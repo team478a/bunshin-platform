@@ -80,6 +80,33 @@ enum FacePolicy {
   FULL_ANONYMOUS
 }
 
+enum OwnerKnowledgeType {
+  PROFILE
+  EXPERIENCE
+  SKILL
+  PRODUCT
+  FAQ
+  CASE
+  ASSET
+  OTHER
+}
+
+enum KnowledgeSourceType {
+  MANUAL
+  IMPORT
+  SYSTEM
+}
+
+enum OwnerKnowledgeStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum KnowledgeGrantStatus {
+  ACTIVE
+  REVOKED
+}
+
 model User {
   id            String                @id @default(uuid()) @db.Uuid
   status        UserStatus            @default(ACTIVE)
@@ -91,6 +118,8 @@ model User {
   memberships   WorkspaceMembership[]
   platformAdmin PlatformAdmin?
   bunshins      Bunshin[]
+  ownerKnowledge OwnerKnowledge[] @relation("KnowledgeOwner")
+  knowledgeGrants BunshinKnowledgeGrant[] @relation("GrantActor")
 
   @@index([status])
   @@map("users")
@@ -119,6 +148,8 @@ model Workspace {
   updatedAt   DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   memberships WorkspaceMembership[]
   bunshins    Bunshin[]
+  ownerKnowledge OwnerKnowledge[]
+  knowledgeGrants BunshinKnowledgeGrant[]
 
   @@index([status])
   @@map("workspaces")
@@ -173,11 +204,52 @@ model Bunshin {
   objectives         BunshinObjective[]
   audiences          BunshinAudience[]
   personality        BunshinPersonality?
+  knowledgeGrants    BunshinKnowledgeGrant[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId, status, updatedAt])
   @@index([ownerUserId, status])
   @@map("bunshins")
+}
+
+model OwnerKnowledge {
+  id          String               @id @default(uuid()) @db.Uuid
+  workspaceId String               @map("workspace_id") @db.Uuid
+  ownerUserId String               @map("owner_user_id") @db.Uuid
+  type        OwnerKnowledgeType
+  title       String               @db.VarChar(160)
+  content     String               @db.VarChar(20000)
+  sourceType  KnowledgeSourceType  @default(MANUAL) @map("source_type")
+  status      OwnerKnowledgeStatus @default(ACTIVE)
+  archivedAt  DateTime?            @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  ownerUser   User                 @relation("KnowledgeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  grants      BunshinKnowledgeGrant[]
+
+  @@index([workspaceId, ownerUserId, status, updatedAt])
+  @@map("owner_knowledge")
+}
+
+model BunshinKnowledgeGrant {
+  id               String               @id @default(uuid()) @db.Uuid
+  workspaceId      String               @map("workspace_id") @db.Uuid
+  bunshinId        String               @map("bunshin_id") @db.Uuid
+  ownerKnowledgeId String               @map("owner_knowledge_id") @db.Uuid
+  grantedByUserId  String               @map("granted_by_user_id") @db.Uuid
+  status           KnowledgeGrantStatus @default(ACTIVE)
+  grantedAt        DateTime             @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt        DateTime?            @map("revoked_at") @db.Timestamptz(6)
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin          Bunshin              @relation(fields: [bunshinId], references: [id], onDelete: Restrict)
+  ownerKnowledge   OwnerKnowledge       @relation(fields: [ownerKnowledgeId], references: [id], onDelete: Restrict)
+  grantedByUser    User                 @relation("GrantActor", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, ownerKnowledgeId])
+  @@index([bunshinId, status])
+  @@index([ownerKnowledgeId, status])
+  @@map("bunshin_knowledge_grants")
 }
 
 model BunshinObjective {

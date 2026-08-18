@@ -168,3 +168,43 @@ export function canManageBunshin(
 ): boolean {
   return role === 'OWNER' || role === 'ADMIN' || actorUserId === ownerUserId;
 }
+
+export const OWNER_KNOWLEDGE_TYPES = [
+  'PROFILE',
+  'EXPERIENCE',
+  'SKILL',
+  'PRODUCT',
+  'FAQ',
+  'CASE',
+  'ASSET',
+  'OTHER',
+] as const;
+export type OwnerKnowledgeType = (typeof OWNER_KNOWLEDGE_TYPES)[number];
+export type OwnerKnowledgeStatus = 'ACTIVE' | 'ARCHIVED';
+export type KnowledgeSourceType = 'MANUAL' | 'IMPORT' | 'SYSTEM';
+export type KnowledgeGrantStatus = 'ACTIVE' | 'REVOKED';
+
+export interface OwnerKnowledge {
+  id: string;
+  workspaceId: string;
+  ownerUserId: string;
+  type: OwnerKnowledgeType;
+  title: string;
+  content: string;
+  sourceType: KnowledgeSourceType;
+  status: OwnerKnowledgeStatus;
+  archivedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BunshinKnowledgeGrant {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  ownerKnowledgeId: string;
+  grantedByUserId: string;
+  status: KnowledgeGrantStatus;
+  grantedAt: Date;
+  revokedAt: Date | null;
+}

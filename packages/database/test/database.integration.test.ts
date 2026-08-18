@@ -7,6 +7,8 @@ import {
   PrismaBunshinRepository,
   PrismaPlatformAdminRepository,
   PrismaWorkspaceAccessRepository,
+  PrismaOwnerKnowledgeRepository,
+  PrismaKnowledgeGrantRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -18,6 +20,8 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.bunshinKnowledgeGrant.deleteMany();
+    await client.ownerKnowledge.deleteMany();
     await client.platformAdmin.deleteMany();
     await client.bunshinPersonality.deleteMany();
     await client.bunshinAudience.deleteMany();
@@ -86,6 +90,98 @@ integration('database ownership boundaries', () => {
         account.user.id,
       ),
     ).toBeNull();
+  });
+
+  it('enforces default DENY, workspace isolation, revoke, and archive for Knowledge grants', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Knowledge Owner' });
+    const outsider = await accounts.execute({ displayName: 'Knowledge Outsider' });
+    const bunshins = new PrismaBunshinRepository(client);
+    const bunshin = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Knowledge Bunshin',
+      slug: `knowledge-${randomUUID()}`,
+      type: 'EXPERT',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const knowledgeRepository = new PrismaOwnerKnowledgeRepository(client);
+    const grants = new PrismaKnowledgeGrantRepository(client);
+    const item = await knowledgeRepository.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      type: 'SKILL',
+      title: 'Skill',
+      content: 'Private skill',
+    });
+    expect(
+      await grants.listGrantedKnowledge({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await grants.grant({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+        knowledgeId: item.id,
+      }),
+    ).toMatchObject({ status: 'ACTIVE' });
+    expect(
+      await grants.listGrantedKnowledge({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+      }),
+    ).toMatchObject([{ id: item.id }]);
+    expect(
+      await grants.grant({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: bunshin.id,
+        knowledgeId: item.id,
+      }),
+    ).toBeNull();
+    expect(
+      await grants.revoke({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+        knowledgeId: item.id,
+      }),
+    ).toMatchObject({ status: 'REVOKED', revokedAt: expect.any(Date) });
+    expect(
+      await grants.listGrantedKnowledge({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+      }),
+    ).toEqual([]);
+    await grants.grant({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: bunshin.id,
+      knowledgeId: item.id,
+    });
+    await knowledgeRepository.archiveOwned({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      knowledgeId: item.id,
+    });
+    expect(
+      await grants.listGrantedKnowledge({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await client.bunshinKnowledgeGrant.findFirst({ where: { ownerKnowledgeId: item.id } }),
+    ).toMatchObject({ status: 'REVOKED', revokedAt: expect.any(Date) });
   });
 
   it('does not grant a Platform Admin automatic Workspace Membership', async () => {

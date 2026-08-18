@@ -131,7 +131,7 @@
 ## D-016: Owner Knowledge Grantは明示ALLOWと監査可能な失効で管理する
 
 - 日付: 2026-08-18
-- 状態: Proposed
+- 状態: Accepted（PR #9で承認）
 - 提案: 有効なGrantが存在しない状態をdefault DENYとし、Grantは`ACTIVE | REVOKED`で保持する
 - 監査: revokeは物理削除せず`revokedAt`を記録し、再grantは同一rowを再有効化する
 - 境界: KnowledgeとBunshinは同じWorkspaceに限定し、application/repository transactionとPostgreSQL integration testで保証する
