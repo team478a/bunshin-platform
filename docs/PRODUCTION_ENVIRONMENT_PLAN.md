@@ -114,6 +114,7 @@ Preview deploymentを共有staging DBへ接続する場合、古いPRコード�
 - [ ] Supabase Pro organizationを作成する
 - [ ] production/stagingをTokyoで別projectとして作成する
 - [ ] GitHub branch protectionで`verify`と`database`をrequiredにする
+- [ ] GitHub Environment `production`にrequired reviewerとDB secretsを設定する
 - [ ] Vercel projectをGitHub repositoryへ接続する
 - [ ] Vercel Root Directoryを`apps/web`、Framework Presetを`Next.js`にする
 - [ ] Function regionを`hnd1`に固定する
@@ -141,10 +142,10 @@ Preview deploymentを共有staging DBへ接続する場合、古いPRコード�
 1. PRのCIで空DBへの`prisma migrate deploy`とintegration testを成功させる
 2. migrationの前方互換性とrollback方法をレビューする
 3. staging backupを確認する
-4. stagingへ手動で`pnpm db:migrate:deploy`を実行する
+4. stagingへ承認済み手順で`pnpm db:migrate:deploy`を実行する
 5. staging deploy後に`/api/health/live`と`/api/health/ready`を確認する
 6. production変更時間と担当者を記録する
-7. production backupを確認してmigrationを適用する
+7. production backupを確認し、`Production Database Migration` workflowを`main`から手動実行する
 8. production deployとsmoke testを実行する
 9. 失敗時は安易にdown migrationせず、restoreまたはforward fixを承認して実施する
 

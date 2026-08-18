@@ -1,0 +1,76 @@
+name: Production Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type MIGRATE_PRODUCTION to continue
+        required: true
+        type: string
+
+concurrency:
+  group: production-database-migration
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-confirmation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require explicit production confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Production migrations must run from main."
+            exit 1
+          fi
+          if [ "$CONFIRMATION" != "MIGRATE_PRODUCTION" ]; then
+            echo "Confirmation did not match MIGRATE_PRODUCTION."
+            exit 1
+          fi
+
+  migrate:
+    needs: validate-confirmation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Verify required secrets
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$DIRECT_URL" ]; then
+            echo "Production database secrets are not configured."
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+
+      - name: Show migration status before deployment
+        continue-on-error: true
+        run: pnpm --filter @bunshin/database exec prisma migrate status
+
+      - name: Apply approved production migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Verify migration status after deployment
+        run: pnpm --filter @bunshin/database exec prisma migrate status
