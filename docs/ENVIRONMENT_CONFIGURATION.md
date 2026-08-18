@@ -5,10 +5,12 @@
 | APP_ENV       | 用途                           | DB                          |
 | ------------- | ------------------------------ | --------------------------- |
 | `development` | local/test/preview development | localまたはdevelopment専用  |
-| `staging`     | Vercel Preview/staging         | staging Supabase project    |
+| `staging`     | 実運用開始前の受入確認         | 将来追加するstaging専用DB   |
 | `production`  | production                     | production Supabase project |
 
 stagingとproductionで同じSupabase project、URL、secretを使用しない。
+
+実運用開始まではstaging専用Supabaseを作成しない。Vercel Previewへproduction DB credentialを設定せず、DBが必要な検証はlocal PostgreSQLまたはGitHub Actionsの一時PostgreSQLで行う。実ユーザー受入前、またはproduction相当環境でmigration・認証・外部連携を検証する必要が生じた時点でstagingを追加する。
 
 ## Variables
 

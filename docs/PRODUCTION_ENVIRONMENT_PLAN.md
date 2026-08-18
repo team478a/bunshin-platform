@@ -6,18 +6,18 @@
 
 初期本番環境は次を推奨する。
 
-| 領域           | 推奨                                  | 設定                                                  |
-| -------------- | ------------------------------------- | ----------------------------------------------------- |
-| Web / API      | Vercel Pro                            | Tokyo `hnd1`、GitHub連携、ProductionとPreviewを分離   |
-| Database       | Supabase Pro                          | Tokyo `ap-northeast-1`、production/stagingを別project |
-| Runtime DB接続 | Supavisor transaction mode            | `DATABASE_URL`、port `6543`                           |
-| Migration接続  | direct connectionまたはsession pooler | `DIRECT_URL`。CI/Vercel buildから自動migrationしない  |
-| DNS            | 所有中のDNS provider                  | `app.<domain>`をVercelへ接続                          |
-| CI             | GitHub Actions                        | 現在の`verify`と`database`をrequired checksにする     |
-| Backup         | Supabase Pro daily backup             | 初期は7日保持。PITRは利用量・重要度上昇時に追加       |
-| Secrets        | Vercel Environment Variables          | Production / Preview / Developmentを分離              |
+| 領域           | 推奨                                  | 設定                                                 |
+| -------------- | ------------------------------------- | ---------------------------------------------------- |
+| Web / API      | Vercel Pro                            | Tokyo `hnd1`、GitHub連携、ProductionとPreviewを分離  |
+| Database       | Supabase Pro                          | Tokyo `ap-northeast-1`。当面はproductionのみ         |
+| Runtime DB接続 | Supavisor transaction mode            | `DATABASE_URL`、port `6543`                          |
+| Migration接続  | direct connectionまたはsession pooler | `DIRECT_URL`。CI/Vercel buildから自動migrationしない |
+| DNS            | 所有中のDNS provider                  | `app.<domain>`をVercelへ接続                         |
+| CI             | GitHub Actions                        | 現在の`verify`と`database`をrequired checksにする    |
+| Backup         | Supabase Pro daily backup             | 初期は7日保持。PITRは利用量・重要度上昇時に追加      |
+| Secrets        | Vercel Environment Variables          | Production / Preview / Developmentを分離             |
 
-この構成は本番リソースを今すぐ作らなくても、アカウント、責任者、命名、secret、migration手順を先に準備できる。
+実運用開始まではstaging専用Supabaseを作成せず、local PostgreSQL、GitHub Actionsの一時PostgreSQL、production Supabaseで運用する。Preview deploymentをproduction DBへ接続してはいけない。
 
 ## 推奨理由
 
@@ -54,14 +54,13 @@ Cloud Runは東京regionと従量課金を利用でき、将来のworker、sched
 
 2026-08-18時点の公式表示を基にした税・為替・超過料金を除く概算。
 
-| 項目                     |             概算 |
-| ------------------------ | ---------------: |
-| Vercel Pro 1 seat        |   USD 20 / month |
-| Supabase Pro plan        |   USD 25 / month |
-| 2つ目のMicro compute相当 |   USD 10 / month |
-| 合計baseline             | 約USD 55 / month |
+| 項目              |             概算 |
+| ----------------- | ---------------: |
+| Vercel Pro 1 seat |   USD 20 / month |
+| Supabase Pro plan |   USD 25 / month |
+| 合計baseline      | 約USD 45 / month |
 
-Supabase ProはUSD 10のcompute creditを含み、Micro 1台分に相当する。productionとstagingを別projectにすると、2台目のMicro相当が追加される想定である。正確な請求額は契約直前にpricing calculatorで再確認する。
+Supabase ProはUSD 10のcompute creditを含み、Micro 1台分に相当する。staging追加後は2台目のMicro相当として約USD 10/monthが増え、合計baselineは約USD 55/monthになる想定である。正確な請求額はpricing calculatorで再確認する。
 
 PITRは初期導入しない。公式価格では7日保持がUSD 100/monthからで、Small以上のcomputeも必要になるため、daily backup＋restore rehearsalで開始する。決済・顧客データ・高頻度更新が本番に入る前にPITRを再評価する。
 
@@ -72,15 +71,14 @@ GitHub main
   └─ Vercel Production (hnd1)
        └─ Supabase production (ap-northeast-1)
 
-GitHub pull request / staging branch
-  └─ Vercel Preview
-       └─ Supabase staging (ap-northeast-1)
+GitHub pull request
+  └─ Vercel Preview (production DBへ接続しない)
 
 Local / GitHub Actions
   └─ local or ephemeral PostgreSQL
 ```
 
-Preview deploymentを共有staging DBへ接続する場合、古いPRコードと新しいschemaの互換性が崩れる可能性がある。migrationを含むPRでは、Previewを自動的にstaging DBへ向けず、互換性確認後に限定して接続する。
+実運用開始前にSupabase stagingを追加する。追加後も、Preview deploymentを共有staging DBへ接続する場合は、古いPRコードと新しいschemaの互換性に注意する。migrationを含むPRでは、Previewを自動的にstaging DBへ向けず、互換性確認後に限定して接続する。
 
 ## 命名案
 
@@ -112,7 +110,8 @@ Preview deploymentを共有staging DBへ接続する場合、古いPRコード�
 - [ ] Vercel Pro teamを作成する
 - [ ] Spend Managementの50% / 75% / 100%通知と上限時actionを設定する
 - [ ] Supabase Pro organizationを作成する
-- [ ] production/stagingをTokyoで別projectとして作成する
+- [x] productionをTokyoで作成する
+- [ ] 実運用開始前にstagingをTokyoで別projectとして作成する
 - [ ] GitHub branch protectionで`verify`と`database`をrequiredにする
 - [ ] GitHub Environment `production`にrequired reviewerとDB secretsを設定する
 - [ ] Vercel projectをGitHub repositoryへ接続する
