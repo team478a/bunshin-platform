@@ -22,7 +22,9 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 | `DIRECT_URL`     | secret      | Prisma migration/direct connection |
 | `SESSION_SECRET` | secret      | 将来のapplication session用        |
 | `LOG_LEVEL`      | server-only | log threshold                      |
+| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase Auth project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key |
 
-Phase 1には`NEXT_PUBLIC_*`変数がない。server-only変数をClient Componentからimportしない。LINE、AI、cron等の未使用secretは追加していない。
+`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。LINE、AI、cron等の未使用secretは追加していない。
 
 validation errorは不足した変数名だけを出し、値をlogへ出さない。
