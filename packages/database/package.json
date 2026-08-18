@@ -14,7 +14,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "lint": "eslint src test",
     "test": "vitest run --passWithNoTests --exclude '**/*.integration.test.ts'",
-    "test:integration": "vitest run test/database.integration.test.ts",
+    "test:integration": "prisma generate && vitest run test/database.integration.test.ts",
     "typecheck": "prisma generate && tsc --noEmit"
   },
   "dependencies": {
