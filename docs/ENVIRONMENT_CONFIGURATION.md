@@ -14,16 +14,16 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 
 ## Variables
 
-| 変数             | 公開        | 用途                               |
-| ---------------- | ----------- | ---------------------------------- |
-| `APP_ENV`        | server-only | deployment environment             |
-| `APP_URL`        | server-only | deployment base URL                |
-| `DATABASE_URL`   | secret      | pooled runtime connection          |
-| `DIRECT_URL`     | secret      | Prisma migration/direct connection |
-| `SESSION_SECRET` | secret      | 将来のapplication session用        |
-| `LOG_LEVEL`      | server-only | log threshold                      |
-| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase Auth project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key |
+| 変数                                   | 公開        | 用途                               |
+| -------------------------------------- | ----------- | ---------------------------------- |
+| `APP_ENV`                              | server-only | deployment environment             |
+| `APP_URL`                              | server-only | deployment base URL                |
+| `DATABASE_URL`                         | secret      | pooled runtime connection          |
+| `DIRECT_URL`                           | secret      | Prisma migration/direct connection |
+| `SESSION_SECRET`                       | secret      | 将来のapplication session用        |
+| `LOG_LEVEL`                            | server-only | log threshold                      |
+| `NEXT_PUBLIC_SUPABASE_URL`             | public      | Supabase Auth project URL          |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public      | Supabase publishable key           |
 
 `NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。LINE、AI、cron等の未使用secretは追加していない。
 
