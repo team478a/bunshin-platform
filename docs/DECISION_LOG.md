@@ -87,7 +87,7 @@
 ## D-012: Phase 2を独立した縦切りで進める
 
 - 日付: 2026-08-18
-- 状態: Proposed（Phase 1 Draft PRレビュー待ち）
+- 状態: Accepted（Phase 2 Slice 2.1-A / 2.1-B完了）
 - 提案: Phase 2はBunshin Identity、Owner Knowledge/Grant、Bunshin Memory、Capability Assignmentの順に独立PRで進める
 - 理由: Multi-Bunshinの所有境界を先に検証し、SOCIAL、AI、LINE、BLOGの関心事をCoreへ混在させないため
 - 最初のSlice: Bunshin CRUDとObjective/Audience/Personality、およびCross User isolation
@@ -127,6 +127,17 @@
 - 禁止: request由来User ID、Productionでのmock auth、BrowserからのBunshin table直接access
 - Gate: custom SMTP、Site/Redirect URL、session値、WAF値の承認後にSlice 2.1-Bを開始する
 - 詳細: `docs/AUTH_SESSION_ADR.md`
+
+## D-016: Owner Knowledge Grantは明示ALLOWと監査可能な失効で管理する
+
+- 日付: 2026-08-18
+- 状態: Proposed
+- 提案: 有効なGrantが存在しない状態をdefault DENYとし、Grantは`ACTIVE | REVOKED`で保持する
+- 監査: revokeは物理削除せず`revokedAt`を記録し、再grantは同一rowを再有効化する
+- 境界: KnowledgeとBunshinは同じWorkspaceに限定し、application/repository transactionとPostgreSQL integration testで保証する
+- PR分割: Slice 2.2-AはCore Persistenceのみ、認証済みAPI/UIは2.2-Bへ分離する
+- 禁止: AI抽出、embedding、RAG、import、file upload、Memory、Capability、SOCIAL、LINE、BLOG、Jobを混在させない
+- 詳細: `docs/PHASE2_SLICE_2_2_IMPLEMENTATION_INSTRUCTION.md`
 
 ## 未決事項
 
