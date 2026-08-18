@@ -208,3 +208,33 @@ export interface BunshinKnowledgeGrant {
   grantedAt: Date;
   revokedAt: Date | null;
 }
+
+export const BUNSHIN_MEMORY_TYPES = [
+  'BELIEF',
+  'EXPERIENCE',
+  'KNOWLEDGE',
+  'STORY',
+  'FAQ',
+  'OPINION',
+  'PREFERENCE',
+  'PERFORMANCE_INSIGHT',
+] as const;
+export type BunshinMemoryType = (typeof BUNSHIN_MEMORY_TYPES)[number];
+export type BunshinMemorySourceType =
+  'USER_INPUT' | 'MISSION_FEEDBACK' | 'PERFORMANCE' | 'IMPORT' | 'SYSTEM';
+export interface BunshinMemory {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  type: BunshinMemoryType;
+  content: string;
+  summary: string | null;
+  sourceType: BunshinMemorySourceType;
+  sourceId: string | null;
+  confidence: number;
+  importance: number;
+  active: boolean;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}

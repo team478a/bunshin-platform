@@ -37,7 +37,7 @@ export function KnowledgeForm({
       headers: { 'content-type': 'application/json' },
       body: '{}',
     });
-    if (response.ok) router.push('/knowledge' as Route);
+    if (response.ok) router.push('/knowledge');
   }
   return (
     <main>
