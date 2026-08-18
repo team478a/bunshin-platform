@@ -93,6 +93,16 @@
 - 最初のSlice: Bunshin CRUDとObjective/Audience/Personality、およびCross User isolation
 - 詳細: `docs/PHASE2_READINESS_PLAN.md`
 
+## D-013: 初期本番環境はVercelとSupabaseを東京に配置する
+
+- 日付: 2026-08-18
+- 状態: Proposed（契約・project作成前の人間承認待ち）
+- 提案: Web/APIはVercel Pro `hnd1`、PostgreSQLはSupabase Pro `ap-northeast-1`を使用し、productionとstagingを別projectにする
+- 理由: Next.js/Prismaの現行構成との差分と少人数運用の負担を抑え、applicationとDBを同じ東京圏に配置するため
+- 接続: runtimeはSupavisor transaction mode、migrationはdirect connectionまたはsession poolerを使用する
+- 将来: worker、長時間Job、private network等が必要になった時点でCloud Run / Cloud SQLを再評価する
+- 詳細: `docs/PRODUCTION_ENVIRONMENT_PLAN.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:

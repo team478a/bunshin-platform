@@ -9,6 +9,7 @@
 | Build Command   | `pnpm turbo run build --filter=web` |
 | Output          | Next.js default `.next`             |
 | Node.js         | 24.x                                |
+| Function Region | Tokyo `hnd1`                        |
 
 `vercel.json`にもinstall/build commandを定義している。
 
@@ -29,3 +30,5 @@ Vercel Previewへproduction database URLやsecretを設定しない。環境変�
 5. `/api/health/live`と`/api/health/ready`を確認する。
 
 Phase 1ではworker/Cloud Runをdeployしない。
+
+本番構成の選定理由、費用目安、アカウント作成前後のチェックリストは`docs/PRODUCTION_ENVIRONMENT_PLAN.md`を参照する。
