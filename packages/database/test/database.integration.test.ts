@@ -9,6 +9,7 @@ import {
   PrismaWorkspaceAccessRepository,
   PrismaOwnerKnowledgeRepository,
   PrismaKnowledgeGrantRepository,
+  PrismaBunshinMemoryRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -20,6 +21,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.bunshinMemory.deleteMany();
     await client.bunshinKnowledgeGrant.deleteMany();
     await client.ownerKnowledge.deleteMany();
     await client.platformAdmin.deleteMany();
@@ -90,6 +92,96 @@ integration('database ownership boundaries', () => {
         account.user.id,
       ),
     ).toBeNull();
+  });
+
+  it('isolates Memory by workspace and Bunshin and excludes inactive/deleted rows', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Memory Owner' });
+    const outsider = await accounts.execute({ displayName: 'Memory Outsider' });
+    const bunshins = new PrismaBunshinRepository(client);
+    const first = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Memory A',
+      slug: `memory-a-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const second = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Memory B',
+      slug: `memory-b-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const repository = new PrismaBunshinMemoryRepository(client);
+    const created = await repository.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      type: 'BELIEF',
+      content: 'Only A',
+      confidence: 0.9,
+      importance: 4,
+    });
+    expect(created).not.toBeNull();
+    if (created === null) throw new Error('memory creation failed');
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: second.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await repository.list({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: first.id,
+      }),
+    ).toEqual([]);
+    await repository.setActive({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      memoryId: created.id,
+      active: false,
+    });
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        includeInactive: true,
+      }),
+    ).toHaveLength(1);
+    const deleted = await repository.softDelete({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      memoryId: created.id,
+    });
+    expect(deleted).toMatchObject({ active: false, deletedAt: expect.any(Date) });
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        includeInactive: true,
+      }),
+    ).toEqual([]);
   });
 
   it('enforces default DENY, workspace isolation, revoke, and archive for Knowledge grants', async () => {

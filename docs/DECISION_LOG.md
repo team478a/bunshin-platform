@@ -153,7 +153,7 @@
 ## D-018: Bunshin Memoryはsoft deleteしembeddingをPhase 6まで延期する
 
 - 日付: 2026-08-18
-- 状態: Proposed
+- 状態: Accepted（PR #13で承認）
 - 提案: Memoryは`workspaceId + bunshinId`でscopeし、無効化とsoft deleteを区別する
 - 削除: `active=false`と`deletedAt`を記録し、通常取得から除外する
 - embedding: provider、model、次元数、index、再生成方針が未決定のため、Phase 6のADRとmigrationまでcolumn追加を延期する

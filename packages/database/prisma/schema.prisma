@@ -107,6 +107,25 @@ enum KnowledgeGrantStatus {
   REVOKED
 }
 
+enum BunshinMemoryType {
+  BELIEF
+  EXPERIENCE
+  KNOWLEDGE
+  STORY
+  FAQ
+  OPINION
+  PREFERENCE
+  PERFORMANCE_INSIGHT
+}
+
+enum BunshinMemorySourceType {
+  USER_INPUT
+  MISSION_FEEDBACK
+  PERFORMANCE
+  IMPORT
+  SYSTEM
+}
+
 model User {
   id            String                @id @default(uuid()) @db.Uuid
   status        UserStatus            @default(ACTIVE)
@@ -150,6 +169,7 @@ model Workspace {
   bunshins    Bunshin[]
   ownerKnowledge OwnerKnowledge[]
   knowledgeGrants BunshinKnowledgeGrant[]
+  memories        BunshinMemory[]
 
   @@index([status])
   @@map("workspaces")
@@ -205,6 +225,7 @@ model Bunshin {
   audiences          BunshinAudience[]
   personality        BunshinPersonality?
   knowledgeGrants    BunshinKnowledgeGrant[]
+  memories           BunshinMemory[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId, status, updatedAt])
@@ -250,6 +271,28 @@ model BunshinKnowledgeGrant {
   @@index([bunshinId, status])
   @@index([ownerKnowledgeId, status])
   @@map("bunshin_knowledge_grants")
+}
+
+model BunshinMemory {
+  id          String                  @id @default(uuid()) @db.Uuid
+  workspaceId String                  @map("workspace_id") @db.Uuid
+  bunshinId   String                  @map("bunshin_id") @db.Uuid
+  type        BunshinMemoryType
+  content     String                  @db.VarChar(20000)
+  summary     String?                 @db.VarChar(1000)
+  sourceType  BunshinMemorySourceType @default(USER_INPUT) @map("source_type")
+  sourceId    String?                 @map("source_id") @db.VarChar(255)
+  confidence  Decimal                 @db.Decimal(4, 3)
+  importance  Int
+  active      Boolean                 @default(true)
+  deletedAt   DateTime?               @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin     Bunshin                 @relation(fields: [bunshinId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, bunshinId, active, deletedAt, updatedAt])
+  @@map("bunshin_memories")
 }
 
 model BunshinObjective {
