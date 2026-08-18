@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client/index';
-import type { Prisma } from '@prisma/client/index';
+import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import type {
   AccountTransaction,
   AccountUnitOfWork,
@@ -11,6 +11,7 @@ import type {
   UpdateBunshinInput,
   WorkspaceAccessRepository,
 } from '@bunshin/application';
+import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import type {
   BunshinAggregate,
   PlatformAdmin,
@@ -62,6 +63,75 @@ export class PrismaAccountUnitOfWork implements AccountUnitOfWork {
       return operation(adapter);
     });
   }
+}
+
+export class PrismaCurrentUserAccountRepository implements CurrentUserAccountRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async findActiveByEmailIdentity(providerUserId: string): Promise<CurrentUser | null> {
+    const identity = await this.client.authIdentity.findFirst({
+      where: { provider: 'EMAIL', providerUserId, user: { status: 'ACTIVE' } },
+      select: { id: true, userId: true },
+    });
+    return identity === null ? null : { userId: identity.userId, authIdentityId: identity.id };
+  }
+
+  async provisionEmailIdentity(input: VerifiedSessionUser): Promise<CurrentUser> {
+    const existing = await this.findActiveByEmailIdentity(input.providerUserId);
+    if (existing !== null) return existing;
+    try {
+      return await this.client.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            displayName: (input.displayName ?? input.email?.split('@')[0] ?? 'BUNSHIN User').slice(
+              0,
+              100,
+            ),
+            email: input.email,
+          },
+        });
+        const identity = await tx.authIdentity.create({
+          data: {
+            userId: createdUser.id,
+            provider: 'EMAIL',
+            providerUserId: input.providerUserId,
+          },
+        });
+        const workspace = await tx.workspace.create({
+          data: { type: 'PERSONAL', name: `${createdUser.displayName}のワークスペース` },
+        });
+        await tx.workspaceMembership.create({
+          data: { workspaceId: workspace.id, userId: createdUser.id, role: 'OWNER' },
+        });
+        return { userId: createdUser.id, authIdentityId: identity.id };
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        const raced = await this.findActiveByEmailIdentity(input.providerUserId);
+        if (raced !== null) return raced;
+      }
+      throw error;
+    }
+  }
+}
+
+export async function listActiveWorkspacesForUser(
+  userId: string,
+  client: PrismaClient = prisma,
+): Promise<Array<{ id: string; name: string }>> {
+  return client.workspace.findMany({
+    where: {
+      status: 'ACTIVE',
+      memberships: { some: { userId, status: 'ACTIVE' } },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true },
+  });
 }
 
 export class PrismaWorkspaceAccessRepository implements WorkspaceAccessRepository {
