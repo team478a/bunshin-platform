@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft. `docs/AUTH_SESSION_ADR.md`がAcceptedになり、Production Auth設定値が確認されるまで実装を開始しない。
+Approved for implementation. `docs/AUTH_SESSION_ADR.md`はAccepted。Production API/UIの公開はProduction Auth設定値とDNSが確認されるまで行わない。
 
 ## Objective
 
@@ -113,7 +113,7 @@ Today、Mission、SOCIAL、Knowledge、Memory画面は作らない。
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - Supabase Auth Site URL
 - callback Redirect URL allowlist
-- custom SMTPと送信domain認証
+- Resend Free custom SMTPと認証専用送信domain認証
 - Magic Link template
 - JWT 1時間、session 30日、inactivity 7日
 - Supabase Auth rate limits

@@ -1,6 +1,6 @@
 # ADR: Phase 2 Web Authentication and Session
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-18
 - Scope: Phase 2 Slice 2.1-B
 
@@ -65,7 +65,7 @@ Web版の初期認証にはSupabase AuthのEmail Magic Linkを使用する。
 
 ### Email delivery
 
-Supabaseの組み込みSMTPは本番利用しない。custom SMTPと送信domain認証をProduction API/UI公開前に完了する。Magic Link templateはtoken hashをPlatformのHTTPS callbackへ渡し、link trackingを無効にする。
+Supabaseの組み込みSMTPは本番利用しない。Resend Freeをcustom SMTP providerとして採用する。初期上限は月3,000通・1日100通で、認証メールだけに使用する。認証専用subdomain、SPF、DKIM、DMARC、送信元addressをProduction API/UI公開前に設定する。Magic Link templateはtoken hashをPlatformのHTTPS callbackへ渡し、link trackingを無効にする。
 
 ## Authorization boundary
 
@@ -106,16 +106,15 @@ Membership変更がtoken expiryまで反映されず、DBとの二重管理に�
 - Auth userとPlatform Userの不整合: 初回provisioningをtransaction化し、途中失敗を残さない。
 - session cookie漏洩: cookie値・URL token・emailをlogへ出さず、error responseも認証失敗理由を統一する。
 
-## Acceptance gate
-
-実装開始前に次を人間が承認する。
+## Accepted values
 
 - Supabase Auth Email Magic Link + PKCE
-- session expiry値
-- custom SMTP providerと認証済み送信domain
-- Production Site URL / Redirect URL
-- Vercel WAF rate limit値
-- Cookie / Origin validation方針
+- Access token 1時間、session最大30日、inactivity 7日
+- Resend Free custom SMTP
+- login 10 request / 10分、Bunshin API 120 request / 1分
+- `SameSite=Lax` cookie + Origin validation
+
+Production Site URL、Redirect URL、認証専用送信domainの具体値はsecretではないが、DNS設定と同時に運用者が確定する。未設定のままProduction API/UIを公開しない。
 
 ## References
 
@@ -126,3 +125,5 @@ Membership変更がtoken expiryまで反映されず、DBとの二重管理に�
 - Supabase Custom SMTP: https://supabase.com/docs/guides/auth/auth-smtp
 - Next.js Authentication Guide: https://nextjs.org/docs/app/guides/authentication
 - Vercel WAF Rate Limiting: https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting
+- Resend Pricing: https://resend.com/pricing
+- Resend Supabase Integration: https://supabase.com/partners/integrations/resend
