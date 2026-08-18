@@ -8,7 +8,10 @@ const generatedPrismaEntry = resolve(dirname(prismaPackageEntry), '../../.prisma
 
 export default defineConfig({
   resolve: {
-    alias: [{ find: '@prisma/client/index', replacement: generatedPrismaEntry }],
+    alias: [
+      { find: /^@prisma\/client$/, replacement: generatedPrismaEntry },
+      { find: '@prisma/client/index', replacement: generatedPrismaEntry },
+    ],
   },
   test: { environment: 'node' },
 });

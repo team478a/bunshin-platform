@@ -126,6 +126,22 @@ enum BunshinMemorySourceType {
   SYSTEM
 }
 
+enum CapabilityType {
+  SOCIAL
+  BLOG
+  LINE_MARKETING
+  LP
+  LEAD_GENERATION
+  SALES
+  CUSTOMER_SUPPORT
+}
+
+enum CapabilityAssignmentStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+}
+
 model User {
   id            String                @id @default(uuid()) @db.Uuid
   status        UserStatus            @default(ACTIVE)
@@ -139,6 +155,7 @@ model User {
   bunshins      Bunshin[]
   ownerKnowledge OwnerKnowledge[] @relation("KnowledgeOwner")
   knowledgeGrants BunshinKnowledgeGrant[] @relation("GrantActor")
+  capabilityAssignments BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
 
   @@index([status])
   @@map("users")
@@ -170,6 +187,7 @@ model Workspace {
   ownerKnowledge OwnerKnowledge[]
   knowledgeGrants BunshinKnowledgeGrant[]
   memories        BunshinMemory[]
+  capabilityAssignments BunshinCapabilityAssignment[]
 
   @@index([status])
   @@map("workspaces")
@@ -226,6 +244,7 @@ model Bunshin {
   personality        BunshinPersonality?
   knowledgeGrants    BunshinKnowledgeGrant[]
   memories           BunshinMemory[]
+  capabilityAssignments BunshinCapabilityAssignment[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId, status, updatedAt])
@@ -293,6 +312,26 @@ model BunshinMemory {
 
   @@index([workspaceId, bunshinId, active, deletedAt, updatedAt])
   @@map("bunshin_memories")
+}
+
+model BunshinCapabilityAssignment {
+  id               String                     @id @default(uuid()) @db.Uuid
+  workspaceId      String                     @map("workspace_id") @db.Uuid
+  bunshinId        String                     @map("bunshin_id") @db.Uuid
+  capabilityType   CapabilityType             @map("capability_type")
+  status           CapabilityAssignmentStatus @default(ACTIVE)
+  config           Json                       @default("{}")
+  assignedByUserId String                     @map("assigned_by_user_id") @db.Uuid
+  activatedAt      DateTime                   @default(now()) @map("activated_at") @db.Timestamptz(6)
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin          Bunshin                    @relation(fields: [bunshinId], references: [id], onDelete: Restrict)
+  assignedByUser   User                       @relation("CapabilityAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, capabilityType])
+  @@index([workspaceId, bunshinId, status, updatedAt])
+  @@map("bunshin_capability_assignments")
 }
 
 model BunshinObjective {

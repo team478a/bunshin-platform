@@ -176,7 +176,7 @@
 ## D-020: Capability Assignmentは明示割当とCore guardで管理する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #17で承認）
 - 提案: CapabilityはBunshin本体へ直書きせず、Workspace/Bunshin scoped Assignmentとして`ACTIVE | SUSPENDED | LOCKED`を管理する
 - 一意性: `workspaceId + bunshinId + capabilityType`
 - 実行防御: 未割当、SUSPENDED、LOCKEDを`RequireActiveBunshinCapability`がapplication層で拒否する
