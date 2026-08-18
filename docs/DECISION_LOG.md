@@ -173,6 +173,20 @@
 - 禁止: AI抽出、AI要約、embedding、RAG、Mission連携、Bunshin間共有を混在させない
 - 詳細: `docs/PHASE2_SLICE_2_3B_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-020: Capability Assignmentは明示割当とCore guardで管理する
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: CapabilityはBunshin本体へ直書きせず、Workspace/Bunshin scoped Assignmentとして`ACTIVE | SUSPENDED | LOCKED`を管理する
+- 一意性: `workspaceId + bunshinId + capabilityType`
+- 実行防御: 未割当、SUSPENDED、LOCKEDを`RequireActiveBunshinCapability`がapplication層で拒否する
+- 公開範囲: Coreは既存CapabilityType全体を保持可能とするが、Phase 2のAPI/UIで新規割当できるのはSOCIALだけとする
+- config: DBには空objectで保持し、Capability側のschemaが決まるまでinput/DTOへ公開しない
+- 状態遷移: assign/activate/suspendを冪等にし、LOCKED操作、削除、unassignはPhase 2で提供しない
+- PR分割: 2.4-A Core Persistenceと2.4-B authenticated API/UIを分離する
+- 禁止: Capability handler、Provider、投稿、AI、LINE、BLOG、Jobを混在させない
+- 詳細: `docs/PHASE2_SLICE_2_4_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
