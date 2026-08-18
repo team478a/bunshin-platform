@@ -139,6 +139,17 @@
 - 禁止: AI抽出、embedding、RAG、import、file upload、Memory、Capability、SOCIAL、LINE、BLOG、Jobを混在させない
 - 詳細: `docs/PHASE2_SLICE_2_2_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-017: Knowledge API/UIは本人所有と最小Grant操作に限定する
+
+- 日付: 2026-08-18
+- 状態: Proposed
+- 提案: Knowledge CRUDはverified session user本人の所有Knowledgeだけを扱い、Bunshin詳細へ最小のgrant/revoke操作を追加する
+- DTO: `ownerUserId`と`grantedByUserId`を通常の公開responseから除外する
+- 防御: mutationはsame-originとJSONを必須とし、default DENYと既存Bunshin管理policyを再利用する
+- 禁止: 他User Knowledgeの候補表示、AI抽出、embedding、RAG、import、file upload、Memory、Capability、SOCIAL、LINE、BLOG、Job
+- Gate: Supabase Auth本番設定、migration、browser smoke、human security reviewの完了前はProduction公開しない
+- 詳細: `docs/PHASE2_SLICE_2_2B_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
