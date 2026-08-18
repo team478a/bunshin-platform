@@ -195,8 +195,12 @@ integration('database ownership boundaries', () => {
         },
       ],
     });
-    expect(sibling.objectives).toMatchObject([{ bunshinId: sibling.id, primaryGoal: 'Sibling goal' }]);
-    expect(created.objectives).toMatchObject([{ bunshinId: created.id, primaryGoal: 'Improve decisions' }]);
+    expect(sibling.objectives).toMatchObject([
+      { bunshinId: sibling.id, primaryGoal: 'Sibling goal' },
+    ]);
+    expect(created.objectives).toMatchObject([
+      { bunshinId: created.id, primaryGoal: 'Improve decisions' },
+    ]);
     await expect(
       repository.create({
         workspaceId: owner.workspace.id,

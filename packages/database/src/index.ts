@@ -25,10 +25,7 @@ import { ApplicationError } from '@bunshin/shared';
 type PrismaClient = PrismaClientType;
 const requireModule = createRequire(import.meta.url);
 const prismaPackageEntry = requireModule.resolve('@prisma/client/index');
-const generatedPrismaEntry = resolve(
-  dirname(prismaPackageEntry),
-  '../../.prisma/client/index.js',
-);
+const generatedPrismaEntry = resolve(dirname(prismaPackageEntry), '../../.prisma/client/index.js');
 const generatedPrismaClient = requireModule(generatedPrismaEntry) as {
   PrismaClient: typeof PrismaClientType;
 };
