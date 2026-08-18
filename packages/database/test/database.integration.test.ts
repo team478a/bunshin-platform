@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CreateUserWithPersonalWorkspace, requireAccessibleWorkspace } from '@bunshin/application';
+import { PrismaClient } from '@prisma/client/index';
 import {
-  createPrismaClient,
   PrismaAccountUnitOfWork,
   PrismaBunshinRepository,
   PrismaPlatformAdminRepository,
@@ -15,7 +15,7 @@ const safe =
 const integration = safe ? describe : describe.skip;
 
 integration('database ownership boundaries', () => {
-  const client = createPrismaClient();
+  const client = new PrismaClient();
 
   beforeAll(async () => {
     await client.platformAdmin.deleteMany();

@@ -1,6 +1,5 @@
-import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
-import type { Prisma, PrismaClient as PrismaClientType } from '@prisma/client/index';
+import { PrismaClient } from '@prisma/client/index';
+import type { Prisma } from '@prisma/client/index';
 import type {
   AccountTransaction,
   AccountUnitOfWork,
@@ -21,19 +20,6 @@ import type {
 } from '@bunshin/platform-domain';
 import { canManageBunshin } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
-
-type PrismaClient = PrismaClientType;
-const requireModule = createRequire(import.meta.url);
-const prismaPackageEntry = requireModule.resolve('@prisma/client/index');
-const generatedPrismaEntry = resolve(dirname(prismaPackageEntry), '../../.prisma/client/index.js');
-const generatedPrismaClient = requireModule(generatedPrismaEntry) as {
-  PrismaClient: typeof PrismaClientType;
-};
-const PrismaClient = generatedPrismaClient.PrismaClient;
-
-export function createPrismaClient(): PrismaClient {
-  return new PrismaClient();
-}
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
 export const prisma = globalPrisma.bunshinPrisma ?? new PrismaClient({ log: ['warn', 'error'] });
