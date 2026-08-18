@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CreateUserWithPersonalWorkspace, requireAccessibleWorkspace } from '@bunshin/application';
+import {
+  CreateUserWithPersonalWorkspace,
+  RequireActiveBunshinCapability,
+  requireAccessibleWorkspace,
+} from '@bunshin/application';
 import { PrismaClient } from '@prisma/client/index';
 import {
   PrismaAccountUnitOfWork,
@@ -10,6 +14,7 @@ import {
   PrismaOwnerKnowledgeRepository,
   PrismaKnowledgeGrantRepository,
   PrismaBunshinMemoryRepository,
+  PrismaBunshinCapabilityAssignmentRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -21,6 +26,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.bunshinCapabilityAssignment.deleteMany();
     await client.bunshinMemory.deleteMany();
     await client.bunshinKnowledgeGrant.deleteMany();
     await client.ownerKnowledge.deleteMany();
@@ -537,5 +543,189 @@ integration('database ownership boundaries', () => {
         (item) => item.id,
       ),
     ).not.toContain(memberBunshin.id);
+  });
+
+  it('isolates Capability Assignment and enforces idempotent state transitions', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Capability Owner' });
+    const member = await accounts.execute({ displayName: 'Capability Member' });
+    const admin = await accounts.execute({ displayName: 'Capability Admin' });
+    const outsider = await accounts.execute({ displayName: 'Capability Outsider' });
+    await client.workspaceMembership.createMany({
+      data: [
+        { workspaceId: owner.workspace.id, userId: member.user.id, role: 'MEMBER' },
+        { workspaceId: owner.workspace.id, userId: admin.user.id, role: 'ADMIN' },
+      ],
+    });
+    const bunshins = new PrismaBunshinRepository(client);
+    const createBunshin = (name: string, ownerUserId = owner.user.id) =>
+      bunshins.create({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        ownerUserId,
+        name,
+        slug: `${name.toLowerCase()}-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Objective',
+        audienceSummary: 'Audience',
+        personalitySummary: 'Personality',
+      });
+    const first = await createBunshin('Capability First');
+    const sibling = await createBunshin('Capability Sibling');
+    const memberOwned = await createBunshin('Capability Member Owned', member.user.id);
+    const repository = new PrismaBunshinCapabilityAssignmentRepository(client);
+
+    const assigned = await repository.assign({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      capabilityType: 'SOCIAL',
+    });
+    expect(assigned).toMatchObject({ status: 'ACTIVE', config: {} });
+    if (assigned === null) throw new Error('assignment was not created');
+    expect(
+      await repository.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        capabilityType: 'SOCIAL',
+      }),
+    ).toMatchObject({ id: assigned.id, status: 'ACTIVE' });
+    await expect(
+      client.bunshinCapabilityAssignment.create({
+        data: {
+          workspaceId: owner.workspace.id,
+          bunshinId: first.id,
+          capabilityType: 'SOCIAL',
+          assignedByUserId: owner.user.id,
+          config: {},
+        },
+      }),
+    ).rejects.toThrow();
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: sibling.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: first.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await repository.assign({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: first.id,
+        capabilityType: 'SOCIAL',
+      }),
+    ).toBeNull();
+    expect(
+      await repository.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: first.id,
+        capabilityType: 'BLOG',
+      }),
+    ).toBeNull();
+    await expect(
+      repository.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: admin.user.id,
+        bunshinId: first.id,
+        capabilityType: 'BLOG',
+      }),
+    ).resolves.toMatchObject({ capabilityType: 'BLOG' });
+    await expect(
+      repository.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: memberOwned.id,
+        capabilityType: 'SOCIAL',
+      }),
+    ).resolves.toMatchObject({ capabilityType: 'SOCIAL' });
+
+    const suspended = await repository.setStatus({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      capabilityType: 'SOCIAL',
+      status: 'SUSPENDED',
+    });
+    expect(suspended).toMatchObject({ id: assigned.id, status: 'SUSPENDED' });
+    expect(
+      await repository.setStatus({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        capabilityType: 'SOCIAL',
+        status: 'SUSPENDED',
+      }),
+    ).toMatchObject({ id: assigned.id, status: 'SUSPENDED' });
+    await expect(
+      new RequireActiveBunshinCapability(repository).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        capabilityType: 'SOCIAL',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    await client.bunshinCapabilityAssignment.update({
+      where: { id: assigned.id },
+      data: { status: 'LOCKED' },
+    });
+    await expect(
+      repository.setStatus({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        capabilityType: 'SOCIAL',
+        status: 'ACTIVE',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      repository.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        capabilityType: 'SOCIAL',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    await repository.assign({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: sibling.id,
+      capabilityType: 'SOCIAL',
+    });
+    await bunshins.archive({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: sibling.id,
+    });
+    expect(
+      await repository.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: sibling.id,
+        capabilityType: 'SOCIAL',
+      }),
+    ).toBeNull();
+    for (const status of ['ACTIVE', 'SUSPENDED'] as const) {
+      expect(
+        await repository.setStatus({
+          workspaceId: owner.workspace.id,
+          actorUserId: owner.user.id,
+          bunshinId: sibling.id,
+          capabilityType: 'SOCIAL',
+          status,
+        }),
+      ).toBeNull();
+    }
   });
 });
