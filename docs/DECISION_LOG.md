@@ -84,13 +84,22 @@
 - 決定: JobDispatcher/JobRepositoryとcontext型だけを定義し、table、worker、polling、retry、schedulerを作らない
 - 理由: 実際の非同期処理が必要になるPhaseまでinfrastructureを先回りしないため
 
+## D-012: Phase 2を独立した縦切りで進める
+
+- 日付: 2026-08-18
+- 状態: Proposed（Phase 1 Draft PRレビュー待ち）
+- 提案: Phase 2はBunshin Identity、Owner Knowledge/Grant、Bunshin Memory、Capability Assignmentの順に独立PRで進める
+- 理由: Multi-Bunshinの所有境界を先に検証し、SOCIAL、AI、LINE、BLOGの関心事をCoreへ混在させないため
+- 最初のSlice: Bunshin CRUDとObjective/Audience/Personality、およびCross User isolation
+- 詳細: `docs/PHASE2_READINESS_PLAN.md`
+
 ## 未決事項
 
-Phase 0で決める項目:
+後続Phaseで決める項目:
 
 - 既存ブログ版から移植する具体的module
-- monorepoの最終構成
 - APIの本番実行環境
 - 認証とLINE Providerの詳細
 - Scheduler/Queue方式
-- 既存DBの移行・併存方式
+- Phase 9における既存DBの具体的な移行手順
+- Supabase RLSの採用可否

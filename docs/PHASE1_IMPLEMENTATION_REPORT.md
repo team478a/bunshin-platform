@@ -165,4 +165,4 @@ Next.js production buildは`/`、`/health`、`/api/health`、`/api/health/live`�
 
 ## Phase 1完了判定
 
-ローカル受入検証は完了した。GitHub Actionsの結果とDraft PRレビューを確認するまでPhase 2を開始しない。
+ローカル受入検証とDraft PR #1のGitHub Actions（`verify`、`database`）は完了した。Draft PRの人間によるコード・設計レビューを確認するまでPhase 2を開始しない。Phase 2の準備事項は`docs/PHASE2_READINESS_PLAN.md`に整理する。
