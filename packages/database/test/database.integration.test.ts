@@ -4,6 +4,7 @@ import { CreateUserWithPersonalWorkspace, requireAccessibleWorkspace } from '@bu
 import { PrismaClient } from '@prisma/client/index';
 import {
   PrismaAccountUnitOfWork,
+  PrismaBunshinRepository,
   PrismaPlatformAdminRepository,
   PrismaWorkspaceAccessRepository,
 } from '../src';
@@ -18,6 +19,10 @@ integration('database ownership boundaries', () => {
 
   beforeAll(async () => {
     await client.platformAdmin.deleteMany();
+    await client.bunshinPersonality.deleteMany();
+    await client.bunshinAudience.deleteMany();
+    await client.bunshinObjective.deleteMany();
+    await client.bunshin.deleteMany();
     await client.workspaceMembership.deleteMany();
     await client.workspace.deleteMany();
     await client.authIdentity.deleteMany();
@@ -100,5 +105,249 @@ integration('database ownership boundaries', () => {
         workspaceId: target.workspace.id,
       }),
     ).toBeNull();
+    const bunshinRepository = new PrismaBunshinRepository(client);
+    await bunshinRepository.create({
+      workspaceId: target.workspace.id,
+      actorUserId: target.user.id,
+      name: 'Tenant Bunshin',
+      slug: `tenant-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    expect(
+      await bunshinRepository.list({
+        workspaceId: target.workspace.id,
+        actorUserId: platformUser.id,
+      }),
+    ).toEqual([]);
+  });
+
+  it('persists and reads a complete Bunshin aggregate only for active workspace members', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Bunshin Owner' });
+    const outsider = await accounts.execute({ displayName: 'Outsider' });
+    const repository = new PrismaBunshinRepository(client);
+    const sharedSlug = `expert-${randomUUID()}`;
+    const created = await repository.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Expert One',
+      slug: sharedSlug,
+      type: 'EXPERT',
+      objectiveSummary: 'Help a team',
+      audienceSummary: 'Small teams',
+      personalitySummary: 'Calm and direct',
+      objectives: [
+        {
+          objectiveType: 'BUSINESS',
+          primaryGoal: 'Improve decisions',
+          kpiName: null,
+          kpiTarget: null,
+          kpiPeriod: null,
+          priority: 1,
+        },
+      ],
+      audiences: [
+        {
+          label: 'Operators',
+          ageRange: null,
+          occupation: null,
+          experienceLevel: null,
+          painPoints: ['slow decisions'],
+          desires: ['clarity'],
+          excludedAudience: [],
+          notes: null,
+        },
+      ],
+      personality: {
+        tone: 'calm',
+        formality: 'neutral',
+        energyLevel: 'medium',
+        expertiseLevel: 'expert',
+        sentenceStyle: 'concise',
+        firstPerson: '私',
+        forbiddenExpressions: [],
+        preferredExpressions: ['明確に'],
+        visualDirection: null,
+        facePolicy: 'FULL_ANONYMOUS',
+      },
+    });
+    expect(created).toMatchObject({ status: 'DRAFT', objectives: [{ priority: 1 }] });
+    const sibling = await repository.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Sibling',
+      slug: `sibling-${randomUUID()}`,
+      type: 'BRAND',
+      objectiveSummary: 'Sibling objective',
+      audienceSummary: 'Sibling audience',
+      personalitySummary: 'Sibling personality',
+      objectives: [
+        {
+          objectiveType: 'BRAND',
+          primaryGoal: 'Sibling goal',
+          kpiName: null,
+          kpiTarget: null,
+          kpiPeriod: null,
+          priority: 1,
+        },
+      ],
+    });
+    expect(sibling.objectives).toMatchObject([
+      { bunshinId: sibling.id, primaryGoal: 'Sibling goal' },
+    ]);
+    expect(created.objectives).toMatchObject([
+      { bunshinId: created.id, primaryGoal: 'Improve decisions' },
+    ]);
+    await expect(
+      repository.create({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        name: 'Duplicate',
+        slug: sharedSlug,
+        type: 'COPY',
+        objectiveSummary: 'Objective',
+        audienceSummary: 'Audience',
+        personalitySummary: 'Personality',
+      }),
+    ).rejects.toThrow();
+    await expect(
+      repository.create({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        ownerUserId: outsider.user.id,
+        name: 'Invalid owner',
+        slug: `invalid-owner-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Objective',
+        audienceSummary: 'Audience',
+        personalitySummary: 'Personality',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      repository.create({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        name: 'Same slug elsewhere',
+        slug: sharedSlug,
+        type: 'COPY',
+        objectiveSummary: 'Objective',
+        audienceSummary: 'Audience',
+        personalitySummary: 'Personality',
+      }),
+    ).resolves.toMatchObject({ slug: sharedSlug });
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+      }),
+    ).toEqual([]);
+    expect(
+      await repository.find({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: created.id,
+      }),
+    ).toBeNull();
+    expect(
+      await repository.update({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: created.id,
+        name: 'stolen',
+      }),
+    ).toBeNull();
+    expect(
+      await repository.archive({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: created.id,
+      }),
+    ).toBeNull();
+    expect(
+      await repository.find({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: created.id,
+      }),
+    ).toMatchObject({ id: created.id, personality: { facePolicy: 'FULL_ANONYMOUS' } });
+  });
+
+  it('enforces MEMBER ownership while allowing ADMIN management and hides archives', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Organization Owner' });
+    const member = await accounts.execute({ displayName: 'Organization Member' });
+    const admin = await accounts.execute({ displayName: 'Organization Admin' });
+    await client.workspaceMembership.createMany({
+      data: [
+        { workspaceId: owner.workspace.id, userId: member.user.id, role: 'MEMBER' },
+        { workspaceId: owner.workspace.id, userId: admin.user.id, role: 'ADMIN' },
+      ],
+    });
+    const repository = new PrismaBunshinRepository(client);
+    const create = (actorUserId: string, ownerUserId: string, slug: string) =>
+      repository.create({
+        workspaceId: owner.workspace.id,
+        actorUserId,
+        ownerUserId,
+        name: slug,
+        slug,
+        type: 'COPY',
+        objectiveSummary: 'Objective',
+        audienceSummary: 'Audience',
+        personalitySummary: 'Personality',
+      });
+    const ownerBunshin = await create(owner.user.id, owner.user.id, `owner-${randomUUID()}`);
+    const memberBunshin = await create(member.user.id, member.user.id, `member-${randomUUID()}`);
+    expect(
+      await repository.update({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: ownerBunshin.id,
+        name: 'stolen',
+      }),
+    ).toBeNull();
+    expect(
+      await repository.archive({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: ownerBunshin.id,
+      }),
+    ).toBeNull();
+    expect(
+      await repository.update({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: memberBunshin.id,
+        name: 'member-updated',
+      }),
+    ).toMatchObject({ name: 'member-updated' });
+    expect(
+      await repository.update({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: memberBunshin.id,
+        name: 'owner-managed',
+      }),
+    ).toMatchObject({ name: 'owner-managed' });
+    await repository.archive({
+      workspaceId: owner.workspace.id,
+      actorUserId: admin.user.id,
+      bunshinId: memberBunshin.id,
+    });
+    expect(
+      await repository.find({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: memberBunshin.id,
+      }),
+    ).toBeNull();
+    expect(
+      (await repository.list({ workspaceId: owner.workspace.id, actorUserId: owner.user.id })).map(
+        (item) => item.id,
+      ),
+    ).not.toContain(memberBunshin.id);
   });
 });

@@ -54,6 +54,32 @@ enum PlatformAdminStatus {
   REVOKED
 }
 
+enum BunshinType {
+  COPY
+  EXPERT
+  BRAND
+  CHARACTER
+}
+
+enum BunshinStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum ObjectiveStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum FacePolicy {
+  FACE_OK
+  FACE_NG_VOICE_OK
+  FACE_VOICE_NG
+  FULL_ANONYMOUS
+}
+
 model User {
   id            String                @id @default(uuid()) @db.Uuid
   status        UserStatus            @default(ACTIVE)
@@ -64,6 +90,7 @@ model User {
   identities    AuthIdentity[]
   memberships   WorkspaceMembership[]
   platformAdmin PlatformAdmin?
+  bunshins      Bunshin[]
 
   @@index([status])
   @@map("users")
@@ -91,6 +118,7 @@ model Workspace {
   createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   memberships WorkspaceMembership[]
+  bunshins    Bunshin[]
 
   @@index([status])
   @@map("workspaces")
@@ -123,4 +151,89 @@ model PlatformAdmin {
 
   @@index([status, role])
   @@map("platform_admins")
+}
+
+model Bunshin {
+  id                 String              @id @default(uuid()) @db.Uuid
+  workspaceId        String              @map("workspace_id") @db.Uuid
+  ownerUserId        String              @map("owner_user_id") @db.Uuid
+  name               String              @db.VarChar(100)
+  slug               String              @db.VarChar(80)
+  type               BunshinType
+  status             BunshinStatus       @default(DRAFT)
+  objectiveSummary   String              @map("objective_summary") @db.VarChar(500)
+  audienceSummary    String              @map("audience_summary") @db.VarChar(500)
+  personalitySummary String              @map("personality_summary") @db.VarChar(500)
+  avatarUrl          String?             @map("avatar_url") @db.VarChar(2048)
+  archivedAt         DateTime?           @map("archived_at") @db.Timestamptz(6)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  ownerUser          User                @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  objectives         BunshinObjective[]
+  audiences          BunshinAudience[]
+  personality        BunshinPersonality?
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status, updatedAt])
+  @@index([ownerUserId, status])
+  @@map("bunshins")
+}
+
+model BunshinObjective {
+  id            String          @id @default(uuid()) @db.Uuid
+  bunshinId     String          @map("bunshin_id") @db.Uuid
+  objectiveType String          @map("objective_type") @db.VarChar(80)
+  primaryGoal   String          @map("primary_goal") @db.VarChar(500)
+  kpiName       String?         @map("kpi_name") @db.VarChar(160)
+  kpiTarget     String?         @map("kpi_target") @db.VarChar(160)
+  kpiPeriod     String?         @map("kpi_period") @db.VarChar(160)
+  priority      Int
+  status        ObjectiveStatus @default(ACTIVE)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bunshin       Bunshin         @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
+
+  @@unique([bunshinId, priority])
+  @@index([bunshinId, status])
+  @@map("bunshin_objectives")
+}
+
+model BunshinAudience {
+  id               String   @id @default(uuid()) @db.Uuid
+  bunshinId        String   @map("bunshin_id") @db.Uuid
+  label            String   @db.VarChar(160)
+  ageRange         String?  @map("age_range") @db.VarChar(100)
+  occupation       String?  @db.VarChar(160)
+  experienceLevel  String?  @map("experience_level") @db.VarChar(100)
+  painPoints       Json     @map("pain_points")
+  desires          Json
+  excludedAudience Json     @map("excluded_audience")
+  notes            String?  @db.VarChar(1000)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bunshin          Bunshin  @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
+
+  @@index([bunshinId])
+  @@map("bunshin_audiences")
+}
+
+model BunshinPersonality {
+  id                   String     @id @default(uuid()) @db.Uuid
+  bunshinId            String     @unique @map("bunshin_id") @db.Uuid
+  tone                 String     @db.VarChar(100)
+  formality            String     @db.VarChar(100)
+  energyLevel          String     @map("energy_level") @db.VarChar(100)
+  expertiseLevel       String     @map("expertise_level") @db.VarChar(100)
+  sentenceStyle        String     @map("sentence_style") @db.VarChar(500)
+  firstPerson          String     @map("first_person") @db.VarChar(50)
+  forbiddenExpressions Json       @map("forbidden_expressions")
+  preferredExpressions Json       @map("preferred_expressions")
+  visualDirection      String?    @map("visual_direction") @db.VarChar(500)
+  facePolicy           FacePolicy @map("face_policy")
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bunshin              Bunshin    @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
+
+  @@map("bunshin_personalities")
 }
