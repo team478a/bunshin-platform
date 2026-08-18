@@ -162,6 +162,17 @@
 - 禁止: AI抽出、要約、pgvector、RAG、Mission連携、Bunshin間Memory共有を混在させない
 - 詳細: `docs/PHASE2_SLICE_2_3_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-019: Memory API/UIはBunshin配下の手動管理に限定する
+
+- 日付: 2026-08-18
+- 状態: Proposed
+- 提案: Memory API/UIはverified sessionと既存Bunshin管理policyへ接続し、Bunshin詳細内でactive/inactive Memoryの手動管理だけを提供する
+- 一覧: 通常はactiveのみ、明示切替時はinactiveのみを返し、deleted Memoryの取得・復元経路は作らない
+- DTO: `sourceId`と`deletedAt`を公開せず、Memory本文・summaryをlogへ記録しない
+- 削除: HTTP DELETEでsoft deleteし、物理削除と復元UIは提供しない
+- 禁止: AI抽出、AI要約、embedding、RAG、Mission連携、Bunshin間共有を混在させない
+- 詳細: `docs/PHASE2_SLICE_2_3B_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
