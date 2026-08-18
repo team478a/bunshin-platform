@@ -1,0 +1,40 @@
+{
+  "name": "bunshin-platform",
+  "private": true,
+  "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10 <11"
+  },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "8.0.1"
+    }
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:integration": "pnpm --filter @bunshin/database test:integration",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @bunshin/database db:generate",
+    "db:validate": "pnpm --filter @bunshin/database db:validate",
+    "db:migrate:dev": "pnpm --filter @bunshin/database db:migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @bunshin/database db:migrate:deploy"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.10.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.9.0",
+    "turbo": "2.10.10",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vitest": "^4.1.0"
+  }
+}

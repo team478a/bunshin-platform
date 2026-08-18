@@ -49,30 +49,36 @@ Codexおよび開発者は、実装前に必ず以下も確認してください
 
 ## Current Status
 
-現在は**実装前のリポジトリ初期化段階**です。
+Phase 0の既存システム監査とPhase 1のPlatform Foundationを完了しています。現在の実装範囲は、pnpm/Turborepo、Next.js、Prisma、User/Workspace/Membership/Platform Adminの最小所有境界、環境管理、observability、health check、CIです。
 
-最初に行う作業はPhase 0です。いきなりアプリケーションを実装せず、既存の `stockbusiness/bunshin-blog` を調査し、再利用方針と目標アーキテクチャを確定してください。
+Bunshin、SOCIAL、BLOG、LINE実接続、AI、Job queueはまだ実装していません。Phase 2へ進む前にPhase 1のレビューが必要です。
 
-Phase 0の必須成果物は次の3ファイルです。
+## Local Setup
 
-```text
-docs/CURRENT_SYSTEM_AUDIT.md
-docs/REUSE_MAP.md
-docs/TARGET_ARCHITECTURE.md
+前提はNode.js 24 LTSとpnpm 10.10.0です。
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+cp .env.example .env
+pnpm db:generate
+pnpm dev
 ```
+
+詳細は[`docs/LOCAL_DEVELOPMENT.md`](docs/LOCAL_DEVELOPMENT.md)を参照してください。
 
 ## Recommended Stack
 
 仕様確定後の標準候補です。既存ブログ資産の調査結果により変更する場合は、Decision Logへ理由を残してください。
 
 - React / TypeScript
-- NestJS / TypeScript
+- Next.js / TypeScript（Phase 1。domain/applicationはframework非依存）
 - PostgreSQL / Supabase
 - Prisma
 - pgvector
 - pnpm / Turborepo
 - LINE Login / Messaging API
-- Vercelおよび適切なAPI実行環境
+- Vercel（Web）、将来のworkerは必要時にCloud Runを検討
 - CI: typecheck / lint / test / build
 
 ## Development Rule

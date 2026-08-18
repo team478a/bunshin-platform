@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+coverage
+packages/database/generated
+apps/web/next-env.d.ts
+pnpm-lock.yaml
+.github/pull_request_template.md
+docs/ARCHITECTURE_PRINCIPLES.md
+docs/BUNSHIN_PLATFORM_CODEX_SPEC_V1.md
+docs/CODEX_INITIAL_INSTRUCTION.md
+docs/IMPLEMENTATION_ROADMAP.md
+docs/PHASE0_EXECUTION_GUIDE.md
+docs/README.md

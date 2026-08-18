@@ -54,6 +54,36 @@
 - 決定: MVPではSNS完全自動投稿を実装しない
 - 理由: まず「毎日具体的なMissionが届くことでユーザーが行動を継続するか」を検証するため
 
+## D-008: Phase 1のPlatform Foundation構成
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: Node.js 24、pnpm 10、Turborepo、Next.jsを採用し、domain/applicationをframework非依存packageへ分離する
+- 理由: MVPのdeploy単位を小さく保ちながら、将来API/workerを分離できる境界を作るため
+- 影響: Phase 1ではNestJSと独立`apps/admin`を作らない
+
+## D-009: Platform DBと既存Blog DBを分離する
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: PlatformはSupabase PostgreSQLを利用し、staging/productionを別projectとし、既存Blog DBとは共有しない
+- 理由: Workspace/Bunshinの所有境界を旧schemaへ混ぜず、Strangler移行とrollbackを可能にするため
+- 影響: pooled `DATABASE_URL`とmigration用`DIRECT_URL`を分け、ブラウザからDBへ接続しない
+
+## D-010: Workspace権限とPlatform Adminを分離する
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: WorkspaceMembershipとPlatformAdminを別modelとし、どちらも他方の権限を暗黙付与しない
+- 理由: tenant所有権とPlatform運営権限は異なる責務だから
+
+## D-011: Phase 1ではJob契約だけを定義する
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: JobDispatcher/JobRepositoryとcontext型だけを定義し、table、worker、polling、retry、schedulerを作らない
+- 理由: 実際の非同期処理が必要になるPhaseまでinfrastructureを先回りしないため
+
 ## 未決事項
 
 Phase 0で決める項目:
