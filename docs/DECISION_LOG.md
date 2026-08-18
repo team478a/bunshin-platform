@@ -115,6 +115,18 @@
 - 禁止: header、query、cookieの任意User IDを信頼するmock認証をProduction routeへ接続しない
 - 詳細: `docs/PHASE2_SLICE_2_1_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-015: Web認証/sessionにSupabase Authを採用する
+
+- 日付: 2026-08-18
+- 状態: Proposed（Slice 2.1-B実装前の人間レビュー待ち）
+- 提案: Email Magic Link + PKCE、Supabase SSR cookie、server-side `getUser()`検証を採用する
+- 認可: Supabase JWT claimではなくPlatform DBのactive User/AuthIdentity/WorkspaceMembershipを正本とする
+- Session案: access token 1時間、最大30日、inactivity 7日、初期段階ではsingle-sessionを無効とする
+- 防御: Origin validation、Supabase Auth rate limit、Vercel WAF rate limitを併用する
+- 禁止: request由来User ID、Productionでのmock auth、BrowserからのBunshin table直接access
+- Gate: custom SMTP、Site/Redirect URL、session値、WAF値の承認後にSlice 2.1-Bを開始する
+- 詳細: `docs/AUTH_SESSION_ADR.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
