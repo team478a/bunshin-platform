@@ -7,9 +7,11 @@ import type { FormEvent } from 'react';
 export function BunshinEditor({
   workspaceId,
   bunshin,
+  knowledge,
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
+  knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -35,6 +37,13 @@ export function BunshinEditor({
       body: '{}',
     });
     if (response.ok) router.push('/bunshins');
+  }
+  async function setGrant(knowledgeId: string, granted: boolean) {
+    const response = await fetch(
+      `${endpoint}/knowledge/${encodeURIComponent(knowledgeId)}/${granted ? 'revoke' : 'grant'}`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+    );
+    if (response.ok) router.refresh();
   }
   return (
     <main>
@@ -73,6 +82,28 @@ export function BunshinEditor({
           <button type="submit">保存</button>
         </p>
       </form>
+      <section>
+        <h2>利用するKnowledge</h2>
+        {knowledge.length === 0 ? (
+          <p>利用可能なKnowledgeはありません。</p>
+        ) : (
+          <ul>
+            {knowledge.map((item) => (
+              <li key={item.id}>
+                {item.title}（{item.type}）{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void setGrant(item.id, item.granted);
+                  }}
+                >
+                  {item.granted ? '利用を解除' : '利用する'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <button
         type="button"
         onClick={() => {
