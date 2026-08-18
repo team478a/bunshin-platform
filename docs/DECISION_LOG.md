@@ -150,6 +150,18 @@
 - Gate: Supabase Auth本番設定、migration、browser smoke、human security reviewの完了前はProduction公開しない
 - 詳細: `docs/PHASE2_SLICE_2_2B_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-018: Bunshin Memoryはsoft deleteしembeddingをPhase 6まで延期する
+
+- 日付: 2026-08-18
+- 状態: Proposed
+- 提案: Memoryは`workspaceId + bunshinId`でscopeし、無効化とsoft deleteを区別する
+- 削除: `active=false`と`deletedAt`を記録し、通常取得から除外する
+- embedding: provider、model、次元数、index、再生成方針が未決定のため、Phase 6のADRとmigrationまでcolumn追加を延期する
+- 作成元: Slice 2.3では`USER_INPUT`だけを許可する
+- PR分割: 2.3-A Core Persistenceと2.3-B authenticated API/UIを分離する
+- 禁止: AI抽出、要約、pgvector、RAG、Mission連携、Bunshin間Memory共有を混在させない
+- 詳細: `docs/PHASE2_SLICE_2_3_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
