@@ -109,7 +109,7 @@
 ## D-014: Phase 2 Slice 2.1を認証Gateで分割する
 
 - 日付: 2026-08-18
-- 状態: Proposed（Slice 2.1実装指示書レビュー待ち）
+- 状態: Accepted（PR 2.1-AでCore Persistenceを実装）
 - 提案: PR 2.1-AではBunshin Core Persistenceだけを実装し、Production API/UIはapplication sessionとCurrentUserProvider adapterを承認したPR 2.1-Bまで公開しない
 - 理由: Productionに実認証がない状態でactorUserIdをrequestから受け取ると、Workspace/Bunshin境界を保証できないため
 - 禁止: header、query、cookieの任意User IDを信頼するmock認証をProduction routeへ接続しない
