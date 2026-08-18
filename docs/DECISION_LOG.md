@@ -96,10 +96,13 @@
 ## D-013: 初期本番環境はVercelとSupabaseを東京に配置する
 
 - 日付: 2026-08-18
-- 状態: Proposed（契約・project作成前の人間承認待ち）
-- 提案: Web/APIはVercel Pro `hnd1`、PostgreSQLはSupabase Pro `ap-northeast-1`を使用し、productionとstagingを別projectにする
+- 状態: Accepted
+- 決定: Web/APIはVercel Pro `hnd1`、PostgreSQLはSupabase Pro `ap-northeast-1`を使用する
 - 理由: Next.js/Prismaの現行構成との差分と少人数運用の負担を抑え、applicationとDBを同じ東京圏に配置するため
 - 接続: runtimeはSupavisor transaction mode、migrationはdirect connectionまたはsession poolerを使用する
+- 環境方針: 実運用開始まではstaging専用Supabaseを作成せず、local development、GitHub Actionsの一時DB、productionの3環境で運用する
+- 禁止: Preview deploymentをproduction DBへ接続しない
+- Staging追加条件: 実ユーザー受入前、またはproduction相当環境でDB migration・認証・外部連携の事前検証が必要になった時点
 - 将来: worker、長時間Job、private network等が必要になった時点でCloud Run / Cloud SQLを再評価する
 - 詳細: `docs/PRODUCTION_ENVIRONMENT_PLAN.md`
 
