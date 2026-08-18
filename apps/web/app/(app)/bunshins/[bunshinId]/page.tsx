@@ -1,4 +1,4 @@
-import { GetBunshin } from '@bunshin/application';
+import { GetBunshin, ListBunshinMemories } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { BunshinEditor } from './editor';
@@ -21,6 +21,7 @@ export default async function BunshinPage({
       PrismaBunshinRepository,
       PrismaOwnerKnowledgeRepository,
       PrismaKnowledgeGrantRepository,
+      PrismaBunshinMemoryRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -36,6 +37,12 @@ export default async function BunshinPage({
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
     });
+    const memories = await new ListBunshinMemories(new PrismaBunshinMemoryRepository()).execute({
+      workspaceId,
+      actorUserId: currentUser.userId,
+      bunshinId: bunshin.id,
+      includeInactive: true,
+    });
     return (
       <BunshinEditor
         workspaceId={workspaceId}
@@ -46,6 +53,17 @@ export default async function BunshinPage({
           type,
           granted: granted.some((item) => item.id === id),
         }))}
+        memories={memories.map(
+          ({ id, type, content, summary, confidence, importance, active }) => ({
+            id,
+            type,
+            content,
+            summary,
+            confidence,
+            importance,
+            active,
+          }),
+        )}
       />
     );
   } catch {

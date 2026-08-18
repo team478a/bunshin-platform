@@ -3,15 +3,19 @@ import type { BunshinAggregate } from '@bunshin/platform-domain';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { MemorySection } from './memory-section';
+import type { MemoryView } from './memory-section';
 
 export function BunshinEditor({
   workspaceId,
   bunshin,
   knowledge,
+  memories,
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
   knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
+  memories: MemoryView[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -104,6 +108,7 @@ export function BunshinEditor({
           </ul>
         )}
       </section>
+      <MemorySection workspaceId={workspaceId} bunshinId={bunshin.id} memories={memories} />
       <button
         type="button"
         onClick={() => {
