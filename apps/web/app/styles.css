@@ -31,3 +31,83 @@ main {
 a {
   color: #175cd3;
 }
+
+.memory-section input,
+.memory-section textarea,
+.memory-section select,
+.memory-section button {
+  font: inherit;
+}
+
+.memory-section input,
+.memory-section textarea,
+.memory-section select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #c9d1da;
+  border-radius: 8px;
+}
+
+.memory-section textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.memory-section button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #aab4c0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
+.memory-section {
+  margin: 40px 0;
+}
+
+.memory-form,
+.memory-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: white;
+}
+
+.memory-tabs,
+.memory-actions,
+.memory-numbers {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.memory-numbers > label {
+  flex: 1;
+}
+
+.memory-list {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.danger {
+  color: #b42318;
+  border-color: #f0b4ae;
+}
+
+@media (max-width: 560px) {
+  main {
+    padding: 32px 16px;
+  }
+
+  .memory-actions,
+  .memory-numbers {
+    flex-direction: column;
+  }
+}
