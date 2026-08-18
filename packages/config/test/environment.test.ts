@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest';
+import { parseServerEnvironment } from '../src';
+
+const valid = {
+  NODE_ENV: 'development',
+  APP_ENV: 'development',
+  APP_URL: 'http://localhost:3000',
+  DATABASE_URL: 'postgresql://pooled.example/test',
+  DIRECT_URL: 'postgresql://direct.example/test',
+  SESSION_SECRET: 'x'.repeat(32),
+  LOG_LEVEL: 'info',
+};
+
+describe('environment validation', () => {
+  it('accepts separated runtime and direct database URLs', () => {
+    expect(parseServerEnvironment(valid)).toMatchObject({
+      APP_ENV: 'development',
+      LOG_LEVEL: 'info',
+    });
+  });
+
+  it('reports variable names without secret values', () => {
+    expect(() => parseServerEnvironment({ ...valid, SESSION_SECRET: 'secret' })).toThrow(
+      'SESSION_SECRET',
+    );
+    try {
+      parseServerEnvironment({ ...valid, SESSION_SECRET: 'secret' });
+    } catch (error) {
+      expect(String(error)).not.toContain('postgresql://');
+      expect(String(error)).not.toContain('secret');
+    }
+  });
+
+  it('rejects staging or production configuration in tests', () => {
+    expect(() =>
+      parseServerEnvironment({ ...valid, NODE_ENV: 'test', APP_ENV: 'production' }),
+    ).toThrow('APP_ENV');
+  });
+});

@@ -1,0 +1,33 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  background: #f6f7f9;
+  color: #18202a;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px 24px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #dfe3e8;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgb(26 35 45 / 8%);
+}
+
+.status {
+  color: #16744a;
+  font-weight: 700;
+}
+
+a {
+  color: #175cd3;
+}

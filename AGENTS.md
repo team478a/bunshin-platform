@@ -32,15 +32,9 @@
 
 ## 3. Current Priority
 
-現在の優先作業はPhase 0です。
+Phase 0の監査とPhase 1のPlatform Foundationは完了しています。Phase 2を開始する前に`docs/PHASE1_IMPLEMENTATION_REPORT.md`とDraft PRのレビューを受けてください。
 
-本格実装を始める前に、次を作成してください。
-
-- `docs/CURRENT_SYSTEM_AUDIT.md`
-- `docs/REUSE_MAP.md`
-- `docs/TARGET_ARCHITECTURE.md`
-
-Phase 0がレビューされる前に、SOCIAL画面、AI投稿生成、自動投稿、動画生成などへ進まないでください。
+レビュー完了前にBunshin、SOCIAL画面、AI投稿生成、LINE配信、BLOG移行、自動投稿、動画生成へ進まないでください。
 
 ## 4. Scope Discipline
 

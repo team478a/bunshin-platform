@@ -54,13 +54,62 @@
 - 決定: MVPではSNS完全自動投稿を実装しない
 - 理由: まず「毎日具体的なMissionが届くことでユーザーが行動を継続するか」を検証するため
 
+## D-008: Phase 1のPlatform Foundation構成
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: Node.js 24、pnpm 10、Turborepo、Next.jsを採用し、domain/applicationをframework非依存packageへ分離する
+- 理由: MVPのdeploy単位を小さく保ちながら、将来API/workerを分離できる境界を作るため
+- 影響: Phase 1ではNestJSと独立`apps/admin`を作らない
+
+## D-009: Platform DBと既存Blog DBを分離する
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: PlatformはSupabase PostgreSQLを利用し、staging/productionを別projectとし、既存Blog DBとは共有しない
+- 理由: Workspace/Bunshinの所有境界を旧schemaへ混ぜず、Strangler移行とrollbackを可能にするため
+- 影響: pooled `DATABASE_URL`とmigration用`DIRECT_URL`を分け、ブラウザからDBへ接続しない
+
+## D-010: Workspace権限とPlatform Adminを分離する
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: WorkspaceMembershipとPlatformAdminを別modelとし、どちらも他方の権限を暗黙付与しない
+- 理由: tenant所有権とPlatform運営権限は異なる責務だから
+
+## D-011: Phase 1ではJob契約だけを定義する
+
+- 日付: 2026-08-18
+- 状態: Accepted
+- 決定: JobDispatcher/JobRepositoryとcontext型だけを定義し、table、worker、polling、retry、schedulerを作らない
+- 理由: 実際の非同期処理が必要になるPhaseまでinfrastructureを先回りしないため
+
+## D-012: Phase 2を独立した縦切りで進める
+
+- 日付: 2026-08-18
+- 状態: Proposed（Phase 1 Draft PRレビュー待ち）
+- 提案: Phase 2はBunshin Identity、Owner Knowledge/Grant、Bunshin Memory、Capability Assignmentの順に独立PRで進める
+- 理由: Multi-Bunshinの所有境界を先に検証し、SOCIAL、AI、LINE、BLOGの関心事をCoreへ混在させないため
+- 最初のSlice: Bunshin CRUDとObjective/Audience/Personality、およびCross User isolation
+- 詳細: `docs/PHASE2_READINESS_PLAN.md`
+
+## D-013: 初期本番環境はVercelとSupabaseを東京に配置する
+
+- 日付: 2026-08-18
+- 状態: Proposed（契約・project作成前の人間承認待ち）
+- 提案: Web/APIはVercel Pro `hnd1`、PostgreSQLはSupabase Pro `ap-northeast-1`を使用し、productionとstagingを別projectにする
+- 理由: Next.js/Prismaの現行構成との差分と少人数運用の負担を抑え、applicationとDBを同じ東京圏に配置するため
+- 接続: runtimeはSupavisor transaction mode、migrationはdirect connectionまたはsession poolerを使用する
+- 将来: worker、長時間Job、private network等が必要になった時点でCloud Run / Cloud SQLを再評価する
+- 詳細: `docs/PRODUCTION_ENVIRONMENT_PLAN.md`
+
 ## 未決事項
 
-Phase 0で決める項目:
+後続Phaseで決める項目:
 
 - 既存ブログ版から移植する具体的module
-- monorepoの最終構成
 - APIの本番実行環境
 - 認証とLINE Providerの詳細
 - Scheduler/Queue方式
-- 既存DBの移行・併存方式
+- Phase 9における既存DBの具体的な移行手順
+- Supabase RLSの採用可否

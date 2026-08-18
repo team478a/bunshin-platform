@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum AuthProvider {
+  LINE
+  EMAIL
+}
+
+enum WorkspaceType {
+  PERSONAL
+  ORGANIZATION
+}
+
+enum WorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  OPERATOR
+  SUPPORT
+  READ_ONLY
+}
+
+enum PlatformAdminStatus {
+  ACTIVE
+  REVOKED
+}
+
+model User {
+  id            String                @id @default(uuid()) @db.Uuid
+  status        UserStatus            @default(ACTIVE)
+  displayName   String                @map("display_name") @db.VarChar(100)
+  email         String?               @db.VarChar(320)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  identities    AuthIdentity[]
+  memberships   WorkspaceMembership[]
+  platformAdmin PlatformAdmin?
+
+  @@index([status])
+  @@map("users")
+}
+
+model AuthIdentity {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  provider       AuthProvider
+  providerUserId String       @map("provider_user_id") @db.VarChar(255)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+model Workspace {
+  id          String                @id @default(uuid()) @db.Uuid
+  type        WorkspaceType
+  name        String                @db.VarChar(120)
+  status      WorkspaceStatus       @default(ACTIVE)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships WorkspaceMembership[]
+
+  @@index([status])
+  @@map("workspaces")
+}
+
+model WorkspaceMembership {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  role        WorkspaceRole
+  status      MembershipStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, status])
+  @@map("workspace_memberships")
+}
+
+model PlatformAdmin {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @unique @map("user_id") @db.Uuid
+  role      PlatformRole
+  status    PlatformAdminStatus @default(ACTIVE)
+  grantedAt DateTime            @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt DateTime?           @map("revoked_at") @db.Timestamptz(6)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, role])
+  @@map("platform_admins")
+}
