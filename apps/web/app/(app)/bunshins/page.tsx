@@ -31,6 +31,9 @@ export default async function BunshinsPage() {
       <p>
         <Link href={`/bunshins/new?workspaceId=${workspace.id}` as Route}>新しい分身を作る</Link>
       </p>
+      <p>
+        <Link href={'/knowledge' as Route}>Knowledgeを管理</Link>
+      </p>
       {bunshins.length === 0 ? (
         <p>まだ分身はありません。</p>
       ) : (

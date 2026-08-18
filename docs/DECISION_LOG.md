@@ -142,7 +142,7 @@
 ## D-017: Knowledge API/UIは本人所有と最小Grant操作に限定する
 
 - 日付: 2026-08-18
-- 状態: Proposed
+- 状態: Accepted（PR #11で承認）
 - 提案: Knowledge CRUDはverified session user本人の所有Knowledgeだけを扱い、Bunshin詳細へ最小のgrant/revoke操作を追加する
 - DTO: `ownerUserId`と`grantedByUserId`を通常の公開responseから除外する
 - 防御: mutationはsame-originとJSONを必須とし、default DENYと既存Bunshin管理policyを再利用する
