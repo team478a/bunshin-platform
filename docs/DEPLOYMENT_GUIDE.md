@@ -2,16 +2,16 @@
 
 ## Vercel
 
-| 項目            | 設定                                |
-| --------------- | ----------------------------------- |
-| Root Directory  | repository root                     |
-| Install Command | `pnpm install --frozen-lockfile`    |
-| Build Command   | `pnpm turbo run build --filter=web` |
-| Output          | Next.js default `.next`             |
-| Node.js         | 24.x                                |
-| Function Region | Tokyo `hnd1`                        |
+| 項目            | 設定                                            |
+| --------------- | ----------------------------------------------- |
+| Root Directory  | `apps/web`                                      |
+| Install Command | Vercelのpnpm workspace自動検出                  |
+| Build Command   | `cd ../.. && pnpm turbo run build --filter=web` |
+| Output          | Next.js default `.next`                         |
+| Node.js         | 24.x                                            |
+| Function Region | Tokyo `hnd1`                                    |
 
-`vercel.json`にもinstall/build commandを定義している。
+`apps/web/vercel.json`にもframework、build command、Function regionを定義している。Vercel ProjectのRoot Directoryが`apps/web`であるため、設定fileも同directoryへ置く。
 
 ## Environment Separation
 

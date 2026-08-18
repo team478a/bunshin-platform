@@ -115,6 +115,7 @@ Preview deploymentを共有staging DBへ接続する場合、古いPRコード�
 - [ ] production/stagingをTokyoで別projectとして作成する
 - [ ] GitHub branch protectionで`verify`と`database`をrequiredにする
 - [ ] Vercel projectをGitHub repositoryへ接続する
+- [ ] Vercel Root Directoryを`apps/web`、Framework Presetを`Next.js`にする
 - [ ] Function regionを`hnd1`に固定する
 - [ ] ProductionとPreviewへ別々の環境変数を登録する
 - [ ] stagingへmigrationを適用し、health checkを確認する
