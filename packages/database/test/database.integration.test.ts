@@ -16,6 +16,10 @@ import {
   DeactivateContentPillar,
   DeleteContentPillar,
   ListContentPillars,
+  CreateWeeklyPlan,
+  CreateWeeklyPlanItem,
+  ConfirmWeeklyPlan,
+  ExpireWeeklyPlan,
 } from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
@@ -29,6 +33,7 @@ import {
   PrismaBunshinCapabilityAssignmentRepository,
   PrismaSocialProfileRepository,
   PrismaContentPillarRepository,
+  PrismaWeeklyPlanRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -40,6 +45,8 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.weeklyPlanItem.deleteMany();
+    await client.weeklyPlan.deleteMany();
     await client.contentPillar.deleteMany();
     await client.socialProfile.deleteMany();
     await client.bunshinCapabilityAssignment.deleteMany();
@@ -1114,4 +1121,101 @@ integration('database ownership boundaries', () => {
       }),
     ).rejects.toThrow();
   });
+
+  it('persists scoped Weekly Plans with local dates, pillars, and immutable transitions', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Plan Owner' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Planner',
+      slug: `planner-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const assignments = new PrismaBunshinCapabilityAssignmentRepository(client);
+    await assignments.assign({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: bunshin.id,
+      capabilityType: 'SOCIAL',
+    });
+    const pillar = await new CreateContentPillar(
+      new PrismaContentPillarRepository(client),
+      assignments,
+    ).execute({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: bunshin.id,
+      title: '教育',
+      weight: 50,
+    });
+    const repository = new PrismaWeeklyPlanRepository(client);
+    const plan = await new CreateWeeklyPlan(repository, assignments).execute({
+      ...ownerScope(owner, bunshin.id),
+      weekStartDate: '2026-08-17',
+      timezone: 'Asia/Tokyo',
+    });
+    await expect(
+      new CreateWeeklyPlan(repository, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        weekStartDate: '2026-08-17',
+        timezone: 'Asia/Tokyo',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      new CreateWeeklyPlanItem(repository, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        weeklyPlanId: plan.id,
+        scheduledDate: '2026-08-24',
+        contentPillarId: pillar.id,
+        goal: '範囲外',
+        angle: '範囲外',
+        recommendedFormat: 'SLIDE',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    const withItem = await new CreateWeeklyPlanItem(repository, assignments).execute({
+      ...ownerScope(owner, bunshin.id),
+      weeklyPlanId: plan.id,
+      scheduledDate: '2026-08-18',
+      contentPillarId: pillar.id,
+      goal: '教育',
+      angle: '初心者',
+      recommendedFormat: 'SLIDE',
+    });
+    expect(withItem.items[0]).toMatchObject({
+      scheduledDate: '2026-08-18',
+      contentPillarId: pillar.id,
+    });
+    const confirmed = await new ConfirmWeeklyPlan(repository, assignments).execute({
+      ...ownerScope(owner, bunshin.id),
+      weeklyPlanId: plan.id,
+    });
+    expect(confirmed.status).toBe('CONFIRMED');
+    await expect(
+      new ConfirmWeeklyPlan(repository, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        weeklyPlanId: plan.id,
+      }),
+    ).resolves.toMatchObject({ status: 'CONFIRMED' });
+    await expect(
+      repository.updatePlan({
+        ...ownerScope(owner, bunshin.id),
+        weeklyPlanId: plan.id,
+        strategySummary: '変更',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      new ExpireWeeklyPlan(repository, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        weeklyPlanId: plan.id,
+      }),
+    ).resolves.toMatchObject({ status: 'EXPIRED' });
+  });
 });
+
+function ownerScope(owner: { workspace: { id: string }; user: { id: string } }, bunshinId: string) {
+  return { workspaceId: owner.workspace.id, actorUserId: owner.user.id, bunshinId };
+}

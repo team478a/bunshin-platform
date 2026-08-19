@@ -250,7 +250,7 @@
 ## D-026: Weekly Planはtimezone snapshot付きlocal DATEと明示状態遷移で管理する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #30で承認）
 - 提案: 週をIANA timezone上の月曜〜日曜とし、Planへtimezone snapshot、Plan/ItemへPostgreSQL DATEを保存する
 - 一意性: 同一Workspace/Bunshin/週は1 Plan、同一Plan/日は1 Itemとする
 - 状態: DRAFTだけを編集可能とし、CONFIRMED/EXPIREDはimmutable、confirm/expireは冪等とする
