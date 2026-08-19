@@ -273,6 +273,19 @@
 - 理由: 3.3-Aで確立したcalendar、tenant/Bunshin/Pillar、確定点をHTTP/UIでも維持し、自動生成を後続Phaseへ分離するため
 - 詳細: `docs/PHASE3_SLICE_3_3B_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-028: Daily Missionはformat別Contentを持つ必須1対1aggregateとする
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: Slice 3.4をCore Persistenceだけに限定し、DailyMissionとstrict validation済みMissionContentを同一transactionで保存する
+- 一意性: 通常Missionは`workspaceId + bunshinId + missionDate`で1件とする
+- 日付: missionDateはtimezoneを持たないDATEとし、Missionへtimezone snapshotを保存しない
+- 状態: GENERATED / VIEWED / STARTED / COMPLETED / SKIPPED / EXPIREDを持ち、terminal状態はimmutable、同一状態操作は冪等とする
+- Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
+- 禁止: API/UI、AI、Feedback、PostRecord、LINE、Jobを提供しない
+- 理由: Phase 4の生成adapterより先にtenant、日付、content、状態の保存境界を固定し、不完全な生成結果や越境参照を防ぐため
+- 詳細: `docs/PHASE3_SLICE_3_4_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
