@@ -50,6 +50,9 @@ importers:
       '@bunshin/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@bunshin/capability-social':
+        specifier: workspace:*
+        version: link:../../packages/capability-social
       '@bunshin/config':
         specifier: workspace:*
         version: link:../../packages/config

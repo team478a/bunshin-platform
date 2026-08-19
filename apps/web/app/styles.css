@@ -43,6 +43,56 @@ a {
   margin: 40px 0;
 }
 
+.social-profile-section {
+  margin: 40px 0;
+}
+.social-profile-list {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+}
+.social-profile-card,
+.social-profile-form {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: white;
+}
+.social-profile-form input:not([type='checkbox']),
+.social-profile-form textarea,
+.social-profile-form select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #c9d1da;
+  border-radius: 8px;
+}
+.social-profile-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+.social-format-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+}
+.social-profile-actions {
+  display: flex;
+  gap: 10px;
+}
+.social-profile-section button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #aab4c0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
 .capability-card {
   display: flex;
   align-items: center;
@@ -135,5 +185,9 @@ a {
   .capability-card {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .social-profile-actions {
+    flex-direction: column;
   }
 }
