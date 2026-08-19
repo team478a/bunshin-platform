@@ -891,7 +891,7 @@ export class PrismaBunshinCapabilityAssignmentRepository implements BunshinCapab
       },
       select: { id: true },
     });
-    if (accessible === null) return [];
+    if (accessible === null) return null;
     const rows = await this.client.bunshinCapabilityAssignment.findMany({
       where: { workspaceId: input.workspaceId, bunshinId: input.bunshinId },
       orderBy: { updatedAt: 'desc' },
@@ -901,6 +901,7 @@ export class PrismaBunshinCapabilityAssignmentRepository implements BunshinCapab
 
   async find(input: Parameters<BunshinCapabilityAssignmentRepository['find']>[0]) {
     const rows = await this.list(input);
+    if (rows === null) return null;
     return rows.find((row) => row.capabilityType === input.capabilityType) ?? null;
   }
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BunshinCapabilityAssignmentRepository } from '../src';
 import {
   ActivateBunshinCapability,
+  ListBunshinCapabilityAssignments,
   RequireActiveBunshinCapability,
   SuspendBunshinCapability,
 } from '../src';
@@ -61,6 +62,27 @@ describe('Capability Assignment use cases', () => {
         capabilityType: 'SOCIAL',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('distinguishes an inaccessible Bunshin from an accessible empty list', async () => {
+    const input = {
+      workspaceId: 'workspace-1',
+      actorUserId: 'user-1',
+      bunshinId: 'bunshin-1',
+    };
+    const inaccessible = {
+      list: vi.fn().mockResolvedValue(null),
+    } as unknown as BunshinCapabilityAssignmentRepository;
+    await expect(
+      new ListBunshinCapabilityAssignments(inaccessible).execute(input),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    const accessible = {
+      list: vi.fn().mockResolvedValue([]),
+    } as unknown as BunshinCapabilityAssignmentRepository;
+    await expect(new ListBunshinCapabilityAssignments(accessible).execute(input)).resolves.toEqual(
+      [],
+    );
   });
 
   it('maps activate and suspend to the only user-manageable statuses', async () => {

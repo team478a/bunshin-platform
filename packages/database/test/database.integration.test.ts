@@ -615,7 +615,7 @@ integration('database ownership boundaries', () => {
         actorUserId: outsider.user.id,
         bunshinId: first.id,
       }),
-    ).toEqual([]);
+    ).toBeNull();
     expect(
       await repository.assign({
         workspaceId: outsider.workspace.id,

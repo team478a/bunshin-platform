@@ -652,7 +652,7 @@ export interface BunshinCapabilityAssignmentRepository {
     workspaceId: string;
     actorUserId: string;
     bunshinId: string;
-  }): Promise<BunshinCapabilityAssignment[]>;
+  }): Promise<BunshinCapabilityAssignment[] | null>;
   find(input: {
     workspaceId: string;
     actorUserId: string;
@@ -684,8 +684,10 @@ export class AssignCapabilityToBunshin {
 
 export class ListBunshinCapabilityAssignments {
   constructor(private readonly repository: BunshinCapabilityAssignmentRepository) {}
-  execute(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
-    return this.repository.list(input);
+  async execute(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
+    const values = await this.repository.list(input);
+    if (values === null) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    return values;
   }
 }
 
