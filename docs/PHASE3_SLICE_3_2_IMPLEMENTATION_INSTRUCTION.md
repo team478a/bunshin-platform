@@ -176,11 +176,11 @@ listは既定で非deletedのactive/inactive両方を返し、`createdAt ASC, id
 
 ## 15. 承認事項
 
-- [ ] 3.2-A Core Persistenceと3.2-B API/UIを別PRにする
-- [ ] Content Pillarは安定したUUIDを持つresourceとする
-- [ ] titleをBunshin内で一意とし、deleted後も再利用しない
-- [ ] weightは1..100の相対値とし、合計100を要求しない
-- [ ] deleteはsoft deleteとし、restoreは提供しない
-- [ ] listはactive/inactiveを返し、deletedを除外する
-- [ ] mutationにACTIVE SOCIAL Assignmentを必須とする
-- [ ] AI、Weekly Plan、Mission、Provider、Jobを実装しない
+- [x] 3.2-A Core Persistenceと3.2-B API/UIを別PRにする
+- [x] Content Pillarは安定したUUIDを持つresourceとする
+- [x] titleをBunshin内で一意とし、deleted後も再利用しない
+- [x] weightは1..100の相対値とし、合計100を要求しない
+- [x] deleteはsoft deleteとし、restoreは提供しない
+- [x] listはactive/inactiveを返し、deletedを除外する
+- [x] mutationにACTIVE SOCIAL Assignmentを必須とする
+- [x] AI、Weekly Plan、Mission、Provider、Jobを実装しない

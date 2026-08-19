@@ -209,6 +209,7 @@ model Workspace {
   memories        BunshinMemory[]
   capabilityAssignments BunshinCapabilityAssignment[]
   socialProfiles SocialProfile[]
+  contentPillars ContentPillar[]
 
   @@index([status])
   @@map("workspaces")
@@ -267,6 +268,7 @@ model Bunshin {
   memories           BunshinMemory[]
   capabilityAssignments BunshinCapabilityAssignment[]
   socialProfiles SocialProfile[]
+  contentPillars ContentPillar[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -376,6 +378,25 @@ model SocialProfile {
   @@unique([workspaceId, bunshinId, platform])
   @@index([workspaceId, bunshinId, status, updatedAt])
   @@map("social_profiles")
+}
+
+model ContentPillar {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  bunshinId   String    @map("bunshin_id") @db.Uuid
+  title       String    @db.VarChar(100)
+  description String?   @db.VarChar(500)
+  weight      Int
+  active      Boolean   @default(true)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin     Bunshin   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, title])
+  @@index([workspaceId, bunshinId, active, deletedAt, createdAt])
+  @@map("content_pillars")
 }
 
 model BunshinObjective {

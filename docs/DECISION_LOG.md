@@ -225,7 +225,7 @@
 ## D-024: Content Pillarは安定IDを持つ手動管理resourceとする
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #26で承認）
 - 提案: Content PillarはUUID、title、description、weight、active、deletedAtを持ち、3.2-A Core Persistenceと3.2-B API/UIへ分割する
 - 一意性: `workspaceId + bunshinId + title`。soft delete後もtitleを再利用しない
 - weight: 1..100の相対優先度とし、合計100や件数5〜10を強制しない

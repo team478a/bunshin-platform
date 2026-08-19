@@ -20,8 +20,9 @@
 - `BunshinMemory`
 - `BunshinCapabilityAssignment`
 - `SocialProfile`
+- `ContentPillar`
 
-Social Profile以外のSOCIAL固有table、BLOG固有、Mission、Content、Feedback、Job tableは存在しない。
+Social ProfileとContent Pillar以外のSOCIAL固有table、BLOG固有、Mission、Feedback、Job tableは存在しない。
 
 ## Migration
 

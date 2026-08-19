@@ -11,6 +11,11 @@ import {
   DeactivateSocialProfile,
   ListSocialProfiles,
   UpdateSocialProfile,
+  CreateContentPillar,
+  UpdateContentPillar,
+  DeactivateContentPillar,
+  DeleteContentPillar,
+  ListContentPillars,
 } from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
@@ -23,6 +28,7 @@ import {
   PrismaBunshinMemoryRepository,
   PrismaBunshinCapabilityAssignmentRepository,
   PrismaSocialProfileRepository,
+  PrismaContentPillarRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -34,6 +40,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.contentPillar.deleteMany();
     await client.socialProfile.deleteMany();
     await client.bunshinCapabilityAssignment.deleteMany();
     await client.bunshinMemory.deleteMany();
@@ -949,5 +956,162 @@ integration('database ownership boundaries', () => {
         bunshinId: sibling.id,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('persists Content Pillars with scope, weight, state, and soft-delete boundaries', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Pillar Owner' });
+    const outsider = await accounts.execute({ displayName: 'Pillar Outsider' });
+    const bunshins = new PrismaBunshinRepository(client);
+    const first = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Pillar First',
+      slug: `pillar-first-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const sibling = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Pillar Sibling',
+      slug: `pillar-sibling-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const assignments = new PrismaBunshinCapabilityAssignmentRepository(client);
+    for (const bunshinId of [first.id, sibling.id]) {
+      await assignments.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId,
+        capabilityType: 'SOCIAL',
+      });
+    }
+    const repository = new PrismaContentPillarRepository(client);
+    const create = new CreateContentPillar(repository, assignments);
+    const pillar = await create.execute({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      title: '  教育  ',
+      description: '  基礎解説  ',
+      weight: 100,
+    });
+    expect(pillar).toMatchObject({
+      title: '教育',
+      description: '基礎解説',
+      weight: 100,
+      active: true,
+    });
+    await expect(
+      create.execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        title: '教育',
+        weight: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      create.execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: sibling.id,
+        title: '教育',
+        weight: 10,
+      }),
+    ).resolves.toMatchObject({ title: '教育' });
+    await expect(
+      new ListContentPillars(repository).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: first.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      new UpdateContentPillar(repository, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: sibling.id,
+        pillarId: pillar.id,
+        title: '越境',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await assignments.setStatus({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      capabilityType: 'SOCIAL',
+      status: 'SUSPENDED',
+    });
+    await expect(
+      new ListContentPillars(repository).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+      }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      new DeactivateContentPillar(repository, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        pillarId: pillar.id,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await assignments.setStatus({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      capabilityType: 'SOCIAL',
+      status: 'ACTIVE',
+    });
+    const deleted = await new DeleteContentPillar(repository, assignments).execute({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: first.id,
+      pillarId: pillar.id,
+    });
+    expect(deleted).toMatchObject({ active: false, deletedAt: expect.any(Date) });
+    await expect(
+      new DeleteContentPillar(repository, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+        pillarId: pillar.id,
+      }),
+    ).resolves.toMatchObject({ id: pillar.id, deletedAt: expect.any(Date) });
+    await expect(
+      new ListContentPillars(repository).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: first.id,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      client.contentPillar.create({
+        data: {
+          workspaceId: owner.workspace.id,
+          bunshinId: first.id,
+          title: 'bad weight',
+          weight: 0,
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      client.contentPillar.create({
+        data: {
+          workspaceId: owner.workspace.id,
+          bunshinId: outsider.workspace.id,
+          title: 'bad scope',
+          weight: 1,
+        },
+      }),
+    ).rejects.toThrow();
   });
 });
