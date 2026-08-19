@@ -11,6 +11,9 @@ import {
   DeactivateSocialProfile,
   ListSocialProfiles,
   UpdateSocialProfile,
+  CreateSocialAccountStrategy,
+  ApproveSocialAccountStrategy,
+  ListSocialAccountStrategies,
   CreateContentPillar,
   UpdateContentPillar,
   DeactivateContentPillar,
@@ -35,6 +38,7 @@ import {
   PrismaBunshinMemoryRepository,
   PrismaBunshinCapabilityAssignmentRepository,
   PrismaSocialProfileRepository,
+  PrismaSocialAccountStrategyRepository,
   PrismaContentPillarRepository,
   PrismaWeeklyPlanRepository,
   PrismaDailyMissionRepository,
@@ -49,6 +53,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.socialAccountStrategy.deleteMany();
     await client.missionContent.deleteMany();
     await client.dailyMission.deleteMany();
     await client.weeklyPlanItem.deleteMany();
@@ -814,6 +819,49 @@ integration('database ownership boundaries', () => {
       status: 'ACTIVE',
       preferredFormats: ['SLIDE', 'IMAGE'],
     });
+    const strategies = new PrismaSocialAccountStrategyRepository(client);
+    const createStrategy = new CreateSocialAccountStrategy(strategies, assignments);
+    const strategyInput = {
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: owned.id,
+      socialProfileId: profile.id,
+      platform: 'INSTAGRAM' as const,
+      goal: 'FOLLOWERS' as const,
+      availableMinutes: 5 as const,
+      destinationType: 'PROFILE' as const,
+      concept: 'expert',
+      positioning: 'guide',
+      targetSummary: 'beginners',
+      profileDraft: 'profile',
+      ctaStrategy: 'follow',
+      postingPolicy: 'daily',
+    };
+    const strategy1 = await createStrategy.execute(strategyInput);
+    const strategy2 = await createStrategy.execute({ ...strategyInput, concept: 'expert v2' });
+    expect([strategy1.version, strategy2.version]).toEqual([1, 2]);
+    const approveStrategy = new ApproveSocialAccountStrategy(strategies, assignments);
+    await approveStrategy.execute({ ...ownerScope(owner, owned.id), strategyId: strategy1.id });
+    await approveStrategy.execute({ ...ownerScope(owner, owned.id), strategyId: strategy2.id });
+    await expect(
+      new ListSocialAccountStrategies(strategies).execute({
+        ...ownerScope(owner, owned.id),
+        socialProfileId: profile.id,
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: strategy1.id, status: 'SUPERSEDED' }),
+        expect.objectContaining({ id: strategy2.id, status: 'APPROVED' }),
+      ]),
+    );
+    await expect(
+      new ListSocialAccountStrategies(strategies).execute({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: owned.id,
+        socialProfileId: profile.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
       create.execute({
         workspaceId: owner.workspace.id,
