@@ -222,6 +222,19 @@
 - 理由: Coreのtenant/Bunshin境界とCapability guardをHTTP/UIでも維持し、Provider接続や投稿実行を後続Sliceへ分離するため
 - 詳細: `docs/PHASE3_SLICE_3_1B_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-024: Content Pillarは安定IDを持つ手動管理resourceとする
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: Content PillarはUUID、title、description、weight、active、deletedAtを持ち、3.2-A Core Persistenceと3.2-B API/UIへ分割する
+- 一意性: `workspaceId + bunshinId + title`。soft delete後もtitleを再利用しない
+- weight: 1..100の相対優先度とし、合計100や件数5〜10を強制しない
+- delete: soft delete。restoreと物理削除は提供しない
+- Capability: mutationはACTIVE SOCIAL Assignmentを必須とし、停止中もreadを許可する
+- 禁止: AI、Weekly Plan、Mission、SNS Provider、LINE、BLOG、Jobを混在させない
+- 理由: 後続Weekly Planが参照できる安定IDとtenant/Bunshin境界を、生成機能より先に確立するため
+- 詳細: `docs/PHASE3_SLICE_3_2_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
