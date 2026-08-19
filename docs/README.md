@@ -23,6 +23,11 @@
 - [Phase 2完了監査](PHASE2_COMPLETION_AUDIT.md)
 - [Phase 2 Production Gate](PHASE2_PRODUCTION_GATE.md)
 
+## Phase 3計画
+
+- [Phase 3実行計画](PHASE3_EXECUTION_PLAN.md)
+- [Slice 3.1 Social Profile実装指示書](PHASE3_SLICE_3_1_IMPLEMENTATION_INSTRUCTION.md)
+
 ## 文書の優先順位
 
 矛盾がある場合は次の順で判断します。

@@ -198,6 +198,19 @@
 - 理由: Capability実行機能より先に明示割当とtenant／Bunshin境界をHTTP/UIまで一貫させ、未承認機能の公開を防ぐため
 - 詳細: `docs/PHASE2_SLICE_2_4B_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-022: Phase 3は手動Social Profileから開始する
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: Phase 3最初のSliceをSocial Profileとし、3.1-A Core Persistenceと3.1-B authenticated API/UIへ分割する
+- 一意性: `workspaceId + bunshinId + platform`
+- Capability: mutationはACTIVE SOCIAL Assignmentを必須とする
+- 状態: ProfileのACTIVE/INACTIVEとCapability AssignmentのACTIVE/SUSPENDED/LOCKEDを別状態として管理する
+- 形式: preferredFormatsはtyped arrayとして検証し、DBではJSON arrayとして保持する
+- 禁止: Content Pillar、Mission、AI、SNS Provider、LINE、BLOG、Jobを混在させない
+- 理由: ProviderやAIより先にSOCIAL固有package、tenant/Bunshin境界、Capability guardを最小modelで検証するため
+- 詳細: `docs/PHASE3_SLICE_3_1_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
