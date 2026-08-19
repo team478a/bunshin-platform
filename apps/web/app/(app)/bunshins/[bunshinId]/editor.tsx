@@ -10,6 +10,7 @@ import type { MemoryView } from './memory-section';
 import { SocialProfileSection, type SocialProfileView } from './social-profile-section';
 import { ContentPillarSection, type ContentPillarView } from './content-pillar-section';
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
+import { AccountStrategySection, type StrategyView } from './account-strategy-section';
 
 export function BunshinEditor({
   workspaceId,
@@ -18,6 +19,7 @@ export function BunshinEditor({
   memories,
   socialCapabilityStatus,
   socialProfiles,
+  socialStrategies,
   contentPillars,
   weeklyPlans,
 }: {
@@ -27,6 +29,7 @@ export function BunshinEditor({
   memories: MemoryView[];
   socialCapabilityStatus: SocialCapabilityStatus;
   socialProfiles: SocialProfileView[];
+  socialStrategies: StrategyView[];
   contentPillars: ContentPillarView[];
   weeklyPlans: WeeklyPlanView[];
 }) {
@@ -132,6 +135,13 @@ export function BunshinEditor({
         bunshinId={bunshin.id}
         capabilityStatus={socialCapabilityStatus}
         profiles={socialProfiles}
+      />
+      <AccountStrategySection
+        workspaceId={workspaceId}
+        bunshinId={bunshin.id}
+        profiles={socialProfiles.map(({ id, platform }) => ({ id, platform }))}
+        strategies={socialStrategies}
+        active={socialCapabilityStatus === 'ACTIVE'}
       />
       <ContentPillarSection
         workspaceId={workspaceId}
