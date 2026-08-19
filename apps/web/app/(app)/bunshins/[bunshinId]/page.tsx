@@ -4,7 +4,7 @@ import {
   ListBunshinMemories,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
-import { ListSocialProfiles } from '@bunshin/capability-social';
+import { ListContentPillars, ListSocialProfiles } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { BunshinEditor } from './editor';
 
@@ -29,6 +29,7 @@ export default async function BunshinPage({
       PrismaBunshinMemoryRepository,
       PrismaBunshinCapabilityAssignmentRepository,
       PrismaSocialProfileRepository,
+      PrismaContentPillarRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -64,6 +65,9 @@ export default async function BunshinPage({
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
     });
+    const contentPillars = await new ListContentPillars(
+      new PrismaContentPillarRepository(),
+    ).execute({ workspaceId, actorUserId: currentUser.userId, bunshinId: bunshin.id });
     return (
       <BunshinEditor
         workspaceId={workspaceId}
@@ -107,6 +111,13 @@ export default async function BunshinPage({
             status,
           }),
         )}
+        contentPillars={contentPillars.map(({ id, title, description, weight, active }) => ({
+          id,
+          title,
+          description,
+          weight,
+          active,
+        }))}
       />
     );
   } catch {

@@ -238,7 +238,7 @@
 ## D-025: Content Pillar API/UIはBunshin詳細内の手動管理に限定する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #28で承認）
 - 提案: Bunshin scopeされたUUID pillarIdでlist/detail/create/update/activate/deactivate/soft-deleteを提供する
 - HTTP: createは201、それ以外の成功は200。DELETEはbodyを受け付けない
 - Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
