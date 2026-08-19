@@ -4,7 +4,14 @@ import {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 
-export const SOCIAL_PLATFORMS = ['INSTAGRAM', 'TIKTOK', 'X', 'OTHER'] as const;
+export const SOCIAL_PLATFORMS = [
+  'INSTAGRAM',
+  'TIKTOK',
+  'X',
+  'THREADS',
+  'YOUTUBE_SHORTS',
+  'OTHER',
+] as const;
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
 export const SOCIAL_POSTING_FREQUENCIES = [
@@ -17,6 +24,7 @@ export const SOCIAL_POSTING_FREQUENCIES = [
 export type SocialPostingFrequency = (typeof SOCIAL_POSTING_FREQUENCIES)[number];
 
 export const SOCIAL_PREFERRED_FORMATS = [
+  'TEXT',
   'SLIDE',
   'LIVE_ACTION',
   'AI_VIDEO_PROMPT',
@@ -93,8 +101,11 @@ const isOneOf = <T extends string>(value: string, values: readonly T[]): value i
   values.some((candidate) => candidate === value);
 
 export function parsePreferredFormats(value: unknown): SocialPreferredFormat[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 4) {
-    throw new ApplicationError('VALIDATION_ERROR', 'preferredFormats must contain 1 to 4 values');
+  if (!Array.isArray(value) || value.length < 1 || value.length > SOCIAL_PREFERRED_FORMATS.length) {
+    throw new ApplicationError(
+      'VALIDATION_ERROR',
+      `preferredFormats must contain 1 to ${SOCIAL_PREFERRED_FORMATS.length} values`,
+    );
   }
   const parsed: SocialPreferredFormat[] = [];
   for (const item of value) {
@@ -890,10 +901,23 @@ function strings(value: unknown, maximumItems: number, maximumLength: number, fi
     throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
   return value.map((item) => missionString(item, maximumLength, field));
 }
+function missionNullableString(value: unknown, maximum: number, field: string) {
+  return value === null || value === undefined ? null : missionString(value, maximum, field);
+}
 export function normalizeMissionContent(
   format: SocialPreferredFormat,
   value: unknown,
 ): MissionContent {
+  if (format === 'TEXT') {
+    const v = strict(value, ['body', 'threadParts', 'cta', 'caption', 'hashtags'], 'text content');
+    return {
+      body: missionString(v['body'], 10000, 'body'),
+      threadParts: strings(v['threadParts'], 25, 2000, 'thread parts'),
+      cta: missionNullableString(v['cta'], 1000, 'cta'),
+      caption: missionNullableString(v['caption'], 2200, 'caption'),
+      hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+    };
+  }
   if (format === 'SLIDE') {
     const v = strict(
       value,

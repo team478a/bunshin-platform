@@ -165,6 +165,25 @@ describe('authenticated Social Profile HTTP contract', () => {
     );
   });
 
+  it('accepts the expanded platforms and TEXT format', async () => {
+    for (const platform of ['THREADS', 'YOUTUBE_SHORTS']) {
+      const response = await createSocialProfileResponse(
+        request(basePath, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ...createBody,
+            platform,
+            preferredFormats: ['TEXT'],
+          }),
+        }),
+        'workspace-1',
+        'bunshin-1',
+      );
+      expect(response.status).toBe(201);
+    }
+  });
+
   it('rejects supplied authority, platform update, invalid formats, and non-HTTPS URLs', async () => {
     for (const body of [
       { ...createBody, actorUserId: 'attacker' },

@@ -289,7 +289,7 @@
 ## D-029: FREE SOCIAL MVPをAI企画担当として再定義する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #37で承認）
 - 提案: BUNSHIN SOCIAL FREEを、自動制作・自動投稿サービスではなく、SNS戦略、投稿企画、投稿文章、構成、外部AI向けPrompt、採否と行動の学習を担うAI企画担当として再定義する
 - 分担: BUNSHINは戦略と実行指示を提供し、ユーザーが必要に応じて外部サービスで画像・動画を制作して自分で投稿する
 - Strategy: SocialProfileの上にversion管理・承認可能なSocialAccountStrategyを追加する

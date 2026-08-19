@@ -1,10 +1,12 @@
 'use client';
 
-import type {
-  SocialPlatform,
-  SocialPostingFrequency,
-  SocialPreferredFormat,
-  SocialProfileStatus,
+import {
+  SOCIAL_PLATFORMS,
+  SOCIAL_PREFERRED_FORMATS,
+  type SocialPlatform,
+  type SocialPostingFrequency,
+  type SocialPreferredFormat,
+  type SocialProfileStatus,
 } from '@bunshin/capability-social';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
@@ -20,9 +22,7 @@ export interface SocialProfileView {
   status: SocialProfileStatus;
 }
 
-const platforms = ['INSTAGRAM', 'TIKTOK', 'X', 'OTHER'] as const;
 const frequencies = ['DAILY', 'WEEKDAYS', 'THREE_PER_WEEK', 'WEEKLY', 'FLEXIBLE'] as const;
-const formats = ['SLIDE', 'LIVE_ACTION', 'AI_VIDEO_PROMPT', 'IMAGE'] as const;
 const frequencyLabels: Record<SocialPostingFrequency, string> = {
   DAILY: '毎日',
   WEEKDAYS: '平日',
@@ -31,6 +31,7 @@ const frequencyLabels: Record<SocialPostingFrequency, string> = {
   FLEXIBLE: '柔軟に設定',
 };
 const formatLabels: Record<SocialPreferredFormat, string> = {
+  TEXT: 'テキスト',
   SLIDE: 'スライド',
   LIVE_ACTION: '実写',
   AI_VIDEO_PROMPT: '動画用プロンプト',
@@ -132,7 +133,7 @@ function ProfileForm({
       </label>
       <fieldset>
         <legend>希望形式（1つ以上）</legend>
-        {formats.map((value) => (
+        {SOCIAL_PREFERRED_FORMATS.map((value) => (
           <label key={value} className="social-format-option">
             <input
               type="checkbox"
@@ -173,7 +174,7 @@ export function SocialProfileSection({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/social-profiles`;
-  const available = platforms.filter(
+  const available = SOCIAL_PLATFORMS.filter(
     (value) => !profiles.some(({ platform }) => platform === value),
   );
 

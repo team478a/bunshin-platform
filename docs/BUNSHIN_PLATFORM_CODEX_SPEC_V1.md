@@ -396,7 +396,7 @@ MVPではSNS API接続ではなく発信設定を保持します。
 ```text
 id
 bunshinId
-platform: INSTAGRAM | TIKTOK | X | OTHER
+platform: INSTAGRAM | TIKTOK | X | THREADS | YOUTUBE_SHORTS | OTHER
 handle nullable
 profileUrl nullable
 purpose
@@ -443,7 +443,7 @@ socialProfileId nullable
 weeklyPlanItemId nullable
 missionDate
 status: GENERATED | VIEWED | STARTED | COMPLETED | SKIPPED | EXPIRED
-format: SLIDE | LIVE_ACTION | AI_VIDEO_PROMPT | IMAGE
+format: TEXT | SLIDE | LIVE_ACTION | AI_VIDEO_PROMPT | IMAGE
 estimatedMinutes
 topic
 angle

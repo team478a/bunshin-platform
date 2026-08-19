@@ -146,6 +146,8 @@ enum SocialPlatform {
   INSTAGRAM
   TIKTOK
   X
+  THREADS
+  YOUTUBE_SHORTS
   OTHER
 }
 
@@ -178,6 +180,7 @@ enum DailyMissionStatus {
 }
 
 enum SocialPreferredFormat {
+  TEXT
   SLIDE
   LIVE_ACTION
   AI_VIDEO_PROMPT

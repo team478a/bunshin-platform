@@ -117,6 +117,27 @@ describe('SocialProfile', () => {
     }
   });
 
+  it('accepts the expanded platforms and every supported format', () => {
+    expect(
+      normalizeCreateSocialProfileInput({
+        ...base,
+        platform: 'THREADS',
+        purpose: '会話型の発信',
+        postingFrequency: 'DAILY',
+        preferredFormats: ['TEXT', 'SLIDE', 'LIVE_ACTION', 'AI_VIDEO_PROMPT', 'IMAGE'],
+      }),
+    ).toMatchObject({ platform: 'THREADS', preferredFormats: expect.arrayContaining(['TEXT']) });
+    expect(
+      normalizeCreateSocialProfileInput({
+        ...base,
+        platform: 'YOUTUBE_SHORTS',
+        purpose: '短尺動画',
+        postingFrequency: 'WEEKLY',
+        preferredFormats: ['AI_VIDEO_PROMPT'],
+      }),
+    ).toMatchObject({ platform: 'YOUTUBE_SHORTS' });
+  });
+
   it.each(['MISSING', 'SUSPENDED', 'LOCKED'] as const)(
     'denies mutation when SOCIAL assignment is %s',
     async (status) => {
