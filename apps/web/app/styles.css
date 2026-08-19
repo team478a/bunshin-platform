@@ -46,6 +46,39 @@ a {
 .social-profile-section {
   margin: 40px 0;
 }
+
+.content-pillar-section {
+  margin-block: 2rem;
+}
+
+.content-pillar-list {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+}
+
+.content-pillar-card,
+.content-pillar-form {
+  border: 1px solid #d4d4d8;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.content-pillar-form input,
+.content-pillar-form textarea {
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
+  width: 100%;
+}
+
+.content-pillar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
 .social-profile-list {
   display: grid;
   gap: 16px;

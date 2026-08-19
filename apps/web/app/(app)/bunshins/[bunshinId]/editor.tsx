@@ -8,6 +8,7 @@ import type { SocialCapabilityStatus } from './capability-section';
 import { MemorySection } from './memory-section';
 import type { MemoryView } from './memory-section';
 import { SocialProfileSection, type SocialProfileView } from './social-profile-section';
+import { ContentPillarSection, type ContentPillarView } from './content-pillar-section';
 
 export function BunshinEditor({
   workspaceId,
@@ -16,6 +17,7 @@ export function BunshinEditor({
   memories,
   socialCapabilityStatus,
   socialProfiles,
+  contentPillars,
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
@@ -23,6 +25,7 @@ export function BunshinEditor({
   memories: MemoryView[];
   socialCapabilityStatus: SocialCapabilityStatus;
   socialProfiles: SocialProfileView[];
+  contentPillars: ContentPillarView[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -126,6 +129,12 @@ export function BunshinEditor({
         bunshinId={bunshin.id}
         capabilityStatus={socialCapabilityStatus}
         profiles={socialProfiles}
+      />
+      <ContentPillarSection
+        workspaceId={workspaceId}
+        bunshinId={bunshin.id}
+        capabilityStatus={socialCapabilityStatus}
+        pillars={contentPillars}
       />
       <button
         type="button"
