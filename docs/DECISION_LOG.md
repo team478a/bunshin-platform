@@ -260,6 +260,19 @@
 - 理由: AI生成や日次Missionより先にcalendar、tenant/Bunshin/Pillar境界と計画の確定点を安定させるため
 - 詳細: `docs/PHASE3_SLICE_3_3_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-027: Weekly Plan API/UIはBunshin詳細内の手動計画に限定する
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: Bunshin scopeされたUUID Plan/Item APIと既存Bunshin詳細内の最小手動管理UIを提供する
+- HTTP: Plan/Item createは201、その他は200。DELETEはbodyを受け付けない
+- timezone: browser timezoneは作成フォーム初期値にだけ使用し、保存前にUserが確認・変更する
+- 状態: DRAFTだけを編集可能とし、確定・失効後はread-onlyにする
+- Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
+- 禁止: AI planner、Daily Mission、scheduler、Provider、LINE、BLOG、Jobを提供しない
+- 理由: 3.3-Aで確立したcalendar、tenant/Bunshin/Pillar、確定点をHTTP/UIでも維持し、自動生成を後続Phaseへ分離するため
+- 詳細: `docs/PHASE3_SLICE_3_3B_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
