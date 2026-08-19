@@ -4,7 +4,11 @@ import {
   ListBunshinMemories,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
-import { ListContentPillars, ListSocialProfiles } from '@bunshin/capability-social';
+import {
+  ListContentPillars,
+  ListSocialProfiles,
+  ListWeeklyPlans,
+} from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { BunshinEditor } from './editor';
 
@@ -30,6 +34,7 @@ export default async function BunshinPage({
       PrismaBunshinCapabilityAssignmentRepository,
       PrismaSocialProfileRepository,
       PrismaContentPillarRepository,
+      PrismaWeeklyPlanRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -68,6 +73,11 @@ export default async function BunshinPage({
     const contentPillars = await new ListContentPillars(
       new PrismaContentPillarRepository(),
     ).execute({ workspaceId, actorUserId: currentUser.userId, bunshinId: bunshin.id });
+    const weeklyPlans = await new ListWeeklyPlans(new PrismaWeeklyPlanRepository()).execute({
+      workspaceId,
+      actorUserId: currentUser.userId,
+      bunshinId: bunshin.id,
+    });
     return (
       <BunshinEditor
         workspaceId={workspaceId}
@@ -118,6 +128,34 @@ export default async function BunshinPage({
           weight,
           active,
         }))}
+        weeklyPlans={weeklyPlans.map(
+          ({ id, weekStartDate, timezone, strategySummary, status, items }) => ({
+            id,
+            weekStartDate,
+            timezone,
+            strategySummary,
+            status,
+            items: items.map(
+              ({
+                id: itemId,
+                scheduledDate,
+                contentPillarId,
+                goal,
+                angle,
+                recommendedFormat,
+                notes,
+              }) => ({
+                id: itemId,
+                scheduledDate,
+                contentPillarId,
+                goal,
+                angle,
+                recommendedFormat,
+                notes,
+              }),
+            ),
+          }),
+        )}
       />
     );
   } catch {
