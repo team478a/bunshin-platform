@@ -12,13 +12,16 @@
 4. [Codex最初の実行指示](CODEX_INITIAL_INSTRUCTION.md)
 5. [意思決定記録](DECISION_LOG.md)
 
-## Phase 0でCodexが作成する文書
+## Phase 0監査文書
 
-以下はまだ作成しません。既存 `stockbusiness/bunshin-blog` を実際に調査した上で作成します。
+- [現行システム監査](CURRENT_SYSTEM_AUDIT.md)
+- [再利用マップ](REUSE_MAP.md)
+- [目標アーキテクチャ](TARGET_ARCHITECTURE.md)
 
-- `CURRENT_SYSTEM_AUDIT.md`
-- `REUSE_MAP.md`
-- `TARGET_ARCHITECTURE.md`
+## Phase 2完了・Production Gate
+
+- [Phase 2完了監査](PHASE2_COMPLETION_AUDIT.md)
+- [Phase 2 Production Gate](PHASE2_PRODUCTION_GATE.md)
 
 ## 文書の優先順位
 

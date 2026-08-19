@@ -78,7 +78,7 @@ Local / GitHub Actions
   └─ local or ephemeral PostgreSQL
 ```
 
-実運用開始前にSupabase stagingを追加する。追加後も、Preview deploymentを共有staging DBへ接続する場合は、古いPRコードと新しいschemaの互換性に注意する。migrationを含むPRでは、Previewを自動的にstaging DBへ向けず、互換性確認後に限定して接続する。
+実運用開始まではSupabase stagingを追加しない。Production相当環境でmigration、認証、外部連携を反復検証する必要が生じた時点で追加を再判断する。追加後も、Preview deploymentを共有staging DBへ接続する場合は、古いPRコードと新しいschemaの互換性に注意する。migrationを含むPRでは、Previewを自動的にstaging DBへ向けず、互換性確認後に限定して接続する。
 
 ## 命名案
 
@@ -111,14 +111,14 @@ Local / GitHub Actions
 - [ ] Spend Managementの50% / 75% / 100%通知と上限時actionを設定する
 - [ ] Supabase Pro organizationを作成する
 - [x] productionをTokyoで作成する
-- [ ] 実運用開始前にstagingをTokyoで別projectとして作成する
+- [x] stagingは実運用開始まで作成しない方針を採用する
 - [ ] GitHub branch protectionで`verify`と`database`をrequiredにする
 - [ ] GitHub Environment `production`にrequired reviewerとDB secretsを設定する
 - [ ] Vercel projectをGitHub repositoryへ接続する
 - [ ] Vercel Root Directoryを`apps/web`、Framework Presetを`Next.js`にする
 - [ ] Function regionを`hnd1`に固定する
 - [ ] ProductionとPreviewへ別々の環境変数を登録する
-- [ ] stagingへmigrationを適用し、health checkを確認する
+- [ ] staging追加を再判断する条件を満たした場合だけ、別projectへmigrationを適用してhealth checkを確認する
 - [ ] backup取得とrestore rehearsalを実施する
 - [ ] production migrationを承認付きで適用する
 - [ ] domain、HTTPS、監視通知を確認する
@@ -140,20 +140,18 @@ Local / GitHub Actions
 
 1. PRのCIで空DBへの`prisma migrate deploy`とintegration testを成功させる
 2. migrationの前方互換性とrollback方法をレビューする
-3. staging backupを確認する
-4. stagingへ承認済み手順で`pnpm db:migrate:deploy`を実行する
-5. staging deploy後に`/api/health/live`と`/api/health/ready`を確認する
-6. production変更時間と担当者を記録する
-7. production backupを確認し、`Production Database Migration` workflowを`main`から手動実行する
-8. production deployとsmoke testを実行する
-9. 失敗時は安易にdown migrationせず、restoreまたはforward fixを承認して実施する
+3. stagingが存在する場合だけ、backup確認、migration、health checkを先に実施する
+4. production変更時間と担当者を記録する
+5. production backupを確認し、`Production Database Migration` workflowを`main`から手動実行する
+6. production deployとsmoke testを実行する
+7. 失敗時は安易にdown migrationせず、restoreまたはforward fixを承認して実施する
 
 ## 本番化のGate
 
 - [ ] Draft PR #1とPhase 2対象PRが承認・merge済み
-- [ ] stagingで同一commitとmigrationを検証済み
+- [x] stagingは現時点で作成しない。CIの一時PostgreSQLで同一migrationを検証する
 - [ ] daily backupが有効でrestore手順を検証済み
-- [ ] productionとstagingのsecretが完全に分離されている
+- [x] Vercel PreviewへProduction DB secretを設定しない。staging secretはstaging追加時に分離する
 - [ ] Vercel FunctionとSupabase DBが東京regionにある
 - [ ] spend alertと請求担当者が設定されている
 - [ ] domain、利用規約、プライバシーポリシー、問い合わせ導線がある

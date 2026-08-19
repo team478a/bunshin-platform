@@ -8,15 +8,19 @@
 - Platform DBと既存Blog DBを共有しない
 - staging/productionは別Supabase projectにする
 
-## Models in Phase 1
+## Models through Phase 2
 
 - `User`
 - `AuthIdentity`
 - `Workspace`
 - `WorkspaceMembership`
 - `PlatformAdmin`
+- `Bunshin` / `BunshinObjective` / `BunshinAudience` / `BunshinPersonality`
+- `OwnerKnowledge` / `BunshinKnowledgeGrant`
+- `BunshinMemory`
+- `BunshinCapabilityAssignment`
 
-Bunshin、Memory、Capability assignment、SOCIAL、BLOG、Job tableは存在しない。
+SOCIAL固有、BLOG固有、Mission、Content、Feedback、Job tableは存在しない。
 
 ## Migration
 
@@ -54,7 +58,7 @@ Workflowは同時に1実行だけ許可し、進行中のproduction migrationを
 
 ## Supabase Setup
 
-1. Tokyo regionにstagingとproductionを別projectで作る。
+1. Tokyo regionにproduction projectを作る。stagingは実運用開始まで作成せず、必要性が生じた時点で別projectとして追加する。
 2. runtime用pooler URLを`DATABASE_URL`へ設定する。
 3. direct URLを`DIRECT_URL`へ設定する。
 4. Preview deploymentへproduction credentialを設定しない。

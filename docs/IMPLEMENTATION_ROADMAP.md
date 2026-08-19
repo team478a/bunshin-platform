@@ -38,6 +38,8 @@ SNS版とブログ版を別々の製品として開発しません。Multi-Bunsh
 
 ## Phase 2: Multi-Bunshin Core
 
+状態: コード実装完了。Production利用開始は`PHASE2_PRODUCTION_GATE.md`完了待ち。
+
 - User / Workspace
 - Bunshin CRUD
 - Objective / Audience / Personality
@@ -49,6 +51,8 @@ SNS版とブログ版を別々の製品として開発しません。Multi-Bunsh
 - Cross-user / Cross-bunshin test
 
 ## Phase 3: SOCIAL Foundation
+
+状態: 未着手。`PHASE2_COMPLETION_AUDIT.md`の承認後、実装前指示書から開始する。
 
 - Social Profile
 - Content Pillar

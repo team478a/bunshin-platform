@@ -29,6 +29,6 @@ Vercel Previewへproduction database URLやsecretを設定しない。環境変�
 4. Webをdeployする。
 5. `/api/health/live`と`/api/health/ready`を確認する。
 
-Phase 1ではworker/Cloud Runをdeployしない。
+Phase 2完了時点でもworker/Cloud Runをdeployしない。SOCIAL、AI、LINE、BLOG、Job runtimeは後続Phaseの承認まで追加しない。
 
 本番構成の選定理由、費用目安、アカウント作成前後のチェックリストは`docs/PRODUCTION_ENVIRONMENT_PLAN.md`を参照する。
