@@ -3,6 +3,8 @@ import type { BunshinAggregate } from '@bunshin/platform-domain';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { CapabilitySection } from './capability-section';
+import type { SocialCapabilityStatus } from './capability-section';
 import { MemorySection } from './memory-section';
 import type { MemoryView } from './memory-section';
 
@@ -11,11 +13,13 @@ export function BunshinEditor({
   bunshin,
   knowledge,
   memories,
+  socialCapabilityStatus,
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
   knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
   memories: MemoryView[];
+  socialCapabilityStatus: SocialCapabilityStatus;
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -109,6 +113,11 @@ export function BunshinEditor({
         )}
       </section>
       <MemorySection workspaceId={workspaceId} bunshinId={bunshin.id} memories={memories} />
+      <CapabilitySection
+        workspaceId={workspaceId}
+        bunshinId={bunshin.id}
+        socialStatus={socialCapabilityStatus}
+      />
       <button
         type="button"
         onClick={() => {

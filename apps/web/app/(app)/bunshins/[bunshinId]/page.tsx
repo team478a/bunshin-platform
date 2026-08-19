@@ -1,4 +1,8 @@
-import { GetBunshin, ListBunshinMemories } from '@bunshin/application';
+import {
+  GetBunshin,
+  ListBunshinCapabilityAssignments,
+  ListBunshinMemories,
+} from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { BunshinEditor } from './editor';
@@ -22,6 +26,7 @@ export default async function BunshinPage({
       PrismaOwnerKnowledgeRepository,
       PrismaKnowledgeGrantRepository,
       PrismaBunshinMemoryRepository,
+      PrismaBunshinCapabilityAssignmentRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -42,6 +47,13 @@ export default async function BunshinPage({
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
       includeInactive: true,
+    });
+    const capabilities = await new ListBunshinCapabilityAssignments(
+      new PrismaBunshinCapabilityAssignmentRepository(),
+    ).execute({
+      workspaceId,
+      actorUserId: currentUser.userId,
+      bunshinId: bunshin.id,
     });
     return (
       <BunshinEditor
@@ -64,6 +76,9 @@ export default async function BunshinPage({
             active,
           }),
         )}
+        socialCapabilityStatus={
+          capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
+        }
       />
     );
   } catch {

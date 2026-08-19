@@ -39,6 +39,30 @@ a {
   font: inherit;
 }
 
+.capability-section {
+  margin: 40px 0;
+}
+
+.capability-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: white;
+}
+
+.capability-card button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #aab4c0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
 .memory-section input,
 .memory-section textarea,
 .memory-section select {
@@ -107,7 +131,9 @@ a {
   }
 
   .memory-actions,
-  .memory-numbers {
+  .memory-numbers,
+  .capability-card {
     flex-direction: column;
+    align-items: stretch;
   }
 }

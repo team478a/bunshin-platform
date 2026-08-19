@@ -190,7 +190,7 @@
 ## D-021: Phase 2のCapability管理UIはSOCIAL割当状態だけを公開する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #19で承認）
 - 提案: 既存Bunshin詳細へ最小Capabilityセクションを追加し、公開mutationをSOCIALのassign／activate／suspendだけに限定する
 - HTTP: listとSOCIAL状態変更はverified session、same-origin、JSON、`no-store`を必須とする
 - DTO: `config`と`assignedByUserId`を公開しない
