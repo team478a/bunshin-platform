@@ -284,7 +284,7 @@ describe('authenticated Weekly Plan HTTP contract', () => {
         await createWeeklyPlanItemResponse(
           request(
             `${base}/${planId}/items`,
-            json('POST', { ...itemBody, recommendedFormat: 'TEXT' }),
+            json('POST', { ...itemBody, recommendedFormat: 'UNKNOWN' }),
           ),
           'workspace-1',
           'bunshin-1',

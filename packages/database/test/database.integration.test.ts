@@ -819,6 +819,28 @@ integration('database ownership boundaries', () => {
         workspaceId: owner.workspace.id,
         actorUserId: owner.user.id,
         bunshinId: owned.id,
+        platform: 'THREADS',
+        purpose: 'text publishing',
+        postingFrequency: 'DAILY',
+        preferredFormats: ['TEXT'],
+      }),
+    ).resolves.toMatchObject({ platform: 'THREADS', preferredFormats: ['TEXT'] });
+    await expect(
+      create.execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
+        platform: 'YOUTUBE_SHORTS',
+        purpose: 'short video publishing',
+        postingFrequency: 'WEEKLY',
+        preferredFormats: ['AI_VIDEO_PROMPT'],
+      }),
+    ).resolves.toMatchObject({ platform: 'YOUTUBE_SHORTS' });
+    await expect(
+      create.execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
         platform: 'INSTAGRAM',
         purpose: 'duplicate',
         postingFrequency: 'WEEKLY',
@@ -910,7 +932,7 @@ integration('database ownership boundaries', () => {
         actorUserId: owner.user.id,
         bunshinId: owned.id,
       }),
-    ).resolves.toHaveLength(1);
+    ).resolves.toHaveLength(3);
     await assignments.setStatus({
       workspaceId: owner.workspace.id,
       actorUserId: owner.user.id,
@@ -1189,11 +1211,12 @@ integration('database ownership boundaries', () => {
       contentPillarId: pillar.id,
       goal: '教育',
       angle: '初心者',
-      recommendedFormat: 'SLIDE',
+      recommendedFormat: 'TEXT',
     });
     expect(withItem.items[0]).toMatchObject({
       scheduledDate: '2026-08-18',
       contentPillarId: pillar.id,
+      recommendedFormat: 'TEXT',
     });
     const confirmed = await new ConfirmWeeklyPlan(repository, assignments).execute({
       ...ownerScope(owner, bunshin.id),

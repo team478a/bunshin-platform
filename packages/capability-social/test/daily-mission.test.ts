@@ -128,6 +128,15 @@ describe('Daily Mission core', () => {
 
   it('validates all content formats', () => {
     expect(() =>
+      normalizeMissionContent('TEXT', {
+        body: '今日から始める3つの方法',
+        threadParts: ['1つ目', '2つ目'],
+        cta: '保存してください',
+        caption: null,
+        hashtags: ['#初心者'],
+      }),
+    ).not.toThrow();
+    expect(() =>
       normalizeMissionContent('LIVE_ACTION', {
         topic: '基礎',
         estimatedMinutes: 10,
@@ -162,6 +171,16 @@ describe('Daily Mission core', () => {
         hashtags: [],
       }),
     ).not.toThrow();
+    expect(() =>
+      normalizeMissionContent('TEXT', {
+        body: '本文',
+        threadParts: [],
+        cta: null,
+        caption: null,
+        hashtags: [],
+        providerPayload: {},
+      }),
+    ).toThrow();
   });
 
   it('validates inclusive date ranges up to 90 days', async () => {
