@@ -52,7 +52,7 @@ SNS版とブログ版を別々の製品として開発しません。Multi-Bunsh
 
 ## Phase 3: SOCIAL Foundation
 
-状態: Slice 3.1実装前レビュー中。`PHASE3_EXECUTION_PLAN.md`と`PHASE3_SLICE_3_1_IMPLEMENTATION_INSTRUCTION.md`の承認後にCore Persistenceから開始する。
+状態: Slice 3.1〜3.3完了。Slice 3.4 Daily Mission Core Persistenceの実装前レビュー中。
 
 - Social Profile
 - Content Pillar
