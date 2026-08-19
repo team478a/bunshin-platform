@@ -286,6 +286,20 @@
 - 理由: Phase 4の生成adapterより先にtenant、日付、content、状態の保存境界を固定し、不完全な生成結果や越境参照を防ぐため
 - 詳細: `docs/PHASE3_SLICE_3_4_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-029: Mission結果はFeedbackとPostRecordをMission状態と原子的に記録する
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: Slice 3.5を3.5-A Core Persistenceと3.5-B authenticated API/UIへ分け、先にMissionFeedback、PostRecord、manual metricsの保存境界を確立する
+- Feedback: `workspaceId + bunshinId + dailyMissionId + userId`で1件とし、LATERからYES/NOへ変更できる最新状態としてupsertする
+- Post Record: 通常Missionは1投稿を表すため`workspaceId + bunshinId + dailyMissionId`で1件とし、重複投稿履歴を作らない
+- 原子性: posted YESはMission COMPLETED、Feedback YES、PostRecordを同一transactionで記録し、posted NOはMission SKIPPEDとFeedback NOを同一transactionで記録する。LATERはMission状態を変更しない
+- Metrics: manualMetricsはviews / likes / comments / shares / savesの非負整数だけをstrict JSONで保持し、自動取得値やProvider responseを混在させない
+- Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
+- 禁止: SNS API投稿、自動metrics取得、AI、LINE、Job、Provider、BLOGを提供しない
+- 理由: Missionの完了状態、本人評価、実投稿記録が部分成功で矛盾することを防ぎ、Phase 4の投稿完了UIが安全に接続できる永続化境界を先に固定するため
+- 詳細: `docs/PHASE3_SLICE_3_5_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:

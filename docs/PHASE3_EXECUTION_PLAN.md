@@ -48,6 +48,7 @@ Phase 3ではSOCIAL Capability固有のdomainをCoreから分離して構築す�
 - PostRecord
 - manual completionとmanual metrics
 - SNS API投稿・自動metrics取得は実装しない
+- 3.5-A Core Persistenceと3.5-B authenticated API/UIに分割
 
 ## 4. 不変条件
 
