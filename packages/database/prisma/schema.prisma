@@ -162,6 +162,19 @@ enum SocialProfileStatus {
   INACTIVE
 }
 
+enum WeeklyPlanStatus {
+  DRAFT
+  CONFIRMED
+  EXPIRED
+}
+
+enum SocialPreferredFormat {
+  SLIDE
+  LIVE_ACTION
+  AI_VIDEO_PROMPT
+  IMAGE
+}
+
 model User {
   id            String                @id @default(uuid()) @db.Uuid
   status        UserStatus            @default(ACTIVE)
@@ -210,6 +223,8 @@ model Workspace {
   capabilityAssignments BunshinCapabilityAssignment[]
   socialProfiles SocialProfile[]
   contentPillars ContentPillar[]
+  weeklyPlans WeeklyPlan[]
+  weeklyPlanItems WeeklyPlanItem[]
 
   @@index([status])
   @@map("workspaces")
@@ -269,6 +284,8 @@ model Bunshin {
   capabilityAssignments BunshinCapabilityAssignment[]
   socialProfiles SocialProfile[]
   contentPillars ContentPillar[]
+  weeklyPlans WeeklyPlan[]
+  weeklyPlanItems WeeklyPlanItem[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -393,10 +410,58 @@ model ContentPillar {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin     Bunshin   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  weeklyPlanItems WeeklyPlanItem[]
 
   @@unique([workspaceId, bunshinId, title])
+  @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, active, deletedAt, createdAt])
   @@map("content_pillars")
+}
+
+model WeeklyPlan {
+  id              String           @id @default(uuid()) @db.Uuid
+  workspaceId     String           @map("workspace_id") @db.Uuid
+  bunshinId       String           @map("bunshin_id") @db.Uuid
+  weekStartDate   DateTime         @map("week_start_date") @db.Date
+  timezone        String           @db.VarChar(64)
+  strategySummary String?          @map("strategy_summary") @db.VarChar(1000)
+  status          WeeklyPlanStatus @default(DRAFT)
+  confirmedAt     DateTime?        @map("confirmed_at") @db.Timestamptz(6)
+  expiredAt       DateTime?        @map("expired_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin         Bunshin          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  items           WeeklyPlanItem[]
+
+  @@unique([workspaceId, bunshinId, weekStartDate])
+  @@unique([workspaceId, bunshinId, id])
+  @@index([workspaceId, bunshinId, status, weekStartDate])
+  @@map("weekly_plans")
+}
+
+model WeeklyPlanItem {
+  id                String                @id @default(uuid()) @db.Uuid
+  workspaceId       String                @map("workspace_id") @db.Uuid
+  bunshinId         String                @map("bunshin_id") @db.Uuid
+  weeklyPlanId      String                @map("weekly_plan_id") @db.Uuid
+  scheduledDate     DateTime              @map("scheduled_date") @db.Date
+  contentPillarId   String                @map("content_pillar_id") @db.Uuid
+  goal              String                @db.VarChar(200)
+  angle             String                @db.VarChar(500)
+  recommendedFormat SocialPreferredFormat @map("recommended_format")
+  notes             String?               @db.VarChar(1000)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin           Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  weeklyPlan        WeeklyPlan            @relation(fields: [workspaceId, bunshinId, weeklyPlanId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  contentPillar     ContentPillar         @relation(fields: [workspaceId, bunshinId, contentPillarId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+
+  @@unique([weeklyPlanId, scheduledDate])
+  @@index([workspaceId, bunshinId, scheduledDate])
+  @@index([contentPillarId])
+  @@map("weekly_plan_items")
 }
 
 model BunshinObjective {

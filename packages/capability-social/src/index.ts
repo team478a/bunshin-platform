@@ -540,3 +540,271 @@ export class DeleteContentPillar extends ContentPillarMutation {
     return value;
   }
 }
+
+export const WEEKLY_PLAN_STATUSES = ['DRAFT', 'CONFIRMED', 'EXPIRED'] as const;
+export type WeeklyPlanStatus = (typeof WEEKLY_PLAN_STATUSES)[number];
+
+export interface WeeklyPlanItem {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  weeklyPlanId: string;
+  scheduledDate: string;
+  contentPillarId: string;
+  goal: string;
+  angle: string;
+  recommendedFormat: SocialPreferredFormat;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export interface WeeklyPlan {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  weekStartDate: string;
+  timezone: string;
+  strategySummary: string | null;
+  status: WeeklyPlanStatus;
+  confirmedAt: Date | null;
+  expiredAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  items: WeeklyPlanItem[];
+}
+export interface WeeklyPlanScope {
+  workspaceId: string;
+  actorUserId: string;
+  bunshinId: string;
+}
+export interface WeeklyPlanRepository {
+  createPlan(
+    input: WeeklyPlanScope & {
+      weekStartDate: string;
+      timezone: string;
+      strategySummary?: string | null;
+    },
+  ): Promise<WeeklyPlan | null>;
+  listPlans(input: WeeklyPlanScope): Promise<WeeklyPlan[] | null>;
+  findPlan(input: WeeklyPlanScope & { weeklyPlanId: string }): Promise<WeeklyPlan | null>;
+  updatePlan(
+    input: WeeklyPlanScope & { weeklyPlanId: string; strategySummary: string | null },
+  ): Promise<WeeklyPlan | null>;
+  createItem(
+    input: WeeklyPlanScope & {
+      weeklyPlanId: string;
+      scheduledDate: string;
+      contentPillarId: string;
+      goal: string;
+      angle: string;
+      recommendedFormat: SocialPreferredFormat;
+      notes?: string | null;
+    },
+  ): Promise<WeeklyPlan | null>;
+  updateItem(
+    input: WeeklyPlanScope & {
+      weeklyPlanId: string;
+      itemId: string;
+      scheduledDate?: string;
+      contentPillarId?: string;
+      goal?: string;
+      angle?: string;
+      recommendedFormat?: SocialPreferredFormat;
+      notes?: string | null;
+    },
+  ): Promise<WeeklyPlan | null>;
+  removeItem(
+    input: WeeklyPlanScope & { weeklyPlanId: string; itemId: string },
+  ): Promise<WeeklyPlan | null>;
+  confirmPlan(input: WeeklyPlanScope & { weeklyPlanId: string }): Promise<WeeklyPlan | null>;
+  expirePlan(input: WeeklyPlanScope & { weeklyPlanId: string }): Promise<WeeklyPlan | null>;
+}
+
+function localDate(value: string, monday = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid local date');
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (
+    Number.isNaN(date.valueOf()) ||
+    date.toISOString().slice(0, 10) !== value ||
+    (monday && date.getUTCDay() !== 1)
+  )
+    throw new ApplicationError(
+      'VALIDATION_ERROR',
+      monday ? 'week must start on Monday' : 'invalid local date',
+    );
+  return value;
+}
+function timezone(value: string) {
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 64)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid timezone');
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: normalized }).format();
+  } catch (error) {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid timezone', error);
+  }
+  return normalized;
+}
+function weeklyText(value: string, maximum: number, field: string) {
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > maximum)
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+  return normalized;
+}
+function weeklyNullable(value: string | null, maximum: number): string | null;
+function weeklyNullable(value: undefined, maximum: number): undefined;
+function weeklyNullable(
+  value: string | null | undefined,
+  maximum: number,
+): string | null | undefined;
+function weeklyNullable(value: string | null | undefined, maximum: number) {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim().length === 0) return null;
+  return weeklyText(value, maximum, 'text');
+}
+function weeklyFormat(value: SocialPreferredFormat) {
+  return validateEnum(value, SOCIAL_PREFERRED_FORMATS, 'recommendedFormat');
+}
+
+abstract class WeeklyPlanMutation {
+  constructor(
+    protected readonly plans: WeeklyPlanRepository,
+    private readonly assignments: BunshinCapabilityAssignmentRepository,
+  ) {}
+  protected async requireActive(input: WeeklyPlanScope) {
+    await new RequireActiveBunshinCapability(this.assignments).execute({
+      ...input,
+      capabilityType: 'SOCIAL',
+    });
+  }
+}
+export class CreateWeeklyPlan extends WeeklyPlanMutation {
+  async execute(
+    input: WeeklyPlanScope & {
+      weekStartDate: string;
+      timezone: string;
+      strategySummary?: string | null;
+    },
+  ) {
+    await this.requireActive(input);
+    const value = await this.plans.createPlan({
+      ...input,
+      weekStartDate: localDate(input.weekStartDate, true),
+      timezone: timezone(input.timezone),
+      ...(input.strategySummary === undefined
+        ? {}
+        : { strategySummary: weeklyNullable(input.strategySummary, 1000) }),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    return value;
+  }
+}
+export class ListWeeklyPlans {
+  constructor(private readonly plans: WeeklyPlanRepository) {}
+  async execute(input: WeeklyPlanScope) {
+    const value = await this.plans.listPlans(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    return value;
+  }
+}
+export class GetWeeklyPlan {
+  constructor(private readonly plans: WeeklyPlanRepository) {}
+  async execute(input: WeeklyPlanScope & { weeklyPlanId: string }) {
+    const value = await this.plans.findPlan(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan not found');
+    return value;
+  }
+}
+export class UpdateWeeklyPlan extends WeeklyPlanMutation {
+  async execute(input: WeeklyPlanScope & { weeklyPlanId: string; strategySummary: string | null }) {
+    await this.requireActive(input);
+    const value = await this.plans.updatePlan({
+      ...input,
+      strategySummary: weeklyNullable(input.strategySummary, 1000) ?? null,
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan not found');
+    return value;
+  }
+}
+
+function normalizedItem<
+  T extends WeeklyPlanScope & {
+    weeklyPlanId: string;
+    scheduledDate: string;
+    contentPillarId: string;
+    goal: string;
+    angle: string;
+    recommendedFormat: SocialPreferredFormat;
+    notes?: string | null;
+  },
+>(input: T) {
+  return {
+    ...input,
+    scheduledDate: localDate(input.scheduledDate),
+    goal: weeklyText(input.goal, 200, 'goal'),
+    angle: weeklyText(input.angle, 500, 'angle'),
+    recommendedFormat: weeklyFormat(input.recommendedFormat),
+    ...(input.notes === undefined ? {} : { notes: weeklyNullable(input.notes, 1000) }),
+  };
+}
+export class CreateWeeklyPlanItem extends WeeklyPlanMutation {
+  async execute(input: Parameters<WeeklyPlanRepository['createItem']>[0]) {
+    await this.requireActive(input);
+    const value = await this.plans.createItem(normalizedItem(input));
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan not found');
+    return value;
+  }
+}
+export class UpdateWeeklyPlanItem extends WeeklyPlanMutation {
+  async execute(input: Parameters<WeeklyPlanRepository['updateItem']>[0]) {
+    await this.requireActive(input);
+    if (
+      input.scheduledDate === undefined &&
+      input.contentPillarId === undefined &&
+      input.goal === undefined &&
+      input.angle === undefined &&
+      input.recommendedFormat === undefined &&
+      input.notes === undefined
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'update required');
+    const value = await this.plans.updateItem({
+      ...input,
+      ...(input.scheduledDate === undefined
+        ? {}
+        : { scheduledDate: localDate(input.scheduledDate) }),
+      ...(input.goal === undefined ? {} : { goal: weeklyText(input.goal, 200, 'goal') }),
+      ...(input.angle === undefined ? {} : { angle: weeklyText(input.angle, 500, 'angle') }),
+      ...(input.recommendedFormat === undefined
+        ? {}
+        : { recommendedFormat: weeklyFormat(input.recommendedFormat) }),
+      ...(input.notes === undefined ? {} : { notes: weeklyNullable(input.notes, 1000) }),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan item not found');
+    return value;
+  }
+}
+export class RemoveWeeklyPlanItem extends WeeklyPlanMutation {
+  async execute(input: WeeklyPlanScope & { weeklyPlanId: string; itemId: string }) {
+    await this.requireActive(input);
+    const value = await this.plans.removeItem(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan item not found');
+    return value;
+  }
+}
+export class ConfirmWeeklyPlan extends WeeklyPlanMutation {
+  async execute(input: WeeklyPlanScope & { weeklyPlanId: string }) {
+    await this.requireActive(input);
+    const value = await this.plans.confirmPlan(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan not found');
+    return value;
+  }
+}
+export class ExpireWeeklyPlan extends WeeklyPlanMutation {
+  async execute(input: WeeklyPlanScope & { weeklyPlanId: string }) {
+    await this.requireActive(input);
+    const value = await this.plans.expirePlan(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'weekly plan not found');
+    return value;
+  }
+}
