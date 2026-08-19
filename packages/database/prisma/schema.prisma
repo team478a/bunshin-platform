@@ -168,6 +168,15 @@ enum WeeklyPlanStatus {
   EXPIRED
 }
 
+enum DailyMissionStatus {
+  GENERATED
+  VIEWED
+  STARTED
+  COMPLETED
+  SKIPPED
+  EXPIRED
+}
+
 enum SocialPreferredFormat {
   SLIDE
   LIVE_ACTION
@@ -176,18 +185,18 @@ enum SocialPreferredFormat {
 }
 
 model User {
-  id            String                @id @default(uuid()) @db.Uuid
-  status        UserStatus            @default(ACTIVE)
-  displayName   String                @map("display_name") @db.VarChar(100)
-  email         String?               @db.VarChar(320)
-  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  identities    AuthIdentity[]
-  memberships   WorkspaceMembership[]
-  platformAdmin PlatformAdmin?
-  bunshins      Bunshin[]
-  ownerKnowledge OwnerKnowledge[] @relation("KnowledgeOwner")
-  knowledgeGrants BunshinKnowledgeGrant[] @relation("GrantActor")
+  id                    String                        @id @default(uuid()) @db.Uuid
+  status                UserStatus                    @default(ACTIVE)
+  displayName           String                        @map("display_name") @db.VarChar(100)
+  email                 String?                       @db.VarChar(320)
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  identities            AuthIdentity[]
+  memberships           WorkspaceMembership[]
+  platformAdmin         PlatformAdmin?
+  bunshins              Bunshin[]
+  ownerKnowledge        OwnerKnowledge[]              @relation("KnowledgeOwner")
+  knowledgeGrants       BunshinKnowledgeGrant[]       @relation("GrantActor")
   capabilityAssignments BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
 
   @@index([status])
@@ -209,22 +218,24 @@ model AuthIdentity {
 }
 
 model Workspace {
-  id          String                @id @default(uuid()) @db.Uuid
-  type        WorkspaceType
-  name        String                @db.VarChar(120)
-  status      WorkspaceStatus       @default(ACTIVE)
-  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  memberships WorkspaceMembership[]
-  bunshins    Bunshin[]
-  ownerKnowledge OwnerKnowledge[]
-  knowledgeGrants BunshinKnowledgeGrant[]
-  memories        BunshinMemory[]
+  id                    String                        @id @default(uuid()) @db.Uuid
+  type                  WorkspaceType
+  name                  String                        @db.VarChar(120)
+  status                WorkspaceStatus               @default(ACTIVE)
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships           WorkspaceMembership[]
+  bunshins              Bunshin[]
+  ownerKnowledge        OwnerKnowledge[]
+  knowledgeGrants       BunshinKnowledgeGrant[]
+  memories              BunshinMemory[]
   capabilityAssignments BunshinCapabilityAssignment[]
-  socialProfiles SocialProfile[]
-  contentPillars ContentPillar[]
-  weeklyPlans WeeklyPlan[]
-  weeklyPlanItems WeeklyPlanItem[]
+  socialProfiles        SocialProfile[]
+  contentPillars        ContentPillar[]
+  weeklyPlans           WeeklyPlan[]
+  weeklyPlanItems       WeeklyPlanItem[]
+  dailyMissions         DailyMission[]
+  missionContents       MissionContent[]
 
   @@index([status])
   @@map("workspaces")
@@ -260,32 +271,34 @@ model PlatformAdmin {
 }
 
 model Bunshin {
-  id                 String              @id @default(uuid()) @db.Uuid
-  workspaceId        String              @map("workspace_id") @db.Uuid
-  ownerUserId        String              @map("owner_user_id") @db.Uuid
-  name               String              @db.VarChar(100)
-  slug               String              @db.VarChar(80)
-  type               BunshinType
-  status             BunshinStatus       @default(DRAFT)
-  objectiveSummary   String              @map("objective_summary") @db.VarChar(500)
-  audienceSummary    String              @map("audience_summary") @db.VarChar(500)
-  personalitySummary String              @map("personality_summary") @db.VarChar(500)
-  avatarUrl          String?             @map("avatar_url") @db.VarChar(2048)
-  archivedAt         DateTime?           @map("archived_at") @db.Timestamptz(6)
-  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  ownerUser          User                @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
-  objectives         BunshinObjective[]
-  audiences          BunshinAudience[]
-  personality        BunshinPersonality?
-  knowledgeGrants    BunshinKnowledgeGrant[]
-  memories           BunshinMemory[]
+  id                    String                        @id @default(uuid()) @db.Uuid
+  workspaceId           String                        @map("workspace_id") @db.Uuid
+  ownerUserId           String                        @map("owner_user_id") @db.Uuid
+  name                  String                        @db.VarChar(100)
+  slug                  String                        @db.VarChar(80)
+  type                  BunshinType
+  status                BunshinStatus                 @default(DRAFT)
+  objectiveSummary      String                        @map("objective_summary") @db.VarChar(500)
+  audienceSummary       String                        @map("audience_summary") @db.VarChar(500)
+  personalitySummary    String                        @map("personality_summary") @db.VarChar(500)
+  avatarUrl             String?                       @map("avatar_url") @db.VarChar(2048)
+  archivedAt            DateTime?                     @map("archived_at") @db.Timestamptz(6)
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  ownerUser             User                          @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  objectives            BunshinObjective[]
+  audiences             BunshinAudience[]
+  personality           BunshinPersonality?
+  knowledgeGrants       BunshinKnowledgeGrant[]
+  memories              BunshinMemory[]
   capabilityAssignments BunshinCapabilityAssignment[]
-  socialProfiles SocialProfile[]
-  contentPillars ContentPillar[]
-  weeklyPlans WeeklyPlan[]
-  weeklyPlanItems WeeklyPlanItem[]
+  socialProfiles        SocialProfile[]
+  contentPillars        ContentPillar[]
+  weeklyPlans           WeeklyPlan[]
+  weeklyPlanItems       WeeklyPlanItem[]
+  dailyMissions         DailyMission[]
+  missionContents       MissionContent[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -295,19 +308,19 @@ model Bunshin {
 }
 
 model OwnerKnowledge {
-  id          String               @id @default(uuid()) @db.Uuid
-  workspaceId String               @map("workspace_id") @db.Uuid
-  ownerUserId String               @map("owner_user_id") @db.Uuid
+  id          String                  @id @default(uuid()) @db.Uuid
+  workspaceId String                  @map("workspace_id") @db.Uuid
+  ownerUserId String                  @map("owner_user_id") @db.Uuid
   type        OwnerKnowledgeType
-  title       String               @db.VarChar(160)
-  content     String               @db.VarChar(20000)
-  sourceType  KnowledgeSourceType  @default(MANUAL) @map("source_type")
-  status      OwnerKnowledgeStatus @default(ACTIVE)
-  archivedAt  DateTime?            @map("archived_at") @db.Timestamptz(6)
-  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  ownerUser   User                 @relation("KnowledgeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  title       String                  @db.VarChar(160)
+  content     String                  @db.VarChar(20000)
+  sourceType  KnowledgeSourceType     @default(MANUAL) @map("source_type")
+  status      OwnerKnowledgeStatus    @default(ACTIVE)
+  archivedAt  DateTime?               @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  ownerUser   User                    @relation("KnowledgeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   grants      BunshinKnowledgeGrant[]
 
   @@index([workspaceId, ownerUserId, status, updatedAt])
@@ -391,25 +404,27 @@ model SocialProfile {
   updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin          Bunshin                @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMissions    DailyMission[]
 
   @@unique([workspaceId, bunshinId, platform])
+  @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, status, updatedAt])
   @@map("social_profiles")
 }
 
 model ContentPillar {
-  id          String    @id @default(uuid()) @db.Uuid
-  workspaceId String    @map("workspace_id") @db.Uuid
-  bunshinId   String    @map("bunshin_id") @db.Uuid
-  title       String    @db.VarChar(100)
-  description String?   @db.VarChar(500)
-  weight      Int
-  active      Boolean   @default(true)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin     Bunshin   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  id              String           @id @default(uuid()) @db.Uuid
+  workspaceId     String           @map("workspace_id") @db.Uuid
+  bunshinId       String           @map("bunshin_id") @db.Uuid
+  title           String           @db.VarChar(100)
+  description     String?          @db.VarChar(500)
+  weight          Int
+  active          Boolean          @default(true)
+  deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin         Bunshin          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   weeklyPlanItems WeeklyPlanItem[]
 
   @@unique([workspaceId, bunshinId, title])
@@ -457,11 +472,68 @@ model WeeklyPlanItem {
   bunshin           Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   weeklyPlan        WeeklyPlan            @relation(fields: [workspaceId, bunshinId, weeklyPlanId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   contentPillar     ContentPillar         @relation(fields: [workspaceId, bunshinId, contentPillarId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  dailyMissions     DailyMission[]
 
   @@unique([weeklyPlanId, scheduledDate])
+  @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, scheduledDate])
   @@index([contentPillarId])
   @@map("weekly_plan_items")
+}
+
+model DailyMission {
+  id               String                @id @default(uuid()) @db.Uuid
+  workspaceId      String                @map("workspace_id") @db.Uuid
+  bunshinId        String                @map("bunshin_id") @db.Uuid
+  socialProfileId  String?               @map("social_profile_id") @db.Uuid
+  weeklyPlanItemId String?               @map("weekly_plan_item_id") @db.Uuid
+  missionDate      DateTime              @map("mission_date") @db.Date
+  status           DailyMissionStatus    @default(GENERATED)
+  format           SocialPreferredFormat
+  estimatedMinutes Int                   @map("estimated_minutes")
+  topic            String                @db.VarChar(200)
+  angle            String                @db.VarChar(500)
+  reason           String                @db.VarChar(1000)
+  qualityScore     Int?                  @map("quality_score")
+  viewedAt         DateTime?             @map("viewed_at") @db.Timestamptz(6)
+  startedAt        DateTime?             @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime?             @map("completed_at") @db.Timestamptz(6)
+  skippedAt        DateTime?             @map("skipped_at") @db.Timestamptz(6)
+  expiredAt        DateTime?             @map("expired_at") @db.Timestamptz(6)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin          Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile    SocialProfile?        @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  weeklyPlanItem   WeeklyPlanItem?       @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  content          MissionContent?
+
+  @@unique([workspaceId, bunshinId, missionDate])
+  @@unique([workspaceId, bunshinId, id])
+  @@unique([workspaceId, bunshinId, id, format])
+  @@index([workspaceId, bunshinId, status, missionDate])
+  @@index([socialProfileId])
+  @@index([weeklyPlanItemId])
+  @@map("daily_missions")
+}
+
+model MissionContent {
+  id             String                @id @default(uuid()) @db.Uuid
+  workspaceId    String                @map("workspace_id") @db.Uuid
+  bunshinId      String                @map("bunshin_id") @db.Uuid
+  dailyMissionId String                @unique @map("daily_mission_id") @db.Uuid
+  format         SocialPreferredFormat
+  contentJson    Json                  @map("content_json")
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission   DailyMission          @relation(fields: [workspaceId, bunshinId, dailyMissionId, format], references: [workspaceId, bunshinId, id, format], onDelete: Cascade)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@unique([workspaceId, bunshinId, dailyMissionId, format])
+  @@index([workspaceId, bunshinId, format])
+  @@map("mission_contents")
 }
 
 model BunshinObjective {

@@ -2,7 +2,7 @@
 
 ## 1. 状態
 
-実装前レビュー用。本文書とD-028が承認されるまでschema、migration、domain実装を開始しない。
+承認・実装済み。実装結果は `docs/PHASE3_SLICE_3_4_IMPLEMENTATION_REPORT.md` を参照する。
 
 ## 2. 目的
 
@@ -260,11 +260,11 @@ markExpired(scope, dailyMissionId) -> DailyMission
 
 ## 15. 承認事項
 
-- [ ] Slice 3.4はCore Persistenceだけとし、API/UIを開始しない
-- [ ] DailyMissionとMissionContentを必須1対1aggregateとして保存する
-- [ ] 通常MissionはWorkspace/Bunshin/local dateで1件に限定する
-- [ ] Missionへtimezone snapshotを保存しない
-- [ ] format別contentを保存前にstrict validationする
-- [ ] terminal状態をimmutableにし、同一状態操作を冪等にする
-- [ ] Assignment停止中もreadを許可し、mutationだけ拒否する
-- [ ] AI、Feedback、PostRecord、LINE、Jobを実装しない
+- [x] Slice 3.4はCore Persistenceだけとし、API/UIを開始しない
+- [x] DailyMissionとMissionContentを必須1対1aggregateとして保存する
+- [x] 通常MissionはWorkspace/Bunshin/local dateで1件に限定する
+- [x] Missionへtimezone snapshotを保存しない
+- [x] format別contentを保存前にstrict validationする
+- [x] terminal状態をimmutableにし、同一状態操作を冪等にする
+- [x] Assignment停止中もreadを許可し、mutationだけ拒否する
+- [x] AI、Feedback、PostRecord、LINE、Jobを実装しない

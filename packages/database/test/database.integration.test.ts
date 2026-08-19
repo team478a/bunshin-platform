@@ -20,6 +20,9 @@ import {
   CreateWeeklyPlanItem,
   ConfirmWeeklyPlan,
   ExpireWeeklyPlan,
+  CreateDailyMission,
+  ListDailyMissions,
+  TransitionDailyMission,
 } from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
@@ -34,6 +37,7 @@ import {
   PrismaSocialProfileRepository,
   PrismaContentPillarRepository,
   PrismaWeeklyPlanRepository,
+  PrismaDailyMissionRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -45,6 +49,8 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.missionContent.deleteMany();
+    await client.dailyMission.deleteMany();
     await client.weeklyPlanItem.deleteMany();
     await client.weeklyPlan.deleteMany();
     await client.contentPillar.deleteMany();
@@ -1213,6 +1219,77 @@ integration('database ownership boundaries', () => {
         weeklyPlanId: plan.id,
       }),
     ).resolves.toMatchObject({ status: 'EXPIRED' });
+  });
+
+  it('persists Daily Mission and content atomically with date uniqueness and transitions', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Mission Owner' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Mission Bunshin',
+      slug: `mission-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const assignments = new PrismaBunshinCapabilityAssignmentRepository(client);
+    await assignments.assign({
+      ...ownerScope(owner, bunshin.id),
+      capabilityType: 'SOCIAL',
+    });
+    const repository = new PrismaDailyMissionRepository(client);
+    const create = new CreateDailyMission(repository, assignments);
+    const input = {
+      ...ownerScope(owner, bunshin.id),
+      missionDate: '2026-08-19',
+      format: 'SLIDE' as const,
+      estimatedMinutes: 5,
+      topic: '基礎',
+      angle: '3手',
+      reason: '初心者向け',
+      content: {
+        topic: '基礎',
+        angle: '3手',
+        reason: '初心者向け',
+        estimatedMinutes: 5,
+        slides: [
+          { index: 1, role: 'HOOK', headline: '開始', body: '本文' },
+          { index: 2, role: 'CTA', headline: '行動', body: '本文' },
+        ],
+        caption: 'caption',
+        hashtags: [],
+      },
+    };
+    const created = await create.execute(input);
+    expect(created).toMatchObject({
+      missionDate: '2026-08-19',
+      status: 'GENERATED',
+      content: expect.objectContaining({ topic: '基礎' }),
+    });
+    await expect(create.execute(input)).rejects.toMatchObject({ code: 'CONFLICT' });
+    const completed = await new TransitionDailyMission(repository, assignments).execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      status: 'COMPLETED',
+    });
+    expect(completed.completedAt).toBeInstanceOf(Date);
+    await expect(
+      new TransitionDailyMission(repository, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+        status: 'VIEWED',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await assignments.setStatus({
+      ...ownerScope(owner, bunshin.id),
+      capabilityType: 'SOCIAL',
+      status: 'SUSPENDED',
+    });
+    await expect(
+      new ListDailyMissions(repository).execute(ownerScope(owner, bunshin.id)),
+    ).resolves.toHaveLength(1);
   });
 });
 
