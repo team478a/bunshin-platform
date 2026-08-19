@@ -235,6 +235,18 @@
 - 理由: 後続Weekly Planが参照できる安定IDとtenant/Bunshin境界を、生成機能より先に確立するため
 - 詳細: `docs/PHASE3_SLICE_3_2_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-025: Content Pillar API/UIはBunshin詳細内の手動管理に限定する
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: Bunshin scopeされたUUID pillarIdでlist/detail/create/update/activate/deactivate/soft-deleteを提供する
+- HTTP: createは201、それ以外の成功は200。DELETEはbodyを受け付けない
+- Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
+- UI: 既存Bunshin詳細内の最小セクションとし、削除前確認とrestore不可を明示する
+- 禁止: AI、Weekly Plan、Mission、Provider、LINE、BLOG、Jobを提供しない
+- 理由: Coreで確立したtenant/Bunshin/soft-delete境界を維持し、計画生成より先に安全な手動管理を公開するため
+- 詳細: `docs/PHASE3_SLICE_3_2B_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
