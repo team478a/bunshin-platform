@@ -187,6 +187,17 @@
 - 禁止: Capability handler、Provider、投稿、AI、LINE、BLOG、Jobを混在させない
 - 詳細: `docs/PHASE2_SLICE_2_4_IMPLEMENTATION_INSTRUCTION.md`
 
+## D-021: Phase 2のCapability管理UIはSOCIAL割当状態だけを公開する
+
+- 日付: 2026-08-19
+- 状態: Proposed
+- 提案: 既存Bunshin詳細へ最小Capabilityセクションを追加し、公開mutationをSOCIALのassign／activate／suspendだけに限定する
+- HTTP: listとSOCIAL状態変更はverified session、same-origin、JSON、`no-store`を必須とする
+- DTO: `config`と`assignedByUserId`を公開しない
+- 非目標: SOCIAL処理、Provider、AI、Job、LOCKED操作、削除、unassign、config編集は実装しない
+- 理由: Capability実行機能より先に明示割当とtenant／Bunshin境界をHTTP/UIまで一貫させ、未承認機能の公開を防ぐため
+- 詳細: `docs/PHASE2_SLICE_2_4B_IMPLEMENTATION_INSTRUCTION.md`
+
 ## 未決事項
 
 後続Phaseで決める項目:
