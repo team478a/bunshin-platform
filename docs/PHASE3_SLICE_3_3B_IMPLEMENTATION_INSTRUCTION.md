@@ -2,7 +2,7 @@
 
 ## 1. 状態
 
-実装前レビュー用。本文書とD-027が承認されるまでAPI/UI実装を開始しない。
+承認・実装済み。実装結果は `docs/PHASE3_SLICE_3_3B_IMPLEMENTATION_REPORT.md` を参照する。
 
 ## 2. 目的
 
@@ -190,11 +190,11 @@ WeeklyPlanItemDto
 
 ## 14. 承認事項
 
-- [ ] Plan/Item APIはBunshin scopeとUUIDを必須にする
-- [ ] Plan/Item createは201、それ以外の成功は200とする
-- [ ] Assignment停止中もreadを許可し、mutationだけ拒否する
-- [ ] DRAFTのみ編集可能とし、confirm/expireは冪等にする
-- [ ] Itemはactive Content Pillarだけを選択可能にする
-- [ ] UIは既存Bunshin詳細内の最小セクションとする
-- [ ] browser timezoneは初期値にだけ使い、Userが確認できるようにする
-- [ ] AI、Daily Mission、Provider、LINE、BLOG、Jobを実装しない
+- [x] Plan/Item APIはBunshin scopeとUUIDを必須にする
+- [x] Plan/Item createは201、それ以外の成功は200とする
+- [x] Assignment停止中もreadを許可し、mutationだけ拒否する
+- [x] DRAFTのみ編集可能とし、confirm/expireは冪等にする
+- [x] Itemはactive Content Pillarだけを選択可能にする
+- [x] UIは既存Bunshin詳細内の最小セクションとする
+- [x] browser timezoneは初期値にだけ使い、Userが確認できるようにする
+- [x] AI、Daily Mission、Provider、LINE、BLOG、Jobを実装しない

@@ -263,7 +263,7 @@
 ## D-027: Weekly Plan API/UIはBunshin詳細内の手動計画に限定する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #32で承認）
 - 提案: Bunshin scopeされたUUID Plan/Item APIと既存Bunshin詳細内の最小手動管理UIを提供する
 - HTTP: Plan/Item createは201、その他は200。DELETEはbodyを受け付けない
 - timezone: browser timezoneは作成フォーム初期値にだけ使用し、保存前にUserが確認・変更する
