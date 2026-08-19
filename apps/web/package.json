@@ -12,6 +12,7 @@
   "dependencies": {
     "@bunshin/application": "workspace:*",
     "@bunshin/auth": "workspace:*",
+    "@bunshin/capability-social": "workspace:*",
     "@bunshin/config": "workspace:*",
     "@bunshin/database": "workspace:*",
     "@bunshin/observability": "workspace:*",

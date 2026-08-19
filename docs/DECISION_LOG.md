@@ -214,7 +214,7 @@
 ## D-023: Social Profile API/UIはBunshin詳細内の手動設定に限定する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #24で承認）
 - 提案: Social Profileは`workspaceId + bunshinId + platform`で識別し、既存Bunshin詳細内でlist/create/update/activate/deactivateだけを提供する
 - 状態: Assignment停止中はread-onlyとし、外部SNS通信を行わない
 - HTTP: createは201、updateと冪等な状態変更は200とする

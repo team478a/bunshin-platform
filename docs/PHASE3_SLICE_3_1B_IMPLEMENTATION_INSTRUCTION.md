@@ -165,10 +165,10 @@ SocialProfileDto
 
 ## 15. 承認事項
 
-- [ ] Profile resourceは`workspaceId + bunshinId + platform`で識別する
-- [ ] createは`201`、update/activate/deactivateは`200`とする
-- [ ] Assignment停止中もreadを許可し、mutationだけを拒否する
-- [ ] UIは既存Bunshin詳細内の最小セクションとする
-- [ ] SUSPENDED/LOCKED時はread-only表示とする
-- [ ] SNS接続・投稿・AI・Mission・Jobを実装しない
-- [ ] Production gate完了まではDraft扱いとする
+- [x] Profile resourceは`workspaceId + bunshinId + platform`で識別する
+- [x] createは`201`、update/activate/deactivateは`200`とする
+- [x] Assignment停止中もreadを許可し、mutationだけを拒否する
+- [x] UIは既存Bunshin詳細内の最小セクションとする
+- [x] SUSPENDED/LOCKED時はread-only表示とする
+- [x] SNS接続・投稿・AI・Mission・Jobを実装しない
+- [x] Production gate完了まではDraft扱いとする
