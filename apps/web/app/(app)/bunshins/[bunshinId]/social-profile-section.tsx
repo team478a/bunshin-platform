@@ -13,6 +13,7 @@ import { useState, type FormEvent } from 'react';
 import type { SocialCapabilityStatus } from './capability-section';
 
 export interface SocialProfileView {
+  id: string;
   platform: SocialPlatform;
   handle: string | null;
   profileUrl: string | null;
@@ -38,7 +39,7 @@ const formatLabels: Record<SocialPreferredFormat, string> = {
   IMAGE: '画像',
 };
 
-type FormState = Omit<SocialProfileView, 'status'>;
+type FormState = Omit<SocialProfileView, 'id' | 'status'>;
 const empty: FormState = {
   platform: 'INSTAGRAM',
   handle: '',

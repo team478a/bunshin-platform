@@ -7,6 +7,7 @@ import { notFound, redirect } from 'next/navigation';
 import {
   ListContentPillars,
   ListSocialProfiles,
+  ListSocialAccountStrategies,
   ListWeeklyPlans,
 } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
@@ -33,6 +34,7 @@ export default async function BunshinPage({
       PrismaBunshinMemoryRepository,
       PrismaBunshinCapabilityAssignmentRepository,
       PrismaSocialProfileRepository,
+      PrismaSocialAccountStrategyRepository,
       PrismaContentPillarRepository,
       PrismaWeeklyPlanRepository,
     } = await import('@bunshin/database');
@@ -70,6 +72,19 @@ export default async function BunshinPage({
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
     });
+    const strategyRepository = new PrismaSocialAccountStrategyRepository();
+    const socialStrategies = (
+      await Promise.all(
+        socialProfiles.map((profile) =>
+          new ListSocialAccountStrategies(strategyRepository).execute({
+            workspaceId,
+            actorUserId: currentUser.userId,
+            bunshinId: bunshin.id,
+            socialProfileId: profile.id,
+          }),
+        ),
+      )
+    ).flat();
     const contentPillars = await new ListContentPillars(
       new PrismaContentPillarRepository(),
     ).execute({ workspaceId, actorUserId: currentUser.userId, bunshinId: bunshin.id });
@@ -104,6 +119,7 @@ export default async function BunshinPage({
         }
         socialProfiles={socialProfiles.map(
           ({
+            id,
             platform,
             handle,
             profileUrl,
@@ -112,12 +128,34 @@ export default async function BunshinPage({
             preferredFormats,
             status,
           }) => ({
+            id,
             platform,
             handle,
             profileUrl,
             purpose,
             postingFrequency,
             preferredFormats,
+            status,
+          }),
+        )}
+        socialStrategies={socialStrategies.map(
+          ({
+            id,
+            socialProfileId,
+            platform,
+            concept,
+            positioning,
+            targetSummary,
+            version,
+            status,
+          }) => ({
+            id,
+            socialProfileId,
+            platform,
+            concept,
+            positioning,
+            targetSummary,
+            version,
             status,
           }),
         )}
