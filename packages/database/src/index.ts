@@ -22,6 +22,9 @@ import {
   type ContentPillarRepository,
   type WeeklyPlan,
   type WeeklyPlanRepository,
+  type DailyMission,
+  type DailyMissionRepository,
+  type DailyMissionStatus,
   type SocialProfile,
   type SocialProfileRepository,
 } from '@bunshin/capability-social';
@@ -480,6 +483,186 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
         await tx.weeklyPlan.update({
           where: { id: plan.id },
           data: { status: 'EXPIRED', expiredAt: new Date() },
+          include: this.include,
+        }),
+      );
+    });
+  }
+}
+
+const missionDate = (value: Date) => value.toISOString().slice(0, 10);
+type MissionRow = Prisma.DailyMissionGetPayload<{ include: { content: true } }>;
+function dailyMission(row: MissionRow): DailyMission {
+  if (!row.content) throw new ApplicationError('INTERNAL_ERROR', 'mission content missing');
+  return {
+    ...row,
+    missionDate: missionDate(row.missionDate),
+    status: row.status,
+    format: row.format,
+    content: row.content.contentJson as Record<string, unknown>,
+  };
+}
+export class PrismaDailyMissionRepository implements DailyMissionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  private include = { content: true } as const;
+  private async authorized(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    manage: boolean,
+  ) {
+    const bunshin = await client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      include: {
+        workspace: {
+          select: {
+            memberships: {
+              where: { userId: input.actorUserId, status: 'ACTIVE' },
+              select: { role: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (!bunshin) return null;
+    const role = bunshin.workspace.memberships[0]?.role;
+    return !manage || (role && canManageBunshin(role, input.actorUserId, bunshin.ownerUserId))
+      ? bunshin
+      : null;
+  }
+  private async row(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: { workspaceId: string; bunshinId: string; dailyMissionId: string },
+  ) {
+    return client.dailyMission.findFirst({
+      where: {
+        id: input.dailyMissionId,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+      },
+      include: this.include,
+    });
+  }
+  async create(input: Parameters<DailyMissionRepository['create']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        if (!(await this.authorized(tx, input, true))) return null;
+        if (
+          input.socialProfileId &&
+          !(await tx.socialProfile.findFirst({
+            where: {
+              id: input.socialProfileId,
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+            },
+          }))
+        )
+          return null;
+        if (
+          input.weeklyPlanItemId &&
+          !(await tx.weeklyPlanItem.findFirst({
+            where: {
+              id: input.weeklyPlanItemId,
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+            },
+          }))
+        )
+          return null;
+        const created = await tx.dailyMission.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            socialProfileId: input.socialProfileId ?? null,
+            weeklyPlanItemId: input.weeklyPlanItemId ?? null,
+            missionDate: new Date(`${input.missionDate}T00:00:00Z`),
+            format: input.format,
+            estimatedMinutes: input.estimatedMinutes,
+            topic: input.topic,
+            angle: input.angle,
+            reason: input.reason,
+            qualityScore: input.qualityScore ?? null,
+          },
+        });
+        await tx.missionContent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            dailyMissionId: created.id,
+            format: input.format,
+            contentJson: input.content as Prisma.InputJsonValue,
+          },
+        });
+        return dailyMission((await this.row(tx, { ...input, dailyMissionId: created.id }))!);
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError('CONFLICT', 'daily mission already exists', error);
+      throw error;
+    }
+  }
+  async list(input: Parameters<DailyMissionRepository['list']>[0]) {
+    if (!(await this.authorized(this.client, input, false))) return null;
+    return (
+      await this.client.dailyMission.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          ...(input.from || input.to
+            ? {
+                missionDate: {
+                  ...(input.from ? { gte: new Date(`${input.from}T00:00:00Z`) } : {}),
+                  ...(input.to ? { lte: new Date(`${input.to}T00:00:00Z`) } : {}),
+                },
+              }
+            : {}),
+        },
+        include: this.include,
+        orderBy: [{ missionDate: 'desc' }, { id: 'desc' }],
+      })
+    ).map(dailyMission);
+  }
+  async find(input: Parameters<DailyMissionRepository['find']>[0]) {
+    if (!(await this.authorized(this.client, input, false))) return null;
+    const value = await this.row(this.client, input);
+    return value ? dailyMission(value) : null;
+  }
+  async transition(input: Parameters<DailyMissionRepository['transition']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      if (!(await this.authorized(tx, input, true))) return null;
+      const row = await this.row(tx, input);
+      if (!row) return null;
+      if (row.status === input.status) return dailyMission(row);
+      const allowed: Record<DailyMissionStatus, DailyMissionStatus[]> = {
+        GENERATED: ['VIEWED', 'STARTED', 'COMPLETED', 'SKIPPED', 'EXPIRED'],
+        VIEWED: ['STARTED', 'COMPLETED', 'SKIPPED', 'EXPIRED'],
+        STARTED: ['COMPLETED', 'SKIPPED', 'EXPIRED'],
+        COMPLETED: [],
+        SKIPPED: [],
+        EXPIRED: [],
+      };
+      if (!allowed[row.status].includes(input.status))
+        throw new ApplicationError('CONFLICT', 'invalid mission transition');
+      const now = new Date();
+      return dailyMission(
+        await tx.dailyMission.update({
+          where: { id: row.id },
+          data: {
+            status: input.status,
+            ...(input.status === 'VIEWED' ? { viewedAt: now } : {}),
+            ...(input.status === 'STARTED' ? { startedAt: now } : {}),
+            ...(input.status === 'COMPLETED' ? { completedAt: now } : {}),
+            ...(input.status === 'SKIPPED' ? { skippedAt: now } : {}),
+            ...(input.status === 'EXPIRED' ? { expiredAt: now } : {}),
+          },
           include: this.include,
         }),
       );

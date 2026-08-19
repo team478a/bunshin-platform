@@ -276,7 +276,7 @@
 ## D-028: Daily Missionはformat別Contentを持つ必須1対1aggregateとする
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #34で承認）
 - 提案: Slice 3.4をCore Persistenceだけに限定し、DailyMissionとstrict validation済みMissionContentを同一transactionで保存する
 - 一意性: 通常Missionは`workspaceId + bunshinId + missionDate`で1件とする
 - 日付: missionDateはtimezoneを持たないDATEとし、Missionへtimezone snapshotを保存しない

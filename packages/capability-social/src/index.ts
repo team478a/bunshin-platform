@@ -808,3 +808,292 @@ export class ExpireWeeklyPlan extends WeeklyPlanMutation {
     return value;
   }
 }
+
+export const DAILY_MISSION_STATUSES = [
+  'GENERATED',
+  'VIEWED',
+  'STARTED',
+  'COMPLETED',
+  'SKIPPED',
+  'EXPIRED',
+] as const;
+export type DailyMissionStatus = (typeof DAILY_MISSION_STATUSES)[number];
+export type MissionContent = Record<string, unknown>;
+export interface DailyMission {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  socialProfileId: string | null;
+  weeklyPlanItemId: string | null;
+  missionDate: string;
+  status: DailyMissionStatus;
+  format: SocialPreferredFormat;
+  estimatedMinutes: number;
+  topic: string;
+  angle: string;
+  reason: string;
+  qualityScore: number | null;
+  viewedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  skippedAt: Date | null;
+  expiredAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  content: MissionContent;
+}
+export interface DailyMissionScope {
+  workspaceId: string;
+  actorUserId: string;
+  bunshinId: string;
+}
+export interface CreateDailyMissionInput extends DailyMissionScope {
+  socialProfileId?: string | null;
+  weeklyPlanItemId?: string | null;
+  missionDate: string;
+  format: SocialPreferredFormat;
+  estimatedMinutes: number;
+  topic: string;
+  angle: string;
+  reason: string;
+  content: MissionContent;
+  qualityScore?: number | null;
+}
+export interface DailyMissionRepository {
+  create(input: CreateDailyMissionInput): Promise<DailyMission | null>;
+  list(input: DailyMissionScope & { from?: string; to?: string }): Promise<DailyMission[] | null>;
+  find(input: DailyMissionScope & { dailyMissionId: string }): Promise<DailyMission | null>;
+  transition(
+    input: DailyMissionScope & { dailyMissionId: string; status: DailyMissionStatus },
+  ): Promise<DailyMission | null>;
+}
+
+const missionString = (value: unknown, maximum: number, field: string) => {
+  if (typeof value !== 'string' || value.trim().length < 1 || value.trim().length > maximum)
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+  return value.trim();
+};
+const missionInteger = (value: unknown, minimum: number, maximum: number, field: string) => {
+  if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum)
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+  return value as number;
+};
+function strict(value: unknown, keys: readonly string[], field: string) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+  if (Object.keys(value).some((key) => !keys.includes(key)))
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+  return value as Record<string, unknown>;
+}
+function strings(value: unknown, maximumItems: number, maximumLength: number, field: string) {
+  if (!Array.isArray(value) || value.length > maximumItems)
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+  return value.map((item) => missionString(item, maximumLength, field));
+}
+export function normalizeMissionContent(
+  format: SocialPreferredFormat,
+  value: unknown,
+): MissionContent {
+  if (format === 'SLIDE') {
+    const v = strict(
+      value,
+      ['topic', 'angle', 'reason', 'estimatedMinutes', 'slides', 'caption', 'hashtags'],
+      'slide content',
+    );
+    if (!Array.isArray(v['slides']) || v['slides'].length < 1 || v['slides'].length > 7)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid slides');
+    const slides = v['slides'].map((entry, index) => {
+      const slide = strict(entry, ['index', 'role', 'headline', 'body'], 'slide');
+      const role = missionString(slide['role'], 20, 'slide role');
+      if (!['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'].includes(role))
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid slide role');
+      if (slide['index'] !== index + 1)
+        throw new ApplicationError('VALIDATION_ERROR', 'slide index must be sequential');
+      return {
+        index: index + 1,
+        role,
+        headline: missionString(slide['headline'], 200, 'headline'),
+        body: missionString(slide['body'], 2000, 'body'),
+      };
+    });
+    if (slides[0]?.role !== 'HOOK' || slides.at(-1)?.role !== 'CTA')
+      throw new ApplicationError('VALIDATION_ERROR', 'slides require HOOK and CTA');
+    return {
+      topic: missionString(v['topic'], 200, 'topic'),
+      angle: missionString(v['angle'], 500, 'angle'),
+      reason: missionString(v['reason'], 1000, 'reason'),
+      estimatedMinutes: missionInteger(v['estimatedMinutes'], 1, 120, 'estimated minutes'),
+      slides,
+      caption: missionString(v['caption'], 2200, 'caption'),
+      hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+    };
+  }
+  if (format === 'LIVE_ACTION') {
+    const v = strict(
+      value,
+      ['topic', 'estimatedMinutes', 'shootingInstruction', 'script', 'caption'],
+      'live action content',
+    );
+    if (!Array.isArray(v['script']) || v['script'].length < 1 || v['script'].length > 20)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid script');
+    const script = v['script'].map((entry) => {
+      const part = strict(entry, ['seconds', 'role', 'text'], 'script part');
+      const role = missionString(part['role'], 10, 'script role');
+      if (!['HOOK', 'BODY', 'CTA'].includes(role))
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid script role');
+      return {
+        seconds: missionString(part['seconds'], 30, 'seconds'),
+        role,
+        text: missionString(part['text'], 2000, 'script text'),
+      };
+    });
+    if (script[0]?.role !== 'HOOK' || script.at(-1)?.role !== 'CTA')
+      throw new ApplicationError('VALIDATION_ERROR', 'script requires HOOK and CTA');
+    return {
+      topic: missionString(v['topic'], 200, 'topic'),
+      estimatedMinutes: missionInteger(v['estimatedMinutes'], 1, 120, 'estimated minutes'),
+      shootingInstruction: missionString(v['shootingInstruction'], 2000, 'shooting instruction'),
+      script,
+      caption: missionString(v['caption'], 2200, 'caption'),
+    };
+  }
+  if (format === 'AI_VIDEO_PROMPT') {
+    const v = strict(
+      value,
+      [
+        'topic',
+        'estimatedMinutes',
+        'toolSuggestion',
+        'videoSettings',
+        'prompt',
+        'overlayText',
+        'caption',
+      ],
+      'video content',
+    );
+    const settings = strict(
+      v['videoSettings'],
+      ['aspectRatio', 'durationSeconds', 'style'],
+      'video settings',
+    );
+    return {
+      topic: missionString(v['topic'], 200, 'topic'),
+      estimatedMinutes: missionInteger(v['estimatedMinutes'], 1, 120, 'estimated minutes'),
+      toolSuggestion:
+        v['toolSuggestion'] === null
+          ? null
+          : missionString(v['toolSuggestion'], 100, 'tool suggestion'),
+      videoSettings: {
+        aspectRatio: missionString(settings['aspectRatio'], 20, 'aspect ratio'),
+        durationSeconds: missionInteger(settings['durationSeconds'], 1, 120, 'duration seconds'),
+        style: missionString(settings['style'], 500, 'style'),
+      },
+      prompt: missionString(v['prompt'], 10000, 'prompt'),
+      overlayText: strings(v['overlayText'], 20, 200, 'overlay text'),
+      caption: missionString(v['caption'], 2200, 'caption'),
+    };
+  }
+  const v = strict(
+    value,
+    [
+      'topic',
+      'angle',
+      'reason',
+      'estimatedMinutes',
+      'imageInstruction',
+      'overlayText',
+      'caption',
+      'hashtags',
+    ],
+    'image content',
+  );
+  return {
+    topic: missionString(v['topic'], 200, 'topic'),
+    angle: missionString(v['angle'], 500, 'angle'),
+    reason: missionString(v['reason'], 1000, 'reason'),
+    estimatedMinutes: missionInteger(v['estimatedMinutes'], 1, 120, 'estimated minutes'),
+    imageInstruction: missionString(v['imageInstruction'], 5000, 'image instruction'),
+    overlayText:
+      v['overlayText'] === null ? null : missionString(v['overlayText'], 500, 'overlay text'),
+    caption: missionString(v['caption'], 2200, 'caption'),
+    hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+  };
+}
+export function normalizeCreateDailyMission(
+  input: CreateDailyMissionInput,
+): CreateDailyMissionInput {
+  const format = weeklyFormat(input.format);
+  const quality =
+    input.qualityScore === undefined || input.qualityScore === null
+      ? input.qualityScore
+      : missionInteger(input.qualityScore, 0, 100, 'quality score');
+  return {
+    ...input,
+    missionDate: localDate(input.missionDate),
+    format,
+    estimatedMinutes: missionInteger(input.estimatedMinutes, 1, 120, 'estimated minutes'),
+    topic: missionString(input.topic, 200, 'topic'),
+    angle: missionString(input.angle, 500, 'angle'),
+    reason: missionString(input.reason, 1000, 'reason'),
+    content: normalizeMissionContent(format, input.content),
+    ...(quality === undefined ? {} : { qualityScore: quality }),
+  };
+}
+abstract class DailyMissionMutation {
+  constructor(
+    protected readonly missions: DailyMissionRepository,
+    private readonly assignments: BunshinCapabilityAssignmentRepository,
+  ) {}
+  protected requireActive(input: DailyMissionScope) {
+    return new RequireActiveBunshinCapability(this.assignments).execute({
+      ...input,
+      capabilityType: 'SOCIAL',
+    });
+  }
+}
+export class CreateDailyMission extends DailyMissionMutation {
+  async execute(input: CreateDailyMissionInput) {
+    await this.requireActive(input);
+    const value = await this.missions.create(normalizeCreateDailyMission(input));
+    if (!value) throw new ApplicationError('NOT_FOUND', 'bunshin or relation not found');
+    return value;
+  }
+}
+export class ListDailyMissions {
+  constructor(private readonly missions: DailyMissionRepository) {}
+  async execute(input: DailyMissionScope & { from?: string; to?: string }) {
+    const from = input.from === undefined ? undefined : localDate(input.from);
+    const to = input.to === undefined ? undefined : localDate(input.to);
+    if (
+      from &&
+      to &&
+      (from > to || (new Date(to).valueOf() - new Date(from).valueOf()) / 86400000 > 89)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid mission date range');
+    const value = await this.missions.list({
+      ...input,
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    return value;
+  }
+}
+export class GetDailyMission {
+  constructor(private readonly missions: DailyMissionRepository) {}
+  async execute(input: DailyMissionScope & { dailyMissionId: string }) {
+    const value = await this.missions.find(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return value;
+  }
+}
+export class TransitionDailyMission extends DailyMissionMutation {
+  async execute(input: DailyMissionScope & { dailyMissionId: string; status: DailyMissionStatus }) {
+    await this.requireActive(input);
+    if (!DAILY_MISSION_STATUSES.includes(input.status))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid mission status');
+    const value = await this.missions.transition(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return value;
+  }
+}
