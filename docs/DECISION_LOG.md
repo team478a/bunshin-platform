@@ -201,7 +201,7 @@
 ## D-022: Phase 3は手動Social Profileから開始する
 
 - 日付: 2026-08-19
-- 状態: Proposed
+- 状態: Accepted（PR #22で承認）
 - 提案: Phase 3最初のSliceをSocial Profileとし、3.1-A Core Persistenceと3.1-B authenticated API/UIへ分割する
 - 一意性: `workspaceId + bunshinId + platform`
 - Capability: mutationはACTIVE SOCIAL Assignmentを必須とする

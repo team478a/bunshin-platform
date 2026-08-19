@@ -8,7 +8,7 @@
 - Platform DBと既存Blog DBを共有しない
 - staging/productionは別Supabase projectにする
 
-## Models through Phase 2
+## Models through Phase 3 Slice 3.1-A
 
 - `User`
 - `AuthIdentity`
@@ -19,8 +19,9 @@
 - `OwnerKnowledge` / `BunshinKnowledgeGrant`
 - `BunshinMemory`
 - `BunshinCapabilityAssignment`
+- `SocialProfile`
 
-SOCIAL固有、BLOG固有、Mission、Content、Feedback、Job tableは存在しない。
+Social Profile以外のSOCIAL固有table、BLOG固有、Mission、Content、Feedback、Job tableは存在しない。
 
 ## Migration
 

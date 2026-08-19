@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import type {
   AccountTransaction,
   AccountUnitOfWork,
@@ -17,6 +16,11 @@ import type {
   BunshinCapabilityAssignment,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
+import {
+  parsePreferredFormats,
+  type SocialProfile,
+  type SocialProfileRepository,
+} from '@bunshin/capability-social';
 import type {
   BunshinAggregate,
   PlatformAdmin,
@@ -928,6 +932,180 @@ export class PrismaBunshinCapabilityAssignmentRepository implements BunshinCapab
             ...(input.status === 'ACTIVE' ? { activatedAt: new Date() } : {}),
           },
         }),
+      );
+    });
+  }
+}
+
+function socialProfile(row: Prisma.SocialProfileGetPayload<object>): SocialProfile {
+  try {
+    return {
+      ...row,
+      platform: row.platform,
+      postingFrequency: row.postingFrequency,
+      preferredFormats: parsePreferredFormats(row.preferredFormats),
+      status: row.status,
+    };
+  } catch (error) {
+    throw new ApplicationError('INTERNAL_ERROR', 'invalid persisted social profile', error);
+  }
+}
+
+export class PrismaSocialProfileRepository implements SocialProfileRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async accessible(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+  ) {
+    return client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+  }
+
+  private async managed(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+  ) {
+    const bunshin = await client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      include: {
+        workspace: {
+          select: {
+            memberships: {
+              where: { userId: input.actorUserId, status: 'ACTIVE' },
+              select: { role: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    const role = bunshin?.workspace.memberships[0]?.role;
+    return bunshin !== null &&
+      role !== undefined &&
+      canManageBunshin(role, input.actorUserId, bunshin.ownerUserId)
+      ? bunshin
+      : null;
+  }
+
+  async create(input: Parameters<SocialProfileRepository['create']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        if ((await this.managed(tx, input)) === null) return null;
+        return socialProfile(
+          await tx.socialProfile.create({
+            data: {
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+              platform: input.platform,
+              handle: input.handle ?? null,
+              profileUrl: input.profileUrl ?? null,
+              purpose: input.purpose,
+              postingFrequency: input.postingFrequency,
+              preferredFormats: input.preferredFormats,
+            },
+          }),
+        );
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ApplicationError('CONFLICT', 'social profile already exists', error);
+      }
+      throw error;
+    }
+  }
+
+  async list(input: Parameters<SocialProfileRepository['list']>[0]) {
+    if ((await this.accessible(this.client, input)) === null) return null;
+    const rows = await this.client.socialProfile.findMany({
+      where: { workspaceId: input.workspaceId, bunshinId: input.bunshinId },
+      orderBy: [{ platform: 'asc' }],
+    });
+    return rows.map(socialProfile);
+  }
+
+  async findByPlatform(input: Parameters<SocialProfileRepository['findByPlatform']>[0]) {
+    if ((await this.accessible(this.client, input)) === null) return null;
+    const row = await this.client.socialProfile.findUnique({
+      where: {
+        workspaceId_bunshinId_platform: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          platform: input.platform,
+        },
+      },
+    });
+    return row === null ? null : socialProfile(row);
+  }
+
+  async update(input: Parameters<SocialProfileRepository['update']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      if ((await this.managed(tx, input)) === null) return null;
+      const row = await tx.socialProfile.findUnique({
+        where: {
+          workspaceId_bunshinId_platform: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            platform: input.platform,
+          },
+        },
+        select: { id: true },
+      });
+      if (row === null) return null;
+      return socialProfile(
+        await tx.socialProfile.update({
+          where: { id: row.id },
+          data: {
+            ...(input.handle === undefined ? {} : { handle: input.handle }),
+            ...(input.profileUrl === undefined ? {} : { profileUrl: input.profileUrl }),
+            ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+            ...(input.postingFrequency === undefined
+              ? {}
+              : { postingFrequency: input.postingFrequency }),
+            ...(input.preferredFormats === undefined
+              ? {}
+              : { preferredFormats: input.preferredFormats }),
+          },
+        }),
+      );
+    });
+  }
+
+  async setActive(input: Parameters<SocialProfileRepository['setActive']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      if ((await this.managed(tx, input)) === null) return null;
+      const row = await tx.socialProfile.findUnique({
+        where: {
+          workspaceId_bunshinId_platform: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            platform: input.platform,
+          },
+        },
+      });
+      if (row === null) return null;
+      const status = input.active ? 'ACTIVE' : 'INACTIVE';
+      if (row.status === status) return socialProfile(row);
+      return socialProfile(
+        await tx.socialProfile.update({ where: { id: row.id }, data: { status } }),
       );
     });
   }

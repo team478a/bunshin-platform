@@ -142,6 +142,26 @@ enum CapabilityAssignmentStatus {
   LOCKED
 }
 
+enum SocialPlatform {
+  INSTAGRAM
+  TIKTOK
+  X
+  OTHER
+}
+
+enum SocialPostingFrequency {
+  DAILY
+  WEEKDAYS
+  THREE_PER_WEEK
+  WEEKLY
+  FLEXIBLE
+}
+
+enum SocialProfileStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id            String                @id @default(uuid()) @db.Uuid
   status        UserStatus            @default(ACTIVE)
@@ -188,6 +208,7 @@ model Workspace {
   knowledgeGrants BunshinKnowledgeGrant[]
   memories        BunshinMemory[]
   capabilityAssignments BunshinCapabilityAssignment[]
+  socialProfiles SocialProfile[]
 
   @@index([status])
   @@map("workspaces")
@@ -245,8 +266,10 @@ model Bunshin {
   knowledgeGrants    BunshinKnowledgeGrant[]
   memories           BunshinMemory[]
   capabilityAssignments BunshinCapabilityAssignment[]
+  socialProfiles SocialProfile[]
 
   @@unique([workspaceId, slug])
+  @@unique([workspaceId, id])
   @@index([workspaceId, status, updatedAt])
   @@index([ownerUserId, status])
   @@map("bunshins")
@@ -332,6 +355,27 @@ model BunshinCapabilityAssignment {
   @@unique([workspaceId, bunshinId, capabilityType])
   @@index([workspaceId, bunshinId, status, updatedAt])
   @@map("bunshin_capability_assignments")
+}
+
+model SocialProfile {
+  id               String                 @id @default(uuid()) @db.Uuid
+  workspaceId      String                 @map("workspace_id") @db.Uuid
+  bunshinId        String                 @map("bunshin_id") @db.Uuid
+  platform         SocialPlatform
+  handle           String?                @db.VarChar(100)
+  profileUrl       String?                @map("profile_url") @db.VarChar(2048)
+  purpose          String                 @db.VarChar(500)
+  postingFrequency SocialPostingFrequency @map("posting_frequency")
+  preferredFormats Json                   @map("preferred_formats")
+  status           SocialProfileStatus    @default(ACTIVE)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin          Bunshin                @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, platform])
+  @@index([workspaceId, bunshinId, status, updatedAt])
+  @@map("social_profiles")
 }
 
 model BunshinObjective {
