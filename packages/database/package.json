@@ -20,6 +20,7 @@
   "dependencies": {
     "@bunshin/application": "workspace:*",
     "@bunshin/auth": "workspace:*",
+    "@bunshin/capability-social": "workspace:*",
     "@bunshin/platform-domain": "workspace:*",
     "@bunshin/shared": "workspace:*",
     "@prisma/client": "6.19.3"

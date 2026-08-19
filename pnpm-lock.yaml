@@ -122,6 +122,19 @@ importers:
         specifier: ^4.1.0
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
 
+  packages/capability-social:
+    dependencies:
+      '@bunshin/application':
+        specifier: workspace:*
+        version: link:../application
+      '@bunshin/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
+
   packages/config:
     dependencies:
       '@bunshin/shared':
@@ -143,6 +156,9 @@ importers:
       '@bunshin/auth':
         specifier: workspace:*
         version: link:../auth
+      '@bunshin/capability-social':
+        specifier: workspace:*
+        version: link:../capability-social
       '@bunshin/platform-domain':
         specifier: workspace:*
         version: link:../platform-domain

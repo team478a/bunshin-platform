@@ -186,12 +186,12 @@ Prismaで複合FKを採用する場合は、Bunshin側の対応unique/indexとmi
 
 ## 16. 承認事項
 
-- [ ] Phase 3最初のSliceを手動Social Profileとする
-- [ ] 3.1-A Core Persistenceと3.1-B API/UIを別PRにする
-- [ ] `workspaceId + bunshinId + platform`を一意とする
-- [ ] 公開platformを`INSTAGRAM | TIKTOK | X | OTHER`とする
-- [ ] 投稿頻度を5つのenumで保持する
-- [ ] preferredFormatsをtyped arrayとして検証し、DBではJSONで保持する
-- [ ] mutationにACTIVE SOCIAL Assignmentを必須とする
-- [ ] Profile状態とCapability Assignment状態を分離する
-- [ ] AI、SNS Provider、Job、Missionを3.1へ含めない
+- [x] Phase 3最初のSliceを手動Social Profileとする
+- [x] 3.1-A Core Persistenceと3.1-B API/UIを別PRにする
+- [x] `workspaceId + bunshinId + platform`を一意とする
+- [x] 公開platformを`INSTAGRAM | TIKTOK | X | OTHER`とする
+- [x] 投稿頻度を5つのenumで保持する
+- [x] preferredFormatsをtyped arrayとして検証し、DBではJSONで保持する
+- [x] mutationにACTIVE SOCIAL Assignmentを必須とする
+- [x] Profile状態とCapability Assignment状態を分離する
+- [x] AI、SNS Provider、Job、Missionを3.1へ含めない

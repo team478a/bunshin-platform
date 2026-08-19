@@ -5,6 +5,13 @@ import {
   RequireActiveBunshinCapability,
   requireAccessibleWorkspace,
 } from '@bunshin/application';
+import {
+  ActivateSocialProfile,
+  CreateSocialProfile,
+  DeactivateSocialProfile,
+  ListSocialProfiles,
+  UpdateSocialProfile,
+} from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
   PrismaAccountUnitOfWork,
@@ -15,6 +22,7 @@ import {
   PrismaKnowledgeGrantRepository,
   PrismaBunshinMemoryRepository,
   PrismaBunshinCapabilityAssignmentRepository,
+  PrismaSocialProfileRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -26,6 +34,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.socialProfile.deleteMany();
     await client.bunshinCapabilityAssignment.deleteMany();
     await client.bunshinMemory.deleteMany();
     await client.bunshinKnowledgeGrant.deleteMany();
@@ -727,5 +736,218 @@ integration('database ownership boundaries', () => {
         }),
       ).toBeNull();
     }
+  });
+
+  it('persists manual Social Profiles with capability and tenant boundaries', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Social Owner' });
+    const member = await accounts.execute({ displayName: 'Social Member' });
+    const admin = await accounts.execute({ displayName: 'Social Admin' });
+    const outsider = await accounts.execute({ displayName: 'Social Outsider' });
+    await client.workspaceMembership.createMany({
+      data: [
+        { workspaceId: owner.workspace.id, userId: member.user.id, role: 'MEMBER' },
+        { workspaceId: owner.workspace.id, userId: admin.user.id, role: 'ADMIN' },
+      ],
+    });
+    const bunshins = new PrismaBunshinRepository(client);
+    const createBunshin = (name: string, ownerUserId = owner.user.id) =>
+      bunshins.create({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        ownerUserId,
+        name,
+        slug: `${name.toLowerCase().replaceAll(' ', '-')}-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Objective',
+        audienceSummary: 'Audience',
+        personalitySummary: 'Personality',
+      });
+    const owned = await createBunshin('Social Owned');
+    const sibling = await createBunshin('Social Sibling');
+    const memberOwned = await createBunshin('Social Member Owned', member.user.id);
+    const assignments = new PrismaBunshinCapabilityAssignmentRepository(client);
+    for (const bunshinId of [owned.id, sibling.id, memberOwned.id]) {
+      await assignments.assign({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId,
+        capabilityType: 'SOCIAL',
+      });
+    }
+    const profiles = new PrismaSocialProfileRepository(client);
+    const create = new CreateSocialProfile(profiles, assignments);
+    const profile = await create.execute({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: owned.id,
+      platform: 'INSTAGRAM',
+      handle: '  bunshin  ',
+      profileUrl: ' https://example.com/bunshin ',
+      purpose: '  manual publishing  ',
+      postingFrequency: 'THREE_PER_WEEK',
+      preferredFormats: ['SLIDE', 'IMAGE'],
+    });
+    expect(profile).toMatchObject({
+      handle: 'bunshin',
+      purpose: 'manual publishing',
+      status: 'ACTIVE',
+      preferredFormats: ['SLIDE', 'IMAGE'],
+    });
+    await expect(
+      create.execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
+        platform: 'INSTAGRAM',
+        purpose: 'duplicate',
+        postingFrequency: 'WEEKLY',
+        preferredFormats: ['IMAGE'],
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      new ListSocialProfiles(profiles).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: sibling.id,
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      new ListSocialProfiles(profiles).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: owned.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      create.execute({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: owned.id,
+        platform: 'X',
+        purpose: 'cross tenant',
+        postingFrequency: 'WEEKLY',
+        preferredFormats: ['IMAGE'],
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      new UpdateSocialProfile(profiles, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: owned.id,
+        platform: 'INSTAGRAM',
+        purpose: 'stolen',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      new UpdateSocialProfile(profiles, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: admin.user.id,
+        bunshinId: owned.id,
+        platform: 'INSTAGRAM',
+        purpose: 'admin managed',
+      }),
+    ).resolves.toMatchObject({ purpose: 'admin managed' });
+    await expect(
+      create.execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: memberOwned.id,
+        platform: 'TIKTOK',
+        purpose: 'member owned',
+        postingFrequency: 'DAILY',
+        preferredFormats: ['LIVE_ACTION'],
+      }),
+    ).resolves.toMatchObject({ platform: 'TIKTOK' });
+
+    await assignments.setStatus({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: owned.id,
+      capabilityType: 'SOCIAL',
+      status: 'SUSPENDED',
+    });
+    await expect(
+      new UpdateSocialProfile(profiles, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
+        platform: 'INSTAGRAM',
+        purpose: 'blocked',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      new DeactivateSocialProfile(profiles, assignments).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
+        platform: 'INSTAGRAM',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      new ListSocialProfiles(profiles).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
+      }),
+    ).resolves.toHaveLength(1);
+    await assignments.setStatus({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: owned.id,
+      capabilityType: 'SOCIAL',
+      status: 'ACTIVE',
+    });
+    const deactivate = new DeactivateSocialProfile(profiles, assignments);
+    await expect(
+      deactivate.execute({ ...profile, actorUserId: owner.user.id }),
+    ).resolves.toMatchObject({ status: 'INACTIVE' });
+    await expect(
+      deactivate.execute({ ...profile, actorUserId: owner.user.id }),
+    ).resolves.toMatchObject({ status: 'INACTIVE' });
+    await expect(
+      new ActivateSocialProfile(profiles, assignments).execute({
+        ...profile,
+        actorUserId: owner.user.id,
+      }),
+    ).resolves.toMatchObject({ status: 'ACTIVE' });
+
+    await expect(
+      client.socialProfile.create({
+        data: {
+          workspaceId: owner.workspace.id,
+          bunshinId: outsider.workspace.id,
+          platform: 'OTHER',
+          purpose: 'invalid relation',
+          postingFrequency: 'FLEXIBLE',
+          preferredFormats: ['IMAGE'],
+        },
+      }),
+    ).rejects.toThrow();
+    await client.socialProfile.update({
+      where: { id: profile.id },
+      data: { preferredFormats: [] },
+    });
+    await expect(
+      profiles.findByPlatform({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: owned.id,
+        platform: 'INSTAGRAM',
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+
+    await bunshins.archive({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      bunshinId: sibling.id,
+    });
+    await expect(
+      new ListSocialProfiles(profiles).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: sibling.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
