@@ -315,3 +315,12 @@
 - Scheduler/Queue方式
 - Phase 9における既存DBの具体的な移行手順
 - Supabase RLSの採用可否
+
+## D-030: SocialAccountStrategyを不変versionとして管理する
+
+- 日付: 2026-08-20
+- 状態: Accepted
+- 決定: Strategy本文は更新せず、SocialProfile単位でversionを追加する
+- 承認: 現在のAPPROVEDは最大1件とし、新version承認時に旧版をSUPERSEDEDへ遷移する
+- 整合性: application transactionに加え、DBの部分unique indexと複合外部キーで競合・tenant混入を防ぐ
+- 保留: Primary SNSの表現は既存Profileのbackfill方針が決まるまで実装しない

@@ -27,6 +27,8 @@ import {
   type DailyMissionStatus,
   type SocialProfile,
   type SocialProfileRepository,
+  type SocialAccountStrategy,
+  type SocialAccountStrategyRepository,
 } from '@bunshin/capability-social';
 import type {
   BunshinAggregate,
@@ -1734,6 +1736,138 @@ export class PrismaSocialProfileRepository implements SocialProfileRepository {
       if (row.status === status) return socialProfile(row);
       return socialProfile(
         await tx.socialProfile.update({ where: { id: row.id }, data: { status } }),
+      );
+    });
+  }
+}
+
+function socialAccountStrategy(
+  row: Prisma.SocialAccountStrategyGetPayload<object>,
+): SocialAccountStrategy {
+  return { ...row, availableMinutes: row.availableMinutes as 3 | 5 | 10 | 20 };
+}
+
+export class PrismaSocialAccountStrategyRepository implements SocialAccountStrategyRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  private managed(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+  ) {
+    return client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: {
+            some: { userId: input.actorUserId, status: 'ACTIVE', role: { in: ['OWNER', 'ADMIN'] } },
+          },
+        },
+      },
+      select: { id: true },
+    });
+  }
+  private accessible(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
+    return this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+  }
+  async createVersion(input: Parameters<SocialAccountStrategyRepository['createVersion']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        if ((await this.managed(tx, input)) === null) return null;
+        const profile = await tx.socialProfile.findFirst({
+          where: {
+            id: input.socialProfileId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            platform: input.platform,
+          },
+          select: { id: true },
+        });
+        if (profile === null) return null;
+        await tx.$queryRaw<Array<{ lock: string }>>`
+          SELECT pg_advisory_xact_lock(hashtext(${input.socialProfileId}))::text AS lock
+        `;
+        const latest = await tx.socialAccountStrategy.aggregate({
+          where: { socialProfileId: input.socialProfileId },
+          _max: { version: true },
+        });
+        const { actorUserId, status, ...data } = input;
+        void actorUserId;
+        return socialAccountStrategy(
+          await tx.socialAccountStrategy.create({
+            data: {
+              ...data,
+              destinationDetail: input.destinationDetail ?? null,
+              status: status ?? 'DRAFT',
+              version: (latest._max.version ?? 0) + 1,
+            },
+          }),
+        );
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError('CONFLICT', 'strategy version conflict', error);
+      throw error;
+    }
+  }
+  async list(input: Parameters<SocialAccountStrategyRepository['list']>[0]) {
+    if ((await this.accessible(input)) === null) return null;
+    const profile = await this.client.socialProfile.findFirst({
+      where: {
+        id: input.socialProfileId,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+      },
+      select: { id: true },
+    });
+    if (profile === null) return null;
+    return (
+      await this.client.socialAccountStrategy.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          socialProfileId: input.socialProfileId,
+        },
+        orderBy: { version: 'desc' },
+      })
+    ).map(socialAccountStrategy);
+  }
+  async approve(input: Parameters<SocialAccountStrategyRepository['approve']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      if ((await this.managed(tx, input)) === null) return null;
+      const target = await tx.socialAccountStrategy.findFirst({
+        where: { id: input.strategyId, workspaceId: input.workspaceId, bunshinId: input.bunshinId },
+        select: { id: true, socialProfileId: true, status: true },
+      });
+      if (target === null) return null;
+      if (target.status === 'SUPERSEDED')
+        throw new ApplicationError('CONFLICT', 'superseded strategy cannot be approved');
+      if (target.status === 'APPROVED')
+        return socialAccountStrategy(
+          await tx.socialAccountStrategy.findUniqueOrThrow({ where: { id: target.id } }),
+        );
+      const now = new Date();
+      await tx.socialAccountStrategy.updateMany({
+        where: { socialProfileId: target.socialProfileId, status: 'APPROVED' },
+        data: { status: 'SUPERSEDED', supersededAt: now },
+      });
+      return socialAccountStrategy(
+        await tx.socialAccountStrategy.update({
+          where: { id: target.id },
+          data: { status: 'APPROVED', approvedAt: now, supersededAt: null },
+        }),
       );
     });
   }
