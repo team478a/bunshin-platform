@@ -1156,6 +1156,167 @@ export class ExpireWeeklyPlan extends WeeklyPlanMutation {
   }
 }
 
+export interface DailyMissionPlannerInput {
+  workspaceId: string;
+  bunshinId: string;
+  missionDate: string;
+  timezone: string;
+  socialProfile: SocialProfile;
+  bunshin: {
+    name: string;
+    objectiveSummary: string;
+    audienceSummary: string;
+    personalitySummary: string;
+  };
+  approvedStrategy: SocialAccountStrategy;
+  weeklyPlan: WeeklyPlan;
+  contentPillars: ContentPillar[];
+  grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+}
+
+export interface DailyMissionPlannerProviderInput {
+  missionDate: string;
+  timezone: string;
+  platform: SocialPlatform;
+  availableMinutes: 3 | 5 | 10 | 20;
+  bunshin: DailyMissionPlannerInput['bunshin'];
+  approvedStrategy: {
+    concept: string;
+    positioning: string;
+    targetSummary: string;
+    ctaStrategy: string;
+    postingPolicy: string;
+  };
+  weeklyPlanStrategySummary: string | null;
+  weeklyItem: {
+    goal: string;
+    angle: string;
+    recommendedFormat: SocialPreferredFormat;
+    notes: string | null;
+  };
+  contentPillar: { title: string; description: string | null };
+  grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+}
+
+export interface DailyMissionPlannerOutput {
+  topic: string;
+  angle: string;
+  reason: string;
+  estimatedMinutes: number;
+}
+
+export interface DailyMissionPlannerResult {
+  output: DailyMissionPlannerOutput;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+
+export interface DailyMissionPlannerPort {
+  generate(input: DailyMissionPlannerProviderInput): Promise<DailyMissionPlannerResult>;
+}
+
+export interface DailyMissionBrief extends DailyMissionPlannerOutput {
+  missionDate: string;
+  socialProfileId: string;
+  weeklyPlanItemId: string;
+  format: SocialPreferredFormat;
+}
+
+export class GenerateDailyMissionBrief {
+  constructor(private readonly planner: DailyMissionPlannerPort) {}
+
+  async execute(input: DailyMissionPlannerInput) {
+    const missionDate = localDate(input.missionDate);
+    const timezoneValue = timezone(input.timezone);
+    if (
+      input.socialProfile.workspaceId !== input.workspaceId ||
+      input.socialProfile.bunshinId !== input.bunshinId ||
+      input.socialProfile.status !== 'ACTIVE'
+    )
+      throw new ApplicationError('NOT_FOUND', 'active social profile not found');
+    if (
+      input.approvedStrategy.workspaceId !== input.workspaceId ||
+      input.approvedStrategy.bunshinId !== input.bunshinId ||
+      input.approvedStrategy.socialProfileId !== input.socialProfile.id ||
+      input.approvedStrategy.platform !== input.socialProfile.platform ||
+      input.approvedStrategy.status !== 'APPROVED'
+    )
+      throw new ApplicationError('NOT_FOUND', 'approved strategy not found');
+    if (
+      input.weeklyPlan.workspaceId !== input.workspaceId ||
+      input.weeklyPlan.bunshinId !== input.bunshinId
+    )
+      throw new ApplicationError('NOT_FOUND', 'weekly plan not found');
+    if (input.weeklyPlan.status !== 'CONFIRMED')
+      throw new ApplicationError('CONFLICT', 'confirmed weekly plan is required');
+    if (input.weeklyPlan.timezone !== timezoneValue)
+      throw new ApplicationError('VALIDATION_ERROR', 'weekly plan timezone mismatch');
+    const item = input.weeklyPlan.items.find(({ scheduledDate }) => scheduledDate === missionDate);
+    if (!item) throw new ApplicationError('NOT_FOUND', 'weekly plan item not found for date');
+    if (
+      item.workspaceId !== input.workspaceId ||
+      item.bunshinId !== input.bunshinId ||
+      item.weeklyPlanId !== input.weeklyPlan.id
+    )
+      throw new ApplicationError('NOT_FOUND', 'weekly plan item not found');
+    const pillar = input.contentPillars.find(
+      ({ id, workspaceId, bunshinId, active, deletedAt }) =>
+        id === item.contentPillarId &&
+        workspaceId === input.workspaceId &&
+        bunshinId === input.bunshinId &&
+        active &&
+        deletedAt === null,
+    );
+    if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
+
+    const result = await this.planner.generate({
+      missionDate,
+      timezone: timezoneValue,
+      platform: input.socialProfile.platform,
+      availableMinutes: input.approvedStrategy.availableMinutes,
+      bunshin: input.bunshin,
+      approvedStrategy: {
+        concept: input.approvedStrategy.concept,
+        positioning: input.approvedStrategy.positioning,
+        targetSummary: input.approvedStrategy.targetSummary,
+        ctaStrategy: input.approvedStrategy.ctaStrategy,
+        postingPolicy: input.approvedStrategy.postingPolicy,
+      },
+      weeklyPlanStrategySummary: input.weeklyPlan.strategySummary,
+      weeklyItem: {
+        goal: item.goal,
+        angle: item.angle,
+        recommendedFormat: item.recommendedFormat,
+        notes: item.notes,
+      },
+      contentPillar: { title: pillar.title, description: pillar.description },
+      grantedKnowledge: input.grantedKnowledge,
+    });
+    const estimatedMinutes = missionInteger(
+      result.output.estimatedMinutes,
+      1,
+      input.approvedStrategy.availableMinutes,
+      'estimated minutes',
+    );
+    return {
+      ...result,
+      output: {
+        missionDate,
+        socialProfileId: input.socialProfile.id,
+        weeklyPlanItemId: item.id,
+        format: item.recommendedFormat,
+        topic: missionString(result.output.topic, 200, 'topic'),
+        angle: missionString(result.output.angle, 500, 'angle'),
+        reason: missionString(result.output.reason, 1000, 'reason'),
+        estimatedMinutes,
+      } satisfies DailyMissionBrief,
+    };
+  }
+}
+
 export const DAILY_MISSION_STATUSES = [
   'GENERATED',
   'VIEWED',

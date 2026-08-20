@@ -91,7 +91,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - Account Strategy Generator — 完了
 - Grant済みOwner KnowledgeとBunshin context
 - Weekly Planner — 実装済み、レビュー待ち
-- Daily Mission Planner
+- Daily Mission Planner Brief — 実装済み、レビュー待ち
+- Daily Mission生成orchestration — Content Generator / Quality Checker完了後
 - Content Generator
 - Quality Checker
 - `TEXT | SLIDE | IMAGE | LIVE_ACTION | AI_VIDEO_PROMPT`

@@ -416,3 +416,18 @@
 - Model: `OPENAI_WEEKLY_PLANNER_MODEL`で切替可能とし、初期既定値を`gpt-5.2`とする
 - 分離: Daily Mission生成、Content Generator、Quality Checker、画像/動画binary、自動投稿、Memory学習、LINE、BLOG、Jobを混在させない
 - 詳細: `docs/PHASE4_SLICE_4_1_IMPLEMENTATION_REPORT.md`
+
+## D-038: Daily Mission Plannerは本文のないMission Briefを生成する
+
+- 日付: 2026-08-21
+- 状態: Proposed
+- Responsibility: Plannerは確定済みWeekly Planの当日Itemから`topic / angle / reason / estimatedMinutes`だけを生成する
+- Trusted values: `socialProfileId / weeklyPlanItemId / missionDate / format`はProvider出力を信頼せず、scope検証済み入力から引き継ぐ
+- Context: 承認済みWeekly Plan、当日Item、Active Content Pillar、Bunshin、承認済みStrategy、Grant済みOwnerKnowledgeを使う
+- Feasibility: `estimatedMinutes`はStrategy Wizardの`availableMinutes`以内とし、ユーザーが今日実行できる計画に限る
+- Provider: Coreは`DailyMissionPlannerPort`に依存し、Web AdapterはOpenAI Responses APIのstrict JSON Schemaと`store: false`を使う
+- Persistence: MissionContent必須aggregateを守るため、Planner単体でDailyMissionを保存しない。Content GeneratorとQuality Checker完了後にorchestrationがまとめてatomic保存する
+- Privacy: ProviderへWorkspace ID、Bunshin ID、Plan ID、Item IDを渡さず、Prompt、Knowledge、生成本文、credentialをログへ保存しない
+- Model: `OPENAI_DAILY_MISSION_PLANNER_MODEL`で切替可能とし、初期既定値を`gpt-5.2`とする
+- 分離: Content Generator、Quality Checker、API/UI、Job、画像/動画binary、自動投稿、Memory学習、LINE、BLOGを混在させない
+- 詳細: `docs/PHASE4_SLICE_4_2_IMPLEMENTATION_REPORT.md`
