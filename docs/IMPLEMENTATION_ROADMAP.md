@@ -68,6 +68,8 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ### 3.6 Mission Decision / Activity
 
+- Core Persistence — 実装済み、レビュー待ち
+- authenticated API / UX — 未実装
 - Mission lifecycleと採用判断を分離
 - ACCEPTED / REJECTEDと不採用理由
 - VIEWED / COPY等のappend-only Raw Activity
@@ -100,7 +102,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 ## Phase 5: Free MVP User Experience
 
 - Account Strategy Wizard / approval — 完了
-- Daily Mission API/UI — 実装済み、レビュー待ち
+- Daily Mission API/UI — 完了
 - 採用 / 不採用 / 不採用理由
 - format別copy UX
 - 1日1回を候補とする別案導線（Billing制限なし）
