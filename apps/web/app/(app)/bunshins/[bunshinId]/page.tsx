@@ -41,6 +41,7 @@ export default async function BunshinPage({
       PrismaWeeklyPlanRepository,
       PrismaDailyMissionRepository,
       PrismaMissionEngagementRepository,
+      PrismaMissionOutcomeRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -112,6 +113,23 @@ export default async function BunshinPage({
           dailyMissionId: mission.id,
         }),
       ),
+    );
+    const outcomeRepository = new PrismaMissionOutcomeRepository();
+    const missionOutcomes = await Promise.all(
+      dailyMissions.map(async (mission) => ({
+        post: await outcomeRepository.getPost({
+          workspaceId,
+          actorUserId: currentUser.userId,
+          bunshinId: bunshin.id,
+          dailyMissionId: mission.id,
+        }),
+        feedback: await outcomeRepository.getFeedback({
+          workspaceId,
+          actorUserId: currentUser.userId,
+          bunshinId: bunshin.id,
+          dailyMissionId: mission.id,
+        }),
+      })),
     );
     return (
       <BunshinEditor
@@ -227,6 +245,7 @@ export default async function BunshinPage({
               reason,
               qualityScore,
               content,
+              socialProfileId,
             },
             index,
           ) => ({
@@ -242,6 +261,10 @@ export default async function BunshinPage({
             content,
             decision: missionDecisions[index]!.decision,
             rejectionReason: missionDecisions[index]!.rejectionReason,
+            platform:
+              socialProfiles.find((profile) => profile.id === socialProfileId)?.platform ?? null,
+            postedAt: missionOutcomes[index]!.post?.postedAt.toISOString() ?? null,
+            feedback: missionOutcomes[index]!.feedback?.rating ?? null,
           }),
         )}
       />
