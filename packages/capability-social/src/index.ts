@@ -486,6 +486,62 @@ export class ApproveSocialAccountStrategy {
   }
 }
 
+export interface StrategyGeneratorInput {
+  wizardTopic: string;
+  wizardAudience: string;
+  platform: SocialPlatform;
+  goal: SocialAccountStrategyGoal;
+  availableMinutes: 3 | 5 | 10 | 20;
+  destinationType: SocialAccountStrategyDestination;
+  destinationDetail: string | null;
+  bunshin: {
+    name: string;
+    objectiveSummary: string;
+    audienceSummary: string;
+    personalitySummary: string;
+    objectives: unknown[];
+    audiences: unknown[];
+    personality: unknown;
+  };
+  grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+}
+export interface StrategyGeneratorOutput {
+  concept: string;
+  positioning: string;
+  targetSummary: string;
+  profileDraft: string;
+  ctaStrategy: string;
+  postingPolicy: string;
+}
+export interface StrategyGeneratorResult {
+  output: StrategyGeneratorOutput;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+export interface StrategyGeneratorPort {
+  generate(input: StrategyGeneratorInput): Promise<StrategyGeneratorResult>;
+}
+export class GenerateSocialAccountStrategy {
+  constructor(private readonly generator: StrategyGeneratorPort) {}
+  async execute(input: StrategyGeneratorInput) {
+    const result = await this.generator.generate(input);
+    return {
+      ...result,
+      output: {
+        concept: strategyText(result.output.concept, 1000, 'concept'),
+        positioning: strategyText(result.output.positioning, 1000, 'positioning'),
+        targetSummary: strategyText(result.output.targetSummary, 1000, 'targetSummary'),
+        profileDraft: strategyText(result.output.profileDraft, 2000, 'profileDraft'),
+        ctaStrategy: strategyText(result.output.ctaStrategy, 1000, 'ctaStrategy'),
+        postingPolicy: strategyText(result.output.postingPolicy, 2000, 'postingPolicy'),
+      },
+    };
+  }
+}
+
 export interface ContentPillar {
   id: string;
   workspaceId: string;
