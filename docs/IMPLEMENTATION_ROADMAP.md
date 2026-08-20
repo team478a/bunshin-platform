@@ -35,7 +35,7 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ## Phase 3: SOCIAL Foundation
 
-状態: Slice 3.1〜3.4完了。3.5以降はFREE SOCIAL MVP Rebaselineのレビュー待ち。
+状態: Slice 3.1〜3.5完了。3.6以降を順次実装する。
 
 ### 3.1 Social Profile — 完了
 
@@ -57,9 +57,9 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 - DailyMission / MissionContent aggregate
 - format別strict validation
 - lifecycle、日付一意性、tenant/Bunshin境界
-- API/UIとAI生成は未実装
+- API/UIはPhase 5で実装済み、AI生成は未実装
 
-### 3.5 Social Account Strategy
+### 3.5 Social Account Strategy — 完了
 
 - SocialAccountStrategy version / approval
 - FREEでは1 BunshinにつきPrimary SNS 1件
@@ -85,7 +85,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 4: SOCIAL Free MVP Intelligence
 
-- Account Strategy Generator
+- Account Strategy Generator — 完了
 - Grant済みOwner KnowledgeとBunshin context
 - Weekly Planner
 - Daily Mission Planner
@@ -99,8 +99,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 5: Free MVP User Experience
 
-- Account Strategy Wizard / approval
-- Daily Mission API/UI
+- Account Strategy Wizard / approval — 完了
+- Daily Mission API/UI — 実装済み、レビュー待ち
 - 採用 / 不採用 / 不採用理由
 - format別copy UX
 - 1日1回を候補とする別案導線（Billing制限なし）

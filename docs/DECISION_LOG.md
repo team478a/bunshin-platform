@@ -328,7 +328,7 @@
 ## D-031: Account Strategy生成はCore PortとOpenAI Responses Adapterを分離する
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted（PR #41で承認）
 - 決定: Coreへ`StrategyGeneratorPort`を置き、OpenAI固有処理はWeb Provider Adapterへ隔離する
 - 出力: Responses APIのstrict `json_schema`とCore validationを併用し、6つのStrategy本文を構造化出力する
 - Privacy: `store: false`を指定し、生成contextは対象Bunshin、Wizard回答、同一scopeのGrant済みOwnerKnowledgeだけに限定する。Memoryはまだ利用しない
@@ -337,3 +337,15 @@
 - Model: `OPENAI_STRATEGY_MODEL`で切替可能とし、初期既定値を`gpt-5.2`とする
 - 禁止: Mission生成、Decision / Activity、PostRecord、Feedback、Memory学習、Publishing Providerを混在させない
 - 詳細: `docs/STRATEGY_GENERATOR_REPORT.md`
+
+## D-032: Daily Mission API/UIはlifecycle操作だけを公開する
+
+- 日付: 2026-08-20
+- 状態: Proposed
+- 決定: 既存DailyMission Coreをverified sessionへ接続し、list/detail/createと明示lifecycle遷移を提供する
+- UI: Bunshin詳細でformat別内容を表示し、VIEWED / STARTED / COMPLETED / SKIPPEDだけをユーザー操作として提供する。EXPIRED APIは将来Jobが同じCoreを利用できるよう保持する
+- Create: 後続AI Generator用APIは提供するが、手動作成フォームは提供しない
+- 分離: Mission lifecycleへ採用/不採用を追加せず、Decision、Activity、Copy、PostRecord、Feedbackを別resourceとして後続PRへ分離する
+- Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
+- 禁止: AI生成、Provider、regenerate、Decision / Activity、PostRecord / Feedback、LINE、Jobを混在させない
+- 詳細: `docs/DAILY_MISSION_API_UI_REPORT.md`
