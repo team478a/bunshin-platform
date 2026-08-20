@@ -402,3 +402,17 @@
 - Security: same-origin、strict JSON、no-store、Workspace / Bunshin isolationを維持する
 - 分離: SNS自動投稿、Analytics、AI、Memory学習、LINE、BLOG、Jobを混在させない
 - 詳細: `docs/PHASE3_SLICE_3_7B_IMPLEMENTATION_REPORT.md`
+
+## D-037: Weekly Plannerは承認済み戦略からatomicなDRAFTを生成する
+
+- 日付: 2026-08-20
+- 状態: Proposed
+- Context: 対象Bunshin、Active SocialProfile、その承認済みAccount Strategy、Active Content Pillar、Grant済みOwnerKnowledgeだけを利用する
+- Isolation: verified sessionのactorを起点にWorkspace / Bunshinを絞り、クライアントからKnowledgeや戦略本文を受け取らない
+- Provider: Coreは`WeeklyPlannerPort`だけに依存し、WebのOpenAI AdapterがResponses APIのstrict JSON Schemaを使う
+- Persistence: 生成結果をCoreで再検証し、Planと1〜7件のItemを同一transactionでDRAFT保存する。自動CONFIRMEDにしない
+- Cost guard: SOCIALのActive状態、同週重複、Active Pillar、Active Profile、承認済み戦略をProvider呼び出し前に検証する
+- Observability: model、prompt version、input/output token、latency、statusを記録し、Prompt、生成本文、Knowledge、credentialはログに残さない
+- Model: `OPENAI_WEEKLY_PLANNER_MODEL`で切替可能とし、初期既定値を`gpt-5.2`とする
+- 分離: Daily Mission生成、Content Generator、Quality Checker、画像/動画binary、自動投稿、Memory学習、LINE、BLOG、Jobを混在させない
+- 詳細: `docs/PHASE4_SLICE_4_1_IMPLEMENTATION_REPORT.md`

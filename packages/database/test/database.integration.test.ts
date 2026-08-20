@@ -20,6 +20,7 @@ import {
   DeleteContentPillar,
   ListContentPillars,
   CreateWeeklyPlan,
+  CreateGeneratedWeeklyPlan,
   CreateWeeklyPlanItem,
   ConfirmWeeklyPlan,
   ExpireWeeklyPlan,
@@ -1243,6 +1244,53 @@ integration('database ownership boundaries', () => {
       weight: 50,
     });
     const repository = new PrismaWeeklyPlanRepository(client);
+    const generated = await new CreateGeneratedWeeklyPlan(repository, assignments).execute({
+      ...ownerScope(owner, bunshin.id),
+      weekStartDate: '2026-08-10',
+      timezone: 'Asia/Tokyo',
+      strategySummary: 'AI生成戦略',
+      items: [
+        {
+          scheduledDate: '2026-08-11',
+          contentPillarId: pillar.id,
+          goal: '学び',
+          angle: '失敗から学ぶ',
+          recommendedFormat: 'TEXT',
+          notes: null,
+        },
+      ],
+    });
+    expect(generated).toMatchObject({
+      status: 'DRAFT',
+      strategySummary: 'AI生成戦略',
+      items: [{ scheduledDate: '2026-08-11', contentPillarId: pillar.id }],
+    });
+    const outsider = await accounts.execute({ displayName: 'Plan Outsider' });
+    await expect(
+      repository.createGeneratedPlan({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: bunshin.id,
+        weekStartDate: '2026-08-03',
+        timezone: 'Asia/Tokyo',
+        strategySummary: 'scope外',
+        items: [
+          {
+            scheduledDate: '2026-08-04',
+            contentPillarId: pillar.id,
+            goal: 'scope外',
+            angle: 'scope外',
+            recommendedFormat: 'TEXT',
+            notes: null,
+          },
+        ],
+      }),
+    ).resolves.toBeNull();
+    expect(
+      await client.weeklyPlan.count({
+        where: { bunshinId: bunshin.id, weekStartDate: new Date('2026-08-03T00:00:00.000Z') },
+      }),
+    ).toBe(0);
     const plan = await new CreateWeeklyPlan(repository, assignments).execute({
       ...ownerScope(owner, bunshin.id),
       weekStartDate: '2026-08-17',

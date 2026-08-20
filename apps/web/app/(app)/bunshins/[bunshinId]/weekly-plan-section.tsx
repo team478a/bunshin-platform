@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { SocialCapabilityStatus } from './capability-section';
 import type { ContentPillarView } from './content-pillar-section';
+import type { SocialProfileView } from './social-profile-section';
 
 export interface WeeklyPlanItemView {
   id: string;
@@ -147,12 +148,14 @@ export function WeeklyPlanSection({
   workspaceId,
   bunshinId,
   capabilityStatus,
+  profiles,
   pillars,
   plans,
 }: {
   workspaceId: string;
   bunshinId: string;
   capabilityStatus: SocialCapabilityStatus;
+  profiles: SocialProfileView[];
   pillars: ContentPillarView[];
   plans: WeeklyPlanView[];
 }) {
@@ -166,6 +169,8 @@ export function WeeklyPlanSection({
   const [timezone, setTimezone] = useState('Asia/Tokyo');
   const [weekStartDate, setWeekStartDate] = useState(monday());
   const [strategySummary, setStrategySummary] = useState('');
+  const activeProfiles = profiles.filter(({ status }) => status === 'ACTIVE');
+  const [socialProfileId, setSocialProfileId] = useState(activeProfiles[0]?.id ?? '');
   const readonly = capabilityStatus === 'SUSPENDED' || capabilityStatus === 'LOCKED';
   const activePillars = pillars.filter((pillar) => pillar.active);
 
@@ -215,7 +220,7 @@ export function WeeklyPlanSection({
   return (
     <section className="weekly-plan-section">
       <h2>Weekly Plan</h2>
-      <p>週次の発信計画を手動管理します。AI計画生成とDaily Missionは後続Phaseです。</p>
+      <p>承認済みSNS戦略とActive Content Pillarから、AIが1週間のDRAFT計画を作成します。</p>
       {capabilityStatus === null ? <p>先にSOCIALを割り当ててください。</p> : null}
       {readonly ? (
         <p>
@@ -223,6 +228,71 @@ export function WeeklyPlanSection({
         </p>
       ) : null}
       {plans.length === 0 ? <p>Weekly Planはまだありません。</p> : null}
+      {capabilityStatus === 'ACTIVE' ? (
+        <form
+          className="weekly-plan-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void mutation(`${endpoint}/generate`, 'POST', {
+              weekStartDate,
+              timezone,
+              socialProfileId,
+            });
+          }}
+        >
+          <h3>AIで週間計画を作成</h3>
+          <label>
+            SNS
+            <select
+              required
+              value={socialProfileId}
+              onChange={(event) => setSocialProfileId(event.target.value)}
+            >
+              <option value="">選択してください</option>
+              {activeProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.platform}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            週開始日（月曜日）
+            <input
+              required
+              type="date"
+              value={weekStartDate}
+              onChange={(event) => setWeekStartDate(event.target.value)}
+            />
+          </label>
+          <label>
+            Timezone
+            <input
+              required
+              maxLength={64}
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+            />
+          </label>
+          <button
+            disabled={
+              pending ||
+              !socialProfileId ||
+              activePillars.length === 0 ||
+              activeProfiles.length === 0
+            }
+            type="submit"
+          >
+            AIでDRAFTを作成
+          </button>
+          {activeProfiles.length === 0 ? (
+            <p>先にActiveなSNSプロファイルを作成してください。</p>
+          ) : null}
+          {activePillars.length === 0 ? (
+            <p>先にActiveなContent Pillarを作成してください。</p>
+          ) : null}
+        </form>
+      ) : null}
       {plans.map((plan) => {
         const editable = capabilityStatus === 'ACTIVE' && plan.status === 'DRAFT';
         return (

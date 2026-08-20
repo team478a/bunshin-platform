@@ -815,6 +815,21 @@ export interface WeeklyPlanRepository {
       strategySummary?: string | null;
     },
   ): Promise<WeeklyPlan | null>;
+  createGeneratedPlan(
+    input: WeeklyPlanScope & {
+      weekStartDate: string;
+      timezone: string;
+      strategySummary: string;
+      items: Array<{
+        scheduledDate: string;
+        contentPillarId: string;
+        goal: string;
+        angle: string;
+        recommendedFormat: SocialPreferredFormat;
+        notes: string | null;
+      }>;
+    },
+  ): Promise<WeeklyPlan | null>;
   listPlans(input: WeeklyPlanScope): Promise<WeeklyPlan[] | null>;
   findPlan(input: WeeklyPlanScope & { weeklyPlanId: string }): Promise<WeeklyPlan | null>;
   updatePlan(
@@ -848,6 +863,100 @@ export interface WeeklyPlanRepository {
   ): Promise<WeeklyPlan | null>;
   confirmPlan(input: WeeklyPlanScope & { weeklyPlanId: string }): Promise<WeeklyPlan | null>;
   expirePlan(input: WeeklyPlanScope & { weeklyPlanId: string }): Promise<WeeklyPlan | null>;
+}
+
+export interface WeeklyPlannerInput {
+  weekStartDate: string;
+  timezone: string;
+  platform: SocialPlatform;
+  availableMinutes: 3 | 5 | 10 | 20;
+  bunshin: {
+    name: string;
+    objectiveSummary: string;
+    audienceSummary: string;
+    personalitySummary: string;
+  };
+  approvedStrategy: {
+    concept: string;
+    positioning: string;
+    targetSummary: string;
+    ctaStrategy: string;
+    postingPolicy: string;
+  };
+  contentPillars: Array<{ id: string; title: string; description: string | null; weight: number }>;
+  grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+}
+export interface WeeklyPlannerOutput {
+  strategySummary: string;
+  items: Array<{
+    scheduledDate: string;
+    contentPillarId: string;
+    goal: string;
+    angle: string;
+    recommendedFormat: SocialPreferredFormat;
+    notes: string | null;
+  }>;
+}
+export interface WeeklyPlannerResult {
+  output: WeeklyPlannerOutput;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+export interface WeeklyPlannerPort {
+  generate(input: WeeklyPlannerInput): Promise<WeeklyPlannerResult>;
+}
+
+export class GenerateWeeklyPlan {
+  constructor(private readonly planner: WeeklyPlannerPort) {}
+  async execute(input: WeeklyPlannerInput) {
+    const weekStartDate = localDate(input.weekStartDate, true);
+    const timezoneValue = timezone(input.timezone);
+    if (input.contentPillars.length < 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'active content pillar is required');
+    const result = await this.planner.generate({
+      ...input,
+      weekStartDate,
+      timezone: timezoneValue,
+    });
+    if (
+      !Array.isArray(result.output.items) ||
+      result.output.items.length < 1 ||
+      result.output.items.length > 7
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generated weekly items');
+    const pillarIds = new Set(input.contentPillars.map(({ id }) => id));
+    const dates = new Set<string>();
+    const start = new Date(`${weekStartDate}T00:00:00Z`).valueOf();
+    const items = result.output.items.map((item) => {
+      const scheduledDate = localDate(item.scheduledDate);
+      const offset = (new Date(`${scheduledDate}T00:00:00Z`).valueOf() - start) / 86400000;
+      if (!Number.isInteger(offset) || offset < 0 || offset > 6)
+        throw new ApplicationError('VALIDATION_ERROR', 'generated date is outside week');
+      if (dates.has(scheduledDate))
+        throw new ApplicationError('VALIDATION_ERROR', 'generated dates must be unique');
+      dates.add(scheduledDate);
+      if (!pillarIds.has(item.contentPillarId))
+        throw new ApplicationError('VALIDATION_ERROR', 'generated pillar is outside context');
+      return {
+        scheduledDate,
+        contentPillarId: item.contentPillarId,
+        goal: weeklyText(item.goal, 200, 'goal'),
+        angle: weeklyText(item.angle, 500, 'angle'),
+        recommendedFormat: weeklyFormat(item.recommendedFormat),
+        notes: weeklyNullable(item.notes, 1000) ?? null,
+      };
+    });
+    return {
+      ...result,
+      output: {
+        strategySummary: weeklyText(result.output.strategySummary, 1000, 'strategy summary'),
+        items,
+      },
+    };
+  }
 }
 
 function localDate(value: string, monday = false) {
@@ -927,6 +1036,14 @@ export class CreateWeeklyPlan extends WeeklyPlanMutation {
         : { strategySummary: weeklyNullable(input.strategySummary, 1000) }),
     });
     if (!value) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    return value;
+  }
+}
+export class CreateGeneratedWeeklyPlan extends WeeklyPlanMutation {
+  async execute(input: Parameters<WeeklyPlanRepository['createGeneratedPlan']>[0]) {
+    await this.requireActive(input);
+    const value = await this.plans.createGeneratedPlan(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'bunshin or pillar not found');
     return value;
   }
 }

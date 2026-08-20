@@ -156,6 +156,7 @@ export function BunshinEditor({
         workspaceId={workspaceId}
         bunshinId={bunshin.id}
         capabilityStatus={socialCapabilityStatus}
+        profiles={socialProfiles}
         pillars={contentPillars}
         plans={weeklyPlans}
       />
