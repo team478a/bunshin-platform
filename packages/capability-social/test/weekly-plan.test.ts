@@ -54,6 +54,9 @@ const plan: WeeklyPlan = {
   items: [],
 };
 class Plans implements WeeklyPlanRepository {
+  createGeneratedPlan() {
+    return Promise.resolve(plan);
+  }
   createPlan(input: Parameters<WeeklyPlanRepository['createPlan']>[0]) {
     return Promise.resolve({ ...plan, ...input, items: [] });
   }

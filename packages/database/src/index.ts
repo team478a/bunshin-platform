@@ -319,6 +319,53 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
       return this.conflict(error);
     }
   }
+  async createGeneratedPlan(input: Parameters<WeeklyPlanRepository['createGeneratedPlan']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        if (!(await this.authorized(tx, input, true))) return null;
+        const active = await tx.contentPillar.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            active: true,
+            deletedAt: null,
+            id: { in: input.items.map(({ contentPillarId }) => contentPillarId) },
+          },
+          select: { id: true },
+        });
+        if (
+          new Set(active.map(({ id }) => id)).size !==
+          new Set(input.items.map(({ contentPillarId }) => contentPillarId)).size
+        )
+          return null;
+        const plan = await tx.weeklyPlan.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            weekStartDate: new Date(`${input.weekStartDate}T00:00:00Z`),
+            timezone: input.timezone,
+            strategySummary: input.strategySummary,
+          },
+        });
+        await tx.weeklyPlanItem.createMany({
+          data: input.items.map((item) => ({
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            weeklyPlanId: plan.id,
+            scheduledDate: new Date(`${item.scheduledDate}T00:00:00Z`),
+            contentPillarId: item.contentPillarId,
+            goal: item.goal,
+            angle: item.angle,
+            recommendedFormat: item.recommendedFormat,
+            notes: item.notes,
+          })),
+        });
+        return weeklyPlan((await this.plan(tx, { ...input, weeklyPlanId: plan.id }))!);
+      });
+    } catch (error) {
+      return this.conflict(error);
+    }
+  }
   async listPlans(input: Parameters<WeeklyPlanRepository['listPlans']>[0]) {
     if (!(await this.authorized(this.client, input, false))) return null;
     return (

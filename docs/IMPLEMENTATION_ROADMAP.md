@@ -90,7 +90,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 - Account Strategy Generator — 完了
 - Grant済みOwner KnowledgeとBunshin context
-- Weekly Planner
+- Weekly Planner — 実装済み、レビュー待ち
 - Daily Mission Planner
 - Content Generator
 - Quality Checker
