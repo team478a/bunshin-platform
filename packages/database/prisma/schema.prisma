@@ -234,6 +234,20 @@ enum MissionActivityType {
   COPIED_SLIDE
   COPIED_VIDEO_PROMPT
   COPIED_SCRIPT
+  POSTED
+  FEEDBACK_GOOD
+  FEEDBACK_NEUTRAL
+  FEEDBACK_BAD
+}
+
+enum PostSource {
+  MANUAL
+}
+
+enum MissionFeedbackRating {
+  GOOD
+  NEUTRAL
+  BAD
 }
 
 enum SocialPreferredFormat {
@@ -259,6 +273,8 @@ model User {
   knowledgeGrants       BunshinKnowledgeGrant[]       @relation("GrantActor")
   capabilityAssignments BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
   missionActivities     MissionActivity[]             @relation("MissionActivityActor")
+  postRecords           PostRecord[]                  @relation("PostRecordActor")
+  missionFeedback       MissionFeedback[]             @relation("MissionFeedbackActor")
 
   @@index([status])
   @@map("users")
@@ -300,6 +316,8 @@ model Workspace {
   missionContents         MissionContent[]
   missionDecisions        MissionDecision[]
   missionActivities       MissionActivity[]
+  postRecords             PostRecord[]
+  missionFeedback         MissionFeedback[]
 
   @@index([status])
   @@map("workspaces")
@@ -366,6 +384,8 @@ model Bunshin {
   missionContents         MissionContent[]
   missionDecisions        MissionDecision[]
   missionActivities       MissionActivity[]
+  postRecords             PostRecord[]
+  missionFeedback         MissionFeedback[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -609,6 +629,8 @@ model DailyMission {
   content          MissionContent?
   decision         MissionDecision?
   activities       MissionActivity[]
+  postRecord       PostRecord?
+  feedback         MissionFeedback?
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -678,6 +700,53 @@ model MissionActivity {
   @@index([workspaceId, bunshinId, dailyMissionId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("mission_activities")
+}
+
+model PostRecord {
+  id             String         @id @default(uuid()) @db.Uuid
+  workspaceId    String         @map("workspace_id") @db.Uuid
+  bunshinId      String         @map("bunshin_id") @db.Uuid
+  dailyMissionId String         @unique @map("daily_mission_id") @db.Uuid
+  actorUserId    String         @map("actor_user_id") @db.Uuid
+  platform       SocialPlatform
+  postedAt       DateTime       @map("posted_at") @db.Timestamptz(6)
+  postUrl        String?        @map("post_url") @db.VarChar(2048)
+  externalPostId String?        @map("external_post_id") @db.VarChar(255)
+  source         PostSource     @default(MANUAL)
+  manualMetrics  Json?          @map("manual_metrics")
+  idempotencyKey String         @map("idempotency_key") @db.VarChar(200)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin        @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission   DailyMission   @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade)
+  actor          User           @relation("PostRecordActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@unique([workspaceId, bunshinId, actorUserId, idempotencyKey])
+  @@index([workspaceId, bunshinId, postedAt])
+  @@index([actorUserId, postedAt])
+  @@map("post_records")
+}
+
+model MissionFeedback {
+  id             String                @id @default(uuid()) @db.Uuid
+  workspaceId    String                @map("workspace_id") @db.Uuid
+  bunshinId      String                @map("bunshin_id") @db.Uuid
+  dailyMissionId String                @unique @map("daily_mission_id") @db.Uuid
+  actorUserId    String                @map("actor_user_id") @db.Uuid
+  rating         MissionFeedbackRating
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission   DailyMission          @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade)
+  actor          User                  @relation("MissionFeedbackActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@index([workspaceId, bunshinId, rating, updatedAt])
+  @@index([actorUserId, updatedAt])
+  @@map("mission_feedback")
 }
 
 model BunshinObjective {

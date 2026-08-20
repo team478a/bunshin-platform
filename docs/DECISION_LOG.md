@@ -366,7 +366,7 @@
 ## D-034: 採用判断をコピー操作より先に要求し、成功した操作だけをActivityへ記録する
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted（PR #44で承認）
 - API: DecisionとActivityをDailyMission配下の独立resourceとして公開し、verified sessionのactorだけを使用する
 - UX: 投稿案の表示後は採用/不採用を先に提示し、採用後だけformat別コピー操作を表示する
 - Rejection: 不採用理由はワンタップを基本とし、OTHERだけ任意詳細を許可する
@@ -375,3 +375,17 @@
 - Activity: VIEWEDは内容を開いた行動として記録し、Mission lifecycleのVIEWEDとは別責務のRaw Eventとする
 - 禁止: PostRecord、Feedback、AI生成、Provider、LINE、Jobを混在させない
 - 詳細: `docs/PHASE3_SLICE_3_6B_IMPLEMENTATION_REPORT.md`
+
+## D-035: PostRecordを投稿事実の正本、MissionFeedbackを本人らしさの現在評価とする
+
+- 日付: 2026-08-20
+- 状態: Proposed
+- PostRecord: ACCEPTED済みMissionに対する手動投稿を1 Mission 1件で保存し、SNS API由来の値をFREE Coreへ要求しない
+- Atomicity: PostRecordとPOSTED Activityを同一transactionで保存する
+- Lifecycle: 投稿事実とDailyMission lifecycleを分離し、投稿記録時にCOMPLETEDへ暗黙遷移しない
+- Feedback: PostRecord作成後だけGOOD / NEUTRAL / BADを保存し、現在評価は1件、変更履歴はappend-only Activityへ残す
+- Preference / Outcome: PostRecordをOutcome、MissionFeedbackをPreferenceとして分離する
+- Idempotency: Workspace / Bunshin / actor / keyで再送を重複計上せず、Mission単位の一意制約も併用する
+- Privacy: Activity metadataへ投稿本文、URL、外部ID、metricsを複製しない
+- 分離: API/UI、SNS自動投稿、Analytics、AI、Memory学習、LINE、Jobを混在させない
+- 詳細: `docs/PHASE3_SLICE_3_7A_IMPLEMENTATION_REPORT.md`

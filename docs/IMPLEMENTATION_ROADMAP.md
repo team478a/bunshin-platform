@@ -77,8 +77,9 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ### 3.7 Post Record / Feedback
 
-- 手動投稿完了
-- PostRecord
+- Core Persistence — 実装済み、レビュー待ち
+- authenticated API / UX — 未実装
+- 手動投稿完了とPostRecord
 - GOOD / NEUTRAL / BADのMissionFeedback
 - PreferenceとOutcomeの分離
 - SNS API投稿・自動metrics取得なし
