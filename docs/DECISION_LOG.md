@@ -353,7 +353,7 @@
 ## D-033: Mission Decisionを必須1対1、Activityをappend-onlyにする
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted（PR #43で承認）
 - Decision: Mission作成時にPENDING rowを同一transactionで作り、既存Missionもmigrationでbackfillする
 - 更新: 現在判断は1 Mission 1 rowへ保存し、判断変更履歴はActivityへappendする
 - Rejection: REJECTEDは理由必須、OTHERだけ任意詳細を許可し、ACCEPTEDは不採用情報を持たない
@@ -362,3 +362,16 @@
 - Metadata: event別strict schemaとし、本文、Knowledge、Memory、credential、Provider payloadを保存しない
 - 分離: API/UI、PostRecord、Feedback、AI、LINE、Jobを混在させない
 - 詳細: `docs/PHASE3_SLICE_3_6A_IMPLEMENTATION_REPORT.md`
+
+## D-034: 採用判断をコピー操作より先に要求し、成功した操作だけをActivityへ記録する
+
+- 日付: 2026-08-20
+- 状態: Proposed
+- API: DecisionとActivityをDailyMission配下の独立resourceとして公開し、verified sessionのactorだけを使用する
+- UX: 投稿案の表示後は採用/不採用を先に提示し、採用後だけformat別コピー操作を表示する
+- Rejection: 不採用理由はワンタップを基本とし、OTHERだけ任意詳細を許可する
+- Copy: Clipboard API成功後にだけformat別COPY Activityをappendし、失敗操作を計測しない
+- IMAGE: 専用Activity typeが未定義のため画像制作指示を誤分類せず、今回はcaptionの`COPIED_TEXT`だけを提供する
+- Activity: VIEWEDは内容を開いた行動として記録し、Mission lifecycleのVIEWEDとは別責務のRaw Eventとする
+- 禁止: PostRecord、Feedback、AI生成、Provider、LINE、Jobを混在させない
+- 詳細: `docs/PHASE3_SLICE_3_6B_IMPLEMENTATION_REPORT.md`

@@ -35,7 +35,7 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ## Phase 3: SOCIAL Foundation
 
-状態: Slice 3.1〜3.5完了。3.6以降を順次実装する。
+状態: Slice 3.1〜3.5完了。3.6はAPI/UXまで実装済み、レビュー待ち。
 
 ### 3.1 Social Profile — 完了
 
@@ -68,8 +68,8 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ### 3.6 Mission Decision / Activity
 
-- Core Persistence — 実装済み、レビュー待ち
-- authenticated API / UX — 未実装
+- Core Persistence — 完了
+- authenticated API / UX — 実装済み、レビュー待ち
 - Mission lifecycleと採用判断を分離
 - ACCEPTED / REJECTEDと不採用理由
 - VIEWED / COPY等のappend-only Raw Activity

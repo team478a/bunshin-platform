@@ -10,6 +10,7 @@ import {
   ListSocialAccountStrategies,
   ListWeeklyPlans,
   ListDailyMissions,
+  GetMissionDecision,
 } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { BunshinEditor } from './editor';
@@ -39,6 +40,7 @@ export default async function BunshinPage({
       PrismaContentPillarRepository,
       PrismaWeeklyPlanRepository,
       PrismaDailyMissionRepository,
+      PrismaMissionEngagementRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -100,6 +102,17 @@ export default async function BunshinPage({
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
     });
+    const engagementRepository = new PrismaMissionEngagementRepository();
+    const missionDecisions = await Promise.all(
+      dailyMissions.map((mission) =>
+        new GetMissionDecision(engagementRepository).execute({
+          workspaceId,
+          actorUserId: currentUser.userId,
+          bunshinId: bunshin.id,
+          dailyMissionId: mission.id,
+        }),
+      ),
+    );
     return (
       <BunshinEditor
         workspaceId={workspaceId}
@@ -202,7 +215,21 @@ export default async function BunshinPage({
           }),
         )}
         dailyMissions={dailyMissions.map(
-          ({
+          (
+            {
+              id,
+              missionDate,
+              status,
+              format,
+              estimatedMinutes,
+              topic,
+              angle,
+              reason,
+              qualityScore,
+              content,
+            },
+            index,
+          ) => ({
             id,
             missionDate,
             status,
@@ -213,17 +240,8 @@ export default async function BunshinPage({
             reason,
             qualityScore,
             content,
-          }) => ({
-            id,
-            missionDate,
-            status,
-            format,
-            estimatedMinutes,
-            topic,
-            angle,
-            reason,
-            qualityScore,
-            content,
+            decision: missionDecisions[index]!.decision,
+            rejectionReason: missionDecisions[index]!.rejectionReason,
           }),
         )}
       />

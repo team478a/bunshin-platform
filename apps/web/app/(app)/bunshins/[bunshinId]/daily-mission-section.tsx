@@ -13,6 +13,8 @@ export type DailyMissionView = {
   reason: string;
   qualityScore: number | null;
   content: Record<string, unknown>;
+  decision: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  rejectionReason: string | null;
 };
 
 function text(value: unknown) {
@@ -89,6 +91,63 @@ function MissionContent({ mission }: { mission: DailyMissionView }) {
   );
 }
 
+const rejectionReasons = [
+  ['NOT_MY_STYLE', '自分らしくない'],
+  ['WRONG_TOPIC', '話題が違う'],
+  ['TOO_DIFFICULT', '難しすぎる'],
+  ['TOO_MUCH_WORK', '作業が多すぎる'],
+  ['SIMILAR_TO_PAST', '過去と似ている'],
+  ['TOO_SALESY', '売り込み感が強い'],
+  ['NOT_TODAY', '今日は違う'],
+] as const;
+
+function copyOptions(mission: DailyMissionView) {
+  const content = mission.content;
+  const caption = text(content['caption']);
+  if (mission.format === 'TEXT') {
+    const value = [text(content['body']), ...strings(content['threadParts']), text(content['cta'])]
+      .filter(Boolean)
+      .join('\n\n');
+    return value ? [{ label: '投稿文をコピー', value, type: 'COPIED_TEXT' as const }] : [];
+  }
+  if (mission.format === 'SLIDE') {
+    const slides = records(content['slides']).map((slide, index) => ({
+      label: `${index + 1}枚目をコピー`,
+      value: [text(slide['headline']), text(slide['body'])].filter(Boolean).join('\n'),
+      type: 'COPIED_SLIDE' as const,
+      metadata: { slideIndex: index + 1 },
+    }));
+    const all = slides
+      .map(({ value }) => value)
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+    return [
+      ...(all ? [{ label: '全部コピー', value: all, type: 'COPIED_SLIDE' as const }] : []),
+      ...slides,
+    ];
+  }
+  if (mission.format === 'AI_VIDEO_PROMPT') {
+    return [
+      {
+        label: '動画生成Promptをコピー',
+        value: text(content['prompt']),
+        type: 'COPIED_VIDEO_PROMPT' as const,
+      },
+      { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },
+    ].filter((item): item is typeof item & { value: string } => item.value !== null);
+  }
+  if (mission.format === 'LIVE_ACTION') {
+    const script = records(content['script'])
+      .map((part) => `${text(part['seconds']) ?? ''}: ${text(part['text']) ?? ''}`)
+      .join('\n');
+    return [
+      { label: '撮影台本をコピー', value: script || null, type: 'COPIED_SCRIPT' as const },
+      { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },
+    ].filter((item): item is typeof item & { value: string } => item.value !== null);
+  }
+  return caption ? [{ label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const }] : [];
+}
+
 export function DailyMissionSection({
   workspaceId,
   bunshinId,
@@ -103,6 +162,8 @@ export function DailyMissionSection({
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [otherDetail, setOtherDetail] = useState('');
   const active = capabilityStatus === 'ACTIVE';
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/daily-missions`;
 
@@ -130,12 +191,63 @@ export function DailyMissionSection({
       if (!(await transition(mission.id, 'viewed'))) return;
     }
     setExpanded(mission.id);
+    if (active) void activity(mission.id, 'VIEWED');
+  }
+
+  function key() {
+    return crypto.randomUUID();
+  }
+  async function engagementPost(id: string, resource: string, body: Record<string, unknown>) {
+    const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/${resource}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      setError('操作を記録できませんでした。再度お試しください。');
+      return false;
+    }
+    return true;
+  }
+  async function activity(id: string, type: string, metadata?: { slideIndex: number }) {
+    setError(null);
+    return engagementPost(id, 'activities', {
+      type,
+      idempotencyKey: key(),
+      ...(metadata ? { metadata } : {}),
+    });
+  }
+  async function decide(id: string, decision: 'ACCEPTED' | 'REJECTED', rejectionReason?: string) {
+    setError(null);
+    const ok = await engagementPost(id, 'decision', {
+      decision,
+      idempotencyKey: key(),
+      ...(rejectionReason ? { rejectionReason } : {}),
+      ...(rejectionReason === 'OTHER' && otherDetail.trim()
+        ? { rejectionDetail: otherDetail.trim() }
+        : {}),
+    });
+    if (ok) {
+      setRejecting(null);
+      setOtherDetail('');
+      router.refresh();
+    }
+  }
+  async function copy(id: string, value: string, type: string, metadata?: { slideIndex: number }) {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      setError('クリップボードへコピーできませんでした。ブラウザの権限を確認してください。');
+      return;
+    }
+    await activity(id, type, metadata);
   }
 
   return (
     <section>
       <h2>Daily Mission</h2>
-      <p>今日やることを確認し、進行状態を記録します。採用判断やコピーは後続機能です。</p>
+      <p>今日やることを確認し、採用する投稿案だけをコピーできます。</p>
       {error && <p role="alert">{error}</p>}
       {missions.length === 0 ? (
         <p>Missionはまだありません。</p>
@@ -172,6 +284,68 @@ export function DailyMissionSection({
                 <div>
                   <p>狙い: {mission.angle}</p>
                   <MissionContent mission={mission} />
+                  {active && mission.decision !== 'ACCEPTED' && (
+                    <div>
+                      <button type="button" onClick={() => void decide(mission.id, 'ACCEPTED')}>
+                        採用する
+                      </button>{' '}
+                      <button type="button" onClick={() => setRejecting(mission.id)}>
+                        今回は使わない
+                      </button>
+                    </div>
+                  )}
+                  {active && rejecting === mission.id && (
+                    <div>
+                      <p>理由を1つ選んでください。</p>
+                      {rejectionReasons.map(([value, label]) => (
+                        <span key={value}>
+                          <button
+                            type="button"
+                            onClick={() => void decide(mission.id, 'REJECTED', value)}
+                          >
+                            {label}
+                          </button>{' '}
+                        </span>
+                      ))}
+                      <label>
+                        その他（任意）
+                        <textarea
+                          value={otherDetail}
+                          onChange={(event) => setOtherDetail(event.target.value)}
+                          maxLength={1000}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => void decide(mission.id, 'REJECTED', 'OTHER')}
+                      >
+                        その他で決定
+                      </button>
+                    </div>
+                  )}
+                  {mission.decision === 'REJECTED' && <p>今回は使わないと記録しました。</p>}
+                  {active && mission.decision === 'ACCEPTED' && (
+                    <div>
+                      <p>採用済み</p>
+                      {copyOptions(mission).map((option, index) => (
+                        <span key={`${option.type}-${index}`}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void copy(
+                                mission.id,
+                                option.value,
+                                option.type,
+                                'metadata' in option ? option.metadata : undefined,
+                              )
+                            }
+                          >
+                            {option.label}
+                          </button>{' '}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </li>
