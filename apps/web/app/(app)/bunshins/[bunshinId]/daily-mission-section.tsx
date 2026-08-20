@@ -15,6 +15,9 @@ export type DailyMissionView = {
   content: Record<string, unknown>;
   decision: 'PENDING' | 'ACCEPTED' | 'REJECTED';
   rejectionReason: string | null;
+  platform: 'INSTAGRAM' | 'TIKTOK' | 'X' | 'THREADS' | 'YOUTUBE_SHORTS' | 'OTHER' | null;
+  postedAt: string | null;
+  feedback: 'GOOD' | 'NEUTRAL' | 'BAD' | null;
 };
 
 function text(value: unknown) {
@@ -243,6 +246,23 @@ export function DailyMissionSection({
     }
     await activity(id, type, metadata);
   }
+  async function markPosted(mission: DailyMissionView) {
+    if (!mission.platform) {
+      setError('投稿先SNSがMissionに設定されていません。');
+      return;
+    }
+    setError(null);
+    const ok = await engagementPost(mission.id, 'post-record', {
+      platform: mission.platform,
+      idempotencyKey: key(),
+    });
+    if (ok) router.refresh();
+  }
+  async function feedback(id: string, rating: 'GOOD' | 'NEUTRAL' | 'BAD') {
+    setError(null);
+    const ok = await engagementPost(id, 'feedback', { rating, idempotencyKey: key() });
+    if (ok) router.refresh();
+  }
 
   return (
     <section>
@@ -344,6 +364,42 @@ export function DailyMissionSection({
                           </button>{' '}
                         </span>
                       ))}
+                      {mission.postedAt === null ? (
+                        <div>
+                          <button
+                            type="button"
+                            disabled={mission.platform === null}
+                            onClick={() => void markPosted(mission)}
+                          >
+                            投稿しました
+                          </button>
+                          {mission.platform === null && (
+                            <p>投稿完了を記録するにはSNS Profileの関連付けが必要です。</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <p>投稿済み</p>
+                          <p>この投稿はあなたらしかったですか？</p>
+                          {(
+                            [
+                              ['GOOD', '👍 自分らしい'],
+                              ['NEUTRAL', '😐 普通'],
+                              ['BAD', '👎 違う'],
+                            ] as const
+                          ).map(([rating, label]) => (
+                            <button
+                              key={rating}
+                              type="button"
+                              aria-pressed={mission.feedback === rating}
+                              disabled={mission.feedback === rating}
+                              onClick={() => void feedback(mission.id, rating)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

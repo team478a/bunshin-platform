@@ -379,7 +379,7 @@
 ## D-035: PostRecordを投稿事実の正本、MissionFeedbackを本人らしさの現在評価とする
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted（PR #45で承認）
 - PostRecord: ACCEPTED済みMissionに対する手動投稿を1 Mission 1件で保存し、SNS API由来の値をFREE Coreへ要求しない
 - Atomicity: PostRecordとPOSTED Activityを同一transactionで保存する
 - Lifecycle: 投稿事実とDailyMission lifecycleを分離し、投稿記録時にCOMPLETEDへ暗黙遷移しない
@@ -389,3 +389,16 @@
 - Privacy: Activity metadataへ投稿本文、URL、外部ID、metricsを複製しない
 - 分離: API/UI、SNS自動投稿、Analytics、AI、Memory学習、LINE、Jobを混在させない
 - 詳細: `docs/PHASE3_SLICE_3_7A_IMPLEMENTATION_REPORT.md`
+
+## D-036: 投稿完了後にだけ本人らしさFeedbackを提示する
+
+- 日付: 2026-08-20
+- 状態: Proposed
+- API: PostRecordとMissionFeedbackをDailyMission配下の独立resourceとして公開し、verified sessionのactorだけを使用する
+- Posted UX: ACCEPTED済みMissionへ「投稿しました」を表示し、サーバーでPostRecord保存に成功した後だけ投稿済み表示へ切り替える
+- Feedback UX: PostRecord作成後だけGOOD / NEUTRAL / BADを提示し、現在評価を`aria-pressed`で表現する
+- Platform: Missionに関連するSocialProfileのplatformを使用し、未関連Missionでは投稿完了操作を無効にする
+- Input: FREE APIからpostedAt、source、externalPostId、manualMetrics、actor等を受け取らない
+- Security: same-origin、strict JSON、no-store、Workspace / Bunshin isolationを維持する
+- 分離: SNS自動投稿、Analytics、AI、Memory学習、LINE、BLOG、Jobを混在させない
+- 詳細: `docs/PHASE3_SLICE_3_7B_IMPLEMENTATION_REPORT.md`
