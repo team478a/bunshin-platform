@@ -1340,3 +1340,180 @@ export class TransitionDailyMission extends DailyMissionMutation {
     return value;
   }
 }
+
+export const MISSION_DECISIONS = ['PENDING', 'ACCEPTED', 'REJECTED'] as const;
+export type MissionDecisionValue = (typeof MISSION_DECISIONS)[number];
+export const MISSION_REJECTION_REASONS = [
+  'NOT_MY_STYLE',
+  'WRONG_TOPIC',
+  'TOO_DIFFICULT',
+  'TOO_MUCH_WORK',
+  'SIMILAR_TO_PAST',
+  'TOO_SALESY',
+  'NOT_TODAY',
+  'OTHER',
+] as const;
+export type MissionRejectionReason = (typeof MISSION_REJECTION_REASONS)[number];
+export const MISSION_ACTIVITY_TYPES = [
+  'VIEWED',
+  'ACCEPTED',
+  'REJECTED',
+  'COPIED_TEXT',
+  'COPIED_SLIDE',
+  'COPIED_VIDEO_PROMPT',
+  'COPIED_SCRIPT',
+] as const;
+export type MissionActivityType = (typeof MISSION_ACTIVITY_TYPES)[number];
+export interface MissionDecision {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  dailyMissionId: string;
+  decision: MissionDecisionValue;
+  rejectionReason: MissionRejectionReason | null;
+  rejectionDetail: string | null;
+  decidedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export interface MissionActivity {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  dailyMissionId: string;
+  actorUserId: string;
+  type: MissionActivityType;
+  occurredAt: Date;
+  idempotencyKey: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+}
+export interface MissionEngagementRepository {
+  getDecision(
+    input: DailyMissionScope & { dailyMissionId: string },
+  ): Promise<MissionDecision | null>;
+  decide(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    dailyMissionId: string;
+    decision: 'ACCEPTED' | 'REJECTED';
+    rejectionReason: MissionRejectionReason | null;
+    rejectionDetail: string | null;
+    idempotencyKey: string;
+  }): Promise<{ decision: MissionDecision; activity: MissionActivity } | null>;
+  listActivities(
+    input: DailyMissionScope & { dailyMissionId: string },
+  ): Promise<MissionActivity[] | null>;
+  appendActivity(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    dailyMissionId: string;
+    type: 'VIEWED' | 'COPIED_TEXT' | 'COPIED_SLIDE' | 'COPIED_VIDEO_PROMPT' | 'COPIED_SCRIPT';
+    idempotencyKey: string;
+    metadata: Record<string, unknown> | null;
+  }): Promise<MissionActivity | null>;
+}
+
+function idempotencyKey(value: string) {
+  return missionString(value, 200, 'idempotency key');
+}
+export function normalizeMissionActivityMetadata(
+  type: MissionActivityType,
+  metadata: unknown,
+): Record<string, unknown> | null {
+  if (type === 'COPIED_SLIDE') {
+    if (metadata === null || metadata === undefined) return null;
+    const value = strict(metadata, ['slideIndex'], 'activity metadata');
+    return { slideIndex: missionInteger(value['slideIndex'], 1, 7, 'slide index') };
+  }
+  if (metadata !== null && metadata !== undefined)
+    throw new ApplicationError('VALIDATION_ERROR', 'activity metadata is not allowed');
+  return null;
+}
+
+export class GetMissionDecision {
+  constructor(private readonly engagement: MissionEngagementRepository) {}
+  async execute(input: DailyMissionScope & { dailyMissionId: string }) {
+    const value = await this.engagement.getDecision(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'mission decision not found');
+    return value;
+  }
+}
+export class DecideMission extends DailyMissionMutation {
+  constructor(
+    missions: DailyMissionRepository,
+    assignments: BunshinCapabilityAssignmentRepository,
+    private readonly engagement: MissionEngagementRepository,
+  ) {
+    super(missions, assignments);
+  }
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    dailyMissionId: string;
+    decision: 'ACCEPTED' | 'REJECTED';
+    rejectionReason?: MissionRejectionReason | null;
+    rejectionDetail?: string | null;
+    idempotencyKey: string;
+  }) {
+    await this.requireActive(input);
+    const rejectionReason = input.rejectionReason ?? null;
+    const rejectionDetail = input.rejectionDetail?.trim() || null;
+    if (input.decision === 'ACCEPTED' && (rejectionReason !== null || rejectionDetail !== null))
+      throw new ApplicationError('VALIDATION_ERROR', 'accepted decision cannot have rejection');
+    if (input.decision === 'REJECTED' && !rejectionReason)
+      throw new ApplicationError('VALIDATION_ERROR', 'rejection reason is required');
+    if (rejectionReason && !MISSION_REJECTION_REASONS.includes(rejectionReason))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid rejection reason');
+    if (rejectionReason !== 'OTHER' && rejectionDetail !== null)
+      throw new ApplicationError('VALIDATION_ERROR', 'rejection detail is only allowed for OTHER');
+    if (rejectionDetail && rejectionDetail.length > 1000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid rejection detail');
+    const value = await this.engagement.decide({
+      ...input,
+      rejectionReason,
+      rejectionDetail,
+      idempotencyKey: idempotencyKey(input.idempotencyKey),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return value;
+  }
+}
+export class ListMissionActivities {
+  constructor(private readonly engagement: MissionEngagementRepository) {}
+  async execute(input: DailyMissionScope & { dailyMissionId: string }) {
+    const value = await this.engagement.listActivities(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return value;
+  }
+}
+export class RecordMissionActivity extends DailyMissionMutation {
+  constructor(
+    missions: DailyMissionRepository,
+    assignments: BunshinCapabilityAssignmentRepository,
+    private readonly engagement: MissionEngagementRepository,
+  ) {
+    super(missions, assignments);
+  }
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    dailyMissionId: string;
+    type: 'VIEWED' | 'COPIED_TEXT' | 'COPIED_SLIDE' | 'COPIED_VIDEO_PROMPT' | 'COPIED_SCRIPT';
+    idempotencyKey: string;
+    metadata?: Record<string, unknown> | null;
+  }) {
+    await this.requireActive(input);
+    const value = await this.engagement.appendActivity({
+      ...input,
+      idempotencyKey: idempotencyKey(input.idempotencyKey),
+      metadata: normalizeMissionActivityMetadata(input.type, input.metadata),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return value;
+  }
+}

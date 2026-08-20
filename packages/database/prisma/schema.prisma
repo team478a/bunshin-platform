@@ -209,6 +209,33 @@ enum DailyMissionStatus {
   EXPIRED
 }
 
+enum MissionDecisionValue {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum MissionRejectionReason {
+  NOT_MY_STYLE
+  WRONG_TOPIC
+  TOO_DIFFICULT
+  TOO_MUCH_WORK
+  SIMILAR_TO_PAST
+  TOO_SALESY
+  NOT_TODAY
+  OTHER
+}
+
+enum MissionActivityType {
+  VIEWED
+  ACCEPTED
+  REJECTED
+  COPIED_TEXT
+  COPIED_SLIDE
+  COPIED_VIDEO_PROMPT
+  COPIED_SCRIPT
+}
+
 enum SocialPreferredFormat {
   TEXT
   SLIDE
@@ -231,6 +258,7 @@ model User {
   ownerKnowledge        OwnerKnowledge[]              @relation("KnowledgeOwner")
   knowledgeGrants       BunshinKnowledgeGrant[]       @relation("GrantActor")
   capabilityAssignments BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
+  missionActivities     MissionActivity[]             @relation("MissionActivityActor")
 
   @@index([status])
   @@map("users")
@@ -270,6 +298,8 @@ model Workspace {
   weeklyPlanItems         WeeklyPlanItem[]
   dailyMissions           DailyMission[]
   missionContents         MissionContent[]
+  missionDecisions        MissionDecision[]
+  missionActivities       MissionActivity[]
 
   @@index([status])
   @@map("workspaces")
@@ -334,6 +364,8 @@ model Bunshin {
   weeklyPlanItems         WeeklyPlanItem[]
   dailyMissions           DailyMission[]
   missionContents         MissionContent[]
+  missionDecisions        MissionDecision[]
+  missionActivities       MissionActivity[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -575,6 +607,8 @@ model DailyMission {
   socialProfile    SocialProfile?        @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   weeklyPlanItem   WeeklyPlanItem?       @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   content          MissionContent?
+  decision         MissionDecision?
+  activities       MissionActivity[]
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -602,6 +636,48 @@ model MissionContent {
   @@unique([workspaceId, bunshinId, dailyMissionId, format])
   @@index([workspaceId, bunshinId, format])
   @@map("mission_contents")
+}
+
+model MissionDecision {
+  id              String                  @id @default(uuid()) @db.Uuid
+  workspaceId     String                  @map("workspace_id") @db.Uuid
+  bunshinId       String                  @map("bunshin_id") @db.Uuid
+  dailyMissionId  String                  @unique @map("daily_mission_id") @db.Uuid
+  decision        MissionDecisionValue    @default(PENDING)
+  rejectionReason MissionRejectionReason? @map("rejection_reason")
+  rejectionDetail String?                 @map("rejection_detail") @db.VarChar(1000)
+  decidedAt       DateTime?               @map("decided_at") @db.Timestamptz(6)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin         Bunshin                 @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission    DailyMission            @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@index([workspaceId, bunshinId, decision])
+  @@map("mission_decisions")
+}
+
+model MissionActivity {
+  id             String              @id @default(uuid()) @db.Uuid
+  workspaceId    String              @map("workspace_id") @db.Uuid
+  bunshinId      String              @map("bunshin_id") @db.Uuid
+  dailyMissionId String              @map("daily_mission_id") @db.Uuid
+  actorUserId    String              @map("actor_user_id") @db.Uuid
+  type           MissionActivityType
+  occurredAt     DateTime            @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  idempotencyKey String              @map("idempotency_key") @db.VarChar(200)
+  metadata       Json?
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin             @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission   DailyMission        @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade)
+  actor          User                @relation("MissionActivityActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, actorUserId, idempotencyKey])
+  @@index([workspaceId, bunshinId, dailyMissionId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("mission_activities")
 }
 
 model BunshinObjective {

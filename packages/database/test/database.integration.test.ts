@@ -26,6 +26,10 @@ import {
   CreateDailyMission,
   ListDailyMissions,
   TransitionDailyMission,
+  GetMissionDecision,
+  DecideMission,
+  ListMissionActivities,
+  RecordMissionActivity,
 } from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
@@ -42,6 +46,7 @@ import {
   PrismaContentPillarRepository,
   PrismaWeeklyPlanRepository,
   PrismaDailyMissionRepository,
+  PrismaMissionEngagementRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -53,6 +58,8 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.missionActivity.deleteMany();
+    await client.missionDecision.deleteMany();
     await client.socialAccountStrategy.deleteMany();
     await client.missionContent.deleteMany();
     await client.dailyMission.deleteMany();
@@ -1339,6 +1346,82 @@ integration('database ownership boundaries', () => {
       status: 'GENERATED',
       content: expect.objectContaining({ topic: '基礎' }),
     });
+    const engagement = new PrismaMissionEngagementRepository(client);
+    await expect(
+      new GetMissionDecision(engagement).execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+      }),
+    ).resolves.toMatchObject({ decision: 'PENDING', decidedAt: null });
+    const decide = new DecideMission(repository, assignments, engagement);
+    const accepted = await decide.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      decision: 'ACCEPTED',
+      idempotencyKey: 'accept-once',
+    });
+    expect(accepted.decision).toMatchObject({ decision: 'ACCEPTED', decidedAt: expect.any(Date) });
+    await decide.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      decision: 'ACCEPTED',
+      idempotencyKey: 'accept-once',
+    });
+    const record = new RecordMissionActivity(repository, assignments, engagement);
+    await record.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      type: 'COPIED_SLIDE',
+      idempotencyKey: 'copy-slide-once',
+      metadata: { slideIndex: 1 },
+    });
+    await record.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      type: 'COPIED_SLIDE',
+      idempotencyKey: 'copy-slide-once',
+      metadata: { slideIndex: 1 },
+    });
+    await expect(
+      new ListMissionActivities(engagement).execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+      }),
+    ).resolves.toHaveLength(2);
+    await expect(
+      record.execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+        type: 'COPIED_SLIDE',
+        idempotencyKey: 'copy-slide-once',
+        metadata: { slideIndex: 2 },
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const outsider = await accounts.execute({ displayName: 'Mission Outsider' });
+    await expect(
+      new GetMissionDecision(engagement).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: bunshin.id,
+        dailyMissionId: created.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const otherBunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Other Mission Bunshin',
+      slug: `other-mission-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    await expect(
+      new GetMissionDecision(engagement).execute({
+        ...ownerScope(owner, otherBunshin.id),
+        dailyMissionId: created.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(create.execute(input)).rejects.toMatchObject({ code: 'CONFLICT' });
     const completed = await new TransitionDailyMission(repository, assignments).execute({
       ...ownerScope(owner, bunshin.id),

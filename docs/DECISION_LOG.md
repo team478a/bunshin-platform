@@ -341,7 +341,7 @@
 ## D-032: Daily Mission API/UIはlifecycle操作だけを公開する
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted（PR #42で承認）
 - 決定: 既存DailyMission Coreをverified sessionへ接続し、list/detail/createと明示lifecycle遷移を提供する
 - UI: Bunshin詳細でformat別内容を表示し、VIEWED / STARTED / COMPLETED / SKIPPEDだけをユーザー操作として提供する。EXPIRED APIは将来Jobが同じCoreを利用できるよう保持する
 - Create: 後続AI Generator用APIは提供するが、手動作成フォームは提供しない
@@ -349,3 +349,16 @@
 - Capability: Assignment停止中もreadを許可し、mutationだけを拒否する
 - 禁止: AI生成、Provider、regenerate、Decision / Activity、PostRecord / Feedback、LINE、Jobを混在させない
 - 詳細: `docs/DAILY_MISSION_API_UI_REPORT.md`
+
+## D-033: Mission Decisionを必須1対1、Activityをappend-onlyにする
+
+- 日付: 2026-08-20
+- 状態: Proposed
+- Decision: Mission作成時にPENDING rowを同一transactionで作り、既存Missionもmigrationでbackfillする
+- 更新: 現在判断は1 Mission 1 rowへ保存し、判断変更履歴はActivityへappendする
+- Rejection: REJECTEDは理由必須、OTHERだけ任意詳細を許可し、ACCEPTEDは不採用情報を持たない
+- Activity: 3.6-AではVIEWED、ACCEPTED、REJECTED、format別COPYを定義する
+- Idempotency: keyを必須とし、Workspace/Bunshin/actor/keyをuniqueにする。同一payload再送は既存結果、異なるpayload再利用はCONFLICTとする
+- Metadata: event別strict schemaとし、本文、Knowledge、Memory、credential、Provider payloadを保存しない
+- 分離: API/UI、PostRecord、Feedback、AI、LINE、Jobを混在させない
+- 詳細: `docs/PHASE3_SLICE_3_6A_IMPLEMENTATION_REPORT.md`
