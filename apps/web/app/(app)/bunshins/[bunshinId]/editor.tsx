@@ -11,6 +11,7 @@ import { SocialProfileSection, type SocialProfileView } from './social-profile-s
 import { ContentPillarSection, type ContentPillarView } from './content-pillar-section';
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
 import { AccountStrategySection, type StrategyView } from './account-strategy-section';
+import { DailyMissionSection, type DailyMissionView } from './daily-mission-section';
 
 export function BunshinEditor({
   workspaceId,
@@ -22,6 +23,7 @@ export function BunshinEditor({
   socialStrategies,
   contentPillars,
   weeklyPlans,
+  dailyMissions,
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
@@ -32,6 +34,7 @@ export function BunshinEditor({
   socialStrategies: StrategyView[];
   contentPillars: ContentPillarView[];
   weeklyPlans: WeeklyPlanView[];
+  dailyMissions: DailyMissionView[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -155,6 +158,12 @@ export function BunshinEditor({
         capabilityStatus={socialCapabilityStatus}
         pillars={contentPillars}
         plans={weeklyPlans}
+      />
+      <DailyMissionSection
+        workspaceId={workspaceId}
+        bunshinId={bunshin.id}
+        capabilityStatus={socialCapabilityStatus}
+        missions={dailyMissions}
       />
       <button
         type="button"

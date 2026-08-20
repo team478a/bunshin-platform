@@ -9,6 +9,7 @@ import {
   ListSocialProfiles,
   ListSocialAccountStrategies,
   ListWeeklyPlans,
+  ListDailyMissions,
 } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { BunshinEditor } from './editor';
@@ -37,6 +38,7 @@ export default async function BunshinPage({
       PrismaSocialAccountStrategyRepository,
       PrismaContentPillarRepository,
       PrismaWeeklyPlanRepository,
+      PrismaDailyMissionRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -89,6 +91,11 @@ export default async function BunshinPage({
       new PrismaContentPillarRepository(),
     ).execute({ workspaceId, actorUserId: currentUser.userId, bunshinId: bunshin.id });
     const weeklyPlans = await new ListWeeklyPlans(new PrismaWeeklyPlanRepository()).execute({
+      workspaceId,
+      actorUserId: currentUser.userId,
+      bunshinId: bunshin.id,
+    });
+    const dailyMissions = await new ListDailyMissions(new PrismaDailyMissionRepository()).execute({
       workspaceId,
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
@@ -192,6 +199,31 @@ export default async function BunshinPage({
                 notes,
               }),
             ),
+          }),
+        )}
+        dailyMissions={dailyMissions.map(
+          ({
+            id,
+            missionDate,
+            status,
+            format,
+            estimatedMinutes,
+            topic,
+            angle,
+            reason,
+            qualityScore,
+            content,
+          }) => ({
+            id,
+            missionDate,
+            status,
+            format,
+            estimatedMinutes,
+            topic,
+            angle,
+            reason,
+            qualityScore,
+            content,
           }),
         )}
       />
