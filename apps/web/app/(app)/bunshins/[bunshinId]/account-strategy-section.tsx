@@ -50,7 +50,7 @@ export function AccountStrategySection({
     if (!profile) return;
     setPending(true);
     const response = await fetch(
-      `/api/workspaces/${workspaceId}/bunshins/${bunshinId}/social-account-strategies`,
+      `/api/workspaces/${workspaceId}/bunshins/${bunshinId}/social-account-strategies/generate`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -61,13 +61,8 @@ export function AccountStrategySection({
           availableMinutes: form.availableMinutes,
           destinationType: form.destinationType,
           destinationDetail: form.destinationDetail || null,
-          concept: form.topic,
-          positioning: '既存Bunshin Personalityに準拠',
-          targetSummary: form.audience,
-          profileDraft: `${form.topic}を${form.audience}へ届けます。`,
-          ctaStrategy:
-            form.destinationType === 'NONE' ? '誘導なし' : `${form.destinationType}へ自然に誘導`,
-          postingPolicy: `1日${form.availableMinutes}分で継続可能な投稿を優先`,
+          wizardTopic: form.topic,
+          wizardAudience: form.audience,
         }),
       },
     );
