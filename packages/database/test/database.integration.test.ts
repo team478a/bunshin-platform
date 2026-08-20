@@ -30,6 +30,10 @@ import {
   DecideMission,
   ListMissionActivities,
   RecordMissionActivity,
+  GetPostRecord,
+  RecordManualPost,
+  GetMissionFeedback,
+  RecordMissionFeedback,
 } from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
@@ -47,6 +51,7 @@ import {
   PrismaWeeklyPlanRepository,
   PrismaDailyMissionRepository,
   PrismaMissionEngagementRepository,
+  PrismaMissionOutcomeRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -58,6 +63,8 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.missionFeedback.deleteMany();
+    await client.postRecord.deleteMany();
     await client.missionActivity.deleteMany();
     await client.missionDecision.deleteMany();
     await client.socialAccountStrategy.deleteMany();
@@ -1397,9 +1404,58 @@ integration('database ownership boundaries', () => {
         metadata: { slideIndex: 2 },
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const outcomes = new PrismaMissionOutcomeRepository(client);
+    const manualPost = new RecordManualPost(repository, assignments, outcomes);
+    await manualPost.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      platform: 'X',
+      postedAt: new Date('2026-08-20T01:00:00Z'),
+      idempotencyKey: 'posted-once',
+    });
+    await manualPost.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      platform: 'X',
+      postedAt: new Date('2026-08-20T01:00:00Z'),
+      idempotencyKey: 'posted-once',
+    });
+    await expect(
+      new GetPostRecord(outcomes).execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+      }),
+    ).resolves.toMatchObject({ source: 'MANUAL', externalPostId: null });
+    const missionFeedback = new RecordMissionFeedback(repository, assignments, outcomes);
+    await missionFeedback.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      rating: 'GOOD',
+      idempotencyKey: 'feedback-good-once',
+    });
+    await missionFeedback.execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      rating: 'BAD',
+      idempotencyKey: 'feedback-bad-once',
+    });
+    await expect(
+      new GetMissionFeedback(outcomes).execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+      }),
+    ).resolves.toMatchObject({ rating: 'BAD' });
     const outsider = await accounts.execute({ displayName: 'Mission Outsider' });
     await expect(
       new GetMissionDecision(engagement).execute({
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: bunshin.id,
+        dailyMissionId: created.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      new GetPostRecord(outcomes).execute({
         workspaceId: owner.workspace.id,
         actorUserId: outsider.user.id,
         bunshinId: bunshin.id,
