@@ -6,23 +6,28 @@
 
 Phase 0〜5のコードは完了している。本番利用開始には、以下の人間確認と本番環境での実行記録が必要である。Secretや個人情報は本書へ記録せず、実行日時、担当者、対象commit、GitHub Actions run、確認結果だけを残す。
 
+2026-08-22時点の実査は`PRODUCTION_READINESS_AUDIT_2026-08-22.md`を参照する。現在の判定は**NO-GO**。
+
 ## A. 自動検証
 
 - [x] `main`のCI `verify` / `database`が成功している
+- [ ] main branch protectionで両checkをrequiredにした
 - [x] Vercel Production deploymentが成功している
 - [x] 空PostgreSQLへの全migration適用が成功している
-- [ ] dependency auditの重大問題を確認した
+- [x] dependency auditの重大問題を確認した（2026-08-22、既知の脆弱性0件）
 
 ## B. Production Database
 
 - [ ] Supabase backupと保持期間を確認した
 - [ ] restore手順と責任者を確認した
 - [x] GitHub Environment `production`のrequired reviewerを確認した
+- [ ] Productionをmainだけに制限し、自己承認禁止を確認した
 - [x] GitHub Environmentに`DATABASE_URL` / `DIRECT_URL` secret名が存在する
 - [ ] `DATABASE_URL`がtransaction poolerであることをSupabase接続画面で再確認した
 - [ ] `DIRECT_URL`がmigration用session/direct接続であることをSupabase接続画面で再確認した
 - [x] 対象commitのProduction migration workflowを承認・実行した
-- [x] `prisma migrate status`が最新である
+- [ ] 最新mainに対してProduction migration workflowを承認・実行した
+- [ ] 最新mainで`prisma migrate status`が最新である
 - [x] `/api/health/ready`が`database: ok`を返す
 
 ## C. Auth / AI / Application Configuration

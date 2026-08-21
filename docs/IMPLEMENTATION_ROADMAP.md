@@ -139,7 +139,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 公開中の規約・プライバシーへのユーザー同意、版更新時の再同意（完了）
 - 本人による退会要求・取消、14日猶予、管理者確認（完了）
 - 猶予期間後の匿名化・削除実行（未実装）
-- Production Gate、backup/restore、運用手順
+- Production Gate監査、backup/restore・incident手順、health smoke workflow（完了）
+- 本番Dashboard設定、restore rehearsal、最新migration、FREE MVP smoke、Go承認（未完了）
 
 ここで100人規模のFREE検証を行う。
 
