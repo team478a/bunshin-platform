@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CreateLegalDocumentDraft,
   PublishLegalDocument,
+  AcceptRequiredLegalConsents,
+  type LegalConsentRepository,
   type LegalDocumentRepository,
 } from '../src';
 
@@ -22,6 +24,15 @@ const repository = (overrides: Partial<LegalDocumentRepository> = {}): LegalDocu
   createDraft: () => Promise.resolve(document),
   publish: () => Promise.resolve(document),
   findPublished: () => Promise.resolve(null),
+  ...overrides,
+});
+
+const consentRepository = (
+  overrides: Partial<LegalConsentRepository> = {},
+): LegalConsentRepository => ({
+  findRequiredForUser: () => Promise.resolve([]),
+  acceptRequired: () => Promise.resolve(true),
+  listConsentCountsForAdmin: () => Promise.resolve([]),
   ...overrides,
 });
 
@@ -56,5 +67,35 @@ describe('legal document use cases', () => {
         effectiveAt: new Date(),
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('legal consent use cases', () => {
+  it('records the exact current document set', async () => {
+    const acceptRequired = vi.fn().mockResolvedValue(true);
+    await new AcceptRequiredLegalConsents(consentRepository({ acceptRequired })).execute({
+      userId: 'user-a',
+      documentIds: ['terms-v1', 'privacy-v1'],
+    });
+    expect(acceptRequired).toHaveBeenCalledWith({
+      userId: 'user-a',
+      documentIds: ['terms-v1', 'privacy-v1'],
+    });
+  });
+  it('rejects duplicate documents and a changed current set', async () => {
+    await expect(
+      new AcceptRequiredLegalConsents(consentRepository()).execute({
+        userId: 'user-a',
+        documentIds: ['same', 'same'],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(
+      new AcceptRequiredLegalConsents(
+        consentRepository({ acceptRequired: () => Promise.resolve(false) }),
+      ).execute({
+        userId: 'user-a',
+        documentIds: ['terms-v1'],
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });

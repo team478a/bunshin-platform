@@ -10,6 +10,7 @@ type DocumentValue = {
   status: 'DRAFT' | 'PUBLISHED' | 'RETIRED';
   effectiveAt: string | null;
   publishedAt: string | null;
+  consentCount: number;
 };
 
 export function LegalDocumentEditor({ initialDocuments }: { initialDocuments: DocumentValue[] }) {
@@ -34,7 +35,7 @@ export function LegalDocumentEditor({ initialDocuments }: { initialDocuments: Do
     const value = (await response.json()) as { data: DocumentValue; error?: { message?: string } };
     if (!response.ok) setError(value.error?.message ?? '保存できませんでした。');
     else {
-      setDocuments((current) => [value.data, ...current]);
+      setDocuments((current) => [{ ...value.data, consentCount: 0 }, ...current]);
       event.currentTarget.reset();
     }
     setBusy(false);
@@ -98,6 +99,7 @@ export function LegalDocumentEditor({ initialDocuments }: { initialDocuments: Do
             <p>
               {document.type} / v{document.version} / {document.status}
             </p>
+            <p>同意ユーザー数: {document.consentCount}</p>
             <pre>{document.content}</pre>
             {document.status === 'DRAFT' ? (
               <form
