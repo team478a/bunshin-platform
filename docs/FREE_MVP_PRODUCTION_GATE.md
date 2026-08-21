@@ -26,9 +26,10 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 - [ ] `DATABASE_URL`がtransaction poolerであることをSupabase接続画面で再確認した
 - [ ] `DIRECT_URL`がmigration用session/direct接続であることをSupabase接続画面で再確認した
 - [x] 対象commitのProduction migration workflowを承認・実行した
-- [ ] 最新mainに対してProduction migration workflowを承認・実行した
-- [ ] 最新mainで`prisma migrate status`が最新である
+- [x] 最新mainに対してProduction migration workflowを承認・実行した（run `32535372263`）
+- [x] 最新mainで`prisma migrate status`が最新である
 - [x] `/api/health/ready`が`database: ok`を返す
+- [x] Production Health Smokeが成功した（run `32535679734`）
 
 ## C. Auth / AI / Application Configuration
 

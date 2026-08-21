@@ -43,3 +43,12 @@ Production migrationは完了した。次にSupabase / Vercelの設定確認と�
 - 実行: 未適用12件を順番に適用
 - 実行後: `Database schema is up to date!`
 - 備考: 実行前statusのexit code 1は未適用migration検出による想定結果で、当該stepは`continue-on-error`。migration本体と実行後statusは成功した。
+
+## 2026-08-22 追加実行
+
+- Head SHA: `f3ac9d0283555d700df5036ffeff9f32b3e46a7d`
+- main CI: `https://github.com/team478a/bunshin-platform/actions/runs/32535246116`（verify / database成功）
+- Production migration: `https://github.com/team478a/bunshin-platform/actions/runs/32535372263`（承認、deploy、適用後status成功）
+- 適用対象: legal documents、user legal consents、account deletion requests
+- Production Health Smoke: `https://github.com/team478a/bunshin-platform/actions/runs/32535679734`（live / ready成功）
+- Secret値・個人情報は記録していない
