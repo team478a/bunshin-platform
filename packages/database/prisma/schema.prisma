@@ -250,6 +250,11 @@ enum MissionFeedbackRating {
   BAD
 }
 
+enum AiUsageStatus {
+  SUCCESS
+  FAILED
+}
+
 enum SocialPreferredFormat {
   TEXT
   SLIDE
@@ -275,6 +280,7 @@ model User {
   missionActivities     MissionActivity[]             @relation("MissionActivityActor")
   postRecords           PostRecord[]                  @relation("PostRecordActor")
   missionFeedback       MissionFeedback[]             @relation("MissionFeedbackActor")
+  aiUsageEvents         AiUsageEvent[]                 @relation("AiUsageActor")
 
   @@index([status])
   @@map("users")
@@ -318,6 +324,7 @@ model Workspace {
   missionActivities       MissionActivity[]
   postRecords             PostRecord[]
   missionFeedback         MissionFeedback[]
+  aiUsageEvents           AiUsageEvent[]
 
   @@index([status])
   @@map("workspaces")
@@ -386,12 +393,42 @@ model Bunshin {
   missionActivities       MissionActivity[]
   postRecords             PostRecord[]
   missionFeedback         MissionFeedback[]
+  aiUsageEvents           AiUsageEvent[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
   @@index([workspaceId, status, updatedAt])
   @@index([ownerUserId, status])
   @@map("bunshins")
+}
+
+model AiUsageEvent {
+  id                     String        @id @default(uuid()) @db.Uuid
+  workspaceId            String        @map("workspace_id") @db.Uuid
+  bunshinId              String        @map("bunshin_id") @db.Uuid
+  actorUserId            String        @map("actor_user_id") @db.Uuid
+  taskType               String        @map("task_type") @db.VarChar(80)
+  provider               String        @db.VarChar(40)
+  model                  String        @db.VarChar(120)
+  promptVersion          String        @map("prompt_version") @db.VarChar(120)
+  status                 AiUsageStatus
+  inputTokens            Int?          @map("input_tokens")
+  outputTokens           Int?          @map("output_tokens")
+  latencyMs              Int           @map("latency_ms")
+  estimatedCostUsdMicros BigInt?       @map("estimated_cost_usd_micros")
+  pricingVersion         String?       @map("pricing_version") @db.VarChar(120)
+  errorCode              String?       @map("error_code") @db.VarChar(80)
+  idempotencyKey         String        @map("idempotency_key") @db.VarChar(200)
+  occurredAt             DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace              Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                Bunshin       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  actor                  User          @relation("AiUsageActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, actorUserId, idempotencyKey])
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, bunshinId, taskType, occurredAt])
+  @@map("ai_usage_events")
 }
 
 model OwnerKnowledge {

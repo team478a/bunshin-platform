@@ -15,6 +15,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 
 const createSchema = z
   .object({
@@ -184,6 +185,8 @@ export function generateSocialAccountStrategyResponse(
   return respond(
     request,
     async () => {
+      let usageActor: string | null = null;
+      let providerAttempted = false;
       try {
         requireSameOrigin(request);
         const parsed = generateSchema.safeParse(await body(request));
@@ -192,6 +195,7 @@ export function generateSocialAccountStrategyResponse(
         if (!apiKey)
           throw new ApplicationError('CONFIGURATION_ERROR', 'OPENAI_API_KEY is required');
         const actor = await actorUserId();
+        usageActor = actor;
         const { bunshins, grants, profiles, strategies, assignments } =
           await generationRepositories();
         const bunshin = await new GetBunshin(bunshins).execute({
@@ -213,6 +217,7 @@ export function generateSocialAccountStrategyResponse(
           actorUserId: actor,
         });
         const { OpenAIStrategyGenerator } = await import('../providers/openai-strategy-generator');
+        providerAttempted = true;
         const result = await new GenerateSocialAccountStrategy(
           new OpenAIStrategyGenerator({
             apiKey,
@@ -247,6 +252,20 @@ export function generateSocialAccountStrategyResponse(
           outputTokens: result.outputTokens,
           latency: result.latencyMs,
         });
+        await recordAiUsageSafely({
+          workspaceId,
+          bunshinId,
+          actorUserId: actor,
+          taskType: 'STRATEGY_GENERATOR',
+          provider: 'openai',
+          model: result.model,
+          promptVersion: result.promptVersion,
+          status: 'SUCCESS',
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          latencyMs: result.latencyMs,
+          idempotencyKey: `${requestId}:strategy`,
+        });
         const {
           destinationDetail,
           wizardTopic: _wizardTopic,
@@ -276,6 +295,22 @@ export function generateSocialAccountStrategyResponse(
           latency: Date.now() - started,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         });
+        if (usageActor && providerAttempted)
+          await recordAiUsageSafely({
+            workspaceId,
+            bunshinId,
+            actorUserId: usageActor,
+            taskType: 'STRATEGY_GENERATOR',
+            provider: 'openai',
+            model: process.env['OPENAI_STRATEGY_MODEL'] ?? 'gpt-5.2',
+            promptVersion: SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION,
+            status: 'FAILED',
+            inputTokens: null,
+            outputTokens: null,
+            latencyMs: Date.now() - started,
+            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+            idempotencyKey: `${requestId}:strategy`,
+          });
         throw error;
       }
     },

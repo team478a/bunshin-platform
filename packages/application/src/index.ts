@@ -56,7 +56,65 @@ export interface ValidationMetricsSnapshot {
     threePostsInFirstSevenDaysRate: number | null;
     d7EligibleUsers: number;
     d7ActiveRate: number | null;
+    aiCalls: number;
+    aiSuccessfulCalls: number;
+    aiFailedCalls: number;
+    aiInputTokens: number;
+    aiOutputTokens: number;
+    aiPricedCalls: number;
+    aiEstimatedCostUsdMicros: number | null;
   };
+}
+
+export interface RecordAiUsageInput {
+  workspaceId: string;
+  bunshinId: string;
+  actorUserId: string;
+  taskType: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  status: 'SUCCESS' | 'FAILED';
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+  estimatedCostUsdMicros?: number | null;
+  pricingVersion?: string | null;
+  errorCode?: string | null;
+  idempotencyKey: string;
+  occurredAt?: Date;
+}
+
+export interface AiUsageEventRepository {
+  record(input: RecordAiUsageInput): Promise<void>;
+}
+
+export class RecordAiUsage {
+  constructor(private readonly repository: AiUsageEventRepository) {}
+
+  async execute(input: RecordAiUsageInput) {
+    const required = [
+      input.taskType,
+      input.provider,
+      input.model,
+      input.promptVersion,
+      input.idempotencyKey,
+    ];
+    if (required.some((value) => value.trim().length === 0))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI usage event');
+    if (
+      input.latencyMs < 0 ||
+      (input.inputTokens !== null && input.inputTokens < 0) ||
+      (input.outputTokens !== null && input.outputTokens < 0) ||
+      (input.estimatedCostUsdMicros !== undefined &&
+        input.estimatedCostUsdMicros !== null &&
+        input.estimatedCostUsdMicros < 0)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI usage measurements');
+    if (input.status === 'SUCCESS' && input.errorCode)
+      throw new ApplicationError('VALIDATION_ERROR', 'successful AI usage cannot have errorCode');
+    await this.repository.record(input);
+  }
 }
 
 export interface ValidationMetricsRepository {
