@@ -31,8 +31,14 @@ export async function POST(request: Request): Promise<Response> {
       type: type as EmailOtpType,
     });
     if (error !== null) throw error;
-    if ((await (await currentUserProvider()).getCurrentUser()) === null)
-      throw new Error('user unavailable');
+    const currentUser = await (await currentUserProvider()).getCurrentUser();
+    if (currentUser === null) throw new Error('user unavailable');
+    const { PrismaLegalConsentRepository } = await import('@bunshin/database');
+    const required = await new PrismaLegalConsentRepository().findRequiredForUser(
+      currentUser.userId,
+    );
+    if (required.some((item) => !item.consentedAt))
+      return NextResponse.redirect(new URL('/consent', request.url), 303);
     return NextResponse.redirect(new URL('/bunshins', request.url), 303);
   } catch {
     return NextResponse.redirect(new URL('/login?error=1', request.url), 303);

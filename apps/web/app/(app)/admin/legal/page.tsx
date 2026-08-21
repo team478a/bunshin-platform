@@ -1,4 +1,4 @@
-import { ListLegalDocuments } from '@bunshin/application';
+import { ListLegalConsentCounts, ListLegalDocuments } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
@@ -14,6 +14,10 @@ export default async function LegalAdminPage() {
     const documents = await new ListLegalDocuments(new db.PrismaLegalDocumentRepository()).execute(
       user.userId,
     );
+    const consentCounts = await new ListLegalConsentCounts(
+      new db.PrismaLegalConsentRepository(),
+    ).execute(user.userId);
+    const counts = new Map(consentCounts.map((item) => [item.id, item.consentCount]));
     return (
       <main>
         <h1>法務文書管理</h1>
@@ -23,6 +27,7 @@ export default async function LegalAdminPage() {
             ...value,
             effectiveAt: value.effectiveAt?.toISOString() ?? null,
             publishedAt: value.publishedAt?.toISOString() ?? null,
+            consentCount: counts.get(value.id) ?? 0,
           }))}
         />
       </main>

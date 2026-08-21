@@ -136,7 +136,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - AI見積原価（保存・集計欄完了。公式価格版の確認後に単価適用）
 - 最低限の管理画面（期間指定、最重要KPI、行動指標、funnel完了）
 - 利用規約・プライバシーのPlatform Admin版管理／公開（完了）
-- ユーザー同意、削除・退会（未実装）
+- 公開中の規約・プライバシーへのユーザー同意、版更新時の再同意（完了）
+- 削除・退会（未実装）
 - Production Gate、backup/restore、運用手順
 
 ここで100人規模のFREE検証を行う。

@@ -54,6 +54,7 @@ import {
   PrismaDailyMissionGenerationRepository,
   PrismaMissionEngagementRepository,
   PrismaMissionOutcomeRepository,
+  PrismaLegalConsentRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -65,6 +66,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.userLegalConsent.deleteMany();
     await client.legalDocument.deleteMany();
     await client.aiUsageEvent.deleteMany();
     await client.dailyMissionGeneration.deleteMany();
@@ -151,6 +153,44 @@ integration('database ownership boundaries', () => {
         account.user.id,
       ),
     ).toBeNull();
+  });
+
+  it('isolates legal consent by User and requires a new published version', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const a = await accounts.execute({ displayName: 'Consent A' });
+    const b = await accounts.execute({ displayName: 'Consent B' });
+    const termsV1 = await client.legalDocument.create({
+      data: {
+        type: 'TERMS',
+        version: 1,
+        title: 'Terms v1',
+        content: 'v1',
+        status: 'PUBLISHED',
+        effectiveAt: new Date(0),
+        publishedAt: new Date(0),
+        createdByUserId: a.user.id,
+      },
+    });
+    const repository = new PrismaLegalConsentRepository(client);
+    expect(await repository.acceptRequired({ userId: a.user.id, documentIds: [termsV1.id] })).toBe(
+      true,
+    );
+    expect((await repository.findRequiredForUser(a.user.id))[0]?.consentedAt).not.toBeNull();
+    expect((await repository.findRequiredForUser(b.user.id))[0]?.consentedAt).toBeNull();
+    await client.legalDocument.update({ where: { id: termsV1.id }, data: { status: 'RETIRED' } });
+    await client.legalDocument.create({
+      data: {
+        type: 'TERMS',
+        version: 2,
+        title: 'Terms v2',
+        content: 'v2',
+        status: 'PUBLISHED',
+        effectiveAt: new Date(0),
+        publishedAt: new Date(),
+        createdByUserId: a.user.id,
+      },
+    });
+    expect((await repository.findRequiredForUser(a.user.id))[0]?.consentedAt).toBeNull();
   });
 
   it('isolates Memory by workspace and Bunshin and excludes inactive/deleted rows', async () => {

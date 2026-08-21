@@ -308,6 +308,44 @@ export class PublishLegalDocument {
   }
 }
 
+export interface RequiredLegalConsentDocument extends LegalDocument {
+  consentedAt: Date | null;
+}
+export interface LegalConsentRepository {
+  findRequiredForUser(userId: string): Promise<RequiredLegalConsentDocument[]>;
+  acceptRequired(input: { userId: string; documentIds: string[] }): Promise<boolean>;
+  listConsentCountsForAdmin(
+    actorUserId: string,
+  ): Promise<Array<LegalDocument & { consentCount: number }> | null>;
+}
+export class GetRequiredLegalConsents {
+  constructor(private readonly repository: LegalConsentRepository) {}
+  execute(userId: string) {
+    return this.repository.findRequiredForUser(userId);
+  }
+}
+export class AcceptRequiredLegalConsents {
+  constructor(private readonly repository: LegalConsentRepository) {}
+  async execute(input: { userId: string; documentIds: string[] }) {
+    if (
+      input.documentIds.length === 0 ||
+      input.documentIds.length > LEGAL_DOCUMENT_TYPES.length ||
+      new Set(input.documentIds).size !== input.documentIds.length
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid legal consent documents');
+    const accepted = await this.repository.acceptRequired(input);
+    if (!accepted) throw new ApplicationError('CONFLICT', 'legal documents changed; review again');
+  }
+}
+export class ListLegalConsentCounts {
+  constructor(private readonly repository: LegalConsentRepository) {}
+  async execute(actorUserId: string) {
+    const values = await this.repository.listConsentCountsForAdmin(actorUserId);
+    if (!values) throw new ApplicationError('NOT_FOUND', 'admin page not found');
+    return values;
+  }
+}
+
 export interface JobContext {
   workspaceId: string;
   bunshinId?: string;

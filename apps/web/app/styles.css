@@ -50,11 +50,27 @@ body {
   list-style: none;
 }
 .legal-card pre,
-.legal-public div {
+.legal-public div,
+.legal-content {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: inherit;
   line-height: 1.7;
+}
+.consent-page form {
+  display: grid;
+  gap: 20px;
+}
+.consent-page button {
+  min-height: 48px;
+  padding: 12px;
+  font: inherit;
+}
+.legal-content {
+  max-height: 50vh;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #dfe3e8;
 }
 
 main {

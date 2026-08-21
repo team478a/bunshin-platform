@@ -21,6 +21,8 @@ import type {
   LegalDocumentRepository,
   LegalDocument,
   LegalDocumentType,
+  LegalConsentRepository,
+  RequiredLegalConsentDocument,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -1475,6 +1477,71 @@ export class PrismaLegalDocumentRepository implements LegalDocumentRepository {
       orderBy: { version: 'desc' },
     });
     return row ? legalDocument(row) : null;
+  }
+}
+
+export class PrismaLegalConsentRepository implements LegalConsentRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async findRequiredForUser(userId: string): Promise<RequiredLegalConsentDocument[]> {
+    const rows = await this.client.legalDocument.findMany({
+      where: { status: 'PUBLISHED', effectiveAt: { lte: new Date() } },
+      orderBy: [{ type: 'asc' }, { version: 'desc' }],
+      distinct: ['type'],
+      include: { consents: { where: { userId }, select: { consentedAt: true }, take: 1 } },
+    });
+    return rows.map(({ consents, ...row }) => ({
+      ...legalDocument(row),
+      consentedAt: consents[0]?.consentedAt ?? null,
+    }));
+  }
+
+  async acceptRequired(input: { userId: string; documentIds: string[] }): Promise<boolean> {
+    return this.client.$transaction(async (tx) => {
+      const user = await tx.user.findFirst({
+        where: { id: input.userId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!user) return false;
+      const current = await tx.legalDocument.findMany({
+        where: { status: 'PUBLISHED', effectiveAt: { lte: new Date() } },
+        orderBy: [{ type: 'asc' }, { version: 'desc' }],
+        distinct: ['type'],
+        select: { id: true },
+      });
+      const requiredIds = current.map((item) => item.id).sort();
+      if (
+        requiredIds.length !== input.documentIds.length ||
+        requiredIds.some((id, index) => id !== [...input.documentIds].sort()[index])
+      )
+        return false;
+      await Promise.all(
+        requiredIds.map((legalDocumentId) =>
+          tx.userLegalConsent.upsert({
+            where: { userId_legalDocumentId: { userId: input.userId, legalDocumentId } },
+            create: { userId: input.userId, legalDocumentId },
+            update: {},
+          }),
+        ),
+      );
+      return true;
+    });
+  }
+
+  async listConsentCountsForAdmin(actorUserId: string) {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    const rows = await this.client.legalDocument.findMany({
+      orderBy: [{ type: 'asc' }, { version: 'desc' }],
+      include: { _count: { select: { consents: true } } },
+    });
+    return rows.map(({ _count, ...row }) => ({
+      ...legalDocument(row),
+      consentCount: _count.consents,
+    }));
   }
 }
 
