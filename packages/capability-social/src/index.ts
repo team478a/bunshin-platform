@@ -1317,6 +1317,159 @@ export class GenerateDailyMissionBrief {
   }
 }
 
+export interface MissionContentGeneratorInput {
+  platform: SocialPlatform;
+  brief: DailyMissionBrief;
+  bunshin: DailyMissionPlannerInput['bunshin'];
+  approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
+  contentPillar: { title: string; description: string | null };
+  grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+  repairInstructions?: string[];
+}
+
+export interface MissionContentGeneratorProviderInput extends Omit<
+  MissionContentGeneratorInput,
+  'brief'
+> {
+  brief: Pick<
+    DailyMissionBrief,
+    'missionDate' | 'format' | 'topic' | 'angle' | 'reason' | 'estimatedMinutes'
+  >;
+}
+
+export interface MissionContentGeneratorResult {
+  output: MissionContent;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+
+export interface MissionContentGeneratorPort {
+  generate(input: MissionContentGeneratorProviderInput): Promise<MissionContentGeneratorResult>;
+}
+
+export class GenerateMissionContent {
+  constructor(private readonly generator: MissionContentGeneratorPort) {}
+
+  async execute(input: MissionContentGeneratorInput) {
+    assertPlatformFormat(input.platform, input.brief.format);
+    if (input.repairInstructions !== undefined) {
+      if (input.repairInstructions.length < 1 || input.repairInstructions.length > 10)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid repair instructions');
+      input.repairInstructions = input.repairInstructions.map((value) =>
+        missionString(value, 500, 'repair instruction'),
+      );
+    }
+    const { missionDate, format, topic, angle, reason, estimatedMinutes } = input.brief;
+    const result = await this.generator.generate({
+      ...input,
+      brief: { missionDate, format, topic, angle, reason, estimatedMinutes },
+    });
+    const output = normalizeMissionContent(input.brief.format, result.output);
+    validatePlatformContent(input.platform, input.brief, output);
+    return {
+      ...result,
+      output,
+    };
+  }
+}
+
+export interface MissionQualityCheckerInput {
+  platform: SocialPlatform;
+  brief: DailyMissionBrief;
+  content: MissionContent;
+  bunshin: DailyMissionPlannerInput['bunshin'];
+  approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
+}
+
+export interface MissionQualityCheckerProviderInput extends Omit<
+  MissionQualityCheckerInput,
+  'brief'
+> {
+  brief: Pick<
+    DailyMissionBrief,
+    'missionDate' | 'format' | 'topic' | 'angle' | 'reason' | 'estimatedMinutes'
+  >;
+}
+
+export const MISSION_QUALITY_VERDICTS = ['PASS', 'REVISE', 'REJECT'] as const;
+export type MissionQualityVerdict = (typeof MISSION_QUALITY_VERDICTS)[number];
+export const MISSION_QUALITY_SEVERITIES = ['WARNING', 'ERROR'] as const;
+export type MissionQualitySeverity = (typeof MISSION_QUALITY_SEVERITIES)[number];
+export interface MissionQualityIssue {
+  code: string;
+  severity: MissionQualitySeverity;
+  field: string;
+  message: string;
+  repairInstruction: string;
+}
+export interface MissionQualityCheckerOutput {
+  verdict: MissionQualityVerdict;
+  score: number;
+  issues: MissionQualityIssue[];
+}
+
+export interface MissionQualityCheckerResult {
+  output: MissionQualityCheckerOutput;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+
+export interface MissionQualityCheckerPort {
+  check(input: MissionQualityCheckerProviderInput): Promise<MissionQualityCheckerResult>;
+}
+
+export class CheckMissionQuality {
+  constructor(private readonly checker: MissionQualityCheckerPort) {}
+
+  async execute(input: MissionQualityCheckerInput) {
+    assertPlatformFormat(input.platform, input.brief.format);
+    const content = normalizeMissionContent(input.brief.format, input.content);
+    const { missionDate, format, topic, angle, reason, estimatedMinutes } = input.brief;
+    const result = await this.checker.check({
+      ...input,
+      brief: { missionDate, format, topic, angle, reason, estimatedMinutes },
+      content,
+    });
+    const score = missionInteger(result.output.score, 0, 100, 'quality score');
+    if (!Array.isArray(result.output.issues) || result.output.issues.length > 10)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid quality issues');
+    const issues = result.output.issues.map((value) => {
+      const issue = strict(
+        value,
+        ['code', 'severity', 'field', 'message', 'repairInstruction'],
+        'quality issue',
+      );
+      const severity = missionString(issue['severity'], 20, 'quality severity');
+      if (!MISSION_QUALITY_SEVERITIES.includes(severity as MissionQualitySeverity))
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid quality severity');
+      return {
+        code: missionString(issue['code'], 80, 'quality issue code'),
+        severity: severity as MissionQualitySeverity,
+        field: missionString(issue['field'], 100, 'quality issue field'),
+        message: missionString(issue['message'], 500, 'quality issue message'),
+        repairInstruction: missionString(
+          issue['repairInstruction'],
+          500,
+          'quality repair instruction',
+        ),
+      };
+    });
+    if (!MISSION_QUALITY_VERDICTS.includes(result.output.verdict))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid quality verdict');
+    const verdict = score < 70 ? 'REJECT' : result.output.verdict;
+    return {
+      ...result,
+      output: { verdict, score, issues },
+    };
+  }
+}
+
 export const DAILY_MISSION_STATUSES = [
   'GENERATED',
   'VIEWED',
@@ -1386,6 +1539,52 @@ const missionInteger = (value: unknown, minimum: number, maximum: number, field:
     throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
   return value as number;
 };
+const PLATFORM_FORMATS: Record<SocialPlatform, readonly SocialPreferredFormat[]> = {
+  INSTAGRAM: ['TEXT', 'SLIDE', 'IMAGE', 'LIVE_ACTION', 'AI_VIDEO_PROMPT'],
+  TIKTOK: ['LIVE_ACTION', 'AI_VIDEO_PROMPT', 'IMAGE'],
+  X: ['TEXT', 'IMAGE'],
+  THREADS: ['TEXT', 'IMAGE'],
+  YOUTUBE_SHORTS: ['LIVE_ACTION', 'AI_VIDEO_PROMPT'],
+  OTHER: SOCIAL_PREFERRED_FORMATS,
+};
+export function assertPlatformFormat(platform: SocialPlatform, format: SocialPreferredFormat) {
+  if (!PLATFORM_FORMATS[platform].includes(format))
+    throw new ApplicationError('VALIDATION_ERROR', 'format is not supported for platform');
+}
+function validatePlatformContent(
+  platform: SocialPlatform,
+  brief: DailyMissionBrief,
+  content: MissionContent,
+) {
+  const estimated = content['estimatedMinutes'];
+  if (typeof estimated === 'number' && estimated > brief.estimatedMinutes)
+    throw new ApplicationError('VALIDATION_ERROR', 'content exceeds estimated minutes');
+  const hashtags = content['hashtags'];
+  const hashtagLimit = platform === 'INSTAGRAM' ? 30 : 5;
+  if (Array.isArray(hashtags) && hashtags.length > hashtagLimit)
+    throw new ApplicationError('VALIDATION_ERROR', 'too many hashtags for platform');
+  if (brief.format === 'TEXT') {
+    const limit = platform === 'X' ? 280 : platform === 'THREADS' ? 500 : 2200;
+    if (typeof content['body'] === 'string' && content['body'].length > limit)
+      throw new ApplicationError('VALIDATION_ERROR', 'text exceeds platform limit');
+    if (
+      Array.isArray(content['threadParts']) &&
+      content['threadParts'].some((value) => typeof value === 'string' && value.length > limit)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'thread part exceeds platform limit');
+  }
+  if (brief.format === 'AI_VIDEO_PROMPT') {
+    const settings = content['videoSettings'];
+    if (
+      settings &&
+      typeof settings === 'object' &&
+      'durationSeconds' in settings &&
+      typeof settings.durationSeconds === 'number' &&
+      settings.durationSeconds > 60
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'video duration exceeds platform limit');
+  }
+}
 function strict(value: unknown, keys: readonly string[], field: string) {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);

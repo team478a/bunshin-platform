@@ -90,16 +90,21 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 - Account Strategy Generator — 完了
 - Grant済みOwner KnowledgeとBunshin context
-- Weekly Planner — 実装済み、レビュー待ち
-- Daily Mission Planner Brief — 実装済み、レビュー待ち
-- Daily Mission生成orchestration — Content Generator / Quality Checker完了後
-- Content Generator
-- Quality Checker
-- `TEXT | SLIDE | IMAGE | LIVE_ACTION | AI_VIDEO_PROMPT`
-- model、Prompt Version、使用量、原価、処理時間、成否の記録
-- Provider Port / Adapter
+- Weekly Planner — 完了
+- Daily Mission Planner Brief — 完了
+- Daily Mission生成orchestration — 実装済み、レビュー待ち
+- Content Generator — 実装済み、レビュー待ち
+- Quality Checker — 実装済み、レビュー待ち
+- `TEXT | SLIDE | IMAGE | LIVE_ACTION | AI_VIDEO_PROMPT` — 実装済み、レビュー待ち
+- model、Prompt Version、使用量、処理時間、成否の構造化ログ — 実装済み、レビュー待ち
+- Provider Port / OpenAI Adapter — 実装済み、レビュー待ち
+- verified-session生成APIと「今日のMission」UI — 実装済み、レビュー待ち
+- 品質合格後だけMission / Content / Decisionをatomic保存 — 実装済み、レビュー待ち
+- Stage 1 / Stage 2品質検査と最大1回repair — 実装済み、レビュー待ち
+- DB idempotency claim、同時生成抑止、失敗状態 — 実装済み、レビュー待ち
+- Provider timeout・rate limit・不正JSON分類 — 実装済み、レビュー待ち
 
-画像・動画binaryを生成せず、外部サービスへ渡せる指示・Promptまでを提供する。
+画像・動画binaryを生成せず、外部サービスへ渡せる指示・Promptまでを提供する。Job、LINE、SNS自動投稿、Memory自動学習、BLOGはPhase 4完了条件へ含めない。
 
 ## Phase 5: Free MVP User Experience
 

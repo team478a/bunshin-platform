@@ -155,11 +155,17 @@ export function DailyMissionSection({
   workspaceId,
   bunshinId,
   capabilityStatus,
+  profiles,
   missions,
 }: {
   workspaceId: string;
   bunshinId: string;
   capabilityStatus: 'ACTIVE' | 'SUSPENDED' | 'LOCKED' | null;
+  profiles: Array<{
+    id: string;
+    platform: 'INSTAGRAM' | 'TIKTOK' | 'X' | 'THREADS' | 'YOUTUBE_SHORTS' | 'OTHER';
+    status: 'ACTIVE' | 'INACTIVE';
+  }>;
   missions: DailyMissionView[];
 }) {
   const router = useRouter();
@@ -167,8 +173,50 @@ export function DailyMissionSection({
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [missionDate, setMissionDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const activeProfiles = profiles.filter(({ status }) => status === 'ACTIVE');
+  const [socialProfileId, setSocialProfileId] = useState(activeProfiles[0]?.id ?? '');
   const active = capabilityStatus === 'ACTIVE';
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/daily-missions`;
+
+  async function generate() {
+    setError(null);
+    setGenerating(true);
+    try {
+      const response = await fetch(`${endpoint}/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          missionDate,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          socialProfileId,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { code?: string };
+        } | null;
+        const code = payload?.error?.code;
+        setError(
+          code === 'CONFIGURATION_ERROR'
+            ? 'AI生成の設定が完了していません。管理者へお問い合わせください。'
+            : code === 'CONTENT_REJECTED'
+              ? '内容を安全に作れませんでした。時間をおいて再度お試しください。'
+              : code === 'AI_PROVIDER_UNAVAILABLE'
+                ? '生成サービスへ接続できませんでした。時間をおいて再度お試しください。'
+                : response.status === 409
+                  ? 'この日付のMissionは既に作成中、または作成済みです。'
+                  : 'Missionを生成できませんでした。承認済み戦略と確定済み週間計画を確認してください。',
+        );
+        return;
+      }
+      router.refresh();
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function transition(id: string, action: string) {
     setError(null);
@@ -268,6 +316,45 @@ export function DailyMissionSection({
     <section>
       <h2>Daily Mission</h2>
       <p>今日やることを確認し、採用する投稿案だけをコピーできます。</p>
+      {active && (
+        <div>
+          <h3>AIでMissionを作成</h3>
+          <label>
+            日付
+            <input
+              type="date"
+              value={missionDate}
+              onChange={(event) => setMissionDate(event.target.value)}
+            />
+          </label>{' '}
+          <label>
+            SNS
+            <select
+              value={socialProfileId}
+              onChange={(event) => setSocialProfileId(event.target.value)}
+            >
+              {activeProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.platform}
+                </option>
+              ))}
+            </select>
+          </label>{' '}
+          <button
+            type="button"
+            disabled={
+              generating ||
+              !missionDate ||
+              !socialProfileId ||
+              missions.some((mission) => mission.missionDate === missionDate)
+            }
+            onClick={() => void generate()}
+          >
+            {generating ? '生成中…' : '今日のMissionをAIで作成'}
+          </button>
+          {activeProfiles.length === 0 && <p>有効なSNS Profileが必要です。</p>}
+        </div>
+      )}
       {error && <p role="alert">{error}</p>}
       {missions.length === 0 ? (
         <p>Missionはまだありません。</p>

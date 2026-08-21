@@ -7,6 +7,8 @@ export const ERROR_CODES = [
   'INTERNAL_ERROR',
   'DATABASE_UNAVAILABLE',
   'CONFIGURATION_ERROR',
+  'AI_PROVIDER_UNAVAILABLE',
+  'CONTENT_REJECTED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -35,6 +37,8 @@ const PUBLIC_MESSAGES: Record<ErrorCode, string> = {
   INTERNAL_ERROR: '処理を完了できませんでした。',
   DATABASE_UNAVAILABLE: '現在データを確認できません。',
   CONFIGURATION_ERROR: 'サービスの準備が完了していません。',
+  AI_PROVIDER_UNAVAILABLE: '生成サービスへ一時的に接続できません。',
+  CONTENT_REJECTED: '安全に利用できる内容を生成できませんでした。',
 };
 
 export function toApiError(
@@ -51,6 +55,8 @@ export function toApiError(
     DATABASE_UNAVAILABLE: 503,
     CONFIGURATION_ERROR: 503,
     INTERNAL_ERROR: 500,
+    AI_PROVIDER_UNAVAILABLE: 503,
+    CONTENT_REJECTED: 422,
   };
   return {
     status: statusByCode[code],

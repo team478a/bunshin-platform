@@ -51,6 +51,7 @@ import {
   PrismaContentPillarRepository,
   PrismaWeeklyPlanRepository,
   PrismaDailyMissionRepository,
+  PrismaDailyMissionGenerationRepository,
   PrismaMissionEngagementRepository,
   PrismaMissionOutcomeRepository,
 } from '../src';
@@ -64,6 +65,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.dailyMissionGeneration.deleteMany();
     await client.missionFeedback.deleteMany();
     await client.postRecord.deleteMany();
     await client.missionActivity.deleteMany();
@@ -1372,6 +1374,26 @@ integration('database ownership boundaries', () => {
       ...ownerScope(owner, bunshin.id),
       capabilityType: 'SOCIAL',
     });
+    const generations = new PrismaDailyMissionGenerationRepository(client);
+    const generationInput = {
+      ...ownerScope(owner, bunshin.id),
+      missionDate: '2026-08-18',
+      idempotencyKey: randomUUID(),
+    };
+    const claimed = await generations.claim(generationInput);
+    expect(claimed.acquired).toBe(true);
+    await expect(generations.claim(generationInput)).resolves.toMatchObject({ acquired: false });
+    await expect(
+      generations.claim({ ...generationInput, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await generations.fail({
+      ...ownerScope(owner, bunshin.id),
+      id: claimed.record.id,
+      errorCategory: 'RATE_LIMIT',
+    });
+    await expect(
+      generations.claim({ ...generationInput, idempotencyKey: randomUUID() }),
+    ).resolves.toMatchObject({ acquired: true });
     const repository = new PrismaDailyMissionRepository(client);
     const create = new CreateDailyMission(repository, assignments);
     const input = {
@@ -1494,6 +1516,15 @@ integration('database ownership boundaries', () => {
       }),
     ).resolves.toMatchObject({ rating: 'BAD' });
     const outsider = await accounts.execute({ displayName: 'Mission Outsider' });
+    await expect(
+      generations.claim({
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        actorUserId: outsider.user.id,
+        missionDate: '2026-08-20',
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
       new GetMissionDecision(engagement).execute({
         workspaceId: owner.workspace.id,
