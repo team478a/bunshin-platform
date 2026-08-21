@@ -65,6 +65,12 @@ enum LegalDocumentStatus {
   RETIRED
 }
 
+enum AccountDeletionRequestStatus {
+  REQUESTED
+  CANCELLED
+  COMPLETED
+}
+
 enum BunshinType {
   COPY
   EXPERT
@@ -294,6 +300,7 @@ model User {
   aiUsageEvents         AiUsageEvent[]                 @relation("AiUsageActor")
   legalDocuments        LegalDocument[]                @relation("LegalDocumentAuthor")
   legalConsents         UserLegalConsent[]
+  accountDeletionRequests AccountDeletionRequest[]
 
   @@index([status])
   @@map("users")
@@ -404,6 +411,23 @@ model UserLegalConsent {
   @@index([userId, consentedAt])
   @@index([legalDocumentId, consentedAt])
   @@map("user_legal_consents")
+}
+
+model AccountDeletionRequest {
+  id           String                       @id @default(uuid()) @db.Uuid
+  userId       String                       @map("user_id") @db.Uuid
+  status       AccountDeletionRequestStatus @default(REQUESTED)
+  requestedAt  DateTime                     @default(now()) @map("requested_at") @db.Timestamptz(6)
+  scheduledFor DateTime                     @map("scheduled_for") @db.Timestamptz(6)
+  cancelledAt  DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
+  completedAt  DateTime?                    @map("completed_at") @db.Timestamptz(6)
+  createdAt    DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user         User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status, requestedAt])
+  @@index([status, scheduledFor])
+  @@map("account_deletion_requests")
 }
 
 model Bunshin {

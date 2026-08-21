@@ -23,6 +23,8 @@ import type {
   LegalDocumentType,
   LegalConsentRepository,
   RequiredLegalConsentDocument,
+  AccountDeletionRequestRepository,
+  AccountDeletionRequest,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -1542,6 +1544,67 @@ export class PrismaLegalConsentRepository implements LegalConsentRepository {
       ...legalDocument(row),
       consentCount: _count.consents,
     }));
+  }
+}
+
+function accountDeletionRequest(
+  row: Prisma.AccountDeletionRequestGetPayload<object>,
+): AccountDeletionRequest {
+  return { ...row, status: row.status };
+}
+
+export class PrismaAccountDeletionRequestRepository implements AccountDeletionRequestRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  async findCurrent(userId: string) {
+    const row = await this.client.accountDeletionRequest.findFirst({
+      where: { userId, status: 'REQUESTED' },
+      orderBy: { requestedAt: 'desc' },
+    });
+    return row ? accountDeletionRequest(row) : null;
+  }
+  async request(userId: string, scheduledFor: Date) {
+    return this.client.$transaction(async (tx) => {
+      const user = await tx.user.findFirst({
+        where: { id: userId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (
+        !user ||
+        (await tx.accountDeletionRequest.findFirst({
+          where: { userId, status: 'REQUESTED' },
+          select: { id: true },
+        }))
+      )
+        return null;
+      return accountDeletionRequest(
+        await tx.accountDeletionRequest.create({ data: { userId, scheduledFor } }),
+      );
+    });
+  }
+  async cancel(userId: string) {
+    return this.client.$transaction(async (tx) => {
+      const current = await tx.accountDeletionRequest.findFirst({
+        where: { userId, status: 'REQUESTED' },
+        orderBy: { requestedAt: 'desc' },
+      });
+      if (!current) return null;
+      return accountDeletionRequest(
+        await tx.accountDeletionRequest.update({
+          where: { id: current.id },
+          data: { status: 'CANCELLED', cancelledAt: new Date() },
+        }),
+      );
+    });
+  }
+  async listForAdmin(actorUserId: string) {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    return (
+      await this.client.accountDeletionRequest.findMany({ orderBy: { requestedAt: 'desc' } })
+    ).map(accountDeletionRequest);
   }
 }
 

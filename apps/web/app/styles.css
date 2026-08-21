@@ -66,6 +66,27 @@ body {
   padding: 12px;
   font: inherit;
 }
+.danger-zone {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #f0b4ae;
+  border-radius: 12px;
+  background: white;
+}
+.danger-zone form {
+  display: grid;
+  gap: 12px;
+}
+.danger-zone button {
+  min-height: 48px;
+  padding: 12px;
+  font: inherit;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  background: #b42318;
+}
 .legal-content {
   max-height: 50vh;
   overflow: auto;

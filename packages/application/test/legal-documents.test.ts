@@ -4,6 +4,9 @@ import {
   PublishLegalDocument,
   AcceptRequiredLegalConsents,
   type LegalConsentRepository,
+  RequestAccountDeletion,
+  CancelAccountDeletion,
+  type AccountDeletionRequestRepository,
   type LegalDocumentRepository,
 } from '../src';
 
@@ -97,5 +100,39 @@ describe('legal consent use cases', () => {
         documentIds: ['terms-v1'],
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});
+
+describe('account deletion request use cases', () => {
+  const value = {
+    id: 'request-1',
+    userId: 'user-a',
+    status: 'REQUESTED' as const,
+    requestedAt: new Date(0),
+    scheduledFor: new Date(0),
+    cancelledAt: null,
+    completedAt: null,
+  };
+  const repository = (
+    overrides: Partial<AccountDeletionRequestRepository> = {},
+  ): AccountDeletionRequestRepository => ({
+    findCurrent: () => Promise.resolve(null),
+    request: () => Promise.resolve(value),
+    cancel: () => Promise.resolve({ ...value, status: 'CANCELLED', cancelledAt: new Date() }),
+    listForAdmin: () => Promise.resolve([]),
+    ...overrides,
+  });
+  it('schedules deletion after a 14 day grace period', async () => {
+    const request = vi.fn().mockResolvedValue(value);
+    const now = new Date('2026-08-22T00:00:00Z');
+    await new RequestAccountDeletion(repository({ request }), () => now).execute('user-a');
+    expect(request).toHaveBeenCalledWith('user-a', new Date('2026-09-05T00:00:00Z'));
+  });
+  it('does not let a user cancel a missing request', async () => {
+    await expect(
+      new CancelAccountDeletion(repository({ cancel: () => Promise.resolve(null) })).execute(
+        'user-b',
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
