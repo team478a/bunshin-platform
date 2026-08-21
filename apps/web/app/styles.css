@@ -254,6 +254,127 @@ a {
   border-color: #f0b4ae;
 }
 
+.validation-dashboard {
+  max-width: 960px;
+}
+
+.validation-header,
+.validation-filter,
+.validation-primary-card,
+.validation-kpi-grid article,
+.validation-table-wrap {
+  background: white;
+  border: 1px solid #dfe3e8;
+  border-radius: 16px;
+}
+
+.validation-header,
+.validation-primary-card {
+  padding: 24px;
+}
+
+.validation-eyebrow {
+  margin: 0;
+  color: #175cd3;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.validation-filter {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-block: 20px 32px;
+  padding: 16px;
+}
+
+.validation-filter label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.validation-filter input,
+.validation-filter button {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #aab4c0;
+  border-radius: 8px;
+  background: white;
+  font: inherit;
+}
+
+.validation-filter button {
+  color: white;
+  border-color: #175cd3;
+  background: #175cd3;
+  cursor: pointer;
+}
+
+.validation-notice {
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff6df;
+}
+
+.validation-primary-card {
+  display: grid;
+  gap: 8px;
+  border-color: #84adff;
+  background: #eff4ff;
+}
+
+.validation-primary-card strong {
+  color: #1849a9;
+  font-size: clamp(2rem, 8vw, 3.5rem);
+}
+
+.validation-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.validation-kpi-grid article {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+}
+
+.validation-kpi-grid strong {
+  font-size: 1.75rem;
+}
+
+.validation-table-wrap {
+  overflow-x: auto;
+}
+
+.validation-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.validation-table th,
+.validation-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e4e7ec;
+  text-align: left;
+}
+
+.validation-table td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.validation-footnote {
+  color: #475467;
+  font-size: 0.875rem;
+}
+
 @media (max-width: 560px) {
   main {
     padding: 32px 16px;
@@ -272,5 +393,14 @@ a {
 
   .weekly-plan-actions {
     flex-direction: column;
+  }
+
+  .validation-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .validation-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

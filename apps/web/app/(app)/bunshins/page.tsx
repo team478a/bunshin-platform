@@ -34,6 +34,9 @@ export default async function BunshinsPage() {
       <p>
         <Link href="/knowledge">Knowledgeを管理</Link>
       </p>
+      <p>
+        <Link href={`/validation?workspaceId=${workspace.id}` as Route}>FREE MVP検証指標</Link>
+      </p>
       {bunshins.length === 0 ? (
         <p>まだ分身はありません。</p>
       ) : (
