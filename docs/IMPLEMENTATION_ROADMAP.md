@@ -130,8 +130,9 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 7: 100-user Validation Readiness
 
-- RegistrationからD7までのfunnel
-- 投稿回数、継続率、GOOD率、AI原価
+- RegistrationからD7までのfunnel（集計Core / OWNER・ADMIN API完了）
+- 投稿回数、継続率、GOOD率（集計Core / OWNER・ADMIN API完了）
+- AI原価（未実装。Provider usageの保存設計後に実施）
 - 最低限の管理画面
 - 利用規約、プライバシー、同意、削除・退会
 - Production Gate、backup/restore、運用手順
