@@ -1,0 +1,34 @@
+name: Production Health Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type SMOKE_PRODUCTION to continue
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require main and explicit confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "SMOKE_PRODUCTION"
+      - name: Check liveness
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            https://bunshin-platform-web.vercel.app/api/health/live \
+            | jq -e '.status == "ok" and .service == "web"'
+      - name: Check readiness
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            https://bunshin-platform-web.vercel.app/api/health/ready \
+            | jq -e '.status == "ready" and .environment == "production" and .checks.configuration == "ok" and .checks.database == "ok"'
