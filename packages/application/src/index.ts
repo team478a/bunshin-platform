@@ -240,6 +240,74 @@ export interface PlatformAdminRepository {
   findActivePlatformAdminByUserId(userId: string): Promise<PlatformAdmin | null>;
 }
 
+export const LEGAL_DOCUMENT_TYPES = ['TERMS', 'PRIVACY'] as const;
+export type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
+export type LegalDocumentStatus = 'DRAFT' | 'PUBLISHED' | 'RETIRED';
+export interface LegalDocument {
+  id: string;
+  type: LegalDocumentType;
+  version: number;
+  title: string;
+  content: string;
+  status: LegalDocumentStatus;
+  effectiveAt: Date | null;
+  publishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export interface LegalDocumentRepository {
+  listForAdmin(actorUserId: string): Promise<LegalDocument[] | null>;
+  createDraft(input: {
+    actorUserId: string;
+    type: LegalDocumentType;
+    title: string;
+    content: string;
+  }): Promise<LegalDocument | null>;
+  publish(input: {
+    actorUserId: string;
+    documentId: string;
+    effectiveAt: Date;
+  }): Promise<LegalDocument | null>;
+  findPublished(type: LegalDocumentType): Promise<LegalDocument | null>;
+}
+export class ListLegalDocuments {
+  constructor(private readonly repository: LegalDocumentRepository) {}
+  async execute(actorUserId: string) {
+    const values = await this.repository.listForAdmin(actorUserId);
+    if (values === null) throw new ApplicationError('NOT_FOUND', 'admin page not found');
+    return values;
+  }
+}
+export class CreateLegalDocumentDraft {
+  constructor(private readonly repository: LegalDocumentRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    type: LegalDocumentType;
+    title: string;
+    content: string;
+  }) {
+    const title = input.title.trim();
+    const content = input.content.trim();
+    if (!LEGAL_DOCUMENT_TYPES.includes(input.type) || title.length < 1 || title.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid legal document title');
+    if (content.length < 1 || content.length > 100_000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid legal document content');
+    const value = await this.repository.createDraft({ ...input, title, content });
+    if (value === null) throw new ApplicationError('NOT_FOUND', 'admin page not found');
+    return value;
+  }
+}
+export class PublishLegalDocument {
+  constructor(private readonly repository: LegalDocumentRepository) {}
+  async execute(input: { actorUserId: string; documentId: string; effectiveAt: Date }) {
+    if (Number.isNaN(input.effectiveAt.getTime()))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid effective date');
+    const value = await this.repository.publish(input);
+    if (value === null) throw new ApplicationError('NOT_FOUND', 'legal document not found');
+    return value;
+  }
+}
+
 export interface JobContext {
   workspaceId: string;
   bunshinId?: string;
