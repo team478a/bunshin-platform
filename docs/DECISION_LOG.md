@@ -477,10 +477,33 @@
 
 - 日付: 2026-08-22
 - 状態: Proposed
-- Configuration: MVPはProduction全体で単一ACTIVE設定とversion履歴を持つ
+- Configuration: DEVELOPMENT、STAGING、PRODUCTIONごとに単一ACTIVE設定とversion履歴を持ち、DB一意制約で重複ACTIVEを防ぐ
+- Isolation: runtime environmentとconfiguration environmentをサーバー側で照合し、Production設定をPreview、Development、Stagingから利用しない
 - Encryption: Channel SecretとChannel Access TokenはAES-256-GCM等の認証付き暗号でDB保存し、`keyVersion`を保持する
 - Root Key: `ENCRYPTION_KEY`はVercel Production環境変数に残し、DB、管理画面、Audit Logへ保存しない
 - Display: Secret平文再取得APIを作らず、保存後は必要な権限へ末尾maskだけを表示する
 - Rotation: 新versionの接続検証成功後だけatomicにACTIVEを切り替え、失敗時は旧versionを維持する
 - Authorization: Secret登録・更新・無効化はSUPER_ADMIN、接続テストはSUPER_ADMIN / OPERATORに限定する
 - 詳細: `docs/PHASE6_LINE_IMPLEMENTATION_PLAN.md`
+
+## D-043: LINE URLは環境から自動生成し例外overrideを制限する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Generation: Callback、Webhook、LIFF Endpoint、Mission Deep Link Base URLを環境別アプリURLと固定pathから原則自動生成する
+- Admin: 管理画面では読み取り専用とし、例外変更はSUPER_ADMIN、確認画面、理由、Audit Logを必須にする
+- Validation: HTTPS、環境別host allowlist、Production host限定、DEVELOPMENT以外のlocalhost禁止をサーバー側で検証する
+- Input: URL user info、任意query、fragmentを拒否し、DB保存値も利用直前に再検証する
+- Redirect: Callback後の復帰先を相対pathまたはallowlistへ限定してopen redirectを拒否する
+- 詳細: `docs/adr/LINE_CONFIGURATION_SECURITY_ADR.md`
+
+## D-044: Mission Deep Link署名鍵をLINE秘密値から分離する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Separation: LINE Channel SecretとChannel Access TokenをDeep Link署名へ流用しない
+- Derivation: 環境変数の親鍵からHKDF等でenvironment、purpose、keyVersion別の署名鍵を導出し、`ENCRYPTION_KEY`のraw valueを署名APIへ渡さない
+- Storage: 署名親鍵を管理画面・DBへ保存しない。安全な導出が困難なら環境別専用署名鍵の別ADRを先に承認する
+- State: expiry、single-use identifier、keyVersionを必須とし、使用済みstateのreplayを拒否する
+- Privacy: Mission本文、個人情報、Secretをstateへ含めず、署名検証後もUser / Workspace / Bunshin / Mission ownershipを再検証する
+- 詳細: `docs/adr/LINE_CONFIGURATION_SECURITY_ADR.md`

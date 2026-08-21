@@ -20,7 +20,7 @@ LINE Loginは外部Identity検証として追加し、認可は既存と同じPl
 5. 既存UserへのLINE追加はverified session中の明示的な「LINEを連携する」操作だけ許可する。
 6. LINEから得たメールアドレスと既存Userのメールアドレスが一致しても自動統合しない。
 7. LINE起点sessionも既存Routeが利用する単一の`CurrentUserProvider`契約へ変換する。Routeやapplication serviceは認証Providerを条件分岐しない。
-8. Mission Deep Linkは短期署名付きstateへ復帰先を保存し、Login後にverified actorからMission ownershipを再検証する。
+8. Mission Deep Linkは環境別の用途分離鍵で署名したsingle-use短期stateへ復帰先を保存し、Login後にverified actorからMission ownershipを再検証する。
 9. LINE access tokenはcallbackで必要な検証を終えた後、継続利用要件がない限り永続保存しない。Messaging Channel Access Tokenとは別の秘密値として扱う。
 
 ## Session実装のGate
@@ -45,6 +45,8 @@ LINE Loginは外部Identity検証として追加し、認可は既存と同じPl
 - OAuth transactionは短時間有効、single-useとする。
 - `state`、`nonce`、PKCE verifierをブラウザから任意入力として信頼しない。
 - Callback URLと復帰先はallowlistを使い、open redirectを許可しない。
+- Callback URLは信頼済みアプリURLと固定pathから自動生成し、runtime environmentと設定環境の一致をサーバー側で検証する。
+- Production callbackはProductionドメインだけ、localhostはDEVELOPMENTだけを許可し、URL user info、任意query、fragmentを拒否する。
 - LINE user ID、token、ID token、OAuth codeをログへ記録しない。
 - Login callback後もWorkspaceMembership、Bunshin ownership、Capability、resource scopeを必ず検証する。
 - Cross User / Workspace / BunshinとIdentity競合をintegration testに含める。
@@ -55,6 +57,16 @@ LINE Loginは外部Identity検証として追加し、認可は既存と同じPl
 - 新規User作成と既存User連携を明確に分離できる。
 - Supabase Authとのsession統合方法には事前spikeが必要であり、確認前に6-B本実装へ進めない。
 - LINE user access tokenを常時保存しないため、友だち状態はLogin時確認とWebhook follow/unfollowを用途別に扱う。
+- Deep Link署名はLINE SecretやTokenを流用せず、環境変数の親鍵からHKDF等で環境・用途・key version別に導出する。
+
+## Deep Link State
+
+- stateへ`keyVersion`、purpose、expiry、single-use identifier、必要最小の復帰先参照だけを含める。
+- Mission本文、個人情報、Secret、Token、Knowledgeを含めない。
+- expiry超過、環境不一致、purpose不一致、使用済みidentifierを拒否する。
+- 署名親鍵は管理画面・DBへ保存しない。既存`ENCRYPTION_KEY`のraw valueを署名APIへ直接渡さず、異なるHKDF infoで署名専用鍵を導出する。
+- 安全な導出・rotationが難しい場合は、環境別の専用`LINE_DEEP_LINK_SIGNING_KEY`を採用する別ADRを先に承認する。
+- 署名の成功は認可ではない。Login後にUser、Workspace、Bunshin、Missionを再度scopeする。
 
 ## Rejected Alternatives
 

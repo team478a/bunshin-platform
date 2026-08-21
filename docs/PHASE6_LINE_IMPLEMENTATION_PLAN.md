@@ -56,7 +56,9 @@ LINE連携
 
 - `LineChannelConfiguration`とversion履歴
 - AES-256-GCMによるSecret暗号化、mask、key version
-- 単一Production ACTIVE設定
+- DEVELOPMENT、STAGING、PRODUCTIONごとの単一ACTIVE設定
+- 配備環境と設定環境のサーバー側一致検証
+- 配備環境から自動生成するCallback、Webhook、LIFF、Deep Link URL
 - 設定管理画面、権限、接続テスト、rotation
 - 設定変更Audit Log
 - Migration、rollback、unit・integration test
@@ -107,7 +109,7 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - Pushまたは必要最小限のFlex Message
 - `LineNotification`、`LineDeliveryAttempt`
 - timeout、rate limit、blocked、invalid recipient、credential、quotaの分類
-- 署名付き短期stateを使うMission Deep Link
+- 環境別の用途分離鍵で署名したsingle-use短期stateを使うMission Deep Link
 - click記録、再送、quota優先制御
 
 ### 6-G: Admin / KPI / Production Gate
@@ -127,14 +129,17 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - `id`, `environment`, `version`, `status`
 - Login Channel ID、暗号化Login Secret
 - Messaging Channel ID、暗号化Messaging Secret、暗号化Access Token
-- LIFF ID、Callback URL、Webhook URL、Deep Link Base URL
+- LIFF ID、通知既定値、全体停止、月間配信上限制御
+- Callback URL、Webhook URL、LIFF Endpoint URL、Deep Link Base URLは配備環境から導出し、検証済みoverrideだけを保持する
 - `keyVersion`, `lastVerifiedAt`, `lastErrorCategory`
 - `createdByUserId`, `updatedByUserId`, timestamps
-- ProductionでACTIVEは1件。更新はversion追加とatomic切替で行う。
+- DEVELOPMENT、STAGING、PRODUCTIONごとにACTIVE設定は最大1件とする。実行環境と設定環境の一致をサーバー側で検証し、異なる環境の設定は利用しない。
+- DB一意制約で環境ごとの重複ACTIVEを防止し、更新はversion追加とatomic切替で行う。
+- 環境をまたいだ設定コピーを許可せず、Production SecretをPreview、Development、Stagingの接続テストへ渡さない。
 
 ### LineConfigurationAudit
 
-- configuration、actor、action、reason、changed fields、occurredAt
+- configuration、environment、actor、action、reason、changed fields、occurredAt
 - Secretの値、復号結果、Provider responseを保存しない。
 
 ### LineConnection
@@ -164,12 +169,13 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - idempotency keyを一意にし、試行履歴と論理通知を分離する。
 - Webhookはevent ID、type、時刻、結果、最小metadataだけを保存する。
 
-## 6. 提案方針（人間レビュー対象）
+## 6. 採用方針
 
 - LINE LoginではPKCE S256を必須とする。
 - LINE新規Userの作成を許可する。既存Userとの統合はログイン済み画面からの明示連携だけとし、メール一致で自動統合しない。
-- MVPのLINE設定はProduction全体で単一ACTIVEとversion履歴を採用する。
-- Secret暗号化親鍵はVercel Production環境変数に置き、DB・管理画面へ保存しない。
+- LINE設定、LINE Loginチャネル、Messaging APIチャネルはDEVELOPMENT、STAGING、PRODUCTIONで分離し、環境ごとに単一ACTIVEとversion履歴を採用する。
+- Production用とStaging用のLINE公式アカウント・チャネルを分離し、LoginチャネルとMessaging APIチャネルは同一Provider配下で連携する。
+- Secret暗号化親鍵は環境ごとのVercel環境変数に置き、DB・管理画面へ保存しない。
 - Weekly Planは自動CONFIRMEDにせず、利用者の承認を必須とする。
 - 初期Job基盤はVercel Cron + PostgreSQL Jobとし、独立Workerへ移せるPortを維持する。
 - 通知はMissionへの入口とし、投稿本文、Prompt、KnowledgeをPushしない。
@@ -178,25 +184,25 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 
 ## 7. 6-A開始前に人間確認する事項
 
-1. LINE公式アカウント、LINE Loginチャネル、Messaging APIチャネルを新規作成するか既存を使うか。
-2. LINE LoginチャネルとLINE公式アカウントを同一Provider配下でリンクできるか。
-3. `ENCRYPTION_KEY`の保管、rotation、復旧責任者。
-4. Secret登録・接続テスト・全体停止の権限表。
-5. 退会・連携解除後のIdentity、通知履歴、Audit Log保持期間。
-6. Messaging APIの月間上限と、上限接近時の通知停止順序。
+1. DEVELOPMENT、STAGING、PRODUCTIONそれぞれのアプリURLと許可ドメイン。
+2. 環境ごとの`ENCRYPTION_KEY`とDeep Link署名鍵のkey version、rotation、復旧責任者。
+3. 退会・連携解除時に即時削除する情報と、監査目的で一定期間保持する情報の期間。
+4. Messaging API契約上の月間上限と、警告・停止通知の送信先。
 
 6-0の人間レビューが完了するまで6-Aのコードへ進まない。本番チャネル準備が未完了でも6-Aのローカル実装は可能だが、本番Secret登録とACTIVE化は行わない。
 
 ## 8. 権限案
 
-| 操作                                 | SUPER_ADMIN | OPERATOR     | SUPPORT | READ_ONLY |
-| ------------------------------------ | ----------- | ------------ | ------- | --------- |
-| 状態・非機密KPI閲覧                  | 可          | 可           | 可      | 可        |
-| Secret末尾・接続エラー閲覧           | 可          | 可           | 不可    | 不可      |
-| Secret登録・更新・無効化             | 可          | 不可         | 不可    | 不可      |
-| 接続テスト・管理者本人へのテスト送信 | 可          | 可           | 不可    | 不可      |
-| 限定再送                             | 可          | 可           | 不可    | 不可      |
-| 全体緊急停止・再開                   | 可          | 理由必須で可 | 不可    | 不可      |
+| 操作                                 | SUPER_ADMIN | OPERATOR | SUPPORT | READ_ONLY |
+| ------------------------------------ | ----------- | -------- | ------- | --------- |
+| 状態・非機密KPI閲覧                  | 可          | 可       | 可      | 可        |
+| Secret末尾・接続エラー閲覧           | 可          | 可       | 不可    | 不可      |
+| Secret登録・更新・無効化             | 可          | 不可     | 不可    | 不可      |
+| 接続テスト・管理者本人へのテスト送信 | 可          | 可       | 不可    | 不可      |
+| 限定再送                             | 可          | 可       | 不可    | 不可      |
+| 全体緊急停止・再開                   | 可          | 原則不可 | 不可    | 不可      |
+
+OPERATORへ緊急停止だけを例外的に許可する場合は、変更理由を必須にし、再開はSUPER_ADMINだけに限定する。
 
 ## 9. 通知初期値案
 
@@ -206,17 +212,119 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - quiet hours: `21:00`〜`07:00`
 - Reminder: 初期OFF、利用者がONにした場合も1日最大1回
 - 優先順位: Daily Mission本通知、Weekly Plan確認、Reminder、その他案内
+- 月間使用率80%: 管理者へ警告
+- 月間使用率90%: Reminderなど低優先通知を停止
+- 月間上限到達: 新規送信を停止
+- 停止と優先制御の判断・実行履歴を保存する
 
-## 10. Migration / Rollback方針
+## 10. 環境分離
+
+- `environment`は`DEVELOPMENT | STAGING | PRODUCTION`の閉じた値とする。
+- application runtimeの信頼済み環境値とconfigurationの`environment`をサーバー側で比較する。
+- 不一致時はLogin開始、callback処理、Webhook処理、接続テスト、Push、再送をfail closedで停止する。
+- Preview deploymentはProduction configurationを解決できない。Previewを外部LINE連携に使う場合も専用の非Production設定を明示的に割り当てる。
+- 環境ごとのACTIVEはDB一意制約で最大1件とし、application checkだけに依存しない。
+- 管理画面の全画面で現在の対象環境を表示する。Production変更は確認画面と変更理由を必須にする。
+- 設定複製APIを作らず、環境をまたいだSecret、URL override、接続結果のコピーを禁止する。
+
+## 11. URL生成・検証
+
+Callback URL、Webhook URL、LIFF Endpoint URL、Mission Deep Link Base URLは管理画面からの自由入力にしない。
+
+- 信頼済みの配備環境アプリURLと固定pathからサーバー側で自動生成する。
+- 管理画面では読み取り専用で表示し、LINE Developers Consoleへ登録する値としてコピーできるようにする。
+- 例外的な変更はSUPER_ADMINだけに許可し、確認画面、変更理由、Audit Logを必須にする。
+- URLはHTTPS必須とし、localhostはDEVELOPMENTだけで許可する。
+- hostは環境別allowlistと完全一致させ、ProductionではProductionドメイン以外を拒否する。
+- username、password、任意query、fragmentを拒否し、固定されたscheme、host、port、pathだけを許可する。
+- callback後の復帰先は相対pathまたは環境別allowlistへ限定し、外部URLへのopen redirectを許可しない。
+- DBにoverrideが存在しても、利用直前にサーバー側で再検証する。
+
+## 12. Mission Deep Link署名鍵
+
+- LINE Channel SecretとMessaging API Channel Access Tokenを署名鍵へ流用しない。
+- 署名親鍵を管理画面・DBへ保存しない。
+- 環境ごとのVercel環境変数に置く親鍵から、HKDF-SHA-256等で`environment + purpose + keyVersion`をcontextとして用途別鍵を導出する。
+- 既存`ENCRYPTION_KEY`のraw valueを署名処理へ直接渡さない。暗号化とDeep Link署名で異なるinfo/contextの導出鍵を使用する。
+- 安全な鍵分離を実装・運用できない場合は、専用`LINE_DEEP_LINK_SIGNING_KEY`を環境ごとに追加する別ADRを先に承認する。
+- stateは`keyVersion`、purpose、expiresAt、single-use identifierと必要最小のresource referenceだけを持つ。
+- Mission本文、個人情報、Secret、Token、Knowledgeをstateへ含めない。
+- stateは短時間有効かつ一回限りとし、使用済みidentifierを再利用できないようサーバー側で消費を記録する。
+- 署名検証後もverified User、Workspace、Bunshin、Mission ownershipを再検証する。
+
+## 13. 管理画面の設定境界
+
+### 設定可能
+
+- LINE Login Channel ID / Channel Secret
+- Messaging API Channel ID / Channel Secret / Channel Access Token
+- LIFF ID
+- 通知初期時刻、標準timezone、quiet hours
+- 通知機能の全体停止
+- 月間配信上限へ近づいた場合の停止基準
+
+### 読み取り専用
+
+- Callback URL、Webhook URL、LIFF Endpoint URL、Mission Deep Link Base URL
+- 現在の実行環境
+- Secret登録有無と末尾mask
+- 最終接続確認日時、最終エラー分類、ACTIVE version
+
+### 管理画面・DBへ保存しない
+
+- `ENCRYPTION_KEY`, `SESSION_SECRET`, `CRON_SECRET`
+- DB接続情報、Supabase Service Role Key、Vercel認証情報
+- Deep Link署名親鍵
+
+## 14. 接続テスト
+
+入力有無だけで成功とせず、用途ごとに外部疎通と設定整合性を検証する。
+
+### LINE Login
+
+- Channel ID形式、Channel Secretによる検証可否
+- Callback URLとruntime environmentの一致
+- Login Channel、Messaging Channel、Provider構成の一致
+- ID tokenのissuer、audience、signature、nonce検証に必要な設定
+
+### Messaging API
+
+- Channel Access Tokenの有効性とBot情報取得
+- TokenとMessaging Channelの一致、利用可能な配信状態
+- 認証エラー、失効、権限不足、quotaの分類
+
+### Webhook
+
+- Webhook URLとruntime environmentの一致、HTTPS、host allowlist
+- Messaging Channel Secretによる署名検証
+- ProductionとStagingのWebhook混在拒否
+
+Provider response、Token、Secret、LINE user IDをlogやAudit Logへ保存しない。成功日時、用途、環境、結果、error categoryだけを保存する。
+
+## 15. データ保持区分
+
+実装前に次を個別設定として確定し、退会・連携解除時の即時削除または匿名化と、監査目的の期間保持を分離する。
+
+- LINE Identity
+- LINE Connection
+- 通知設定
+- 配信履歴
+- 配信試行履歴
+- Webhook処理履歴
+- 設定変更Audit Log
+
+保持期間中もproviderUserIdなどの直接識別子を不要な履歴へ複製しない。法令・不正防止・運用監査に不要な情報は猶予期間終了後に削除または不可逆匿名化する。
+
+## 16. Migration / Rollback方針
 
 - PRごとにadditive migrationを作成し、複数領域を1 migrationへまとめない。
 - 6-Aは既存認証・Mission routeから参照しないtable追加とし、未設定時の既存Web動作を変えない。
-- ACTIVE切替はtransactionと一意制約で守り、接続検証失敗時は旧versionを維持する。
+- 環境ごとのACTIVE切替はtransactionとDB一意制約で守り、接続検証失敗時は同じ環境の旧versionを維持する。
 - rollbackは機能flagまたは設定DISABLEDを先に行い、送信停止後にcode rollbackする。
 - 配信済み履歴とAudit Logをrollback時に物理削除しない。
 - destructive migrationはPhase 6では行わない。
 
-## 11. 必須テスト
+## 17. 必須テスト
 
 - Cross User / Workspace / Bunshin isolation
 - Secret暗号化、復号、改ざん検知、mask、key version
@@ -228,7 +336,11 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - Mission生成失敗時に通知されないこと
 - 同一Mission通知を並行実行しても1件だけ送られること
 - unfollow、通知OFF、退会要求、SUSPENDED時に送信されないこと
+- runtime environmentとconfiguration environmentの不一致拒否
+- 環境ごとの重複ACTIVE拒否と環境間設定コピー拒否
+- Production URLへのStaging/Previewアクセス拒否、URL allowlist、open redirect拒否
+- Deep Link stateのexpiry、single-use、keyVersion、環境・用途分離、再利用拒否
 
-## 12. 停止条件
+## 18. 停止条件
 
 6-0承認前に6-Aのコードを実装しない。6-Aの暗号化境界、schema、migration、権限が承認される前に本番LINE SecretをDBへ登録しない。各PRは実装報告と検証結果を含め、次のPRへ自動的に進まない。
