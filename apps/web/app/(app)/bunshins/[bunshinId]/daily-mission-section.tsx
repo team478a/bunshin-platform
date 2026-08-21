@@ -104,7 +104,7 @@ const rejectionReasons = [
   ['NOT_TODAY', '今日は違う'],
 ] as const;
 
-function copyOptions(mission: DailyMissionView) {
+export function copyOptions(mission: DailyMissionView) {
   const content = mission.content;
   const caption = text(content['caption']);
   if (mission.format === 'TEXT') {
@@ -174,10 +174,12 @@ export function DailyMissionSection({
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [missionDate, setMissionDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
   const activeProfiles = profiles.filter(({ status }) => status === 'ACTIVE');
   const [socialProfileId, setSocialProfileId] = useState(activeProfiles[0]?.id ?? '');
   const active = capabilityStatus === 'ACTIVE';
+  const busy = generating || pendingAction !== null;
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/daily-missions`;
 
   async function generate() {
@@ -219,18 +221,24 @@ export function DailyMissionSection({
   }
 
   async function transition(id: string, action: string) {
+    if (pendingAction !== null) return false;
     setError(null);
-    const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/${action}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
-    if (!response.ok) {
-      setError('Missionを更新できませんでした。状態を確認して再度お試しください。');
-      return false;
+    setPendingAction(`${id}:${action}`);
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/${action}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      if (!response.ok) {
+        setError('Missionを更新できませんでした。状態を確認して再度お試しください。');
+        return false;
+      }
+      router.refresh();
+      return true;
+    } finally {
+      setPendingAction(null);
     }
-    router.refresh();
-    return true;
   }
 
   async function view(mission: DailyMissionView) {
@@ -249,16 +257,22 @@ export function DailyMissionSection({
     return crypto.randomUUID();
   }
   async function engagementPost(id: string, resource: string, body: Record<string, unknown>) {
-    const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/${resource}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      setError('操作を記録できませんでした。再度お試しください。');
-      return false;
+    if (pendingAction !== null) return false;
+    setPendingAction(`${id}:${resource}`);
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/${resource}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        setError('操作を記録できませんでした。再度お試しください。');
+        return false;
+      }
+      return true;
+    } finally {
+      setPendingAction(null);
     }
-    return true;
   }
   async function activity(id: string, type: string, metadata?: { slideIndex: number }) {
     setError(null);
@@ -285,13 +299,17 @@ export function DailyMissionSection({
     }
   }
   async function copy(id: string, value: string, type: string, metadata?: { slideIndex: number }) {
+    if (pendingAction !== null) return;
     setError(null);
+    setPendingAction(`${id}:copy`);
     try {
       await navigator.clipboard.writeText(value);
     } catch {
       setError('クリップボードへコピーできませんでした。ブラウザの権限を確認してください。');
+      setPendingAction(null);
       return;
     }
+    setPendingAction(null);
     await activity(id, type, metadata);
   }
   async function markPosted(mission: DailyMissionView) {
@@ -343,7 +361,7 @@ export function DailyMissionSection({
           <button
             type="button"
             disabled={
-              generating ||
+              busy ||
               !missionDate ||
               !socialProfileId ||
               missions.some((mission) => mission.missionDate === missionDate)
@@ -355,6 +373,7 @@ export function DailyMissionSection({
           {activeProfiles.length === 0 && <p>有効なSNS Profileが必要です。</p>}
         </div>
       )}
+      {pendingAction && <p role="status">操作を保存しています…</p>}
       {error && <p role="alert">{error}</p>}
       {missions.length === 0 ? (
         <p>Missionはまだありません。</p>
@@ -369,20 +388,32 @@ export function DailyMissionSection({
                 {mission.format} / 目安{mission.estimatedMinutes}分 / {mission.status}
               </p>
               <p>{mission.reason}</p>
-              <button type="button" onClick={() => void view(mission)}>
+              <button type="button" disabled={busy} onClick={() => void view(mission)}>
                 {expanded === mission.id ? '閉じる' : '内容を見る'}
               </button>{' '}
               {active && ['GENERATED', 'VIEWED'].includes(mission.status) && (
-                <button type="button" onClick={() => void transition(mission.id, 'started')}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void transition(mission.id, 'started')}
+                >
                   開始する
                 </button>
               )}{' '}
               {active && ['GENERATED', 'VIEWED', 'STARTED'].includes(mission.status) && (
                 <>
-                  <button type="button" onClick={() => void transition(mission.id, 'completed')}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void transition(mission.id, 'completed')}
+                  >
                     完了
                   </button>{' '}
-                  <button type="button" onClick={() => void transition(mission.id, 'skipped')}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void transition(mission.id, 'skipped')}
+                  >
                     今日は見送る
                   </button>
                 </>
@@ -393,10 +424,18 @@ export function DailyMissionSection({
                   <MissionContent mission={mission} />
                   {active && mission.decision !== 'ACCEPTED' && (
                     <div>
-                      <button type="button" onClick={() => void decide(mission.id, 'ACCEPTED')}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void decide(mission.id, 'ACCEPTED')}
+                      >
                         採用する
                       </button>{' '}
-                      <button type="button" onClick={() => setRejecting(mission.id)}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setRejecting(mission.id)}
+                      >
                         今回は使わない
                       </button>
                     </div>
@@ -408,6 +447,7 @@ export function DailyMissionSection({
                         <span key={value}>
                           <button
                             type="button"
+                            disabled={busy}
                             onClick={() => void decide(mission.id, 'REJECTED', value)}
                           >
                             {label}
@@ -424,6 +464,7 @@ export function DailyMissionSection({
                       </label>
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() => void decide(mission.id, 'REJECTED', 'OTHER')}
                       >
                         その他で決定
@@ -438,6 +479,7 @@ export function DailyMissionSection({
                         <span key={`${option.type}-${index}`}>
                           <button
                             type="button"
+                            disabled={busy}
                             onClick={() =>
                               void copy(
                                 mission.id,
@@ -455,7 +497,7 @@ export function DailyMissionSection({
                         <div>
                           <button
                             type="button"
-                            disabled={mission.platform === null}
+                            disabled={busy || mission.platform === null}
                             onClick={() => void markPosted(mission)}
                           >
                             投稿しました
@@ -479,7 +521,7 @@ export function DailyMissionSection({
                               key={rating}
                               type="button"
                               aria-pressed={mission.feedback === rating}
-                              disabled={mission.feedback === rating}
+                              disabled={busy || mission.feedback === rating}
                               onClick={() => void feedback(mission.id, rating)}
                             >
                               {label}

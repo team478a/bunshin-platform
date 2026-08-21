@@ -49,7 +49,7 @@ Codexおよび開発者は、実装前に必ず以下も確認してください
 
 ## Current Status
 
-Phase 0〜3とPhase 4 SOCIAL Free MVP Intelligenceを実装しています。現在はMulti-Bunshin、Workspace分離、Knowledge Grant、SOCIAL Capability、Account Strategy、Content Pillar、Weekly Plan、Daily Mission、採用・Copy・手動投稿・Feedback、およびOpenAI AdapterによるMission生成を含みます。
+Phase 0〜5を実装済みです。現在はMulti-Bunshin、Workspace分離、Knowledge Grant、SOCIAL Capability、Account Strategy、Content Pillar、Weekly Plan、Daily Mission、採用・Copy・手動投稿・Feedback、およびOpenAI AdapterによるMission生成を含みます。本番利用開始は[`docs/FREE_MVP_PRODUCTION_GATE.md`](docs/FREE_MVP_PRODUCTION_GATE.md)の人間承認待ちです。
 
 FREE版は投稿案・画像制作指示・撮影台本・外部動画AI向けPromptまでを生成します。SNS自動投稿、画像・動画binary生成、LINE実接続、Memory自動学習、BLOG移行、Job queue、課金は未実装です。
 
