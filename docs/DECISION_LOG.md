@@ -449,3 +449,38 @@
 - UX: ActiveなSNS Profileと日付を選び、既存Missionがない日だけ画面から生成できる
 - 分離: Job、LINE、SNS自動投稿、画像・動画binary生成、Memory自動学習、BLOGを実装しない
 - 詳細: `docs/PHASE4_INTELLIGENCE_COMPLETION_REPORT.md`
+
+## D-040: Phase 6のLINEをMission通知と入口に限定する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Product: LINEはDaily Missionの準備完了を通知し、対象Mission画面へ戻す入口とする
+- Notification: 投稿本文、Prompt、KnowledgeをPushせず、Mission生成成功後だけ1回通知する
+- Separation: 通知機能と将来の`LINE_MARKETING` Capabilityを分離し、販促ステップ配信、セグメント配信、AI自動返信を実装しない
+- Provider: Login、Messaging、Webhookは用途別PortからLINE Adapterを呼び、SDK型とraw responseをCoreへ渡さない
+- Automation: Vercel Cronをtrigger、PostgreSQL Jobを状態・lease・retry・idempotencyの正本とする
+- 詳細: `docs/PHASE6_LINE_IMPLEMENTATION_PLAN.md`
+
+## D-041: LINE Loginを既存actor認可へ収束させる
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Login: LINE Login v2.1 Authorization Code Flowで`state`、`nonce`、PKCE S256を必須とする
+- Identity: 検証済みLINE `sub`を`AuthIdentity(provider=LINE)`へ保存し、LINE user IDをUser直下へ重複保存しない
+- New User: 未登録LINE Identityは新規UserとPERSONAL Workspaceを作成可能とする
+- Linking: 既存Userへの追加はverified session中の明示連携だけ許可し、メール一致で自動統合しない
+- Authorization: LINE起点sessionも共通`CurrentUserProvider`へ変換し、Workspace / Bunshin / Capability / resource scopeを維持する
+- Gate: Supabase SSR sessionへ安全に収束できるか6-B前にspikeし、困難な場合はProvider共通Platform sessionの別ADRを先に承認する
+- 詳細: `docs/adr/LINE_AUTH_SESSION_ADR.md`
+
+## D-042: LINE秘密値は暗号化DB設定、親鍵は環境変数で管理する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Configuration: MVPはProduction全体で単一ACTIVE設定とversion履歴を持つ
+- Encryption: Channel SecretとChannel Access TokenはAES-256-GCM等の認証付き暗号でDB保存し、`keyVersion`を保持する
+- Root Key: `ENCRYPTION_KEY`はVercel Production環境変数に残し、DB、管理画面、Audit Logへ保存しない
+- Display: Secret平文再取得APIを作らず、保存後は必要な権限へ末尾maskだけを表示する
+- Rotation: 新versionの接続検証成功後だけatomicにACTIVEを切り替え、失敗時は旧versionを維持する
+- Authorization: Secret登録・更新・無効化はSUPER_ADMIN、接続テストはSUPER_ADMIN / OPERATORに限定する
+- 詳細: `docs/PHASE6_LINE_IMPLEMENTATION_PLAN.md`

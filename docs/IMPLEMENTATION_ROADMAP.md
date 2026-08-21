@@ -122,11 +122,18 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 6: LINE Daily Experience
 
-- LINE Login / session
-- Messaging API
-- Daily Push / Today Deep Link
-- timezone / 配信設定
-- 二重送信防止、失敗・再送管理
+状態: 実装前設計中。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
+
+- 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
+- 6-A: Secure Configuration。暗号化設定、管理画面、接続テスト、Audit、rotation
+- 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ
+- 6-C: Webhook / Connection。署名、follow/unfollow、postback、友だち状態、冪等性
+- 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止
+- 6-E: Job / Mission Automation。Scheduler、lease、retry、Weekly / Daily自動生成
+- 6-F: Messaging / Deep Link。Push、履歴、再送、クリック、quota
+- 6-G: Admin / KPI / Production Gate。運営画面、Funnel、Smoke、Go/No-Go
+
+LINEはMissionへの通知と入口に限定し、投稿本文・KnowledgeをPushしない。`LINE_MARKETING`、販促ステップ配信、AI自動返信、LINE上でのSNS自動投稿はPhase 6へ含めない。
 
 ## Phase 7: 100-user Validation Readiness
 
