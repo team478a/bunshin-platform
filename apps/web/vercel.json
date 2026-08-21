@@ -2,5 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "regions": ["hnd1"],
-  "buildCommand": "cd ../.. && pnpm turbo run build --filter=web"
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=web",
+  "functions": {
+    "app/api/workspaces/[workspaceId]/bunshins/[bunshinId]/daily-missions/generate/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }

@@ -2,7 +2,7 @@
 
 BUNSHIN Platformは、1人のユーザーが目的ごとに複数のAI分身を作成し、それぞれに人格・目的・知識・記憶・成果指標・Capability（仕事能力）を持たせるためのプラットフォームです。
 
-初期MVPでは、最初のCapabilityとして `SOCIAL` を実装します。SOCIALは単なるSNS投稿生成機能ではなく、各Bunshinが自身の目的に合わせて「今日やる仕事」を決定し、LINE経由でユーザーへ実行可能なミッションを届ける能力です。
+初期MVPでは、最初のCapabilityとして `SOCIAL` を実装します。SOCIALは単なるSNS投稿生成機能ではなく、各Bunshinが自身の目的に合わせて「今日やる仕事」を決定し、Web画面でユーザーへ実行可能なミッションを届ける能力です。LINE連携は後続Phaseです。
 
 ## Core Concept
 
@@ -49,9 +49,9 @@ Codexおよび開発者は、実装前に必ず以下も確認してください
 
 ## Current Status
 
-Phase 0の既存システム監査とPhase 1のPlatform Foundationを完了しています。現在の実装範囲は、pnpm/Turborepo、Next.js、Prisma、User/Workspace/Membership/Platform Adminの最小所有境界、環境管理、observability、health check、CIです。
+Phase 0〜3とPhase 4 SOCIAL Free MVP Intelligenceを実装しています。現在はMulti-Bunshin、Workspace分離、Knowledge Grant、SOCIAL Capability、Account Strategy、Content Pillar、Weekly Plan、Daily Mission、採用・Copy・手動投稿・Feedback、およびOpenAI AdapterによるMission生成を含みます。
 
-Bunshin、SOCIAL、BLOG、LINE実接続、AI、Job queueはまだ実装していません。Phase 2へ進む前にPhase 1のレビューが必要です。
+FREE版は投稿案・画像制作指示・撮影台本・外部動画AI向けPromptまでを生成します。SNS自動投稿、画像・動画binary生成、LINE実接続、Memory自動学習、BLOG移行、Job queue、課金は未実装です。
 
 ## Local Setup
 

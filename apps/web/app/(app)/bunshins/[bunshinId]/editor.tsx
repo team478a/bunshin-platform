@@ -164,6 +164,7 @@ export function BunshinEditor({
         workspaceId={workspaceId}
         bunshinId={bunshin.id}
         capabilityStatus={socialCapabilityStatus}
+        profiles={socialProfiles.map(({ id, platform, status }) => ({ id, platform, status }))}
         missions={dailyMissions}
       />
       <button

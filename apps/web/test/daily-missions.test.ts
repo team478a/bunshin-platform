@@ -90,6 +90,7 @@ vi.mock('@bunshin/database', () => ({
 
 import {
   createDailyMissionResponse,
+  generateDailyMissionResponse,
   getDailyMissionResponse,
   listDailyMissionsResponse,
   transitionDailyMissionResponse,
@@ -134,6 +135,82 @@ describe('authenticated Daily Mission HTTP contract', () => {
     state.inaccessible = false;
     state.create.mockResolvedValue(mission);
     state.transition.mockResolvedValue({ ...mission, status: 'VIEWED' });
+  });
+
+  it('rejects duplicate generated dates before any new aggregate is persisted', async () => {
+    const response = await generateDailyMissionResponse(
+      request(
+        `${base}/generate`,
+        json({
+          missionDate: mission.missionDate,
+          timezone: 'Asia/Tokyo',
+          socialProfileId: '22222222-2222-4222-8222-222222222222',
+          idempotencyKey: '33333333-3333-4333-8333-333333333333',
+        }),
+      ),
+      'workspace-1',
+      'bunshin-1',
+    );
+    expect(response.status).toBe(409);
+    expect(state.create).not.toHaveBeenCalled();
+  });
+
+  it('protects the generation endpoint before resolving AI context', async () => {
+    const body = {
+      missionDate: mission.missionDate,
+      timezone: 'Asia/Tokyo',
+      socialProfileId: '22222222-2222-4222-8222-222222222222',
+      idempotencyKey: '33333333-3333-4333-8333-333333333333',
+    };
+    state.user = null;
+    expect(
+      (
+        await generateDailyMissionResponse(
+          request(`${base}/generate`, json(body)),
+          'workspace-1',
+          'bunshin-1',
+        )
+      ).status,
+    ).toBe(401);
+    state.user = { userId: 'user-1' };
+    state.assignmentStatus = 'SUSPENDED';
+    expect(
+      (
+        await generateDailyMissionResponse(
+          request(`${base}/generate`, json(body)),
+          'workspace-1',
+          'bunshin-1',
+        )
+      ).status,
+    ).toBe(403);
+    state.assignmentStatus = 'ACTIVE';
+    state.inaccessible = true;
+    expect(
+      (
+        await generateDailyMissionResponse(
+          request(`${base}/generate`, json(body)),
+          'other-workspace',
+          'bunshin-1',
+        )
+      ).status,
+    ).toBe(404);
+    state.inaccessible = false;
+    expect(
+      (
+        await generateDailyMissionResponse(
+          request(`${base}/generate`, json({ ...body, actorUserId: 'attacker' })),
+          'workspace-1',
+          'bunshin-1',
+        )
+      ).status,
+    ).toBe(400);
+    const hostile = new Request(`http://localhost:3000${base}/generate`, {
+      ...json(body),
+      headers: { origin: 'https://attacker.example', 'content-type': 'application/json' },
+    });
+    expect((await generateDailyMissionResponse(hostile, 'workspace-1', 'bunshin-1')).status).toBe(
+      403,
+    );
   });
 
   it('returns scoped no-store DTOs and ISO timestamps', async () => {

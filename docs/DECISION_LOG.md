@@ -393,7 +393,7 @@
 ## D-036: 投稿完了後にだけ本人らしさFeedbackを提示する
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted
 - API: PostRecordとMissionFeedbackをDailyMission配下の独立resourceとして公開し、verified sessionのactorだけを使用する
 - Posted UX: ACCEPTED済みMissionへ「投稿しました」を表示し、サーバーでPostRecord保存に成功した後だけ投稿済み表示へ切り替える
 - Feedback UX: PostRecord作成後だけGOOD / NEUTRAL / BADを提示し、現在評価を`aria-pressed`で表現する
@@ -406,7 +406,7 @@
 ## D-037: Weekly Plannerは承認済み戦略からatomicなDRAFTを生成する
 
 - 日付: 2026-08-20
-- 状態: Proposed
+- 状態: Accepted
 - Context: 対象Bunshin、Active SocialProfile、その承認済みAccount Strategy、Active Content Pillar、Grant済みOwnerKnowledgeだけを利用する
 - Isolation: verified sessionのactorを起点にWorkspace / Bunshinを絞り、クライアントからKnowledgeや戦略本文を受け取らない
 - Provider: Coreは`WeeklyPlannerPort`だけに依存し、WebのOpenAI AdapterがResponses APIのstrict JSON Schemaを使う
@@ -420,7 +420,7 @@
 ## D-038: Daily Mission Plannerは本文のないMission Briefを生成する
 
 - 日付: 2026-08-21
-- 状態: Proposed
+- 状態: Accepted
 - Responsibility: Plannerは確定済みWeekly Planの当日Itemから`topic / angle / reason / estimatedMinutes`だけを生成する
 - Trusted values: `socialProfileId / weeklyPlanItemId / missionDate / format`はProvider出力を信頼せず、scope検証済み入力から引き継ぐ
 - Context: 承認済みWeekly Plan、当日Item、Active Content Pillar、Bunshin、承認済みStrategy、Grant済みOwnerKnowledgeを使う
@@ -431,3 +431,21 @@
 - Model: `OPENAI_DAILY_MISSION_PLANNER_MODEL`で切替可能とし、初期既定値を`gpt-5.2`とする
 - 分離: Content Generator、Quality Checker、API/UI、Job、画像/動画binary、自動投稿、Memory学習、LINE、BLOGを混在させない
 - 詳細: `docs/PHASE4_SLICE_4_2_IMPLEMENTATION_REPORT.md`
+
+## D-039: Daily Missionは品質合格後にだけ完全aggregateとして保存する
+
+- 日付: 2026-08-21
+- 状態: Accepted
+- Pipeline: Daily Mission Planner → Content Generator → Quality Checkerを同期実行し、途中結果は保存しない
+- Content: `TEXT / SLIDE / IMAGE / LIVE_ACTION / AI_VIDEO_PROMPT`を同じPortで生成し、Coreがformat別schemaを再検証する
+- Quality: Stage 1でformat/platformとschemaを決定的に検査し、Stage 2で`PASS / REVISE / REJECT`、0〜100点、構造化issuesをstrict schemaで受ける
+- Repair: `REVISE`はrepairInstructionだけを限定contextとして最大1回再生成し、再検査が`PASS`以外なら保存しない
+- Persistence: 品質合格後だけ既存`CreateDailyMission`へBrief、Content、qualityScoreを渡し、Mission / Content / PENDING Decisionを同一transactionで保存する
+- Cost guard: verified session、Active SOCIAL、同日重複、Active Profile、承認済みStrategy、確定済みWeekly Planと当日ItemをProvider呼び出し前に検証し、DB claimで並行生成を抑止する
+- Isolation: ProviderへWorkspace ID、Bunshin ID、Profile ID、Plan ID、Item IDを渡さず、Grant済みKnowledgeだけを利用する
+- Observability: task type、provider、model、prompt version、token、latency、成否を構造化ログへ記録し、Prompt、生成本文、Knowledge、credentialは記録しない
+- Provider: Responses APIのstrict JSON Schemaと`store: false`を使用し、modelは`OPENAI_CONTENT_GENERATOR_MODEL`、`OPENAI_MISSION_QUALITY_MODEL`で任意上書きする。timeout、rate limit、Provider error、不正JSONを分類する
+- HTTP: Quality不合格は422、Provider一時障害は503、同日競合は409とする
+- UX: ActiveなSNS Profileと日付を選び、既存Missionがない日だけ画面から生成できる
+- 分離: Job、LINE、SNS自動投稿、画像・動画binary生成、Memory自動学習、BLOGを実装しない
+- 詳細: `docs/PHASE4_INTELLIGENCE_COMPLETION_REPORT.md`
