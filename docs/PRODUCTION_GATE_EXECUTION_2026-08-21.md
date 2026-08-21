@@ -9,21 +9,21 @@
 
 ## 確認済み
 
-| 項目 | 結果 | 根拠 |
-| --- | --- | --- |
-| main CI | 成功 | GitHub Actions run `32442521627` |
-| verify / database | 成功 | 同runの両job |
-| Vercel Production | 成功 | GitHub deployment `6014707901` |
-| Production commit | 一致 | deployment SHA `4bfaa0a...` |
-| `/api/health/live` | HTTP 200 / `status: ok` | 2026-08-21確認 |
-| `/api/health/ready` | HTTP 200 / configuration・database `ok` | 2026-08-21確認 |
-| GitHub Production reviewer | 設定済み | Environment protection rule |
-| GitHub DB secret名 | `DATABASE_URL` / `DIRECT_URL`あり | 値は取得していない |
-| Vercel function region | `hnd1` | `apps/web/vercel.json` |
-| AI timeout | Provider 45秒 / Function 60秒 | 実コードとVercel設定 |
-| Production migration | 成功 | GitHub Actions run `32443354178` |
-| migration status | 14件 / up to date | 同runの実行後status |
-| migration後health | live・readyともHTTP 200 / database `ok` | 2026-08-21再確認 |
+| 項目                       | 結果                                    | 根拠                             |
+| -------------------------- | --------------------------------------- | -------------------------------- |
+| main CI                    | 成功                                    | GitHub Actions run `32442521627` |
+| verify / database          | 成功                                    | 同runの両job                     |
+| Vercel Production          | 成功                                    | GitHub deployment `6014707901`   |
+| Production commit          | 一致                                    | deployment SHA `4bfaa0a...`      |
+| `/api/health/live`         | HTTP 200 / `status: ok`                 | 2026-08-21確認                   |
+| `/api/health/ready`        | HTTP 200 / configuration・database `ok` | 2026-08-21確認                   |
+| GitHub Production reviewer | 設定済み                                | Environment protection rule      |
+| GitHub DB secret名         | `DATABASE_URL` / `DIRECT_URL`あり       | 値は取得していない               |
+| Vercel function region     | `hnd1`                                  | `apps/web/vercel.json`           |
+| AI timeout                 | Provider 45秒 / Function 60秒           | 実コードとVercel設定             |
+| Production migration       | 成功                                    | GitHub Actions run `32443354178` |
+| migration status           | 14件 / up to date                       | 同runの実行後status              |
+| migration後health          | live・readyともHTTP 200 / database `ok` | 2026-08-21再確認                 |
 
 ## 未完了・Blocker
 
