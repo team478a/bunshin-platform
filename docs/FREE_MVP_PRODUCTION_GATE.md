@@ -1,0 +1,59 @@
+# FREE SOCIAL MVP Production Gate
+
+更新日: 2026-08-21
+
+## 判定
+
+Phase 0〜5のコードは完了している。本番利用開始には、以下の人間確認と本番環境での実行記録が必要である。Secretや個人情報は本書へ記録せず、実行日時、担当者、対象commit、GitHub Actions run、確認結果だけを残す。
+
+## A. 自動検証
+
+- [ ] `main`のCI `verify` / `database`が成功している
+- [ ] Vercel Production deploymentが成功している
+- [ ] 空PostgreSQLへの全migration適用が成功している
+- [ ] dependency auditの重大問題を確認した
+
+## B. Production Database
+
+- [ ] Supabase backupと保持期間を確認した
+- [ ] restore手順と責任者を確認した
+- [ ] GitHub Environment `production`のrequired reviewerを確認した
+- [ ] `DATABASE_URL`がtransaction poolerである
+- [ ] `DIRECT_URL`がmigration用session/direct接続である
+- [ ] 対象commitのProduction migration workflowを承認・実行した
+- [ ] `prisma migrate status`が最新である
+- [ ] `/api/health/ready`が`database: ok`を返す
+
+## C. Auth / AI / Application Configuration
+
+- [ ] Supabase Auth Site URLとRedirect URL allowlistがProduction URLだけを許可する
+- [ ] Production Magic Linkでlogin/logoutできる
+- [ ] `OPENAI_API_KEY`がVercel Productionだけに設定されている
+- [ ] Planner / Content / Qualityのmodel環境変数を確認した
+- [ ] AI失敗時に本文・Knowledge・keyがログへ出ないことを確認した
+- [ ] Vercel Function上限60秒、Provider timeout 45秒が反映されている
+
+## D. FREE MVP Acceptance
+
+- [ ] Bunshin作成からSOCIAL有効化まで完了できる
+- [ ] Social Profile、Strategy生成・承認、Content Pillar、Weekly Plan生成・確定が完了できる
+- [ ] Daily Mission生成・閲覧が完了できる
+- [ ] 採用後だけformat別コピー操作が表示される
+- [ ] 不採用理由を文章入力なしで保存できる
+- [ ] 「投稿しました」とGOOD / NEUTRAL / BAD Feedbackを保存できる
+- [ ] 同日・同Bunshinの重複生成が409で拒否される
+- [ ] User / Workspace / Bunshinを越えるアクセスが404になる
+
+詳細手順は`FREE_MVP_SMOKE_TEST.md`を正本とする。
+
+## E. Operations / Legal
+
+- [ ] Vercel / Supabase / OpenAIの利用上限・通知を確認した
+- [ ] incident連絡先、rollback責任者、migration実行者を確認した
+- [ ] 利用規約、プライバシー、問い合わせ、data deletion窓口を確認した
+- [ ] Production URL、HTTPS、サポート導線を確認した
+- [ ] 人間によるsecurity/privacy reviewを完了した
+
+## Go / No-Go
+
+すべて完了し、Production責任者が対象commitと実行日時を記録して明示承認した場合だけGoとする。Stagingを作らない方針はblockerにしないが、backup、migration承認、smoke、rollback準備は省略しない。

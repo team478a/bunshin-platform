@@ -24,7 +24,7 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ## Phase 2: Multi-Bunshin Core
 
-状態: コード実装完了。Production利用開始は`PHASE2_PRODUCTION_GATE.md`完了待ち。
+状態: コード実装完了。FREE MVP全体のProduction利用開始判定は`FREE_MVP_PRODUCTION_GATE.md`で行う。
 
 - User / Workspace / Membership
 - Bunshin / Objective / Audience / Personality
@@ -35,7 +35,7 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 
 ## Phase 3: SOCIAL Foundation
 
-状態: Slice 3.1〜3.5完了。3.6はAPI/UXまで実装済み、レビュー待ち。
+状態: 完了。
 
 ### 3.1 Social Profile — 完了
 
@@ -66,19 +66,19 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 - Strategy Wizard入力とCore Persistence
 - Content Pillarとの責務境界
 
-### 3.6 Mission Decision / Activity
+### 3.6 Mission Decision / Activity — 完了
 
 - Core Persistence — 完了
-- authenticated API / UX — 実装済み、レビュー待ち
+- authenticated API / UX — 完了
 - Mission lifecycleと採用判断を分離
 - ACCEPTED / REJECTEDと不採用理由
 - VIEWED / COPY等のappend-only Raw Activity
 - 冪等な行動計測
 
-### 3.7 Post Record / Feedback
+### 3.7 Post Record / Feedback — 完了
 
 - Core Persistence — 完了
-- authenticated API / UX — 実装済み、レビュー待ち
+- authenticated API / UX — 完了
 - 手動投稿完了とPostRecord
 - GOOD / NEUTRAL / BADのMissionFeedback
 - PreferenceとOutcomeの分離
@@ -88,34 +88,37 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 4: SOCIAL Free MVP Intelligence
 
+状態: 完了。
+
 - Account Strategy Generator — 完了
 - Grant済みOwner KnowledgeとBunshin context
 - Weekly Planner — 完了
 - Daily Mission Planner Brief — 完了
-- Daily Mission生成orchestration — 実装済み、レビュー待ち
-- Content Generator — 実装済み、レビュー待ち
-- Quality Checker — 実装済み、レビュー待ち
-- `TEXT | SLIDE | IMAGE | LIVE_ACTION | AI_VIDEO_PROMPT` — 実装済み、レビュー待ち
-- model、Prompt Version、使用量、処理時間、成否の構造化ログ — 実装済み、レビュー待ち
-- Provider Port / OpenAI Adapter — 実装済み、レビュー待ち
-- verified-session生成APIと「今日のMission」UI — 実装済み、レビュー待ち
-- 品質合格後だけMission / Content / Decisionをatomic保存 — 実装済み、レビュー待ち
-- Stage 1 / Stage 2品質検査と最大1回repair — 実装済み、レビュー待ち
-- DB idempotency claim、同時生成抑止、失敗状態 — 実装済み、レビュー待ち
-- Provider timeout・rate limit・不正JSON分類 — 実装済み、レビュー待ち
+- Daily Mission生成orchestration — 完了
+- Content Generator / Quality Checker — 完了
+- `TEXT | SLIDE | IMAGE | LIVE_ACTION | AI_VIDEO_PROMPT` — 完了
+- model、Prompt Version、使用量、処理時間、成否の構造化ログ — 完了
+- Provider Port / OpenAI Adapter — 完了
+- verified-session生成APIと「今日のMission」UI — 完了
+- 品質合格後だけMission / Content / Decisionをatomic保存 — 完了
+- Stage 1 / Stage 2品質検査と最大1回repair — 完了
+- DB idempotency claim、同時生成抑止、失敗状態 — 完了
+- Provider timeout・rate limit・不正JSON分類 — 完了
 
 画像・動画binaryを生成せず、外部サービスへ渡せる指示・Promptまでを提供する。Job、LINE、SNS自動投稿、Memory自動学習、BLOGはPhase 4完了条件へ含めない。
 
 ## Phase 5: Free MVP User Experience
 
+状態: 完了。Production利用開始は`FREE_MVP_PRODUCTION_GATE.md`完了待ち。
+
 - Account Strategy Wizard / approval — 完了
 - Daily Mission API/UI — 完了
-- 採用 / 不採用 / 不採用理由
-- format別copy UX
-- 1日1回を候補とする別案導線（Billing制限なし）
-- 投稿完了
-- 簡易Feedback
-- mobile-firstの「今日やること」体験
+- 採用 / 不採用 / 不採用理由 — 完了
+- format別copy UX — 完了
+- 投稿完了 — 完了
+- 簡易Feedback — 完了
+- mobile-firstの「今日やること」体験 — 完了
+- 別案生成 — FREEの利用状況を確認してから回数・課金境界と合わせて再判断
 
 ## Phase 6: LINE Daily Experience
 

@@ -23,6 +23,13 @@
 - [Phase 2完了監査](PHASE2_COMPLETION_AUDIT.md)
 - [Phase 2 Production Gate](PHASE2_PRODUCTION_GATE.md)
 
+## FREE SOCIAL MVP
+
+- [Phase 4 Intelligence完了レポート](PHASE4_INTELLIGENCE_COMPLETION_REPORT.md)
+- [Phase 5 UX完了レポート](PHASE5_COMPLETION_REPORT.md)
+- [FREE MVP Production Gate](FREE_MVP_PRODUCTION_GATE.md)
+- [FREE MVP本番スモークテスト](FREE_MVP_SMOKE_TEST.md)
+
 ## Phase 3計画
 
 - [Phase 3実行計画](PHASE3_EXECUTION_PLAN.md)
