@@ -14,6 +14,8 @@ import type {
   BunshinMemoryRepository,
   BunshinCapabilityAssignmentRepository,
   BunshinCapabilityAssignment,
+  ValidationMetricsRepository,
+  ValidationMetricsSnapshot,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -2419,5 +2421,179 @@ export class PrismaSocialAccountStrategyRepository implements SocialAccountStrat
         }),
       );
     });
+  }
+}
+
+const uniqueCount = (values: string[]) => new Set(values).size;
+const rate = (numerator: number, denominator: number) =>
+  denominator === 0 ? null : numerator / denominator;
+
+export class PrismaValidationMetricsRepository implements ValidationMetricsRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async summarize(input: {
+    workspaceId: string;
+    actorUserId: string;
+    period: { from: Date; to: Date };
+  }): Promise<ValidationMetricsSnapshot | null> {
+    const authorized = await this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+        workspace: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    if (authorized === null) return null;
+
+    const occurred = { gte: input.period.from, lt: input.period.to };
+    const copyTypes = [
+      'COPIED_TEXT',
+      'COPIED_SLIDE',
+      'COPIED_VIDEO_PROMPT',
+      'COPIED_SCRIPT',
+    ] as const;
+    const [registrations, bunshins, activations, strategies, activities, posts, feedback] =
+      await Promise.all([
+        this.client.workspaceMembership.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            status: 'ACTIVE',
+            user: { createdAt: occurred },
+          },
+          select: { userId: true, user: { select: { createdAt: true } } },
+        }),
+        this.client.bunshin.findMany({
+          where: { workspaceId: input.workspaceId, createdAt: occurred },
+          select: { ownerUserId: true },
+        }),
+        this.client.bunshinCapabilityAssignment.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            capabilityType: 'SOCIAL',
+            activatedAt: occurred,
+          },
+          select: { assignedByUserId: true },
+        }),
+        this.client.socialAccountStrategy.findMany({
+          where: { workspaceId: input.workspaceId, createdAt: occurred },
+          select: {
+            status: true,
+            approvedAt: true,
+            bunshin: { select: { ownerUserId: true } },
+          },
+        }),
+        this.client.missionActivity.findMany({
+          where: { workspaceId: input.workspaceId, occurredAt: occurred },
+          select: { actorUserId: true, type: true },
+        }),
+        this.client.postRecord.findMany({
+          where: { workspaceId: input.workspaceId, postedAt: occurred },
+          select: { actorUserId: true, postedAt: true },
+        }),
+        this.client.missionFeedback.findMany({
+          where: { workspaceId: input.workspaceId, createdAt: occurred },
+          select: { actorUserId: true, rating: true },
+        }),
+      ]);
+
+    const matureCohort = registrations.filter(
+      ({ user }) => user.createdAt.getTime() + 8 * 24 * 60 * 60 * 1000 <= input.period.to.getTime(),
+    );
+    const cohortIds = matureCohort.map(({ userId }) => userId);
+    const cohortActivity =
+      cohortIds.length === 0
+        ? []
+        : await this.client.missionActivity.findMany({
+            where: { workspaceId: input.workspaceId, actorUserId: { in: cohortIds } },
+            select: { actorUserId: true, occurredAt: true },
+          });
+    const cohortPosts =
+      cohortIds.length === 0
+        ? []
+        : await this.client.postRecord.findMany({
+            where: { workspaceId: input.workspaceId, actorUserId: { in: cohortIds } },
+            select: { actorUserId: true, postedAt: true },
+          });
+    const createdByUser = new Map(
+      matureCohort.map((value) => [value.userId, value.user.createdAt]),
+    );
+    const d7Active = new Set<string>();
+    const firstWeekPostCounts = new Map<string, number>();
+    for (const activity of cohortActivity) {
+      const createdAt = createdByUser.get(activity.actorUserId);
+      if (
+        createdAt &&
+        activity.occurredAt >= new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000) &&
+        activity.occurredAt < new Date(createdAt.getTime() + 8 * 24 * 60 * 60 * 1000)
+      )
+        d7Active.add(activity.actorUserId);
+    }
+    for (const post of cohortPosts) {
+      const createdAt = createdByUser.get(post.actorUserId);
+      if (!createdAt) continue;
+      if (
+        post.postedAt >= createdAt &&
+        post.postedAt < new Date(createdAt.getTime() + 7 * 86400000)
+      ) {
+        firstWeekPostCounts.set(
+          post.actorUserId,
+          (firstWeekPostCounts.get(post.actorUserId) ?? 0) + 1,
+        );
+      }
+      if (
+        post.postedAt >= new Date(createdAt.getTime() + 7 * 86400000) &&
+        post.postedAt < new Date(createdAt.getTime() + 8 * 86400000)
+      )
+        d7Active.add(post.actorUserId);
+    }
+    const threePostUsers = [...firstWeekPostCounts.values()].filter((value) => value >= 3).length;
+    const goodFeedbackCount = feedback.filter(({ rating }) => rating === 'GOOD').length;
+    const viewedUsers = activities
+      .filter(({ type }) => type === 'VIEWED')
+      .map(({ actorUserId }) => actorUserId);
+    const acceptedUsers = activities
+      .filter(({ type }) => type === 'ACCEPTED')
+      .map(({ actorUserId }) => actorUserId);
+    const copiedUsers = activities
+      .filter(({ type }) => copyTypes.includes(type as (typeof copyTypes)[number]))
+      .map(({ actorUserId }) => actorUserId);
+    const approvedStrategyUsers = strategies
+      .filter(
+        ({ approvedAt }) =>
+          approvedAt && approvedAt >= input.period.from && approvedAt < input.period.to,
+      )
+      .map(({ bunshin }) => bunshin.ownerUserId);
+    const eligible = matureCohort.length;
+
+    return {
+      period: input.period,
+      funnel: {
+        registrations: uniqueCount(registrations.map(({ userId }) => userId)),
+        bunshinCreations: uniqueCount(bunshins.map(({ ownerUserId }) => ownerUserId)),
+        socialActivations: uniqueCount(activations.map(({ assignedByUserId }) => assignedByUserId)),
+        strategyCompletions: uniqueCount(strategies.map(({ bunshin }) => bunshin.ownerUserId)),
+        strategyApprovals: uniqueCount(approvedStrategyUsers),
+        firstMissionViews: uniqueCount(viewedUsers),
+        missionAcceptances: uniqueCount(acceptedUsers),
+        copies: uniqueCount(copiedUsers),
+        posts: uniqueCount(posts.map(({ actorUserId }) => actorUserId)),
+        d7ActiveUsers: d7Active.size,
+      },
+      outcomes: {
+        postedUsers: uniqueCount(posts.map(({ actorUserId }) => actorUserId)),
+        postCount: posts.length,
+        feedbackCount: feedback.length,
+        goodFeedbackCount,
+        goodFeedbackRate: rate(goodFeedbackCount, feedback.length),
+        threePostsInFirstSevenDaysUsers: threePostUsers,
+        eligibleFirstSevenDayUsers: eligible,
+        threePostsInFirstSevenDaysRate: rate(threePostUsers, eligible),
+        d7EligibleUsers: eligible,
+        d7ActiveRate: rate(d7Active.size, eligible),
+      },
+    };
   }
 }
