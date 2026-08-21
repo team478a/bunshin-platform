@@ -12,6 +12,7 @@
 - 投稿数、GOOD Feedback率、D7率
 - 最重要KPI「登録後7日未満に3回以上投稿したユーザー率」
 - 認証、期間入力、tenant isolation、aggregate-only responseのテスト
+- 期間指定、最重要KPI、行動指標、funnelを確認する最小管理画面
 
 DB schemaとmigrationは変更していない。既存のUser、Membership、Bunshin、Capability Assignment、Strategy、Mission Activity、PostRecord、Feedbackを集計元とする。
 
@@ -49,18 +50,20 @@ GET /api/workspaces/{workspaceId}/validation-metrics?from=2026-08-01&to=2026-09-
 - cohort eventも対象Workspaceで再制限
 - aggregate値だけを返し、userIdを含む明細は返さない
 
-## 6. 今回の対象外
+## 6. 管理画面
 
-- 管理画面UI
+`/validation`で直近30日を初期表示する。画面の終了日は含む日付として扱い、集計Coreへ渡す際に排他的な翌日境界へ変換する。デスクトップでは4列、スマートフォンでは2列のKPIカードを表示する。
+
+## 7. 今回の対象外
+
 - AI原価（現状Provider usageの永続化がないため）
 - 外部Analytics、SNS OAuth、自動投稿
 - Share / Referral / Segmentation
 - LINE、課金、法務文書・退会フロー
 
-## 7. 次の推奨Slice
+## 8. 次の推奨Slice
 
-1. このAPIを使う最小管理画面
-2. AI Provider usage / costのRaw Event設計と保存
-3. 利用規約・プライバシー同意・削除/退会
+1. AI Provider usage / costのRaw Event設計と保存
+2. 利用規約・プライバシー同意・削除/退会
 
 本番ダッシュボードでの作業を必要としない順序で進められる。
