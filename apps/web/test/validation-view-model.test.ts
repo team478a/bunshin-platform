@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { percentage, resolveValidationPeriod } from '../app/(app)/validation/view-model';
+import {
+  percentage,
+  resolveValidationPeriod,
+  usdFromMicros,
+} from '../app/(app)/validation/view-model';
 
 describe('validation dashboard view model', () => {
   it('defaults to the inclusive last 30 calendar days', () => {
@@ -34,5 +38,7 @@ describe('validation dashboard view model', () => {
   it('formats ratios without inventing a zero denominator', () => {
     expect(percentage(0.375)).toBe('37.5%');
     expect(percentage(null)).toBe('—');
+    expect(usdFromMicros(12_345)).toBe('$0.0123');
+    expect(usdFromMicros(null)).toBe('—');
   });
 });

@@ -37,6 +37,13 @@ const snapshot = {
     threePostsInFirstSevenDaysRate: 1,
     d7EligibleUsers: 1,
     d7ActiveRate: 1,
+    aiCalls: 5,
+    aiSuccessfulCalls: 4,
+    aiFailedCalls: 1,
+    aiInputTokens: 1000,
+    aiOutputTokens: 500,
+    aiPricedCalls: 0,
+    aiEstimatedCostUsdMicros: null,
   },
 } satisfies ValidationMetricsSnapshot;
 

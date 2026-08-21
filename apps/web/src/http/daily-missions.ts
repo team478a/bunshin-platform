@@ -25,6 +25,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 
 const uuidSchema = z.string().uuid();
 const createSchema = z
@@ -265,6 +266,18 @@ export function generateDailyMissionResponse(
           outputTokens: brief.outputTokens,
           latency: brief.latencyMs,
         });
+        await recordAiUsageSafely({
+          ...scoped,
+          taskType: 'DAILY_MISSION_PLANNER',
+          provider: 'openai',
+          model: brief.model,
+          promptVersion: brief.promptVersion,
+          status: 'SUCCESS',
+          inputTokens: brief.inputTokens,
+          outputTokens: brief.outputTokens,
+          latencyMs: brief.latencyMs,
+          idempotencyKey: `${requestId}:daily-brief`,
+        });
         const pillarId = weeklyPlan.items.find(
           ({ id }) => id === brief.output.weeklyPlanItemId,
         )?.contentPillarId;
@@ -300,6 +313,18 @@ export function generateDailyMissionResponse(
           outputTokens: content.outputTokens,
           latency: content.latencyMs,
         });
+        await recordAiUsageSafely({
+          ...scoped,
+          taskType: 'CONTENT_GENERATOR',
+          provider: 'openai',
+          model: content.model,
+          promptVersion: content.promptVersion,
+          status: 'SUCCESS',
+          inputTokens: content.inputTokens,
+          outputTokens: content.outputTokens,
+          latencyMs: content.latencyMs,
+          idempotencyKey: `${requestId}:content:0`,
+        });
         const qualityChecker = new CheckMissionQuality(
           new checkerModule.OpenAIMissionQualityChecker({
             apiKey,
@@ -331,6 +356,18 @@ export function generateDailyMissionResponse(
           qualityScore: quality.output.score,
           retryCount: 0,
         });
+        await recordAiUsageSafely({
+          ...scoped,
+          taskType: 'QUALITY_CHECKER',
+          provider: 'openai',
+          model: quality.model,
+          promptVersion: quality.promptVersion,
+          status: 'SUCCESS',
+          inputTokens: quality.inputTokens,
+          outputTokens: quality.outputTokens,
+          latencyMs: quality.latencyMs,
+          idempotencyKey: `${requestId}:quality:0`,
+        });
         let repairCount = 0;
         if (quality.output.verdict === 'REVISE') {
           repairCount = 1;
@@ -353,6 +390,18 @@ export function generateDailyMissionResponse(
             latency: content.latencyMs,
             retryCount: 1,
           });
+          await recordAiUsageSafely({
+            ...scoped,
+            taskType: 'CONTENT_REPAIR',
+            provider: 'openai',
+            model: content.model,
+            promptVersion: content.promptVersion,
+            status: 'SUCCESS',
+            inputTokens: content.inputTokens,
+            outputTokens: content.outputTokens,
+            latencyMs: content.latencyMs,
+            idempotencyKey: `${requestId}:content:1`,
+          });
           quality = await qualityChecker.execute(qualityInput());
           totalInputTokens += quality.inputTokens ?? 0;
           totalOutputTokens += quality.outputTokens ?? 0;
@@ -368,6 +417,18 @@ export function generateDailyMissionResponse(
             verdict: quality.output.verdict,
             qualityScore: quality.output.score,
             retryCount: 1,
+          });
+          await recordAiUsageSafely({
+            ...scoped,
+            taskType: 'QUALITY_CHECKER',
+            provider: 'openai',
+            model: quality.model,
+            promptVersion: quality.promptVersion,
+            status: 'SUCCESS',
+            inputTokens: quality.inputTokens,
+            outputTokens: quality.outputTokens,
+            latencyMs: quality.latencyMs,
+            idempotencyKey: `${requestId}:quality:1`,
           });
         }
         if (quality.output.verdict !== 'PASS')
@@ -399,6 +460,20 @@ export function generateDailyMissionResponse(
         }
         return dailyMissionDto(created);
       } catch (error) {
+        if (generationScope && generationId)
+          await recordAiUsageSafely({
+            ...generationScope,
+            taskType: 'DAILY_MISSION_PIPELINE',
+            provider: 'openai',
+            model: process.env['OPENAI_DAILY_MISSION_PLANNER_MODEL'] ?? 'gpt-5.2',
+            promptVersion: 'daily-mission-pipeline-v1',
+            status: 'FAILED',
+            inputTokens: null,
+            outputTokens: null,
+            latencyMs: Date.now() - started,
+            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+            idempotencyKey: `${requestId}:daily-pipeline-failure`,
+          });
         if (generationId && generationScope) {
           try {
             const db = await import('@bunshin/database');

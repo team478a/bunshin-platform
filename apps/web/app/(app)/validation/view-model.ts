@@ -42,6 +42,10 @@ export function percentage(value: number | null) {
   return value === null ? '—' : `${(value * 100).toFixed(1)}%`;
 }
 
+export function usdFromMicros(value: number | null) {
+  return value === null ? '—' : `$${(value / 1_000_000).toFixed(4)}`;
+}
+
 export function funnelRows(metrics: ValidationMetricsSnapshot) {
   return [
     ['登録', metrics.funnel.registrations],

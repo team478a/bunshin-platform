@@ -3,7 +3,7 @@ import { ApplicationError } from '@bunshin/shared';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
-import { funnelRows, percentage, resolveValidationPeriod } from './view-model';
+import { funnelRows, percentage, resolveValidationPeriod, usdFromMicros } from './view-model';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +96,25 @@ export default async function ValidationPage({
           <article>
             <strong>{percentage(outcomes.d7ActiveRate)}</strong>
             <span>D7 Active率</span>
+          </article>
+          <article>
+            <strong>{outcomes.aiCalls}</strong>
+            <span>AI実行回数</span>
+          </article>
+          <article>
+            <strong>{outcomes.aiInputTokens + outcomes.aiOutputTokens}</strong>
+            <span>AI token合計</span>
+          </article>
+          <article>
+            <strong>{outcomes.aiFailedCalls}</strong>
+            <span>AI失敗回数</span>
+          </article>
+          <article>
+            <strong>{usdFromMicros(outcomes.aiEstimatedCostUsdMicros)}</strong>
+            <span>AI見積原価</span>
+            {outcomes.aiPricedCalls < outcomes.aiCalls ? (
+              <small>未価格の実行を含みます</small>
+            ) : null}
           </article>
         </div>
       </section>

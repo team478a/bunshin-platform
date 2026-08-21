@@ -132,7 +132,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 - RegistrationからD7までのfunnel（集計Core / OWNER・ADMIN API完了）
 - 投稿回数、継続率、GOOD率（集計Core / OWNER・ADMIN API完了）
-- AI原価（未実装。Provider usageの保存設計後に実施）
+- AI使用量（Raw Event保存・管理画面集計完了）
+- AI見積原価（保存・集計欄完了。公式価格版の確認後に単価適用）
 - 最低限の管理画面（期間指定、最重要KPI、行動指標、funnel完了）
 - 利用規約、プライバシー、同意、削除・退会
 - Production Gate、backup/restore、運用手順

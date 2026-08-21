@@ -28,6 +28,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { recordAiUsageSafely } from '../observability/ai-usage';
 
 const uuidSchema = z.string().uuid();
 const planCreateSchema = z
@@ -212,11 +213,14 @@ export function generateWeeklyPlanResponse(
   return respond(
     request,
     async () => {
+      let usageActor: string | null = null;
+      let providerAttempted = false;
       try {
         requireSameOrigin(request);
         const parsed = generateSchema.safeParse(await jsonBody(request));
         if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
         const actor = await actorUserId();
+        usageActor = actor;
         const db = await import('@bunshin/database');
         const scope = { workspaceId, bunshinId, actorUserId: actor };
         const assignments = new db.PrismaBunshinCapabilityAssignmentRepository();
@@ -258,6 +262,7 @@ export function generateWeeklyPlanResponse(
         if (!apiKey)
           throw new ApplicationError('CONFIGURATION_ERROR', 'OPENAI_API_KEY is required');
         const { OpenAIWeeklyPlanner } = await import('../providers/openai-weekly-planner');
+        providerAttempted = true;
         const result = await new GenerateWeeklyPlan(
           new OpenAIWeeklyPlanner({
             apiKey,
@@ -306,6 +311,20 @@ export function generateWeeklyPlanResponse(
           outputTokens: result.outputTokens,
           latency: result.latencyMs,
         });
+        await recordAiUsageSafely({
+          workspaceId,
+          bunshinId,
+          actorUserId: actor,
+          taskType: 'WEEKLY_PLANNER',
+          provider: 'openai',
+          model: result.model,
+          promptVersion: result.promptVersion,
+          status: 'SUCCESS',
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          latencyMs: result.latencyMs,
+          idempotencyKey: `${requestId}:weekly-plan`,
+        });
         return weeklyPlanDto(value, titles);
       } catch (error) {
         const { WEEKLY_PLANNER_PROMPT_VERSION } =
@@ -317,6 +336,22 @@ export function generateWeeklyPlanResponse(
           latency: Date.now() - started,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         });
+        if (usageActor && providerAttempted)
+          await recordAiUsageSafely({
+            workspaceId,
+            bunshinId,
+            actorUserId: usageActor,
+            taskType: 'WEEKLY_PLANNER',
+            provider: 'openai',
+            model: process.env['OPENAI_WEEKLY_PLANNER_MODEL'] ?? 'gpt-5.2',
+            promptVersion: WEEKLY_PLANNER_PROMPT_VERSION,
+            status: 'FAILED',
+            inputTokens: null,
+            outputTokens: null,
+            latencyMs: Date.now() - started,
+            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+            idempotencyKey: `${requestId}:weekly-plan`,
+          });
         throw error;
       }
     },

@@ -16,6 +16,8 @@ import type {
   BunshinCapabilityAssignment,
   ValidationMetricsRepository,
   ValidationMetricsSnapshot,
+  AiUsageEventRepository,
+  RecordAiUsageInput,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -2455,7 +2457,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       'COPIED_VIDEO_PROMPT',
       'COPIED_SCRIPT',
     ] as const;
-    const [registrations, bunshins, activations, strategies, activities, posts, feedback] =
+    const [registrations, bunshins, activations, strategies, activities, posts, feedback, aiUsage] =
       await Promise.all([
         this.client.workspaceMembership.findMany({
           where: {
@@ -2496,6 +2498,15 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
         this.client.missionFeedback.findMany({
           where: { workspaceId: input.workspaceId, createdAt: occurred },
           select: { actorUserId: true, rating: true },
+        }),
+        this.client.aiUsageEvent.findMany({
+          where: { workspaceId: input.workspaceId, occurredAt: occurred },
+          select: {
+            status: true,
+            inputTokens: true,
+            outputTokens: true,
+            estimatedCostUsdMicros: true,
+          },
         }),
       ]);
 
@@ -2567,6 +2578,9 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       )
       .map(({ bunshin }) => bunshin.ownerUserId);
     const eligible = matureCohort.length;
+    const pricedAiUsage = aiUsage.filter(
+      ({ estimatedCostUsdMicros }) => estimatedCostUsdMicros !== null,
+    );
 
     return {
       period: input.period,
@@ -2593,7 +2607,60 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
         threePostsInFirstSevenDaysRate: rate(threePostUsers, eligible),
         d7EligibleUsers: eligible,
         d7ActiveRate: rate(d7Active.size, eligible),
+        aiCalls: aiUsage.length,
+        aiSuccessfulCalls: aiUsage.filter(({ status }) => status === 'SUCCESS').length,
+        aiFailedCalls: aiUsage.filter(({ status }) => status === 'FAILED').length,
+        aiInputTokens: aiUsage.reduce((sum, value) => sum + (value.inputTokens ?? 0), 0),
+        aiOutputTokens: aiUsage.reduce((sum, value) => sum + (value.outputTokens ?? 0), 0),
+        aiPricedCalls: pricedAiUsage.length,
+        aiEstimatedCostUsdMicros:
+          pricedAiUsage.length === 0
+            ? null
+            : Number(
+                pricedAiUsage.reduce(
+                  (sum, value) => sum + (value.estimatedCostUsdMicros ?? 0n),
+                  0n,
+                ),
+              ),
       },
     };
+  }
+}
+
+export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async record(input: RecordAiUsageInput): Promise<void> {
+    const accessible = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        workspace: {
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+    if (accessible === null) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    await this.client.aiUsageEvent.upsert({
+      where: {
+        workspaceId_actorUserId_idempotencyKey: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
+      create: {
+        ...input,
+        estimatedCostUsdMicros:
+          input.estimatedCostUsdMicros === undefined || input.estimatedCostUsdMicros === null
+            ? null
+            : BigInt(input.estimatedCostUsdMicros),
+        pricingVersion: input.pricingVersion ?? null,
+        errorCode: input.errorCode ?? null,
+        occurredAt: input.occurredAt ?? new Date(),
+      },
+      update: {},
+    });
   }
 }

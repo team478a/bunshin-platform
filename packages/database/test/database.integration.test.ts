@@ -65,6 +65,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.aiUsageEvent.deleteMany();
     await client.dailyMissionGeneration.deleteMany();
     await client.missionFeedback.deleteMany();
     await client.postRecord.deleteMany();
