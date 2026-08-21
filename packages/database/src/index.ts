@@ -18,6 +18,9 @@ import type {
   ValidationMetricsSnapshot,
   AiUsageEventRepository,
   RecordAiUsageInput,
+  LegalDocumentRepository,
+  LegalDocument,
+  LegalDocumentType,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -1375,6 +1378,103 @@ export class PrismaPlatformAdminRepository implements PlatformAdminRepository {
   async findActivePlatformAdminByUserId(userId: string): Promise<PlatformAdmin | null> {
     const row = await this.client.platformAdmin.findFirst({ where: { userId, status: 'ACTIVE' } });
     return row === null ? null : { ...row, role: row.role, status: row.status };
+  }
+}
+
+function legalDocument(row: Prisma.LegalDocumentGetPayload<object>): LegalDocument {
+  return { ...row, type: row.type, status: row.status };
+}
+
+export class PrismaLegalDocumentRepository implements LegalDocumentRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async listForAdmin(actorUserId: string): Promise<LegalDocument[] | null> {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    return (
+      await this.client.legalDocument.findMany({
+        orderBy: [{ type: 'asc' }, { version: 'desc' }],
+      })
+    ).map(legalDocument);
+  }
+
+  async createDraft(input: {
+    actorUserId: string;
+    type: LegalDocumentType;
+    title: string;
+    content: string;
+  }): Promise<LegalDocument | null> {
+    return this.client.$transaction(async (tx) => {
+      const admin = await tx.platformAdmin.findFirst({
+        where: {
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+        },
+        select: { id: true },
+      });
+      if (!admin) return null;
+      const latest = await tx.legalDocument.findFirst({
+        where: { type: input.type },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      return legalDocument(
+        await tx.legalDocument.create({
+          data: {
+            type: input.type,
+            version: (latest?.version ?? 0) + 1,
+            title: input.title,
+            content: input.content,
+            createdByUserId: input.actorUserId,
+          },
+        }),
+      );
+    });
+  }
+
+  async publish(input: {
+    actorUserId: string;
+    documentId: string;
+    effectiveAt: Date;
+  }): Promise<LegalDocument | null> {
+    return this.client.$transaction(async (tx) => {
+      const admin = await tx.platformAdmin.findFirst({
+        where: {
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+        },
+        select: { id: true },
+      });
+      if (!admin) return null;
+      const target = await tx.legalDocument.findFirst({
+        where: { id: input.documentId, status: 'DRAFT' },
+      });
+      if (!target) return null;
+      const now = new Date();
+      await tx.legalDocument.updateMany({
+        where: { type: target.type, status: 'PUBLISHED' },
+        data: { status: 'RETIRED' },
+      });
+      return legalDocument(
+        await tx.legalDocument.update({
+          where: { id: target.id },
+          data: { status: 'PUBLISHED', effectiveAt: input.effectiveAt, publishedAt: now },
+        }),
+      );
+    });
+  }
+
+  async findPublished(type: LegalDocumentType): Promise<LegalDocument | null> {
+    const row = await this.client.legalDocument.findFirst({
+      where: { type, status: 'PUBLISHED', effectiveAt: { lte: new Date() } },
+      orderBy: { version: 'desc' },
+    });
+    return row ? legalDocument(row) : null;
   }
 }
 

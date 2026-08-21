@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function BunshinsPage() {
   const currentUser = await (await currentUserProvider()).getCurrentUser();
   if (currentUser === null) redirect('/login');
-  const { listActiveWorkspacesForUser, PrismaBunshinRepository } =
+  const { listActiveWorkspacesForUser, PrismaBunshinRepository, PrismaPlatformAdminRepository } =
     await import('@bunshin/database');
   const workspaces = await listActiveWorkspacesForUser(currentUser.userId);
   const workspace = workspaces[0];
@@ -24,6 +24,9 @@ export default async function BunshinsPage() {
     workspaceId: workspace.id,
     actorUserId: currentUser.userId,
   });
+  const platformAdmin = await new PrismaPlatformAdminRepository().findActivePlatformAdminByUserId(
+    currentUser.userId,
+  );
   return (
     <main>
       <h1>BUNSHIN</h1>
@@ -37,6 +40,11 @@ export default async function BunshinsPage() {
       <p>
         <Link href={`/validation?workspaceId=${workspace.id}` as Route}>FREE MVP検証指標</Link>
       </p>
+      {platformAdmin ? (
+        <p>
+          <Link href="/admin/legal">法務文書管理</Link>
+        </p>
+      ) : null}
       {bunshins.length === 0 ? (
         <p>まだ分身はありません。</p>
       ) : (

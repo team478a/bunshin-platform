@@ -54,6 +54,17 @@ enum PlatformAdminStatus {
   REVOKED
 }
 
+enum LegalDocumentType {
+  TERMS
+  PRIVACY
+}
+
+enum LegalDocumentStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
 enum BunshinType {
   COPY
   EXPERT
@@ -281,6 +292,7 @@ model User {
   postRecords           PostRecord[]                  @relation("PostRecordActor")
   missionFeedback       MissionFeedback[]             @relation("MissionFeedbackActor")
   aiUsageEvents         AiUsageEvent[]                 @relation("AiUsageActor")
+  legalDocuments        LegalDocument[]                @relation("LegalDocumentAuthor")
 
   @@index([status])
   @@map("users")
@@ -357,6 +369,25 @@ model PlatformAdmin {
 
   @@index([status, role])
   @@map("platform_admins")
+}
+
+model LegalDocument {
+  id              String              @id @default(uuid()) @db.Uuid
+  type            LegalDocumentType
+  version         Int
+  title           String              @db.VarChar(200)
+  content         String              @db.Text
+  status          LegalDocumentStatus @default(DRAFT)
+  effectiveAt     DateTime?           @map("effective_at") @db.Timestamptz(6)
+  publishedAt     DateTime?           @map("published_at") @db.Timestamptz(6)
+  createdByUserId String              @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy       User                @relation("LegalDocumentAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([type, version])
+  @@index([type, status, publishedAt])
+  @@map("legal_documents")
 }
 
 model Bunshin {
