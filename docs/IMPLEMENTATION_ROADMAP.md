@@ -137,7 +137,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 最低限の管理画面（期間指定、最重要KPI、行動指標、funnel完了）
 - 利用規約・プライバシーのPlatform Admin版管理／公開（完了）
 - 公開中の規約・プライバシーへのユーザー同意、版更新時の再同意（完了）
-- 削除・退会（未実装）
+- 本人による退会要求・取消、14日猶予、管理者確認（完了）
+- 猶予期間後の匿名化・削除実行（未実装）
 - Production Gate、backup/restore、運用手順
 
 ここで100人規模のFREE検証を行う。

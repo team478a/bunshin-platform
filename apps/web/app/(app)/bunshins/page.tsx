@@ -38,11 +38,16 @@ export default async function BunshinsPage() {
         <Link href="/knowledge">Knowledgeを管理</Link>
       </p>
       <p>
+        <Link href="/account">アカウント設定</Link>
+      </p>
+      <p>
         <Link href={`/validation?workspaceId=${workspace.id}` as Route}>FREE MVP検証指標</Link>
       </p>
       {platformAdmin ? (
         <p>
           <Link href="/admin/legal">法務文書管理</Link>
+          {' / '}
+          <Link href="/admin/deletions">退会要求管理</Link>
         </p>
       ) : null}
       {bunshins.length === 0 ? (

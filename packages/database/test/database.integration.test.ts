@@ -55,6 +55,7 @@ import {
   PrismaMissionEngagementRepository,
   PrismaMissionOutcomeRepository,
   PrismaLegalConsentRepository,
+  PrismaAccountDeletionRequestRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -66,6 +67,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.accountDeletionRequest.deleteMany();
     await client.userLegalConsent.deleteMany();
     await client.legalDocument.deleteMany();
     await client.aiUsageEvent.deleteMany();
@@ -191,6 +193,22 @@ integration('database ownership boundaries', () => {
       },
     });
     expect((await repository.findRequiredForUser(a.user.id))[0]?.consentedAt).toBeNull();
+  });
+
+  it('isolates account deletion requests by User and preserves cancelled history', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const a = await accounts.execute({ displayName: 'Deletion A' });
+    const b = await accounts.execute({ displayName: 'Deletion B' });
+    const repository = new PrismaAccountDeletionRequestRepository(client);
+    const scheduledFor = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    expect(await repository.request(a.user.id, scheduledFor)).toMatchObject({
+      userId: a.user.id,
+      status: 'REQUESTED',
+    });
+    expect(await repository.findCurrent(b.user.id)).toBeNull();
+    expect(await repository.cancel(b.user.id)).toBeNull();
+    expect(await repository.cancel(a.user.id)).toMatchObject({ status: 'CANCELLED' });
+    expect(await client.accountDeletionRequest.count({ where: { userId: a.user.id } })).toBe(1);
   });
 
   it('isolates Memory by workspace and Bunshin and excludes inactive/deleted rows', async () => {
