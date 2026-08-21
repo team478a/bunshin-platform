@@ -24,7 +24,13 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 | `LOG_LEVEL`                            | server-only | log threshold                      |
 | `NEXT_PUBLIC_SUPABASE_URL`             | public      | Supabase Auth project URL          |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public      | Supabase publishable key           |
+| `OPENAI_API_KEY`                       | secret      | OpenAI server-side authentication  |
+| `OPENAI_STRATEGY_MODEL`                | server-only | Account Strategy model             |
+| `OPENAI_WEEKLY_PLANNER_MODEL`          | server-only | Weekly Planner model               |
+| `OPENAI_DAILY_MISSION_PLANNER_MODEL`   | server-only | Daily Mission Planner model        |
+| `OPENAI_CONTENT_GENERATOR_MODEL`       | server-only | Mission Content model              |
+| `OPENAI_MISSION_QUALITY_MODEL`         | server-only | Mission Quality model              |
 
-`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。LINE、AI、cron等の未使用secretは追加していない。
+`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。OpenAI keyはProductionだけへ設定し、PreviewへProduction DB credentialやProduction用AI keyを設定しない。LINE、cron等の未使用secretは追加しない。
 
 validation errorは不足した変数名だけを出し、値をlogへ出さない。

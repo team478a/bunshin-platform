@@ -8,21 +8,22 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 
 ## A. 自動検証
 
-- [ ] `main`のCI `verify` / `database`が成功している
-- [ ] Vercel Production deploymentが成功している
-- [ ] 空PostgreSQLへの全migration適用が成功している
+- [x] `main`のCI `verify` / `database`が成功している
+- [x] Vercel Production deploymentが成功している
+- [x] 空PostgreSQLへの全migration適用が成功している
 - [ ] dependency auditの重大問題を確認した
 
 ## B. Production Database
 
 - [ ] Supabase backupと保持期間を確認した
 - [ ] restore手順と責任者を確認した
-- [ ] GitHub Environment `production`のrequired reviewerを確認した
-- [ ] `DATABASE_URL`がtransaction poolerである
-- [ ] `DIRECT_URL`がmigration用session/direct接続である
-- [ ] 対象commitのProduction migration workflowを承認・実行した
-- [ ] `prisma migrate status`が最新である
-- [ ] `/api/health/ready`が`database: ok`を返す
+- [x] GitHub Environment `production`のrequired reviewerを確認した
+- [x] GitHub Environmentに`DATABASE_URL` / `DIRECT_URL` secret名が存在する
+- [ ] `DATABASE_URL`がtransaction poolerであることをSupabase接続画面で再確認した
+- [ ] `DIRECT_URL`がmigration用session/direct接続であることをSupabase接続画面で再確認した
+- [x] 対象commitのProduction migration workflowを承認・実行した
+- [x] `prisma migrate status`が最新である
+- [x] `/api/health/ready`が`database: ok`を返す
 
 ## C. Auth / AI / Application Configuration
 
