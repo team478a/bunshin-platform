@@ -167,7 +167,7 @@ export class PrismaJobRepository implements JobRepository {
   }
 
   async claim(input: Parameters<JobRepository['claim']>[0]): Promise<Job | null> {
-    const rows = await this.client.$queryRaw<Array<Prisma.JobGetPayload<object>>>`
+    const rows = await this.client.$queryRaw<Array<{ id: string }>>`
       WITH candidate AS (
         SELECT "id"
         FROM "jobs"
@@ -190,9 +190,11 @@ export class PrismaJobRepository implements JobRepository {
           "updated_at" = ${input.now}
       FROM candidate
       WHERE job."id" = candidate."id"
-      RETURNING job.*
+      RETURNING job."id"
     `;
-    return rows[0] ? platformJob(rows[0]) : null;
+    const claimed = rows[0];
+    if (!claimed) return null;
+    return platformJob(await this.client.job.findUniqueOrThrow({ where: { id: claimed.id } }));
   }
 
   async complete(input: Parameters<JobRepository['complete']>[0]): Promise<Job | null> {
