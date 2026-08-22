@@ -9,6 +9,7 @@ const serverSchema = z
     DATABASE_URL: z.string().min(1),
     DIRECT_URL: z.string().min(1),
     SESSION_SECRET: z.string().min(32),
+    CRON_SECRET: z.string().min(32).optional(),
     ENCRYPTION_KEY: z.string().min(32).optional(),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
