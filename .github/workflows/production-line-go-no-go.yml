@@ -1,0 +1,49 @@
+name: Production LINE Go-No-Go
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type GO_LINE_PRODUCTION to evaluate the production gate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - name: Require main and explicit confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRMATION" = "GO_LINE_PRODUCTION"
+      - name: Check application readiness
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            https://bunshin-platform-web.vercel.app/api/health/ready \
+            | jq -e '.status == "ready" and .environment == "production" and .checks.database == "ok"'
+      - name: Check LINE operational readiness without sending
+        env:
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET"
+          curl --fail --silent --show-error --retry 3 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://bunshin-platform-web.vercel.app/api/internal/line/readiness \
+            | jq -e '.data.environment == "PRODUCTION" and .data.ready == true and .data.alertingConfigured == true and (.data.alerts | length) == 0'
+      - name: Record gate summary
+        run: |
+          {
+            echo "## Production LINE Go/No-Go"
+            echo ""
+            echo "- Application readiness: GO"
+            echo "- LINE configuration and operations: GO"
+            echo "- External administrator alerting: configured"
+            echo "- This workflow did not send a LINE message."
+          } >> "$GITHUB_STEP_SUMMARY"

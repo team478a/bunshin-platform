@@ -5,7 +5,8 @@
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=web",
   "crons": [
     { "path": "/api/internal/jobs/schedule", "schedule": "* * * * *" },
-    { "path": "/api/internal/jobs/run", "schedule": "* * * * *" }
+    { "path": "/api/internal/jobs/run", "schedule": "* * * * *" },
+    { "path": "/api/internal/line/monitor", "schedule": "0 * * * *" }
   ],
   "functions": {
     "app/api/workspaces/[workspaceId]/bunshins/[bunshinId]/daily-missions/generate/route.ts": {

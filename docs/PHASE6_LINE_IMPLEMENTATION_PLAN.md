@@ -113,7 +113,7 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - `LineMessageDelivery`、`LineMessageDeliveryAttempt`、短期lease（完了）
 - timeout、rate limit、blocked、invalid recipient、credential、quotaの分類とJob retry接続（完了）
 - 環境別の用途分離鍵で署名したsingle-use短期stateを使うMission Deep Link（発行・消費Coreと送信時発行まで完了）
-- Mission Deep LinkのApplication Callback、click記録、理由付き手動再送は完了。管理者警告は後続
+- Mission Deep LinkのApplication Callback、click記録、理由付き手動再送、集計ベースの外部管理者警告は完了
 
 ### 6-G: Admin / KPI / Production Gate
 
@@ -121,7 +121,9 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - ユーザー単位停止、全体停止、理由付き限定再送（再試行可能なFAILED配信のみ完了）
 - 友だち追加から投稿完了までの環境別LINE Funnel（完了）
 - 送信数、Open率、解除・ブロック相当率、通知から投稿完了率（完了）。LINE原価はProvider契約・課金データ未接続のため後続
-- Runbook、Production Smoke、Production Gate再判定
+- 環境別の重大状態判定、allowlist済み外部Webhookへの管理者警告、毎時監視（コード完了）
+- 非送信LINE Readiness、Production LINE Go/No-Go workflow、Runbook（コード・文書完了）
+- Vercel/GitHub Secret登録、外部Webhook疎通、Production LINE Go/No-Go実行（人間作業として未完了）
 
 ## 5. DB変更候補
 

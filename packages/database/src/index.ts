@@ -41,6 +41,7 @@ import type {
   LineAdminMetricsRepository,
   LineDeliveryRetryRepository,
   LineAdminFunnelRepository,
+  LineOperationalSnapshotRepository,
   MissionDeepLinkState,
   MissionDeepLinkStateRepository,
   LineConnection,
@@ -760,6 +761,51 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
         quotaWarningPercent: configuration?.quotaWarningPercent ?? null,
         quotaLowPriorityStop: configuration?.quotaLowPriorityStop ?? null,
       },
+    };
+  }
+}
+
+export class PrismaLineOperationalSnapshotRepository implements LineOperationalSnapshotRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async get(environment: LineConfigurationEnvironment) {
+    const [failed, retryScheduled, dead, failureRows, configuration] = await Promise.all([
+      this.client.lineMessageDelivery.count({ where: { environment, status: 'FAILED' } }),
+      this.client.job.count({
+        where: { environment, jobType: 'LINE_MISSION_DELIVER', status: 'RETRY_SCHEDULED' },
+      }),
+      this.client.job.count({
+        where: { environment, jobType: 'LINE_MISSION_DELIVER', status: 'DEAD' },
+      }),
+      this.client.lineMessageDelivery.findMany({
+        where: { environment, status: 'FAILED', lastErrorCategory: { not: null } },
+        select: { lastErrorCategory: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 500,
+      }),
+      this.client.lineChannelConfiguration.findFirst({
+        where: { environment, status: 'ACTIVE' },
+      }),
+    ]);
+    const failureCounts = new Map<string, number>();
+    for (const row of failureRows) {
+      if (row.lastErrorCategory)
+        failureCounts.set(
+          row.lastErrorCategory,
+          (failureCounts.get(row.lastErrorCategory) ?? 0) + 1,
+        );
+    }
+    return {
+      environment,
+      configuration: {
+        active: configuration !== null,
+        verified:
+          configuration?.lastVerifiedAt !== null && configuration?.lastErrorCategory === null,
+        globallyPaused: configuration?.globallyPaused ?? false,
+      },
+      deliveries: { failed },
+      jobs: { retryScheduled, dead },
+      failures: [...failureCounts.entries()].map(([category, count]) => ({ category, count })),
     };
   }
 }
