@@ -681,3 +681,13 @@
 - Privacy: providerUserId、User ID、Workspace ID、Bunshin ID、Mission ID、Secret、Provider responseをAPI・HTMLへ返さない
 - Bound: 失敗分類は直近500試行から上位8分類に制限し、運用画面の無制限scanを避ける
 - Separation: 個別利用者検索、理由付き再送、外部警告通知、Funnel、Production Smokeは後続へ分離する
+
+## D-059: Mission Deep Linkはverified sessionで消費してからMissionへ遷移する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Consumption: URLの短期stateを一度だけ消費し、署名だけでなくUser、Workspace、Bunshin、Mission所有権をDBで再検証する
+- Activity: 消費したstate ID由来の冪等keyで`VIEWED`を記録し、tokenやLINE user IDをActivityへ保存しない
+- Redirect: 遷移先はDBで検証済みのBunshin IDから固定pathを構築し、外部return URLを受け付けない
+- Failure: 無効、期限切れ、再利用、別User、別環境は同じ404境界で拒否する
+- Separation: 未ログインからLINE Login後に元URLへ戻す処理は6-Bの認証導線へ残す
