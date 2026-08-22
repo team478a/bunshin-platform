@@ -765,3 +765,16 @@
   - 404は冪等成功、429・timeout・5xxは再試行可能、401・403は固定分類の非再試行失敗とする。
   - Secret、Provider response、provider user IDを結果・log・DBへ複製しない。
   - Adapter完成だけではProduction削除を有効化せず、PR Cの匿名化transactionとPR Dの運用Gateが揃うまで実行フローへ接続しない。
+
+## D-066: 退会時のPersonal Data Purgeは匿名User行を残して単一transactionで完了する
+
+- 日付: 2026-08-22
+- 状態: 採用
+- 決定:
+  - Supabase Auth削除成功後専用のRepository境界としてpurgeを実行し、正しいrequest、User、worker lease、SUSPENDED状態を必須とする。
+  - AuthIdentity、LINE Connection、LINE通知設定、Deep Link stateは削除する。
+  - User行は監査参照維持のため削除せず、emailをnull、displayNameを固定値、statusをDELETEDにする。
+  - Personal WorkspaceをARCHIVED化し、Bunshin、Knowledge、Memory、Strategy、Mission、Post URL、自由記述metadataを匿名化する。
+  - Organization Workspaceの共有資産は変更せず、本人MembershipだけをREVOKEDにする。本人所有のOrganization Knowledge / Bunshinが見つかった場合は再検証でBLOCKEDにする。
+  - purgeとrequestのCOMPLETED確定を同じDB transactionで行い、crash時に部分匿名化を残さない。
+  - summaryは処理件数のみとし、削除値やProvider responseを保存しない。

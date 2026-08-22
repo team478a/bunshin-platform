@@ -57,6 +57,7 @@ import {
   PrismaLegalConsentRepository,
   PrismaAccountDeletionRequestRepository,
   PrismaAccountDeletionExecutionRepository,
+  PrismaAccountDeletionPurgeRepository,
   PrismaJobRepository,
   PrismaMissionAutomationScopeRepository,
   PrismaLineConnectionRepository,
@@ -709,6 +710,245 @@ integration('database ownership boundaries', () => {
       client.user.findUniqueOrThrow({ where: { id: account.user.id } }),
     ).resolves.toMatchObject({
       status: 'ACTIVE',
+    });
+  });
+
+  it('purges personal data and completes a suspended account without changing organization assets', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const account = await accounts.execute({
+      displayName: 'Purge User',
+      email: 'purge@example.com',
+    });
+    const other = await accounts.execute({ displayName: 'Organization Owner' });
+    const personalBunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: account.workspace.id,
+      actorUserId: account.user.id,
+      name: 'Private Bunshin',
+      slug: `private-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Private objective',
+      audienceSummary: 'Private audience',
+      personalitySummary: 'Private personality',
+    });
+    const organization = await client.workspace.create({
+      data: { type: 'ORGANIZATION', name: 'Preserved Organization' },
+    });
+    await Promise.all([
+      client.workspaceMembership.create({
+        data: { workspaceId: organization.id, userId: other.user.id, role: 'OWNER' },
+      }),
+      client.workspaceMembership.create({
+        data: { workspaceId: organization.id, userId: account.user.id, role: 'MEMBER' },
+      }),
+      client.authIdentity.create({
+        data: { userId: account.user.id, provider: 'EMAIL', providerUserId: randomUUID() },
+      }),
+      client.ownerKnowledge.create({
+        data: {
+          workspaceId: account.workspace.id,
+          ownerUserId: account.user.id,
+          type: 'PROFILE',
+          title: 'Private title',
+          content: 'Private knowledge',
+        },
+      }),
+      client.bunshinMemory.create({
+        data: {
+          workspaceId: account.workspace.id,
+          bunshinId: personalBunshin.id,
+          type: 'PREFERENCE',
+          content: 'Private memory',
+          summary: 'Private summary',
+          sourceId: 'private-source',
+          confidence: 0.9,
+          importance: 5,
+        },
+      }),
+    ]);
+    const mission = await client.dailyMission.create({
+      data: {
+        workspaceId: account.workspace.id,
+        bunshinId: personalBunshin.id,
+        missionDate: new Date('2026-08-22T00:00:00Z'),
+        format: 'TEXT',
+        estimatedMinutes: 5,
+        topic: 'Private topic',
+        angle: 'Private angle',
+        reason: 'Private reason',
+      },
+    });
+    await Promise.all([
+      client.bunshinObjective.create({
+        data: {
+          bunshinId: personalBunshin.id,
+          objectiveType: 'PRIVATE',
+          primaryGoal: 'Private goal',
+          kpiName: 'Private KPI',
+          priority: 1,
+        },
+      }),
+      client.bunshinAudience.create({
+        data: {
+          bunshinId: personalBunshin.id,
+          label: 'Private audience',
+          painPoints: ['Private pain'],
+          desires: ['Private desire'],
+          excludedAudience: [],
+        },
+      }),
+      client.missionContent.create({
+        data: {
+          workspaceId: account.workspace.id,
+          bunshinId: personalBunshin.id,
+          dailyMissionId: mission.id,
+          format: 'TEXT',
+          contentJson: { text: 'Private mission content' },
+        },
+      }),
+      client.missionActivity.create({
+        data: {
+          workspaceId: account.workspace.id,
+          bunshinId: personalBunshin.id,
+          dailyMissionId: mission.id,
+          actorUserId: account.user.id,
+          type: 'VIEWED',
+          idempotencyKey: `purge-activity-${randomUUID()}`,
+          metadata: { private: 'value' },
+        },
+      }),
+      client.postRecord.create({
+        data: {
+          workspaceId: account.workspace.id,
+          bunshinId: personalBunshin.id,
+          dailyMissionId: mission.id,
+          actorUserId: account.user.id,
+          platform: 'X',
+          postedAt: new Date(),
+          postUrl: 'https://example.com/private',
+          externalPostId: 'private-id',
+          manualMetrics: { views: 10 },
+          idempotencyKey: `purge-post-${randomUUID()}`,
+        },
+      }),
+    ]);
+    const deletionRequest = await new PrismaAccountDeletionRequestRepository(client).request(
+      account.user.id,
+      new Date('2026-08-21T00:00:00Z'),
+    );
+    const preparation = await new PrismaAccountDeletionExecutionRepository(
+      client,
+    ).claimAndSuspendNext({
+      workerId: 'purge-worker',
+      now: new Date('2026-08-22T09:00:00Z'),
+      leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+      executionVersion: 1,
+    });
+    expect(preparation).toMatchObject({ status: 'PROCESSING' });
+
+    await expect(
+      new PrismaAccountDeletionPurgeRepository(client).completeAfterAuthDeletion({
+        requestId: deletionRequest!.id,
+        userId: account.user.id,
+        workerId: 'purge-worker',
+        now: new Date('2026-08-22T09:01:00Z'),
+      }),
+    ).resolves.toMatchObject({ status: 'COMPLETED', userId: account.user.id });
+
+    await expect(
+      client.user.findUniqueOrThrow({ where: { id: account.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'DELETED',
+      email: null,
+      displayName: '退会済みユーザー',
+    });
+    expect(await client.authIdentity.count({ where: { userId: account.user.id } })).toBe(0);
+    await expect(
+      client.workspace.findUniqueOrThrow({ where: { id: account.workspace.id } }),
+    ).resolves.toMatchObject({
+      status: 'ARCHIVED',
+      name: '退会済みワークスペース',
+    });
+    await expect(
+      client.bunshin.findUniqueOrThrow({ where: { id: personalBunshin.id } }),
+    ).resolves.toMatchObject({
+      status: 'ARCHIVED',
+      slug: `deleted-${personalBunshin.id}`,
+      objectiveSummary: '',
+      avatarUrl: null,
+    });
+    await expect(
+      client.bunshinObjective.findFirstOrThrow({ where: { bunshinId: personalBunshin.id } }),
+    ).resolves.toMatchObject({ primaryGoal: '', kpiName: null, status: 'INACTIVE' });
+    await expect(
+      client.bunshinAudience.findFirstOrThrow({ where: { bunshinId: personalBunshin.id } }),
+    ).resolves.toMatchObject({ label: '', painPoints: [], desires: [] });
+    await expect(
+      client.ownerKnowledge.findFirstOrThrow({ where: { workspaceId: account.workspace.id } }),
+    ).resolves.toMatchObject({
+      content: '',
+      status: 'ARCHIVED',
+    });
+    await expect(
+      client.bunshinMemory.findFirstOrThrow({ where: { workspaceId: account.workspace.id } }),
+    ).resolves.toMatchObject({
+      content: '',
+      summary: null,
+      sourceId: null,
+      active: false,
+    });
+    await expect(
+      client.missionContent.findUniqueOrThrow({ where: { dailyMissionId: mission.id } }),
+    ).resolves.toMatchObject({
+      contentJson: {},
+    });
+    await expect(
+      client.postRecord.findUniqueOrThrow({ where: { dailyMissionId: mission.id } }),
+    ).resolves.toMatchObject({
+      postUrl: null,
+      externalPostId: null,
+      manualMetrics: null,
+    });
+    await expect(
+      client.workspace.findUniqueOrThrow({ where: { id: organization.id } }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+      name: 'Preserved Organization',
+    });
+    expect(
+      await client.workspaceMembership.count({
+        where: { workspaceId: organization.id, userId: other.user.id, status: 'ACTIVE' },
+      }),
+    ).toBe(1);
+  });
+
+  it('requires the matching active lease before purge and preserves all data otherwise', async () => {
+    const account = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Lease Protected', email: 'lease@example.com' });
+    const request = await client.accountDeletionRequest.create({
+      data: {
+        userId: account.user.id,
+        status: 'PROCESSING',
+        scheduledFor: new Date('2026-08-21T00:00:00Z'),
+        leaseOwner: 'correct-worker',
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+      },
+    });
+    await client.user.update({ where: { id: account.user.id }, data: { status: 'SUSPENDED' } });
+
+    await expect(
+      new PrismaAccountDeletionPurgeRepository(client).completeAfterAuthDeletion({
+        requestId: request.id,
+        userId: account.user.id,
+        workerId: 'wrong-worker',
+        now: new Date('2026-08-22T09:01:00Z'),
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      client.user.findUniqueOrThrow({ where: { id: account.user.id } }),
+    ).resolves.toMatchObject({
+      email: 'lease@example.com',
+      status: 'SUSPENDED',
     });
   });
 
