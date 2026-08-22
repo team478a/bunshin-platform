@@ -11,6 +11,29 @@ const scope = {
 };
 
 describe('LINE messaging persistence isolation', () => {
+  it('loads a delivery only through the full environment and ownership scope', async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const client = { lineMessageDelivery: { findFirst } } as unknown as PrismaClient;
+    await expect(
+      new PrismaLineMessageDeliveryRepository(client).getScoped({
+        deliveryId: 'delivery-a',
+        environment: 'STAGING',
+        workspaceId: 'workspace-a',
+        bunshinId: 'bunshin-a',
+        actorUserId: 'user-a',
+      }),
+    ).resolves.toBeNull();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        id: 'delivery-a',
+        environment: 'STAGING',
+        workspaceId: 'workspace-a',
+        bunshinId: 'bunshin-a',
+        userId: 'user-a',
+      }),
+    });
+  });
+
   it('atomically claims a due delivery with an environment-scoped lease', async () => {
     const now = new Date('2026-08-22T05:00:00Z');
     const leaseExpiresAt = new Date('2026-08-22T05:00:30Z');

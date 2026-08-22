@@ -658,3 +658,16 @@
 - Isolation: recipient解決時にActive User、Workspace Membership、Bunshin、環境、FOLLOWING、Connection consent、Bunshin別通知同意を再検証する
 - Cancellation: unfollowまたは明示解除時は未送信・処理中・失敗中の配信を`RECIPIENT_UNAVAILABLE`として取消し、以後Providerを呼ばない
 - Scope: message / postback業務処理、LINE Login本番導線、Production Webhook接続、実ユーザーPushは後続へ分離する
+
+## D-057: Daily Mission完成通知を独立したLINE配信Jobへ接続する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Producer: Daily Mission生成が成功または既存Missionを冪等取得した後だけ、環境・User・Mission・用途で一意な`LineMessageDelivery`と`LINE_MISSION_DELIVER` Jobを登録する
+- Payload: JobにはopaqueなDelivery IDだけを保存し、Mission本文、Deep Link state、LINE user ID、Access Tokenを含めない
+- Isolation: 配信実行前にenvironment、Workspace、Bunshin、actor User、Membership、Missionをrepositoryで再検証し、別scopeのDeliveryを取得しない
+- Execution: 配信lease取得後、同一環境のACTIVE設定、全体停止、Connection、通知同意、quotaを順に検証し、すべて通過した場合だけ短期single-use Deep Link stateを発行してProviderを呼ぶ
+- Retry: rate limit、timeout、Provider障害、設定一時不在、lease競合だけを既存Jobの指数backoffへ接続し、停止・quota停止・recipient不在などの非retry結果は配信状態を正本としてJobを終了する
+- Idempotency: DeliveryとJobにそれぞれ決定的な一意keyを持たせ、Daily生成Jobの再実行でも同一Missionを二重送信しない
+- Production Gate: コード接続は行うが、LINE Login / Identity外部設定とProduction Smokeが完了するまで実ユーザー送信をGOとしない
+- Separation: Mission Callback / click、理由付き手動再送、管理者警告、LINE Login UIは後続PRへ分離する

@@ -51,6 +51,7 @@ describe('LINE messaging core', () => {
       updatedAt: now,
     };
     const repository = {
+      getScoped: vi.fn(),
       prepare: vi.fn().mockResolvedValue(delivery),
       claim: vi.fn(),
       recordAttempt: vi.fn(),

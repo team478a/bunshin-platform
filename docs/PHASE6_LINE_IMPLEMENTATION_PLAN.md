@@ -1,7 +1,7 @@
 # Phase 6 LINE Daily Experience 実装計画
 
 更新日: 2026-08-22
-基準commit: `0a732349448703c52d15a873659af1b99d5b33bb`
+基準commit: `164c12aa6618361e7b43b254e0a942994c45e5a0`
 
 ## 1. 目的
 
@@ -28,7 +28,7 @@ LINE連携
 - Platform Adminは`SUPER_ADMIN | OPERATOR | SUPPORT | READ_ONLY`を持つ。
 - Weekly / Daily生成は認証済みScheduler / WorkerとVercel Cronへ接続済み。
 - PostgreSQL Job、lease、retry、配信履歴、Mission Deep Link、Messaging Adapter、quota Gateは実装済み。
-- 通知設定とWebhook / Connection Coreは実装済み。実ユーザーPushはLINE Login接続後まで停止する。
+- 通知設定とWebhook / Connection Coreは実装済み。Mission生成後の配信Job接続も完了したが、実ユーザーPushはLINE Login接続とProduction Gate通過まで停止する。
 - Phase 0〜5のコードは完了しているが、FREE MVP Production GateはNO-GO。
 
 ## 3. 絶対境界
@@ -107,12 +107,13 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 
 ### 6-F: Messaging / Deep Link
 
-- Messaging Provider PortとLINE Adapter
-- Pushまたは必要最小限のFlex Message
-- `LineNotification`、`LineDeliveryAttempt`
-- timeout、rate limit、blocked、invalid recipient、credential、quotaの分類
-- 環境別の用途分離鍵で署名したsingle-use短期stateを使うMission Deep Link
-- click記録、再送、quota優先制御
+- Messaging Provider PortとLINE Adapter（完了）
+- Daily Mission生成成功後の環境別・冪等な配信Job登録（完了）
+- 配信JobからConnection resolver、quota Gate、Push Adapterへの接続（完了）
+- `LineMessageDelivery`、`LineMessageDeliveryAttempt`、短期lease（完了）
+- timeout、rate limit、blocked、invalid recipient、credential、quotaの分類とJob retry接続（完了）
+- 環境別の用途分離鍵で署名したsingle-use短期stateを使うMission Deep Link（発行・消費Coreと送信時発行まで完了）
+- Mission Deep LinkのApplication Callback、click記録、理由付き手動再送、管理者警告は後続
 
 ### 6-G: Admin / KPI / Production Gate
 

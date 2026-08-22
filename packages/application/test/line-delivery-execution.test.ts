@@ -44,6 +44,7 @@ function dependencies(input?: {
 }) {
   const current = delivery({ kind: input?.kind ?? 'DAILY_MISSION' });
   const repository = {
+    getScoped: vi.fn(),
     prepare: vi.fn(),
     claim: vi
       .fn()
@@ -76,7 +77,7 @@ function dependencies(input?: {
 
 async function execute(
   values: ReturnType<typeof dependencies>,
-  deepLinkUrl = 'https://app.example.com/today?state=opaque',
+  deepLinkUrl: string | (() => Promise<string>) = 'https://app.example.com/today?state=opaque',
 ) {
   return new ExecuteLineMissionDelivery(
     values.repository,
@@ -126,13 +127,25 @@ describe('LINE delivery execution', () => {
 
   it('fails closed during a global pause before resolving a recipient', async () => {
     const values = dependencies({ paused: true });
-    await expect(execute(values)).resolves.toEqual({
+    const issueDeepLink = vi.fn().mockResolvedValue('https://app.example.com/today?state=opaque');
+    await expect(execute(values, issueDeepLink)).resolves.toEqual({
       status: 'CANCELLED',
       category: 'GLOBALLY_PAUSED',
       retryable: false,
     });
     expect(values.recipient.resolve).not.toHaveBeenCalled();
     expect(values.provider.getQuota).not.toHaveBeenCalled();
+    expect(issueDeepLink).not.toHaveBeenCalled();
+  });
+
+  it('issues a short-lived deep link only after configuration, recipient and quota checks pass', async () => {
+    const values = dependencies();
+    const issueDeepLink = vi.fn().mockResolvedValue('https://app.example.com/today?state=opaque');
+    await expect(execute(values, issueDeepLink)).resolves.toMatchObject({ status: 'SENT' });
+    expect(issueDeepLink).toHaveBeenCalledOnce();
+    expect(values.provider.pushMissionNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ deepLinkUrl: 'https://app.example.com/today?state=opaque' }),
+    );
   });
 
   it('stops low-priority reminders at the configured quota threshold', async () => {

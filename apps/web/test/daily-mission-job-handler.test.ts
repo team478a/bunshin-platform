@@ -1,8 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const execute = vi.hoisted(() => vi.fn());
+const { execute, prepare, enqueue } = vi.hoisted(() => ({
+  execute: vi.fn(),
+  prepare: vi.fn(),
+  enqueue: vi.fn(),
+}));
 vi.mock('../src/services/daily-mission-generation', () => ({
   createDailyMissionGenerationService: () => ({ execute }),
+}));
+vi.mock('@bunshin/database', () => ({
+  PrismaLineMessageDeliveryRepository: class {
+    prepare = prepare;
+  },
+  PrismaJobRepository: class {
+    enqueue = enqueue;
+  },
 }));
 
 import { createDailyMissionJobHandler } from '../src/jobs/daily-mission-job-handler';
@@ -10,7 +22,12 @@ import { createDailyMissionJobHandler } from '../src/jobs/daily-mission-job-hand
 const now = new Date('2026-08-22T00:00:00.000Z');
 
 describe('daily mission job handler', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    execute.mockResolvedValue({ id: 'mission-1' });
+    prepare.mockResolvedValue({ id: '77d8baef-d7de-48d7-975e-c7c0ea4c81bf' });
+    enqueue.mockImplementation((input) => Promise.resolve({ id: 'delivery-job-1', ...input }));
+  });
 
   it('maps validated Job scope and local date to idempotent Daily generation', async () => {
     await createDailyMissionJobHandler().execute({
@@ -50,5 +67,22 @@ describe('daily mission job handler', () => {
       usageIdempotencyPrefix: 'job:job-1:daily-mission',
       existingPolicy: 'RETURN',
     });
+    expect(prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environment: 'PRODUCTION',
+        workspaceId: 'workspace-1',
+        bunshinId: 'bunshin-1',
+        actorUserId: 'user-1',
+        dailyMissionId: 'mission-1',
+        kind: 'DAILY_MISSION',
+      }),
+    );
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'LINE_MISSION_DELIVER',
+        payloadReference: 'line-delivery:77d8baef-d7de-48d7-975e-c7c0ea4c81bf',
+        requestedBy: 'user-1',
+      }),
+    );
   });
 });
