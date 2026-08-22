@@ -21,6 +21,8 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 | `DATABASE_URL`                         | secret      | pooled runtime connection          |
 | `DIRECT_URL`                           | secret      | Prisma migration/direct connection |
 | `SESSION_SECRET`                       | secret      | 将来のapplication session用        |
+| `ENCRYPTION_KEY`                       | secret      | LINE Secret暗号化の環境別親鍵      |
+| `LINE_CONFIG_KEY_VERSION`              | server-only | LINE暗号化鍵のrotation version     |
 | `LOG_LEVEL`                            | server-only | log threshold                      |
 | `NEXT_PUBLIC_SUPABASE_URL`             | public      | Supabase Auth project URL          |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public      | Supabase publishable key           |
@@ -31,6 +33,6 @@ stagingとproductionで同じSupabase project、URL、secretを使用しない�
 | `OPENAI_CONTENT_GENERATOR_MODEL`       | server-only | Mission Content model              |
 | `OPENAI_MISSION_QUALITY_MODEL`         | server-only | Mission Quality model              |
 
-`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。OpenAI keyはProductionだけへ設定し、PreviewへProduction DB credentialやProduction用AI keyを設定しない。LINE、cron等の未使用secretは追加しない。
+`NEXT_PUBLIC_*`には公開可能なSupabase URLとpublishable keyだけを設定する。service role key、DB credential、SMTP credentialは設定しない。server-only変数をClient Componentからimportしない。OpenAI keyはProductionだけへ設定し、PreviewへProduction DB credentialやProduction用AI keyを設定しない。`ENCRYPTION_KEY`は32文字以上の環境別の値とし、DB・管理画面・Previewへ置かない。
 
 validation errorは不足した変数名だけを出し、値をlogへ出さない。

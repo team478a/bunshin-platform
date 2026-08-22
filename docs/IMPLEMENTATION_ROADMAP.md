@@ -125,7 +125,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 状態: 実装前設計中。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
 
 - 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
-- 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation
+- 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation（実装・レビュー中）
 - 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ
 - 6-C: Webhook / Connection。署名、follow/unfollow、postback、友だち状態、冪等性
 - 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止

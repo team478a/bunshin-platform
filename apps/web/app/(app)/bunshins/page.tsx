@@ -48,6 +48,8 @@ export default async function BunshinsPage() {
           <Link href="/admin/legal">法務文書管理</Link>
           {' / '}
           <Link href="/admin/deletions">退会要求管理</Link>
+          {' / '}
+          <Link href="/admin/line">LINE設定管理</Link>
         </p>
       ) : null}
       {bunshins.length === 0 ? (

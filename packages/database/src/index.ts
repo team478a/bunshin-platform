@@ -25,6 +25,9 @@ import type {
   RequiredLegalConsentDocument,
   AccountDeletionRequestRepository,
   AccountDeletionRequest,
+  LineConfigurationRepository,
+  LineChannelConfiguration,
+  LineConfigurationEnvironment,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -63,6 +66,180 @@ import { ApplicationError } from '@bunshin/shared';
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
 export const prisma = globalPrisma.bunshinPrisma ?? new PrismaClient({ log: ['warn', 'error'] });
 if (process.env['NODE_ENV'] !== 'production') globalPrisma.bunshinPrisma = prisma;
+
+function lineConfiguration(
+  row: Prisma.LineChannelConfigurationGetPayload<object>,
+  exposeMask = true,
+): LineChannelConfiguration {
+  return {
+    id: row.id,
+    environment: row.environment,
+    version: row.version,
+    status: row.status,
+    loginChannelId: row.loginChannelId,
+    loginSecretMask: exposeMask ? row.loginSecretMask : '登録済み',
+    messagingChannelId: row.messagingChannelId,
+    messagingSecretMask: exposeMask ? row.messagingSecretMask : '登録済み',
+    accessTokenMask: exposeMask ? row.accessTokenMask : '登録済み',
+    liffId: row.liffId,
+    defaultNotificationTime: row.defaultNotificationTime,
+    defaultTimezone: row.defaultTimezone,
+    quietHoursStart: row.quietHoursStart,
+    quietHoursEnd: row.quietHoursEnd,
+    globallyPaused: row.globallyPaused,
+    quotaWarningPercent: row.quotaWarningPercent,
+    quotaLowPriorityStop: row.quotaLowPriorityStop,
+    keyVersion: row.keyVersion,
+    lastVerifiedAt: row.lastVerifiedAt,
+    lastErrorCategory: row.lastErrorCategory,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export class PrismaLineConfigurationRepository implements LineConfigurationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private admin(actorUserId: string) {
+    return this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+    });
+  }
+
+  async listForAdmin(input: { actorUserId: string; environment: LineConfigurationEnvironment }) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null) return null;
+    const rows = await this.client.lineChannelConfiguration.findMany({
+      where: { environment: input.environment },
+      orderBy: { version: 'desc' },
+    });
+    return rows.map((row) =>
+      lineConfiguration(row, ['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)),
+    );
+  }
+
+  async createVersion(input: Parameters<LineConfigurationRepository['createVersion']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const latest = await tx.lineChannelConfiguration.findFirst({
+        where: { environment: input.environment },
+        orderBy: { version: 'desc' },
+      });
+      const row = await tx.lineChannelConfiguration.create({
+        data: {
+          environment: input.environment,
+          version: (latest?.version ?? 0) + 1,
+          loginChannelId: input.loginChannelId,
+          encryptedLoginSecret: input.secrets.loginSecret,
+          loginSecretMask: input.secrets.loginSecretMask,
+          messagingChannelId: input.messagingChannelId,
+          encryptedMessagingSecret: input.secrets.messagingSecret,
+          messagingSecretMask: input.secrets.messagingSecretMask,
+          encryptedAccessToken: input.secrets.accessToken,
+          accessTokenMask: input.secrets.accessTokenMask,
+          liffId: input.liffId,
+          defaultNotificationTime: input.defaultNotificationTime,
+          defaultTimezone: input.defaultTimezone,
+          quietHoursStart: input.quietHoursStart,
+          quietHoursEnd: input.quietHoursEnd,
+          globallyPaused: input.globallyPaused,
+          quotaWarningPercent: input.quotaWarningPercent,
+          quotaLowPriorityStop: input.quotaLowPriorityStop,
+          keyVersion: input.secrets.keyVersion,
+        },
+      });
+      await tx.lineConfigurationAudit.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'CREATE_VERSION',
+          reason: input.reason,
+          changedFields: ['credentials', 'notificationDefaults', 'quotaPolicy'],
+        },
+      });
+      return lineConfiguration(row);
+    });
+  }
+
+  async activate(input: Parameters<LineConfigurationRepository['activate']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const target = await tx.lineChannelConfiguration.findFirst({
+        where: { id: input.configurationId, environment: input.environment },
+      });
+      if (target === null) return null;
+      if (target.lastVerifiedAt === null || target.lastErrorCategory !== null)
+        throw new ApplicationError('CONFLICT', 'successful connection test required');
+      await tx.lineChannelConfiguration.updateMany({
+        where: { environment: input.environment, status: 'ACTIVE' },
+        data: { status: 'DISABLED' },
+      });
+      const row = await tx.lineChannelConfiguration.update({
+        where: { id: target.id },
+        data: { status: 'ACTIVE' },
+      });
+      await tx.lineConfigurationAudit.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'ACTIVATE',
+          reason: input.reason,
+          changedFields: ['status'],
+        },
+      });
+      return lineConfiguration(row);
+    });
+  }
+
+  async getForConnectionTest(
+    input: Parameters<LineConfigurationRepository['getForConnectionTest']>[0],
+  ) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    const row = await this.client.lineChannelConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    if (row === null) return null;
+    return {
+      configuration: lineConfiguration(row),
+      loginSecret: row.encryptedLoginSecret,
+      messagingSecret: row.encryptedMessagingSecret,
+      accessToken: row.encryptedAccessToken,
+    };
+  }
+
+  async recordConnectionTest(
+    input: Parameters<LineConfigurationRepository['recordConnectionTest']>[0],
+  ) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role))
+      throw new ApplicationError('FORBIDDEN', 'admin required');
+    await this.client.$transaction([
+      this.client.lineChannelConfiguration.update({
+        where: { id: input.configurationId },
+        data: {
+          ...(input.success ? { lastVerifiedAt: new Date() } : {}),
+          lastErrorCategory: input.errorCategory,
+          ...(input.success ? {} : { status: 'ERROR' }),
+        },
+      }),
+      this.client.lineConfigurationAudit.create({
+        data: {
+          configurationId: input.configurationId,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'CONNECTION_TEST',
+          reason: '管理画面から接続テストを実行',
+          changedFields: ['lastVerifiedAt', 'lastErrorCategory'],
+        },
+      }),
+    ]);
+  }
+}
 
 function user(row: Awaited<ReturnType<PrismaClient['user']['create']>>): User {
   return { ...row, email: row.email, status: row.status };
