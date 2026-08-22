@@ -30,6 +30,9 @@ import type {
   LineConfigurationEnvironment,
   LineNotificationPreference,
   LineNotificationPreferenceRepository,
+  JobRepository,
+  EnqueueJobInput,
+  Job,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -103,6 +106,148 @@ function lineNotificationPreference(
   row: Prisma.LineNotificationPreferenceGetPayload<object>,
 ): LineNotificationPreference {
   return row;
+}
+
+function platformJob(row: Prisma.JobGetPayload<object>): Job {
+  return {
+    ...row,
+    capabilityType: row.capabilityType,
+    environment: row.environment,
+    status: row.status,
+  };
+}
+
+export class PrismaJobRepository implements JobRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async enqueue(input: EnqueueJobInput): Promise<Job> {
+    const scope = await this.client.workspace.findFirst({
+      where: {
+        id: input.workspaceId,
+        status: 'ACTIVE',
+        memberships: { some: { userId: input.requestedBy, status: 'ACTIVE' } },
+        ...(input.bunshinId
+          ? { bunshins: { some: { id: input.bunshinId, status: { not: 'ARCHIVED' } } } }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (!scope) throw new ApplicationError('NOT_FOUND', 'job scope not found');
+    const row = await this.client.job.upsert({
+      where: {
+        environment_idempotencyKey: {
+          environment: input.environment,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
+      create: {
+        environment: input.environment,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId ?? null,
+        capabilityType: input.capabilityType ?? null,
+        jobType: input.jobType,
+        payloadReference: input.payloadReference,
+        idempotencyKey: input.idempotencyKey,
+        correlationId: input.correlationId,
+        requestedBy: input.requestedBy,
+        priority: input.priority ?? 100,
+        maxAttempts: input.maxAttempts ?? 5,
+        scheduledAt: input.scheduledAt ?? new Date(),
+      },
+      update: {},
+    });
+    if (
+      row.workspaceId !== input.workspaceId ||
+      row.bunshinId !== (input.bunshinId ?? null) ||
+      row.jobType !== input.jobType ||
+      row.payloadReference !== input.payloadReference
+    )
+      throw new ApplicationError('CONFLICT', 'idempotency key belongs to another job');
+    return platformJob(row);
+  }
+
+  async claim(input: Parameters<JobRepository['claim']>[0]): Promise<Job | null> {
+    const rows = await this.client.$queryRaw<Array<{ id: string }>>`
+      WITH candidate AS (
+        SELECT "id"
+        FROM "jobs"
+        WHERE "environment" = ${input.environment}::"LineConfigurationEnvironment"
+          AND (
+            ("status" = 'PENDING' AND "scheduled_at" <= ${input.now})
+            OR ("status" = 'RETRY_SCHEDULED' AND "next_retry_at" <= ${input.now})
+            OR ("status" = 'LEASED' AND "lease_expires_at" <= ${input.now})
+          )
+        ORDER BY "priority" ASC, COALESCE("next_retry_at", "scheduled_at") ASC, "created_at" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      UPDATE "jobs" AS job
+      SET "status" = 'LEASED',
+          "lease_owner" = ${input.workerId},
+          "lease_expires_at" = ${input.leaseExpiresAt},
+          "attempt_count" = "attempt_count" + 1,
+          "next_retry_at" = NULL,
+          "updated_at" = ${input.now}
+      FROM candidate
+      WHERE job."id" = candidate."id"
+      RETURNING job."id"
+    `;
+    const claimed = rows[0];
+    if (!claimed) return null;
+    return platformJob(await this.client.job.findUniqueOrThrow({ where: { id: claimed.id } }));
+  }
+
+  async complete(input: Parameters<JobRepository['complete']>[0]): Promise<Job | null> {
+    const result = await this.client.job.updateMany({
+      where: {
+        id: input.jobId,
+        status: 'LEASED',
+        leaseOwner: input.workerId,
+        leaseExpiresAt: { gt: input.now },
+      },
+      data: {
+        status: 'SUCCEEDED',
+        completedAt: input.now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
+    if (result.count === 0) return null;
+    return platformJob(await this.client.job.findUniqueOrThrow({ where: { id: input.jobId } }));
+  }
+
+  async fail(input: Parameters<JobRepository['fail']>[0]): Promise<Job | null> {
+    const result = await this.client.job.updateMany({
+      where: {
+        id: input.jobId,
+        status: 'LEASED',
+        leaseOwner: input.workerId,
+        leaseExpiresAt: { gt: input.now },
+      },
+      data: {
+        status: input.nextRetryAt ? 'RETRY_SCHEDULED' : 'DEAD',
+        nextRetryAt: input.nextRetryAt,
+        lastErrorCategory: input.failure.errorCategory,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
+    if (result.count === 0) return null;
+    return platformJob(await this.client.job.findUniqueOrThrow({ where: { id: input.jobId } }));
+  }
+
+  async cancel(input: Parameters<JobRepository['cancel']>[0]): Promise<Job | null> {
+    const result = await this.client.job.updateMany({
+      where: {
+        id: input.jobId,
+        environment: input.environment,
+        status: { in: ['PENDING', 'RETRY_SCHEDULED'] },
+      },
+      data: { status: 'CANCELLED', cancelledAt: input.now },
+    });
+    if (result.count === 0) return null;
+    return platformJob(await this.client.job.findUniqueOrThrow({ where: { id: input.jobId } }));
+  }
 }
 
 export class PrismaLineNotificationPreferenceRepository implements LineNotificationPreferenceRepository {

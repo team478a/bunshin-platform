@@ -56,6 +56,7 @@ import {
   PrismaMissionOutcomeRepository,
   PrismaLegalConsentRepository,
   PrismaAccountDeletionRequestRepository,
+  PrismaJobRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -67,6 +68,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.job.deleteMany();
     await client.accountDeletionRequest.deleteMany();
     await client.userLegalConsent.deleteMany();
     await client.legalDocument.deleteMany();
@@ -109,6 +111,55 @@ integration('database ownership boundaries', () => {
     });
     expect(result.workspace.type).toBe('PERSONAL');
     expect(result.membership).toMatchObject({ userId: result.user.id, role: 'OWNER' });
+  });
+
+  it('enqueues idempotently, isolates environments, and enforces lease ownership', async () => {
+    const owner = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Job Owner' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Job Bunshin',
+      slug: `job-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const repository = new PrismaJobRepository(client);
+    const base = {
+      workspaceId: owner.workspace.id,
+      bunshinId: bunshin.id,
+      capabilityType: 'SOCIAL' as const,
+      correlationId: randomUUID(),
+      requestedBy: owner.user.id,
+      jobType: 'DAILY_MISSION_GENERATE',
+      payloadReference: 'mission:2026-08-22',
+      idempotencyKey: `job-${randomUUID()}`,
+      scheduledAt: new Date('2026-08-22T00:00:00Z'),
+    };
+    const production = await repository.enqueue({ ...base, environment: 'PRODUCTION' });
+    expect((await repository.enqueue({ ...base, environment: 'PRODUCTION' })).id).toBe(
+      production.id,
+    );
+    const staging = await repository.enqueue({ ...base, environment: 'STAGING' });
+    expect(staging.id).not.toBe(production.id);
+
+    const now = new Date('2026-08-22T01:00:00Z');
+    const claimed = await repository.claim({
+      environment: 'PRODUCTION',
+      workerId: 'worker-a',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+    });
+    expect(claimed).toMatchObject({ id: production.id, attemptCount: 1, status: 'LEASED' });
+    await expect(
+      repository.complete({ jobId: production.id, workerId: 'worker-b', now }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.complete({ jobId: production.id, workerId: 'worker-a', now }),
+    ).resolves.toMatchObject({ status: 'SUCCEEDED' });
   });
 
   it('rolls back all account data when a unique identity conflicts', async () => {

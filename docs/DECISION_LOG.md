@@ -541,3 +541,16 @@
 - Pause: `pausedUntil`とReminder設定は保存・判定までとし、Job・Pushは6-E/Fへ分離する
 - Isolation: Workspace MembershipとBunshin scopeをrepositoryで毎回再検証する
 - 詳細: `docs/PHASE6A_SECURE_CONFIGURATION_IMPLEMENTATION_REPORT.md`
+
+## D-048: Phase 6-E Job CoreをPostgreSQL永続化と短期leaseで構成する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Persistence: Job状態をPostgreSQLへ保存し、CronやHTTP requestのメモリへ保持しない
+- Idempotency: `environment + idempotencyKey`を一意とし、同一環境の重複Job作成を防ぐ
+- Claim: `FOR UPDATE SKIP LOCKED`でdue Jobを原子的にclaimし、worker ownerとlease期限を保存する
+- Retry: retryable failureは指数バックオフ、非retryableまたは上限到達は`DEAD`にする
+- Isolation: enqueueとclaimの両方でenvironmentを固定し、Workspace / Bunshin / requester scopeを検証する
+- Payload: Jobにはresource referenceだけを保存し、Secret、生成本文、Knowledge、Provider responseを保存しない
+- Separation: Cron配備、LINE送信、Mission生成、Webhook、manual retry UIは後続PRへ分離する
+- 詳細: `docs/adr/POSTGRES_JOB_CORE_ADR.md`
