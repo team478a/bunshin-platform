@@ -579,3 +579,15 @@
 - Observability: Job ID、payload、秘密値をresponse / logへ出さず、状態別件数だけを記録する
 - Fail Closed: Weekly / Daily concrete handlerが両方登録されるまではendpointを503とし、Jobをclaimしない
 - Separation: Vercel Cron schedule、OpenAI handler、LINE deliveryは後続PRへ分離する
+
+## D-051: Weekly Planの手動生成とJob生成を同一serviceへ収束させる
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Orchestration: Capability、既存週、Content Pillar、ACTIVE Social Profile、APPROVED Strategy、Bunshin、Grant済みKnowledgeの検証と生成・保存・AI usage記録を共通serviceへ集約する
+- Idempotency: 手動APIは既存週を`CONFLICT`、Job handlerは既存週を成功扱いで返し、再実行時にProviderを呼ばない
+- Scope: Jobの`workspaceId`、`bunshinId`、`requestedBy`だけをactor scopeに使用し、別Workspace / Bunshin / 未Grant Knowledgeを参照しない
+- Defaults: JobはBunshin単位の通知設定timezoneを優先し、未設定時は`Asia/Tokyo`、Primary SNSはACTIVE Social Profileから解決する
+- Usage: Job ID由来の決定的idempotency keyで成功・失敗を記録し、Provider responseや生成本文をusage logへ保存しない
+- Fail Closed: Weekly handlerを登録してもDaily handler完成まではWorker endpointを503にし、Jobをclaimしない
+- Separation: Daily handler、Vercel Cron有効化、LINE送信は後続PRへ分離する

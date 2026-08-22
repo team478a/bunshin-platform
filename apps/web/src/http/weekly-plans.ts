@@ -1,6 +1,5 @@
 import 'server-only';
 import {
-  CreateGeneratedWeeklyPlan,
   ConfirmWeeklyPlan,
   CreateWeeklyPlan,
   CreateWeeklyPlanItem,
@@ -14,21 +13,12 @@ import {
   UpdateWeeklyPlanItem,
   type ContentPillarRepository,
   type WeeklyPlan,
-  GenerateWeeklyPlan,
-  ListSocialAccountStrategies,
-  ListSocialProfiles,
 } from '@bunshin/capability-social';
-import {
-  GetBunshin,
-  ListGrantedKnowledgeForBunshin,
-  RequireActiveBunshinCapability,
-} from '@bunshin/application';
-import { createLogger, requestIdFromHeader } from '@bunshin/observability';
+import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { recordAiUsageSafely } from '../observability/ai-usage';
 
 const uuidSchema = z.string().uuid();
 const planCreateSchema = z
@@ -203,157 +193,28 @@ export function generateWeeklyPlanResponse(
   bunshinId: string,
 ) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
-  const logger = createLogger().child({
-    requestId,
-    workspaceId,
-    bunshinId,
-    route: '/weekly-plans/generate',
-  });
-  const started = Date.now();
   return respond(
     request,
     async () => {
-      let usageActor: string | null = null;
-      let providerAttempted = false;
-      try {
-        requireSameOrigin(request);
-        const parsed = generateSchema.safeParse(await jsonBody(request));
-        if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-        const actor = await actorUserId();
-        usageActor = actor;
-        const db = await import('@bunshin/database');
-        const scope = { workspaceId, bunshinId, actorUserId: actor };
-        const assignments = new db.PrismaBunshinCapabilityAssignmentRepository();
-        const plans = new db.PrismaWeeklyPlanRepository();
-        await new RequireActiveBunshinCapability(assignments).execute({
-          ...scope,
-          capabilityType: 'SOCIAL',
-        });
-        const existingPlans = await new ListWeeklyPlans(plans).execute(scope);
-        if (
-          existingPlans.some(({ weekStartDate }) => weekStartDate === parsed.data.weekStartDate)
-        ) {
-          throw new ApplicationError('CONFLICT', 'weekly plan already exists');
-        }
-        const pillars = await new ListContentPillars(
-          new db.PrismaContentPillarRepository(),
-        ).execute(scope);
-        const activePillars = pillars.filter(({ active }) => active);
-        if (activePillars.length === 0) {
-          throw new ApplicationError('CONFLICT', 'active content pillar is required');
-        }
-        const profileValues = await new ListSocialProfiles(
-          new db.PrismaSocialProfileRepository(),
-        ).execute(scope);
-        const profile = profileValues.find(
-          ({ id, status }) => id === parsed.data.socialProfileId && status === 'ACTIVE',
-        );
-        if (!profile) throw new ApplicationError('NOT_FOUND', 'active social profile not found');
-        const strategies = await new ListSocialAccountStrategies(
-          new db.PrismaSocialAccountStrategyRepository(),
-        ).execute({ ...scope, socialProfileId: profile.id });
-        const strategy = strategies.find(({ status }) => status === 'APPROVED');
-        if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
-        const bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
-        const granted = await new ListGrantedKnowledgeForBunshin(
-          new db.PrismaKnowledgeGrantRepository(),
-        ).execute(scope);
-        const apiKey = process.env['OPENAI_API_KEY'];
-        if (!apiKey)
-          throw new ApplicationError('CONFIGURATION_ERROR', 'OPENAI_API_KEY is required');
-        const { OpenAIWeeklyPlanner } = await import('../providers/openai-weekly-planner');
-        providerAttempted = true;
-        const result = await new GenerateWeeklyPlan(
-          new OpenAIWeeklyPlanner({
-            apiKey,
-            ...(process.env['OPENAI_WEEKLY_PLANNER_MODEL']
-              ? { model: process.env['OPENAI_WEEKLY_PLANNER_MODEL'] }
-              : {}),
-          }),
-        ).execute({
-          weekStartDate: parsed.data.weekStartDate,
-          timezone: parsed.data.timezone,
-          platform: profile.platform,
-          availableMinutes: strategy.availableMinutes,
-          bunshin: {
-            name: bunshin.name,
-            objectiveSummary: bunshin.objectiveSummary,
-            audienceSummary: bunshin.audienceSummary,
-            personalitySummary: bunshin.personalitySummary,
-          },
-          approvedStrategy: {
-            concept: strategy.concept,
-            positioning: strategy.positioning,
-            targetSummary: strategy.targetSummary,
-            ctaStrategy: strategy.ctaStrategy,
-            postingPolicy: strategy.postingPolicy,
-          },
-          contentPillars: activePillars.map(({ id, title, description, weight }) => ({
-            id,
-            title,
-            description,
-            weight,
-          })),
-          grantedKnowledge: granted.map(({ type, title, content }) => ({ type, title, content })),
-        });
-        const titles = new Map(pillars.map(({ id, title }) => [id, title]));
-        const value = await new CreateGeneratedWeeklyPlan(plans, assignments).execute({
-          ...scope,
-          weekStartDate: parsed.data.weekStartDate,
-          timezone: parsed.data.timezone,
-          ...result.output,
-        });
-        logger.info('weekly plan generation complete', {
-          status: 'success',
-          model: result.model,
-          promptVersion: result.promptVersion,
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          latency: result.latencyMs,
-        });
-        await recordAiUsageSafely({
-          workspaceId,
-          bunshinId,
-          actorUserId: actor,
-          taskType: 'WEEKLY_PLANNER',
-          provider: 'openai',
-          model: result.model,
-          promptVersion: result.promptVersion,
-          status: 'SUCCESS',
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          latencyMs: result.latencyMs,
-          idempotencyKey: `${requestId}:weekly-plan`,
-        });
-        return weeklyPlanDto(value, titles);
-      } catch (error) {
-        const { WEEKLY_PLANNER_PROMPT_VERSION } =
-          await import('../providers/openai-weekly-planner');
-        logger.error('weekly plan generation failed', {
-          status: 'failed',
-          model: process.env['OPENAI_WEEKLY_PLANNER_MODEL'] ?? 'gpt-5.2',
-          promptVersion: WEEKLY_PLANNER_PROMPT_VERSION,
-          latency: Date.now() - started,
-          errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-        });
-        if (usageActor && providerAttempted)
-          await recordAiUsageSafely({
-            workspaceId,
-            bunshinId,
-            actorUserId: usageActor,
-            taskType: 'WEEKLY_PLANNER',
-            provider: 'openai',
-            model: process.env['OPENAI_WEEKLY_PLANNER_MODEL'] ?? 'gpt-5.2',
-            promptVersion: WEEKLY_PLANNER_PROMPT_VERSION,
-            status: 'FAILED',
-            inputTokens: null,
-            outputTokens: null,
-            latencyMs: Date.now() - started,
-            errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-            idempotencyKey: `${requestId}:weekly-plan`,
-          });
-        throw error;
-      }
+      requireSameOrigin(request);
+      const parsed = generateSchema.safeParse(await jsonBody(request));
+      if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+      const actor = await actorUserId();
+      const { createWeeklyPlanGenerationService } =
+        await import('../services/weekly-plan-generation');
+      const result = await (
+        await createWeeklyPlanGenerationService()
+      ).execute({
+        workspaceId,
+        bunshinId,
+        actorUserId: actor,
+        weekStartDate: parsed.data.weekStartDate,
+        timezone: parsed.data.timezone,
+        socialProfileId: parsed.data.socialProfileId,
+        usageIdempotencyKey: `${requestId}:weekly-plan`,
+        existingPolicy: 'CONFLICT',
+      });
+      return weeklyPlanDto(result.plan, result.titles);
     },
     201,
     requestId,
