@@ -742,3 +742,14 @@
 - Secrets: Supabase Service Role KeyはProduction環境変数だけに置き、DB、管理画面、Job、logへ保存しない
 - Retention: request、監査、AI usage、配信attempt、backupの保持期間とlegal holdは実装前の人間確認事項とする
 - Gate: `ACCOUNT_DELETION_EXECUTION_PLAN.md`承認前にMigration、Supabase Admin API、不可逆匿名化を実装しない
+
+## D-064: 退会実行Coreは外部削除前のatomic suspensionまでを担当する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Claim: 猶予終了済みREQUESTEDまたはlease切れPROCESSINGを条件付き更新し、同一requestを一workerだけが取得する
+- State: PROCESSING / BLOCKED、5分lease、attempt count、execution versionを持ち、Userごとに未完了requestは最大1件とする
+- Gate: ACTIVE Platform Admin、Organization唯一OWNER、Organization内の本人所有Knowledge / BunshinをBLOCKEDとし、Userを変更しない
+- Suspension: claimと同じtransactionでUser / Membership、LINE同意 / Connection、未送信Delivery / Job、未使用Deep Linkを停止する
+- Privacy: request summaryはtable別更新件数だけとし、email、LINE user ID、Workspace / Bunshin / Mission識別子、本文、Provider responseを含めない
+- Separation: Supabase Auth / AuthIdentity削除、DELETED化、個人データpurge、Scheduler、管理者再実行はPR B〜Dへ分離する

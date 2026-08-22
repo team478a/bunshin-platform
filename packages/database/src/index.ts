@@ -26,6 +26,8 @@ import type {
   RequiredLegalConsentDocument,
   AccountDeletionRequestRepository,
   AccountDeletionRequest,
+  AccountDeletionExecutionRepository,
+  AccountDeletionBlockedReason,
   LineConfigurationRepository,
   LineChannelConfiguration,
   LineConfigurationEnvironment,
@@ -3017,7 +3019,7 @@ export class PrismaAccountDeletionRequestRepository implements AccountDeletionRe
   constructor(private readonly client: PrismaClient = prisma) {}
   async findCurrent(userId: string) {
     const row = await this.client.accountDeletionRequest.findFirst({
-      where: { userId, status: 'REQUESTED' },
+      where: { userId, status: { in: ['REQUESTED', 'PROCESSING', 'BLOCKED'] } },
       orderBy: { requestedAt: 'desc' },
     });
     return row ? accountDeletionRequest(row) : null;
@@ -3031,7 +3033,7 @@ export class PrismaAccountDeletionRequestRepository implements AccountDeletionRe
       if (
         !user ||
         (await tx.accountDeletionRequest.findFirst({
-          where: { userId, status: 'REQUESTED' },
+          where: { userId, status: { in: ['REQUESTED', 'PROCESSING', 'BLOCKED'] } },
           select: { id: true },
         }))
       )
@@ -3065,6 +3067,214 @@ export class PrismaAccountDeletionRequestRepository implements AccountDeletionRe
     return (
       await this.client.accountDeletionRequest.findMany({ orderBy: { requestedAt: 'desc' } })
     ).map(accountDeletionRequest);
+  }
+}
+
+export class PrismaAccountDeletionExecutionRepository implements AccountDeletionExecutionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async claimAndSuspendNext(
+    input: Parameters<AccountDeletionExecutionRepository['claimAndSuspendNext']>[0],
+  ) {
+    return this.client.$transaction(async (tx) => {
+      const candidate = await tx.accountDeletionRequest.findFirst({
+        where: {
+          OR: [
+            { status: 'REQUESTED', scheduledFor: { lte: input.now } },
+            { status: 'PROCESSING', leaseExpiresAt: { lte: input.now } },
+          ],
+        },
+        orderBy: [{ scheduledFor: 'asc' }, { requestedAt: 'asc' }],
+        select: { id: true, userId: true, status: true },
+      });
+      if (!candidate) return null;
+      const claimed = await tx.accountDeletionRequest.updateMany({
+        where: {
+          id: candidate.id,
+          ...(candidate.status === 'REQUESTED'
+            ? { status: 'REQUESTED' as const, scheduledFor: { lte: input.now } }
+            : {
+                status: 'PROCESSING' as const,
+                leaseExpiresAt: { lte: input.now },
+              }),
+        },
+        data: {
+          status: 'PROCESSING',
+          leaseOwner: input.workerId,
+          leaseExpiresAt: input.leaseExpiresAt,
+          processingStartedAt: input.now,
+          blockedReason: null,
+          lastErrorCategory: null,
+          executionVersion: input.executionVersion,
+          attemptCount: { increment: 1 },
+        },
+      });
+      if (claimed.count !== 1) return null;
+
+      const [activeAdmin, organizationMemberships, organizationKnowledge, organizationBunshins] =
+        await Promise.all([
+          tx.platformAdmin.findFirst({
+            where: { userId: candidate.userId, status: 'ACTIVE' },
+            select: { id: true },
+          }),
+          tx.workspaceMembership.findMany({
+            where: {
+              userId: candidate.userId,
+              status: 'ACTIVE',
+              role: 'OWNER',
+              workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+            },
+            select: {
+              workspaceId: true,
+              workspace: {
+                select: {
+                  _count: {
+                    select: {
+                      memberships: {
+                        where: { role: 'OWNER', status: 'ACTIVE' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          tx.ownerKnowledge.count({
+            where: { ownerUserId: candidate.userId, workspace: { type: 'ORGANIZATION' } },
+          }),
+          tx.bunshin.count({
+            where: { ownerUserId: candidate.userId, workspace: { type: 'ORGANIZATION' } },
+          }),
+        ]);
+
+      const blockedReason: AccountDeletionBlockedReason | null = activeAdmin
+        ? 'ACTIVE_PLATFORM_ADMIN'
+        : organizationMemberships.some(({ workspace }) => workspace._count.memberships <= 1)
+          ? 'SOLE_ORGANIZATION_OWNER'
+          : organizationKnowledge > 0 || organizationBunshins > 0
+            ? 'MANUAL_REVIEW_REQUIRED'
+            : null;
+      if (blockedReason) {
+        const row = await tx.accountDeletionRequest.update({
+          where: { id: candidate.id },
+          data: {
+            status: 'BLOCKED',
+            blockedReason,
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            summary: { suspended: false },
+          },
+        });
+        return {
+          requestId: row.id,
+          userId: row.userId,
+          status: 'BLOCKED' as const,
+          attemptCount: row.attemptCount,
+          blockedReason,
+          leaseExpiresAt: null,
+        };
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id: candidate.userId },
+        select: { status: true },
+      });
+      const resumableSuspension = candidate.status === 'PROCESSING' && user?.status === 'SUSPENDED';
+      if (user?.status === 'ACTIVE')
+        await tx.user.update({
+          where: { id: candidate.userId },
+          data: { status: 'SUSPENDED' },
+        });
+      if (user?.status !== 'ACTIVE' && !resumableSuspension) {
+        const row = await tx.accountDeletionRequest.update({
+          where: { id: candidate.id },
+          data: {
+            status: 'BLOCKED',
+            blockedReason: 'MANUAL_REVIEW_REQUIRED',
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            summary: { suspended: false },
+          },
+        });
+        return {
+          requestId: row.id,
+          userId: row.userId,
+          status: 'BLOCKED' as const,
+          attemptCount: row.attemptCount,
+          blockedReason: 'MANUAL_REVIEW_REQUIRED' as const,
+          leaseExpiresAt: null,
+        };
+      }
+
+      const [memberships, preferences, connections, deliveries, jobs, deepLinks] =
+        await Promise.all([
+          tx.workspaceMembership.updateMany({
+            where: { userId: candidate.userId, status: 'ACTIVE' },
+            data: { status: 'SUSPENDED' },
+          }),
+          tx.lineNotificationPreference.updateMany({
+            where: { userId: candidate.userId },
+            data: { enabled: false, notificationConsentAt: null, reminderEnabled: false },
+          }),
+          tx.lineConnection.updateMany({
+            where: { userId: candidate.userId, status: 'ACTIVE' },
+            data: { status: 'DISCONNECTED', notificationConsentAt: null },
+          }),
+          tx.lineMessageDelivery.updateMany({
+            where: {
+              userId: candidate.userId,
+              status: { in: ['PENDING', 'PROCESSING', 'FAILED'] },
+            },
+            data: {
+              status: 'CANCELLED',
+              cancelledAt: input.now,
+              lastErrorCategory: 'ACCOUNT_DELETION_REQUESTED',
+              leaseOwner: null,
+              leaseExpiresAt: null,
+            },
+          }),
+          tx.job.updateMany({
+            where: {
+              requestedBy: candidate.userId,
+              status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] },
+            },
+            data: {
+              status: 'CANCELLED',
+              cancelledAt: input.now,
+              lastErrorCategory: 'ACCOUNT_DELETION_REQUESTED',
+              leaseOwner: null,
+              leaseExpiresAt: null,
+              nextRetryAt: null,
+            },
+          }),
+          tx.missionDeepLinkState.updateMany({
+            where: { userId: candidate.userId, consumedAt: null },
+            data: { consumedAt: input.now },
+          }),
+        ]);
+      const row = await tx.accountDeletionRequest.update({
+        where: { id: candidate.id },
+        data: {
+          summary: {
+            suspended: true,
+            memberships: memberships.count,
+            notificationPreferences: preferences.count,
+            lineConnections: connections.count,
+            deliveries: deliveries.count,
+            jobs: jobs.count,
+            deepLinks: deepLinks.count,
+          },
+        },
+      });
+      return {
+        requestId: row.id,
+        userId: row.userId,
+        status: 'PROCESSING' as const,
+        attemptCount: row.attemptCount,
+        blockedReason: null,
+        leaseExpiresAt: row.leaseExpiresAt,
+      };
+    });
   }
 }
 

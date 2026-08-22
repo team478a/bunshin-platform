@@ -111,6 +111,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR A: Execution Core
 
+- 状態: 完了
 - additive migration
 - claim / lease / retry / block / complete
 - 実行前Gate
@@ -120,6 +121,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR B: Supabase Auth Adapter
 
+- 状態: 未実装
 - Service Role Key環境変数
 - Production/Preview環境分離
 - delete idempotency、timeout、error分類
@@ -127,6 +129,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR C: Personal Data Purge
 
+- 状態: 未実装
 - table別匿名化・本文purge
 - Personal / Organization境界
 - crash途中からの再実行
@@ -134,6 +137,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR D: Scheduler / Admin Operations
 
+- 状態: 未実装
 - CRON Secretで保護した少量batch実行
 - Platform AdminのBLOCKED確認
 - 理由付き再実行
