@@ -121,7 +121,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR B: Supabase Auth Adapter
 
-- 状態: 未実装
+- 状態: Adapter実装完了（実行フロー・Production実削除への接続は未実装）
 - Service Role Key環境変数
 - Production/Preview環境分離
 - delete idempotency、timeout、error分類

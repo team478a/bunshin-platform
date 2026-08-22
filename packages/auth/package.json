@@ -8,11 +8,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "lint": "eslint src",
+    "lint": "eslint src test",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bunshin/application": "workspace:*",
     "@bunshin/platform-domain": "workspace:*"
   }
 }

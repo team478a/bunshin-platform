@@ -5,7 +5,7 @@ describe('SessionCurrentUserProvider', () => {
   it('rejects an absent or invalid session', async () => {
     const accounts = { findActiveByEmailIdentity: vi.fn(), provisionEmailIdentity: vi.fn() };
     const provider = new SessionCurrentUserProvider(
-      { getVerifiedUser: async () => null },
+      { getVerifiedUser: () => Promise.resolve(null) },
       accounts,
     );
     await expect(provider.getCurrentUser()).resolves.toBeNull();
@@ -20,7 +20,7 @@ describe('SessionCurrentUserProvider', () => {
     };
     const verified = { providerUserId: 'provider-1', email: 'user@example.com', displayName: null };
     const provider = new SessionCurrentUserProvider(
-      { getVerifiedUser: async () => verified },
+      { getVerifiedUser: () => Promise.resolve(verified) },
       accounts,
     );
     await expect(provider.getCurrentUser()).resolves.toEqual(existing);
@@ -39,7 +39,7 @@ describe('SessionCurrentUserProvider', () => {
       displayName: 'User',
     };
     const provider = new SessionCurrentUserProvider(
-      { getVerifiedUser: async () => verified },
+      { getVerifiedUser: () => Promise.resolve(verified) },
       accounts,
     );
     await expect(provider.getCurrentUser()).resolves.toEqual(created);

@@ -753,3 +753,15 @@
 - Suspension: claimと同じtransactionでUser / Membership、LINE同意 / Connection、未送信Delivery / Job、未使用Deep Linkを停止する
 - Privacy: request summaryはtable別更新件数だけとし、email、LINE user ID、Workspace / Bunshin / Mission識別子、本文、Provider responseを含めない
 - Separation: Supabase Auth / AuthIdentity削除、DELETED化、個人データpurge、Scheduler、管理者再実行はPR B〜Dへ分離する
+
+# D-065: Supabase Auth管理Adapterは環境一致を必須とし、実削除フローへの接続を分離する
+
+- 日付: 2026-08-22
+- 状態: 採用
+- 決定:
+  - Supabase Auth User削除はProvider非依存の`AuthAdministrationPort`を介し、`@bunshin/auth`のAdapterに閉じ込める。
+  - `SUPABASE_AUTH_ADMIN_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`SUPABASE_AUTH_ADMIN_ENV`はすべてサーバー環境変数とし、3値の一部設定を拒否する。
+  - `SUPABASE_AUTH_ADMIN_ENV`と`APP_ENV`が一致しない場合はProviderへ通信しない。
+  - 404は冪等成功、429・timeout・5xxは再試行可能、401・403は固定分類の非再試行失敗とする。
+  - Secret、Provider response、provider user IDを結果・log・DBへ複製しない。
+  - Adapter完成だけではProduction削除を有効化せず、PR Cの匿名化transactionとPR Dの運用Gateが揃うまで実行フローへ接続しない。

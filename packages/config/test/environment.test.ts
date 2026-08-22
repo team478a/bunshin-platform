@@ -44,4 +44,26 @@ describe('environment validation', () => {
       'c'.repeat(32),
     );
   });
+
+  it('requires complete, environment-matched Supabase Auth administration configuration', () => {
+    expect(() =>
+      parseServerEnvironment({ ...valid, SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40) }),
+    ).toThrow('SUPABASE_AUTH_ADMIN_URL');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        SUPABASE_AUTH_ADMIN_URL: 'https://project.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40),
+        SUPABASE_AUTH_ADMIN_ENV: 'production',
+      }),
+    ).toThrow('SUPABASE_AUTH_ADMIN_ENV');
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        SUPABASE_AUTH_ADMIN_URL: 'http://localhost:54321',
+        SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40),
+        SUPABASE_AUTH_ADMIN_ENV: 'development',
+      }).SUPABASE_AUTH_ADMIN_ENV,
+    ).toBe('development');
+  });
 });
