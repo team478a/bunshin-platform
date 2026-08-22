@@ -119,8 +119,8 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 
 - 設定、友だち状態、通知可能数、生成・送信・失敗・Deadの管理画面
 - ユーザー単位停止、全体停止、理由付き限定再送（再試行可能なFAILED配信のみ完了）
-- 友だち追加から投稿完了までのLINE Funnel
-- 送信数、クリック率、ブロック率、通知から投稿完了率、原価
+- 友だち追加から投稿完了までの環境別LINE Funnel（完了）
+- 送信数、Open率、解除・ブロック相当率、通知から投稿完了率（完了）。LINE原価はProvider契約・課金データ未接続のため後続
 - Runbook、Production Smoke、Production Gate再判定
 
 ## 5. DB変更候補
@@ -180,6 +180,15 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - runtime environmentとDelivery environmentを一致させ、SUPER_ADMIN / OPERATORだけが3〜500文字の理由付きで作成できる。
 - JobにはopaqueなDelivery IDだけを渡す。受信Userを`requestedBy`として既存所有権検証を維持し、管理操作actorはRetryRequestへ分離する。
 - APIと画面へUser ID、Workspace ID、Bunshin ID、Mission ID、LINE user ID、Secret、Provider responseを返さない。
+
+### LINE Funnel Read Model
+
+- runtime environmentと期間を必須条件にし、ACTIVE Platform Adminだけが集計値を閲覧できる。
+- 期間内に送信成功したDeliveryをコホートとし、同一環境のsingle-use Deep Link stateを期間終了までに消費した場合だけOpenとする。
+- 採用、Copy、投稿完了は、同一環境のOpenを通過し、かつ送信後・期間終了前に記録された行動だけを数える。別環境の同一Missionへ行動を誤帰属しない。
+- API/UIには集計値だけを返し、User、Workspace、Bunshin、Mission、Delivery、LINE user IDを返さない。
+- 1回の集計コホートは5,000 Deliveryまでとし、超過時は`truncated`を返して不完全な率を表示しない。
+- 解除・ブロック相当率は期間内のfollow / unfollow記録を母集団とする。LINE Provider上の厳密なブロック理由とは扱わない。
 
 ## 6. 採用方針
 

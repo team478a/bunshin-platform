@@ -40,6 +40,7 @@ import type {
   LineMessageDeliveryRepository,
   LineAdminMetricsRepository,
   LineDeliveryRetryRepository,
+  LineAdminFunnelRepository,
   MissionDeepLinkState,
   MissionDeepLinkStateRepository,
   LineConnection,
@@ -758,6 +759,154 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
         globallyPaused: configuration?.globallyPaused ?? false,
         quotaWarningPercent: configuration?.quotaWarningPercent ?? null,
         quotaLowPriorityStop: configuration?.quotaLowPriorityStop ?? null,
+      },
+    };
+  }
+}
+
+const ratio = (numerator: number, denominator: number) =>
+  denominator === 0 ? null : numerator / denominator;
+
+export class PrismaLineAdminFunnelRepository implements LineAdminFunnelRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async summarize(input: Parameters<LineAdminFunnelRepository['summarize']>[0]) {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: input.actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    const sentWhere = {
+      environment: input.environment,
+      status: 'SENT' as const,
+      sentAt: { gte: input.from, lt: input.to },
+    };
+    const [sentMessages, cohortRows, connections] = await Promise.all([
+      this.client.lineMessageDelivery.count({ where: sentWhere }),
+      this.client.lineMessageDelivery.findMany({
+        where: sentWhere,
+        select: {
+          userId: true,
+          sentAt: true,
+          dailyMission: {
+            select: {
+              decision: { select: { decision: true, decidedAt: true } },
+              activities: {
+                where: {
+                  type: {
+                    in: ['COPIED_TEXT', 'COPIED_SLIDE', 'COPIED_VIDEO_PROMPT', 'COPIED_SCRIPT'],
+                  },
+                  occurredAt: { lt: input.to },
+                },
+                select: { occurredAt: true },
+              },
+              postRecord: { select: { postedAt: true } },
+              deepLinkStates: {
+                where: {
+                  environment: input.environment,
+                  consumedAt: { not: null, lt: input.to },
+                },
+                select: { consumedAt: true },
+              },
+            },
+          },
+        },
+        orderBy: [{ sentAt: 'asc' }, { id: 'asc' }],
+        take: input.cohortLimit + 1,
+      }),
+      this.client.lineConnection.findMany({
+        where: {
+          environment: input.environment,
+          OR: [
+            { followedAt: { gte: input.from, lt: input.to } },
+            { unfollowedAt: { gte: input.from, lt: input.to } },
+          ],
+        },
+        select: { userId: true, followedAt: true, unfollowedAt: true },
+      }),
+    ]);
+    const truncated = cohortRows.length > input.cohortLimit;
+    const cohort = cohortRows.slice(0, input.cohortLimit);
+    const sentUsers = new Set<string>();
+    const openedUsers = new Set<string>();
+    const acceptedUsers = new Set<string>();
+    const copiedUsers = new Set<string>();
+    const postedUsers = new Set<string>();
+    let opened = 0;
+    let posted = 0;
+    for (const row of cohort) {
+      if (!row.sentAt) continue;
+      sentUsers.add(row.userId);
+      const sentAt = row.sentAt.getTime();
+      const openedThroughEnvironment = row.dailyMission.deepLinkStates.some(
+        (state) => (state.consumedAt?.getTime() ?? 0) >= sentAt,
+      );
+      if (openedThroughEnvironment) {
+        opened += 1;
+        openedUsers.add(row.userId);
+      }
+      const decision = row.dailyMission.decision;
+      if (
+        openedThroughEnvironment &&
+        decision?.decision === 'ACCEPTED' &&
+        (decision.decidedAt?.getTime() ?? 0) >= sentAt &&
+        decision.decidedAt!.getTime() < input.to.getTime()
+      )
+        acceptedUsers.add(row.userId);
+      if (
+        openedThroughEnvironment &&
+        row.dailyMission.activities.some((activity) => activity.occurredAt.getTime() >= sentAt)
+      )
+        copiedUsers.add(row.userId);
+      const postedAt = row.dailyMission.postRecord?.postedAt;
+      if (
+        openedThroughEnvironment &&
+        postedAt &&
+        postedAt.getTime() >= sentAt &&
+        postedAt < input.to
+      ) {
+        posted += 1;
+        postedUsers.add(row.userId);
+      }
+    }
+    const followedUsers = new Set<string>();
+    const unfollowedUsers = new Set<string>();
+    const reachedUsers = new Set<string>();
+    for (const connection of connections) {
+      if (
+        connection.followedAt &&
+        connection.followedAt >= input.from &&
+        connection.followedAt < input.to
+      ) {
+        followedUsers.add(connection.userId);
+        reachedUsers.add(connection.userId);
+      }
+      if (
+        connection.unfollowedAt &&
+        connection.unfollowedAt >= input.from &&
+        connection.unfollowedAt < input.to
+      ) {
+        unfollowedUsers.add(connection.userId);
+        reachedUsers.add(connection.userId);
+      }
+    }
+    return {
+      environment: input.environment,
+      period: { from: input.from, to: input.to },
+      cohort: { sentMessages, sentUsers: sentUsers.size, truncated },
+      stages: {
+        followedUsers: followedUsers.size,
+        unfollowedUsers: unfollowedUsers.size,
+        openedUsers: openedUsers.size,
+        acceptedUsers: acceptedUsers.size,
+        copiedUsers: copiedUsers.size,
+        postedUsers: postedUsers.size,
+      },
+      messages: { opened, posted },
+      rates: {
+        openRate: truncated ? null : ratio(opened, cohort.length),
+        notificationToPostRate: truncated ? null : ratio(posted, cohort.length),
+        unfollowRate: ratio(unfollowedUsers.size, reachedUsers.size),
       },
     };
   }
