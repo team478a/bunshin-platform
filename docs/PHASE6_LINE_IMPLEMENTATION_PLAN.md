@@ -26,9 +26,9 @@ LINE連携
 
 - `AuthIdentity`は`LINE | EMAIL`を扱えるが、LINE Login AdapterとLINE起点sessionは未実装。
 - Platform Adminは`SUPER_ADMIN | OPERATOR | SUPPORT | READ_ONLY`を持つ。
-- Phase 4のWeekly PlannerとDaily Mission生成orchestrationは実装済みだが、定時Jobへ未接続。
-- `JobDispatcher`と`JobRepository`はcontractのみで、永続化、Scheduler、Worker、lease、retryは未実装。
-- Messaging API、Webhook、友だち状態、通知設定、配信履歴、再送は未実装。
+- Weekly / Daily生成は認証済みScheduler / WorkerとVercel Cronへ接続済み。
+- PostgreSQL Job、lease、retry、配信履歴、Mission Deep Link、Messaging Adapter、quota Gateは実装済み。
+- 通知設定とWebhook / Connection Coreは実装済み。実ユーザーPushはLINE Login接続後まで停止する。
 - Phase 0〜5のコードは完了しているが、FREE MVP Production GateはNO-GO。
 
 ## 3. 絶対境界
@@ -78,12 +78,13 @@ LINE連携
 
 ### 6-C: Webhook / Connection
 
-- `LineConnection`
-- raw bodyに対するHMAC-SHA256署名検証
-- follow、unfollow、限定message、strict postback
-- `webhookEventId`による冪等処理
-- 友だち状態と未送信Job取消
-- 最小metadataだけを持つWebhook Event記録
+- `LineConnection`（完了）
+- raw bodyに対するHMAC-SHA256署名検証（完了）
+- follow / unfollow（完了）。message / postback業務処理は後続へ分離
+- `webhookEventId`による環境別冪等処理（完了）
+- 友だち状態と未送信配信取消（完了）
+- LINE user IDやraw payloadを含まない最小Webhook Event記録（完了）
+- 公開WebhookのProduction利用は環境別ACTIVE設定と外部Console設定後に行う
 
 ### 6-D: Notification Preferences
 

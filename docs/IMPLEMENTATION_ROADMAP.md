@@ -122,13 +122,13 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 6: LINE Daily Experience
 
-状態: 6-A、6-D、6-E、6-F1、6-F2a Coreを実装済み。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
+状態: 6-A、6-C Core、6-D、6-E、6-F1、6-F2a Coreを実装済み。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
 
 - 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
 - 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation（完了）
 - 6-B0: Auth Session Spike。Supabase Custom OIDC採用、Provider/Application Callback分離、環境別外部設定Gate（実装中）
 - 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ（6-B0レビュー・外部設定後）
-- 6-C: Webhook / Connection。署名、follow/unfollow、postback、友だち状態、冪等性
+- 6-C: Webhook / Connection Core。署名、follow/unfollow、友だち状態、環境別冪等性、未送信取消、recipient resolver（完了。postback業務処理とProduction接続は後続）
 - 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止（完了）
 - 6-E: Job / Mission Automation。Job Core、lease、retry、Producer、認証Scheduler / Worker、Weekly / Daily handler、Vercel Cron設定まで完了
 - 6-F1（完了）: 配信・試行履歴Core、環境別用途分離鍵、短期・single-use Mission Deep Link state
