@@ -67,6 +67,11 @@ enum LineConfigurationStatus {
   ERROR
 }
 
+enum LineNotificationFrequency {
+  DAILY
+  WEEKDAYS
+}
+
 enum LegalDocumentType {
   TERMS
   PRIVACY
@@ -294,27 +299,28 @@ enum SocialPreferredFormat {
 }
 
 model User {
-  id                      String                        @id @default(uuid()) @db.Uuid
-  status                  UserStatus                    @default(ACTIVE)
-  displayName             String                        @map("display_name") @db.VarChar(100)
-  email                   String?                       @db.VarChar(320)
-  createdAt               DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt               DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  identities              AuthIdentity[]
-  memberships             WorkspaceMembership[]
-  platformAdmin           PlatformAdmin?
-  bunshins                Bunshin[]
-  ownerKnowledge          OwnerKnowledge[]              @relation("KnowledgeOwner")
-  knowledgeGrants         BunshinKnowledgeGrant[]       @relation("GrantActor")
-  capabilityAssignments   BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
-  missionActivities       MissionActivity[]             @relation("MissionActivityActor")
-  postRecords             PostRecord[]                  @relation("PostRecordActor")
-  missionFeedback         MissionFeedback[]             @relation("MissionFeedbackActor")
-  aiUsageEvents           AiUsageEvent[]                @relation("AiUsageActor")
-  legalDocuments          LegalDocument[]               @relation("LegalDocumentAuthor")
-  legalConsents           UserLegalConsent[]
-  accountDeletionRequests AccountDeletionRequest[]
-  lineConfigurationAudits LineConfigurationAudit[]      @relation("LineConfigurationAuditActor")
+  id                          String                        @id @default(uuid()) @db.Uuid
+  status                      UserStatus                    @default(ACTIVE)
+  displayName                 String                        @map("display_name") @db.VarChar(100)
+  email                       String?                       @db.VarChar(320)
+  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  identities                  AuthIdentity[]
+  memberships                 WorkspaceMembership[]
+  platformAdmin               PlatformAdmin?
+  bunshins                    Bunshin[]
+  ownerKnowledge              OwnerKnowledge[]              @relation("KnowledgeOwner")
+  knowledgeGrants             BunshinKnowledgeGrant[]       @relation("GrantActor")
+  capabilityAssignments       BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
+  missionActivities           MissionActivity[]             @relation("MissionActivityActor")
+  postRecords                 PostRecord[]                  @relation("PostRecordActor")
+  missionFeedback             MissionFeedback[]             @relation("MissionFeedbackActor")
+  aiUsageEvents               AiUsageEvent[]                @relation("AiUsageActor")
+  legalDocuments              LegalDocument[]               @relation("LegalDocumentAuthor")
+  legalConsents               UserLegalConsent[]
+  accountDeletionRequests     AccountDeletionRequest[]
+  lineConfigurationAudits     LineConfigurationAudit[]      @relation("LineConfigurationAuditActor")
+  lineNotificationPreferences LineNotificationPreference[]
 
   @@index([status])
   @@map("users")
@@ -335,30 +341,31 @@ model AuthIdentity {
 }
 
 model Workspace {
-  id                      String                        @id @default(uuid()) @db.Uuid
-  type                    WorkspaceType
-  name                    String                        @db.VarChar(120)
-  status                  WorkspaceStatus               @default(ACTIVE)
-  createdAt               DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt               DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  memberships             WorkspaceMembership[]
-  bunshins                Bunshin[]
-  ownerKnowledge          OwnerKnowledge[]
-  knowledgeGrants         BunshinKnowledgeGrant[]
-  memories                BunshinMemory[]
-  capabilityAssignments   BunshinCapabilityAssignment[]
-  socialProfiles          SocialProfile[]
-  socialAccountStrategies SocialAccountStrategy[]
-  contentPillars          ContentPillar[]
-  weeklyPlans             WeeklyPlan[]
-  weeklyPlanItems         WeeklyPlanItem[]
-  dailyMissions           DailyMission[]
-  missionContents         MissionContent[]
-  missionDecisions        MissionDecision[]
-  missionActivities       MissionActivity[]
-  postRecords             PostRecord[]
-  missionFeedback         MissionFeedback[]
-  aiUsageEvents           AiUsageEvent[]
+  id                          String                        @id @default(uuid()) @db.Uuid
+  type                        WorkspaceType
+  name                        String                        @db.VarChar(120)
+  status                      WorkspaceStatus               @default(ACTIVE)
+  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships                 WorkspaceMembership[]
+  bunshins                    Bunshin[]
+  ownerKnowledge              OwnerKnowledge[]
+  knowledgeGrants             BunshinKnowledgeGrant[]
+  memories                    BunshinMemory[]
+  capabilityAssignments       BunshinCapabilityAssignment[]
+  socialProfiles              SocialProfile[]
+  socialAccountStrategies     SocialAccountStrategy[]
+  contentPillars              ContentPillar[]
+  weeklyPlans                 WeeklyPlan[]
+  weeklyPlanItems             WeeklyPlanItem[]
+  dailyMissions               DailyMission[]
+  missionContents             MissionContent[]
+  missionDecisions            MissionDecision[]
+  missionActivities           MissionActivity[]
+  postRecords                 PostRecord[]
+  missionFeedback             MissionFeedback[]
+  aiUsageEvents               AiUsageEvent[]
+  lineNotificationPreferences LineNotificationPreference[]
 
   @@index([status])
   @@map("workspaces")
@@ -444,6 +451,32 @@ model LineConfigurationAudit {
   @@map("line_configuration_audits")
 }
 
+model LineNotificationPreference {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  workspaceId           String                    @map("workspace_id") @db.Uuid
+  userId                String                    @map("user_id") @db.Uuid
+  bunshinId             String                    @map("bunshin_id") @db.Uuid
+  enabled               Boolean                   @default(false)
+  notificationConsentAt DateTime?                 @map("notification_consent_at") @db.Timestamptz(6)
+  localTime             String                    @default("08:00") @map("local_time") @db.VarChar(5)
+  timezone              String                    @default("Asia/Tokyo") @db.VarChar(64)
+  frequency             LineNotificationFrequency @default(DAILY)
+  quietHoursStart       String                    @default("21:00") @map("quiet_hours_start") @db.VarChar(5)
+  quietHoursEnd         String                    @default("07:00") @map("quiet_hours_end") @db.VarChar(5)
+  pausedUntil           DateTime?                 @map("paused_until") @db.Timestamptz(6)
+  reminderEnabled       Boolean                   @default(false) @map("reminder_enabled")
+  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user                  User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bunshin               Bunshin                   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, bunshinId])
+  @@index([workspaceId, bunshinId, enabled])
+  @@index([userId, enabled])
+  @@map("line_notification_preferences")
+}
+
 model LegalDocument {
   id              String              @id @default(uuid()) @db.Uuid
   type            LegalDocumentType
@@ -496,40 +529,41 @@ model AccountDeletionRequest {
 }
 
 model Bunshin {
-  id                      String                        @id @default(uuid()) @db.Uuid
-  workspaceId             String                        @map("workspace_id") @db.Uuid
-  ownerUserId             String                        @map("owner_user_id") @db.Uuid
-  name                    String                        @db.VarChar(100)
-  slug                    String                        @db.VarChar(80)
-  type                    BunshinType
-  status                  BunshinStatus                 @default(DRAFT)
-  objectiveSummary        String                        @map("objective_summary") @db.VarChar(500)
-  audienceSummary         String                        @map("audience_summary") @db.VarChar(500)
-  personalitySummary      String                        @map("personality_summary") @db.VarChar(500)
-  avatarUrl               String?                       @map("avatar_url") @db.VarChar(2048)
-  archivedAt              DateTime?                     @map("archived_at") @db.Timestamptz(6)
-  createdAt               DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt               DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace               Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  ownerUser               User                          @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
-  objectives              BunshinObjective[]
-  audiences               BunshinAudience[]
-  personality             BunshinPersonality?
-  knowledgeGrants         BunshinKnowledgeGrant[]
-  memories                BunshinMemory[]
-  capabilityAssignments   BunshinCapabilityAssignment[]
-  socialProfiles          SocialProfile[]
-  socialAccountStrategies SocialAccountStrategy[]
-  contentPillars          ContentPillar[]
-  weeklyPlans             WeeklyPlan[]
-  weeklyPlanItems         WeeklyPlanItem[]
-  dailyMissions           DailyMission[]
-  missionContents         MissionContent[]
-  missionDecisions        MissionDecision[]
-  missionActivities       MissionActivity[]
-  postRecords             PostRecord[]
-  missionFeedback         MissionFeedback[]
-  aiUsageEvents           AiUsageEvent[]
+  id                          String                        @id @default(uuid()) @db.Uuid
+  workspaceId                 String                        @map("workspace_id") @db.Uuid
+  ownerUserId                 String                        @map("owner_user_id") @db.Uuid
+  name                        String                        @db.VarChar(100)
+  slug                        String                        @db.VarChar(80)
+  type                        BunshinType
+  status                      BunshinStatus                 @default(DRAFT)
+  objectiveSummary            String                        @map("objective_summary") @db.VarChar(500)
+  audienceSummary             String                        @map("audience_summary") @db.VarChar(500)
+  personalitySummary          String                        @map("personality_summary") @db.VarChar(500)
+  avatarUrl                   String?                       @map("avatar_url") @db.VarChar(2048)
+  archivedAt                  DateTime?                     @map("archived_at") @db.Timestamptz(6)
+  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                   Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  ownerUser                   User                          @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  objectives                  BunshinObjective[]
+  audiences                   BunshinAudience[]
+  personality                 BunshinPersonality?
+  knowledgeGrants             BunshinKnowledgeGrant[]
+  memories                    BunshinMemory[]
+  capabilityAssignments       BunshinCapabilityAssignment[]
+  socialProfiles              SocialProfile[]
+  socialAccountStrategies     SocialAccountStrategy[]
+  contentPillars              ContentPillar[]
+  weeklyPlans                 WeeklyPlan[]
+  weeklyPlanItems             WeeklyPlanItem[]
+  dailyMissions               DailyMission[]
+  missionContents             MissionContent[]
+  missionDecisions            MissionDecision[]
+  missionActivities           MissionActivity[]
+  postRecords                 PostRecord[]
+  missionFeedback             MissionFeedback[]
+  aiUsageEvents               AiUsageEvent[]
+  lineNotificationPreferences LineNotificationPreference[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])

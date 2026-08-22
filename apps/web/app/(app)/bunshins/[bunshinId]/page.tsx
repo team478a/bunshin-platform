@@ -2,6 +2,7 @@ import {
   GetBunshin,
   ListBunshinCapabilityAssignments,
   ListBunshinMemories,
+  GetLineNotificationPreference,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -42,6 +43,7 @@ export default async function BunshinPage({
       PrismaDailyMissionRepository,
       PrismaMissionEngagementRepository,
       PrismaMissionOutcomeRepository,
+      PrismaLineNotificationPreferenceRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -65,6 +67,13 @@ export default async function BunshinPage({
     });
     const capabilities = await new ListBunshinCapabilityAssignments(
       new PrismaBunshinCapabilityAssignmentRepository(),
+    ).execute({
+      workspaceId,
+      actorUserId: currentUser.userId,
+      bunshinId: bunshin.id,
+    });
+    const lineNotificationPreference = await new GetLineNotificationPreference(
+      new PrismaLineNotificationPreferenceRepository(),
     ).execute({
       workspaceId,
       actorUserId: currentUser.userId,
@@ -267,6 +276,19 @@ export default async function BunshinPage({
             feedback: missionOutcomes[index]!.feedback?.rating ?? null,
           }),
         )}
+        lineNotificationPreference={{
+          enabled: lineNotificationPreference.enabled,
+          consentGranted: lineNotificationPreference.notificationConsentAt !== null,
+          localTime: lineNotificationPreference.localTime,
+          timezone: lineNotificationPreference.timezone,
+          frequency: lineNotificationPreference.frequency,
+          quietHoursStart: lineNotificationPreference.quietHoursStart,
+          quietHoursEnd: lineNotificationPreference.quietHoursEnd,
+          pausedUntil: lineNotificationPreference.pausedUntil
+            ? lineNotificationPreference.pausedUntil.toISOString()
+            : null,
+          reminderEnabled: lineNotificationPreference.reminderEnabled,
+        }}
       />
     );
   } catch {

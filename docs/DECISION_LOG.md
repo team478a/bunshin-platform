@@ -530,4 +530,14 @@
 - Identity: LINE subject、Supabase Auth User ID、Platform User IDを別識別子として扱う
 - Linking: 既存verified sessionからの明示操作だけ許可し、メール一致で統合しない
 - Gate: 環境別Custom Provider、Redirect Allowlist、manual linking有効化、DEVELOPMENT smokeの完了まで6-B本実装へ進まない
+
+## D-047: 通知設定をLINE接続・送信から独立したBunshin単位resourceにする
+
+- 日付: 2026-08-22
+- 状態: Accepted
+- Scope: `workspaceId + userId + bunshinId`で一意とし、verified actor本人の設定だけを取得・更新する
+- Consent: 同意なしの有効化を拒否し、撤回時は無効化して同意日時を削除する
+- Schedule: IANA timezone、`HH:mm`、日跨ぎQuiet Hours、`DAILY | WEEKDAYS`を保存する
+- Pause: `pausedUntil`とReminder設定は保存・判定までとし、Job・Pushは6-E/Fへ分離する
+- Isolation: Workspace MembershipとBunshin scopeをrepositoryで毎回再検証する
 - 詳細: `docs/PHASE6A_SECURE_CONFIGURATION_IMPLEMENTATION_REPORT.md`

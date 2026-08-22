@@ -12,6 +12,10 @@ import { ContentPillarSection, type ContentPillarView } from './content-pillar-s
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
 import { AccountStrategySection, type StrategyView } from './account-strategy-section';
 import { DailyMissionSection, type DailyMissionView } from './daily-mission-section';
+import {
+  LineNotificationPreferenceSection,
+  type LineNotificationPreferenceView,
+} from './line-notification-preference-section';
 
 export function BunshinEditor({
   workspaceId,
@@ -24,6 +28,7 @@ export function BunshinEditor({
   contentPillars,
   weeklyPlans,
   dailyMissions,
+  lineNotificationPreference,
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
@@ -35,6 +40,7 @@ export function BunshinEditor({
   contentPillars: ContentPillarView[];
   weeklyPlans: WeeklyPlanView[];
   dailyMissions: DailyMissionView[];
+  lineNotificationPreference: LineNotificationPreferenceView;
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -132,6 +138,11 @@ export function BunshinEditor({
         workspaceId={workspaceId}
         bunshinId={bunshin.id}
         socialStatus={socialCapabilityStatus}
+      />
+      <LineNotificationPreferenceSection
+        workspaceId={workspaceId}
+        bunshinId={bunshin.id}
+        preference={lineNotificationPreference}
       />
       <SocialProfileSection
         workspaceId={workspaceId}
