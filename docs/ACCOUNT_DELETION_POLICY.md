@@ -19,3 +19,7 @@
 - Workspace、Bunshin、Knowledge、Memory、Mission等の物理削除・匿名化
 
 これらは所有関係、法定保持、バックアップ、復旧不能性をレビューした後、別PRで実装する。
+
+## 次の実装計画
+
+猶予期間後の処理順、匿名化・保持境界、Organization所有権、Supabase Auth削除、冪等Job、必須確認事項は`ACCOUNT_DELETION_EXECUTION_PLAN.md`を正本とする。同計画が承認されるまで、Migrationと不可逆処理を実装しない。

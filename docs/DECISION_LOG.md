@@ -729,3 +729,16 @@
 - Environment: runtime environmentはrequest入力から受け取らずサーバー設定から導出し、Productionでは外部管理者通知未設定をNO-GOとする
 - Smoke: Production gateはmain、GitHub Environment承認、明示文字列、Health Ready、CRON認証済みLINE Readinessを要求し、LINE Pushを実行しない
 - Execution: コードとworkflowの成功は本番GOを意味しない。Vercel環境変数、GitHub Secret、外部Webhook疎通、LINE外部設定、人間承認後に本番workflowを実行する
+
+## D-063: 退会完了はUser物理削除ではなく段階的停止・外部Auth削除・匿名化とする
+
+- 日付: 2026-08-22
+- 状態: Proposed / 人間レビュー待ち
+- Identity: 14日猶予終了後に処理対象をclaimし、本人操作と通知を停止してからSupabase Auth Userを削除し、成功後にPlatform AuthIdentityを削除する
+- User Row: 監査resourceのRestrict参照を維持するためUser行は消さず、emailをnull、displayNameを固定値、statusをDELETEDにする
+- Workspace: Organizationデータは削除せずMembershipだけをREVOKEDにする。唯一OWNERとACTIVE Platform Adminは自動処理せずBLOCKEDにする
+- Personal Data: LINE外部ID、Post URL、自由記述metadata、Knowledge、Memory、Mission Content等の個人情報・本文をtable別にpurgeする
+- Execution: PROCESSING / BLOCKED、短期lease、attempt、versionを持つ専用実行状態で並行処理とcrash再開を安全にする
+- Secrets: Supabase Service Role KeyはProduction環境変数だけに置き、DB、管理画面、Job、logへ保存しない
+- Retention: request、監査、AI usage、配信attempt、backupの保持期間とlegal holdは実装前の人間確認事項とする
+- Gate: `ACCOUNT_DELETION_EXECUTION_PLAN.md`承認前にMigration、Supabase Admin API、不可逆匿名化を実装しない
