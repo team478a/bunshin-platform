@@ -42,7 +42,11 @@ function authorize(request: Request, secret: string | undefined) {
 }
 
 async function configuredWorker(): Promise<JobWorkerPort> {
-  const registry = new MissionAutomationHandlerRegistry();
+  const { createWeeklyPlanJobHandler } = await import('../jobs/weekly-plan-job-handler');
+  const registry = new MissionAutomationHandlerRegistry().register(
+    'WEEKLY_PLAN_PREPARE',
+    createWeeklyPlanJobHandler(),
+  );
   if (!registry.get('WEEKLY_PLAN_PREPARE') || !registry.get('DAILY_MISSION_GENERATE'))
     throw new ApplicationError(
       'CONFIGURATION_ERROR',
