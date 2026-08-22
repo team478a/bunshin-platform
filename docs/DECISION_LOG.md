@@ -631,3 +631,18 @@
 - Ownership: 署名検証後もUser、Workspace Membership、Bunshin、Daily Mission、実行環境をrepositoryで再検証する
 - Privacy: LINE user ID、Provider response、Token、Secret、Mission本文を配信履歴・state・logへ保存しない
 - Separation: 本PRでは実際のLINE Push、Webhook、LINE Login、quota、再送UIを実装しない
+
+## D-055: LINE送信を短期lease、Provider Port、quota Gateで保護する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Claim: 配信前に`environment + deliveryId`を条件として30秒leaseを取得し、attempt番号をatomicに増加する
+- Concurrency: `PROCESSING`中の配信は別workerが取得せず、lease期限切れの場合だけ回収可能とする
+- Ownership: attempt完了とpolicy停止は、同じenvironment、lease owner、attempt番号を満たすworkerだけが更新できる
+- Provider: Applicationは`LineMessagingProviderPort`だけを参照し、LINE HTTP、SDK型、raw responseをCoreへ渡さない
+- Message: Push本文はMission完成通知と短期Deep Linkだけに固定し、投稿本文、Prompt、Knowledgeを送信しない
+- Classification: credential、rate limit、invalid recipient、timeout、provider unavailableを分類し、retry可否をapplicationへ返す
+- Quota: 80%相当の設定値でwarning、90%相当でReminder停止、100%で全送信停止とし、Daily Missionを優先する
+- Pause: 全体停止中はProviderと受信者解決を呼ばず、claimを理由付きでcancelする
+- Secrets: Access TokenはACTIVEかつ接続確認済みの同一環境設定から実行時だけ復号し、DB履歴、attempt、response、logへ保存しない
+- Separation: LINE Identity / Connectionが未実装のためRecipient ResolverはPortに留め、実ユーザーPushとJob接続は行わない

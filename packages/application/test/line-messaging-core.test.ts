@@ -44,12 +44,17 @@ describe('LINE messaging core', () => {
       sentAt: null,
       cancelledAt: null,
       lastErrorCategory: null,
+      attemptCount: 0,
+      leaseOwner: null,
+      leaseExpiresAt: null,
       createdAt: now,
       updatedAt: now,
     };
     const repository = {
       prepare: vi.fn().mockResolvedValue(delivery),
+      claim: vi.fn(),
       recordAttempt: vi.fn(),
+      releaseClaim: vi.fn(),
     } satisfies LineMessageDeliveryRepository;
     await expect(
       new PrepareLineMissionDelivery(repository).execute({
