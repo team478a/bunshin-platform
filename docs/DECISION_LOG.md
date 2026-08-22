@@ -603,3 +603,17 @@
 - Worker: Weekly / Daily handlerが揃ったため、認証済みWorkerをPostgreSQL Job executorへ接続する。環境固定、lease、retry、実行直前scope再検証を維持する
 - Privacy: Job payloadへMission本文、Knowledge、Provider response、Secretを保存せず、logとusage eventにもProvider responseを保存しない
 - Separation: Vercel Cron schedule有効化、LINE Push、Deep Linkは後続PRへ分離する
+
+## D-053: Vercel Cronを毎分のScheduler / Worker triggerとして使用する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Trigger: Vercel Cronから毎分SchedulerとWorkerをGETし、処理状態・lease・retryはPostgreSQL Jobを正本とする
+- Authentication: 両endpointで32文字以上の`CRON_SECRET`をBearer認証し、digestをconstant-time比較する。URL、response、logへsecretを出さない
+- Environment: Job environmentは`APP_ENV`から固定し、query、header、request bodyによる上書きを禁止する。PreviewへProduction secret / DBを渡さない
+- Local Time: Cron自体はUTCで起動し、各PreferenceのIANA timezone、local time、pause、quiet hours、WEEKDAYSをapplicationで評価する
+- Weekly: Sundayのlocal timeに翌MondayのDRAFT Weekly Plan準備Jobを登録する。WEEKDAYSでもWeekly準備は行うが、pause / quiet hours / consentは尊重する
+- Daily: 対象local dateにCONFIRMED Weekly Plan itemがある場合だけDaily Jobを登録し、未承認Planを追い越さない
+- Idempotency: Workspace / Bunshin / local date由来の決定的keyを使用し、Cron重複配送やScheduler再実行でJobを重複作成しない
+- Bound: 1回最大1,000件をID順で走査し、truncatedと件数だけをresponse / logへ出す。個別User / Bunshin IDは出さない
+- Separation: LINE Push、Deep Link、独立Worker / Cloud Runは後続PRへ分離する

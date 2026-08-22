@@ -6,3 +6,5 @@ export async function POST(request: Request) {
   const { jobWorkerResponse } = await import('../../../../../src/http/job-worker');
   return jobWorkerResponse(request);
 }
+
+export const GET = POST;

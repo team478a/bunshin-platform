@@ -130,7 +130,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ（6-B0レビュー・外部設定後）
 - 6-C: Webhook / Connection。署名、follow/unfollow、postback、友だち状態、冪等性
 - 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止（実装・レビュー中）
-- 6-E: Job / Mission Automation。Job Core、lease、retry、Producer、認証Worker、Weekly / Daily handler接続まで完了。Vercel Cron scheduleは未有効化
+- 6-E: Job / Mission Automation。Job Core、lease、retry、Producer、認証Scheduler / Worker、Weekly / Daily handler、Vercel Cron設定まで完了
 - 6-F: Messaging / Deep Link。Push、履歴、再送、クリック、quota、環境別用途分離鍵によるsingle-use state
 - 6-G: Admin / KPI / Production Gate。運営画面、Funnel、Smoke、Go/No-Go
 
