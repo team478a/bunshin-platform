@@ -24,7 +24,7 @@ Auth削除成功後だけpurgeへ進む。Provider user不在は冪等成功と�
 ## 運用未完了
 
 - Vercel ProductionへのService Role Key登録
-- Production Migration適用
+- Production Migration適用（run `32575525688`で完了）
 - Production dry-run
 - Backup / Restore rehearsalの最終確認
 - 検証用Production Userでの限定実行

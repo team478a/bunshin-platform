@@ -157,7 +157,7 @@ LINE設定とLINE公式アカウントはProduction / Stagingで分離する。�
 - 本人による退会要求・取消、14日猶予、管理者確認（完了）
 - 猶予期間後の匿名化・削除実行（PR A〜Dコード完了。Productionはdisabled、Service Role Key登録・dry-run・Go承認待ち）
 - Production Gate監査、backup/restore・incident手順、health smoke workflow（完了）
-- 本番Dashboard設定、restore rehearsal、最新migration、FREE MVP smoke、Go承認（未完了）
+- Auth公開設定・最新migration・Health Smoke完了。本番Dashboard残確認、restore rehearsal、Magic Link / FREE MVP smoke、退会dry-run、Go承認は未完了
 
 ここで100人規模のFREE検証を行う。
 

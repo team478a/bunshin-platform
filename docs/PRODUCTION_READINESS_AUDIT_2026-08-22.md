@@ -8,8 +8,8 @@
 
 | 項目                                | 状態           | 根拠                                                           |
 | ----------------------------------- | -------------- | -------------------------------------------------------------- |
-| 最新main                            | OK             | `81878156772d7d5d73fea96f9a5c4f3ee2f43022`                     |
-| main CI                             | OK             | PR #84 `verify` / `database`成功                               |
+| 最新main                            | OK             | `e38e9eab26d031342638e3531642441207fe4eb2`                     |
+| main CI                             | OK             | PR #85 `verify` / `database`成功                               |
 | Vercel Production                   | OK             | deployment `6029600254`、main SHA一致                          |
 | live / ready                        | OK             | 2026-08-22、両方HTTP 200、DB `ok`                              |
 | production dependency audit         | OK             | `pnpm audit --prod --audit-level high`、既知の脆弱性0件        |
@@ -18,11 +18,12 @@
 | main branch protection              | OK             | `verify` / `database`必須、strict、admin適用、会話解決必須     |
 | Production deployment branch policy | OK             | custom policyで`main`だけを許可                                |
 | 最新DB migration                    | OK             | Actions run `32535372263`、適用後status成功                    |
-| Production Health Smoke             | OK             | Actions run `32575539271`、最新mainでlive / ready成功          |
+| Production Health Smoke             | OK             | Actions run `32579885767`、Auth / DBを含むreadiness成功        |
 | Supabase Pro daily backup           | 契約上利用可能 | 公式仕様は日次・7日保持。Dashboardで実プロジェクト状態を要確認 |
 | restore rehearsal                   | BLOCKER        | 実施記録なし                                                   |
 | Vercel Spend Management             | BLOCKER        | Dashboardの設定値・hard pause・通知先を未確認                  |
-| Auth URL / Magic Link               | BLOCKER        | Vercel ProductionのSupabase公開認証変数が未登録                |
+| Auth configuration                  | OK             | Vercel Production設定済み、readiness `authentication: ok`      |
+| Auth URL / Magic Link               | BLOCKER        | Redirect allowlistと本番Magic Link実操作の確認記録なし         |
 | FREE MVP smoke                      | BLOCKER        | 完走記録なし                                                   |
 
 ## 2026-08-22適用済みmigration
@@ -37,13 +38,11 @@
 
 1. Supabase Dashboardで日次backupと7日保持を確認する。
 2. `BACKUP_RESTORE_RUNBOOK.md`に従いrestore rehearsalの日時・担当・結果を記録する。
-3. Vercel Productionへ`NEXT_PUBLIC_SUPABASE_URL`と`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`を登録する。
-4. Supabase Auth Site URLとRedirect URL allowlistをProduction URLへ設定する。
-5. Production migration run `32575525688`を承認し、最新migrationを適用する。
-6. 認証設定を検証する新readinessをdeploy後、`Production Health Smoke`を再実行する。
-7. Vercel Spend Managementと通知を確認する。
-8. Magic Link、法務同意、FREE MVP smokeを本番テストアカウントで完走する。
-9. 責任者が対象SHAと日時を記録してGoを宣言する。
+3. Supabase Auth Site URLとRedirect URL allowlistをProduction URLへ設定する。
+4. Vercel Spend Managementと通知を確認する。
+5. Magic Link、法務同意、FREE MVP smokeを本番テストアカウントで完走する。
+6. 退会処理のService Role Key、dry-run、限定検証をRunbookに従って実施する。
+7. 責任者が対象SHAと日時を記録してGoを宣言する。
 
 Production Environmentの自己承認禁止は、現在のrequired reviewerが1名だけのため未適用である。第二承認者を追加してから有効化する。
 
