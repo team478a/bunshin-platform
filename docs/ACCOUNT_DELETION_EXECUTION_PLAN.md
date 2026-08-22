@@ -4,7 +4,7 @@
 
 対象: Phase 7 Account Deletion Execution
 
-状態: PR A〜C Core完了。PR D実行接続・運用機能は未実装
+状態: PR A〜Dコード実装完了。Production実行はdisabled、dry-run・Go承認待ち
 
 ## 1. 目的
 
@@ -137,7 +137,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR D: Scheduler / Admin Operations
 
-- 状態: 未実装
+- 状態: コード実装完了（Production Secret登録、dry-run、Go承認は未実施）
 - CRON Secretで保護した少量batch実行
 - Platform AdminのBLOCKED確認
 - 理由付き再実行

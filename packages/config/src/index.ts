@@ -14,6 +14,8 @@ const serverSchema = z
     SUPABASE_AUTH_ADMIN_URL: z.url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(32).optional(),
     SUPABASE_AUTH_ADMIN_ENV: z.enum(['development', 'staging', 'production']).optional(),
+    ACCOUNT_DELETION_EXECUTION_MODE: z.enum(['disabled', 'dry-run', 'enabled']).default('disabled'),
+    ACCOUNT_DELETION_PRODUCTION_APPROVED: z.enum(['true', 'false']).default('false'),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
@@ -78,6 +80,27 @@ const serverSchema = z
           message: 'Supabase Auth administration URL cannot use localhost outside development',
         });
       }
+    }
+    if (
+      value.APP_ENV === 'production' &&
+      value.ACCOUNT_DELETION_EXECUTION_MODE === 'enabled' &&
+      value.ACCOUNT_DELETION_PRODUCTION_APPROVED !== 'true'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ACCOUNT_DELETION_PRODUCTION_APPROVED'],
+        message: 'Production account deletion execution requires explicit approval',
+      });
+    }
+    if (
+      value.ACCOUNT_DELETION_EXECUTION_MODE === 'enabled' &&
+      authAdminValues.some((item) => item === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SUPABASE_AUTH_ADMIN_URL'],
+        message: 'Enabled account deletion requires Auth administration configuration',
+      });
     }
   });
 

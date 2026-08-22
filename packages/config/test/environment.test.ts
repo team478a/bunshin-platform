@@ -66,4 +66,26 @@ describe('environment validation', () => {
       }).SUPABASE_AUTH_ADMIN_ENV,
     ).toBe('development');
   });
+
+  it('requires a second explicit approval before enabling production deletion', () => {
+    const production = {
+      ...valid,
+      NODE_ENV: 'production',
+      APP_ENV: 'production',
+      APP_URL: 'https://app.example.com',
+      ACCOUNT_DELETION_EXECUTION_MODE: 'enabled',
+      SUPABASE_AUTH_ADMIN_URL: 'https://project.supabase.co',
+      SUPABASE_SERVICE_ROLE_KEY: 's'.repeat(40),
+      SUPABASE_AUTH_ADMIN_ENV: 'production',
+    };
+    expect(() => parseServerEnvironment(production)).toThrow(
+      'ACCOUNT_DELETION_PRODUCTION_APPROVED',
+    );
+    expect(
+      parseServerEnvironment({
+        ...production,
+        ACCOUNT_DELETION_PRODUCTION_APPROVED: 'true',
+      }).ACCOUNT_DELETION_EXECUTION_MODE,
+    ).toBe('enabled');
+  });
 });

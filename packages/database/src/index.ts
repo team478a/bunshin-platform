@@ -28,6 +28,8 @@ import type {
   AccountDeletionRequest,
   AccountDeletionExecutionRepository,
   AccountDeletionPurgeRepository,
+  AccountDeletionOrchestrationRepository,
+  AccountDeletionAdminOperationsRepository,
   AccountDeletionBlockedReason,
   LineConfigurationRepository,
   LineChannelConfiguration,
@@ -3518,6 +3520,129 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
         status: 'COMPLETED' as const,
         blockedReason: null,
       };
+    });
+  }
+}
+
+export class PrismaAccountDeletionOrchestrationRepository implements AccountDeletionOrchestrationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async findEmailIdentity(
+    input: Parameters<AccountDeletionOrchestrationRepository['findEmailIdentity']>[0],
+  ) {
+    const request = await this.client.accountDeletionRequest.findFirst({
+      where: {
+        id: input.requestId,
+        userId: input.userId,
+        status: 'PROCESSING',
+        leaseOwner: input.workerId,
+        leaseExpiresAt: { gt: input.now },
+        user: { status: 'SUSPENDED' },
+      },
+      select: {
+        user: {
+          select: {
+            identities: {
+              where: { provider: 'EMAIL' },
+              select: { providerUserId: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    return request?.user.identities[0] ?? null;
+  }
+
+  async recordAuthFailure(
+    input: Parameters<AccountDeletionOrchestrationRepository['recordAuthFailure']>[0],
+  ) {
+    const base = {
+      id: input.requestId,
+      userId: input.userId,
+      status: 'PROCESSING' as const,
+      leaseOwner: input.workerId,
+      leaseExpiresAt: { gt: input.now },
+    };
+    if (input.retryable) {
+      const result = await this.client.accountDeletionRequest.updateMany({
+        where: base,
+        data: {
+          lastErrorCategory: input.category,
+          leaseExpiresAt: new Date(input.now.getTime() + 5 * 60 * 1_000),
+        },
+      });
+      return result.count === 1;
+    }
+    const blockedReason: AccountDeletionBlockedReason =
+      input.category === 'AUTH_ENVIRONMENT_MISMATCH'
+        ? 'AUTH_ENVIRONMENT_MISMATCH'
+        : 'AUTH_CONFIGURATION_UNAVAILABLE';
+    const result = await this.client.accountDeletionRequest.updateMany({
+      where: base,
+      data: {
+        status: 'BLOCKED',
+        blockedReason,
+        lastErrorCategory: input.category,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
+    return result.count === 1;
+  }
+
+  async inspect(now: Date) {
+    const [due, processing, blocked] = await Promise.all([
+      this.client.accountDeletionRequest.count({
+        where: { status: 'REQUESTED', scheduledFor: { lte: now } },
+      }),
+      this.client.accountDeletionRequest.count({ where: { status: 'PROCESSING' } }),
+      this.client.accountDeletionRequest.count({ where: { status: 'BLOCKED' } }),
+    ]);
+    return { due, processing, blocked };
+  }
+}
+
+export class PrismaAccountDeletionAdminOperationsRepository implements AccountDeletionAdminOperationsRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async retryBlocked(
+    input: Parameters<AccountDeletionAdminOperationsRepository['retryBlocked']>[0],
+  ) {
+    return this.client.$transaction(async (tx) => {
+      const admin = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        select: { id: true },
+      });
+      if (!admin) return null;
+      const request = await tx.accountDeletionRequest.findFirst({
+        where: { id: input.requestId, status: 'BLOCKED' },
+        select: { id: true, status: true },
+      });
+      if (!request) return false;
+      const updated = await tx.accountDeletionRequest.updateMany({
+        where: { id: request.id, status: 'BLOCKED' },
+        data: {
+          status: 'REQUESTED',
+          scheduledFor: input.now,
+          blockedReason: null,
+          lastErrorCategory: null,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+      });
+      if (updated.count !== 1) return false;
+      await tx.accountDeletionOperationAudit.create({
+        data: {
+          requestId: request.id,
+          actorUserId: input.actorUserId,
+          action: 'RETRY_BLOCKED',
+          reason: input.reason,
+          previousStatus: 'BLOCKED',
+          nextStatus: 'REQUESTED',
+        },
+      });
+      return true;
     });
   }
 }

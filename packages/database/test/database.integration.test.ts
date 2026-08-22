@@ -58,6 +58,8 @@ import {
   PrismaAccountDeletionRequestRepository,
   PrismaAccountDeletionExecutionRepository,
   PrismaAccountDeletionPurgeRepository,
+  PrismaAccountDeletionOrchestrationRepository,
+  PrismaAccountDeletionAdminOperationsRepository,
   PrismaJobRepository,
   PrismaMissionAutomationScopeRepository,
   PrismaLineConnectionRepository,
@@ -82,6 +84,7 @@ integration('database ownership boundaries', () => {
     await client.missionDeepLinkState.deleteMany();
     await client.lineNotificationPreference.deleteMany();
     await client.job.deleteMany();
+    await client.accountDeletionOperationAudit.deleteMany();
     await client.accountDeletionRequest.deleteMany();
     await client.userLegalConsent.deleteMany();
     await client.legalDocument.deleteMany();
@@ -949,6 +952,136 @@ integration('database ownership boundaries', () => {
     ).resolves.toMatchObject({
       email: 'lease@example.com',
       status: 'SUSPENDED',
+    });
+  });
+
+  it('resolves Auth identity only inside the active deletion lease and records retryable failures', async () => {
+    const account = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Auth Orchestration' });
+    const identity = await client.authIdentity.create({
+      data: { userId: account.user.id, provider: 'EMAIL', providerUserId: randomUUID() },
+    });
+    const request = await client.accountDeletionRequest.create({
+      data: {
+        userId: account.user.id,
+        status: 'PROCESSING',
+        scheduledFor: new Date('2026-08-21T00:00:00Z'),
+        leaseOwner: 'auth-worker',
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+      },
+    });
+    await client.user.update({ where: { id: account.user.id }, data: { status: 'SUSPENDED' } });
+    const repository = new PrismaAccountDeletionOrchestrationRepository(client);
+    await expect(
+      repository.findEmailIdentity({
+        requestId: request.id,
+        userId: account.user.id,
+        workerId: 'auth-worker',
+        now: new Date('2026-08-22T09:01:00Z'),
+      }),
+    ).resolves.toEqual({ providerUserId: identity.providerUserId });
+    await expect(
+      repository.findEmailIdentity({
+        requestId: request.id,
+        userId: account.user.id,
+        workerId: 'wrong-worker',
+        now: new Date('2026-08-22T09:01:00Z'),
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.recordAuthFailure({
+        requestId: request.id,
+        userId: account.user.id,
+        workerId: 'auth-worker',
+        now: new Date('2026-08-22T09:01:00Z'),
+        category: 'AUTH_RATE_LIMITED',
+        retryable: true,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      client.accountDeletionRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({
+      status: 'PROCESSING',
+      lastErrorCategory: 'AUTH_RATE_LIMITED',
+      leaseOwner: 'auth-worker',
+      leaseExpiresAt: new Date('2026-08-22T09:06:00Z'),
+    });
+    await expect(
+      repository.recordAuthFailure({
+        requestId: request.id,
+        userId: account.user.id,
+        workerId: 'auth-worker',
+        now: new Date('2026-08-22T09:02:00Z'),
+        category: 'AUTH_CREDENTIAL_INVALID',
+        retryable: false,
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      client.accountDeletionRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({
+      status: 'BLOCKED',
+      blockedReason: 'AUTH_CONFIGURATION_UNAVAILABLE',
+      lastErrorCategory: 'AUTH_CREDENTIAL_INVALID',
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    });
+  });
+
+  it('allows only SUPER_ADMIN to retry BLOCKED deletion and records the reason in Audit', async () => {
+    const account = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Blocked Deletion' });
+    const superAdmin = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Deletion Super Admin' });
+    const operator = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Deletion Operator' });
+    await Promise.all([
+      client.platformAdmin.create({ data: { userId: superAdmin.user.id, role: 'SUPER_ADMIN' } }),
+      client.platformAdmin.create({ data: { userId: operator.user.id, role: 'OPERATOR' } }),
+    ]);
+    const request = await client.accountDeletionRequest.create({
+      data: {
+        userId: account.user.id,
+        status: 'BLOCKED',
+        scheduledFor: new Date('2026-08-21T00:00:00Z'),
+        blockedReason: 'MANUAL_REVIEW_REQUIRED',
+      },
+    });
+    const repository = new PrismaAccountDeletionAdminOperationsRepository(client);
+    await expect(
+      repository.retryBlocked({
+        requestId: request.id,
+        actorUserId: operator.user.id,
+        reason: 'Operator must not retry this request',
+        now: new Date('2026-08-22T10:00:00Z'),
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.retryBlocked({
+        requestId: request.id,
+        actorUserId: superAdmin.user.id,
+        reason: 'Organization ownership has been safely transferred',
+        now: new Date('2026-08-22T10:00:00Z'),
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      client.accountDeletionRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({
+      status: 'REQUESTED',
+      blockedReason: null,
+      scheduledFor: new Date('2026-08-22T10:00:00Z'),
+    });
+    await expect(
+      client.accountDeletionOperationAudit.findFirstOrThrow({ where: { requestId: request.id } }),
+    ).resolves.toMatchObject({
+      actorUserId: superAdmin.user.id,
+      action: 'RETRY_BLOCKED',
+      previousStatus: 'BLOCKED',
+      nextStatus: 'REQUESTED',
+      reason: 'Organization ownership has been safely transferred',
     });
   });
 
