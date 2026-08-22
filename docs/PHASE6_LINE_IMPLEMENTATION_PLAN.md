@@ -113,12 +113,12 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - `LineMessageDelivery`、`LineMessageDeliveryAttempt`、短期lease（完了）
 - timeout、rate limit、blocked、invalid recipient、credential、quotaの分類とJob retry接続（完了）
 - 環境別の用途分離鍵で署名したsingle-use短期stateを使うMission Deep Link（発行・消費Coreと送信時発行まで完了）
-- Mission Deep LinkのApplication Callback、click記録、理由付き手動再送、管理者警告は後続
+- Mission Deep LinkのApplication Callback、click記録、理由付き手動再送は完了。管理者警告は後続
 
 ### 6-G: Admin / KPI / Production Gate
 
 - 設定、友だち状態、通知可能数、生成・送信・失敗・Deadの管理画面
-- ユーザー単位停止、全体停止、理由付き限定再送
+- ユーザー単位停止、全体停止、理由付き限定再送（再試行可能なFAILED配信のみ完了）
 - 友だち追加から投稿完了までのLINE Funnel
 - 送信数、クリック率、ブロック率、通知から投稿完了率、原価
 - Runbook、Production Smoke、Production Gate再判定
@@ -171,6 +171,15 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - 通知はMission、User、Workspace、Bunshinへ防御的にscopeする。
 - idempotency keyを一意にし、試行履歴と論理通知を分離する。
 - Webhookはevent ID、type、時刻、結果、最小metadataだけを保存する。
+
+### LineDeliveryRetryRequest
+
+- environment、delivery、失敗時attempt count、actor、理由、生成Job、createdAtを保存する。
+- `deliveryId + deliveryAttemptCount`を一意にし、同じ失敗回への二重再送操作をDBで拒否する。次の配信試行が失敗した場合は、新しいattemptとして再判断できる。
+- 対象は`CONFIGURATION_UNAVAILABLE`、`RATE_LIMITED`、`TIMEOUT`、`PROVIDER_UNAVAILABLE`に限定する。停止、quota、認証情報不正、受信者不在、blockedは管理者再送で回避しない。
+- runtime environmentとDelivery environmentを一致させ、SUPER_ADMIN / OPERATORだけが3〜500文字の理由付きで作成できる。
+- JobにはopaqueなDelivery IDだけを渡す。受信Userを`requestedBy`として既存所有権検証を維持し、管理操作actorはRetryRequestへ分離する。
+- APIと画面へUser ID、Workspace ID、Bunshin ID、Mission ID、LINE user ID、Secret、Provider responseを返さない。
 
 ## 6. 採用方針
 

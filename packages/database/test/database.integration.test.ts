@@ -59,6 +59,7 @@ import {
   PrismaJobRepository,
   PrismaMissionAutomationScopeRepository,
   PrismaLineConnectionRepository,
+  PrismaLineDeliveryRetryRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -72,6 +73,7 @@ integration('database ownership boundaries', () => {
   beforeAll(async () => {
     await client.lineWebhookEvent.deleteMany();
     await client.lineConnection.deleteMany();
+    await client.lineDeliveryRetryRequest.deleteMany();
     await client.lineMessageDeliveryAttempt.deleteMany();
     await client.lineMessageDelivery.deleteMany();
     await client.missionDeepLinkState.deleteMany();
@@ -694,6 +696,77 @@ integration('database ownership boundaries', () => {
         actorUserId: platformUser.id,
       }),
     ).toEqual([]);
+  });
+
+  it('creates one audited retry Job per failed delivery attempt in the exact environment', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Retry Recipient' });
+    const admin = await client.user.create({ data: { displayName: 'Retry Operator' } });
+    await client.platformAdmin.create({ data: { userId: admin.id, role: 'OPERATOR' } });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Retry Bunshin',
+      slug: `retry-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const mission = await client.dailyMission.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        missionDate: new Date('2026-08-22T00:00:00Z'),
+        format: 'TEXT',
+        estimatedMinutes: 5,
+        topic: 'Retry test',
+        angle: 'Isolation',
+        reason: 'Integration test',
+      },
+    });
+    const delivery = await client.lineMessageDelivery.create({
+      data: {
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        userId: owner.user.id,
+        dailyMissionId: mission.id,
+        status: 'FAILED',
+        idempotencyKey: `retry-test:${randomUUID()}`,
+        attemptCount: 1,
+        lastErrorCategory: 'RATE_LIMITED',
+      },
+    });
+    const repository = new PrismaLineDeliveryRetryRepository(client);
+    const base = {
+      actorUserId: admin.id,
+      deliveryId: delivery.id,
+      reason: 'rate limit復旧後の再送',
+    };
+    await expect(
+      repository.request({ ...base, requestId: randomUUID(), environment: 'STAGING' }),
+    ).resolves.toBeNull();
+    const retry = await repository.request({
+      ...base,
+      requestId: randomUUID(),
+      environment: 'PRODUCTION',
+    });
+    expect(retry).toMatchObject({
+      environment: 'PRODUCTION',
+      deliveryId: delivery.id,
+      deliveryAttemptCount: 1,
+      actorUserId: admin.id,
+    });
+    expect(await client.job.findUnique({ where: { id: retry!.jobId } })).toMatchObject({
+      environment: 'PRODUCTION',
+      requestedBy: owner.user.id,
+      payloadReference: `line-delivery:${delivery.id}`,
+      status: 'PENDING',
+    });
+    await expect(
+      repository.request({ ...base, requestId: randomUUID(), environment: 'PRODUCTION' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('persists and reads a complete Bunshin aggregate only for active workspace members', async () => {

@@ -13,6 +13,12 @@ export interface LineAdminMetrics {
   };
   jobs: { retryScheduled: number; dead: number };
   failures: Array<{ category: string; count: number }>;
+  retryableFailures: Array<{
+    deliveryId: string;
+    category: string;
+    attemptCount: number;
+    failedAt: Date;
+  }>;
   configuration: {
     active: boolean;
     verified: boolean;

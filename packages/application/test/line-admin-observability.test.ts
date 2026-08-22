@@ -9,6 +9,7 @@ describe('LINE admin observability', () => {
       deliveries: { pending: 1, processing: 0, sent: 3, failed: 1, cancelled: 0 },
       jobs: { retryScheduled: 1, dead: 0 },
       failures: [{ category: 'RATE_LIMITED', count: 1 }],
+      retryableFailures: [],
       configuration: {
         active: true,
         verified: true,
