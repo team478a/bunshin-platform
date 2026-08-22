@@ -122,7 +122,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 6: LINE Daily Experience
 
-状態: 6-A、6-C Core、6-D、6-E、6-F、6-G1、6-G2aを実装済み。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
+状態: 6-A、6-C Core、6-D、6-E、6-F、6-G1、6-G2a、6-G2bのコード実装済み。Production利用開始は外部設定とGo/No-Go実行待ち。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
 
 - 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
 - 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation（完了）
@@ -135,11 +135,11 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 6-F2a（完了）: Messaging Provider Port / LINE Adapter、配信lease、Provider障害分類、quota優先制御Core
 - 6-F2b1（完了）: Mission生成成功後の配信Job、Connection resolver、短期Deep Link発行、Push、retry分類の接続
 - 6-F2b2a（完了）: verified sessionでのsingle-use Mission Callback、所有権再検証、VIEWED記録
-- 6-F2b2b（未実装）: LINE Identity接続後の未ログイン復帰、管理者警告
+- 6-F2b2b（未実装）: LINE Identity接続後の未ログイン復帰。管理者警告は6-G2b2で実装済み
 - 6-G1（完了）: 環境別の通知可能数、配信状態、失敗分類、Retry / Dead Jobを管理画面・APIで可視化
 - 6-G2a（完了）: 再試行可能なFAILED配信の理由付き限定再送、環境別監査、同一失敗回の二重操作防止
 - 6-G2b1（完了）: 環境別LINE Funnel、Open率、通知→投稿完了率、解除・ブロック相当率の管理API/UI
-- 6-G2b2（未実装）: 外部管理者通知、Production Smoke、Go/No-Go
+- 6-G2b2（コード完了）: 外部管理者通知、非送信Readiness、Production LINE Go/No-Go workflow。Vercel/GitHub Secret登録と本番実行は未完了
 
 LINEはMissionへの通知と入口に限定し、投稿本文・KnowledgeをPushしない。`LINE_MARKETING`、販促ステップ配信、AI自動返信、LINE上でのSNS自動投稿はPhase 6へ含めない。
 

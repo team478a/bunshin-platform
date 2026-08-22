@@ -61,6 +61,17 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 - [ ] Production URL、HTTPS、サポート導線を確認した
 - [ ] 人間によるsecurity/privacy reviewを完了した
 
+## F. LINE Production Gate
+
+- [ ] Production専用LINE Login / Messaging API / Webhook設定を確認した
+- [ ] Vercel Productionへ外部管理者通知URL・host allowlist・必要なTokenを登録した
+- [ ] GitHub Environment `production`へ`PRODUCTION_CRON_SECRET`を登録した
+- [ ] `/api/internal/line/readiness`がProduction、ready、alertingConfigured、alerts空を返した
+- [ ] `Production LINE Go-No-Go` workflowが最新mainで成功した
+- [ ] LINE通知同意、quota、緊急停止、担当者、rollbackを人間が確認した
+
+詳細手順は`LINE_PRODUCTION_GO_NO_GO_RUNBOOK.md`を正本とする。LINE Pushを伴わない技術Gate成功だけでは実ユーザー送信を開始しない。
+
 ## Go / No-Go
 
 すべて完了し、Production責任者が対象commitと実行日時を記録して明示承認した場合だけGoとする。Stagingを作らない方針はblockerにしないが、backup、migration承認、smoke、rollback準備は省略しない。

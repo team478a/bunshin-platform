@@ -716,3 +716,16 @@
 - Bound: 最大5,000 Deliveryを集計し、超過時は`truncated`として不完全なOpen率・通知→投稿率を表示しない
 - Semantics: unfollowはLINE上の解除・ブロック相当として表示し、厳密なProvider理由だと断定しない
 - Separation: Provider課金原価、外部管理者通知、Production Smoke / Go-No-Goは後続へ残す
+
+## D-062: LINE Production Gateは非送信Readinessと集計アラートで保護する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Assessment: runtime environmentと同じ環境のACTIVE設定、接続確認、全体停止、FAILED Delivery、再試行待ち、Dead Job、失敗分類だけから運用状態を判定する
+- Severity: 設定不在・未確認、Dead Job、環境不一致、credential失効、quota枯渇をCRITICALとし、それ以外の再試行・失敗・全体停止をWARNINGとして明示する
+- Alert Provider: Applicationは通知Portだけを参照し、Web側の汎用Webhook Adapterから集計値だけを送る。送信先URL、認証Token、host allowlistは環境変数に置く
+- SSRF: HTTPS、host完全一致allowlist、redirect禁止、URL user info・query・fragment禁止、5秒timeoutを必須とする
+- Privacy: 外部通知にUser、Workspace、Bunshin、Mission、Delivery、LINE user ID、本文、Secret、Provider responseを含めない
+- Environment: runtime environmentはrequest入力から受け取らずサーバー設定から導出し、Productionでは外部管理者通知未設定をNO-GOとする
+- Smoke: Production gateはmain、GitHub Environment承認、明示文字列、Health Ready、CRON認証済みLINE Readinessを要求し、LINE Pushを実行しない
+- Execution: コードとworkflowの成功は本番GOを意味しない。Vercel環境変数、GitHub Secret、外部Webhook疎通、LINE外部設定、人間承認後に本番workflowを実行する

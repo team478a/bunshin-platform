@@ -13,6 +13,9 @@ const serverSchema = z
     ENCRYPTION_KEY: z.string().min(32).optional(),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
+    LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
+    LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
+    LINE_ADMIN_ALERT_WEBHOOK_ALLOWED_HOSTS: z.string().min(1).optional(),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   })
   .superRefine((value, context) => {
