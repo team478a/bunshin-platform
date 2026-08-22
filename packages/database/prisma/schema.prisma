@@ -377,6 +377,7 @@ model User {
   jobs                        Job[]
   lineMessageDeliveries       LineMessageDelivery[]
   missionDeepLinkStates       MissionDeepLinkState[]
+  lineDeliveryRetryRequests   LineDeliveryRetryRequest[]    @relation("LineDeliveryRetryActor")
 
   @@index([status])
   @@map("users")
@@ -543,15 +544,15 @@ model LineConnection {
   environment           LineConfigurationEnvironment
   workspaceId           String                       @map("workspace_id") @db.Uuid
   userId                String                       @map("user_id") @db.Uuid
-  providerUserId         String                       @map("provider_user_id") @db.VarChar(255)
+  providerUserId        String                       @map("provider_user_id") @db.VarChar(255)
   status                LineConnectionStatus         @default(ACTIVE)
   friendshipStatus      LineFriendshipStatus         @default(UNKNOWN) @map("friendship_status")
-  notificationConsentAt DateTime?                     @map("notification_consent_at") @db.Timestamptz(6)
-  followedAt            DateTime?                     @map("followed_at") @db.Timestamptz(6)
-  unfollowedAt          DateTime?                     @map("unfollowed_at") @db.Timestamptz(6)
-  lastWebhookAt         DateTime?                     @map("last_webhook_at") @db.Timestamptz(6)
-  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  notificationConsentAt DateTime?                    @map("notification_consent_at") @db.Timestamptz(6)
+  followedAt            DateTime?                    @map("followed_at") @db.Timestamptz(6)
+  unfollowedAt          DateTime?                    @map("unfollowed_at") @db.Timestamptz(6)
+  lastWebhookAt         DateTime?                    @map("last_webhook_at") @db.Timestamptz(6)
+  createdAt             DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace             Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   user                  User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -706,32 +707,33 @@ model AiUsageEvent {
 }
 
 model Job {
-  id                String                       @id @default(uuid()) @db.Uuid
-  environment       LineConfigurationEnvironment
-  workspaceId       String                       @map("workspace_id") @db.Uuid
-  bunshinId         String?                      @map("bunshin_id") @db.Uuid
-  capabilityType    CapabilityType?              @map("capability_type")
-  jobType           String                       @map("job_type") @db.VarChar(80)
-  payloadReference  String                       @map("payload_reference") @db.VarChar(500)
-  idempotencyKey    String                       @map("idempotency_key") @db.VarChar(200)
-  correlationId     String                       @map("correlation_id") @db.VarChar(120)
-  requestedBy       String                       @map("requested_by") @db.Uuid
-  status            JobStatus                    @default(PENDING)
-  priority          Int                          @default(100)
-  scheduledAt       DateTime                     @default(now()) @map("scheduled_at") @db.Timestamptz(6)
-  attemptCount      Int                          @default(0) @map("attempt_count")
-  maxAttempts       Int                          @default(5) @map("max_attempts")
-  leaseOwner        String?                      @map("lease_owner") @db.VarChar(120)
-  leaseExpiresAt    DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
-  nextRetryAt       DateTime?                    @map("next_retry_at") @db.Timestamptz(6)
-  lastErrorCategory String?                      @map("last_error_category") @db.VarChar(80)
-  completedAt       DateTime?                    @map("completed_at") @db.Timestamptz(6)
-  cancelledAt       DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
-  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin           Bunshin?                     @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  requester         User                         @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  id                       String                       @id @default(uuid()) @db.Uuid
+  environment              LineConfigurationEnvironment
+  workspaceId              String                       @map("workspace_id") @db.Uuid
+  bunshinId                String?                      @map("bunshin_id") @db.Uuid
+  capabilityType           CapabilityType?              @map("capability_type")
+  jobType                  String                       @map("job_type") @db.VarChar(80)
+  payloadReference         String                       @map("payload_reference") @db.VarChar(500)
+  idempotencyKey           String                       @map("idempotency_key") @db.VarChar(200)
+  correlationId            String                       @map("correlation_id") @db.VarChar(120)
+  requestedBy              String                       @map("requested_by") @db.Uuid
+  status                   JobStatus                    @default(PENDING)
+  priority                 Int                          @default(100)
+  scheduledAt              DateTime                     @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  attemptCount             Int                          @default(0) @map("attempt_count")
+  maxAttempts              Int                          @default(5) @map("max_attempts")
+  leaseOwner               String?                      @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt           DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
+  nextRetryAt              DateTime?                    @map("next_retry_at") @db.Timestamptz(6)
+  lastErrorCategory        String?                      @map("last_error_category") @db.VarChar(80)
+  completedAt              DateTime?                    @map("completed_at") @db.Timestamptz(6)
+  cancelledAt              DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                  Bunshin?                     @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  requester                User                         @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  lineDeliveryRetryRequest LineDeliveryRetryRequest?
 
   @@unique([environment, idempotencyKey])
   @@index([environment, status, scheduledAt, priority])
@@ -1199,6 +1201,7 @@ model LineMessageDelivery {
   user              User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
   dailyMission      DailyMission                 @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   attempts          LineMessageDeliveryAttempt[]
+  retryRequests     LineDeliveryRetryRequest[]
 
   @@unique([environment, idempotencyKey])
   @@unique([environment, userId, dailyMissionId, kind])
@@ -1206,6 +1209,25 @@ model LineMessageDelivery {
   @@index([environment, status, leaseExpiresAt])
   @@index([workspaceId, bunshinId, createdAt])
   @@map("line_message_deliveries")
+}
+
+model LineDeliveryRetryRequest {
+  id                   String                       @id @db.Uuid
+  environment          LineConfigurationEnvironment
+  deliveryId           String                       @map("delivery_id") @db.Uuid
+  deliveryAttemptCount Int                          @map("delivery_attempt_count")
+  actorUserId          String                       @map("actor_user_id") @db.Uuid
+  reason               String                       @db.VarChar(500)
+  jobId                String                       @unique @map("job_id") @db.Uuid
+  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  delivery             LineMessageDelivery          @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  actor                User                         @relation("LineDeliveryRetryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  job                  Job                          @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([deliveryId, deliveryAttemptCount])
+  @@index([environment, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("line_delivery_retry_requests")
 }
 
 model LineMessageDeliveryAttempt {

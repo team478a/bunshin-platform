@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { LINE_ADMIN_RETRYABLE_FAILURES } from '@bunshin/application';
 import type {
   AccountTransaction,
   AccountUnitOfWork,
@@ -38,6 +39,7 @@ import type {
   LineMessageDelivery,
   LineMessageDeliveryRepository,
   LineAdminMetricsRepository,
+  LineDeliveryRetryRepository,
   MissionDeepLinkState,
   MissionDeepLinkStateRepository,
   LineConnection,
@@ -651,7 +653,7 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
   async get(actorUserId: string, environment: LineConfigurationEnvironment) {
     const admin = await this.client.platformAdmin.findFirst({
       where: { userId: actorUserId, status: 'ACTIVE' },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     if (!admin) return null;
     const [
@@ -659,6 +661,7 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
       deliveryCounts,
       jobCounts,
       failureRows,
+      retryableFailures,
       configuration,
     ] = await Promise.all([
       Promise.all([
@@ -691,6 +694,26 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
         orderBy: { attemptedAt: 'desc' },
         take: 500,
       }),
+      ['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)
+        ? this.client.lineMessageDelivery.findMany({
+            where: {
+              environment,
+              status: 'FAILED',
+              sentAt: null,
+              cancelledAt: null,
+              lastErrorCategory: { in: [...LINE_ADMIN_RETRYABLE_FAILURES] },
+            },
+            select: {
+              id: true,
+              lastErrorCategory: true,
+              attemptCount: true,
+              updatedAt: true,
+              retryRequests: { select: { deliveryAttemptCount: true } },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 100,
+          })
+        : Promise.resolve([]),
       this.client.lineChannelConfiguration.findFirst({ where: { environment, status: 'ACTIVE' } }),
     ]);
     const [pending = 0, processing = 0, sent = 0, failed = 0, cancelled = 0] = deliveryCounts;
@@ -713,6 +736,21 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
         .map(([category, count]) => ({ category, count }))
         .sort((left, right) => right.count - left.count)
         .slice(0, 8),
+      retryableFailures: retryableFailures
+        .flatMap((row) =>
+          row.lastErrorCategory &&
+          !row.retryRequests.some((request) => request.deliveryAttemptCount === row.attemptCount)
+            ? [
+                {
+                  deliveryId: row.id,
+                  category: row.lastErrorCategory,
+                  attemptCount: row.attemptCount,
+                  failedAt: row.updatedAt,
+                },
+              ]
+            : [],
+        )
+        .slice(0, 20),
       configuration: {
         active: configuration !== null,
         verified:
@@ -722,6 +760,75 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
         quotaLowPriorityStop: configuration?.quotaLowPriorityStop ?? null,
       },
     };
+  }
+}
+
+export class PrismaLineDeliveryRetryRepository implements LineDeliveryRetryRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async request(input: Parameters<LineDeliveryRetryRepository['request']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        const admin = await tx.platformAdmin.findFirst({
+          where: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+          },
+          select: { id: true },
+        });
+        if (!admin) return null;
+        const delivery = await tx.lineMessageDelivery.findFirst({
+          where: {
+            id: input.deliveryId,
+            environment: input.environment,
+            status: 'FAILED',
+            sentAt: null,
+            cancelledAt: null,
+            attemptCount: { gt: 0 },
+            lastErrorCategory: { in: [...LINE_ADMIN_RETRYABLE_FAILURES] },
+            workspace: { status: 'ACTIVE' },
+            bunshin: { status: { not: 'ARCHIVED' } },
+            user: { status: 'ACTIVE' },
+          },
+        });
+        if (!delivery) return null;
+        const job = await tx.job.create({
+          data: {
+            environment: input.environment,
+            workspaceId: delivery.workspaceId,
+            bunshinId: delivery.bunshinId,
+            capabilityType: 'SOCIAL',
+            jobType: 'LINE_MISSION_DELIVER',
+            payloadReference: `line-delivery:${delivery.id}`,
+            idempotencyKey: `line-admin-retry:${delivery.id}:${delivery.attemptCount}`,
+            correlationId: input.requestId,
+            requestedBy: delivery.userId,
+            priority: 50,
+          },
+        });
+        const retry = await tx.lineDeliveryRetryRequest.create({
+          data: {
+            id: input.requestId,
+            environment: input.environment,
+            deliveryId: delivery.id,
+            deliveryAttemptCount: delivery.attemptCount,
+            actorUserId: input.actorUserId,
+            reason: input.reason,
+            jobId: job.id,
+          },
+        });
+        return retry;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError(
+          'CONFLICT',
+          'this delivery failure already has a retry job',
+          error,
+        );
+      throw error;
+    }
   }
 }
 

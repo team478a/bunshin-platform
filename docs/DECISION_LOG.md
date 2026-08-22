@@ -691,3 +691,15 @@
 - Redirect: 遷移先はDBで検証済みのBunshin IDから固定pathを構築し、外部return URLを受け付けない
 - Failure: 無効、期限切れ、再利用、別User、別環境は同じ404境界で拒否する
 - Separation: 未ログインからLINE Login後に元URLへ戻す処理は6-Bの認証導線へ残す
+
+## D-060: 管理者再送は同一失敗attemptにつき理由付き1回へ限定する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Eligibility: `FAILED`かつ未送信・未取消で、設定一時不在、rate limit、timeout、Provider一時障害の配信だけを対象にする
+- Authorization: runtime environmentに固定し、ACTIVEなSUPER_ADMIN / OPERATORだけに許可する。対象外・別環境・権限なしは存在を秘匿する
+- Audit: environment、Delivery ID、失敗時attempt count、actor、3〜500文字の理由、生成Jobを専用履歴へ保存する
+- Concurrency: `deliveryId + deliveryAttemptCount`をDB uniqueとし、同じ失敗回への二重クリック・並行操作をatomicに拒否する
+- Ownership: 再送Jobの`requestedBy`は元の受信Userを維持し、既存のWorkspace / Bunshin / User / Mission再検証を通す。管理actorを受信者として流用しない
+- Privacy: 管理API / UIにはopaqueなDelivery ID、分類、試行回数、日時だけを出し、User・Workspace・Bunshin・Mission識別子、LINE user ID、Secret、Provider responseを出さない
+- Separation: LINE Login、Production実送信、外部管理者警告、Funnelは本変更へ含めない

@@ -7,6 +7,7 @@ import {
   lineEndpointUrls,
 } from '../../../../src/line/secure-configuration';
 import { LineConfigurationEditor } from './line-configuration-editor';
+import { LineDeliveryRetryPanel } from './line-delivery-retry-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,12 @@ export default async function LineConfigurationPage() {
             </ul>
           )}
         </section>
+        <LineDeliveryRetryPanel
+          failures={metrics.retryableFailures.map((failure) => ({
+            ...failure,
+            failedAt: failure.failedAt.toISOString(),
+          }))}
+        />
         <LineConfigurationEditor
           environment={environment}
           urls={lineEndpointUrls()}
