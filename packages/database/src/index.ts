@@ -37,6 +37,7 @@ import type {
   MissionAutomationCandidateRepository,
   LineMessageDelivery,
   LineMessageDeliveryRepository,
+  LineAdminMetricsRepository,
   MissionDeepLinkState,
   MissionDeepLinkStateRepository,
   LineConnection,
@@ -641,6 +642,86 @@ export class PrismaLineConnectionRepository implements LineConnectionRepository 
       },
     });
     return row?.workspace.bunshins.length === 1 ? row.providerUserId : null;
+  }
+}
+
+export class PrismaLineAdminMetricsRepository implements LineAdminMetricsRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async get(actorUserId: string, environment: LineConfigurationEnvironment) {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    const [
+      [active, following, notificationReady],
+      deliveryCounts,
+      jobCounts,
+      failureRows,
+      configuration,
+    ] = await Promise.all([
+      Promise.all([
+        this.client.lineConnection.count({ where: { environment, status: 'ACTIVE' } }),
+        this.client.lineConnection.count({ where: { environment, friendshipStatus: 'FOLLOWING' } }),
+        this.client.lineConnection.count({
+          where: {
+            environment,
+            status: 'ACTIVE',
+            friendshipStatus: 'FOLLOWING',
+            notificationConsentAt: { not: null },
+          },
+        }),
+      ]),
+      Promise.all(
+        (['PENDING', 'PROCESSING', 'SENT', 'FAILED', 'CANCELLED'] as const).map((status) =>
+          this.client.lineMessageDelivery.count({ where: { environment, status } }),
+        ),
+      ),
+      Promise.all(
+        (['RETRY_SCHEDULED', 'DEAD'] as const).map((status) =>
+          this.client.job.count({
+            where: { environment, jobType: 'LINE_MISSION_DELIVER', status },
+          }),
+        ),
+      ),
+      this.client.lineMessageDeliveryAttempt.findMany({
+        where: { delivery: { environment }, status: 'FAILED', errorCategory: { not: null } },
+        select: { errorCategory: true },
+        orderBy: { attemptedAt: 'desc' },
+        take: 500,
+      }),
+      this.client.lineChannelConfiguration.findFirst({ where: { environment, status: 'ACTIVE' } }),
+    ]);
+    const [pending = 0, processing = 0, sent = 0, failed = 0, cancelled = 0] = deliveryCounts;
+    const [retryScheduled = 0, dead = 0] = jobCounts;
+    const failureCounts = new Map<string, number>();
+    for (const row of failureRows) {
+      if (row.errorCategory)
+        failureCounts.set(row.errorCategory, (failureCounts.get(row.errorCategory) ?? 0) + 1);
+    }
+    return {
+      environment,
+      connections: {
+        active,
+        following,
+        notificationReady,
+      },
+      deliveries: { pending, processing, sent, failed, cancelled },
+      jobs: { retryScheduled, dead },
+      failures: [...failureCounts.entries()]
+        .map(([category, count]) => ({ category, count }))
+        .sort((left, right) => right.count - left.count)
+        .slice(0, 8),
+      configuration: {
+        active: configuration !== null,
+        verified:
+          configuration?.lastVerifiedAt !== null && configuration?.lastErrorCategory === null,
+        globallyPaused: configuration?.globallyPaused ?? false,
+        quotaWarningPercent: configuration?.quotaWarningPercent ?? null,
+        quotaLowPriorityStop: configuration?.quotaLowPriorityStop ?? null,
+      },
+    };
   }
 }
 

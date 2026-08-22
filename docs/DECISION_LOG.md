@@ -671,3 +671,13 @@
 - Idempotency: DeliveryとJobにそれぞれ決定的な一意keyを持たせ、Daily生成Jobの再実行でも同一Missionを二重送信しない
 - Production Gate: コード接続は行うが、LINE Login / Identity外部設定とProduction Smokeが完了するまで実ユーザー送信をGOとしない
 - Separation: Mission Callback / click、理由付き手動再送、管理者警告、LINE Login UIは後続PRへ分離する
+
+## D-058: LINE運用指標を環境別の非機密Read Modelとして公開する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Scope: runtime environmentで固定したConnection、Delivery、Attempt、LINE Delivery Job、ACTIVE設定だけを集計する
+- Authorization: Active Platform Adminだけに許可し、非管理者にはresourceの存在を示さない
+- Privacy: providerUserId、User ID、Workspace ID、Bunshin ID、Mission ID、Secret、Provider responseをAPI・HTMLへ返さない
+- Bound: 失敗分類は直近500試行から上位8分類に制限し、運用画面の無制限scanを避ける
+- Separation: 個別利用者検索、理由付き再送、外部警告通知、Funnel、Production Smokeは後続へ分離する

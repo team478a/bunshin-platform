@@ -1516,3 +1516,4 @@ export * from './job-worker';
 export * from './line-messaging-core';
 export * from './line-connection-core';
 export * from './line-delivery-job';
+export * from './line-admin-observability';
