@@ -617,3 +617,17 @@
 - Idempotency: Workspace / Bunshin / local date由来の決定的keyを使用し、Cron重複配送やScheduler再実行でJobを重複作成しない
 - Bound: 1回最大1,000件をID順で走査し、truncatedと件数だけをresponse / logへ出す。個別User / Bunshin IDは出さない
 - Separation: LINE Push、Deep Link、独立Worker / Cloud Runは後続PRへ分離する
+
+## D-054: LINE配信履歴とMission Deep Link stateをProvider送信から分離する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Delivery: 環境、Workspace、Bunshin、User、Daily Mission、用途、状態を持つ配信履歴と、attempt番号ごとの結果をPostgreSQLへ保存する
+- Idempotency: `environment + idempotencyKey`および`environment + user + mission + kind`で同一通知の重複準備を防ぐ
+- State: Deep Link tokenにはランダムstate ID、環境、鍵version、期限だけを含め、Mission本文、User ID、Knowledge、秘密値を含めない
+- Key Separation: 環境別`ENCRYPTION_KEY`を直接HMACへ渡さず、HKDFで`line-mission-deep-link`用途・環境・version専用鍵を導出する
+- Rotation: `LINE_DEEP_LINK_KEY_VERSION`を現行versionとし、検証時は現行と直前versionだけを受け付ける
+- Single Use: stateは10分で期限切れとし、DBの条件付き更新で1回だけconsumedにする。競合した2回目は拒否する
+- Ownership: 署名検証後もUser、Workspace Membership、Bunshin、Daily Mission、実行環境をrepositoryで再検証する
+- Privacy: LINE user ID、Provider response、Token、Secret、Mission本文を配信履歴・state・logへ保存しない
+- Separation: 本PRでは実際のLINE Push、Webhook、LINE Login、quota、再送UIを実装しない
