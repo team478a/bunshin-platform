@@ -449,3 +449,61 @@
 - UX: ActiveなSNS Profileと日付を選び、既存Missionがない日だけ画面から生成できる
 - 分離: Job、LINE、SNS自動投稿、画像・動画binary生成、Memory自動学習、BLOGを実装しない
 - 詳細: `docs/PHASE4_INTELLIGENCE_COMPLETION_REPORT.md`
+
+## D-040: Phase 6のLINEをMission通知と入口に限定する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Product: LINEはDaily Missionの準備完了を通知し、対象Mission画面へ戻す入口とする
+- Notification: 投稿本文、Prompt、KnowledgeをPushせず、Mission生成成功後だけ1回通知する
+- Separation: 通知機能と将来の`LINE_MARKETING` Capabilityを分離し、販促ステップ配信、セグメント配信、AI自動返信を実装しない
+- Provider: Login、Messaging、Webhookは用途別PortからLINE Adapterを呼び、SDK型とraw responseをCoreへ渡さない
+- Automation: Vercel Cronをtrigger、PostgreSQL Jobを状態・lease・retry・idempotencyの正本とする
+- 詳細: `docs/PHASE6_LINE_IMPLEMENTATION_PLAN.md`
+
+## D-041: LINE Loginを既存actor認可へ収束させる
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Login: LINE Login v2.1 Authorization Code Flowで`state`、`nonce`、PKCE S256を必須とする
+- Identity: 検証済みLINE `sub`を`AuthIdentity(provider=LINE)`へ保存し、LINE user IDをUser直下へ重複保存しない
+- New User: 未登録LINE Identityは新規UserとPERSONAL Workspaceを作成可能とする
+- Linking: 既存Userへの追加はverified session中の明示連携だけ許可し、メール一致で自動統合しない
+- Authorization: LINE起点sessionも共通`CurrentUserProvider`へ変換し、Workspace / Bunshin / Capability / resource scopeを維持する
+- Gate: Supabase SSR sessionへ安全に収束できるか6-B前にspikeし、困難な場合はProvider共通Platform sessionの別ADRを先に承認する
+- 詳細: `docs/adr/LINE_AUTH_SESSION_ADR.md`
+
+## D-042: LINE秘密値は暗号化DB設定、親鍵は環境変数で管理する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Configuration: DEVELOPMENT、STAGING、PRODUCTIONごとに単一ACTIVE設定とversion履歴を持ち、DB一意制約で重複ACTIVEを防ぐ
+- Isolation: runtime environmentとconfiguration environmentをサーバー側で照合し、Production設定をPreview、Development、Stagingから利用しない
+- Encryption: Channel SecretとChannel Access TokenはAES-256-GCM等の認証付き暗号でDB保存し、`keyVersion`を保持する
+- Root Key: `ENCRYPTION_KEY`はVercel Production環境変数に残し、DB、管理画面、Audit Logへ保存しない
+- Display: Secret平文再取得APIを作らず、保存後は必要な権限へ末尾maskだけを表示する
+- Rotation: 新versionの接続検証成功後だけatomicにACTIVEを切り替え、失敗時は旧versionを維持する
+- Authorization: Secret登録・更新・無効化はSUPER_ADMIN、接続テストはSUPER_ADMIN / OPERATORに限定する
+- 詳細: `docs/PHASE6_LINE_IMPLEMENTATION_PLAN.md`
+
+## D-043: LINE URLは環境から自動生成し例外overrideを制限する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Generation: Callback、Webhook、LIFF Endpoint、Mission Deep Link Base URLを環境別アプリURLと固定pathから原則自動生成する
+- Admin: 管理画面では読み取り専用とし、例外変更はSUPER_ADMIN、確認画面、理由、Audit Logを必須にする
+- Validation: HTTPS、環境別host allowlist、Production host限定、DEVELOPMENT以外のlocalhost禁止をサーバー側で検証する
+- Input: URL user info、任意query、fragmentを拒否し、DB保存値も利用直前に再検証する
+- Redirect: Callback後の復帰先を相対pathまたはallowlistへ限定してopen redirectを拒否する
+- 詳細: `docs/adr/LINE_CONFIGURATION_SECURITY_ADR.md`
+
+## D-044: Mission Deep Link署名鍵をLINE秘密値から分離する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Separation: LINE Channel SecretとChannel Access TokenをDeep Link署名へ流用しない
+- Derivation: 環境変数の親鍵からHKDF等でenvironment、purpose、keyVersion別の署名鍵を導出し、`ENCRYPTION_KEY`のraw valueを署名APIへ渡さない
+- Storage: 署名親鍵を管理画面・DBへ保存しない。安全な導出が困難なら環境別専用署名鍵の別ADRを先に承認する
+- State: expiry、single-use identifier、keyVersionを必須とし、使用済みstateのreplayを拒否する
+- Privacy: Mission本文、個人情報、Secretをstateへ含めず、署名検証後もUser / Workspace / Bunshin / Mission ownershipを再検証する
+- 詳細: `docs/adr/LINE_CONFIGURATION_SECURITY_ADR.md`
