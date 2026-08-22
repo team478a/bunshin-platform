@@ -60,6 +60,7 @@ import {
   PrismaMissionAutomationScopeRepository,
   PrismaLineConnectionRepository,
   PrismaLineDeliveryRetryRepository,
+  PrismaLineAdminFunnelRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -767,6 +768,137 @@ integration('database ownership boundaries', () => {
     await expect(
       repository.request({ ...base, requestId: randomUUID(), environment: 'PRODUCTION' }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('aggregates a sequential LINE funnel only through a consumed state in the exact environment', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Funnel Recipient' });
+    const admin = await client.user.create({ data: { displayName: 'Funnel Admin' } });
+    await client.platformAdmin.create({ data: { userId: admin.id, role: 'READ_ONLY' } });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Funnel Bunshin',
+      slug: `funnel-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const sentAt = new Date('2026-08-10T01:00:00Z');
+    const mission = await client.dailyMission.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        missionDate: new Date('2026-08-10T00:00:00Z'),
+        format: 'TEXT',
+        estimatedMinutes: 5,
+        topic: 'Funnel test',
+        angle: 'Environment isolation',
+        reason: 'Integration test',
+      },
+    });
+    await client.lineConnection.create({
+      data: {
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        userId: owner.user.id,
+        providerUserId: `U${randomUUID()}`,
+        friendshipStatus: 'FOLLOWING',
+        followedAt: new Date('2026-08-09T01:00:00Z'),
+      },
+    });
+    await client.lineMessageDelivery.createMany({
+      data: [
+        {
+          environment: 'PRODUCTION',
+          workspaceId: owner.workspace.id,
+          bunshinId: bunshin.id,
+          userId: owner.user.id,
+          dailyMissionId: mission.id,
+          status: 'SENT',
+          sentAt,
+          idempotencyKey: `funnel-production:${randomUUID()}`,
+          attemptCount: 1,
+        },
+        {
+          environment: 'STAGING',
+          workspaceId: owner.workspace.id,
+          bunshinId: bunshin.id,
+          userId: owner.user.id,
+          dailyMissionId: mission.id,
+          status: 'SENT',
+          sentAt,
+          idempotencyKey: `funnel-staging:${randomUUID()}`,
+          attemptCount: 1,
+        },
+      ],
+    });
+    await client.missionDeepLinkState.create({
+      data: {
+        id: randomUUID(),
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        userId: owner.user.id,
+        dailyMissionId: mission.id,
+        keyVersion: 1,
+        expiresAt: new Date('2026-08-10T01:10:00Z'),
+        consumedAt: new Date('2026-08-10T01:02:00Z'),
+      },
+    });
+    await client.missionDecision.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        dailyMissionId: mission.id,
+        decision: 'ACCEPTED',
+        decidedAt: new Date('2026-08-10T01:03:00Z'),
+      },
+    });
+    await client.missionActivity.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        dailyMissionId: mission.id,
+        actorUserId: owner.user.id,
+        type: 'COPIED_TEXT',
+        occurredAt: new Date('2026-08-10T01:04:00Z'),
+        idempotencyKey: `funnel-copy:${randomUUID()}`,
+      },
+    });
+    await client.postRecord.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        dailyMissionId: mission.id,
+        actorUserId: owner.user.id,
+        platform: 'X',
+        postedAt: new Date('2026-08-10T01:05:00Z'),
+        idempotencyKey: `funnel-post:${randomUUID()}`,
+      },
+    });
+    const repository = new PrismaLineAdminFunnelRepository(client);
+    const period = {
+      actorUserId: admin.id,
+      from: new Date('2026-08-01T00:00:00Z'),
+      to: new Date('2026-09-01T00:00:00Z'),
+      cohortLimit: 100,
+    };
+    await expect(
+      repository.summarize({ ...period, environment: 'PRODUCTION' }),
+    ).resolves.toMatchObject({
+      cohort: { sentMessages: 1, sentUsers: 1, truncated: false },
+      stages: { openedUsers: 1, acceptedUsers: 1, copiedUsers: 1, postedUsers: 1 },
+      messages: { opened: 1, posted: 1 },
+      rates: { openRate: 1, notificationToPostRate: 1 },
+    });
+    await expect(
+      repository.summarize({ ...period, environment: 'STAGING' }),
+    ).resolves.toMatchObject({
+      cohort: { sentMessages: 1, sentUsers: 1 },
+      stages: { openedUsers: 0, acceptedUsers: 0, copiedUsers: 0, postedUsers: 0 },
+    });
   });
 
   it('persists and reads a complete Bunshin aggregate only for active workspace members', async () => {

@@ -703,3 +703,16 @@
 - Ownership: 再送Jobの`requestedBy`は元の受信Userを維持し、既存のWorkspace / Bunshin / User / Mission再検証を通す。管理actorを受信者として流用しない
 - Privacy: 管理API / UIにはopaqueなDelivery ID、分類、試行回数、日時だけを出し、User・Workspace・Bunshin・Mission識別子、LINE user ID、Secret、Provider responseを出さない
 - Separation: LINE Login、Production実送信、外部管理者警告、Funnelは本変更へ含めない
+
+## D-061: LINE Funnelは送信コホートと同一環境Deep Link消費で帰属させる
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Cohort: 指定期間内に送信成功したLINE Deliveryを母集団とし、送信件数とユニークUser数を分ける
+- Attribution: 同一runtime environmentのMission Deep Link stateを送信後に消費した場合だけOpenとし、そのOpenを通過したMissionの採用、Copy、投稿完了だけを後続段階へ帰属させる
+- Period: コホートは`sentAt`が期間内のもの、後続行動は送信後かつ期間終了前のものとする
+- Isolation: Environmentを全LINE resourceで固定し、別環境のstate消費を採用・Copy・投稿の入口として認めない
+- Privacy: API/UIへ集計値だけを返し、User、Workspace、Bunshin、Mission、Delivery、LINE user ID、Secret、Provider responseを返さない
+- Bound: 最大5,000 Deliveryを集計し、超過時は`truncated`として不完全なOpen率・通知→投稿率を表示しない
+- Semantics: unfollowはLINE上の解除・ブロック相当として表示し、厳密なProvider理由だと断定しない
+- Separation: Provider課金原価、外部管理者通知、Production Smoke / Go-No-Goは後続へ残す

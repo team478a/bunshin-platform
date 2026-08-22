@@ -138,7 +138,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 6-F2b2b（未実装）: LINE Identity接続後の未ログイン復帰、管理者警告
 - 6-G1（完了）: 環境別の通知可能数、配信状態、失敗分類、Retry / Dead Jobを管理画面・APIで可視化
 - 6-G2a（完了）: 再試行可能なFAILED配信の理由付き限定再送、環境別監査、同一失敗回の二重操作防止
-- 6-G2b（未実装）: Funnel、外部管理者通知、Smoke、Go/No-Go
+- 6-G2b1（完了）: 環境別LINE Funnel、Open率、通知→投稿完了率、解除・ブロック相当率の管理API/UI
+- 6-G2b2（未実装）: 外部管理者通知、Production Smoke、Go/No-Go
 
 LINEはMissionへの通知と入口に限定し、投稿本文・KnowledgeをPushしない。`LINE_MARKETING`、販促ステップ配信、AI自動返信、LINE上でのSNS自動投稿はPhase 6へ含めない。
 
