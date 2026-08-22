@@ -1,5 +1,9 @@
 import 'server-only';
-import { ProcessLineWebhookEvents, type LineConfigurationEnvironment } from '@bunshin/application';
+import {
+  ProcessLineWebhookEvents,
+  type LineConfigurationEnvironment,
+  type LineWebhookEventType,
+} from '@bunshin/application';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from './secure-configuration';
@@ -49,12 +53,16 @@ export function parseLineWebhookEvents(rawBody: string) {
   }
   const parsed = webhookBody.safeParse(json);
   if (!parsed.success) return null;
-  return parsed.data.events.map((event) => ({
-    providerEventId: event.webhookEventId,
-    providerUserId: event.source?.userId ?? null,
-    type: event.type === 'follow' ? 'FOLLOW' : event.type === 'unfollow' ? 'UNFOLLOW' : 'OTHER',
-    occurredAt: new Date(event.timestamp),
-  }));
+  return parsed.data.events.map((event) => {
+    const type: LineWebhookEventType =
+      event.type === 'follow' ? 'FOLLOW' : event.type === 'unfollow' ? 'UNFOLLOW' : 'OTHER';
+    return {
+      providerEventId: event.webhookEventId,
+      providerUserId: event.source?.userId ?? null,
+      type,
+      occurredAt: new Date(event.timestamp),
+    };
+  });
 }
 
 export interface ActiveLineWebhookSecretPort {
