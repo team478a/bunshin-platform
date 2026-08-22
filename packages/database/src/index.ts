@@ -33,6 +33,7 @@ import type {
   JobRepository,
   EnqueueJobInput,
   Job,
+  MissionAutomationScopeRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -247,6 +248,75 @@ export class PrismaJobRepository implements JobRepository {
     });
     if (result.count === 0) return null;
     return platformJob(await this.client.job.findUniqueOrThrow({ where: { id: input.jobId } }));
+  }
+}
+
+export class PrismaMissionAutomationScopeRepository implements MissionAutomationScopeRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async base(input: { workspaceId: string; bunshinId: string; actorUserId: string }) {
+    return this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+        OR: [
+          { ownerUserId: input.actorUserId },
+          {
+            workspace: {
+              memberships: {
+                some: {
+                  userId: input.actorUserId,
+                  status: 'ACTIVE',
+                  role: { in: ['OWNER', 'ADMIN'] },
+                },
+              },
+            },
+          },
+        ],
+        capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
+        socialAccountStrategies: { some: { status: 'APPROVED' } },
+        socialProfiles: { some: { status: 'ACTIVE' } },
+      },
+      select: { id: true },
+    });
+  }
+
+  async validateWeekly(input: Parameters<MissionAutomationScopeRepository['validateWeekly']>[0]) {
+    if (!(await this.base(input))) return false;
+    return (
+      (await this.client.contentPillar.count({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          active: true,
+          deletedAt: null,
+        },
+      })) > 0
+    );
+  }
+
+  async validateDaily(input: Parameters<MissionAutomationScopeRepository['validateDaily']>[0]) {
+    if (!(await this.base(input))) return false;
+    const missionDate = new Date(`${input.missionDate}T00:00:00.000Z`);
+    return (
+      (await this.client.weeklyPlan.count({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'CONFIRMED',
+          weekStartDate: {
+            lte: missionDate,
+            gte: new Date(missionDate.getTime() - 6 * 86_400_000),
+          },
+          items: { some: { scheduledDate: missionDate } },
+        },
+      })) > 0
+    );
   }
 }
 
