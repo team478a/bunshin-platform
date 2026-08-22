@@ -31,4 +31,4 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 3 \
             https://bunshin-platform-web.vercel.app/api/health/ready \
-            | jq -e '.status == "ready" and .environment == "production" and .checks.configuration == "ok" and .checks.database == "ok"'
+            | jq -e '.status == "ready" and .environment == "production" and .checks.configuration == "ok" and .checks.authentication == "ok" and .checks.database == "ok"'

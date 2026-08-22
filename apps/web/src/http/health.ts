@@ -1,6 +1,7 @@
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
+import { authConfiguration } from '../auth/supabase';
 
 const logger = createLogger();
 
@@ -9,6 +10,7 @@ export async function readyResponse(request: Request): Promise<Response> {
   const started = Date.now();
   try {
     const environment = getServerEnvironment();
+    authConfiguration();
     const { checkDatabaseReadiness } = await import('@bunshin/database');
     await checkDatabaseReadiness();
     logger.info('readiness check complete', {
@@ -20,7 +22,7 @@ export async function readyResponse(request: Request): Promise<Response> {
     return Response.json({
       status: 'ready',
       environment: environment.APP_ENV,
-      checks: { configuration: 'ok', database: 'ok' },
+      checks: { configuration: 'ok', authentication: 'ok', database: 'ok' },
       requestId,
     });
   } catch (error) {

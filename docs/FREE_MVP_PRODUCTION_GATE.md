@@ -34,6 +34,7 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 ## C. Auth / AI / Application Configuration
 
 - [ ] Supabase Auth Site URLとRedirect URL allowlistがProduction URLだけを許可する
+- [ ] Vercel ProductionのSupabase公開認証設定がreadinessで`authentication: ok`になる
 - [ ] Production Magic Linkでlogin/logoutできる
 - [ ] `OPENAI_API_KEY`がVercel Productionだけに設定されている
 - [ ] Planner / Content / Qualityのmodel環境変数を確認した
