@@ -112,6 +112,14 @@ describe('account deletion request use cases', () => {
     scheduledFor: new Date(0),
     cancelledAt: null,
     completedAt: null,
+    attemptCount: 0,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    processingStartedAt: null,
+    blockedReason: null,
+    lastErrorCategory: null,
+    executionVersion: 1,
+    summary: null,
   };
   const repository = (
     overrides: Partial<AccountDeletionRequestRepository> = {},

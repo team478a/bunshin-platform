@@ -85,6 +85,8 @@ enum LegalDocumentStatus {
 
 enum AccountDeletionRequestStatus {
   REQUESTED
+  PROCESSING
+  BLOCKED
   CANCELLED
   COMPLETED
 }
@@ -614,19 +616,28 @@ model UserLegalConsent {
 }
 
 model AccountDeletionRequest {
-  id           String                       @id @default(uuid()) @db.Uuid
-  userId       String                       @map("user_id") @db.Uuid
-  status       AccountDeletionRequestStatus @default(REQUESTED)
-  requestedAt  DateTime                     @default(now()) @map("requested_at") @db.Timestamptz(6)
-  scheduledFor DateTime                     @map("scheduled_for") @db.Timestamptz(6)
-  cancelledAt  DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
-  completedAt  DateTime?                    @map("completed_at") @db.Timestamptz(6)
-  createdAt    DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user         User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id                  String                       @id @default(uuid()) @db.Uuid
+  userId              String                       @map("user_id") @db.Uuid
+  status              AccountDeletionRequestStatus @default(REQUESTED)
+  requestedAt         DateTime                     @default(now()) @map("requested_at") @db.Timestamptz(6)
+  scheduledFor        DateTime                     @map("scheduled_for") @db.Timestamptz(6)
+  attemptCount        Int                          @default(0) @map("attempt_count")
+  leaseOwner          String?                      @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt      DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
+  processingStartedAt DateTime?                    @map("processing_started_at") @db.Timestamptz(6)
+  blockedReason       String?                      @map("blocked_reason") @db.VarChar(80)
+  lastErrorCategory   String?                      @map("last_error_category") @db.VarChar(80)
+  executionVersion    Int                          @default(1) @map("execution_version")
+  summary             Json?
+  cancelledAt         DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
+  completedAt         DateTime?                    @map("completed_at") @db.Timestamptz(6)
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, status, requestedAt])
   @@index([status, scheduledFor])
+  @@index([status, leaseExpiresAt])
   @@map("account_deletion_requests")
 }
 

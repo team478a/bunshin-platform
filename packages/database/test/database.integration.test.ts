@@ -56,6 +56,7 @@ import {
   PrismaMissionOutcomeRepository,
   PrismaLegalConsentRepository,
   PrismaAccountDeletionRequestRepository,
+  PrismaAccountDeletionExecutionRepository,
   PrismaJobRepository,
   PrismaMissionAutomationScopeRepository,
   PrismaLineConnectionRepository,
@@ -479,6 +480,236 @@ integration('database ownership boundaries', () => {
     expect(await repository.cancel(b.user.id)).toBeNull();
     expect(await repository.cancel(a.user.id)).toMatchObject({ status: 'CANCELLED' });
     expect(await client.accountDeletionRequest.count({ where: { userId: a.user.id } })).toBe(1);
+  });
+
+  it('atomically suspends a due account and stops pending jobs, LINE delivery and deep links', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const account = await accounts.execute({ displayName: 'Deletion Execution' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: account.workspace.id,
+      actorUserId: account.user.id,
+      name: 'Deletion Bunshin',
+      slug: `deletion-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const mission = await client.dailyMission.create({
+      data: {
+        workspaceId: account.workspace.id,
+        bunshinId: bunshin.id,
+        missionDate: new Date('2026-08-22T00:00:00Z'),
+        format: 'TEXT',
+        estimatedMinutes: 5,
+        topic: 'Deletion test',
+        angle: 'Safety',
+        reason: 'Verify account suspension',
+      },
+    });
+    await Promise.all([
+      client.lineNotificationPreference.create({
+        data: {
+          workspaceId: account.workspace.id,
+          userId: account.user.id,
+          bunshinId: bunshin.id,
+          enabled: true,
+          notificationConsentAt: new Date('2026-08-01T00:00:00Z'),
+        },
+      }),
+      client.lineConnection.create({
+        data: {
+          environment: 'PRODUCTION',
+          workspaceId: account.workspace.id,
+          userId: account.user.id,
+          providerUserId: `U${randomUUID()}`,
+          notificationConsentAt: new Date('2026-08-01T00:00:00Z'),
+        },
+      }),
+      client.job.create({
+        data: {
+          environment: 'PRODUCTION',
+          workspaceId: account.workspace.id,
+          bunshinId: bunshin.id,
+          jobType: 'DAILY_MISSION_GENERATE',
+          payloadReference: 'opaque',
+          idempotencyKey: `deletion-job-${randomUUID()}`,
+          correlationId: `deletion-${randomUUID()}`,
+          requestedBy: account.user.id,
+        },
+      }),
+      client.lineMessageDelivery.create({
+        data: {
+          environment: 'PRODUCTION',
+          workspaceId: account.workspace.id,
+          bunshinId: bunshin.id,
+          userId: account.user.id,
+          dailyMissionId: mission.id,
+          idempotencyKey: `deletion-delivery-${randomUUID()}`,
+        },
+      }),
+      client.missionDeepLinkState.create({
+        data: {
+          id: randomUUID(),
+          environment: 'PRODUCTION',
+          workspaceId: account.workspace.id,
+          bunshinId: bunshin.id,
+          userId: account.user.id,
+          dailyMissionId: mission.id,
+          keyVersion: 1,
+          expiresAt: new Date('2026-08-23T00:00:00Z'),
+        },
+      }),
+    ]);
+    await new PrismaAccountDeletionRequestRepository(client).request(
+      account.user.id,
+      new Date('2026-08-21T00:00:00Z'),
+    );
+    const result = await new PrismaAccountDeletionExecutionRepository(client).claimAndSuspendNext({
+      workerId: 'integration-worker',
+      now: new Date('2026-08-22T09:00:00Z'),
+      leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+      executionVersion: 1,
+    });
+
+    expect(result).toMatchObject({ userId: account.user.id, status: 'PROCESSING' });
+    await expect(
+      client.user.findUniqueOrThrow({ where: { id: account.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'SUSPENDED',
+    });
+    expect(
+      await client.workspaceMembership.count({
+        where: { userId: account.user.id, status: 'ACTIVE' },
+      }),
+    ).toBe(0);
+    await expect(
+      client.lineNotificationPreference.findFirstOrThrow({ where: { userId: account.user.id } }),
+    ).resolves.toMatchObject({ enabled: false, notificationConsentAt: null });
+    await expect(
+      client.lineConnection.findFirstOrThrow({ where: { userId: account.user.id } }),
+    ).resolves.toMatchObject({ status: 'DISCONNECTED', notificationConsentAt: null });
+    await expect(
+      client.job.findFirstOrThrow({ where: { requestedBy: account.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'CANCELLED',
+      lastErrorCategory: 'ACCOUNT_DELETION_REQUESTED',
+    });
+    await expect(
+      client.lineMessageDelivery.findFirstOrThrow({ where: { userId: account.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'CANCELLED',
+      lastErrorCategory: 'ACCOUNT_DELETION_REQUESTED',
+    });
+    expect(
+      await client.missionDeepLinkState.count({
+        where: { userId: account.user.id, consumedAt: null },
+      }),
+    ).toBe(0);
+  });
+
+  it('blocks the sole active owner of an organization without suspending the user', async () => {
+    const account = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Organization Owner' });
+    const organization = await client.workspace.create({
+      data: { type: 'ORGANIZATION', name: 'Deletion Organization' },
+    });
+    await client.workspaceMembership.create({
+      data: { workspaceId: organization.id, userId: account.user.id, role: 'OWNER' },
+    });
+    await new PrismaAccountDeletionRequestRepository(client).request(
+      account.user.id,
+      new Date('2026-08-21T00:00:00Z'),
+    );
+
+    await expect(
+      new PrismaAccountDeletionExecutionRepository(client).claimAndSuspendNext({
+        workerId: 'integration-worker',
+        now: new Date('2026-08-22T09:00:00Z'),
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+        executionVersion: 1,
+      }),
+    ).resolves.toMatchObject({
+      userId: account.user.id,
+      status: 'BLOCKED',
+      blockedReason: 'SOLE_ORGANIZATION_OWNER',
+    });
+    await expect(
+      client.user.findUniqueOrThrow({ where: { id: account.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+    });
+  });
+
+  it('does not claim requests in the grace period and allows only one concurrent claim', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const future = await accounts.execute({ displayName: 'Future Deletion' });
+    const due = await accounts.execute({ displayName: 'Concurrent Deletion' });
+    const requests = new PrismaAccountDeletionRequestRepository(client);
+    await requests.request(future.user.id, new Date('2026-08-23T00:00:00Z'));
+    const executor = new PrismaAccountDeletionExecutionRepository(client);
+    await expect(
+      executor.claimAndSuspendNext({
+        workerId: 'before-grace-worker',
+        now: new Date('2026-08-22T09:00:00Z'),
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+        executionVersion: 1,
+      }),
+    ).resolves.toBeNull();
+    await requests.request(due.user.id, new Date('2026-08-21T00:00:00Z'));
+
+    const results = await Promise.all([
+      executor.claimAndSuspendNext({
+        workerId: 'concurrent-worker-a',
+        now: new Date('2026-08-22T09:00:00Z'),
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+        executionVersion: 1,
+      }),
+      executor.claimAndSuspendNext({
+        workerId: 'concurrent-worker-b',
+        now: new Date('2026-08-22T09:00:00Z'),
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+        executionVersion: 1,
+      }),
+    ]);
+    expect(results.filter((value) => value?.userId === due.user.id)).toHaveLength(1);
+    await expect(
+      client.user.findUniqueOrThrow({ where: { id: future.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+    });
+  });
+
+  it('blocks an active Platform Admin without suspending the account', async () => {
+    const account = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Deletion Admin' });
+    await client.platformAdmin.create({
+      data: { userId: account.user.id, role: 'OPERATOR' },
+    });
+    await new PrismaAccountDeletionRequestRepository(client).request(
+      account.user.id,
+      new Date('2026-08-21T00:00:00Z'),
+    );
+
+    await expect(
+      new PrismaAccountDeletionExecutionRepository(client).claimAndSuspendNext({
+        workerId: 'admin-gate-worker',
+        now: new Date('2026-08-22T09:00:00Z'),
+        leaseExpiresAt: new Date('2026-08-22T09:05:00Z'),
+        executionVersion: 1,
+      }),
+    ).resolves.toMatchObject({
+      userId: account.user.id,
+      status: 'BLOCKED',
+      blockedReason: 'ACTIVE_PLATFORM_ADMIN',
+    });
+    await expect(
+      client.user.findUniqueOrThrow({ where: { id: account.user.id } }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+    });
   });
 
   it('isolates Memory by workspace and Bunshin and excludes inactive/deleted rows', async () => {

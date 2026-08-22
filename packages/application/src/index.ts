@@ -720,11 +720,19 @@ export class ListLegalConsentCounts {
 export interface AccountDeletionRequest {
   id: string;
   userId: string;
-  status: 'REQUESTED' | 'CANCELLED' | 'COMPLETED';
+  status: 'REQUESTED' | 'PROCESSING' | 'BLOCKED' | 'CANCELLED' | 'COMPLETED';
   requestedAt: Date;
   scheduledFor: Date;
   cancelledAt: Date | null;
   completedAt: Date | null;
+  attemptCount: number;
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
+  processingStartedAt: Date | null;
+  blockedReason: string | null;
+  lastErrorCategory: string | null;
+  executionVersion: number;
+  summary: unknown;
 }
 export interface AccountDeletionRequestRepository {
   findCurrent(userId: string): Promise<AccountDeletionRequest | null>;
@@ -1520,3 +1528,4 @@ export * from './line-admin-observability';
 export * from './line-delivery-admin-retry';
 export * from './line-admin-funnel';
 export * from './line-operational-readiness';
+export * from './account-deletion-execution';
