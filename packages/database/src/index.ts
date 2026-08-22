@@ -647,6 +647,25 @@ export class PrismaLineConnectionRepository implements LineConnectionRepository 
 export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async getScoped(input: Parameters<LineMessageDeliveryRepository['getScoped']>[0]) {
+    const row = await this.client.lineMessageDelivery.findFirst({
+      where: {
+        id: input.deliveryId,
+        environment: input.environment,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        userId: input.actorUserId,
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+        bunshin: { status: { not: 'ARCHIVED' } },
+        user: { status: 'ACTIVE' },
+      },
+    });
+    return row ? lineMessageDelivery(row) : null;
+  }
+
   async prepare(input: Parameters<LineMessageDeliveryRepository['prepare']>[0]) {
     const accessible = await this.client.bunshin.findFirst({
       where: lineMissionScope(input),

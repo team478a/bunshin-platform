@@ -3,6 +3,7 @@ import {
   ClaimJob,
   CompleteJob,
   ExecuteMissionAutomationJob,
+  ExecuteLineDeliveryJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -31,24 +32,35 @@ export interface JobWorkerPort {
 }
 
 async function configuredWorker(): Promise<JobWorkerPort> {
-  const [{ createWeeklyPlanJobHandler }, { createDailyMissionJobHandler }] = await Promise.all([
+  const [
+    { createWeeklyPlanJobHandler },
+    { createDailyMissionJobHandler },
+    { createLineDeliveryJobHandler },
+  ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
+    import('../jobs/line-delivery-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
     .register('DAILY_MISSION_GENERATE', createDailyMissionJobHandler());
   const db = await import('@bunshin/database');
   const jobs = new db.PrismaJobRepository();
-  return new RunJobWorkerBatch(
-    new ClaimJob(jobs),
-    new ExecuteMissionAutomationJob(
-      new db.PrismaMissionAutomationScopeRepository(),
-      registry,
-      new CompleteJob(jobs),
-      new FailJob(jobs),
-    ),
+  const complete = new CompleteJob(jobs);
+  const fail = new FailJob(jobs);
+  const missionExecutor = new ExecuteMissionAutomationJob(
+    new db.PrismaMissionAutomationScopeRepository(),
+    registry,
+    complete,
+    fail,
   );
+  const lineExecutor = new ExecuteLineDeliveryJob(createLineDeliveryJobHandler(), complete, fail);
+  return new RunJobWorkerBatch(new ClaimJob(jobs), {
+    execute: (job, workerId) =>
+      job.jobType === 'LINE_MISSION_DELIVER'
+        ? lineExecutor.execute(job, workerId)
+        : missionExecutor.execute(job, workerId),
+  });
 }
 
 export async function jobWorkerResponse(

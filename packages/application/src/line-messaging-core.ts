@@ -40,6 +40,13 @@ export interface LineMessageDelivery {
 }
 
 export interface LineMessageDeliveryRepository {
+  getScoped(input: {
+    deliveryId: string;
+    environment: LineConfigurationEnvironment;
+    workspaceId: string;
+    bunshinId: string;
+    actorUserId: string;
+  }): Promise<LineMessageDelivery | null>;
   prepare(input: {
     environment: LineConfigurationEnvironment;
     workspaceId: string;
@@ -76,6 +83,15 @@ export interface LineMessageDeliveryRepository {
     errorCategory: LineMessagingErrorCategory;
     now: Date;
   }): Promise<boolean>;
+}
+
+export class GetLineMissionDelivery {
+  constructor(private readonly repository: LineMessageDeliveryRepository) {}
+  async execute(input: Parameters<LineMessageDeliveryRepository['getScoped']>[0]) {
+    const value = await this.repository.getScoped(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'Mission delivery not found');
+    return value;
+  }
 }
 
 export class PrepareLineMissionDelivery {
@@ -186,7 +202,7 @@ export class ExecuteLineMissionDelivery {
     environment: LineConfigurationEnvironment;
     actorUserId: string;
     workerId: string;
-    deepLinkUrl: string;
+    deepLinkUrl: string | (() => Promise<string>);
   }): Promise<LineDeliveryExecutionResult> {
     if (!input.deliveryId.trim() || !input.actorUserId.trim())
       throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE delivery scope');
@@ -194,7 +210,8 @@ export class ExecuteLineMissionDelivery {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE delivery worker');
     if (this.leaseMilliseconds < 5_000 || this.leaseMilliseconds > 60_000)
       throw new ApplicationError('CONFIGURATION_ERROR', 'invalid LINE delivery lease');
-    this.validateDeepLink(input.deepLinkUrl, input.environment);
+    if (typeof input.deepLinkUrl === 'string')
+      this.validateDeepLink(input.deepLinkUrl, input.environment);
     const now = this.now();
     const claim = await this.repository.claim({
       deliveryId: input.deliveryId,
@@ -252,11 +269,19 @@ export class ExecuteLineMissionDelivery {
     if (!policy.allowed)
       return failWithoutProvider('CANCELLED', policy.category ?? 'QUOTA_EXHAUSTED', false);
 
+    let deepLinkUrl: string;
+    try {
+      deepLinkUrl =
+        typeof input.deepLinkUrl === 'string' ? input.deepLinkUrl : await input.deepLinkUrl();
+      this.validateDeepLink(deepLinkUrl, input.environment);
+    } catch {
+      return failWithoutProvider('FAILED', 'CONFIGURATION_UNAVAILABLE', true);
+    }
     const result = await this.safeProviderCall(() =>
       this.provider.pushMissionNotification({
         accessToken: configuration.accessToken,
         recipientId,
-        deepLinkUrl: input.deepLinkUrl,
+        deepLinkUrl,
       }),
     );
     if (!result.ok) return this.recordProviderFailure(claim, input, result, now);
