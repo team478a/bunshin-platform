@@ -148,7 +148,10 @@ export class LineConnectionTestAdapter {
 }
 
 export interface LineEndpointUrls {
+  /** LINE Developers Consoleへ登録するSupabase AuthのProvider Callback。 */
   callbackUrl: string;
+  /** Supabase認証完了後に戻るBUNSHIN Application Callback。 */
+  applicationCallbackUrl: string;
   webhookUrl: string;
   liffEndpointUrl: string;
   missionDeepLinkBaseUrl: string;
@@ -157,15 +160,32 @@ export interface LineEndpointUrls {
 export function lineEndpointUrls(): LineEndpointUrls {
   const environment = getServerEnvironment();
   const base = new URL(environment.APP_URL);
+  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  if (!supabaseUrl)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'NEXT_PUBLIC_SUPABASE_URL is required');
+  const supabase = new URL(supabaseUrl);
   if (environment.APP_ENV !== 'development' && base.protocol !== 'https:')
     throw new ApplicationError('CONFIGURATION_ERROR', 'LINE URLs require HTTPS');
   if (environment.APP_ENV !== 'development' && ['localhost', '127.0.0.1'].includes(base.hostname))
     throw new ApplicationError('CONFIGURATION_ERROR', 'localhost is development only');
   if (base.username || base.password || base.search || base.hash)
     throw new ApplicationError('CONFIGURATION_ERROR', 'APP_URL contains forbidden components');
+  if (environment.APP_ENV !== 'development' && supabase.protocol !== 'https:')
+    throw new ApplicationError('CONFIGURATION_ERROR', 'Supabase Auth URL requires HTTPS');
+  if (
+    environment.APP_ENV !== 'development' &&
+    ['localhost', '127.0.0.1'].includes(supabase.hostname)
+  )
+    throw new ApplicationError('CONFIGURATION_ERROR', 'local Supabase is development only');
+  if (supabase.username || supabase.password || supabase.search || supabase.hash)
+    throw new ApplicationError(
+      'CONFIGURATION_ERROR',
+      'NEXT_PUBLIC_SUPABASE_URL contains forbidden components',
+    );
   const origin = base.origin;
   return {
-    callbackUrl: `${origin}/auth/line/callback`,
+    callbackUrl: `${supabase.origin}/auth/v1/callback`,
+    applicationCallbackUrl: `${origin}/auth/line/callback`,
     webhookUrl: `${origin}/api/line/webhook`,
     liffEndpointUrl: `${origin}/line`,
     missionDeepLinkBaseUrl: `${origin}/today`,

@@ -519,4 +519,15 @@
 - Activation: 接続成功日時がなく、または最新接続結果がerrorのversionはACTIVEにできない
 - Audit: version作成、接続テスト、ACTIVE切替でactor、environment、action、reason、changed fieldsを保存し、SecretとProvider responseは保存しない
 - 分離: LINE Login callback、Webhook、Push、Job、Deep Link state、LINE Marketingを実装しない
+
+## D-046: LINE LoginはSupabase Custom OIDC Providerへ収束させる
+
+- 日付: 2026-08-22
+- 状態: Accepted for spike / Production implementation gated
+- Session: LINE専用sessionを作らず、Supabase AuthのCustom Providerが発行する既存SSR sessionを利用する
+- Security: PKCEを有効、nonce検証を有効、scopeは初期MVPで`openid profile`としemail一致の自動統合を避ける
+- Callback: LINEへ登録するProvider CallbackはSupabase project URL由来、Application Callbackは`APP_URL`由来として分離する
+- Identity: LINE subject、Supabase Auth User ID、Platform User IDを別識別子として扱う
+- Linking: 既存verified sessionからの明示操作だけ許可し、メール一致で統合しない
+- Gate: 環境別Custom Provider、Redirect Allowlist、manual linking有効化、DEVELOPMENT smokeの完了まで6-B本実装へ進まない
 - 詳細: `docs/PHASE6A_SECURE_CONFIGURATION_IMPLEMENTATION_REPORT.md`

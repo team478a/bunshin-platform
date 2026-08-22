@@ -126,7 +126,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 - 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
 - 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation（実装・レビュー中）
-- 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ
+- 6-B0: Auth Session Spike。Supabase Custom OIDC採用、Provider/Application Callback分離、環境別外部設定Gate（実装中）
+- 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ（6-B0レビュー・外部設定後）
 - 6-C: Webhook / Connection。署名、follow/unfollow、postback、友だち状態、冪等性
 - 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止
 - 6-E: Job / Mission Automation。Scheduler、lease、retry、Weekly / Daily自動生成

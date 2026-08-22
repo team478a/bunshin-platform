@@ -11,6 +11,7 @@ beforeEach(() => {
   vi.stubEnv('SESSION_SECRET', 'session-secret-at-least-thirty-two-bytes');
   vi.stubEnv('ENCRYPTION_KEY', 'encryption-root-at-least-thirty-two-bytes');
   vi.stubEnv('LINE_CONFIG_KEY_VERSION', '3');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321');
 });
 
 describe('LINE secure configuration', () => {
@@ -25,16 +26,25 @@ describe('LINE secure configuration', () => {
     expect(sealed.loginSecretMask).toBe('••••1234');
     expect(sealed.keyVersion).toBe(3);
     expect(crypto.decrypt(sealed.loginSecret)).toBe('login-secret-1234');
-    const tampered = `${sealed.loginSecret.slice(0, -1)}A`;
+    const parts = sealed.loginSecret.split('.');
+    const ciphertext = parts[3]!;
+    parts[3] = `${ciphertext[0] === 'A' ? 'B' : 'A'}${ciphertext.slice(1)}`;
+    const tampered = parts.join('.');
     expect(() => crypto.decrypt(tampered)).toThrow();
   });
 
-  it('derives read-only endpoints from APP_URL', () => {
+  it('separates the LINE provider callback from the application callback', () => {
     expect(lineEndpointUrls()).toEqual({
-      callbackUrl: 'http://localhost:3000/auth/line/callback',
+      callbackUrl: 'http://127.0.0.1:54321/auth/v1/callback',
+      applicationCallbackUrl: 'http://localhost:3000/auth/line/callback',
       webhookUrl: 'http://localhost:3000/api/line/webhook',
       liffEndpointUrl: 'http://localhost:3000/line',
       missionDeepLinkBaseUrl: 'http://localhost:3000/today',
     });
+  });
+
+  it('rejects a Supabase URL containing redirectable components', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321?next=https://evil.example');
+    expect(() => lineEndpointUrls()).toThrow('forbidden components');
   });
 });
