@@ -100,6 +100,7 @@ enum JobStatus {
 
 enum LineMessageDeliveryStatus {
   PENDING
+  PROCESSING
   SENT
   FAILED
   CANCELLED
@@ -1120,6 +1121,9 @@ model LineMessageDelivery {
   sentAt            DateTime?                    @map("sent_at") @db.Timestamptz(6)
   cancelledAt       DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
   lastErrorCategory String?                      @map("last_error_category") @db.VarChar(80)
+  attemptCount      Int                          @default(0) @map("attempt_count")
+  leaseOwner        String?                      @map("lease_owner") @db.VarChar(100)
+  leaseExpiresAt    DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
   createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -1131,6 +1135,7 @@ model LineMessageDelivery {
   @@unique([environment, idempotencyKey])
   @@unique([environment, userId, dailyMissionId, kind])
   @@index([environment, status, scheduledAt])
+  @@index([environment, status, leaseExpiresAt])
   @@index([workspaceId, bunshinId, createdAt])
   @@map("line_message_deliveries")
 }

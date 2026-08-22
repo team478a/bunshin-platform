@@ -443,6 +443,67 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
     }
   }
 
+  async claim(input: Parameters<LineMessageDeliveryRepository['claim']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const claimed = await tx.lineMessageDelivery.updateMany({
+        where: {
+          id: input.deliveryId,
+          environment: input.environment,
+          userId: input.actorUserId,
+          sentAt: null,
+          cancelledAt: null,
+          scheduledAt: { lte: input.now },
+          user: { status: 'ACTIVE' },
+          workspace: {
+            status: 'ACTIVE',
+            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          },
+          bunshin: {
+            status: { not: 'ARCHIVED' },
+            OR: [
+              { ownerUserId: input.actorUserId },
+              {
+                workspace: {
+                  memberships: {
+                    some: {
+                      userId: input.actorUserId,
+                      status: 'ACTIVE',
+                      role: { in: ['OWNER', 'ADMIN'] },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          OR: [
+            { status: { in: ['PENDING', 'FAILED'] } },
+            { status: 'PROCESSING', leaseExpiresAt: { lte: input.now } },
+          ],
+        },
+        data: {
+          status: 'PROCESSING',
+          attemptCount: { increment: 1 },
+          leaseOwner: input.leaseOwner,
+          leaseExpiresAt: input.leaseExpiresAt,
+          lastErrorCategory: null,
+        },
+      });
+      if (claimed.count !== 1) return null;
+      const row = await tx.lineMessageDelivery.findFirst({
+        where: {
+          id: input.deliveryId,
+          environment: input.environment,
+          userId: input.actorUserId,
+          status: 'PROCESSING',
+          leaseOwner: input.leaseOwner,
+          leaseExpiresAt: input.leaseExpiresAt,
+        },
+      });
+      if (!row) throw new ApplicationError('CONFLICT', 'LINE delivery claim lost');
+      return { delivery: lineMessageDelivery(row), attemptNumber: row.attemptCount };
+    });
+  }
+
   async recordAttempt(input: Parameters<LineMessageDeliveryRepository['recordAttempt']>[0]) {
     if (!Number.isInteger(input.attemptNumber) || input.attemptNumber < 1)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid delivery attempt number');
@@ -453,11 +514,19 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
 
     await this.client.$transaction(async (tx) => {
       const delivery = await tx.lineMessageDelivery.updateMany({
-        where: { id: input.deliveryId, environment: input.environment },
+        where: {
+          id: input.deliveryId,
+          environment: input.environment,
+          status: 'PROCESSING',
+          leaseOwner: input.leaseOwner,
+          attemptCount: input.attemptNumber,
+        },
         data: {
           status: input.status === 'SUCCESS' ? 'SENT' : 'FAILED',
           sentAt: input.status === 'SUCCESS' ? input.attemptedAt : null,
           lastErrorCategory: input.errorCategory,
+          leaseOwner: null,
+          leaseExpiresAt: null,
         },
       });
       if (delivery.count !== 1)
@@ -473,6 +542,25 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
         },
       });
     });
+  }
+
+  async releaseClaim(input: Parameters<LineMessageDeliveryRepository['releaseClaim']>[0]) {
+    const result = await this.client.lineMessageDelivery.updateMany({
+      where: {
+        id: input.deliveryId,
+        environment: input.environment,
+        status: 'PROCESSING',
+        leaseOwner: input.leaseOwner,
+      },
+      data: {
+        status: input.status,
+        lastErrorCategory: input.errorCategory,
+        cancelledAt: input.status === 'CANCELLED' ? input.now : null,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
+    return result.count === 1;
   }
 }
 

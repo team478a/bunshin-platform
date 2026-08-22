@@ -122,7 +122,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 ## Phase 6: LINE Daily Experience
 
-状態: 6-A、6-D、6-E、6-F1 Coreを実装済み。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
+状態: 6-A、6-D、6-E、6-F1、6-F2a Coreを実装済み。詳細は`PHASE6_LINE_IMPLEMENTATION_PLAN.md`を正本とする。
 
 - 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
 - 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation（完了）
@@ -132,7 +132,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止（完了）
 - 6-E: Job / Mission Automation。Job Core、lease、retry、Producer、認証Scheduler / Worker、Weekly / Daily handler、Vercel Cron設定まで完了
 - 6-F1（完了）: 配信・試行履歴Core、環境別用途分離鍵、短期・single-use Mission Deep Link state
-- 6-F2（未実装）: LINE Push Provider Adapter、再送、クリック導線、quota制御
+- 6-F2a（完了）: Messaging Provider Port / LINE Adapter、配信lease、Provider障害分類、quota優先制御Core
+- 6-F2b（未実装）: LINE Identity / Connection接続後の実ユーザーPush、再送、クリック導線、管理者警告
 - 6-G: Admin / KPI / Production Gate。運営画面、Funnel、Smoke、Go/No-Go
 
 LINEはMissionへの通知と入口に限定し、投稿本文・KnowledgeをPushしない。`LINE_MARKETING`、販促ステップ配信、AI自動返信、LINE上でのSNS自動投稿はPhase 6へ含めない。
