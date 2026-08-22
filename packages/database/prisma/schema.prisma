@@ -116,6 +116,31 @@ enum LineMessageKind {
   REMINDER
 }
 
+enum LineConnectionStatus {
+  ACTIVE
+  DISCONNECTED
+}
+
+enum LineFriendshipStatus {
+  UNKNOWN
+  FOLLOWING
+  UNFOLLOWED
+}
+
+enum LineWebhookEventType {
+  FOLLOW
+  UNFOLLOW
+  OTHER
+}
+
+enum LineWebhookEventOutcome {
+  APPLIED
+  DUPLICATE
+  IDENTITY_NOT_FOUND
+  CONNECTION_NOT_FOUND
+  IGNORED
+}
+
 enum BunshinType {
   COPY
   EXPERT
@@ -348,6 +373,7 @@ model User {
   accountDeletionRequests     AccountDeletionRequest[]
   lineConfigurationAudits     LineConfigurationAudit[]      @relation("LineConfigurationAuditActor")
   lineNotificationPreferences LineNotificationPreference[]
+  lineConnections             LineConnection[]
   jobs                        Job[]
   lineMessageDeliveries       LineMessageDelivery[]
   missionDeepLinkStates       MissionDeepLinkState[]
@@ -396,6 +422,8 @@ model Workspace {
   missionFeedback             MissionFeedback[]
   aiUsageEvents               AiUsageEvent[]
   lineNotificationPreferences LineNotificationPreference[]
+  lineConnections             LineConnection[]
+  lineWebhookEvents           LineWebhookEvent[]
   jobs                        Job[]
   lineMessageDeliveries       LineMessageDelivery[]
   missionDeepLinkStates       MissionDeepLinkState[]
@@ -508,6 +536,46 @@ model LineNotificationPreference {
   @@index([workspaceId, bunshinId, enabled])
   @@index([userId, enabled])
   @@map("line_notification_preferences")
+}
+
+model LineConnection {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  environment           LineConfigurationEnvironment
+  workspaceId           String                       @map("workspace_id") @db.Uuid
+  userId                String                       @map("user_id") @db.Uuid
+  providerUserId         String                       @map("provider_user_id") @db.VarChar(255)
+  status                LineConnectionStatus         @default(ACTIVE)
+  friendshipStatus      LineFriendshipStatus         @default(UNKNOWN) @map("friendship_status")
+  notificationConsentAt DateTime?                     @map("notification_consent_at") @db.Timestamptz(6)
+  followedAt            DateTime?                     @map("followed_at") @db.Timestamptz(6)
+  unfollowedAt          DateTime?                     @map("unfollowed_at") @db.Timestamptz(6)
+  lastWebhookAt         DateTime?                     @map("last_webhook_at") @db.Timestamptz(6)
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user                  User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([environment, workspaceId, userId])
+  @@index([environment, providerUserId, status, friendshipStatus])
+  @@index([workspaceId, userId, status])
+  @@map("line_connections")
+}
+
+model LineWebhookEvent {
+  id              String                       @id @default(uuid()) @db.Uuid
+  environment     LineConfigurationEnvironment
+  providerEventId String                       @map("provider_event_id") @db.VarChar(255)
+  type            LineWebhookEventType
+  outcome         LineWebhookEventOutcome
+  occurredAt      DateTime                     @map("occurred_at") @db.Timestamptz(6)
+  processedAt     DateTime                     @default(now()) @map("processed_at") @db.Timestamptz(6)
+  workspaceId     String?                      @map("workspace_id") @db.Uuid
+  workspace       Workspace?                   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@unique([environment, providerEventId])
+  @@index([environment, processedAt])
+  @@index([workspaceId, processedAt])
+  @@map("line_webhook_events")
 }
 
 model LegalDocument {

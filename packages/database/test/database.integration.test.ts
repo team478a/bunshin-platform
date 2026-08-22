@@ -58,6 +58,7 @@ import {
   PrismaAccountDeletionRequestRepository,
   PrismaJobRepository,
   PrismaMissionAutomationScopeRepository,
+  PrismaLineConnectionRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -69,6 +70,12 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.lineWebhookEvent.deleteMany();
+    await client.lineConnection.deleteMany();
+    await client.lineMessageDeliveryAttempt.deleteMany();
+    await client.lineMessageDelivery.deleteMany();
+    await client.missionDeepLinkState.deleteMany();
+    await client.lineNotificationPreference.deleteMany();
     await client.job.deleteMany();
     await client.accountDeletionRequest.deleteMany();
     await client.userLegalConsent.deleteMany();
@@ -112,6 +119,96 @@ integration('database ownership boundaries', () => {
     });
     expect(result.workspace.type).toBe('PERSONAL');
     expect(result.membership).toMatchObject({ userId: result.user.id, role: 'OWNER' });
+  });
+
+  it('isolates LINE connections by actor, workspace, environment, friendship and consent', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'LINE Owner' });
+    const outsider = await accounts.execute({ displayName: 'LINE Outsider' });
+    const providerUserId = `U${randomUUID()}`;
+    await client.authIdentity.create({
+      data: { userId: owner.user.id, provider: 'LINE', providerUserId },
+    });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'LINE Bunshin',
+      slug: `line-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    await client.lineNotificationPreference.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        userId: owner.user.id,
+        bunshinId: bunshin.id,
+        enabled: true,
+        notificationConsentAt: new Date('2026-08-22T06:00:00Z'),
+      },
+    });
+    const repository = new PrismaLineConnectionRepository(client);
+    await expect(
+      repository.connect({
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        actorUserId: outsider.user.id,
+        providerUserId,
+        consentGranted: true,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.connect({
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        actorUserId: owner.user.id,
+        providerUserId,
+        consentGranted: true,
+      }),
+    ).resolves.toMatchObject({ friendshipStatus: 'UNKNOWN' });
+    await expect(
+      repository.resolve({
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        userId: owner.user.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.applyWebhook({
+        environment: 'PRODUCTION',
+        providerEventId: `evt-${randomUUID()}`,
+        providerUserId,
+        type: 'FOLLOW',
+        occurredAt: new Date('2026-08-22T06:01:00Z'),
+        processedAt: new Date('2026-08-22T06:01:01Z'),
+      }),
+    ).resolves.toBe('APPLIED');
+    await expect(
+      repository.resolve({
+        environment: 'PRODUCTION',
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        userId: owner.user.id,
+      }),
+    ).resolves.toBe(providerUserId);
+    await expect(
+      repository.resolve({
+        environment: 'STAGING',
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        userId: owner.user.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.resolve({
+        environment: 'PRODUCTION',
+        workspaceId: outsider.workspace.id,
+        bunshinId: bunshin.id,
+        userId: outsider.user.id,
+      }),
+    ).resolves.toBeNull();
   });
 
   it('enqueues idempotently, isolates environments, and enforces lease ownership', async () => {

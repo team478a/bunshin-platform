@@ -646,3 +646,15 @@
 - Pause: 全体停止中はProviderと受信者解決を呼ばず、claimを理由付きでcancelする
 - Secrets: Access TokenはACTIVEかつ接続確認済みの同一環境設定から実行時だけ復号し、DB履歴、attempt、response、logへ保存しない
 - Separation: LINE Identity / Connectionが未実装のためRecipient ResolverはPortに留め、実ユーザーPushとJob接続は行わない
+
+## D-056: LINE Webhookを署名済み最小eventと環境別Connectionへ収束させる
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Signature: `x-line-signature`を未変更raw bodyとMessaging Channel SecretでHMAC-SHA256検証し、constant-time比較する
+- Environment: ACTIVE Secret、Connection、Webhook Eventをruntime environmentへ固定し、ProductionとStagingを混在させない
+- Event: `environment + webhookEventId`を一意にし、follow / unfollowを冪等適用する。raw payload、reply token、LINE user ID、Provider responseはevent履歴へ保存しない
+- Identity: WebhookのLINE user IDだけでUserを新規作成せず、既存`AuthIdentity(provider=LINE)`と明示作成済みConnectionへだけ適用する
+- Isolation: recipient解決時にActive User、Workspace Membership、Bunshin、環境、FOLLOWING、Connection consent、Bunshin別通知同意を再検証する
+- Cancellation: unfollowまたは明示解除時は未送信・処理中・失敗中の配信を`RECIPIENT_UNAVAILABLE`として取消し、以後Providerを呼ばない
+- Scope: message / postback業務処理、LINE Login本番導線、Production Webhook接続、実ユーザーPushは後続へ分離する
