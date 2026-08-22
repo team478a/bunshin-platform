@@ -11,7 +11,7 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 ## A. 自動検証
 
 - [x] `main`のCI `verify` / `database`が成功している
-- [ ] main branch protectionで両checkをrequiredにした
+- [x] main branch protectionで両checkをrequiredにした
 - [x] Vercel Production deploymentが成功している
 - [x] 空PostgreSQLへの全migration適用が成功している
 - [x] dependency auditの重大問題を確認した（2026-08-22、既知の脆弱性0件）
@@ -21,7 +21,7 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 - [ ] Supabase backupと保持期間を確認した
 - [ ] restore手順と責任者を確認した
 - [x] GitHub Environment `production`のrequired reviewerを確認した
-- [ ] Productionをmainだけに制限し、自己承認禁止を確認した
+- [x] Productionをmainだけに制限した（自己承認禁止は第二承認者追加待ち）
 - [x] GitHub Environmentに`DATABASE_URL` / `DIRECT_URL` secret名が存在する
 - [ ] `DATABASE_URL`がtransaction poolerであることをSupabase接続画面で再確認した
 - [ ] `DIRECT_URL`がmigration用session/direct接続であることをSupabase接続画面で再確認した
@@ -34,7 +34,7 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 ## C. Auth / AI / Application Configuration
 
 - [ ] Supabase Auth Site URLとRedirect URL allowlistがProduction URLだけを許可する
-- [ ] Vercel ProductionのSupabase公開認証設定がreadinessで`authentication: ok`になる
+- [x] Vercel ProductionのSupabase公開認証設定がreadinessで`authentication: ok`になる
 - [ ] Production Magic Linkでlogin/logoutできる
 - [ ] `OPENAI_API_KEY`がVercel Productionだけに設定されている
 - [ ] Planner / Content / Qualityのmodel環境変数を確認した
