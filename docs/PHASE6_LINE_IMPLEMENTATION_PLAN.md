@@ -58,7 +58,7 @@ LINE連携
 - AES-256-GCMによるSecret暗号化、mask、key version
 - DEVELOPMENT、STAGING、PRODUCTIONごとの単一ACTIVE設定
 - 配備環境と設定環境のサーバー側一致検証
-- 配備環境から自動生成するCallback、Webhook、LIFF、Deep Link URL
+- Supabase project URLから生成するLINE Provider Callbackと、配備環境から生成するApplication Callback、Webhook、LIFF、Deep Link URL
 - 設定管理画面、権限、接続テスト、rotation
 - 設定変更Audit Log
 - Migration、rollback、unit・integration test
@@ -68,6 +68,7 @@ LINE連携
 ### 6-B: LINE Identity / Login
 
 - OAuth Authorization Code、`state`、`nonce`、PKCE S256
+- Supabase Custom OIDC Providerを利用し、Provider CallbackとApplication Callbackを分離
 - ID tokenのsignature、issuer、audience、nonce検証
 - `AuthIdentity(provider=LINE)`との接続
 - 新規User作成と既存Userへの明示連携

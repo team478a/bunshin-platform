@@ -1,7 +1,7 @@
 # ADR: LINE Loginと既存verified sessionの統合
 
 日付: 2026-08-22
-状態: Proposed
+状態: Accepted for spike / Production implementation gated
 
 ## Context
 
@@ -25,11 +25,15 @@ LINE Loginは外部Identity検証として追加し、認可は既存と同じPl
 
 ## Session実装のGate
 
-現在のSupabase sessionをLINE認証後に安全に発行できる公式・保守可能な方法を6-B着手前にspikeで確認する。
+公式仕様のspikeにより、Supabase Custom OIDC Providerを使えばLINE認証後も既存Supabase SSR sessionへ収束できると判断した。
 
-- 既存Supabase SSR cookieへ収束できる場合は、EmailとLINEで同じsession検証を利用する。
-- 収束できない場合は、署名・rotation・失効・CSRF・cookie属性を備えたPlatform sessionを認証Provider共通で導入する別ADRを先に承認する。
+- `custom:line` Providerを環境別Supabase projectへ登録し、EmailとLINEで同じsession検証を利用する。
+- Custom ProviderのPKCEを無効化せず、nonce検証をskipしない。
+- LINEへemail scopeを要求せず、email一致による自動account mergeを避ける。
+- 独自Platform sessionは導入しない。
 - LINE専用cookieやLINE専用認可middlewareを暫定追加してRouteごとに混在させない。
+
+LINE Developers Consoleへ登録するProvider Callback URLは`{NEXT_PUBLIC_SUPABASE_URL}/auth/v1/callback`である。`{APP_URL}/auth/line/callback`はSupabase認証完了後のApplication Callbackであり、両者を分離する。詳細は`docs/PHASE6B_AUTH_SESSION_SPIKE.md`を正本とする。
 
 ## Account Linking
 
