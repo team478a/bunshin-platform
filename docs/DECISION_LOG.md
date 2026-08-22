@@ -566,3 +566,16 @@
 - Revocation: 登録後に権限・Capability・Strategy・Planが無効になったJobはProviderを呼ばず、非retryable `SCOPE_NO_LONGER_ELIGIBLE`で終了する
 - Handler: Job typeとhandlerをregistryで対応付け、Provider実装をJob Coreへ混ぜない
 - Separation: Cron trigger、OpenAI handler接続、LINE通知、Webhookは本PRへ含めない
+
+## D-050: Job worker HTTP境界を短時間・固定batch・fail closedで構成する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Authentication: 32文字以上の`CRON_SECRET`をBearer tokenとして要求し、SHA-256 digestをconstant-time比較する
+- Environment: Job environmentは`APP_ENV`からサーバー側で固定し、queryやrequest bodyから受け取らない
+- Bound: 1 request最大5件、application上限10件、最大実行時間25秒、route上限30秒とする
+- State: request内へretry状態を保持せず、各Jobのclaim / lease / resultをPostgreSQLへ保存する
+- Isolation: 1件のinfrastructure failureでbatch全体を中断せず、lease期限後に回収可能な状態を維持する
+- Observability: Job ID、payload、秘密値をresponse / logへ出さず、状態別件数だけを記録する
+- Fail Closed: Weekly / Daily concrete handlerが両方登録されるまではendpointを503とし、Jobをclaimしない
+- Separation: Vercel Cron schedule、OpenAI handler、LINE deliveryは後続PRへ分離する

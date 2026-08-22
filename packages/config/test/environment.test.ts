@@ -36,4 +36,12 @@ describe('environment validation', () => {
       parseServerEnvironment({ ...valid, NODE_ENV: 'test', APP_ENV: 'production' }),
     ).toThrow('APP_ENV');
   });
+
+  it('accepts an omitted CRON secret but validates it when configured', () => {
+    expect(parseServerEnvironment(valid).CRON_SECRET).toBeUndefined();
+    expect(() => parseServerEnvironment({ ...valid, CRON_SECRET: 'short' })).toThrow('CRON_SECRET');
+    expect(parseServerEnvironment({ ...valid, CRON_SECRET: 'c'.repeat(32) }).CRON_SECRET).toBe(
+      'c'.repeat(32),
+    );
+  });
 });
