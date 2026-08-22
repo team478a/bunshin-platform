@@ -57,6 +57,7 @@ import {
   PrismaLegalConsentRepository,
   PrismaAccountDeletionRequestRepository,
   PrismaJobRepository,
+  PrismaMissionAutomationScopeRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -160,6 +161,124 @@ integration('database ownership boundaries', () => {
     await expect(
       repository.complete({ jobId: production.id, workerId: 'worker-a', now }),
     ).resolves.toMatchObject({ status: 'SUCCEEDED' });
+  });
+
+  it('revalidates SOCIAL strategy and confirmed plan without crossing user scope', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Automation Owner' });
+    const outsider = await accounts.execute({ displayName: 'Automation Outsider' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Automation Bunshin',
+      slug: `automation-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    await client.bunshinCapabilityAssignment.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        capabilityType: 'SOCIAL',
+        assignedByUserId: owner.user.id,
+      },
+    });
+    const profile = await client.socialProfile.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        platform: 'X',
+        purpose: '教育',
+        postingFrequency: 'DAILY',
+        preferredFormats: ['TEXT'],
+      },
+    });
+    await client.socialAccountStrategy.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        socialProfileId: profile.id,
+        platform: 'X',
+        goal: 'FOLLOWERS',
+        availableMinutes: 5,
+        destinationType: 'PROFILE',
+        concept: 'concept',
+        positioning: 'positioning',
+        targetSummary: 'target',
+        profileDraft: 'profile',
+        ctaStrategy: 'cta',
+        postingPolicy: 'policy',
+        version: 1,
+        status: 'APPROVED',
+        approvedAt: new Date(),
+      },
+    });
+    const pillar = await client.contentPillar.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        title: '教育',
+        weight: 100,
+      },
+    });
+    const plan = await client.weeklyPlan.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        weekStartDate: new Date('2026-08-24T00:00:00Z'),
+        timezone: 'Asia/Tokyo',
+        status: 'CONFIRMED',
+        confirmedAt: new Date(),
+      },
+    });
+    await client.weeklyPlanItem.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        weeklyPlanId: plan.id,
+        scheduledDate: new Date('2026-08-25T00:00:00Z'),
+        contentPillarId: pillar.id,
+        goal: '学び',
+        angle: '初心者向け',
+        recommendedFormat: 'TEXT',
+      },
+    });
+    const scopes = new PrismaMissionAutomationScopeRepository(client);
+    await expect(
+      scopes.validateWeekly({
+        ...ownerScope(owner, bunshin.id),
+        actorUserId: owner.user.id,
+        weekStartDate: '2026-08-24',
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      scopes.validateDaily({
+        ...ownerScope(owner, bunshin.id),
+        actorUserId: owner.user.id,
+        missionDate: '2026-08-25',
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      scopes.validateDaily({
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        actorUserId: outsider.user.id,
+        missionDate: '2026-08-25',
+      }),
+    ).resolves.toBe(false);
+    await client.bunshinCapabilityAssignment.updateMany({
+      where: { workspaceId: owner.workspace.id, bunshinId: bunshin.id },
+      data: { status: 'SUSPENDED' },
+    });
+    await expect(
+      scopes.validateDaily({
+        ...ownerScope(owner, bunshin.id),
+        actorUserId: owner.user.id,
+        missionDate: '2026-08-25',
+      }),
+    ).resolves.toBe(false);
   });
 
   it('rolls back all account data when a unique identity conflicts', async () => {

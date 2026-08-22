@@ -554,3 +554,15 @@
 - Payload: Jobにはresource referenceだけを保存し、Secret、生成本文、Knowledge、Provider responseを保存しない
 - Separation: Cron配備、LINE送信、Mission生成、Webhook、manual retry UIは後続PRへ分離する
 - 詳細: `docs/adr/POSTGRES_JOB_CORE_ADR.md`
+
+## D-049: Mission Automation Jobは登録時と実行直前の二段階でscopeを検証する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Producer: Weekly Plan準備とDaily Mission生成をBunshin・対象日単位の決定的idempotency keyで登録する
+- Runtime Gate: handler実行直前にWorkspace、Membership、Bunshin、SOCIAL Capability、ACTIVE Social Profile、APPROVED Strategyを再検証する
+- Weekly Gate: Weekly Plan準備には有効なContent Pillarを最低1件必要とする
+- Daily Gate: Daily Mission生成には対象日のitemを持つCONFIRMED Weekly Planを必要とする
+- Revocation: 登録後に権限・Capability・Strategy・Planが無効になったJobはProviderを呼ばず、非retryable `SCOPE_NO_LONGER_ELIGIBLE`で終了する
+- Handler: Job typeとhandlerをregistryで対応付け、Provider実装をJob Coreへ混ぜない
+- Separation: Cron trigger、OpenAI handler接続、LINE通知、Webhookは本PRへ含めない
