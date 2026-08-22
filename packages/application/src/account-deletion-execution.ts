@@ -21,6 +21,25 @@ export interface AccountDeletionExecutionRepository {
   }): Promise<AccountDeletionPreparation | null>;
 }
 
+export type AuthAdministrationFailureCategory =
+  | 'AUTH_CONFIGURATION_UNAVAILABLE'
+  | 'AUTH_ENVIRONMENT_MISMATCH'
+  | 'AUTH_CREDENTIAL_INVALID'
+  | 'AUTH_RATE_LIMITED'
+  | 'AUTH_PROVIDER_UNAVAILABLE';
+
+export type AuthAdministrationResult =
+  | { success: true; alreadyAbsent: boolean }
+  | {
+      success: false;
+      category: AuthAdministrationFailureCategory;
+      retryable: boolean;
+    };
+
+export interface AuthAdministrationPort {
+  deleteUser(providerUserId: string): Promise<AuthAdministrationResult>;
+}
+
 export class PrepareNextAccountDeletion {
   constructor(
     private readonly repository: AccountDeletionExecutionRepository,
