@@ -791,3 +791,14 @@
   - Auth削除成功後だけpurgeへ進み、retryable Provider障害はleaseを延長し、credential・環境不一致はBLOCKEDにする。
   - BLOCKED再試行はSUPER_ADMIN限定、10〜500文字の理由必須とし、専用Auditへ遷移前後の状態を保存する。
   - logとレスポンスは集計件数・固定分類のみとし、User ID、providerUserId、email、削除本文を含めない。
+
+## D-068: FREE利用者UIはスマートフォンの「今日やること」を正本にする
+
+- 日付: 2026-08-23
+- 状態: Proposed（デザイン方向は人間確認済み）
+- Entry: 認証後は機能一覧ではなく、現在のBunshinと今日のMissionを第一導線にする。
+- Navigation: FREE利用者はHome、Mission、Progress、ProfileのBottom Navigationを基本とし、管理機能と内部用語を混ぜない。
+- Visual: warm ivory、deep navy、indigo、mintと2円のBUNSHINモチーフを採用し、過度に未来的なAI表現を避ける。
+- Mobile: 375〜430pxを正本とし、主要操作領域44px以上、Primary Action 48px以上、Safe Area対応を必須とする。
+- Architecture: UI刷新は既存Use Case、Persistence、Isolation、Provider境界を変更せず、presentationとView Modelへ閉じ込める。
+- Delivery: Design Foundation、Public Auth、App Shell、Onboarding、Today / Mission、SOCIAL Settings、Admin QAへPRを分割する。
