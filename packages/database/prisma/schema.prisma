@@ -89,6 +89,15 @@ enum AccountDeletionRequestStatus {
   COMPLETED
 }
 
+enum JobStatus {
+  PENDING
+  LEASED
+  RETRY_SCHEDULED
+  SUCCEEDED
+  DEAD
+  CANCELLED
+}
+
 enum BunshinType {
   COPY
   EXPERT
@@ -321,6 +330,7 @@ model User {
   accountDeletionRequests     AccountDeletionRequest[]
   lineConfigurationAudits     LineConfigurationAudit[]      @relation("LineConfigurationAuditActor")
   lineNotificationPreferences LineNotificationPreference[]
+  jobs                        Job[]
 
   @@index([status])
   @@map("users")
@@ -366,6 +376,7 @@ model Workspace {
   missionFeedback             MissionFeedback[]
   aiUsageEvents               AiUsageEvent[]
   lineNotificationPreferences LineNotificationPreference[]
+  jobs                        Job[]
 
   @@index([status])
   @@map("workspaces")
@@ -564,6 +575,7 @@ model Bunshin {
   missionFeedback             MissionFeedback[]
   aiUsageEvents               AiUsageEvent[]
   lineNotificationPreferences LineNotificationPreference[]
+  jobs                        Job[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -599,6 +611,42 @@ model AiUsageEvent {
   @@index([workspaceId, occurredAt])
   @@index([workspaceId, bunshinId, taskType, occurredAt])
   @@map("ai_usage_events")
+}
+
+model Job {
+  id                String                       @id @default(uuid()) @db.Uuid
+  environment       LineConfigurationEnvironment
+  workspaceId       String                       @map("workspace_id") @db.Uuid
+  bunshinId         String?                      @map("bunshin_id") @db.Uuid
+  capabilityType    CapabilityType?              @map("capability_type")
+  jobType           String                       @map("job_type") @db.VarChar(80)
+  payloadReference  String                       @map("payload_reference") @db.VarChar(500)
+  idempotencyKey    String                       @map("idempotency_key") @db.VarChar(200)
+  correlationId     String                       @map("correlation_id") @db.VarChar(120)
+  requestedBy       String                       @map("requested_by") @db.Uuid
+  status            JobStatus                    @default(PENDING)
+  priority          Int                          @default(100)
+  scheduledAt       DateTime                     @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  attemptCount      Int                          @default(0) @map("attempt_count")
+  maxAttempts       Int                          @default(5) @map("max_attempts")
+  leaseOwner        String?                      @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt    DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
+  nextRetryAt       DateTime?                    @map("next_retry_at") @db.Timestamptz(6)
+  lastErrorCategory String?                      @map("last_error_category") @db.VarChar(80)
+  completedAt       DateTime?                    @map("completed_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin           Bunshin?                     @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  requester         User                         @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+
+  @@unique([environment, idempotencyKey])
+  @@index([environment, status, scheduledAt, priority])
+  @@index([environment, status, nextRetryAt, priority])
+  @@index([workspaceId, bunshinId, createdAt])
+  @@index([leaseExpiresAt])
+  @@map("jobs")
 }
 
 model OwnerKnowledge {
