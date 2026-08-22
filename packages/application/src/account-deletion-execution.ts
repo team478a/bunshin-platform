@@ -40,6 +40,35 @@ export interface AuthAdministrationPort {
   deleteUser(providerUserId: string): Promise<AuthAdministrationResult>;
 }
 
+export interface AccountDeletionPurgeResult {
+  requestId: string;
+  userId: string;
+  status: 'COMPLETED' | 'BLOCKED';
+  blockedReason: AccountDeletionBlockedReason | null;
+}
+
+export interface AccountDeletionPurgeRepository {
+  completeAfterAuthDeletion(input: {
+    requestId: string;
+    userId: string;
+    workerId: string;
+    now: Date;
+  }): Promise<AccountDeletionPurgeResult | null>;
+}
+
+export class CompleteAccountDeletionPurge {
+  constructor(
+    private readonly repository: AccountDeletionPurgeRepository,
+    private readonly now = () => new Date(),
+  ) {}
+
+  async execute(input: { requestId: string; userId: string; workerId: string }) {
+    if (!input.requestId || !input.userId || !input.workerId.trim() || input.workerId.length > 120)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid account deletion purge input');
+    return this.repository.completeAfterAuthDeletion({ ...input, now: this.now() });
+  }
+}
+
 export class PrepareNextAccountDeletion {
   constructor(
     private readonly repository: AccountDeletionExecutionRepository,

@@ -4,7 +4,7 @@
 
 対象: Phase 7 Account Deletion Execution
 
-状態: 人間レビュー待ち（本書ではコード、Prisma Schema、Migrationを変更しない）
+状態: PR A〜C Core完了。PR D実行接続・運用機能は未実装
 
 ## 1. 目的
 
@@ -129,7 +129,7 @@ User ID、email、providerUserId、本文をrequestのerror / summaryへ複製�
 
 ### PR C: Personal Data Purge
 
-- 状態: 未実装
+- 状態: Core実装完了（Auth Adapter・Schedulerとの実行接続はPR D）
 - table別匿名化・本文purge
 - Personal / Organization境界
 - crash途中からの再実行
