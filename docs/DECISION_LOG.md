@@ -591,3 +591,15 @@
 - Usage: Job ID由来の決定的idempotency keyで成功・失敗を記録し、Provider responseや生成本文をusage logへ保存しない
 - Fail Closed: Weekly handlerを登録してもDaily handler完成まではWorker endpointを503にし、Jobをclaimしない
 - Separation: Daily handler、Vercel Cron有効化、LINE送信は後続PRへ分離する
+
+## D-052: Daily Mission生成pipelineを手動APIとJobで共有する
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Pipeline: Planner、Content Generator、Quality Checker、最大1回の修復、Mission永続化、AI usage記録を共通serviceへ集約する
+- Idempotency: 手動APIは既存日を`CONFLICT`、Job handlerは既存Missionを成功扱いで返し、Providerを再呼び出ししない。生成claimにはJobの決定的idempotency keyを使用する
+- Runtime Gate: claim後もWorkspace、Bunshin、actor、SOCIAL Capability、ACTIVE Profile、APPROVED Strategy、CONFIRMED Weekly Plan、Grant済みKnowledgeを共通serviceで検証する
+- Defaults: JobのtimezoneはBunshin単位の通知設定を優先し、未設定時は`Asia/Tokyo`、Primary SNSはACTIVE Social Profileから解決する
+- Worker: Weekly / Daily handlerが揃ったため、認証済みWorkerをPostgreSQL Job executorへ接続する。環境固定、lease、retry、実行直前scope再検証を維持する
+- Privacy: Job payloadへMission本文、Knowledge、Provider response、Secretを保存せず、logとusage eventにもProvider responseを保存しない
+- Separation: Vercel Cron schedule有効化、LINE Push、Deep Linkは後続PRへ分離する

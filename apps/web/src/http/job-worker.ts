@@ -1,6 +1,9 @@
 import 'server-only';
 import {
   ClaimJob,
+  CompleteJob,
+  ExecuteMissionAutomationJob,
+  FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
   type JobEnvironment,
@@ -42,22 +45,23 @@ function authorize(request: Request, secret: string | undefined) {
 }
 
 async function configuredWorker(): Promise<JobWorkerPort> {
-  const { createWeeklyPlanJobHandler } = await import('../jobs/weekly-plan-job-handler');
-  const registry = new MissionAutomationHandlerRegistry().register(
-    'WEEKLY_PLAN_PREPARE',
-    createWeeklyPlanJobHandler(),
-  );
-  if (!registry.get('WEEKLY_PLAN_PREPARE') || !registry.get('DAILY_MISSION_GENERATE'))
-    throw new ApplicationError(
-      'CONFIGURATION_ERROR',
-      'mission automation handlers are not configured',
-    );
+  const [{ createWeeklyPlanJobHandler }, { createDailyMissionJobHandler }] = await Promise.all([
+    import('../jobs/weekly-plan-job-handler'),
+    import('../jobs/daily-mission-job-handler'),
+  ]);
+  const registry = new MissionAutomationHandlerRegistry()
+    .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
+    .register('DAILY_MISSION_GENERATE', createDailyMissionJobHandler());
   const db = await import('@bunshin/database');
   const jobs = new db.PrismaJobRepository();
   return new RunJobWorkerBatch(
     new ClaimJob(jobs),
-    // Both handlers are required above. The concrete executor is connected in Phase 6-E4.
-    { execute: () => Promise.reject(new Error('unreachable')) },
+    new ExecuteMissionAutomationJob(
+      new db.PrismaMissionAutomationScopeRepository(),
+      registry,
+      new CompleteJob(jobs),
+      new FailJob(jobs),
+    ),
   );
 }
 

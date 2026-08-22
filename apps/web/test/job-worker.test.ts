@@ -65,16 +65,20 @@ describe('job worker HTTP boundary', () => {
     await expect(response.json()).resolves.toMatchObject({ claimed: 2, drained: true });
   });
 
-  it('fails closed before claiming when production handlers are not configured', async () => {
+  it('maps worker failures without exposing authorization secrets', async () => {
     const response = await jobWorkerResponse(
       new Request('http://localhost/api/internal/jobs/run', {
         method: 'POST',
         headers: { authorization: `Bearer ${secret}` },
       }),
+      () =>
+        Promise.resolve({
+          execute: () => Promise.reject(new Error(`database failed ${secret}`)),
+        }),
     );
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'CONFIGURATION_ERROR' },
-    });
+    expect(response.status).toBe(500);
+    const body = await response.text();
+    expect(body).toContain('INTERNAL_ERROR');
+    expect(body).not.toContain(secret);
   });
 });
