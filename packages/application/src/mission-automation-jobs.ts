@@ -1,5 +1,12 @@
 import { ApplicationError } from '@bunshin/shared';
-import type { CompleteJob, EnqueueJob, FailJob, Job, JobEnvironment } from './index';
+import type {
+  CompleteJob,
+  EnqueueJob,
+  FailJob,
+  Job,
+  JobEnvironment,
+  LineNotificationPreference,
+} from './index';
 
 export const MISSION_AUTOMATION_JOB_TYPES = [
   'WEEKLY_PLAN_PREPARE',
@@ -16,6 +23,127 @@ export interface MissionAutomationScope {
 export interface MissionAutomationScopeRepository {
   validateWeekly(input: MissionAutomationScope & { weekStartDate: string }): Promise<boolean>;
   validateDaily(input: MissionAutomationScope & { missionDate: string }): Promise<boolean>;
+}
+
+export interface MissionAutomationCandidateRepository {
+  listEnabled(limit: number): Promise<{
+    candidates: LineNotificationPreference[];
+    truncated: boolean;
+  }>;
+}
+
+export interface MissionAutomationScheduleSummary {
+  environment: JobEnvironment;
+  candidates: number;
+  due: number;
+  weeklyEnqueued: number;
+  dailyEnqueued: number;
+  skipped: number;
+  failures: number;
+  truncated: boolean;
+}
+
+const localClock = (at: Date, timezone: string) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+  }).formatToParts(at);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${value['year']}-${value['month']}-${value['day']}`,
+    time: `${value['hour']}:${value['minute']}`,
+    weekday: value['weekday'] ?? '',
+  };
+};
+
+const nextLocalDate = (value: string) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+};
+
+const isSuppressed = (
+  preference: LineNotificationPreference,
+  at: Date,
+  local: ReturnType<typeof localClock>,
+  includeFrequency = true,
+) => {
+  if (!preference.enabled || preference.notificationConsentAt === null) return true;
+  if (preference.pausedUntil && preference.pausedUntil.getTime() > at.getTime()) return true;
+  if (
+    includeFrequency &&
+    preference.frequency === 'WEEKDAYS' &&
+    ['Sat', 'Sun'].includes(local.weekday)
+  )
+    return true;
+  const { quietHoursStart: start, quietHoursEnd: end } = preference;
+  return start < end
+    ? local.time >= start && local.time < end
+    : local.time >= start || local.time < end;
+};
+
+export class RunMissionAutomationScheduler {
+  constructor(
+    private readonly candidates: MissionAutomationCandidateRepository,
+    private readonly weekly: ScheduleWeeklyPlanPreparation,
+    private readonly daily: ScheduleDailyMissionGeneration,
+    private readonly now = () => new Date(),
+    private readonly limit = 1_000,
+  ) {}
+
+  async execute(environment: JobEnvironment): Promise<MissionAutomationScheduleSummary> {
+    const at = this.now();
+    const values = await this.candidates.listEnabled(this.limit);
+    const summary: MissionAutomationScheduleSummary = {
+      environment,
+      candidates: values.candidates.length,
+      due: 0,
+      weeklyEnqueued: 0,
+      dailyEnqueued: 0,
+      skipped: 0,
+      failures: 0,
+      truncated: values.truncated,
+    };
+    for (const preference of values.candidates) {
+      const local = localClock(at, preference.timezone);
+      if (local.time !== preference.localTime) continue;
+      summary.due += 1;
+      const scope = {
+        environment,
+        workspaceId: preference.workspaceId,
+        bunshinId: preference.bunshinId,
+        actorUserId: preference.userId,
+        correlationId: `scheduler:${environment}:${local.date}`,
+      };
+      if (local.weekday === 'Sun' && !isSuppressed(preference, at, local, false)) {
+        try {
+          await this.weekly.execute({ ...scope, weekStartDate: nextLocalDate(local.date) });
+          summary.weeklyEnqueued += 1;
+        } catch (error) {
+          if (error instanceof ApplicationError && error.code === 'FORBIDDEN') summary.skipped += 1;
+          else summary.failures += 1;
+        }
+      }
+      if (isSuppressed(preference, at, local)) {
+        summary.skipped += 1;
+        continue;
+      }
+      try {
+        await this.daily.execute({ ...scope, missionDate: local.date });
+        summary.dailyEnqueued += 1;
+      } catch (error) {
+        if (error instanceof ApplicationError && error.code === 'FORBIDDEN') summary.skipped += 1;
+        else summary.failures += 1;
+      }
+    }
+    return summary;
+  }
 }
 
 interface ScheduleInput extends MissionAutomationScope {

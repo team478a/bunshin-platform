@@ -34,6 +34,7 @@ import type {
   EnqueueJobInput,
   Job,
   MissionAutomationScopeRepository,
+  MissionAutomationCandidateRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -317,6 +318,30 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
         },
       })) > 0
     );
+  }
+}
+
+export class PrismaMissionAutomationCandidateRepository implements MissionAutomationCandidateRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async listEnabled(limit: number) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid scheduler candidate limit');
+    const rows = await this.client.lineNotificationPreference.findMany({
+      where: {
+        enabled: true,
+        notificationConsentAt: { not: null },
+        workspace: { status: 'ACTIVE' },
+        user: { status: 'ACTIVE', memberships: { some: { status: 'ACTIVE' } } },
+        bunshin: { status: { not: 'ARCHIVED' } },
+      },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+    return {
+      candidates: rows.slice(0, limit).map(lineNotificationPreference),
+      truncated: rows.length > limit,
+    };
   }
 }
 

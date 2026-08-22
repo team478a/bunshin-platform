@@ -3,6 +3,10 @@
   "framework": "nextjs",
   "regions": ["hnd1"],
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=web",
+  "crons": [
+    { "path": "/api/internal/jobs/schedule", "schedule": "* * * * *" },
+    { "path": "/api/internal/jobs/run", "schedule": "* * * * *" }
+  ],
   "functions": {
     "app/api/workspaces/[workspaceId]/bunshins/[bunshinId]/daily-missions/generate/route.ts": {
       "maxDuration": 60

@@ -11,8 +11,9 @@ import {
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
-import { ApplicationError, toApiError } from '@bunshin/shared';
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { toApiError } from '@bunshin/shared';
+import { randomUUID } from 'node:crypto';
+import { authorizeCronRequest } from './cron-security';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -27,21 +28,6 @@ export interface JobWorkerPort {
     workerId: string;
     batchSize: number;
   }): Promise<JobWorkerSummary>;
-}
-
-function sameSecret(presented: string, expected: string) {
-  const digest = (value: string) => createHash('sha256').update(value, 'utf8').digest();
-  return timingSafeEqual(digest(presented), digest(expected));
-}
-
-function authorize(request: Request, secret: string | undefined) {
-  if (!secret) throw new ApplicationError('CONFIGURATION_ERROR', 'CRON_SECRET is required');
-  const authorization = request.headers.get('authorization');
-  if (!authorization?.startsWith('Bearer '))
-    throw new ApplicationError('UNAUTHENTICATED', 'worker authorization required');
-  const presented = authorization.slice('Bearer '.length);
-  if (!sameSecret(presented, secret))
-    throw new ApplicationError('UNAUTHENTICATED', 'worker authorization required');
 }
 
 async function configuredWorker(): Promise<JobWorkerPort> {
@@ -73,7 +59,7 @@ export async function jobWorkerResponse(
   const started = Date.now();
   try {
     const environment = getServerEnvironment();
-    authorize(request, environment.CRON_SECRET);
+    authorizeCronRequest(request, environment.CRON_SECRET);
     const worker = await workerFactory();
     const result = await worker.execute({
       environment: runtimeEnvironment[environment.APP_ENV],
