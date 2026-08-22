@@ -353,33 +353,34 @@ enum SocialPreferredFormat {
 }
 
 model User {
-  id                          String                        @id @default(uuid()) @db.Uuid
-  status                      UserStatus                    @default(ACTIVE)
-  displayName                 String                        @map("display_name") @db.VarChar(100)
-  email                       String?                       @db.VarChar(320)
-  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                          String                          @id @default(uuid()) @db.Uuid
+  status                      UserStatus                      @default(ACTIVE)
+  displayName                 String                          @map("display_name") @db.VarChar(100)
+  email                       String?                         @db.VarChar(320)
+  createdAt                   DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
   identities                  AuthIdentity[]
   memberships                 WorkspaceMembership[]
   platformAdmin               PlatformAdmin?
   bunshins                    Bunshin[]
-  ownerKnowledge              OwnerKnowledge[]              @relation("KnowledgeOwner")
-  knowledgeGrants             BunshinKnowledgeGrant[]       @relation("GrantActor")
-  capabilityAssignments       BunshinCapabilityAssignment[] @relation("CapabilityAssignmentActor")
-  missionActivities           MissionActivity[]             @relation("MissionActivityActor")
-  postRecords                 PostRecord[]                  @relation("PostRecordActor")
-  missionFeedback             MissionFeedback[]             @relation("MissionFeedbackActor")
-  aiUsageEvents               AiUsageEvent[]                @relation("AiUsageActor")
-  legalDocuments              LegalDocument[]               @relation("LegalDocumentAuthor")
+  ownerKnowledge              OwnerKnowledge[]                @relation("KnowledgeOwner")
+  knowledgeGrants             BunshinKnowledgeGrant[]         @relation("GrantActor")
+  capabilityAssignments       BunshinCapabilityAssignment[]   @relation("CapabilityAssignmentActor")
+  missionActivities           MissionActivity[]               @relation("MissionActivityActor")
+  postRecords                 PostRecord[]                    @relation("PostRecordActor")
+  missionFeedback             MissionFeedback[]               @relation("MissionFeedbackActor")
+  aiUsageEvents               AiUsageEvent[]                  @relation("AiUsageActor")
+  legalDocuments              LegalDocument[]                 @relation("LegalDocumentAuthor")
   legalConsents               UserLegalConsent[]
   accountDeletionRequests     AccountDeletionRequest[]
-  lineConfigurationAudits     LineConfigurationAudit[]      @relation("LineConfigurationAuditActor")
+  accountDeletionAudits       AccountDeletionOperationAudit[] @relation("AccountDeletionAuditActor")
+  lineConfigurationAudits     LineConfigurationAudit[]        @relation("LineConfigurationAuditActor")
   lineNotificationPreferences LineNotificationPreference[]
   lineConnections             LineConnection[]
   jobs                        Job[]
   lineMessageDeliveries       LineMessageDelivery[]
   missionDeepLinkStates       MissionDeepLinkState[]
-  lineDeliveryRetryRequests   LineDeliveryRetryRequest[]    @relation("LineDeliveryRetryActor")
+  lineDeliveryRetryRequests   LineDeliveryRetryRequest[]      @relation("LineDeliveryRetryActor")
 
   @@index([status])
   @@map("users")
@@ -616,29 +617,47 @@ model UserLegalConsent {
 }
 
 model AccountDeletionRequest {
-  id                  String                       @id @default(uuid()) @db.Uuid
-  userId              String                       @map("user_id") @db.Uuid
-  status              AccountDeletionRequestStatus @default(REQUESTED)
-  requestedAt         DateTime                     @default(now()) @map("requested_at") @db.Timestamptz(6)
-  scheduledFor        DateTime                     @map("scheduled_for") @db.Timestamptz(6)
-  attemptCount        Int                          @default(0) @map("attempt_count")
-  leaseOwner          String?                      @map("lease_owner") @db.VarChar(120)
-  leaseExpiresAt      DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
-  processingStartedAt DateTime?                    @map("processing_started_at") @db.Timestamptz(6)
-  blockedReason       String?                      @map("blocked_reason") @db.VarChar(80)
-  lastErrorCategory   String?                      @map("last_error_category") @db.VarChar(80)
-  executionVersion    Int                          @default(1) @map("execution_version")
+  id                  String                          @id @default(uuid()) @db.Uuid
+  userId              String                          @map("user_id") @db.Uuid
+  status              AccountDeletionRequestStatus    @default(REQUESTED)
+  requestedAt         DateTime                        @default(now()) @map("requested_at") @db.Timestamptz(6)
+  scheduledFor        DateTime                        @map("scheduled_for") @db.Timestamptz(6)
+  attemptCount        Int                             @default(0) @map("attempt_count")
+  leaseOwner          String?                         @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt      DateTime?                       @map("lease_expires_at") @db.Timestamptz(6)
+  processingStartedAt DateTime?                       @map("processing_started_at") @db.Timestamptz(6)
+  blockedReason       String?                         @map("blocked_reason") @db.VarChar(80)
+  lastErrorCategory   String?                         @map("last_error_category") @db.VarChar(80)
+  executionVersion    Int                             @default(1) @map("execution_version")
   summary             Json?
-  cancelledAt         DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
-  completedAt         DateTime?                    @map("completed_at") @db.Timestamptz(6)
-  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user                User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cancelledAt         DateTime?                       @map("cancelled_at") @db.Timestamptz(6)
+  completedAt         DateTime?                       @map("completed_at") @db.Timestamptz(6)
+  createdAt           DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  operationAudits     AccountDeletionOperationAudit[]
 
   @@index([userId, status, requestedAt])
   @@index([status, scheduledFor])
   @@index([status, leaseExpiresAt])
   @@map("account_deletion_requests")
+}
+
+model AccountDeletionOperationAudit {
+  id             String                       @id @default(uuid()) @db.Uuid
+  requestId      String                       @map("request_id") @db.Uuid
+  actorUserId    String                       @map("actor_user_id") @db.Uuid
+  action         String                       @db.VarChar(40)
+  reason         String                       @db.VarChar(500)
+  previousStatus AccountDeletionRequestStatus @map("previous_status")
+  nextStatus     AccountDeletionRequestStatus @map("next_status")
+  occurredAt     DateTime                     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  request        AccountDeletionRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actor          User                         @relation("AccountDeletionAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("account_deletion_operation_audits")
 }
 
 model Bunshin {

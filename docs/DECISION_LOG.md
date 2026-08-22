@@ -778,3 +778,16 @@
   - Organization Workspaceの共有資産は変更せず、本人MembershipだけをREVOKEDにする。本人所有のOrganization Knowledge / Bunshinが見つかった場合は再検証でBLOCKEDにする。
   - purgeとrequestのCOMPLETED確定を同じDB transactionで行い、crash時に部分匿名化を残さない。
   - summaryは処理件数のみとし、削除値やProvider responseを保存しない。
+
+## D-067: 退会Schedulerはdisabledを既定としProduction有効化に二重Gateを要求する
+
+- 日付: 2026-08-22
+- 状態: 採用
+- 決定:
+  - `ACCOUNT_DELETION_EXECUTION_MODE`は`disabled | dry-run | enabled`とし、既定値を`disabled`にする。
+  - dry-runは件数集計だけを行い、claim、Auth削除、DB更新を行わない。
+  - Productionの`enabled`には`ACCOUNT_DELETION_PRODUCTION_APPROVED=true`を追加で必須とする。
+  - Cron endpointはCRON Secretで保護し、1回最大3件、1日1回とする。
+  - Auth削除成功後だけpurgeへ進み、retryable Provider障害はleaseを延長し、credential・環境不一致はBLOCKEDにする。
+  - BLOCKED再試行はSUPER_ADMIN限定、10〜500文字の理由必須とし、専用Auditへ遷移前後の状態を保存する。
+  - logとレスポンスは集計件数・固定分類のみとし、User ID、providerUserId、email、削除本文を含めない。
