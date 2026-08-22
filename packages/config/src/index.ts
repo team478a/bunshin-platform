@@ -12,6 +12,7 @@ const serverSchema = z
     CRON_SECRET: z.string().min(32).optional(),
     ENCRYPTION_KEY: z.string().min(32).optional(),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
+    LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   })
   .superRefine((value, context) => {

@@ -1513,3 +1513,4 @@ export class RequireActiveBunshinCapability {
 
 export * from './mission-automation-jobs';
 export * from './job-worker';
+export * from './line-messaging-core';

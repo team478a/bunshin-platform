@@ -35,6 +35,10 @@ import type {
   Job,
   MissionAutomationScopeRepository,
   MissionAutomationCandidateRepository,
+  LineMessageDelivery,
+  LineMessageDeliveryRepository,
+  MissionDeepLinkState,
+  MissionDeepLinkStateRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -342,6 +346,218 @@ export class PrismaMissionAutomationCandidateRepository implements MissionAutoma
       candidates: rows.slice(0, limit).map(lineNotificationPreference),
       truncated: rows.length > limit,
     };
+  }
+}
+
+function lineMessageDelivery(
+  row: Prisma.LineMessageDeliveryGetPayload<object>,
+): LineMessageDelivery {
+  return row;
+}
+
+function missionDeepLinkState(
+  row: Prisma.MissionDeepLinkStateGetPayload<object>,
+): MissionDeepLinkState {
+  return row;
+}
+
+function lineMissionScope(input: {
+  workspaceId: string;
+  bunshinId: string;
+  actorUserId: string;
+  dailyMissionId: string;
+}): Prisma.BunshinWhereInput {
+  return {
+    id: input.bunshinId,
+    workspaceId: input.workspaceId,
+    status: { not: 'ARCHIVED' },
+    ownerUser: { status: 'ACTIVE' },
+    workspace: {
+      status: 'ACTIVE',
+      memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+    },
+    OR: [
+      { ownerUserId: input.actorUserId },
+      {
+        workspace: {
+          memberships: {
+            some: {
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              role: { in: ['OWNER', 'ADMIN'] },
+            },
+          },
+        },
+      },
+    ],
+    dailyMissions: { some: { id: input.dailyMissionId } },
+  };
+}
+
+export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async prepare(input: Parameters<LineMessageDeliveryRepository['prepare']>[0]) {
+    const accessible = await this.client.bunshin.findFirst({
+      where: lineMissionScope(input),
+      select: { id: true },
+    });
+    if (!accessible) return null;
+
+    try {
+      return lineMessageDelivery(
+        await this.client.lineMessageDelivery.create({
+          data: {
+            environment: input.environment,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            userId: input.actorUserId,
+            dailyMissionId: input.dailyMissionId,
+            kind: input.kind,
+            idempotencyKey: input.idempotencyKey,
+            scheduledAt: input.scheduledAt,
+          },
+        }),
+      );
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
+      const existing = await this.client.lineMessageDelivery.findUnique({
+        where: {
+          environment_idempotencyKey: {
+            environment: input.environment,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (
+        !existing ||
+        existing.workspaceId !== input.workspaceId ||
+        existing.bunshinId !== input.bunshinId ||
+        existing.userId !== input.actorUserId ||
+        existing.dailyMissionId !== input.dailyMissionId ||
+        existing.kind !== input.kind
+      )
+        throw new ApplicationError('CONFLICT', 'delivery idempotency key is already in use');
+      return lineMessageDelivery(existing);
+    }
+  }
+
+  async recordAttempt(input: Parameters<LineMessageDeliveryRepository['recordAttempt']>[0]) {
+    if (!Number.isInteger(input.attemptNumber) || input.attemptNumber < 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid delivery attempt number');
+    if (!Number.isInteger(input.latencyMs) || input.latencyMs < 0)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid delivery attempt latency');
+    if ((input.status === 'SUCCESS') !== (input.errorCategory === null))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid delivery attempt error category');
+
+    await this.client.$transaction(async (tx) => {
+      const delivery = await tx.lineMessageDelivery.updateMany({
+        where: { id: input.deliveryId, environment: input.environment },
+        data: {
+          status: input.status === 'SUCCESS' ? 'SENT' : 'FAILED',
+          sentAt: input.status === 'SUCCESS' ? input.attemptedAt : null,
+          lastErrorCategory: input.errorCategory,
+        },
+      });
+      if (delivery.count !== 1)
+        throw new ApplicationError('NOT_FOUND', 'LINE delivery not found in environment');
+      await tx.lineMessageDeliveryAttempt.create({
+        data: {
+          deliveryId: input.deliveryId,
+          attemptNumber: input.attemptNumber,
+          status: input.status,
+          errorCategory: input.errorCategory,
+          latencyMs: input.latencyMs,
+          attemptedAt: input.attemptedAt,
+        },
+      });
+    });
+  }
+}
+
+export class PrismaMissionDeepLinkStateRepository implements MissionDeepLinkStateRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async create(input: Parameters<MissionDeepLinkStateRepository['create']>[0]) {
+    const accessible = await this.client.bunshin.findFirst({
+      where: lineMissionScope(input),
+      select: { id: true },
+    });
+    if (!accessible) return null;
+    try {
+      return missionDeepLinkState(
+        await this.client.missionDeepLinkState.create({
+          data: {
+            id: input.id,
+            environment: input.environment,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            userId: input.actorUserId,
+            dailyMissionId: input.dailyMissionId,
+            keyVersion: input.keyVersion,
+            expiresAt: input.expiresAt,
+          },
+        }),
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError('CONFLICT', 'Mission deep link state already exists');
+      throw error;
+    }
+  }
+
+  async consume(input: Parameters<MissionDeepLinkStateRepository['consume']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const state = await tx.missionDeepLinkState.findFirst({
+        where: {
+          id: input.id,
+          environment: input.environment,
+          userId: input.actorUserId,
+          keyVersion: input.keyVersion,
+          expiresAt: input.expiresAt,
+          consumedAt: null,
+          AND: { expiresAt: { gt: input.now } },
+          user: { status: 'ACTIVE' },
+          workspace: {
+            status: 'ACTIVE',
+            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          },
+          bunshin: {
+            status: { not: 'ARCHIVED' },
+            OR: [
+              { ownerUserId: input.actorUserId },
+              {
+                workspace: {
+                  memberships: {
+                    some: {
+                      userId: input.actorUserId,
+                      status: 'ACTIVE',
+                      role: { in: ['OWNER', 'ADMIN'] },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      });
+      if (!state) return null;
+      const claimed = await tx.missionDeepLinkState.updateMany({
+        where: {
+          id: state.id,
+          environment: input.environment,
+          userId: input.actorUserId,
+          keyVersion: input.keyVersion,
+          expiresAt: input.expiresAt,
+          consumedAt: null,
+          AND: { expiresAt: { gt: input.now } },
+        },
+        data: { consumedAt: input.now },
+      });
+      if (claimed.count !== 1) return null;
+      return missionDeepLinkState({ ...state, consumedAt: input.now });
+    });
   }
 }
 

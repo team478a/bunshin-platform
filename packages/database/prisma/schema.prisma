@@ -98,6 +98,23 @@ enum JobStatus {
   CANCELLED
 }
 
+enum LineMessageDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum LineMessageAttemptStatus {
+  SUCCESS
+  FAILED
+}
+
+enum LineMessageKind {
+  DAILY_MISSION
+  REMINDER
+}
+
 enum BunshinType {
   COPY
   EXPERT
@@ -331,6 +348,8 @@ model User {
   lineConfigurationAudits     LineConfigurationAudit[]      @relation("LineConfigurationAuditActor")
   lineNotificationPreferences LineNotificationPreference[]
   jobs                        Job[]
+  lineMessageDeliveries       LineMessageDelivery[]
+  missionDeepLinkStates       MissionDeepLinkState[]
 
   @@index([status])
   @@map("users")
@@ -377,6 +396,8 @@ model Workspace {
   aiUsageEvents               AiUsageEvent[]
   lineNotificationPreferences LineNotificationPreference[]
   jobs                        Job[]
+  lineMessageDeliveries       LineMessageDelivery[]
+  missionDeepLinkStates       MissionDeepLinkState[]
 
   @@index([status])
   @@map("workspaces")
@@ -576,6 +597,8 @@ model Bunshin {
   aiUsageEvents               AiUsageEvent[]
   lineNotificationPreferences LineNotificationPreference[]
   jobs                        Job[]
+  lineMessageDeliveries       LineMessageDelivery[]
+  missionDeepLinkStates       MissionDeepLinkState[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -857,35 +880,37 @@ model WeeklyPlanItem {
 }
 
 model DailyMission {
-  id               String                @id @default(uuid()) @db.Uuid
-  workspaceId      String                @map("workspace_id") @db.Uuid
-  bunshinId        String                @map("bunshin_id") @db.Uuid
-  socialProfileId  String?               @map("social_profile_id") @db.Uuid
-  weeklyPlanItemId String?               @map("weekly_plan_item_id") @db.Uuid
-  missionDate      DateTime              @map("mission_date") @db.Date
-  status           DailyMissionStatus    @default(GENERATED)
-  format           SocialPreferredFormat
-  estimatedMinutes Int                   @map("estimated_minutes")
-  topic            String                @db.VarChar(200)
-  angle            String                @db.VarChar(500)
-  reason           String                @db.VarChar(1000)
-  qualityScore     Int?                  @map("quality_score")
-  viewedAt         DateTime?             @map("viewed_at") @db.Timestamptz(6)
-  startedAt        DateTime?             @map("started_at") @db.Timestamptz(6)
-  completedAt      DateTime?             @map("completed_at") @db.Timestamptz(6)
-  skippedAt        DateTime?             @map("skipped_at") @db.Timestamptz(6)
-  expiredAt        DateTime?             @map("expired_at") @db.Timestamptz(6)
-  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin          Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  socialProfile    SocialProfile?        @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  weeklyPlanItem   WeeklyPlanItem?       @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  content          MissionContent?
-  decision         MissionDecision?
-  activities       MissionActivity[]
-  postRecord       PostRecord?
-  feedback         MissionFeedback?
+  id                    String                 @id @default(uuid()) @db.Uuid
+  workspaceId           String                 @map("workspace_id") @db.Uuid
+  bunshinId             String                 @map("bunshin_id") @db.Uuid
+  socialProfileId       String?                @map("social_profile_id") @db.Uuid
+  weeklyPlanItemId      String?                @map("weekly_plan_item_id") @db.Uuid
+  missionDate           DateTime               @map("mission_date") @db.Date
+  status                DailyMissionStatus     @default(GENERATED)
+  format                SocialPreferredFormat
+  estimatedMinutes      Int                    @map("estimated_minutes")
+  topic                 String                 @db.VarChar(200)
+  angle                 String                 @db.VarChar(500)
+  reason                String                 @db.VarChar(1000)
+  qualityScore          Int?                   @map("quality_score")
+  viewedAt              DateTime?              @map("viewed_at") @db.Timestamptz(6)
+  startedAt             DateTime?              @map("started_at") @db.Timestamptz(6)
+  completedAt           DateTime?              @map("completed_at") @db.Timestamptz(6)
+  skippedAt             DateTime?              @map("skipped_at") @db.Timestamptz(6)
+  expiredAt             DateTime?              @map("expired_at") @db.Timestamptz(6)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin               Bunshin                @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile         SocialProfile?         @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  weeklyPlanItem        WeeklyPlanItem?        @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  content               MissionContent?
+  decision              MissionDecision?
+  activities            MissionActivity[]
+  postRecord            PostRecord?
+  feedback              MissionFeedback?
+  lineMessageDeliveries LineMessageDelivery[]
+  deepLinkStates        MissionDeepLinkState[]
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -1079,4 +1104,69 @@ model BunshinPersonality {
   bunshin              Bunshin    @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
 
   @@map("bunshin_personalities")
+}
+
+model LineMessageDelivery {
+  id                String                       @id @default(uuid()) @db.Uuid
+  environment       LineConfigurationEnvironment
+  workspaceId       String                       @map("workspace_id") @db.Uuid
+  bunshinId         String                       @map("bunshin_id") @db.Uuid
+  userId            String                       @map("user_id") @db.Uuid
+  dailyMissionId    String                       @map("daily_mission_id") @db.Uuid
+  kind              LineMessageKind              @default(DAILY_MISSION)
+  status            LineMessageDeliveryStatus    @default(PENDING)
+  idempotencyKey    String                       @map("idempotency_key") @db.VarChar(200)
+  scheduledAt       DateTime                     @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  sentAt            DateTime?                    @map("sent_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
+  lastErrorCategory String?                      @map("last_error_category") @db.VarChar(80)
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin           Bunshin                      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  dailyMission      DailyMission                 @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  attempts          LineMessageDeliveryAttempt[]
+
+  @@unique([environment, idempotencyKey])
+  @@unique([environment, userId, dailyMissionId, kind])
+  @@index([environment, status, scheduledAt])
+  @@index([workspaceId, bunshinId, createdAt])
+  @@map("line_message_deliveries")
+}
+
+model LineMessageDeliveryAttempt {
+  id            String                   @id @default(uuid()) @db.Uuid
+  deliveryId    String                   @map("delivery_id") @db.Uuid
+  attemptNumber Int                      @map("attempt_number")
+  status        LineMessageAttemptStatus
+  errorCategory String?                  @map("error_category") @db.VarChar(80)
+  latencyMs     Int                      @map("latency_ms")
+  attemptedAt   DateTime                 @default(now()) @map("attempted_at") @db.Timestamptz(6)
+  delivery      LineMessageDelivery      @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryId, attemptNumber])
+  @@index([status, attemptedAt])
+  @@map("line_message_delivery_attempts")
+}
+
+model MissionDeepLinkState {
+  id             String                       @id @db.Uuid
+  environment    LineConfigurationEnvironment
+  workspaceId    String                       @map("workspace_id") @db.Uuid
+  bunshinId      String                       @map("bunshin_id") @db.Uuid
+  userId         String                       @map("user_id") @db.Uuid
+  dailyMissionId String                       @map("daily_mission_id") @db.Uuid
+  keyVersion     Int                          @map("key_version")
+  expiresAt      DateTime                     @map("expires_at") @db.Timestamptz(6)
+  consumedAt     DateTime?                    @map("consumed_at") @db.Timestamptz(6)
+  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace      Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin                      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  user           User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyMission   DailyMission                 @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade)
+
+  @@index([environment, expiresAt, consumedAt])
+  @@index([workspaceId, userId, createdAt])
+  @@map("mission_deep_link_states")
 }
