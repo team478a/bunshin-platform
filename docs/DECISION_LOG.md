@@ -507,3 +507,16 @@
 - State: expiry、single-use identifier、keyVersionを必須とし、使用済みstateのreplayを拒否する
 - Privacy: Mission本文、個人情報、Secretをstateへ含めず、署名検証後もUser / Workspace / Bunshin / Mission ownershipを再検証する
 - 詳細: `docs/adr/LINE_CONFIGURATION_SECURITY_ADR.md`
+
+## D-045: Phase 6-Aは環境別version設定と接続成功後の明示ACTIVE切替にする
+
+- 日付: 2026-08-22
+- 状態: Proposed
+- Persistence: DEVELOPMENT / STAGING / PRODUCTIONごとにversion履歴を持ち、partial unique indexでACTIVEを最大1件にする
+- Secret: LINE Secretは環境・用途・keyVersionをcontextにしたHKDF導出鍵とAES-256-GCMで暗号化し、APIは平文を返さない
+- URL: Callback / Webhook / LIFF / Deep Link URLはruntimeの`APP_URL`と固定pathから生成し、requestからenvironmentやURLを受け取らない
+- Authorization: version作成とACTIVE切替はSUPER_ADMIN、接続テストはSUPER_ADMIN / OPERATORに限定する
+- Activation: 接続成功日時がなく、または最新接続結果がerrorのversionはACTIVEにできない
+- Audit: version作成、接続テスト、ACTIVE切替でactor、environment、action、reason、changed fieldsを保存し、SecretとProvider responseは保存しない
+- 分離: LINE Login callback、Webhook、Push、Job、Deep Link state、LINE Marketingを実装しない
+- 詳細: `docs/PHASE6A_SECURE_CONFIGURATION_IMPLEMENTATION_REPORT.md`
