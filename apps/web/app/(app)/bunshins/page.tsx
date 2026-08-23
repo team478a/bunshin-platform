@@ -28,47 +28,60 @@ export default async function BunshinsPage() {
     currentUser.userId,
   );
   return (
-    <main>
-      <h1>BUNSHIN</h1>
-      <p>{workspace.name}</p>
-      <p>
-        <Link href={`/bunshins/new?workspaceId=${workspace.id}` as Route}>新しい分身を作る</Link>
-      </p>
-      <p>
-        <Link href="/knowledge">Knowledgeを管理</Link>
-      </p>
-      <p>
-        <Link href="/account">アカウント設定</Link>
-      </p>
-      <p>
-        <Link href={`/validation?workspaceId=${workspace.id}` as Route}>FREE MVP検証指標</Link>
-      </p>
+    <main className="app-page bunshin-home">
+      <header className="app-page__heading">
+        <p className="eyebrow">YOUR BUNSHIN</p>
+        <h1>BUNSHIN</h1>
+        <p>{workspace.name}</p>
+      </header>
       {platformAdmin ? (
-        <p>
-          <Link href="/admin/legal">法務文書管理</Link>
-          {' / '}
-          <Link href="/admin/deletions">退会要求管理</Link>
-          {' / '}
-          <Link href="/admin/line">LINE設定管理</Link>
-        </p>
+        <aside className="admin-shortcut">
+          <strong>管理者メニュー</strong>
+          <span>
+            <Link href="/admin/legal">法務</Link>
+            <Link href="/admin/deletions">退会要求</Link>
+            <Link href="/admin/line">LINE</Link>
+            <Link href={`/validation?workspaceId=${workspace.id}` as Route}>検証指標</Link>
+          </span>
+        </aside>
       ) : null}
       {bunshins.length === 0 ? (
-        <p>まだ分身はありません。</p>
+        <section className="empty-state bunshin-empty-state">
+          <div className="echo-motif" aria-hidden="true" />
+          <h2>最初のBUNSHINを作りましょう</h2>
+          <p>あなたの目的や話し方を理解して、毎日の発信を一緒に考えるパートナーです。</p>
+          <Link
+            className="button button--primary button--full"
+            href={`/bunshins/new?workspaceId=${workspace.id}` as Route}
+          >
+            BUNSHINを作る
+          </Link>
+          <small>約3分・あとから変更できます</small>
+        </section>
       ) : (
-        <ul>
-          {bunshins.map((bunshin) => (
-            <li key={bunshin.id}>
-              <Link href={`/bunshins/${bunshin.id}?workspaceId=${workspace.id}` as Route}>
-                {bunshin.name}
-              </Link>{' '}
-              — {bunshin.status}
-            </li>
-          ))}
-        </ul>
+        <section>
+          <div className="section-heading">
+            <h2>あなたのBUNSHIN</h2>
+            <Link href={`/bunshins/new?workspaceId=${workspace.id}` as Route}>新しく作る</Link>
+          </div>
+          <ul className="bunshin-card-list">
+            {bunshins.map((bunshin) => (
+              <li key={bunshin.id}>
+                <Link href={`/bunshins/${bunshin.id}?workspaceId=${workspace.id}` as Route}>
+                  <span className="bunshin-avatar" aria-hidden="true">
+                    {bunshin.name.slice(0, 1)}
+                  </span>
+                  <span>
+                    <strong>{bunshin.name}</strong>
+                    <small>{bunshin.status === 'ACTIVE' ? '活動中' : '停止中'}</small>
+                  </span>
+                  <span aria-hidden="true">›</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
-      <form action="/auth/logout" method="post">
-        <button type="submit">ログアウト</button>
-      </form>
     </main>
   );
 }
