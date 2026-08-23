@@ -1345,6 +1345,64 @@ a {
   padding-top: 18px;
   border-top: 1px solid var(--color-border);
 }
+.mission-assistance-picker {
+  margin: 0 0 18px;
+  padding: 0;
+  border: 0;
+}
+.mission-assistance-picker legend {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.mission-assistance-picker > p {
+  margin: 6px 0 12px;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+.mission-assistance-picker > div {
+  display: grid;
+  gap: 8px;
+}
+.mission-assistance-picker label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.mission-assistance-picker label:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.mission-assistance-picker input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+.mission-assistance-picker span,
+.mission-assistance-picker small {
+  display: block;
+}
+.mission-assistance-picker small {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+}
+.mission-assistance-content {
+  margin-top: 10px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f8f8fb;
+  white-space: pre-wrap;
+}
+.mission-assistance-content h4 {
+  margin: 0 0 10px;
+}
+.mission-assistance-content p:last-child,
+.mission-assistance-content ol:last-child {
+  margin-bottom: 0;
+}
 .mission-detail > div:first-of-type,
 .mission-detail > ol {
   padding: 16px;

@@ -199,7 +199,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - SocialProfileの初期値とDailyMissionのsnapshot — Core完了
 - SocialProfileの初期設定API/UI（日本語3択） — 完了
 - SNS別投稿セットと自動選択Domain Policy
-- 企画、作り方、完成版の段階表示
+- 企画、作り方、完成版の段階表示 — 完了
 - 画像・動画を作るための指示文を含む形式別コピー
 - 投稿本文や指示文をPushしないLINE安全要約
 - 支援レベル別Funnel、投稿完了率、AI使用量・見積原価
