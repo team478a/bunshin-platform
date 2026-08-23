@@ -225,7 +225,8 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 
 状態: E0設計レビュー中。外部Agent、学習、Skill Registry、MCPは未実装。`AI_AGENT_COMPATIBILITY_REBASELINE.md`を正本候補とする。
 
-- E0: AI／Agent互換境界、data policy、tool policy、budget、kill switch、Golden Dataset方針
+- E0: AI／Agent互換境界、data policy、tool policy、budget、kill switch、Golden Dataset方針 — 文書完了
+- Golden Dataset Core: version固定fixture、評価器、禁止結果テスト — 完了（外部接続なし）
 - E1: 環境別・版管理Provider Registry（D3実測と運用要件確定後）
 - E2: 既存行動から作るPreference Read ModelとLearning Proposal
 - E3: 人間承認、回帰評価、rollbackを持つ変更提案
