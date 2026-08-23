@@ -189,6 +189,22 @@ DB接続、Session、暗号化親鍵、Cron認証等の起動に必要な秘密�
 
 UI変更では既存Coreの意味、Isolation、外部Provider境界を変更しない。FREE検証開始条件へ、スマートフォンでLoginから初回投稿完了まで到達できることを追加する。
 
+### Phase 7-C: Adaptive Content Assistance
+
+状態: 設計中。詳細は`ADAPTIVE_CONTENT_ASSISTANCE_PLAN.md`を正本とする。
+
+SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要とする支援量で今日のMissionを実行できるようにする。
+
+- `IDEA_ONLY | GUIDED | READY_TO_USE`の作成支援レベル
+- SocialProfileの初期値とDailyMissionのsnapshot
+- SNS別投稿セットと自動選択Domain Policy
+- 企画、作り方、完成版の段階表示
+- 画像・動画を作るための指示文を含む形式別コピー
+- 投稿本文や指示文をPushしないLINE安全要約
+- 支援レベル別Funnel、投稿完了率、AI使用量・見積原価
+
+第1段階は既存のMissionContent必須1対1aggregateとatomic生成を維持し、表示と行動計測を段階化する。AIの段階生成は利用実績と原価を確認した後の独立判断とし、画像・動画本体生成、SNS自動投稿、管理画面からの本番Prompt自由編集を含めない。
+
 ## Phase 8: Share / Referral / Segmentation Preparation
 
 FREE継続率を確認してから着手する。
