@@ -812,3 +812,19 @@
 - 決定: `DATABASE_URL`、`SESSION_SECRET`、`ENCRYPTION_KEY`、`CRON_SECRET`等の起動・復号に必要な秘密値は環境変数に残す。
 - 理由: 日常運用の再配備依存を減らしながら、管理画面侵害だけで暗号化親鍵と全秘密情報が同時に失われる構造を避けるため。
 - 詳細: `docs/OPERATIONS_ADMIN_CONSOLE_PLAN.md`
+
+## D-070: SNS・投稿方法とBUNSHINの作成支援レベルを分離する
+
+- 日付: 2026-08-23
+- 状態: Proposed / 人間レビュー待ち
+- Separation: 投稿先は既存`SocialPlatform`、投稿方法は既存`SocialPreferredFormat`、BUNSHINが作る範囲は新しい`ContentAssistanceLevel`として分離する。
+- Levels: `IDEA_ONLY | GUIDED | READY_TO_USE`の3段階とし、画面では「企画だけ」「作り方まで」「そのまま使えるもの」のやさしい日本語を使う。
+- Default: 初回の推奨は`READY_TO_USE`とするが強制せず、SocialProfileの初期値と当日Missionの選択を分ける。
+- Recipe: SNS別に必要な成果物一式を投稿セットとして定義し、facePolicy、声、作業時間、外部AI利用可否、最近の形式、採用・不採用を入力として実行可能な形式を選ぶ。
+- Persistence: SocialProfileへ初期値、DailyMissionへ生成時snapshotを持たせる案をPR 2前に人間確認する。別Workspace、User、Bunshin、SocialProfileの値を利用しない。
+- Migration: 第1段階は既存MissionContent必須1対1aggregateと品質合格後のatomic保存を維持し、企画・作り方・完成版のView ModelとActivityを追加する。
+- Cost: 企画から完成版への段階生成は、第1段階の利用率とAI原価を確認した後にPersistence、version、Quality Check、同時生成を独立再設計する。
+- LINE: SNS、やさしい形式名、目安時間、短いテーマ、短期Deep Linkだけを通知候補とし、投稿本文、画像・動画の指示文、Knowledge、MemoryをPush・Job・logへ複製しない。
+- Admin: 初期はSNS別ルールと支援レベル指標を読み取り専用にし、本番Promptや生成ルールの自由編集はversion、テスト、承認、rollback、Auditが揃うまで実装しない。
+- Scope: 画像・動画本体生成、SNS自動投稿、LINE上だけでのMission完結、課金、Memory自動学習は含めない。
+- 詳細: `docs/ADAPTIVE_CONTENT_ASSISTANCE_PLAN.md`
