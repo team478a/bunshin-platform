@@ -208,12 +208,13 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 
 ### Phase 7-D: Evidence-based Trend Research
 
-状態: 設計提案。Core / Provider / Job / UIは未実装。詳細は`TREND_RESEARCH_DELIVERY_PLAN.md`を正本とする。
+状態: Core Persistence完了。Provider / Job / UIは未実装。詳細は`TREND_RESEARCH_DELIVERY_PLAN.md`を正本とする。
 
 - 「バズ保証」ではなく、最新情報を調べた利用者向け動画企画を提供する
 - 初期FREE検証は週1回、最大3候補を基本とする
 - `TrendResearchPort`と交換可能なProvider Adapter
 - Evidence、取得日時、有効期限、適合理由を持つ候補
+- Research Run / Evidence / Candidate Core Persistence — 完了
 - Workspace / User / Bunshin isolationとquery最小化
 - 週次冪等Job、quota、原価、期限切れ、通常Mission fallback
 - Mission画面の出典表示とLINE安全要約

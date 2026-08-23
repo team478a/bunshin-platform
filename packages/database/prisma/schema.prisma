@@ -358,6 +358,38 @@ enum ContentAssistanceLevel {
   READY_TO_USE
 }
 
+enum TrendResearchRunStatus {
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum TrendEvidenceSourceType {
+  OFFICIAL_API
+  PUBLIC_WEB
+  NEWS
+  OTHER
+}
+
+enum TrendEvidenceStatus {
+  ACTIVE
+  EXPIRED
+  REJECTED
+}
+
+enum TrendIdeaCandidateStatus {
+  PROPOSED
+  SELECTED
+  REJECTED
+  EXPIRED
+}
+
+enum TrendSafetyStatus {
+  SAFE
+  REVIEW_REQUIRED
+  REJECTED
+}
+
 model User {
   id                          String                          @id @default(uuid()) @db.Uuid
   status                      UserStatus                      @default(ACTIVE)
@@ -437,6 +469,9 @@ model Workspace {
   jobs                        Job[]
   lineMessageDeliveries       LineMessageDelivery[]
   missionDeepLinkStates       MissionDeepLinkState[]
+  trendResearchRuns           TrendResearchRun[]
+  trendEvidence               TrendEvidence[]
+  trendIdeaCandidates         TrendIdeaCandidate[]
 
   @@index([status])
   @@map("workspaces")
@@ -705,6 +740,9 @@ model Bunshin {
   jobs                        Job[]
   lineMessageDeliveries       LineMessageDelivery[]
   missionDeepLinkStates       MissionDeepLinkState[]
+  trendResearchRuns           TrendResearchRun[]
+  trendEvidence               TrendEvidence[]
+  trendIdeaCandidates         TrendIdeaCandidate[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -879,6 +917,8 @@ model SocialProfile {
   bunshin                Bunshin                 @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   dailyMissions          DailyMission[]
   accountStrategies      SocialAccountStrategy[]
+  trendResearchRuns      TrendResearchRun[]
+  trendIdeaCandidates    TrendIdeaCandidate[]
 
   @@unique([workspaceId, bunshinId, platform])
   @@unique([workspaceId, bunshinId, id])
@@ -916,6 +956,102 @@ model SocialAccountStrategy {
   @@unique([socialProfileId, version])
   @@index([workspaceId, bunshinId, socialProfileId, status, version])
   @@map("social_account_strategies")
+}
+
+model TrendResearchRun {
+  id              String                 @id @default(uuid()) @db.Uuid
+  workspaceId     String                 @map("workspace_id") @db.Uuid
+  bunshinId       String                 @map("bunshin_id") @db.Uuid
+  socialProfileId String                 @map("social_profile_id") @db.Uuid
+  periodStart     DateTime               @map("period_start") @db.Date
+  periodEnd       DateTime               @map("period_end") @db.Date
+  status          TrendResearchRunStatus @default(COMPLETED)
+  queryVersion    String                 @map("query_version") @db.VarChar(120)
+  providerKey     String                 @map("provider_key") @db.VarChar(40)
+  completedAt     DateTime?              @map("completed_at") @db.Timestamptz(6)
+  expiresAt       DateTime               @map("expires_at") @db.Timestamptz(6)
+  failureCategory String?                @map("failure_category") @db.VarChar(80)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin         Bunshin                @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile   SocialProfile          @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  evidence        TrendEvidence[]
+  candidates      TrendIdeaCandidate[]
+
+  @@unique([workspaceId, bunshinId, socialProfileId, periodStart, queryVersion])
+  @@unique([workspaceId, bunshinId, id])
+  @@index([workspaceId, bunshinId, status, expiresAt])
+  @@map("trend_research_runs")
+}
+
+model TrendEvidence {
+  id             String                       @id @default(uuid()) @db.Uuid
+  workspaceId    String                       @map("workspace_id") @db.Uuid
+  bunshinId      String                       @map("bunshin_id") @db.Uuid
+  researchRunId  String                       @map("research_run_id") @db.Uuid
+  sourceType     TrendEvidenceSourceType      @map("source_type")
+  sourceUrl      String                       @map("source_url") @db.VarChar(2048)
+  sourceTitle    String                       @map("source_title") @db.VarChar(500)
+  publishedAt    DateTime?                    @map("published_at") @db.Timestamptz(6)
+  retrievedAt    DateTime                     @map("retrieved_at") @db.Timestamptz(6)
+  summary        String                       @db.VarChar(2000)
+  evidenceHash   String                       @map("evidence_hash") @db.VarChar(64)
+  status         TrendEvidenceStatus          @default(ACTIVE)
+  expiresAt      DateTime                     @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace      Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin                      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  researchRun    TrendResearchRun             @relation(fields: [workspaceId, bunshinId, researchRunId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  candidateLinks TrendIdeaCandidateEvidence[]
+
+  @@unique([researchRunId, evidenceHash])
+  @@unique([workspaceId, bunshinId, id])
+  @@index([workspaceId, bunshinId, status, expiresAt])
+  @@map("trend_evidence")
+}
+
+model TrendIdeaCandidate {
+  id               String                       @id @default(uuid()) @db.Uuid
+  workspaceId      String                       @map("workspace_id") @db.Uuid
+  bunshinId        String                       @map("bunshin_id") @db.Uuid
+  socialProfileId  String                       @map("social_profile_id") @db.Uuid
+  researchRunId    String                       @map("research_run_id") @db.Uuid
+  platform         SocialPlatform
+  topic            String                       @db.VarChar(200)
+  hook             String                       @db.VarChar(500)
+  whyNow           String                       @map("why_now") @db.VarChar(1000)
+  fitReason        String                       @map("fit_reason") @db.VarChar(1000)
+  suggestedFormat  SocialPreferredFormat        @map("suggested_format")
+  estimatedMinutes Int                          @map("estimated_minutes")
+  freshnessScore   Int                          @map("freshness_score")
+  fitScore         Int                          @map("fit_score")
+  feasibilityScore Int                          @map("feasibility_score")
+  safetyStatus     TrendSafetyStatus            @map("safety_status")
+  status           TrendIdeaCandidateStatus     @default(PROPOSED)
+  expiresAt        DateTime                     @map("expires_at") @db.Timestamptz(6)
+  createdAt        DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin          Bunshin                      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile    SocialProfile                @relation(fields: [workspaceId, bunshinId, socialProfileId, platform], references: [workspaceId, bunshinId, id, platform], onDelete: Restrict)
+  researchRun      TrendResearchRun             @relation(fields: [workspaceId, bunshinId, researchRunId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  evidenceLinks    TrendIdeaCandidateEvidence[]
+
+  @@unique([workspaceId, bunshinId, id])
+  @@index([workspaceId, bunshinId, socialProfileId, status, expiresAt])
+  @@map("trend_idea_candidates")
+}
+
+model TrendIdeaCandidateEvidence {
+  candidateId String             @map("candidate_id") @db.Uuid
+  evidenceId  String             @map("evidence_id") @db.Uuid
+  candidate   TrendIdeaCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  evidence    TrendEvidence      @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, evidenceId])
+  @@index([evidenceId])
+  @@map("trend_idea_candidate_evidence")
 }
 
 model ContentPillar {
