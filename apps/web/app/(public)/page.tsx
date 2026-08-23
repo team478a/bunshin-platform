@@ -1,13 +1,57 @@
+import Link from 'next/link';
+import { PublicShell } from '../ui/public-shell';
+
 export default function HomePage() {
   return (
-    <main>
-      <section className="card">
-        <p className="status">Platform Foundation initialized</p>
-        <h1>BUNSHIN Platform</h1>
-        <p>Phase 1では、WorkspaceとUserの所有境界、開発・運用基盤だけを構築しています。</p>
-        <p>Bunshin、SOCIAL、BLOG、LINE、AIの機能はまだ実装されていません。</p>
-        <a href="/health">稼働状態を確認する</a>
+    <PublicShell>
+      <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="landing-hero__copy">
+          <p className="eyebrow">YOUR AI PLANNING PARTNER</p>
+          <h1 id="landing-title">毎日の発信を、あなたのBUNSHINと。</h1>
+          <p>
+            あなた専用のSNS戦略を考え、今日やることと投稿案を届けます。内容を選んでコピーし、投稿するだけです。
+          </p>
+          <div className="landing-actions">
+            <Link className="button button--primary" href="/login">
+              BUNSHINをはじめる
+            </Link>
+            <a className="button button--secondary" href="#how-it-works">
+              使い方を見る
+            </a>
+          </div>
+          <small>メールリンクでログイン・パスワード不要</small>
+        </div>
+        <div className="landing-visual" aria-hidden="true">
+          <span className="landing-visual__circle landing-visual__circle--one" />
+          <span className="landing-visual__circle landing-visual__circle--two" />
+          <div className="landing-mission-preview">
+            <span>今日のMission</span>
+            <strong>専門知識を1つ、短い言葉で届ける</strong>
+            <small>X ・ TEXT ・ 約5分</small>
+          </div>
+        </div>
       </section>
-    </main>
+      <section className="landing-steps" id="how-it-works" aria-labelledby="steps-title">
+        <p className="eyebrow">HOW IT WORKS</p>
+        <h2 id="steps-title">迷わず発信できる3ステップ</h2>
+        <ol>
+          <li>
+            <span>1</span>
+            <strong>戦略を作る</strong>
+            <p>目的と届けたい相手から、SNSの育て方を整理します。</p>
+          </li>
+          <li>
+            <span>2</span>
+            <strong>今日の案を選ぶ</strong>
+            <p>毎日の具体的な投稿案を確認し、採用する案を選びます。</p>
+          </li>
+          <li>
+            <span>3</span>
+            <strong>コピーして投稿</strong>
+            <p>文章や台本をコピーし、ご自身のSNSへ投稿します。</p>
+          </li>
+        </ol>
+      </section>
+    </PublicShell>
   );
 }
