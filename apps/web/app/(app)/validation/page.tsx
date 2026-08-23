@@ -44,8 +44,8 @@ export default async function ValidationPage({
       </p>
       <header className="validation-header">
         <div>
-          <p className="validation-eyebrow">100-user Validation</p>
-          <h1>FREE MVP 検証指標</h1>
+          <p className="validation-eyebrow">100人での確認</p>
+          <h1>無料版の利用状況</h1>
           <p>{workspace.name}の集計値です。個人情報や投稿内容は表示しません。</p>
         </div>
       </header>
@@ -67,7 +67,7 @@ export default async function ValidationPage({
       ) : null}
 
       <section aria-labelledby="primary-kpi">
-        <h2 id="primary-kpi">最重要KPI</h2>
+        <h2 id="primary-kpi">いちばん大切な数字</h2>
         <div className="validation-primary-card">
           <strong>{percentage(outcomes.threePostsInFirstSevenDaysRate)}</strong>
           <span>登録後7日以内に3回以上投稿したユーザー率</span>
@@ -91,11 +91,11 @@ export default async function ValidationPage({
           </article>
           <article>
             <strong>{percentage(outcomes.goodFeedbackRate)}</strong>
-            <span>GOOD率</span>
+            <span>「自分らしい」と答えた割合</span>
           </article>
           <article>
             <strong>{percentage(outcomes.d7ActiveRate)}</strong>
-            <span>D7 Active率</span>
+            <span>7日後も使っている人の割合</span>
           </article>
           <article>
             <strong>{outcomes.aiCalls}</strong>
@@ -103,7 +103,7 @@ export default async function ValidationPage({
           </article>
           <article>
             <strong>{outcomes.aiInputTokens + outcomes.aiOutputTokens}</strong>
-            <span>AI token合計</span>
+            <span>AIが読み書きした量</span>
           </article>
           <article>
             <strong>{outcomes.aiFailedCalls}</strong>
@@ -120,7 +120,7 @@ export default async function ValidationPage({
       </section>
 
       <section aria-labelledby="funnel-heading">
-        <h2 id="funnel-heading">ファネル</h2>
+        <h2 id="funnel-heading">登録してから投稿するまで</h2>
         <div className="validation-table-wrap">
           <table className="validation-table">
             <thead>

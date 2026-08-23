@@ -6,7 +6,7 @@ export default function HomePage() {
     <PublicShell>
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__copy">
-          <p className="eyebrow">YOUR AI PLANNING PARTNER</p>
+          <p className="eyebrow">あなたのための企画担当</p>
           <h1 id="landing-title">毎日の発信を、あなたのBUNSHINと。</h1>
           <p>
             あなた専用のSNS戦略を考え、今日やることと投稿案を届けます。内容を選んでコピーし、投稿するだけです。
@@ -25,14 +25,14 @@ export default function HomePage() {
           <span className="landing-visual__circle landing-visual__circle--one" />
           <span className="landing-visual__circle landing-visual__circle--two" />
           <div className="landing-mission-preview">
-            <span>今日のMission</span>
+            <span>今日やること</span>
             <strong>専門知識を1つ、短い言葉で届ける</strong>
-            <small>X ・ TEXT ・ 約5分</small>
+            <small>X ・ 文章 ・ 約5分</small>
           </div>
         </div>
       </section>
       <section className="landing-steps" id="how-it-works" aria-labelledby="steps-title">
-        <p className="eyebrow">HOW IT WORKS</p>
+        <p className="eyebrow">使い方</p>
         <h2 id="steps-title">迷わず発信できる3ステップ</h2>
         <ol>
           <li>

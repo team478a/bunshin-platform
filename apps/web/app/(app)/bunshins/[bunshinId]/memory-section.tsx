@@ -16,6 +16,17 @@ const memoryTypes = [
   'PERFORMANCE_INSIGHT',
 ] as const;
 
+const memoryTypeLabels: Record<BunshinMemoryType, string> = {
+  BELIEF: '大切にしている考え',
+  EXPERIENCE: 'これまでの経験',
+  KNOWLEDGE: '知っていること',
+  STORY: '伝えたい話',
+  FAQ: 'よくある質問と答え',
+  OPINION: '自分の意見',
+  PREFERENCE: '好きなこと・苦手なこと',
+  PERFORMANCE_INSIGHT: 'うまくいったこと',
+};
+
 export interface MemoryView {
   id: string;
   type: BunshinMemoryType;
@@ -58,9 +69,10 @@ export function MemorySection({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(form),
     });
-    if (!response.ok) return setMessage('Memoryを作成できませんでした。入力内容をご確認ください。');
+    if (!response.ok)
+      return setMessage('覚える内容を保存できませんでした。入力を確認してください。');
     setForm(initialForm);
-    setMessage('Memoryを作成しました。');
+    setMessage('BUNSHINが新しく覚えました。');
     router.refresh();
   }
 
@@ -77,7 +89,7 @@ export function MemorySection({
         importance: memory.importance,
       }),
     });
-    setMessage(response.ok ? 'Memoryを更新しました。' : 'Memoryを更新できませんでした。');
+    setMessage(response.ok ? '覚えている内容を保存しました。' : '内容を保存できませんでした。');
     if (response.ok) router.refresh();
   }
 
@@ -89,26 +101,24 @@ export function MemorySection({
       headers: { 'content-type': 'application/json' },
       body: '{}',
     });
-    setMessage(
-      response.ok ? 'Memoryの状態を変更しました。' : 'Memoryの状態を変更できませんでした。',
-    );
+    setMessage(response.ok ? '使う内容を変えました。' : '変更できませんでした。');
     if (response.ok) router.refresh();
   }
 
   async function remove(memory: MemoryView) {
-    if (!window.confirm('このMemoryを削除しますか？削除後は復元できません。')) return;
+    if (!window.confirm('この内容を忘れさせますか？後から元に戻すことはできません。')) return;
     setMessage(null);
     const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}`, {
       method: 'DELETE',
     });
-    setMessage(response.ok ? 'Memoryを削除しました。' : 'Memoryを削除できませんでした。');
+    setMessage(response.ok ? 'この内容を忘れました。' : '削除できませんでした。');
     if (response.ok) router.refresh();
   }
 
   return (
     <section className="memory-section">
-      <h2>Memory</h2>
-      <p>Bunshinだけが利用する経験・考え・好みを手動で登録します。</p>
+      <h2>BUNSHINが覚えていること</h2>
+      <p>あなたの経験や考え、好きなことを教えると、BUNSHINが回答や投稿作りに使います。</p>
       <form
         className="memory-form"
         onSubmit={(event) => {
@@ -125,7 +135,7 @@ export function MemorySection({
           >
             {memoryTypes.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {memoryTypeLabels[type]}
               </option>
             ))}
           </select>
@@ -148,7 +158,7 @@ export function MemorySection({
           />
         </label>
         <label>
-          確信度（0〜1）
+          どのくらい確かな内容ですか？（0〜1）
           <input
             type="number"
             min="0"
@@ -169,7 +179,7 @@ export function MemorySection({
             onChange={(event) => setForm({ ...form, importance: Number(event.target.value) })}
           />
         </label>
-        <button type="submit">Memoryを追加</button>
+        <button type="submit">BUNSHINに覚えてもらう</button>
       </form>
 
       <div className="memory-tabs">
@@ -182,7 +192,7 @@ export function MemorySection({
       </div>
       {message ? <p role="status">{message}</p> : null}
       {visible.length === 0 ? (
-        <p>{showInactive ? '無効なMemoryはありません。' : '有効なMemoryはありません。'}</p>
+        <p>{showInactive ? 'お休み中の内容はありません。' : '覚えている内容はまだありません。'}</p>
       ) : (
         <ul className="memory-list">
           {visible.map((memory) => (
@@ -224,7 +234,7 @@ function MemoryItem({
         >
           {memoryTypes.map((type) => (
             <option key={type} value={type}>
-              {type}
+              {memoryTypeLabels[type]}
             </option>
           ))}
         </select>

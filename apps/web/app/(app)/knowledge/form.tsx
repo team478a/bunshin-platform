@@ -10,6 +10,16 @@ export function KnowledgeForm({
   workspaceId: string;
   item?: { id: string; type: string; title: string; content: string };
 }) {
+  const typeLabels: Record<string, string> = {
+    PROFILE: '自分や会社の紹介',
+    EXPERIENCE: 'これまでの経験',
+    SKILL: 'できること・得意なこと',
+    PRODUCT: '商品やサービス',
+    FAQ: 'よくある質問と答え',
+    CASE: 'これまでの事例',
+    ASSET: '持っている資料',
+    OTHER: 'その他',
+  };
   const router = useRouter();
   const [form, setForm] = useState({
     type: item?.type ?? 'PROFILE',
@@ -41,7 +51,7 @@ export function KnowledgeForm({
   }
   return (
     <main>
-      <h1>{item ? 'Knowledge編集' : 'Knowledge作成'}</h1>
+      <h1>{item ? '教えた内容を直す' : 'BUNSHINに新しく教える'}</h1>
       <form
         onSubmit={(event) => {
           void save(event);
@@ -52,7 +62,9 @@ export function KnowledgeForm({
           <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
             {['PROFILE', 'EXPERIENCE', 'SKILL', 'PRODUCT', 'FAQ', 'CASE', 'ASSET', 'OTHER'].map(
               (value) => (
-                <option key={value}>{value}</option>
+                <option key={value} value={value}>
+                  {typeLabels[value]}
+                </option>
               ),
             )}
           </select>
@@ -84,7 +96,7 @@ export function KnowledgeForm({
             void archive();
           }}
         >
-          アーカイブ
+          使わないようにする
         </button>
       )}
     </main>

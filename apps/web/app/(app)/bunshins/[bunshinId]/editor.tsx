@@ -77,7 +77,7 @@ export function BunshinEditor({
   return (
     <main className="app-page bunshin-detail-page">
       <header className="bunshin-detail-header">
-        <p className="eyebrow">YOUR BUNSHIN</p>
+        <p className="eyebrow">あなたのBUNSHIN</p>
         <h1>{bunshin.name}</h1>
       </header>
       <section id="daily-mission">
@@ -222,16 +222,16 @@ export function BunshinEditor({
           </span>
           <span>
             <h2>知識</h2>
-            <p>利用するKnowledgeとBUNSHINの記憶</p>
+            <p>BUNSHINに教えることと、覚えていること</p>
           </span>
         </header>
         <details className="settings-disclosure">
           <summary>知識と記憶を確認・編集</summary>
           <div className="settings-disclosure__content">
             <section>
-              <h2>利用するKnowledge</h2>
+              <h2>BUNSHINに教えること</h2>
               {knowledge.length === 0 ? (
-                <p>利用可能なKnowledgeはありません。</p>
+                <p>教えられる内容はまだありません。</p>
               ) : (
                 <ul className="knowledge-grant-list">
                   {knowledge.map((item) => (

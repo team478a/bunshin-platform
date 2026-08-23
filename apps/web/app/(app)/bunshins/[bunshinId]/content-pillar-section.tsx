@@ -53,7 +53,7 @@ function PillarForm({
         />
       </label>
       <label>
-        相対的な優先度（合計100でなくてよい）
+        このテーマをどのくらい多く使いますか？（1〜100）
         <input
           required
           type="number"
@@ -106,8 +106,8 @@ export function ContentPillarSection({
       });
       setMessage(
         response.ok
-          ? 'Content Pillarを更新しました。'
-          : 'Content Pillarを更新できませんでした。入力内容とSOCIALの状態を確認してください。',
+          ? '投稿テーマを保存しました。'
+          : '投稿テーマを保存できませんでした。入力した内容を確認してください。',
       );
       if (response.ok) {
         setEditing(null);
@@ -120,16 +120,11 @@ export function ContentPillarSection({
 
   return (
     <section className="content-pillar-section">
-      <h2>Content Pillar</h2>
-      <p>発信テーマと相対的な優先度を手動管理します。AI生成と計画作成は後続Phaseです。</p>
-      {capabilityStatus === null ? <p>先にSOCIALを割り当ててください。</p> : null}
-      {readonly ? (
-        <p>
-          SOCIALが{capabilityStatus === 'LOCKED' ? 'ロック中' : '停止中'}
-          のため、現在は参照のみ可能です。
-        </p>
-      ) : null}
-      {pillars.length === 0 ? <p>Content Pillarはまだありません。</p> : null}
+      <h2>投稿するテーマ</h2>
+      <p>よく投稿したい話題を登録します。数字が大きいテーマほど、たくさん使います。</p>
+      {capabilityStatus === null ? <p>先に「SNSのお手伝いをはじめる」を押してください。</p> : null}
+      {readonly ? <p>今はテーマを見ることだけできます。内容を変えることはできません。</p> : null}
+      {pillars.length === 0 ? <p>投稿するテーマはまだありません。</p> : null}
       <ul className="content-pillar-list">
         {pillars.map((pillar) => (
           <li className="content-pillar-card" key={pillar.id}>
@@ -146,7 +141,7 @@ export function ContentPillarSection({
                   {pillar.title} <small>{pillar.active ? '有効' : '停止'}</small>
                 </h3>
                 {pillar.description ? <p>{pillar.description}</p> : null}
-                <p>優先度: {pillar.weight}</p>
+                <p>使う多さ：{pillar.weight}</p>
                 {!readonly && capabilityStatus === 'ACTIVE' ? (
                   <div className="content-pillar-actions">
                     <button disabled={pending} type="button" onClick={() => setEditing(pillar.id)}>
@@ -163,7 +158,7 @@ export function ContentPillarSection({
                         )
                       }
                     >
-                      {pillar.active ? '停止する' : '再有効化する'}
+                      {pillar.active ? 'お休みにする' : 'もう一度使う'}
                     </button>
                     <button
                       disabled={pending}
@@ -184,7 +179,7 @@ export function ContentPillarSection({
       </ul>
       {capabilityStatus === 'ACTIVE' && editing === null ? (
         <button type="button" disabled={pending} onClick={() => setEditing('NEW')}>
-          Pillarを追加
+          投稿テーマを追加
         </button>
       ) : null}
       {editing === 'NEW' ? (

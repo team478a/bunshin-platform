@@ -20,6 +20,15 @@ export type DailyMissionView = {
   feedback: 'GOOD' | 'NEUTRAL' | 'BAD' | null;
 };
 
+const platformLabels: Record<NonNullable<DailyMissionView['platform']>, string> = {
+  INSTAGRAM: 'インスタグラム',
+  TIKTOK: 'ティックトック',
+  X: 'X（旧ツイッター）',
+  THREADS: 'スレッズ',
+  YOUTUBE_SHORTS: 'ユーチューブ ショート',
+  OTHER: 'その他',
+};
+
 function text(value: unknown) {
   return typeof value === 'string' ? value : null;
 }
@@ -79,7 +88,7 @@ function MissionContent({ mission }: { mission: DailyMissionView }) {
   if (mission.format === 'AI_VIDEO_PROMPT') {
     return (
       <div>
-        <p>動画生成Prompt:</p>
+        <p>AI動画を作るための説明：</p>
         <p>{text(content['prompt'])}</p>
         {text(content['caption']) && <p>投稿文: {text(content['caption'])}</p>}
       </div>
@@ -132,7 +141,7 @@ export function copyOptions(mission: DailyMissionView) {
   if (mission.format === 'AI_VIDEO_PROMPT') {
     return [
       {
-        label: '動画生成Promptをコピー',
+        label: 'AI動画を作るための説明をコピー',
         value: text(content['prompt']),
         type: 'COPIED_VIDEO_PROMPT' as const,
       },
@@ -209,8 +218,8 @@ export function DailyMissionSection({
               : code === 'AI_PROVIDER_UNAVAILABLE'
                 ? '生成サービスへ接続できませんでした。時間をおいて再度お試しください。'
                 : response.status === 409
-                  ? 'この日付のMissionは既に作成中、または作成済みです。'
-                  : 'Missionを生成できませんでした。承認済み戦略と確定済み週間計画を確認してください。',
+                  ? 'この日の投稿案は、すでに作成中か作成済みです。'
+                  : '投稿案を作れませんでした。SNSの進め方と1週間の予定を確認してください。',
         );
         return;
       }
@@ -231,7 +240,7 @@ export function DailyMissionSection({
         body: '{}',
       });
       if (!response.ok) {
-        setError('Missionを更新できませんでした。状態を確認して再度お試しください。');
+        setError('今日やることを更新できませんでした。もう一度お試しください。');
         return false;
       }
       router.refresh();
@@ -314,7 +323,7 @@ export function DailyMissionSection({
   }
   async function markPosted(mission: DailyMissionView) {
     if (!mission.platform) {
-      setError('投稿先SNSがMissionに設定されていません。');
+      setError('どのSNSに投稿するか決まっていません。');
       return;
     }
     setError(null);
@@ -333,7 +342,7 @@ export function DailyMissionSection({
   return (
     <section className="mission-experience">
       <header className="mission-experience__header">
-        <p className="eyebrow">TODAY'S MISSION</p>
+        <p className="eyebrow">今日のおすすめ</p>
         <h2>今日やること</h2>
         <p>投稿案を確認して、使いたいものを選びましょう。</p>
       </header>
@@ -356,7 +365,7 @@ export function DailyMissionSection({
             >
               {activeProfiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>
-                  {profile.platform}
+                  {platformLabels[profile.platform]}
                 </option>
               ))}
             </select>
@@ -371,9 +380,9 @@ export function DailyMissionSection({
             }
             onClick={() => void generate()}
           >
-            {generating ? '生成中…' : '今日のMissionをAIで作成'}
+            {generating ? '考えています…' : '今日の投稿案を作る'}
           </button>
-          {activeProfiles.length === 0 && <p>有効なSNS Profileが必要です。</p>}
+          {activeProfiles.length === 0 && <p>先に、使いたいSNSを登録してください。</p>}
         </div>
       )}
       {pendingAction && (
@@ -388,7 +397,7 @@ export function DailyMissionSection({
       )}
       {missions.length === 0 ? (
         <div className="mission-empty">
-          <strong>今日のMissionはまだありません</strong>
+          <strong>今日の投稿案はまだありません</strong>
           <p>SNS設定と週間計画を準備すると、投稿案を作成できます。</p>
         </div>
       ) : (
@@ -399,8 +408,18 @@ export function DailyMissionSection({
                 {mission.missionDate} — {mission.topic}
               </h3>
               <div className="mission-meta">
-                <span>{mission.platform ?? 'SNS'}</span>
-                <span>{mission.format}</span>
+                <span>{mission.platform ? platformLabels[mission.platform] : 'SNS'}</span>
+                <span>
+                  {mission.format === 'TEXT'
+                    ? '文章'
+                    : mission.format === 'SLIDE'
+                      ? 'スライド'
+                      : mission.format === 'IMAGE'
+                        ? '画像'
+                        : mission.format === 'LIVE_ACTION'
+                          ? '自分で撮る動画'
+                          : 'AI動画の作り方'}
+                </span>
                 <span>約{mission.estimatedMinutes}分</span>
               </div>
               <p className="mission-reason">{mission.reason}</p>
@@ -519,7 +538,7 @@ export function DailyMissionSection({
                             投稿しました
                           </button>
                           {mission.platform === null && (
-                            <p>投稿完了を記録するにはSNS Profileの関連付けが必要です。</p>
+                            <p>投稿したことを記録するには、使うSNSを先に決めてください。</p>
                           )}
                         </div>
                       ) : (

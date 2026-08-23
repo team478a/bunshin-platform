@@ -14,7 +14,7 @@ export default async function AccountPage() {
   return (
     <main className="app-page account-page">
       <header className="app-page__heading">
-        <p className="eyebrow">PROFILE</p>
+        <p className="eyebrow">アカウント</p>
         <h1>アカウント</h1>
         <p>利用情報や通知、セキュリティに関する設定を確認できます。</p>
       </header>

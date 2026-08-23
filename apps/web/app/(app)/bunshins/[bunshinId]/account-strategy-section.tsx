@@ -19,6 +19,41 @@ export interface StrategyView {
   version: number;
   status: SocialAccountStrategyStatus;
 }
+const goalLabels: Record<SocialAccountStrategyGoal, string> = {
+  FOLLOWERS: '見てくれる人を増やす',
+  LINE_REGISTRATION: 'LINEに登録してもらう',
+  INQUIRY: '問い合わせを増やす',
+  SALES: '商品を買ってもらう',
+  RECRUIT: 'いっしょに働く人を探す',
+  BRAND_AWARENESS: '名前や活動を知ってもらう',
+  BLOG_TRAFFIC: 'ブログを読んでもらう',
+  OTHER: 'その他',
+};
+const destinationLabels: Record<SocialAccountStrategyDestination, string> = {
+  PROFILE: 'SNSの自己紹介ページ',
+  LINE: 'LINE',
+  LP: '案内ページ',
+  BLOG: 'ブログ',
+  EC: 'ネットショップ',
+  INQUIRY: '問い合わせページ',
+  RECRUIT_PAGE: '求人ページ',
+  NONE: '特になし',
+  OTHER: 'その他',
+};
+const strategyStatusLabels: Record<SocialAccountStrategyStatus, string> = {
+  DRAFT: '作成中',
+  PROPOSED: '確認待ち',
+  APPROVED: '決定済み',
+  SUPERSEDED: '古い案',
+};
+const platformLabels: Record<SocialPlatform, string> = {
+  INSTAGRAM: 'インスタグラム',
+  TIKTOK: 'ティックトック',
+  X: 'X（旧ツイッター）',
+  THREADS: 'スレッズ',
+  YOUTUBE_SHORTS: 'ユーチューブ ショート',
+  OTHER: 'その他',
+};
 export function AccountStrategySection({
   workspaceId,
   bunshinId,
@@ -86,10 +121,8 @@ export function AccountStrategySection({
   }
   return (
     <section>
-      <h2>SNSアカウント戦略</h2>
-      <p>
-        最大7問で運用方針を作成します。顔・声の方針と雰囲気の正本は既存Bunshin設定を利用し、ここで二重管理しません。
-      </p>
+      <h2>SNSで何を伝えるか決める</h2>
+      <p>短い質問に答えると、BUNSHINがあなたに合う発信の進め方を考えます。</p>
       {active && profiles.length ? (
         <form onSubmit={(e) => void create(e)}>
           <label>
@@ -100,7 +133,7 @@ export function AccountStrategySection({
             >
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.platform}
+                  {platformLabels[p.platform]}
                 </option>
               ))}
             </select>
@@ -130,7 +163,9 @@ export function AccountStrategySection({
               }
             >
               {SOCIAL_ACCOUNT_STRATEGY_GOALS.map((v) => (
-                <option key={v}>{v}</option>
+                <option key={v} value={v}>
+                  {goalLabels[v]}
+                </option>
               ))}
             </select>
           </label>
@@ -150,7 +185,7 @@ export function AccountStrategySection({
             </select>
           </label>
           <label>
-            誘導先
+            投稿を見た人に、次にどこへ行ってほしいですか？
             <select
               value={form.destinationType}
               onChange={(e) =>
@@ -161,11 +196,13 @@ export function AccountStrategySection({
               }
             >
               {SOCIAL_ACCOUNT_STRATEGY_DESTINATIONS.map((v) => (
-                <option key={v}>{v}</option>
+                <option key={v} value={v}>
+                  {destinationLabels[v]}
+                </option>
               ))}
             </select>
           </label>
-          <button disabled={pending}>戦略案を作成</button>
+          <button disabled={pending}>発信の進め方を考えてもらう</button>
         </form>
       ) : (
         <p>先に「SNSのお手伝い」を始めて、使いたいSNSを決めてください。</p>
@@ -174,14 +211,14 @@ export function AccountStrategySection({
         {strategies.map((s) => (
           <li key={s.id}>
             <strong>
-              {s.platform} v{s.version} / {s.status}
+              {platformLabels[s.platform]}・第{s.version}案・{strategyStatusLabels[s.status]}
             </strong>
             <p>
               {s.concept} — {s.targetSummary}
             </p>
             {s.status !== 'APPROVED' && s.status !== 'SUPERSEDED' && active ? (
               <button disabled={pending} onClick={() => void approve(s.id)}>
-                この戦略を承認
+                この進め方に決める
               </button>
             ) : null}
           </li>

@@ -68,7 +68,7 @@ export default async function LineConfigurationPage({
       <main>
         <h1>LINE設定管理</h1>
         <p>対象環境: {environment}</p>
-        <p>秘密値は保存後に再表示されません。Production変更には理由が必要です。</p>
+        <p>秘密の値は保存後に再表示されません。本番設定の変更には理由が必要です。</p>
         <section aria-labelledby="line-operations-heading">
           <h2 id="line-operations-heading">配信状況</h2>
           <p>
@@ -81,11 +81,11 @@ export default async function LineConfigurationPage({
             {metrics.deliveries.cancelled}
           </p>
           <p>
-            再試行待ち {metrics.jobs.retryScheduled} / Dead Job {metrics.jobs.dead}
+            再試行待ち {metrics.jobs.retryScheduled} / 再実行できない処理 {metrics.jobs.dead}
           </p>
           <p>
-            設定: {metrics.configuration.active ? 'ACTIVE' : '未設定'} / 接続確認:{' '}
-            {metrics.configuration.verified ? 'OK' : '未確認・エラー'} / 全体停止:{' '}
+            設定: {metrics.configuration.active ? '使用中' : '未設定'} / 接続確認:{' '}
+            {metrics.configuration.verified ? '確認済み' : '未確認・エラー'} / 全体停止:{' '}
             {metrics.configuration.globallyPaused ? '停止中' : '稼働'}
           </p>
           {metrics.failures.length > 0 && (
@@ -99,7 +99,7 @@ export default async function LineConfigurationPage({
           )}
         </section>
         <section aria-labelledby="line-funnel-heading">
-          <h2 id="line-funnel-heading">LINE Funnel</h2>
+          <h2 id="line-funnel-heading">LINEを見てから投稿するまで</h2>
           <form method="get">
             <label>
               開始日 <input type="date" name="from" defaultValue={period.fromInput} />
@@ -127,7 +127,7 @@ export default async function LineConfigurationPage({
                 <td>{funnel.cohort.sentUsers}</td>
               </tr>
               <tr>
-                <td>Missionを開いた</td>
+                <td>今日やることを開いた</td>
                 <td>{funnel.stages.openedUsers}</td>
               </tr>
               <tr>
@@ -145,7 +145,7 @@ export default async function LineConfigurationPage({
             </tbody>
           </table>
           <p>
-            送信 {funnel.cohort.sentMessages}件 / Open率 {percentage(funnel.rates.openRate)} /
+            送信 {funnel.cohort.sentMessages}件 / 開いた割合 {percentage(funnel.rates.openRate)} /
             通知→投稿完了率 {percentage(funnel.rates.notificationToPostRate)} / 解除・ブロック相当率{' '}
             {percentage(funnel.rates.unfollowRate)}
           </p>
