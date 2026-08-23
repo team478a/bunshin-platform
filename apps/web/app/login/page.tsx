@@ -12,7 +12,7 @@ export default async function LoginPage({
         <div className="echo-motif" aria-hidden="true" />
         <div className="page-heading page-heading--center">
           <h1 id="login-title">BUNSHINへログイン</h1>
-          <p>メールに届くリンクで、すぐにはじめられます。</p>
+          <p>LINEなら、すぐにはじめられます。</p>
         </div>
         {query.sent === '1' && (
           <div className="notice notice--success" role="status">
@@ -26,6 +26,17 @@ export default async function LoginPage({
             <span>リンクを再送して、最新のメールからもう一度お試しください。</span>
           </div>
         )}
+        <form action="/auth/line" method="post">
+          <button className="button button--line button--full" type="submit">
+            <span className="button__line-mark" aria-hidden="true">
+              LINE
+            </span>
+            LINEでログイン
+          </button>
+        </form>
+        <div className="auth-divider" aria-hidden="true">
+          <span>または</span>
+        </div>
         <form className="form-stack" action="/auth/email" method="post">
           <label className="field" htmlFor="email">
             <span className="field__label">メールアドレス</span>
@@ -41,11 +52,11 @@ export default async function LoginPage({
               required
             />
           </label>
-          <button className="button button--primary button--full" type="submit">
-            ログインリンクを送る
+          <button className="button button--secondary button--full" type="submit">
+            メールでログイン
           </button>
         </form>
-        <p className="auth-panel__help">パスワードの入力は必要ありません。</p>
+        <p className="auth-panel__help">メールログインではパスワードの入力は必要ありません。</p>
       </section>
     </PublicShell>
   );
