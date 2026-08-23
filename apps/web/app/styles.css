@@ -301,7 +301,7 @@ a {
   border-radius: 12px;
   background: white;
 }
-.social-profile-form input:not([type='checkbox']),
+.social-profile-form input:not([type='checkbox']):not([type='radio']),
 .social-profile-form textarea,
 .social-profile-form select {
   box-sizing: border-box;
@@ -319,6 +319,48 @@ a {
   align-items: center;
   gap: 6px;
   margin-right: 14px;
+}
+.assistance-level-fieldset {
+  display: grid;
+  gap: 10px;
+}
+.assistance-level-fieldset > p {
+  margin: 0;
+  color: #667085;
+}
+.assistance-level-options {
+  display: grid;
+  gap: 10px;
+}
+.assistance-level-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #c9d1da;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.assistance-level-option:has(input:checked) {
+  border-color: #5b5ce2;
+  background: #f5f3ff;
+}
+.assistance-level-option > span,
+.assistance-level-option strong {
+  display: grid;
+  gap: 4px;
+}
+.assistance-level-option strong small {
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #3f3fa8;
+  background: #e8e7ff;
+  font-size: 0.75rem;
+}
+.assistance-level-option span span {
+  color: #667085;
+  font-size: 0.9rem;
 }
 .social-profile-actions {
   display: flex;

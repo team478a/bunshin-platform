@@ -1,8 +1,10 @@
 'use client';
 
 import {
+  DEFAULT_CONTENT_ASSISTANCE_LEVEL,
   SOCIAL_PLATFORMS,
   SOCIAL_PREFERRED_FORMATS,
+  type ContentAssistanceLevel,
   type SocialPlatform,
   type SocialPostingFrequency,
   type SocialPreferredFormat,
@@ -20,6 +22,7 @@ export interface SocialProfileView {
   purpose: string;
   postingFrequency: SocialPostingFrequency;
   preferredFormats: SocialPreferredFormat[];
+  defaultAssistanceLevel: ContentAssistanceLevel;
   status: SocialProfileStatus;
 }
 
@@ -32,10 +35,10 @@ const frequencyLabels: Record<SocialPostingFrequency, string> = {
   FLEXIBLE: '柔軟に設定',
 };
 const formatLabels: Record<SocialPreferredFormat, string> = {
-  TEXT: 'テキスト',
-  SLIDE: 'スライド',
-  LIVE_ACTION: '実写',
-  AI_VIDEO_PROMPT: 'AI動画の作り方',
+  TEXT: '文章',
+  SLIDE: 'ページをめくる投稿',
+  LIVE_ACTION: '自分で撮る動画',
+  AI_VIDEO_PROMPT: 'AIで作る動画',
   IMAGE: '画像',
 };
 const platformLabels: Record<SocialPlatform, string> = {
@@ -47,6 +50,40 @@ const platformLabels: Record<SocialPlatform, string> = {
   OTHER: 'その他',
 };
 
+export const assistanceOptions: ReadonlyArray<{
+  value: ContentAssistanceLevel;
+  label: string;
+  description: string;
+  example: string;
+  recommended: boolean;
+}> = [
+  {
+    value: 'IDEA_ONLY',
+    label: '企画だけ教えてほしい',
+    description: '自分で文章や画像を作れる人向けです。',
+    example: '例：今日は「初心者が困りやすいこと」を紹介しましょう。',
+    recommended: false,
+  },
+  {
+    value: 'GUIDED',
+    label: '作り方も教えてほしい',
+    description: '順番や構成を見ながら、自分で仕上げたい人向けです。',
+    example: '例：1枚目は悩み、2枚目は原因、最後は行動の案内にします。',
+    recommended: false,
+  },
+  {
+    value: 'READY_TO_USE',
+    label: 'そのまま使えるものを作ってほしい',
+    description: '文章、台本、画像や動画を作るための指示までBUNSHINが用意します。',
+    example: '例：完成した投稿文や撮影台本をコピーして使えます。',
+    recommended: true,
+  },
+];
+
+export function assistanceLevelLabel(value: ContentAssistanceLevel) {
+  return assistanceOptions.find((option) => option.value === value)?.label ?? '';
+}
+
 type FormState = Omit<SocialProfileView, 'id' | 'status'>;
 const empty: FormState = {
   platform: 'INSTAGRAM',
@@ -55,6 +92,7 @@ const empty: FormState = {
   purpose: '',
   postingFrequency: 'WEEKLY',
   preferredFormats: ['SLIDE'],
+  defaultAssistanceLevel: DEFAULT_CONTENT_ASSISTANCE_LEVEL,
 };
 
 function ProfileForm({
@@ -155,6 +193,31 @@ function ProfileForm({
           </label>
         ))}
       </fieldset>
+      <fieldset className="assistance-level-fieldset">
+        <legend>BUNSHINにどこまで作ってほしいですか？</legend>
+        <p>あとから変えられます。迷ったら「おすすめ」を選んでください。</p>
+        <div className="assistance-level-options">
+          {assistanceOptions.map((option) => (
+            <label className="assistance-level-option" key={option.value}>
+              <input
+                type="radio"
+                name="defaultAssistanceLevel"
+                value={option.value}
+                checked={form.defaultAssistanceLevel === option.value}
+                onChange={() => setForm({ ...form, defaultAssistanceLevel: option.value })}
+              />
+              <span>
+                <strong>
+                  {option.label}
+                  {option.recommended ? <small>おすすめ</small> : null}
+                </strong>
+                <span>{option.description}</span>
+                <span>{option.example}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div className="social-profile-actions">
         <button disabled={pending || form.preferredFormats.length === 0} type="submit">
           保存
@@ -248,6 +311,9 @@ export function SocialProfileSection({
                 <p>
                   投稿の形：
                   {profile.preferredFormats.map((value) => formatLabels[value]).join('、')}
+                </p>
+                <p>
+                  BUNSHINにお願いすること：{assistanceLevelLabel(profile.defaultAssistanceLevel)}
                 </p>
                 {!readonly && capabilityStatus === 'ACTIVE' ? (
                   <div className="social-profile-actions">

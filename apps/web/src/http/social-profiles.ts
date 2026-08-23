@@ -4,6 +4,7 @@ import {
   CreateSocialProfile,
   DeactivateSocialProfile,
   ListSocialProfiles,
+  CONTENT_ASSISTANCE_LEVELS,
   SOCIAL_PLATFORMS,
   SOCIAL_POSTING_FREQUENCIES,
   SOCIAL_PREFERRED_FORMATS,
@@ -23,6 +24,7 @@ const values = {
   purpose: z.string(),
   postingFrequency: z.enum(SOCIAL_POSTING_FREQUENCIES),
   preferredFormats: z.array(z.enum(SOCIAL_PREFERRED_FORMATS)),
+  defaultAssistanceLevel: z.enum(CONTENT_ASSISTANCE_LEVELS).optional(),
 };
 const createSchema = z.object({ platform: z.enum(SOCIAL_PLATFORMS), ...values }).strict();
 const updateSchema = z
@@ -32,6 +34,7 @@ const updateSchema = z
     purpose: values.purpose.optional(),
     postingFrequency: values.postingFrequency.optional(),
     preferredFormats: values.preferredFormats.optional(),
+    defaultAssistanceLevel: values.defaultAssistanceLevel.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0);
@@ -73,6 +76,7 @@ export const socialProfileDto = (value: SocialProfile) => ({
   purpose: value.purpose,
   postingFrequency: value.postingFrequency,
   preferredFormats: value.preferredFormats,
+  defaultAssistanceLevel: value.defaultAssistanceLevel,
   status: value.status,
   createdAt: value.createdAt.toISOString(),
   updatedAt: value.updatedAt.toISOString(),
@@ -134,6 +138,9 @@ export function createSocialProfileResponse(
           purpose: parsed.data.purpose,
           postingFrequency: parsed.data.postingFrequency,
           preferredFormats: parsed.data.preferredFormats,
+          ...(parsed.data.defaultAssistanceLevel === undefined
+            ? {}
+            : { defaultAssistanceLevel: parsed.data.defaultAssistanceLevel }),
           ...(parsed.data.handle === undefined ? {} : { handle: parsed.data.handle }),
           ...(parsed.data.profileUrl === undefined ? {} : { profileUrl: parsed.data.profileUrl }),
           workspaceId,
@@ -168,6 +175,9 @@ export function updateSocialProfileResponse(
         ...(parsed.data.preferredFormats === undefined
           ? {}
           : { preferredFormats: parsed.data.preferredFormats }),
+        ...(parsed.data.defaultAssistanceLevel === undefined
+          ? {}
+          : { defaultAssistanceLevel: parsed.data.defaultAssistanceLevel }),
         platform: platform(platformValue),
         workspaceId,
         bunshinId,
