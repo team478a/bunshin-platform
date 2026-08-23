@@ -213,6 +213,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - 「バズ保証」ではなく、最新情報を調べた利用者向け動画企画を提供する
 - 初期FREE検証は週1回、最大3候補を基本とする
 - `TrendResearchPort`と交換可能なProvider Adapter
+- Provider比較spike（Exa／Firecrawl共通契約・安全変換・失敗分類）: 完了。本番採用と外部接続は未承認
 - Evidence、取得日時、有効期限、適合理由を持つ候補
 - Research Run / Evidence / Candidate Core Persistence — 完了
 - Workspace / User / Bunshin isolationとquery最小化

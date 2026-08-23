@@ -2411,3 +2411,33 @@ export class ListActiveTrendIdeas {
     return values;
   }
 }
+
+export type TrendSearchFailureCategory =
+  | 'AUTHENTICATION'
+  | 'RATE_LIMIT'
+  | 'QUOTA'
+  | 'TIMEOUT_OR_NETWORK'
+  | 'PROVIDER_ERROR'
+  | 'INVALID_RESPONSE';
+export interface TrendSearchQuery {
+  query: string;
+  language: string;
+  country: string;
+  publishedAfter: Date;
+  maximumResults: number;
+}
+export interface TrendSearchResultItem {
+  url: string;
+  title: string;
+  publishedAt: Date | null;
+  highlights: string[];
+}
+export interface TrendSearchResult {
+  providerKey: string;
+  items: TrendSearchResultItem[];
+  creditsUsed: number | null;
+  latencyMs: number;
+}
+export interface TrendResearchProviderPort {
+  search(input: TrendSearchQuery): Promise<TrendSearchResult>;
+}
