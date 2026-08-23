@@ -828,3 +828,18 @@
 - Admin: 初期はSNS別ルールと支援レベル指標を読み取り専用にし、本番Promptや生成ルールの自由編集はversion、テスト、承認、rollback、Auditが揃うまで実装しない。
 - Scope: 画像・動画本体生成、SNS自動投稿、LINE上だけでのMission完結、課金、Memory自動学習は含めない。
 - 詳細: `docs/ADAPTIVE_CONTENT_ASSISTANCE_PLAN.md`
+
+## D-071: トレンド調査をEvidence付き週次Researchとして開始する
+
+- 日付: 2026-08-24
+- 状態: Proposed
+- Product: 「必ずバズる」と保証せず、「最新情報を調べ、利用者に合う動画企画を提案する」と表現する。
+- Cadence: 初期FREE検証は週1回、SocialProfileごとに最大3候補を作り、毎日のMissionで再利用する。毎日調査は採用率・投稿率・原価確認後の有料候補とする。
+- Provider: Coreは`TrendResearchPort`だけに依存し、Web Search、YouTube Data等をAdapterへ隔離する。Provider採用はspike後に別判断する。
+- Evidence: 候補は出典URL、公開日時、取得日時、短い要約、有効期限、適合理由を持つ。全文、動画、画像、コメント、個人プロフィール、raw responseを保存しない。
+- Isolation: 別Workspace / User / Bunshin、GrantされていないKnowledgeを利用しない。検索queryへ内部ID、個人情報、秘密値、Knowledge全文を含めない。
+- Safety: SNSを無断スクレイピングせず、他者投稿をコピーせず、外部ページ内の命令をPrompt instructionとして扱わない。
+- Failure: Provider障害・期限切れ時は通常Missionへ戻し、古い候補を最新として表示しない。
+- Scope: SNS自動投稿、SNS OAuth、画像・動画本体生成、高度Analytics、課金、自動Memory化を含めない。
+- Gate: FREE頻度、Evidence保持、高リスク領域、Provider予算、出典表示範囲を人間確認してからCore実装へ進む。
+- 詳細: `docs/TREND_RESEARCH_DELIVERY_PLAN.md`、`docs/adr/TREND_RESEARCH_PROVIDER_ADR.md`
