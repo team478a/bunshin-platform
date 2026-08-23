@@ -10,6 +10,12 @@ const navigation = [
   { href: '/account', label: 'アカウント', icon: 'account' },
 ] as const;
 
+const adminNavigation = [
+  { href: '/admin/line', label: 'LINE運用' },
+  { href: '/admin/legal', label: '法務文書' },
+  { href: '/admin/deletions', label: '退会要求' },
+] as const;
+
 export function isNavigationItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -55,7 +61,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         )}
       </header>
-      <div className="app-shell__content">{children}</div>
+      {isAdmin ? (
+        <div className="admin-layout">
+          <aside className="admin-sidebar">
+            <div className="admin-sidebar__heading">
+              <strong>運用管理</strong>
+              <span>管理者専用</span>
+            </div>
+            <nav aria-label="管理画面ナビゲーション">
+              {adminNavigation.map((item) => {
+                const active = isNavigationItemActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={active ? 'is-active' : ''}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <Link className="admin-sidebar__back" href="/bunshins">
+              ← ユーザー画面へ戻る
+            </Link>
+          </aside>
+          <div className="admin-content">{children}</div>
+        </div>
+      ) : (
+        <div className="app-shell__content">{children}</div>
+      )}
       {!isAdmin && (
         <nav className="bottom-navigation" aria-label="メインナビゲーション">
           <div className="bottom-navigation__inner">
