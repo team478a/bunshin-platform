@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   copyOptions,
+  missionAssistanceOptions,
+  missionGuide,
   type DailyMissionView,
 } from '../app/(app)/bunshins/[bunshinId]/daily-mission-section';
 
@@ -13,6 +15,7 @@ function mission(
     missionDate: '2026-08-21',
     status: 'VIEWED',
     format,
+    assistanceLevel: 'READY_TO_USE',
     estimatedMinutes: 5,
     topic: 'topic',
     angle: 'angle',
@@ -28,6 +31,26 @@ function mission(
 }
 
 describe('Daily Mission copy UX', () => {
+  it('shows three plain Japanese assistance choices in increasing order', () => {
+    expect(missionAssistanceOptions.map(({ label }) => label)).toEqual([
+      '企画を見る',
+      '作り方を見る',
+      '完成版を見る',
+    ]);
+  });
+
+  it('builds a safe guide without exposing the finished text', () => {
+    const textMission = mission('TEXT', {
+      body: '完成した投稿本文',
+      threadParts: ['続き1', '続き2'],
+      cta: 'CTA',
+    });
+    const guide = missionGuide(textMission);
+    expect(guide).toHaveLength(3);
+    expect(guide.join(' ')).not.toContain('完成した投稿本文');
+    expect(guide.join(' ')).not.toContain('続き1');
+  });
+
   it('provides a single combined TEXT copy action', () => {
     expect(
       copyOptions(

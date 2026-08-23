@@ -7,6 +7,7 @@ export type DailyMissionView = {
   missionDate: string;
   status: 'GENERATED' | 'VIEWED' | 'STARTED' | 'COMPLETED' | 'SKIPPED' | 'EXPIRED';
   format: 'TEXT' | 'SLIDE' | 'IMAGE' | 'LIVE_ACTION' | 'AI_VIDEO_PROMPT';
+  assistanceLevel: ContentAssistanceLevel;
   estimatedMinutes: number;
   topic: string;
   angle: string;
@@ -19,6 +20,18 @@ export type DailyMissionView = {
   postedAt: string | null;
   feedback: 'GOOD' | 'NEUTRAL' | 'BAD' | null;
 };
+
+export type ContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
+
+export const missionAssistanceOptions = [
+  { value: 'IDEA_ONLY', label: '企画を見る', help: 'テーマと、伝えるポイントを確認します。' },
+  { value: 'GUIDED', label: '作り方を見る', help: '作る順番や進め方も確認します。' },
+  { value: 'READY_TO_USE', label: '完成版を見る', help: 'そのまま使える文章や台本を確認します。' },
+] as const satisfies ReadonlyArray<{
+  value: ContentAssistanceLevel;
+  label: string;
+  help: string;
+}>;
 
 const platformLabels: Record<NonNullable<DailyMissionView['platform']>, string> = {
   INSTAGRAM: 'インスタグラム',
@@ -44,6 +57,83 @@ function strings(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+export function missionGuide(mission: DailyMissionView) {
+  const content = mission.content;
+  if (mission.format === 'TEXT') {
+    const parts = strings(content['threadParts']);
+    return [
+      '最初に、読む人が気になるひと言を書きます。',
+      parts.length > 0
+        ? `次に、話を${parts.length + 1}つに分けて順番に伝えます。`
+        : '次に、いちばん伝えたいことを分かりやすく説明します。',
+      text(content['cta'])
+        ? '最後に、読んだ人にしてほしいことを伝えます。'
+        : '最後に、短いまとめを書きます。',
+    ];
+  }
+  if (mission.format === 'SLIDE') {
+    return records(content['slides']).map((slide, index) => {
+      const headline = text(slide['headline']);
+      return `${index + 1}枚目${headline ? `「${headline}」` : ''}を作ります。`;
+    });
+  }
+  if (mission.format === 'LIVE_ACTION') {
+    const instruction = text(content['shootingInstruction']);
+    const scenes = records(content['script']);
+    return [
+      ...(instruction ? [instruction] : []),
+      scenes.length > 0
+        ? `${scenes.length}つの場面に分けて、上から順番に撮ります。`
+        : '最初・説明・まとめの順番で撮ります。',
+    ];
+  }
+  if (mission.format === 'AI_VIDEO_PROMPT') {
+    return [
+      '最初に、動画で伝えたいことを1つに決めます。',
+      '次に、場面の順番と動画の雰囲気を決めます。',
+      '最後に、完成版の指示文を動画を作るAIへ入れます。',
+    ];
+  }
+  return [
+    '最初に、画像でいちばん伝えたいことを決めます。',
+    '次に、色・配置・画像の中に入れる文字を決めます。',
+    '最後に、完成版の指示文を画像を作るAIや制作サービスへ入れます。',
+  ];
+}
+
+function MissionIdea({ mission }: { mission: DailyMissionView }) {
+  return (
+    <div className="mission-assistance-content">
+      <h4>今日の企画</h4>
+      <p>
+        <strong>テーマ：</strong>
+        {mission.topic}
+      </p>
+      <p>
+        <strong>伝え方：</strong>
+        {mission.angle}
+      </p>
+      <p>
+        <strong>この企画にした理由：</strong>
+        {mission.reason}
+      </p>
+    </div>
+  );
+}
+
+function MissionGuide({ mission }: { mission: DailyMissionView }) {
+  return (
+    <div className="mission-assistance-content">
+      <h4>作り方</h4>
+      <ol>
+        {missionGuide(mission).map((step, index) => (
+          <li key={index}>{step}</li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 function MissionContent({ mission }: { mission: DailyMissionView }) {
@@ -179,6 +269,9 @@ export function DailyMissionSection({
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [assistanceSelections, setAssistanceSelections] = useState<
+    Record<string, ContentAssistanceLevel>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
@@ -455,8 +548,49 @@ export function DailyMissionSection({
               )}
               {expanded === mission.id && (
                 <div className="mission-detail">
-                  <p>狙い: {mission.angle}</p>
-                  <MissionContent mission={mission} />
+                  {(() => {
+                    const selected = assistanceSelections[mission.id] ?? mission.assistanceLevel;
+                    return (
+                      <>
+                        <fieldset className="mission-assistance-picker">
+                          <legend>今日はどこまで見ますか？</legend>
+                          <p>今日だけ変えられます。SNSのいつもの設定は変わりません。</p>
+                          <div>
+                            {missionAssistanceOptions.map((option) => (
+                              <label key={option.value}>
+                                <input
+                                  type="radio"
+                                  name={`assistance-${mission.id}`}
+                                  value={option.value}
+                                  checked={selected === option.value}
+                                  onChange={() =>
+                                    setAssistanceSelections((current) => ({
+                                      ...current,
+                                      [mission.id]: option.value,
+                                    }))
+                                  }
+                                />
+                                <span>
+                                  <strong>{option.label}</strong>
+                                  <small>{option.help}</small>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                        <MissionIdea mission={mission} />
+                        {(selected === 'GUIDED' || selected === 'READY_TO_USE') && (
+                          <MissionGuide mission={mission} />
+                        )}
+                        {selected === 'READY_TO_USE' && (
+                          <div className="mission-assistance-content">
+                            <h4>完成版</h4>
+                            <MissionContent mission={mission} />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   {active && mission.decision !== 'ACCEPTED' && (
                     <div className="mission-decision-actions">
                       <button
@@ -510,24 +644,28 @@ export function DailyMissionSection({
                   {active && mission.decision === 'ACCEPTED' && (
                     <div className="mission-accepted">
                       <p className="mission-step-complete">✓ 採用しました</p>
-                      {copyOptions(mission).map((option, index) => (
-                        <span key={`${option.type}-${index}`}>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              void copy(
-                                mission.id,
-                                option.value,
-                                option.type,
-                                'metadata' in option ? option.metadata : undefined,
-                              )
-                            }
-                          >
-                            {option.label}
-                          </button>{' '}
-                        </span>
-                      ))}
+                      {(assistanceSelections[mission.id] ?? mission.assistanceLevel) !==
+                        'READY_TO_USE' && <p>完成版を見ると、文章や台本をコピーできます。</p>}
+                      {(assistanceSelections[mission.id] ?? mission.assistanceLevel) ===
+                        'READY_TO_USE' &&
+                        copyOptions(mission).map((option, index) => (
+                          <span key={`${option.type}-${index}`}>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void copy(
+                                  mission.id,
+                                  option.value,
+                                  option.type,
+                                  'metadata' in option ? option.metadata : undefined,
+                                )
+                              }
+                            >
+                              {option.label}
+                            </button>{' '}
+                          </span>
+                        ))}
                       {mission.postedAt === null ? (
                         <div className="mission-post-action">
                           <button
