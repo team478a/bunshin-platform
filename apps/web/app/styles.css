@@ -566,6 +566,111 @@ a {
   }
 }
 
+/* AI-assisted Bunshin onboarding */
+.wizard-card > h1 {
+  margin-bottom: 10px;
+  font-size: clamp(1.45rem, 6vw, 1.9rem);
+}
+.onboarding-options {
+  display: grid;
+  gap: 10px;
+}
+.onboarding-options > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 60px;
+  padding: 14px 16px;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: white;
+  cursor: pointer;
+}
+.onboarding-options > button span {
+  font-weight: 750;
+}
+.onboarding-options > button small {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.onboarding-options > button.is-selected {
+  color: var(--color-primary-strong);
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+.onboarding-options > button.is-selected small {
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
+.proposal-grid {
+  display: grid;
+  gap: 14px;
+}
+.proposal-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: white;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+.proposal-card:hover,
+.proposal-card.is-selected {
+  border-color: var(--color-primary);
+}
+.proposal-card.is-selected {
+  background: var(--color-primary-soft);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+.proposal-card__number {
+  color: var(--color-primary-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.proposal-card > strong {
+  font-size: 1.2rem;
+}
+.proposal-card > em {
+  color: var(--color-primary-strong);
+  font-style: normal;
+  font-weight: 700;
+}
+.proposal-card > p {
+  margin: 2px 0 8px;
+  color: var(--color-text-muted);
+}
+.proposal-card__select {
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+.proposal-screen .wizard-actions {
+  flex-wrap: wrap;
+}
+@media (min-width: 800px) {
+  .proposal-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .proposal-card {
+    min-height: 260px;
+  }
+}
+@media (max-width: 560px) {
+  .proposal-screen .wizard-actions {
+    display: grid;
+  }
+  .proposal-screen .wizard-actions .button {
+    width: 100%;
+  }
+}
+
 /* Public landing */
 .landing-hero {
   display: grid;
