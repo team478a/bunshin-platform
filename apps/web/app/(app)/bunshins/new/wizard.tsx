@@ -185,7 +185,7 @@ export function BunshinWizard({ workspaceId }: { workspaceId: string }) {
       </header>
       <section className="proposal-screen">
         <div className="page-heading">
-          <p className="eyebrow">AI PROPOSALS</p>
+          <p className="eyebrow">BUNSHINからの3つの案</p>
           <h1>あなたに合うBUNSHINを3つ考えました</h1>
           <p>一番近いものを選んでください。作成後にも調整できます。</p>
         </div>

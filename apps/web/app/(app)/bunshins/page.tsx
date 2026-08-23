@@ -30,7 +30,7 @@ export default async function BunshinsPage() {
   return (
     <main className="app-page bunshin-home">
       <header className="app-page__heading">
-        <p className="eyebrow">YOUR BUNSHIN</p>
+        <p className="eyebrow">あなたのBUNSHIN</p>
         <h1>BUNSHIN</h1>
         <p>{workspace.name}</p>
       </header>

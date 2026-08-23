@@ -72,7 +72,7 @@ describe('Daily Mission copy UX', () => {
     [
       'AI_VIDEO_PROMPT',
       { prompt: '動画Prompt', caption: '投稿文' },
-      ['動画生成Promptをコピー', '投稿文をコピー'],
+      ['AI動画を作るための説明をコピー', '投稿文をコピー'],
     ],
     [
       'LIVE_ACTION',

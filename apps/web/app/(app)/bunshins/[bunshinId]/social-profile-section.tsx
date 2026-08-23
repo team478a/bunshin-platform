@@ -38,6 +38,14 @@ const formatLabels: Record<SocialPreferredFormat, string> = {
   AI_VIDEO_PROMPT: 'AI動画の作り方',
   IMAGE: '画像',
 };
+const platformLabels: Record<SocialPlatform, string> = {
+  INSTAGRAM: 'インスタグラム',
+  TIKTOK: 'ティックトック',
+  X: 'X（旧ツイッター）',
+  THREADS: 'スレッズ',
+  YOUTUBE_SHORTS: 'ユーチューブ ショート',
+  OTHER: 'その他',
+};
 
 type FormState = Omit<SocialProfileView, 'id' | 'status'>;
 const empty: FormState = {
@@ -87,7 +95,9 @@ function ProfileForm({
           onChange={(event) => setForm({ ...form, platform: event.target.value as SocialPlatform })}
         >
           {(availablePlatforms ?? [form.platform]).map((value) => (
-            <option key={value}>{value}</option>
+            <option key={value} value={value}>
+              {platformLabels[value]}
+            </option>
           ))}
         </select>
       </label>
@@ -203,7 +213,7 @@ export function SocialProfileSection({
   return (
     <section className="social-profile-section">
       <h2>使いたいSNSを決める</h2>
-      <p>InstagramやXなど、どのSNSで、だれに、何を伝えたいかを決めます。</p>
+      <p>インスタグラムやXなど、どのSNSで、だれに、何を伝えたいかを決めます。</p>
       <p>BUNSHINが投稿案を作ります。SNSへの投稿は、あなたが自分で行います。</p>
       {capabilityStatus === null ? (
         <p>まず、上の「SNSのお手伝いをはじめる」を押してください。</p>
@@ -213,7 +223,8 @@ export function SocialProfileSection({
         {profiles.map((profile) => (
           <li className="social-profile-card" key={profile.platform}>
             <h3>
-              {profile.platform} <small>{profile.status === 'ACTIVE' ? '有効' : '停止'}</small>
+              {platformLabels[profile.platform]}{' '}
+              <small>{profile.status === 'ACTIVE' ? '使用中' : 'お休み中'}</small>
             </h3>
             {editing === profile.platform ? (
               <ProfileForm
@@ -258,7 +269,7 @@ export function SocialProfileSection({
                         )
                       }
                     >
-                      {profile.status === 'ACTIVE' ? '停止する' : '再有効化する'}
+                      {profile.status === 'ACTIVE' ? 'お休みにする' : 'もう一度使う'}
                     </button>
                   </div>
                 ) : null}
@@ -269,7 +280,7 @@ export function SocialProfileSection({
       </ul>
       {capabilityStatus === 'ACTIVE' && available.length > 0 && editing === null ? (
         <button type="button" onClick={() => setEditing('NEW')}>
-          Profileを追加
+          使うSNSを追加
         </button>
       ) : null}
       {editing === 'NEW' ? (

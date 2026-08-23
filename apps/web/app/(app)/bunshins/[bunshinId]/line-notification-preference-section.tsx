@@ -39,7 +39,7 @@ export function LineNotificationPreferenceSection(props: {
   return (
     <section>
       <h2>LINE通知設定</h2>
-      <p>LINE連携後に使われる設定です。現在は設定保存のみで、通知はまだ送信されません。</p>
+      <p>LINEとつながった後、何時ごろにお知らせを受け取るか決められます。</p>
       <form onSubmit={(event) => void save(event)}>
         <label>
           <input
@@ -62,7 +62,7 @@ export function LineNotificationPreferenceSection(props: {
             disabled={!value.consentGranted}
             onChange={(event) => setValue({ ...value, enabled: event.target.checked })}
           />
-          Daily Mission通知を有効にする
+          今日やることをLINEで知らせる
         </label>
         <label>
           通知時刻

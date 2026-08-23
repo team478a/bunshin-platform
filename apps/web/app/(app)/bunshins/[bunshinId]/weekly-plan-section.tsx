@@ -7,6 +7,15 @@ import type { SocialCapabilityStatus } from './capability-section';
 import type { ContentPillarView } from './content-pillar-section';
 import type { SocialProfileView } from './social-profile-section';
 
+const platformLabels: Record<SocialProfileView['platform'], string> = {
+  INSTAGRAM: 'インスタグラム',
+  TIKTOK: 'ティックトック',
+  X: 'X（旧ツイッター）',
+  THREADS: 'スレッズ',
+  YOUTUBE_SHORTS: 'ユーチューブ ショート',
+  OTHER: 'その他',
+};
+
 export interface WeeklyPlanItemView {
   id: string;
   scheduledDate: string;
@@ -25,6 +34,20 @@ export interface WeeklyPlanView {
   status: 'DRAFT' | 'CONFIRMED' | 'EXPIRED';
   items: WeeklyPlanItemView[];
 }
+
+const planStatusLabels: Record<WeeklyPlanView['status'], string> = {
+  DRAFT: '作成中',
+  CONFIRMED: '決定済み',
+  EXPIRED: '終了',
+};
+
+const formatLabels: Record<SocialPreferredFormat, string> = {
+  TEXT: '文章',
+  SLIDE: 'スライド',
+  LIVE_ACTION: '自分で撮る動画',
+  AI_VIDEO_PROMPT: 'AI動画の作り方',
+  IMAGE: '画像',
+};
 
 type ItemFormValue = Omit<WeeklyPlanItemView, 'id'>;
 
@@ -77,7 +100,7 @@ function ItemForm({
         />
       </label>
       <label>
-        Content Pillar
+        投稿テーマ
         <select
           required
           value={form.contentPillarId}
@@ -120,7 +143,9 @@ function ItemForm({
           }
         >
           {SOCIAL_PREFERRED_FORMATS.map((format) => (
-            <option key={format}>{format}</option>
+            <option key={format} value={format}>
+              {formatLabels[format]}
+            </option>
           ))}
         </select>
       </label>
@@ -194,8 +219,8 @@ export function WeeklyPlanSection({
       });
       setMessage(
         response.ok
-          ? 'Weekly Planを更新しました。'
-          : 'Weekly Planを更新できませんでした。入力内容、週、Pillar、SOCIALの状態を確認してください。',
+          ? '1週間の予定を保存しました。'
+          : '1週間の予定を保存できませんでした。入力した内容を確認してください。',
       );
       if (response.ok) {
         setCreating(false);
@@ -219,15 +244,11 @@ export function WeeklyPlanSection({
 
   return (
     <section className="weekly-plan-section">
-      <h2>Weekly Plan</h2>
-      <p>承認済みSNS戦略とActive Content Pillarから、AIが1週間のDRAFT計画を作成します。</p>
-      {capabilityStatus === null ? <p>先にSOCIALを割り当ててください。</p> : null}
-      {readonly ? (
-        <p>
-          SOCIALが{capabilityStatus === 'LOCKED' ? 'ロック中' : '停止中'}のため参照のみ可能です。
-        </p>
-      ) : null}
-      {plans.length === 0 ? <p>Weekly Planはまだありません。</p> : null}
+      <h2>1週間の投稿予定</h2>
+      <p>BUNSHINが、決めたSNSと投稿テーマを使って、1週間分の予定を考えます。</p>
+      {capabilityStatus === null ? <p>先に「SNSのお手伝いをはじめる」を押してください。</p> : null}
+      {readonly ? <p>今は予定を見ることだけできます。内容を変えることはできません。</p> : null}
+      {plans.length === 0 ? <p>1週間の投稿予定はまだありません。</p> : null}
       {capabilityStatus === 'ACTIVE' ? (
         <form
           className="weekly-plan-form"
@@ -240,7 +261,7 @@ export function WeeklyPlanSection({
             });
           }}
         >
-          <h3>AIで週間計画を作成</h3>
+          <h3>BUNSHINに1週間の予定を考えてもらう</h3>
           <label>
             SNS
             <select
@@ -251,7 +272,7 @@ export function WeeklyPlanSection({
               <option value="">選択してください</option>
               {activeProfiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>
-                  {profile.platform}
+                  {platformLabels[profile.platform]}
                 </option>
               ))}
             </select>
@@ -266,7 +287,7 @@ export function WeeklyPlanSection({
             />
           </label>
           <label>
-            Timezone
+            住んでいる地域の時間
             <input
               required
               maxLength={64}
@@ -283,13 +304,11 @@ export function WeeklyPlanSection({
             }
             type="submit"
           >
-            AIでDRAFTを作成
+            1週間の予定を作る
           </button>
-          {activeProfiles.length === 0 ? (
-            <p>先にActiveなSNSプロファイルを作成してください。</p>
-          ) : null}
+          {activeProfiles.length === 0 ? <p>先に、使いたいSNSを登録してください。</p> : null}
           {activePillars.length === 0 ? (
-            <p>先にActiveなContent Pillarを作成してください。</p>
+            <p>先に、投稿するテーマを1つ以上登録してください。</p>
           ) : null}
         </form>
       ) : null}
@@ -298,9 +317,10 @@ export function WeeklyPlanSection({
         return (
           <article className="weekly-plan-card" key={plan.id}>
             <h3>
-              {plan.weekStartDate}〜{addDays(plan.weekStartDate, 6)} <small>{plan.status}</small>
+              {plan.weekStartDate}〜{addDays(plan.weekStartDate, 6)}{' '}
+              <small>{planStatusLabels[plan.status]}</small>
             </h3>
-            <p>Timezone: {plan.timezone}</p>
+            <p>地域の時間：{plan.timezone}</p>
             {editable ? (
               <form
                 onSubmit={(event) => {
@@ -327,7 +347,7 @@ export function WeeklyPlanSection({
             ) : (
               <p>戦略: {plan.strategySummary || '未設定'}</p>
             )}
-            {plan.status !== 'DRAFT' ? <p>確定または失効後のPlanは編集できません。</p> : null}
+            {plan.status !== 'DRAFT' ? <p>決めた後や終了した予定は編集できません。</p> : null}
             <ul className="weekly-plan-items">
               {plan.items.map((item) => (
                 <li key={item.id}>
@@ -346,9 +366,9 @@ export function WeeklyPlanSection({
                     <>
                       <strong>{item.scheduledDate}</strong>{' '}
                       {pillars.find((pillar) => pillar.id === item.contentPillarId)?.title ??
-                        '利用できないContent Pillar'}
+                        '使えない投稿テーマ'}
                       <p>
-                        {item.goal} — {item.angle}（{item.recommendedFormat}）
+                        {item.goal} — {item.angle}（{formatLabels[item.recommendedFormat]}）
                       </p>
                       {item.notes ? <p>{item.notes}</p> : null}
                       {editable ? (
@@ -404,17 +424,17 @@ export function WeeklyPlanSection({
                       void mutation(`${endpoint}/${plan.id}/confirm`, 'POST', {});
                   }}
                 >
-                  Planを確定
+                  この予定に決める
                 </button>
                 <button
                   disabled={pending}
                   type="button"
                   onClick={() => {
-                    if (window.confirm('自動失効ではありません。このPlanを失効しますか？'))
+                    if (window.confirm('この1週間の予定を終了しますか？'))
                       void mutation(`${endpoint}/${plan.id}/expire`, 'POST', {});
                   }}
                 >
-                  Planを失効
+                  この予定を終了する
                 </button>
               </div>
             ) : null}
@@ -423,7 +443,7 @@ export function WeeklyPlanSection({
       })}
       {capabilityStatus === 'ACTIVE' && !creating ? (
         <button disabled={pending} type="button" onClick={() => setCreating(true)}>
-          新しいDRAFT Plan
+          自分で1週間の予定を作る
         </button>
       ) : null}
       {creating ? (
@@ -447,7 +467,7 @@ export function WeeklyPlanSection({
             {weekStartDate}〜{addDays(weekStartDate, 6)}
           </p>
           <label>
-            Timezone（保存前に確認してください）
+            住んでいる地域の時間
             <input
               required
               maxLength={64}
@@ -473,7 +493,7 @@ export function WeeklyPlanSection({
           </div>
         </form>
       ) : null}
-      <p>同じ週に1 Plan、同じ日には1件だけ登録できます。失効したPlanは再利用できません。</p>
+      <p>1週間に作れる予定は1つです。同じ日に登録できる投稿は1つです。</p>
       {message ? <p role="status">{message}</p> : null}
     </section>
   );

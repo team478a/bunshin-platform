@@ -65,7 +65,7 @@ export function LineConfigurationEditor(props: {
     if (!response.ok || !result.data) setMessage(result.error?.message ?? '保存できませんでした。');
     else {
       setConfigurations((current) => [result.data!, ...current]);
-      setMessage('新しいDRAFT版を保存しました。');
+      setMessage('新しい下書きを保存しました。');
       event.currentTarget.reset();
     }
     setBusy(false);
@@ -77,7 +77,7 @@ export function LineConfigurationEditor(props: {
     if (
       name === 'activate' &&
       props.environment === 'PRODUCTION' &&
-      !window.confirm('ProductionのACTIVE設定を変更します。内容と接続テスト結果を確認しましたか？')
+      !window.confirm('本番で使う設定を変更します。内容と接続テストの結果を確認しましたか？')
     )
       return;
     setBusy(true);
@@ -102,12 +102,12 @@ export function LineConfigurationEditor(props: {
               : item,
         ),
       );
-      setMessage('ACTIVE版を切り替えました。');
+      setMessage('本番で使う設定を切り替えました。');
     } else {
       const tested = result.data as { success: boolean; botDisplayName: string | null };
       setMessage(
         tested.success
-          ? `接続成功: ${tested.botDisplayName ?? 'LINE Bot'}`
+          ? `接続成功：${tested.botDisplayName ?? 'LINE公式アカウント'}`
           : '接続テストに失敗しました。',
       );
     }
@@ -163,15 +163,15 @@ export function LineConfigurationEditor(props: {
           <input name="defaultNotificationTime" type="time" defaultValue="08:00" required />
         </label>
         <label>
-          標準timezone
+          標準の地域時間
           <input name="defaultTimezone" defaultValue="Asia/Tokyo" required />
         </label>
         <label>
-          Quiet Hours開始
+          通知を休む時間の開始
           <input name="quietHoursStart" type="time" defaultValue="21:00" required />
         </label>
         <label>
-          Quiet Hours終了
+          通知を休む時間の終了
           <input name="quietHoursEnd" type="time" defaultValue="07:00" required />
         </label>
         <label>
@@ -201,7 +201,7 @@ export function LineConfigurationEditor(props: {
           />
         </label>
         <button disabled={busy} type="submit">
-          DRAFT版を保存
+          下書きを保存
         </button>
       </form>
       <h2>設定履歴</h2>
@@ -209,7 +209,14 @@ export function LineConfigurationEditor(props: {
         {configurations.map((item) => (
           <li key={item.id}>
             <strong>
-              v{item.version} / {item.status}
+              第{item.version}版 ／{' '}
+              {item.status === 'DRAFT'
+                ? '下書き'
+                : item.status === 'ACTIVE'
+                  ? '使用中'
+                  : item.status === 'DISABLED'
+                    ? '停止中'
+                    : 'エラー'}
             </strong>
             <p>
               Login: {item.loginChannelId} / {item.loginSecretMask}
@@ -219,14 +226,15 @@ export function LineConfigurationEditor(props: {
               {item.accessTokenMask}
             </p>
             <p>
-              最終確認: {item.lastVerifiedAt ?? '未確認'} / {item.lastErrorCategory ?? 'errorなし'}
+              最終確認：{item.lastVerifiedAt ?? '未確認'} ／{' '}
+              {item.lastErrorCategory ?? 'エラーなし'}
             </p>
             <button disabled={busy} onClick={() => void action(item.id, 'test')}>
               接続テスト
             </button>
             {item.status !== 'ACTIVE' ? (
               <button disabled={busy} onClick={() => void action(item.id, 'activate')}>
-                ACTIVEにする
+                この設定を使う
               </button>
             ) : null}
           </li>
