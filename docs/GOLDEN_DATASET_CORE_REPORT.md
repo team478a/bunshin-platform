@@ -35,4 +35,6 @@ APIキーや実利用者データを使わず、将来のProvider／Model／Agen
 
 ## 次のGate
 
-APIキー準備前に進められる追加作業は、Golden Datasetを使うfixture-onlyのSchema／Policy回帰Runnerまでとする。実Provider benchmark、共有Research Job、Provider Registry、Agent Adapterへは進まない。
+Golden Datasetを使うfixture-onlyのSchema／Policy回帰Runnerまで完了した。全件の合否と、欠落、重複、未知ケースを固定分類できる。
+
+APIキー準備前に承認された範囲はここで完了とする。実Provider benchmark、共有Research Job、Provider Registry、Agent Adapterへは進まない。
