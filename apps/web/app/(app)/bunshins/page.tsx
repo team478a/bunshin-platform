@@ -38,6 +38,7 @@ export default async function BunshinsPage() {
         <aside className="admin-shortcut">
           <strong>管理者メニュー</strong>
           <span>
+            <Link href="/admin">運用設定</Link>
             <Link href="/admin/legal">法務</Link>
             <Link href="/admin/deletions">退会要求</Link>
             <Link href="/admin/line">LINE</Link>

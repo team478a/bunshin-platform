@@ -161,6 +161,18 @@ LINE設定とLINE公式アカウントはProduction / Stagingで分離する。�
 
 ここで100人規模のFREE検証を行う。
 
+### Phase 7-O: Operations Admin Console
+
+日常運用でファイル編集、Vercel環境変数の更新、サーバー操作を必要としない管理画面を整備する。詳細は`OPERATIONS_ADMIN_CONSOLE_PLAN.md`を正本とする。
+
+- 運用設定の状態一覧と管理画面入口
+- OpenAI APIキー・モデル・停止設定の暗号化管理
+- 既存LINE設定管理の入口統合
+- LINEリッチメニューの作成・公開・切替・停止
+- 環境分離、版管理、接続確認、監査履歴
+
+DB接続、Session、暗号化親鍵、Cron認証等の起動に必要な秘密値は管理画面へ移さない。
+
 ### Phase 7-U: Mobile-first UI Readiness
 
 100-user Validation開始前に、`docs/UI_DESIGN_FOUNDATION.md`を基準として主要利用導線を刷新する。
