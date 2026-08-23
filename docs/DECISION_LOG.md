@@ -855,3 +855,17 @@
 - Gate: 日本語品質と費用をまだ実測していないため本番採用しない。DEVELOPMENT限定キー、費用上限、同一query比較を承認後に行い、別ADRで確定する。
 - Scope: APIキー登録、外部API実行、課金契約、Job／Mission生成への接続を含めない。
 - 詳細: `docs/TREND_PROVIDER_SPIKE_REPORT.md`
+
+## D-073: 外部AI・AgentをBUNSHINの制御下にあるAdapterとして扱う
+
+- 日付: 2026-08-24
+- 状態: Proposed
+- Core: BUNSHINのDomain／Applicationを正本とし、Hermes等の外部Agentは`AgentRuntimePort` Adapter候補に限定する。
+- WorkOrder: 目的、許可context、許可Skill／Tool、timeout、予算、data policy、出力schemaを明示する。
+- Prohibited: DB直接接続、Secret、任意HTTP／shell、LINE直接送信、SNS直接投稿、本番設定変更を許可しない。
+- Validation: 実行前後にtenant／Bunshin／Grantを再検証し、Schema合格後だけatomicに保存する。
+- Audit: workflow／schema／provider／model version、費用、token、遅延、成否、固定error分類を記録し、本文、思考過程、raw response、個人情報、Secretを保存しない。
+- Learning: AIはMemory、設定、Prompt、Skillを直接変更せず、将来のProposalと人間承認を経由する。
+- Reuse: MissionActivity、PostRecord、MissionFeedback、BunshinMemoryを正本とし、汎用Outcome／Preference tableを先に重複作成しない。
+- Gate: 本文書の人間レビュー前にProvider Registry、Learning、Skill、Agent Runtime、MCPを実装しない。
+- 詳細: `docs/AI_AGENT_COMPATIBILITY_REBASELINE.md`、`docs/adr/AI_AGENT_RUNTIME_BOUNDARY_ADR.md`
