@@ -1620,6 +1620,25 @@ a {
   transform: translateY(1px);
 }
 
+.button--line {
+  gap: 10px;
+  color: white;
+  border-color: #06c755;
+  background: #06c755;
+  box-shadow: 0 8px 18px rgb(6 199 85 / 20%);
+}
+
+.button--line:hover {
+  border-color: #05b34c;
+  background: #05b34c;
+}
+
+.button__line-mark {
+  font-size: 0.6875rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
 .button--full {
   width: 100%;
 }
@@ -1667,6 +1686,22 @@ a {
   color: var(--color-text-muted);
   font-size: 0.875rem;
   text-align: center;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+  content: '';
 }
 
 .consent-documents {
