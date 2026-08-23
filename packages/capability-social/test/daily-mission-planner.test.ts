@@ -21,6 +21,7 @@ const input: DailyMissionPlannerInput = {
     purpose: '発信',
     postingFrequency: 'WEEKDAYS',
     preferredFormats: ['TEXT'],
+    defaultAssistanceLevel: 'READY_TO_USE',
     status: 'ACTIVE',
     createdAt: now,
     updatedAt: now,

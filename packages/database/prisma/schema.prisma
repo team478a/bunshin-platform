@@ -352,6 +352,12 @@ enum SocialPreferredFormat {
   IMAGE
 }
 
+enum ContentAssistanceLevel {
+  IDEA_ONLY
+  GUIDED
+  READY_TO_USE
+}
+
 model User {
   id                          String                          @id @default(uuid()) @db.Uuid
   status                      UserStatus                      @default(ACTIVE)
@@ -856,22 +862,23 @@ model BunshinCapabilityAssignment {
 }
 
 model SocialProfile {
-  id                String                  @id @default(uuid()) @db.Uuid
-  workspaceId       String                  @map("workspace_id") @db.Uuid
-  bunshinId         String                  @map("bunshin_id") @db.Uuid
-  platform          SocialPlatform
-  handle            String?                 @db.VarChar(100)
-  profileUrl        String?                 @map("profile_url") @db.VarChar(2048)
-  purpose           String                  @db.VarChar(500)
-  postingFrequency  SocialPostingFrequency  @map("posting_frequency")
-  preferredFormats  Json                    @map("preferred_formats")
-  status            SocialProfileStatus     @default(ACTIVE)
-  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace         Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin           Bunshin                 @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  dailyMissions     DailyMission[]
-  accountStrategies SocialAccountStrategy[]
+  id                     String                  @id @default(uuid()) @db.Uuid
+  workspaceId            String                  @map("workspace_id") @db.Uuid
+  bunshinId              String                  @map("bunshin_id") @db.Uuid
+  platform               SocialPlatform
+  handle                 String?                 @db.VarChar(100)
+  profileUrl             String?                 @map("profile_url") @db.VarChar(2048)
+  purpose                String                  @db.VarChar(500)
+  postingFrequency       SocialPostingFrequency  @map("posting_frequency")
+  preferredFormats       Json                    @map("preferred_formats")
+  defaultAssistanceLevel ContentAssistanceLevel  @default(READY_TO_USE) @map("default_assistance_level")
+  status                 SocialProfileStatus     @default(ACTIVE)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                Bunshin                 @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMissions          DailyMission[]
+  accountStrategies      SocialAccountStrategy[]
 
   @@unique([workspaceId, bunshinId, platform])
   @@unique([workspaceId, bunshinId, id])
@@ -989,6 +996,7 @@ model DailyMission {
   missionDate           DateTime               @map("mission_date") @db.Date
   status                DailyMissionStatus     @default(GENERATED)
   format                SocialPreferredFormat
+  assistanceLevel       ContentAssistanceLevel @default(READY_TO_USE) @map("assistance_level")
   estimatedMinutes      Int                    @map("estimated_minutes")
   topic                 String                 @db.VarChar(200)
   angle                 String                 @db.VarChar(500)

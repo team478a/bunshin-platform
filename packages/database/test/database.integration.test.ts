@@ -1965,12 +1965,14 @@ integration('database ownership boundaries', () => {
       purpose: '  manual publishing  ',
       postingFrequency: 'THREE_PER_WEEK',
       preferredFormats: ['SLIDE', 'IMAGE'],
+      defaultAssistanceLevel: 'IDEA_ONLY',
     });
     expect(profile).toMatchObject({
       handle: 'bunshin',
       purpose: 'manual publishing',
       status: 'ACTIVE',
       preferredFormats: ['SLIDE', 'IMAGE'],
+      defaultAssistanceLevel: 'IDEA_ONLY',
     });
     const strategies = new PrismaSocialAccountStrategyRepository(client);
     const createStrategy = new CreateSocialAccountStrategy(strategies, assignments);
@@ -2080,6 +2082,7 @@ integration('database ownership boundaries', () => {
         bunshinId: owned.id,
         platform: 'INSTAGRAM',
         purpose: 'stolen',
+        defaultAssistanceLevel: 'GUIDED',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
@@ -2089,8 +2092,12 @@ integration('database ownership boundaries', () => {
         bunshinId: owned.id,
         platform: 'INSTAGRAM',
         purpose: 'admin managed',
+        defaultAssistanceLevel: 'GUIDED',
       }),
-    ).resolves.toMatchObject({ purpose: 'admin managed' });
+    ).resolves.toMatchObject({
+      purpose: 'admin managed',
+      defaultAssistanceLevel: 'GUIDED',
+    });
     await expect(
       create.execute({
         workspaceId: owner.workspace.id,
@@ -2540,6 +2547,7 @@ integration('database ownership boundaries', () => {
       topic: '基礎',
       angle: '3手',
       reason: '初心者向け',
+      assistanceLevel: 'GUIDED' as const,
       content: {
         topic: '基礎',
         angle: '3手',
@@ -2557,6 +2565,7 @@ integration('database ownership boundaries', () => {
     expect(created).toMatchObject({
       missionDate: '2026-08-19',
       status: 'GENERATED',
+      assistanceLevel: 'GUIDED',
       content: expect.objectContaining({ topic: '基礎' }),
     });
     const engagement = new PrismaMissionEngagementRepository(client);

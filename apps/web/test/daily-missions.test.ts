@@ -14,6 +14,7 @@ const mission: DailyMission = {
   missionDate: '2026-08-20',
   status: 'GENERATED',
   format: 'TEXT',
+  assistanceLevel: 'READY_TO_USE',
   estimatedMinutes: 5,
   topic: '今日の一歩',
   angle: '初心者向け',
