@@ -89,111 +89,202 @@ export function BunshinEditor({
           missions={dailyMissions}
         />
       </section>
-      <details className="bunshin-settings-disclosure">
-        <summary>BUNSHINの基本設定</summary>
-        <form
-          onSubmit={(event) => {
-            void save(event);
-          }}
-        >
-          <label>
-            名前
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </label>
-          <label>
-            目的
-            <textarea
-              value={form.objectiveSummary}
-              onChange={(e) => setForm({ ...form, objectiveSummary: e.target.value })}
-            />
-          </label>
-          <label>
-            対象者
-            <textarea
-              value={form.audienceSummary}
-              onChange={(e) => setForm({ ...form, audienceSummary: e.target.value })}
-            />
-          </label>
-          <label>
-            人格
-            <textarea
-              value={form.personalitySummary}
-              onChange={(e) => setForm({ ...form, personalitySummary: e.target.value })}
-            />
-          </label>
-          <p>
-            <button type="submit">保存</button>
-          </p>
-        </form>
-      </details>
-      <section>
-        <h2>利用するKnowledge</h2>
-        {knowledge.length === 0 ? (
-          <p>利用可能なKnowledgeはありません。</p>
-        ) : (
-          <ul>
-            {knowledge.map((item) => (
-              <li key={item.id}>
-                {item.title}（{item.type}）{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    void setGrant(item.id, item.granted);
-                  }}
-                >
-                  {item.granted ? '利用を解除' : '利用する'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+      <nav className="bunshin-section-nav" aria-label="BUNSHIN設定">
+        <a href="#overview">概要</a>
+        <a href="#social-strategy">SNS戦略</a>
+        <a href="#content-planning">発信テーマ</a>
+        <a href="#knowledge-memory">知識</a>
+        <a href="#notification-settings">設定</a>
+      </nav>
+
+      <section className="settings-group" id="overview">
+        <header>
+          <span className="settings-group__icon" aria-hidden="true">
+            分
+          </span>
+          <span>
+            <h2>概要</h2>
+            <p>名前・目的・届けたい相手・話し方</p>
+          </span>
+        </header>
+        <details className="settings-disclosure">
+          <summary>基本情報を編集</summary>
+          <form
+            onSubmit={(event) => {
+              void save(event);
+            }}
+          >
+            <label>
+              名前
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </label>
+            <label>
+              目的
+              <textarea
+                value={form.objectiveSummary}
+                onChange={(e) => setForm({ ...form, objectiveSummary: e.target.value })}
+              />
+            </label>
+            <label>
+              対象者
+              <textarea
+                value={form.audienceSummary}
+                onChange={(e) => setForm({ ...form, audienceSummary: e.target.value })}
+              />
+            </label>
+            <label>
+              人格
+              <textarea
+                value={form.personalitySummary}
+                onChange={(e) => setForm({ ...form, personalitySummary: e.target.value })}
+              />
+            </label>
+            <button className="button button--primary" type="submit">
+              変更を保存
+            </button>
+          </form>
+        </details>
       </section>
-      <MemorySection workspaceId={workspaceId} bunshinId={bunshin.id} memories={memories} />
-      <CapabilitySection
-        workspaceId={workspaceId}
-        bunshinId={bunshin.id}
-        socialStatus={socialCapabilityStatus}
-      />
-      <LineNotificationPreferenceSection
-        workspaceId={workspaceId}
-        bunshinId={bunshin.id}
-        preference={lineNotificationPreference}
-      />
-      <SocialProfileSection
-        workspaceId={workspaceId}
-        bunshinId={bunshin.id}
-        capabilityStatus={socialCapabilityStatus}
-        profiles={socialProfiles}
-      />
-      <AccountStrategySection
-        workspaceId={workspaceId}
-        bunshinId={bunshin.id}
-        profiles={socialProfiles.map(({ id, platform }) => ({ id, platform }))}
-        strategies={socialStrategies}
-        active={socialCapabilityStatus === 'ACTIVE'}
-      />
-      <ContentPillarSection
-        workspaceId={workspaceId}
-        bunshinId={bunshin.id}
-        capabilityStatus={socialCapabilityStatus}
-        pillars={contentPillars}
-      />
-      <WeeklyPlanSection
-        workspaceId={workspaceId}
-        bunshinId={bunshin.id}
-        capabilityStatus={socialCapabilityStatus}
-        profiles={socialProfiles}
-        pillars={contentPillars}
-        plans={weeklyPlans}
-      />
-      <button
-        type="button"
-        onClick={() => {
-          void archive();
-        }}
-      >
-        アーカイブ
-      </button>
+
+      <section className="settings-group" id="social-strategy">
+        <header>
+          <span className="settings-group__icon" aria-hidden="true">
+            SNS
+          </span>
+          <span>
+            <h2>SNS戦略</h2>
+            <p>SNSの選択、アカウント方針、発信戦略</p>
+          </span>
+        </header>
+        <details className="settings-disclosure">
+          <summary>SNS戦略を確認・編集</summary>
+          <div className="settings-disclosure__content">
+            <CapabilitySection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              socialStatus={socialCapabilityStatus}
+            />
+            <SocialProfileSection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              capabilityStatus={socialCapabilityStatus}
+              profiles={socialProfiles}
+            />
+            <AccountStrategySection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              profiles={socialProfiles.map(({ id, platform }) => ({ id, platform }))}
+              strategies={socialStrategies}
+              active={socialCapabilityStatus === 'ACTIVE'}
+            />
+          </div>
+        </details>
+      </section>
+
+      <section className="settings-group" id="content-planning">
+        <header>
+          <span className="settings-group__icon" aria-hidden="true">
+            企
+          </span>
+          <span>
+            <h2>発信テーマ</h2>
+            <p>Content Pillarと週間計画</p>
+          </span>
+        </header>
+        <details className="settings-disclosure">
+          <summary>発信テーマと計画を確認・編集</summary>
+          <div className="settings-disclosure__content">
+            <ContentPillarSection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              capabilityStatus={socialCapabilityStatus}
+              pillars={contentPillars}
+            />
+            <WeeklyPlanSection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              capabilityStatus={socialCapabilityStatus}
+              profiles={socialProfiles}
+              pillars={contentPillars}
+              plans={weeklyPlans}
+            />
+          </div>
+        </details>
+      </section>
+
+      <section className="settings-group" id="knowledge-memory">
+        <header>
+          <span className="settings-group__icon" aria-hidden="true">
+            知
+          </span>
+          <span>
+            <h2>知識</h2>
+            <p>利用するKnowledgeとBUNSHINの記憶</p>
+          </span>
+        </header>
+        <details className="settings-disclosure">
+          <summary>知識と記憶を確認・編集</summary>
+          <div className="settings-disclosure__content">
+            <section>
+              <h2>利用するKnowledge</h2>
+              {knowledge.length === 0 ? (
+                <p>利用可能なKnowledgeはありません。</p>
+              ) : (
+                <ul className="knowledge-grant-list">
+                  {knowledge.map((item) => (
+                    <li key={item.id}>
+                      <span>
+                        {item.title}
+                        <small>{item.type}</small>
+                      </span>
+                      <button type="button" onClick={() => void setGrant(item.id, item.granted)}>
+                        {item.granted ? '利用を解除' : '利用する'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <MemorySection workspaceId={workspaceId} bunshinId={bunshin.id} memories={memories} />
+          </div>
+        </details>
+      </section>
+
+      <section className="settings-group" id="notification-settings">
+        <header>
+          <span className="settings-group__icon" aria-hidden="true">
+            設
+          </span>
+          <span>
+            <h2>通知と設定</h2>
+            <p>LINE通知とBUNSHINの管理</p>
+          </span>
+        </header>
+        <details className="settings-disclosure">
+          <summary>通知と管理設定を開く</summary>
+          <div className="settings-disclosure__content">
+            <LineNotificationPreferenceSection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              preference={lineNotificationPreference}
+            />
+            <div className="bunshin-archive">
+              <h2>このBUNSHINを停止する</h2>
+              <p>停止後もデータは保持されます。</p>
+              <button
+                className="button button--danger"
+                type="button"
+                onClick={() => void archive()}
+              >
+                アーカイブ
+              </button>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
   );
 }
