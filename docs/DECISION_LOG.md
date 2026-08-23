@@ -802,3 +802,13 @@
 - Mobile: 375〜430pxを正本とし、主要操作領域44px以上、Primary Action 48px以上、Safe Area対応を必須とする。
 - Architecture: UI刷新は既存Use Case、Persistence、Isolation、Provider境界を変更せず、presentationとView Modelへ閉じ込める。
 - Delivery: Design Foundation、Public Auth、App Shell、Onboarding、Today / Mission、SOCIAL Settings、Admin QAへPRを分割する。
+
+## D-069: 日常運用設定を管理画面へ集約する
+
+- 日付: 2026-08-23
+- 状態: 採用
+- 決定: OpenAI APIキー、AIモデル、LINEチャネル設定、通知制御、LINEリッチメニューを環境別・版管理された管理画面から操作可能にする。
+- 決定: 秘密値は暗号化して保存し、保存後は平文を再表示しない。変更者、理由、対象環境、変更項目を監査履歴へ残す。
+- 決定: `DATABASE_URL`、`SESSION_SECRET`、`ENCRYPTION_KEY`、`CRON_SECRET`等の起動・復号に必要な秘密値は環境変数に残す。
+- 理由: 日常運用の再配備依存を減らしながら、管理画面侵害だけで暗号化親鍵と全秘密情報が同時に失われる構造を避けるため。
+- 詳細: `docs/OPERATIONS_ADMIN_CONSOLE_PLAN.md`
