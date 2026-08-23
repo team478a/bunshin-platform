@@ -161,6 +161,20 @@ LINE設定とLINE公式アカウントはProduction / Stagingで分離する。�
 
 ここで100人規模のFREE検証を行う。
 
+### Phase 7-U: Mobile-first UI Readiness
+
+100-user Validation開始前に、`docs/UI_DESIGN_FOUNDATION.md`を基準として主要利用導線を刷新する。
+
+- UI-0: Design Foundation、Decision、PR分割（文書）
+- UI-1: Token / Primitive / Login / Confirm / Consent
+- UI-2: Authenticated App Shell / Bottom Navigation / Profile
+- UI-3: Bunshin Onboarding
+- UI-4: Home / Today / Mission Decision・Copy・Post・Feedback
+- UI-5: SOCIAL Settingsの情報設計
+- UI-6: Admin Shell / Responsive / Accessibility / Final QA
+
+UI変更では既存Coreの意味、Isolation、外部Provider境界を変更しない。FREE検証開始条件へ、スマートフォンでLoginから初回投稿完了まで到達できることを追加する。
+
 ## Phase 8: Share / Referral / Segmentation Preparation
 
 FREE継続率を確認してから着手する。
