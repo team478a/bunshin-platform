@@ -168,7 +168,7 @@ export function AccountStrategySection({
           <button disabled={pending}>戦略案を作成</button>
         </form>
       ) : (
-        <p>ACTIVEなSOCIAL CapabilityとSocial Profileが必要です。</p>
+        <p>先に「SNSのお手伝い」を始めて、使いたいSNSを決めてください。</p>
       )}
       <ul>
         {strategies.map((s) => (

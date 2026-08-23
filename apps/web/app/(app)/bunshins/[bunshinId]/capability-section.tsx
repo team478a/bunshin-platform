@@ -6,9 +6,9 @@ import { useState } from 'react';
 export type SocialCapabilityStatus = 'ACTIVE' | 'SUSPENDED' | 'LOCKED' | null;
 
 const labels: Record<Exclude<SocialCapabilityStatus, null>, string> = {
-  ACTIVE: '有効',
-  SUSPENDED: '停止中',
-  LOCKED: 'ロック中',
+  ACTIVE: '使えます',
+  SUSPENDED: 'お休み中です',
+  LOCKED: '今は使えません',
 };
 
 export function CapabilitySection({
@@ -36,26 +36,29 @@ export function CapabilitySection({
     setPending(false);
     setMessage(
       response.ok
-        ? 'SOCIAL Capabilityの状態を更新しました。'
-        : 'SOCIAL Capabilityの状態を更新できませんでした。',
+        ? 'SNSのお手伝い設定を変えました。'
+        : '設定を変えられませんでした。もう一度お試しください。',
     );
     if (response.ok) router.refresh();
   }
 
   return (
     <section className="capability-section">
-      <h2>Capability</h2>
+      <h2>SNSのお手伝い</h2>
       <div className="capability-card">
         <div>
-          <h3>SOCIAL</h3>
+          <h3>SNSの投稿をいっしょに考える</h3>
           <p>
-            状態: <strong>{socialStatus === null ? '未割当' : labels[socialStatus]}</strong>
+            今の状態：
+            <strong>{socialStatus === null ? 'まだ始めていません' : labels[socialStatus]}</strong>
           </p>
-          <p>投稿機能は後続Phaseで提供します。この設定だけでは投稿されません。</p>
+          <p>
+            BUNSHINが「何を投稿するか」をいっしょに考えます。あなたの許可なく、勝手に投稿することはありません。
+          </p>
         </div>
         {socialStatus === null ? (
           <button type="button" disabled={pending} onClick={() => void mutate('assign')}>
-            SOCIALを割り当てる
+            SNSのお手伝いをはじめる
           </button>
         ) : socialStatus === 'ACTIVE' ? (
           <button type="button" disabled={pending} onClick={() => void mutate('suspend')}>
@@ -63,7 +66,7 @@ export function CapabilitySection({
           </button>
         ) : socialStatus === 'SUSPENDED' ? (
           <button type="button" disabled={pending} onClick={() => void mutate('activate')}>
-            再有効化する
+            もう一度はじめる
           </button>
         ) : null}
       </div>

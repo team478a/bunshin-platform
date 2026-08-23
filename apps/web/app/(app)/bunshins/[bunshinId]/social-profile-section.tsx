@@ -35,7 +35,7 @@ const formatLabels: Record<SocialPreferredFormat, string> = {
   TEXT: 'テキスト',
   SLIDE: 'スライド',
   LIVE_ACTION: '実写',
-  AI_VIDEO_PROMPT: '動画用プロンプト',
+  AI_VIDEO_PROMPT: 'AI動画の作り方',
   IMAGE: '画像',
 };
 
@@ -80,7 +80,7 @@ function ProfileForm({
       }}
     >
       <label>
-        Platform
+        使うSNS
         <select
           value={form.platform}
           disabled={availablePlatforms === undefined}
@@ -92,7 +92,7 @@ function ProfileForm({
         </select>
       </label>
       <label>
-        Handle（任意）
+        SNSのアカウント名（わかる場合だけ）
         <input
           value={form.handle ?? ''}
           maxLength={100}
@@ -100,7 +100,7 @@ function ProfileForm({
         />
       </label>
       <label>
-        Profile URL（任意・HTTPS）
+        SNSページのURL（わかる場合だけ）
         <input
           type="url"
           value={form.profileUrl ?? ''}
@@ -109,7 +109,7 @@ function ProfileForm({
         />
       </label>
       <label>
-        発信目的
+        どんな人に、何を伝えたいですか？
         <textarea
           required
           maxLength={500}
@@ -118,7 +118,7 @@ function ProfileForm({
         />
       </label>
       <label>
-        投稿頻度
+        どのくらい投稿しますか？
         <select
           value={form.postingFrequency}
           onChange={(event) =>
@@ -133,7 +133,7 @@ function ProfileForm({
         </select>
       </label>
       <fieldset>
-        <legend>希望形式（1つ以上）</legend>
+        <legend>どんな投稿を作りたいですか？（1つ以上）</legend>
         {SOCIAL_PREFERRED_FORMATS.map((value) => (
           <label key={value} className="social-format-option">
             <input
@@ -190,8 +190,8 @@ export function SocialProfileSection({
     setPending(false);
     setMessage(
       response.ok
-        ? 'Social Profileを更新しました。'
-        : 'Social Profileを更新できませんでした。入力内容とSOCIALの状態を確認してください。',
+        ? 'SNSの設定を保存しました。'
+        : 'SNSの設定を保存できませんでした。入力した内容を確認してください。',
     );
     if (response.ok) {
       setEditing(null);
@@ -202,15 +202,13 @@ export function SocialProfileSection({
   const readonly = capabilityStatus === 'SUSPENDED' || capabilityStatus === 'LOCKED';
   return (
     <section className="social-profile-section">
-      <h2>Social Profile</h2>
-      <p>SNS接続・投稿機能は後続Phaseで提供します。ここでは発信方針だけを手動設定します。</p>
-      {capabilityStatus === null ? <p>先にSOCIAL Capabilityを割り当ててください。</p> : null}
-      {readonly ? (
-        <p>
-          SOCIALが{capabilityStatus === 'LOCKED' ? 'ロック中' : '停止中'}
-          のため、現在は参照のみ可能です。
-        </p>
+      <h2>使いたいSNSを決める</h2>
+      <p>InstagramやXなど、どのSNSで、だれに、何を伝えたいかを決めます。</p>
+      <p>BUNSHINが投稿案を作ります。SNSへの投稿は、あなたが自分で行います。</p>
+      {capabilityStatus === null ? (
+        <p>まず、上の「SNSのお手伝いをはじめる」を押してください。</p>
       ) : null}
+      {readonly ? <p>今は設定を見ることだけできます。内容を変えることはできません。</p> : null}
       <ul className="social-profile-list">
         {profiles.map((profile) => (
           <li className="social-profile-card" key={profile.platform}>
@@ -231,11 +229,14 @@ export function SocialProfileSection({
               />
             ) : (
               <>
-                <p>{profile.handle ? `@${profile.handle}` : 'Handle未設定'}</p>
-                <p>{profile.purpose}</p>
-                <p>頻度: {frequencyLabels[profile.postingFrequency]}</p>
                 <p>
-                  形式: {profile.preferredFormats.map((value) => formatLabels[value]).join('、')}
+                  {profile.handle ? `アカウント名：@${profile.handle}` : 'アカウント名：未入力'}
+                </p>
+                <p>{profile.purpose}</p>
+                <p>投稿する回数：{frequencyLabels[profile.postingFrequency]}</p>
+                <p>
+                  投稿の形：
+                  {profile.preferredFormats.map((value) => formatLabels[value]).join('、')}
                 </p>
                 {!readonly && capabilityStatus === 'ACTIVE' ? (
                   <div className="social-profile-actions">
