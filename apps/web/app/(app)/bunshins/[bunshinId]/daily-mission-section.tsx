@@ -331,12 +331,15 @@ export function DailyMissionSection({
   }
 
   return (
-    <section>
-      <h2>Daily Mission</h2>
-      <p>今日やることを確認し、採用する投稿案だけをコピーできます。</p>
+    <section className="mission-experience">
+      <header className="mission-experience__header">
+        <p className="eyebrow">TODAY'S MISSION</p>
+        <h2>今日やること</h2>
+        <p>投稿案を確認して、使いたいものを選びましょう。</p>
+      </header>
       {active && (
-        <div>
-          <h3>AIでMissionを作成</h3>
+        <div className="mission-generator">
+          <h3>今日の案を準備する</h3>
           <label>
             日付
             <input
@@ -373,21 +376,34 @@ export function DailyMissionSection({
           {activeProfiles.length === 0 && <p>有効なSNS Profileが必要です。</p>}
         </div>
       )}
-      {pendingAction && <p role="status">操作を保存しています…</p>}
-      {error && <p role="alert">{error}</p>}
+      {pendingAction && (
+        <div className="notice" role="status">
+          操作を保存しています…
+        </div>
+      )}
+      {error && (
+        <div className="notice notice--danger" role="alert">
+          {error}
+        </div>
+      )}
       {missions.length === 0 ? (
-        <p>Missionはまだありません。</p>
+        <div className="mission-empty">
+          <strong>今日のMissionはまだありません</strong>
+          <p>SNS設定と週間計画を準備すると、投稿案を作成できます。</p>
+        </div>
       ) : (
-        <ul>
+        <ul className="mission-list">
           {missions.map((mission) => (
-            <li key={mission.id}>
+            <li className="mission-card" key={mission.id}>
               <h3>
                 {mission.missionDate} — {mission.topic}
               </h3>
-              <p>
-                {mission.format} / 目安{mission.estimatedMinutes}分 / {mission.status}
-              </p>
-              <p>{mission.reason}</p>
+              <div className="mission-meta">
+                <span>{mission.platform ?? 'SNS'}</span>
+                <span>{mission.format}</span>
+                <span>約{mission.estimatedMinutes}分</span>
+              </div>
+              <p className="mission-reason">{mission.reason}</p>
               <button type="button" disabled={busy} onClick={() => void view(mission)}>
                 {expanded === mission.id ? '閉じる' : '内容を見る'}
               </button>{' '}
@@ -419,11 +435,11 @@ export function DailyMissionSection({
                 </>
               )}
               {expanded === mission.id && (
-                <div>
+                <div className="mission-detail">
                   <p>狙い: {mission.angle}</p>
                   <MissionContent mission={mission} />
                   {active && mission.decision !== 'ACCEPTED' && (
-                    <div>
+                    <div className="mission-decision-actions">
                       <button
                         type="button"
                         disabled={busy}
@@ -441,7 +457,7 @@ export function DailyMissionSection({
                     </div>
                   )}
                   {active && rejecting === mission.id && (
-                    <div>
+                    <div className="mission-rejection">
                       <p>理由を1つ選んでください。</p>
                       {rejectionReasons.map(([value, label]) => (
                         <span key={value}>
@@ -473,8 +489,8 @@ export function DailyMissionSection({
                   )}
                   {mission.decision === 'REJECTED' && <p>今回は使わないと記録しました。</p>}
                   {active && mission.decision === 'ACCEPTED' && (
-                    <div>
-                      <p>採用済み</p>
+                    <div className="mission-accepted">
+                      <p className="mission-step-complete">✓ 採用しました</p>
                       {copyOptions(mission).map((option, index) => (
                         <span key={`${option.type}-${index}`}>
                           <button
@@ -494,7 +510,7 @@ export function DailyMissionSection({
                         </span>
                       ))}
                       {mission.postedAt === null ? (
-                        <div>
+                        <div className="mission-post-action">
                           <button
                             type="button"
                             disabled={busy || mission.platform === null}
@@ -507,8 +523,8 @@ export function DailyMissionSection({
                           )}
                         </div>
                       ) : (
-                        <div>
-                          <p>投稿済み</p>
+                        <div className="mission-feedback">
+                          <p className="mission-step-complete">✓ 投稿済み</p>
                           <p>この投稿はあなたらしかったですか？</p>
                           {(
                             [

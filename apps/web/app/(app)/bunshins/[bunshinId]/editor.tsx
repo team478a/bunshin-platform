@@ -75,42 +75,57 @@ export function BunshinEditor({
     if (response.ok) router.refresh();
   }
   return (
-    <main>
-      <h1>{bunshin.name}</h1>
-      <form
-        onSubmit={(event) => {
-          void save(event);
-        }}
-      >
-        <label>
-          名前
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </label>
-        <label>
-          目的
-          <textarea
-            value={form.objectiveSummary}
-            onChange={(e) => setForm({ ...form, objectiveSummary: e.target.value })}
-          />
-        </label>
-        <label>
-          対象者
-          <textarea
-            value={form.audienceSummary}
-            onChange={(e) => setForm({ ...form, audienceSummary: e.target.value })}
-          />
-        </label>
-        <label>
-          人格
-          <textarea
-            value={form.personalitySummary}
-            onChange={(e) => setForm({ ...form, personalitySummary: e.target.value })}
-          />
-        </label>
-        <p>
-          <button type="submit">保存</button>
-        </p>
-      </form>
+    <main className="app-page bunshin-detail-page">
+      <header className="bunshin-detail-header">
+        <p className="eyebrow">YOUR BUNSHIN</p>
+        <h1>{bunshin.name}</h1>
+      </header>
+      <section id="daily-mission">
+        <DailyMissionSection
+          workspaceId={workspaceId}
+          bunshinId={bunshin.id}
+          capabilityStatus={socialCapabilityStatus}
+          profiles={socialProfiles.map(({ id, platform, status }) => ({ id, platform, status }))}
+          missions={dailyMissions}
+        />
+      </section>
+      <details className="bunshin-settings-disclosure">
+        <summary>BUNSHINの基本設定</summary>
+        <form
+          onSubmit={(event) => {
+            void save(event);
+          }}
+        >
+          <label>
+            名前
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </label>
+          <label>
+            目的
+            <textarea
+              value={form.objectiveSummary}
+              onChange={(e) => setForm({ ...form, objectiveSummary: e.target.value })}
+            />
+          </label>
+          <label>
+            対象者
+            <textarea
+              value={form.audienceSummary}
+              onChange={(e) => setForm({ ...form, audienceSummary: e.target.value })}
+            />
+          </label>
+          <label>
+            人格
+            <textarea
+              value={form.personalitySummary}
+              onChange={(e) => setForm({ ...form, personalitySummary: e.target.value })}
+            />
+          </label>
+          <p>
+            <button type="submit">保存</button>
+          </p>
+        </form>
+      </details>
       <section>
         <h2>利用するKnowledge</h2>
         {knowledge.length === 0 ? (
@@ -171,15 +186,6 @@ export function BunshinEditor({
         pillars={contentPillars}
         plans={weeklyPlans}
       />
-      <section id="daily-mission">
-        <DailyMissionSection
-          workspaceId={workspaceId}
-          bunshinId={bunshin.id}
-          capabilityStatus={socialCapabilityStatus}
-          profiles={socialProfiles.map(({ id, platform, status }) => ({ id, platform, status }))}
-          missions={dailyMissions}
-        />
-      </section>
       <button
         type="button"
         onClick={() => {

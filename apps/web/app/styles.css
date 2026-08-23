@@ -566,6 +566,242 @@ a {
   }
 }
 
+/* Today mission experience */
+.bunshin-detail-header {
+  margin-bottom: 20px;
+}
+.bunshin-detail-header h1 {
+  margin: 0;
+  font-size: clamp(1.65rem, 7vw, 2.2rem);
+}
+#daily-mission {
+  margin-bottom: 28px;
+}
+.mission-experience {
+  padding: 0;
+}
+.mission-experience__header {
+  margin-bottom: 18px;
+}
+.mission-experience__header h2 {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+}
+.mission-experience__header p:last-child {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+.mission-generator {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+}
+.mission-generator h3 {
+  grid-column: 1/-1;
+  margin: 0;
+  font-size: 1rem;
+}
+.mission-generator label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.mission-generator input,
+.mission-generator select {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: white;
+}
+.mission-generator button {
+  grid-column: 1/-1;
+  min-height: 48px;
+  color: white;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-primary);
+  font-weight: 750;
+}
+.mission-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mission-card {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.mission-card > h3 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+}
+.mission-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.mission-meta span {
+  padding: 4px 8px;
+  color: var(--color-primary-strong);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.mission-reason {
+  color: var(--color-text-muted);
+}
+.mission-card > button,
+.mission-detail button {
+  min-height: 42px;
+  margin: 4px 4px 4px 0;
+  padding: 9px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mission-card > button:first-of-type {
+  color: white;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+.mission-detail {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+.mission-detail > div:first-of-type,
+.mission-detail > ol {
+  padding: 16px;
+  border-radius: 12px;
+  background: #f8f8fb;
+  white-space: pre-wrap;
+}
+.mission-decision-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+.mission-decision-actions button {
+  margin: 0;
+}
+.mission-decision-actions button:first-child {
+  color: white;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+.mission-rejection {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8f8fb;
+}
+.mission-rejection textarea {
+  width: 100%;
+  min-height: 80px;
+  margin-top: 6px;
+}
+.mission-accepted {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.mission-accepted > span button {
+  color: var(--color-primary-strong);
+  border-color: #d6d6f7;
+  background: var(--color-primary-soft);
+}
+.mission-step-complete {
+  color: #0c6045;
+  font-weight: 800;
+}
+.mission-post-action {
+  margin-top: 16px;
+}
+.mission-post-action button {
+  width: 100%;
+  color: white;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+.mission-feedback {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--color-success-soft);
+}
+.mission-feedback button[aria-pressed='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.mission-empty {
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed #bec4cf;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 60%);
+}
+.mission-empty p {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+}
+.bunshin-settings-disclosure {
+  margin: 24px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+}
+.bunshin-settings-disclosure summary {
+  padding: 16px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.bunshin-settings-disclosure form {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+.bunshin-settings-disclosure label {
+  display: grid;
+  gap: 6px;
+}
+.bunshin-settings-disclosure input,
+.bunshin-settings-disclosure textarea {
+  width: 100%;
+}
+@media (max-width: 560px) {
+  .mission-generator {
+    grid-template-columns: 1fr;
+  }
+  .mission-generator h3,
+  .mission-generator button {
+    grid-column: auto;
+  }
+  .mission-decision-actions {
+    grid-template-columns: 1fr;
+  }
+  .mission-card {
+    padding: 16px;
+  }
+}
+
 /* UI Foundation: public authentication and consent */
 .public-shell {
   width: 100%;
