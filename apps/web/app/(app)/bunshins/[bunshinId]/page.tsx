@@ -173,6 +173,7 @@ export default async function BunshinPage({
             purpose,
             postingFrequency,
             preferredFormats,
+            defaultAssistanceLevel,
             status,
           }) => ({
             id,
@@ -182,6 +183,7 @@ export default async function BunshinPage({
             purpose,
             postingFrequency,
             preferredFormats,
+            defaultAssistanceLevel,
             status,
           }),
         )}

@@ -99,6 +99,7 @@ const createBody = {
   purpose: ' 発信目的 ',
   postingFrequency: 'WEEKLY',
   preferredFormats: ['SLIDE'],
+  defaultAssistanceLevel: 'READY_TO_USE',
 };
 
 describe('authenticated Social Profile HTTP contract', () => {
@@ -133,6 +134,7 @@ describe('authenticated Social Profile HTTP contract', () => {
     expect(body.data[0]).toMatchObject({
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
+      defaultAssistanceLevel: 'READY_TO_USE',
     });
     expect(JSON.stringify(body)).not.toContain('private');
     expect(body.data[0]).not.toHaveProperty('assignedByUserId');
@@ -162,7 +164,11 @@ describe('authenticated Social Profile HTTP contract', () => {
     );
     expect(response.status).toBe(201);
     expect(state.create).toHaveBeenCalledWith(
-      expect.objectContaining({ handle: 'bunshin', purpose: '発信目的' }),
+      expect.objectContaining({
+        handle: 'bunshin',
+        purpose: '発信目的',
+        defaultAssistanceLevel: 'READY_TO_USE',
+      }),
     );
   });
 
@@ -192,6 +198,7 @@ describe('authenticated Social Profile HTTP contract', () => {
       { ...createBody, preferredFormats: [] },
       { ...createBody, preferredFormats: ['SLIDE', 'SLIDE'] },
       { ...createBody, preferredFormats: ['UNKNOWN'] },
+      { ...createBody, defaultAssistanceLevel: 'UNKNOWN' },
       { ...createBody, profileUrl: 'http://example.com' },
     ]) {
       const response = await createSocialProfileResponse(
@@ -218,6 +225,46 @@ describe('authenticated Social Profile HTTP contract', () => {
     expect(update.status).toBe(400);
     expect(state.create).not.toHaveBeenCalled();
     expect(state.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps older create requests compatible with the ready-to-use default', async () => {
+    const olderBody = { ...createBody, defaultAssistanceLevel: undefined };
+    const response = await createSocialProfileResponse(
+      request(basePath, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(olderBody),
+      }),
+      'workspace-1',
+      'bunshin-1',
+    );
+    expect(response.status).toBe(201);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultAssistanceLevel: 'READY_TO_USE' }),
+    );
+  });
+
+  it('updates only the verified profile assistance level', async () => {
+    const response = await updateSocialProfileResponse(
+      request(`${basePath}/INSTAGRAM`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ defaultAssistanceLevel: 'GUIDED' }),
+      }),
+      'workspace-1',
+      'bunshin-1',
+      'INSTAGRAM',
+    );
+    expect(response.status).toBe(200);
+    expect(state.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        bunshinId: 'bunshin-1',
+        actorUserId: 'user-1',
+        platform: 'INSTAGRAM',
+        defaultAssistanceLevel: 'GUIDED',
+      }),
+    );
   });
 
   it.each([

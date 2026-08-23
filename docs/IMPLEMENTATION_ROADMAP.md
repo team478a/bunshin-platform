@@ -191,12 +191,13 @@ UI変更では既存Coreの意味、Isolation、外部Provider境界を変更し
 
 ### Phase 7-C: Adaptive Content Assistance
 
-状態: 設計承認済み。作成支援レベルのCore Persistenceを実装。初期設定API/UI以降は未実装。詳細は`ADAPTIVE_CONTENT_ASSISTANCE_PLAN.md`を正本とする。
+状態: 作成支援レベルのCore PersistenceとSocialProfile初期設定API/UIを実装。Mission表示以降は未実装。詳細は`ADAPTIVE_CONTENT_ASSISTANCE_PLAN.md`を正本とする。
 
 SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要とする支援量で今日のMissionを実行できるようにする。
 
 - `IDEA_ONLY | GUIDED | READY_TO_USE`の作成支援レベル — Core完了
 - SocialProfileの初期値とDailyMissionのsnapshot — Core完了
+- SocialProfileの初期設定API/UI（日本語3択） — 完了
 - SNS別投稿セットと自動選択Domain Policy
 - 企画、作り方、完成版の段階表示
 - 画像・動画を作るための指示文を含む形式別コピー
