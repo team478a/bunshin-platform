@@ -241,6 +241,7 @@ export class DailyMissionGenerationService {
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,
         ...brief.output,
+        assistanceLevel: profile.defaultAssistanceLevel,
         content: content.output,
         qualityScore: quality.output.score,
       });

@@ -32,6 +32,10 @@ export const SOCIAL_PREFERRED_FORMATS = [
 ] as const;
 export type SocialPreferredFormat = (typeof SOCIAL_PREFERRED_FORMATS)[number];
 
+export const CONTENT_ASSISTANCE_LEVELS = ['IDEA_ONLY', 'GUIDED', 'READY_TO_USE'] as const;
+export type ContentAssistanceLevel = (typeof CONTENT_ASSISTANCE_LEVELS)[number];
+export const DEFAULT_CONTENT_ASSISTANCE_LEVEL: ContentAssistanceLevel = 'READY_TO_USE';
+
 export const SOCIAL_PROFILE_STATUSES = ['ACTIVE', 'INACTIVE'] as const;
 export type SocialProfileStatus = (typeof SOCIAL_PROFILE_STATUSES)[number];
 
@@ -45,6 +49,7 @@ export interface SocialProfile {
   purpose: string;
   postingFrequency: SocialPostingFrequency;
   preferredFormats: SocialPreferredFormat[];
+  defaultAssistanceLevel: ContentAssistanceLevel;
   status: SocialProfileStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -60,6 +65,7 @@ export interface CreateSocialProfileInput {
   purpose: string;
   postingFrequency: SocialPostingFrequency;
   preferredFormats: SocialPreferredFormat[];
+  defaultAssistanceLevel?: ContentAssistanceLevel;
 }
 
 export interface UpdateSocialProfileInput {
@@ -72,6 +78,7 @@ export interface UpdateSocialProfileInput {
   purpose?: string;
   postingFrequency?: SocialPostingFrequency;
   preferredFormats?: SocialPreferredFormat[];
+  defaultAssistanceLevel?: ContentAssistanceLevel;
 }
 
 export interface SocialProfileRepository {
@@ -118,6 +125,13 @@ export function parsePreferredFormats(value: unknown): SocialPreferredFormat[] {
     parsed.push(item);
   }
   return parsed;
+}
+
+export function parseContentAssistanceLevel(value: unknown): ContentAssistanceLevel {
+  if (typeof value !== 'string' || !isOneOf(value, CONTENT_ASSISTANCE_LEVELS)) {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid content assistance level');
+  }
+  return value;
 }
 
 function nullableText(value: string | null, maximum: number): string | null;
@@ -183,6 +197,9 @@ export function normalizeCreateSocialProfileInput(
       'postingFrequency',
     ),
     preferredFormats: parsePreferredFormats(input.preferredFormats),
+    defaultAssistanceLevel: parseContentAssistanceLevel(
+      input.defaultAssistanceLevel ?? DEFAULT_CONTENT_ASSISTANCE_LEVEL,
+    ),
   };
 }
 
@@ -195,6 +212,7 @@ export function normalizeUpdateSocialProfileInput(
     input.purpose,
     input.postingFrequency,
     input.preferredFormats,
+    input.defaultAssistanceLevel,
   ];
   if (mutable.every((value) => value === undefined)) {
     throw new ApplicationError('VALIDATION_ERROR', 'at least one update field is required');
@@ -219,6 +237,9 @@ export function normalizeUpdateSocialProfileInput(
     ...(input.preferredFormats === undefined
       ? {}
       : { preferredFormats: parsePreferredFormats(input.preferredFormats) }),
+    ...(input.defaultAssistanceLevel === undefined
+      ? {}
+      : { defaultAssistanceLevel: parseContentAssistanceLevel(input.defaultAssistanceLevel) }),
   };
 }
 
@@ -1489,6 +1510,7 @@ export interface DailyMission {
   missionDate: string;
   status: DailyMissionStatus;
   format: SocialPreferredFormat;
+  assistanceLevel: ContentAssistanceLevel;
   estimatedMinutes: number;
   topic: string;
   angle: string;
@@ -1513,6 +1535,7 @@ export interface CreateDailyMissionInput extends DailyMissionScope {
   weeklyPlanItemId?: string | null;
   missionDate: string;
   format: SocialPreferredFormat;
+  assistanceLevel?: ContentAssistanceLevel;
   estimatedMinutes: number;
   topic: string;
   angle: string;
@@ -1751,6 +1774,9 @@ export function normalizeCreateDailyMission(
     ...input,
     missionDate: localDate(input.missionDate),
     format,
+    assistanceLevel: parseContentAssistanceLevel(
+      input.assistanceLevel ?? DEFAULT_CONTENT_ASSISTANCE_LEVEL,
+    ),
     estimatedMinutes: missionInteger(input.estimatedMinutes, 1, 120, 'estimated minutes'),
     topic: missionString(input.topic, 200, 'topic'),
     angle: missionString(input.angle, 500, 'angle'),

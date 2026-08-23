@@ -31,6 +31,7 @@ const mission: DailyMission = {
   missionDate: '2026-08-19',
   status: 'GENERATED',
   format: 'SLIDE',
+  assistanceLevel: 'READY_TO_USE',
   estimatedMinutes: 5,
   topic: '基礎',
   angle: '3手',
@@ -106,6 +107,7 @@ describe('Daily Mission core', () => {
   it('normalizes a mission and requires ACTIVE SOCIAL', async () => {
     const value = await new CreateDailyMission(new Missions(), new Assignments()).execute(input);
     expect(value).toMatchObject({ topic: '基礎', missionDate: '2026-08-19' });
+    expect(value.assistanceLevel).toBe('READY_TO_USE');
     for (const status of ['MISSING', 'SUSPENDED', 'LOCKED'] as const)
       await expect(
         new CreateDailyMission(new Missions(), new Assignments(status)).execute(input),
@@ -117,12 +119,13 @@ describe('Daily Mission core', () => {
       { ...input, missionDate: '2026-02-30' },
       { ...input, estimatedMinutes: 0 },
       { ...input, qualityScore: 101 },
+      { ...input, assistanceLevel: 'UNKNOWN' },
       { ...input, content: { ...slide, secret: true } },
       { ...input, content: { ...slide, slides: [{ ...slide.slides[0], index: 2 }] } },
       { ...input, content: { ...slide, slides: [{ ...slide.slides[0], role: 'BODY' }] } },
     ])
       await expect(
-        new CreateDailyMission(new Missions(), new Assignments()).execute(value),
+        new CreateDailyMission(new Missions(), new Assignments()).execute(value as never),
       ).rejects.toThrow();
   });
 

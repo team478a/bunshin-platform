@@ -6,6 +6,7 @@ import {
   DeactivateSocialProfile,
   ListSocialProfiles,
   normalizeCreateSocialProfileInput,
+  parseContentAssistanceLevel,
   parsePreferredFormats,
   type SocialProfile,
   type SocialProfileRepository,
@@ -60,6 +61,7 @@ class ProfileRepository implements SocialProfileRepository {
       purpose: input.purpose,
       postingFrequency: input.postingFrequency,
       preferredFormats: input.preferredFormats,
+      defaultAssistanceLevel: input.defaultAssistanceLevel ?? 'READY_TO_USE',
       status: 'ACTIVE',
       createdAt: now,
       updatedAt: now,
@@ -97,6 +99,7 @@ describe('SocialProfile', () => {
       handle: 'bunshin',
       profileUrl: 'https://example.com/bunshin',
       purpose: '発信目的',
+      defaultAssistanceLevel: 'READY_TO_USE',
     });
     expect(() =>
       normalizeCreateSocialProfileInput({
@@ -107,6 +110,15 @@ describe('SocialProfile', () => {
         preferredFormats: ['SLIDE'],
       }),
     ).toThrowError(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  });
+
+  it('validates an explicit content assistance level', () => {
+    expect(parseContentAssistanceLevel('IDEA_ONLY')).toBe('IDEA_ONLY');
+    expect(parseContentAssistanceLevel('GUIDED')).toBe('GUIDED');
+    expect(parseContentAssistanceLevel('READY_TO_USE')).toBe('READY_TO_USE');
+    expect(() => parseContentAssistanceLevel('UNKNOWN')).toThrowError(
+      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+    );
   });
 
   it('rejects empty, duplicate, and unknown preferred formats', () => {

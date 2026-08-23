@@ -26,6 +26,7 @@ const profile: SocialProfile = {
   purpose: '発信目的',
   postingFrequency: 'WEEKLY',
   preferredFormats: ['SLIDE'],
+  defaultAssistanceLevel: 'READY_TO_USE',
   status: 'ACTIVE',
   createdAt: now,
   updatedAt: now,

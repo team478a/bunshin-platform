@@ -816,7 +816,7 @@
 ## D-070: SNS・投稿方法とBUNSHINの作成支援レベルを分離する
 
 - 日付: 2026-08-23
-- 状態: Proposed / 人間レビュー待ち
+- 状態: 採用
 - Separation: 投稿先は既存`SocialPlatform`、投稿方法は既存`SocialPreferredFormat`、BUNSHINが作る範囲は新しい`ContentAssistanceLevel`として分離する。
 - Levels: `IDEA_ONLY | GUIDED | READY_TO_USE`の3段階とし、画面では「企画だけ」「作り方まで」「そのまま使えるもの」のやさしい日本語を使う。
 - Default: 初回の推奨は`READY_TO_USE`とするが強制せず、SocialProfileの初期値と当日Missionの選択を分ける。

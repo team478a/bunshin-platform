@@ -2035,6 +2035,7 @@ function dailyMission(row: MissionRow): DailyMission {
     missionDate: missionDate(row.missionDate),
     status: row.status,
     format: row.format,
+    assistanceLevel: row.assistanceLevel,
     content: row.content.contentJson as Record<string, unknown>,
   };
 }
@@ -2121,6 +2122,7 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             weeklyPlanItemId: input.weeklyPlanItemId ?? null,
             missionDate: new Date(`${input.missionDate}T00:00:00Z`),
             format: input.format,
+            assistanceLevel: input.assistanceLevel ?? 'READY_TO_USE',
             estimatedMinutes: input.estimatedMinutes,
             topic: input.topic,
             angle: input.angle,
@@ -4401,6 +4403,7 @@ function socialProfile(row: Prisma.SocialProfileGetPayload<object>): SocialProfi
       platform: row.platform,
       postingFrequency: row.postingFrequency,
       preferredFormats: parsePreferredFormats(row.preferredFormats),
+      defaultAssistanceLevel: row.defaultAssistanceLevel,
       status: row.status,
     };
   } catch (error) {
@@ -4478,6 +4481,7 @@ export class PrismaSocialProfileRepository implements SocialProfileRepository {
               purpose: input.purpose,
               postingFrequency: input.postingFrequency,
               preferredFormats: input.preferredFormats,
+              defaultAssistanceLevel: input.defaultAssistanceLevel ?? 'READY_TO_USE',
             },
           }),
         );
@@ -4540,6 +4544,9 @@ export class PrismaSocialProfileRepository implements SocialProfileRepository {
             ...(input.preferredFormats === undefined
               ? {}
               : { preferredFormats: input.preferredFormats }),
+            ...(input.defaultAssistanceLevel === undefined
+              ? {}
+              : { defaultAssistanceLevel: input.defaultAssistanceLevel }),
           },
         }),
       );
