@@ -11,10 +11,10 @@ export function GET(request: Request): Response {
   if (tokenHash === null || !/^[A-Za-z0-9_-]+$/.test(tokenHash) || type !== 'email') {
     return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
   }
-  const body = `<!doctype html><html lang="ja"><body><main><h1>ログイン確認</h1><p>このブラウザでBUNSHINへログインします。</p><form method="post"><input type="hidden" name="token_hash" value="${tokenHash}"><input type="hidden" name="type" value="email"><button type="submit">ログインする</button></form></main></body></html>`;
-  return new Response(body, {
-    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
-  });
+  const confirmation = new URL('/login/confirm', request.url);
+  confirmation.searchParams.set('token_hash', tokenHash);
+  confirmation.searchParams.set('type', type);
+  return NextResponse.redirect(confirmation, 303);
 }
 
 export async function POST(request: Request): Promise<Response> {
