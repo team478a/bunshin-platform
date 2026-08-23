@@ -843,3 +843,15 @@
 - Scope: SNS自動投稿、SNS OAuth、画像・動画本体生成、高度Analytics、課金、自動Memory化を含めない。
 - Gate: FREE頻度、Evidence保持、高リスク領域、Provider予算、出典表示範囲を人間確認してからCore実装へ進む。
 - 詳細: `docs/TREND_RESEARCH_DELIVERY_PLAN.md`、`docs/adr/TREND_RESEARCH_PROVIDER_ADR.md`
+
+## D-072: トレンド検索Providerの採用は実測後に確定する
+
+- 日付: 2026-08-24
+- 状態: Proposed
+- Contract: Coreは共通の`TrendResearchProviderPort`だけを公開し、Exa／Firecrawl固有の型と認証をWeb Adapterへ隔離する。
+- Safety: Provider応答は信頼しない。HTTPS URL、短い題名、短い根拠、公開日時だけへ変換し、raw responseや本文全文を保存しない。
+- Failure: 認証、回数制限、残高、通信、Provider障害、壊れた応答を固定分類する。
+- Candidate: 暫定第一候補はEvidence取得に適したExa、Firecrawlはページ取得重視の比較候補とする。
+- Gate: 日本語品質と費用をまだ実測していないため本番採用しない。DEVELOPMENT限定キー、費用上限、同一query比較を承認後に行い、別ADRで確定する。
+- Scope: APIキー登録、外部API実行、課金契約、Job／Mission生成への接続を含めない。
+- 詳細: `docs/TREND_PROVIDER_SPIKE_REPORT.md`
