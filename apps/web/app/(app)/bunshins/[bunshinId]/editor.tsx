@@ -156,7 +156,7 @@ export function BunshinEditor({
           </span>
           <span>
             <h2>SNS戦略</h2>
-            <p>SNSの選択、アカウント方針、発信戦略</p>
+            <p>どのSNSで、だれに、何を伝えるかを決めます</p>
           </span>
         </header>
         <details className="settings-disclosure">
@@ -191,7 +191,7 @@ export function BunshinEditor({
           </span>
           <span>
             <h2>発信テーマ</h2>
-            <p>Content Pillarと週間計画</p>
+            <p>どんなことを投稿するかと、1週間の予定を決めます</p>
           </span>
         </header>
         <details className="settings-disclosure">
