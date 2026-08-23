@@ -35,6 +35,8 @@ import {
   RecordManualPost,
   GetMissionFeedback,
   RecordMissionFeedback,
+  CreateCompletedTrendResearch,
+  ListActiveTrendIdeas,
 } from '@bunshin/capability-social';
 import { PrismaClient } from '@prisma/client/index';
 import {
@@ -65,6 +67,7 @@ import {
   PrismaLineConnectionRepository,
   PrismaLineDeliveryRetryRepository,
   PrismaLineAdminFunnelRepository,
+  PrismaTrendResearchRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -76,6 +79,10 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.trendIdeaCandidateEvidence.deleteMany();
+    await client.trendIdeaCandidate.deleteMany();
+    await client.trendEvidence.deleteMany();
+    await client.trendResearchRun.deleteMany();
     await client.lineWebhookEvent.deleteMany();
     await client.lineConnection.deleteMany();
     await client.lineDeliveryRetryRequest.deleteMany();
@@ -2724,6 +2731,154 @@ integration('database ownership boundaries', () => {
     await expect(
       new ListDailyMissions(repository).execute(ownerScope(owner, bunshin.id)),
     ).resolves.toHaveLength(1);
+  });
+
+  it('persists trend evidence and candidates within Workspace and Bunshin boundaries', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Trend Owner' });
+    const outsider = await accounts.execute({ displayName: 'Trend Outsider' });
+    const bunshins = new PrismaBunshinRepository(client);
+    const bunshin = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Trend Bunshin',
+      slug: `trend-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const assignments = new PrismaBunshinCapabilityAssignmentRepository(client);
+    await assignments.assign({ ...ownerScope(owner, bunshin.id), capabilityType: 'SOCIAL' });
+    const profile = await new CreateSocialProfile(
+      new PrismaSocialProfileRepository(client),
+      assignments,
+    ).execute({
+      ...ownerScope(owner, bunshin.id),
+      platform: 'YOUTUBE_SHORTS',
+      purpose: 'Trend videos',
+      postingFrequency: 'WEEKLY',
+      preferredFormats: ['LIVE_ACTION'],
+    });
+    const repository = new PrismaTrendResearchRepository(client);
+    const completedAt = new Date('2026-08-24T00:00:00.000Z');
+    const expiresAt = new Date('2026-08-31T00:00:00.000Z');
+    const created = await new CreateCompletedTrendResearch(repository, assignments).execute({
+      ...ownerScope(owner, bunshin.id),
+      socialProfileId: profile.id,
+      platform: 'YOUTUBE_SHORTS',
+      periodStart: '2026-08-24',
+      periodEnd: '2026-08-30',
+      queryVersion: 'weekly-v1',
+      providerKey: 'test',
+      completedAt,
+      expiresAt,
+      evidence: [
+        {
+          key: 'e1',
+          sourceType: 'OFFICIAL_API',
+          sourceUrl: 'https://example.com/video',
+          sourceTitle: 'Source',
+          retrievedAt: completedAt,
+          summary: 'Summary',
+          evidenceHash: 'a'.repeat(64),
+          expiresAt,
+        },
+      ],
+      candidates: [
+        {
+          platform: 'YOUTUBE_SHORTS',
+          topic: 'Idea',
+          hook: 'Hook',
+          whyNow: 'Now',
+          fitReason: 'Fit',
+          suggestedFormat: 'LIVE_ACTION',
+          estimatedMinutes: 10,
+          freshnessScore: 90,
+          fitScore: 80,
+          feasibilityScore: 70,
+          safetyStatus: 'SAFE',
+          expiresAt,
+          evidenceKeys: ['e1'],
+        },
+      ],
+    });
+    expect(created.candidates[0]?.evidenceIds).toEqual([created.evidence[0]?.id]);
+    await expect(
+      new ListActiveTrendIdeas(repository).execute({
+        ...ownerScope(owner, bunshin.id),
+        socialProfileId: profile.id,
+        at: completedAt,
+      }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      new ListActiveTrendIdeas(repository).execute({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: bunshin.id,
+        socialProfileId: profile.id,
+        at: completedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const sibling = await bunshins.create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Sibling Trend',
+      slug: `sibling-trend-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'O',
+      audienceSummary: 'A',
+      personalitySummary: 'P',
+    });
+    await expect(
+      new ListActiveTrendIdeas(repository).execute({
+        ...ownerScope(owner, sibling.id),
+        socialProfileId: profile.id,
+        at: completedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      new CreateCompletedTrendResearch(repository, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        socialProfileId: profile.id,
+        platform: 'YOUTUBE_SHORTS',
+        periodStart: '2026-08-24',
+        periodEnd: '2026-08-30',
+        queryVersion: 'weekly-v1',
+        providerKey: 'test',
+        completedAt,
+        expiresAt,
+        evidence: [
+          {
+            key: 'e1',
+            sourceType: 'OFFICIAL_API',
+            sourceUrl: 'https://example.com/video',
+            sourceTitle: 'Source',
+            retrievedAt: completedAt,
+            summary: 'Summary',
+            evidenceHash: 'a'.repeat(64),
+            expiresAt,
+          },
+        ],
+        candidates: [
+          {
+            platform: 'YOUTUBE_SHORTS',
+            topic: 'Idea',
+            hook: 'Hook',
+            whyNow: 'Now',
+            fitReason: 'Fit',
+            suggestedFormat: 'LIVE_ACTION',
+            estimatedMinutes: 10,
+            freshnessScore: 90,
+            fitScore: 80,
+            feasibilityScore: 70,
+            safetyStatus: 'SAFE',
+            expiresAt,
+            evidenceKeys: ['e1'],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });
 
