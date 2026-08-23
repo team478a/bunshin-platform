@@ -1,6 +1,7 @@
 import { GetRequiredLegalConsents } from '@bunshin/application';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../src/auth/current-user';
+import { AppShell } from '../ui/app-shell';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,5 +13,5 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
     new db.PrismaLegalConsentRepository(),
   ).execute(user.userId);
   if (documents.some((item) => !item.consentedAt)) redirect('/consent');
-  return children;
+  return <AppShell>{children}</AppShell>;
 }
