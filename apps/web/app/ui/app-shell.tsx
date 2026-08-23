@@ -12,6 +12,7 @@ const navigation = [
 
 const adminNavigation = [
   { href: '/admin', label: '運用設定' },
+  { href: '/admin/users', label: 'ユーザーと利用状況' },
   { href: '/admin/line', label: 'LINE運用' },
   { href: '/admin/legal', label: '法務文書' },
   { href: '/admin/deletions', label: '退会要求' },

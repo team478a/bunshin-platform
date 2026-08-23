@@ -51,6 +51,11 @@ import type {
   MissionDeepLinkStateRepository,
   LineConnection,
   LineConnectionRepository,
+  AdminOperationsRepository,
+  AdminOperationsSnapshot,
+  AdminUserDetail,
+  AdminUserStage,
+  AdminUserSummary,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -4931,5 +4936,290 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
       },
       update: {},
     });
+  }
+}
+
+const adminUserSelect = {
+  id: true,
+  displayName: true,
+  email: true,
+  status: true,
+  createdAt: true,
+  identities: { select: { provider: true } },
+  memberships: {
+    select: { role: true, status: true, workspace: { select: { id: true, name: true } } },
+  },
+  bunshins: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      createdAt: true,
+      capabilityAssignments: {
+        where: { capabilityType: 'SOCIAL', status: 'ACTIVE' },
+        select: { id: true },
+      },
+      socialAccountStrategies: {
+        where: { status: 'APPROVED' },
+        select: { id: true },
+      },
+    },
+  },
+  missionActivities: {
+    orderBy: { occurredAt: 'desc' },
+    take: 50,
+    select: { type: true, occurredAt: true },
+  },
+  postRecords: {
+    orderBy: { postedAt: 'desc' },
+    take: 50,
+    select: { postedAt: true },
+  },
+  aiUsageEvents: {
+    orderBy: { occurredAt: 'desc' },
+    take: 50,
+    select: { status: true, occurredAt: true, estimatedCostUsdMicros: true, errorCode: true },
+  },
+  lineConnections: {
+    select: { environment: true, status: true, friendshipStatus: true, updatedAt: true },
+  },
+  accountDeletionRequests: {
+    where: { status: { in: ['REQUESTED', 'PROCESSING', 'BLOCKED'] } },
+    select: { id: true },
+  },
+  _count: { select: { postRecords: true, aiUsageEvents: true } },
+} satisfies Prisma.UserSelect;
+
+type AdminUserRow = Prisma.UserGetPayload<{ select: typeof adminUserSelect }>;
+const copyActivityTypes = new Set([
+  'COPIED_TEXT',
+  'COPIED_SLIDE',
+  'COPIED_VIDEO_PROMPT',
+  'COPIED_SCRIPT',
+]);
+
+function adminUserSummary(
+  row: AdminUserRow,
+  environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION',
+  now = new Date(),
+): AdminUserSummary {
+  const activityTypes = new Set(row.missionActivities.map(({ type }) => type));
+  let stage: AdminUserStage = 'REGISTERED';
+  if (row.bunshins.length > 0) stage = 'BUNSHIN_CREATED';
+  if (row.bunshins.some(({ capabilityAssignments }) => capabilityAssignments.length > 0))
+    stage = 'SOCIAL_ACTIVATED';
+  if (row.bunshins.some(({ socialAccountStrategies }) => socialAccountStrategies.length > 0))
+    stage = 'STRATEGY_APPROVED';
+  if (activityTypes.has('VIEWED')) stage = 'MISSION_VIEWED';
+  if (activityTypes.has('ACCEPTED')) stage = 'MISSION_ACCEPTED';
+  if ([...activityTypes].some((type) => copyActivityTypes.has(type))) stage = 'COPIED';
+  if (row.postRecords.length > 0) stage = 'POSTED';
+
+  const lineConnections = row.lineConnections.filter((item) => item.environment === environment);
+  const activityDates = [
+    row.createdAt,
+    ...row.missionActivities.map(({ occurredAt }) => occurredAt),
+    ...row.postRecords.map(({ postedAt }) => postedAt),
+    ...row.aiUsageEvents.map(({ occurredAt }) => occurredAt),
+    ...lineConnections.map(({ updatedAt }) => updatedAt),
+  ];
+  const lastActiveAt = new Date(Math.max(...activityDates.map((value) => value.getTime())));
+  const deletionPending = row.accountDeletionRequests.length > 0;
+  let attentionReason: string | null = null;
+  if (row.status !== 'ACTIVE') attentionReason = '利用停止・退会済み';
+  else if (deletionPending) attentionReason = '退会処理待ち';
+  else if (row.bunshins.length === 0 && now.getTime() - row.createdAt.getTime() >= 86_400_000)
+    attentionReason = 'BUNSHINが未作成';
+  else if (now.getTime() - lastActiveAt.getTime() >= 7 * 86_400_000)
+    attentionReason = '7日以上利用がありません';
+  else if (row.aiUsageEvents.filter(({ status }) => status === 'FAILED').length >= 3)
+    attentionReason = 'AI処理が繰り返し失敗';
+
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    email: row.email,
+    status: row.status,
+    createdAt: row.createdAt,
+    authProviders: [...new Set(row.identities.map(({ provider }) => provider))],
+    bunshinCount: row.bunshins.length,
+    postCount: row._count.postRecords,
+    aiCalls: row._count.aiUsageEvents,
+    aiFailedCalls: row.aiUsageEvents.filter(({ status }) => status === 'FAILED').length,
+    lineConnected: lineConnections.some(({ status }) => status === 'ACTIVE'),
+    lineFollowing: lineConnections.some(({ friendshipStatus }) => friendshipStatus === 'FOLLOWING'),
+    deletionPending,
+    lastActiveAt,
+    stage,
+    attentionReason,
+  };
+}
+
+export class PrismaAdminOperationsRepository implements AdminOperationsRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async authorized(actorUserId: string) {
+    return Boolean(
+      await this.client.platformAdmin.findFirst({
+        where: { userId: actorUserId, status: 'ACTIVE' },
+        select: { id: true },
+      }),
+    );
+  }
+
+  async snapshot(
+    input: Parameters<AdminOperationsRepository['snapshot']>[0],
+  ): Promise<AdminOperationsSnapshot | null> {
+    if (!(await this.authorized(input.actorUserId))) return null;
+    const search = input.query
+      ? {
+          OR: [
+            { displayName: { contains: input.query, mode: Prisma.QueryMode.insensitive } },
+            { email: { contains: input.query, mode: Prisma.QueryMode.insensitive } },
+          ],
+        }
+      : {};
+    const period = { gte: input.from, lt: input.to };
+    const [rows, cohortRows, users, activeUsers, periodPosts, periodAi, lineUsers, deletionUsers] =
+      await Promise.all([
+        this.client.user.findMany({
+          where: search,
+          select: adminUserSelect,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: input.limit + 1,
+        }),
+        this.client.user.findMany({
+          where: { createdAt: period },
+          select: {
+            ...adminUserSelect,
+            missionActivities: {
+              ...adminUserSelect.missionActivities,
+              where: { occurredAt: { lt: input.to } },
+            },
+            postRecords: {
+              ...adminUserSelect.postRecords,
+              where: { postedAt: { lt: input.to } },
+            },
+            aiUsageEvents: {
+              ...adminUserSelect.aiUsageEvents,
+              where: { occurredAt: { lt: input.to } },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 5001,
+        }),
+        this.client.user.count(),
+        this.client.user.count({ where: { status: 'ACTIVE' } }),
+        this.client.postRecord.count({ where: { postedAt: period } }),
+        this.client.aiUsageEvent.findMany({
+          where: { occurredAt: period },
+          select: { status: true, estimatedCostUsdMicros: true },
+        }),
+        this.client.lineConnection.findMany({
+          where: { environment: input.environment, status: 'ACTIVE' },
+          distinct: ['userId'],
+          select: { userId: true },
+        }),
+        this.client.accountDeletionRequest.findMany({
+          where: { status: { in: ['REQUESTED', 'PROCESSING', 'BLOCKED'] } },
+          distinct: ['userId'],
+          select: { userId: true },
+        }),
+      ]);
+    const visible = rows
+      .slice(0, input.limit)
+      .map((row) => adminUserSummary(row, input.environment));
+    const cohort = cohortRows.slice(0, 5000).map((row) => adminUserSummary(row, input.environment));
+    const stageIndex = new Map<AdminUserStage, number>([
+      ['REGISTERED', 0],
+      ['BUNSHIN_CREATED', 1],
+      ['SOCIAL_ACTIVATED', 2],
+      ['STRATEGY_APPROVED', 3],
+      ['MISSION_VIEWED', 4],
+      ['MISSION_ACCEPTED', 5],
+      ['COPIED', 6],
+      ['POSTED', 7],
+    ]);
+    const stages = [...stageIndex.keys()];
+    const funnel = Object.fromEntries(
+      stages.map((stage) => [
+        stage,
+        cohort.filter((user) => stageIndex.get(user.stage)! >= stageIndex.get(stage)!).length,
+      ]),
+    ) as Record<AdminUserStage, number>;
+    const priced = periodAi.filter(({ estimatedCostUsdMicros }) => estimatedCostUsdMicros !== null);
+    return {
+      period: { from: input.from, to: input.to },
+      totals: {
+        users,
+        activeUsers,
+        newUsers: cohortRows.length,
+        posts: periodPosts,
+        aiCalls: periodAi.length,
+        aiFailedCalls: periodAi.filter(({ status }) => status === 'FAILED').length,
+        estimatedAiCostUsdMicros:
+          priced.length === 0
+            ? null
+            : Number(priced.reduce((sum, item) => sum + (item.estimatedCostUsdMicros ?? 0n), 0n)),
+        lineConnectedUsers: lineUsers.length,
+        attentionUsers: visible.filter(({ attentionReason }) => attentionReason !== null).length,
+        deletionPendingUsers: deletionUsers.length,
+      },
+      funnel,
+      users: visible,
+      truncated: rows.length > input.limit || cohortRows.length > 5000,
+    };
+  }
+
+  async userDetail(
+    input: Parameters<AdminOperationsRepository['userDetail']>[0],
+  ): Promise<AdminUserDetail | null> {
+    if (!(await this.authorized(input.actorUserId))) return null;
+    const row = await this.client.user.findUnique({
+      where: { id: input.userId },
+      select: adminUserSelect,
+    });
+    if (!row) return null;
+    const timeline = [
+      ...row.missionActivities.map((item) => ({
+        type: item.type,
+        occurredAt: item.occurredAt,
+        label: `投稿案：${item.type}`,
+        outcome: 'INFO' as const,
+      })),
+      ...row.postRecords.map((item) => ({
+        type: 'POSTED',
+        occurredAt: item.postedAt,
+        label: '投稿完了',
+        outcome: 'SUCCESS' as const,
+      })),
+      ...row.aiUsageEvents.map((item) => ({
+        type: 'AI',
+        occurredAt: item.occurredAt,
+        label:
+          item.status === 'SUCCESS'
+            ? 'AI処理成功'
+            : `AI処理失敗（${item.errorCode ?? '原因不明'}）`,
+        outcome: item.status,
+      })),
+    ]
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      .slice(0, 50);
+    return {
+      user: adminUserSummary(row, input.environment),
+      workspaces: row.memberships.map((item) => ({
+        id: item.workspace.id,
+        name: item.workspace.name,
+        role: item.role,
+        status: item.status,
+      })),
+      bunshins: row.bunshins.map((item) => ({
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        createdAt: item.createdAt,
+      })),
+      timeline,
+    };
   }
 }

@@ -1529,3 +1529,4 @@ export * from './line-delivery-admin-retry';
 export * from './line-admin-funnel';
 export * from './line-operational-readiness';
 export * from './account-deletion-execution';
+export * from './admin-operations';
