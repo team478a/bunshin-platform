@@ -277,6 +277,8 @@ LINEは通知と安全な入口に限定する。
 
 ### PR 5: Candidate Ranking / Mission Integration
 
+状態: Core接続完了。SAFE、期限内、SNS・形式一致、Evidenceあり、利用可能時間内の候補だけを決定的に順位付けし、最上位1件をDaily Mission Plannerへ任意入力する。候補がない場合は従来生成へfallbackする。Evidence表示用snapshotとCandidate選択履歴は後続UI PRで扱う。
+
 - 決定的な前処理と構造化AI評価
 - Weekly Plan / Daily Missionへの任意入力
 - Evidence snapshot

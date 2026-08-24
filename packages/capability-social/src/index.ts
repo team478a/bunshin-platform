@@ -1196,6 +1196,7 @@ export interface DailyMissionPlannerInput {
   weeklyPlan: WeeklyPlan;
   contentPillars: ContentPillar[];
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+  trendIdeas?: TrendIdeaCandidate[];
 }
 
 const PLATFORM_FORMAT_PRIORITY: Record<SocialPlatform, readonly SocialPreferredFormat[]> = {
@@ -1271,6 +1272,12 @@ export interface DailyMissionPlannerProviderInput {
   };
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+  trendIdeas?: Array<{
+    topic: string;
+    hook: string;
+    whyNow: string;
+    fitReason: string;
+  }>;
 }
 
 export interface DailyMissionPlannerOutput {
@@ -1355,6 +1362,14 @@ export class GenerateDailyMissionBrief {
       availableMinutes: input.approvedStrategy.availableMinutes,
       ...(input.recentFormats ? { recentFormats: input.recentFormats } : {}),
     });
+    const trendIdeas = rankTrendIdeaCandidates({
+      candidates: input.trendIdeas ?? [],
+      platform: input.socialProfile.platform,
+      format: selectedFormat,
+      availableMinutes: input.approvedStrategy.availableMinutes,
+      at: new Date(`${missionDate}T00:00:00.000Z`),
+      maximum: 1,
+    });
 
     const result = await this.planner.generate({
       missionDate,
@@ -1378,6 +1393,16 @@ export class GenerateDailyMissionBrief {
       },
       contentPillar: { title: pillar.title, description: pillar.description },
       grantedKnowledge: input.grantedKnowledge,
+      ...(trendIdeas.length > 0
+        ? {
+            trendIdeas: trendIdeas.map(({ topic, hook, whyNow, fitReason }) => ({
+              topic,
+              hook,
+              whyNow,
+              fitReason,
+            })),
+          }
+        : {}),
     });
     const estimatedMinutes = missionInteger(
       result.output.estimatedMinutes,
@@ -2473,6 +2498,53 @@ export class ListActiveTrendIdeas {
     if (values === null) throw new ApplicationError('NOT_FOUND', 'trend research scope not found');
     return values;
   }
+}
+
+export interface RankTrendIdeaCandidatesInput {
+  candidates: TrendIdeaCandidate[];
+  platform: SocialPlatform;
+  format: SocialPreferredFormat;
+  availableMinutes: number;
+  at: Date;
+  maximum?: number;
+}
+
+export interface RankedTrendIdeaCandidate extends TrendIdeaCandidate {
+  rankingScore: number;
+}
+
+export function rankTrendIdeaCandidates(
+  input: RankTrendIdeaCandidatesInput,
+): RankedTrendIdeaCandidate[] {
+  trendTimestamp(input.at, 'ranking at');
+  if (!Number.isInteger(input.availableMinutes) || input.availableMinutes < 1)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid ranking time budget');
+  const maximum = input.maximum ?? 3;
+  if (!Number.isInteger(maximum) || maximum < 1 || maximum > 3)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid ranking candidate limit');
+  assertPlatformFormat(input.platform, input.format);
+  return input.candidates
+    .filter(
+      (candidate) =>
+        candidate.platform === input.platform &&
+        candidate.suggestedFormat === input.format &&
+        candidate.safetyStatus === 'SAFE' &&
+        candidate.expiresAt > input.at &&
+        candidate.estimatedMinutes <= input.availableMinutes &&
+        candidate.evidenceIds.length > 0,
+    )
+    .map((candidate) => ({
+      ...candidate,
+      rankingScore:
+        candidate.fitScore * 40 + candidate.freshnessScore * 35 + candidate.feasibilityScore * 25,
+    }))
+    .sort(
+      (left, right) =>
+        right.rankingScore - left.rankingScore ||
+        right.fitScore - left.fitScore ||
+        left.id.localeCompare(right.id),
+    )
+    .slice(0, maximum);
 }
 
 export type TrendSearchFailureCategory =
