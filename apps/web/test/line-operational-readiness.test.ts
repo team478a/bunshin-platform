@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 const get = vi.fn();
+const active = vi.fn();
+const hasConfiguration = vi.fn();
 vi.mock('@bunshin/database', () => ({
   PrismaLineOperationalSnapshotRepository: class {
     get = get;
+  },
+  PrismaAdminEmailConfigurationRepository: class {
+    active = active;
+    hasConfiguration = hasConfiguration;
   },
 }));
 
@@ -29,6 +35,8 @@ beforeEach(() => {
     jobs: { retryScheduled: 0, dead: 0 },
     failures: [],
   });
+  active.mockResolvedValue(null);
+  hasConfiguration.mockResolvedValue(false);
 });
 
 describe('LINE operational readiness HTTP boundary', () => {
@@ -75,5 +83,31 @@ describe('LINE operational readiness HTTP boundary', () => {
     const body = await response.text();
     expect(body).toContain('ACTIVE_CONFIGURATION_MISSING');
     expect(body).not.toContain(secret);
+  });
+
+  it('fails closed after database-managed email settings have been paused', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_ENV', 'production');
+    vi.stubEnv('APP_URL', 'https://app.example.com');
+    vi.stubEnv('RESEND_ADMIN_ALERT_API_KEY', 'legacy-resend-api-key');
+    vi.stubEnv('RESEND_ADMIN_ALERT_FROM', 'alerts@example.com');
+    vi.stubEnv('RESEND_ADMIN_ALERT_TO', 'admin@example.com');
+    get.mockResolvedValue({
+      environment: 'PRODUCTION',
+      configuration: { active: true, verified: true, globallyPaused: false },
+      deliveries: { failed: 0 },
+      jobs: { retryScheduled: 0, dead: 0 },
+      failures: [],
+    });
+    hasConfiguration.mockResolvedValue(true);
+    const response = await lineOperationalReadinessResponse(
+      new Request('https://app.example.com/api/internal/line/readiness', {
+        headers: { authorization: `Bearer ${secret}` },
+      }),
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      data: { alertingConfigured: false },
+    });
   });
 });

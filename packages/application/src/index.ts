@@ -578,6 +578,7 @@ export interface AdminEmailConfigurationRepository {
   active(input: {
     environment: LineConfigurationEnvironment;
   }): Promise<{ configuration: AdminEmailConfiguration; encryptedApiKey: string } | null>;
+  hasConfiguration(input: { environment: LineConfigurationEnvironment }): Promise<boolean>;
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
