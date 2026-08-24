@@ -38,6 +38,8 @@ import type {
   LineRichMenuRepository,
   AiProviderConfiguration,
   AiProviderConfigurationRepository,
+  AdminEmailConfiguration,
+  AdminEmailConfigurationRepository,
   LineNotificationPreference,
   LineNotificationPreferenceRepository,
   JobRepository,
@@ -196,6 +198,17 @@ function aiProviderConfiguration(
     lastErrorCategory: row.lastErrorCategory,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+function adminEmailConfiguration(
+  row: Prisma.AdminEmailConfigurationGetPayload<object>,
+): AdminEmailConfiguration {
+  return {
+    ...row,
+    recipientEmails: Array.isArray(row.recipientEmails)
+      ? row.recipientEmails.filter((value): value is string => typeof value === 'string')
+      : [],
   };
 }
 
@@ -1812,6 +1825,159 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
       monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
     };
+  }
+}
+
+export class PrismaAdminEmailConfigurationRepository implements AdminEmailConfigurationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  private admin(userId: string) {
+    return this.client.platformAdmin.findFirst({ where: { userId, status: 'ACTIVE' } });
+  }
+  async list(input: Parameters<AdminEmailConfigurationRepository['list']>[0]) {
+    if (!(await this.admin(input.actorUserId))) return null;
+    return (
+      await this.client.adminEmailConfiguration.findMany({
+        where: { environment: input.environment },
+        orderBy: { version: 'desc' },
+      })
+    ).map(adminEmailConfiguration);
+  }
+  async create(input: Parameters<AdminEmailConfigurationRepository['create']>[0]) {
+    if ((await this.admin(input.actorUserId))?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const latest = await tx.adminEmailConfiguration.findFirst({
+        where: { environment: input.environment },
+        orderBy: { version: 'desc' },
+      });
+      const row = await tx.adminEmailConfiguration.create({
+        data: {
+          environment: input.environment,
+          version: (latest?.version ?? 0) + 1,
+          encryptedApiKey: input.apiKey.encryptedValue,
+          apiKeyMask: input.apiKey.mask,
+          keyVersion: input.apiKey.keyVersion,
+          fromEmail: input.fromEmail,
+          recipientEmails: input.recipientEmails,
+        },
+      });
+      await tx.adminEmailConfigurationAudit.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'CREATE_VERSION',
+          reason: input.reason,
+          changedFields: ['credentials', 'fromEmail', 'recipientEmails'],
+        },
+      });
+      return adminEmailConfiguration(row);
+    });
+  }
+  async forTest(input: Parameters<AdminEmailConfigurationRepository['forTest']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (!admin || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    const row = await this.client.adminEmailConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    return row
+      ? { configuration: adminEmailConfiguration(row), encryptedApiKey: row.encryptedApiKey }
+      : null;
+  }
+  async recordTest(input: Parameters<AdminEmailConfigurationRepository['recordTest']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (!admin || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role))
+      throw new ApplicationError('FORBIDDEN', 'admin required');
+    const target = await this.client.adminEmailConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    if (!target) throw new ApplicationError('NOT_FOUND', 'configuration not found');
+    await this.client.$transaction([
+      this.client.adminEmailConfiguration.update({
+        where: { id: target.id },
+        data: {
+          status: input.success ? 'DRAFT' : 'ERROR',
+          lastVerifiedAt: input.success ? new Date() : target.lastVerifiedAt,
+          lastErrorCategory: input.errorCategory,
+        },
+      }),
+      this.client.adminEmailConfigurationAudit.create({
+        data: {
+          configurationId: target.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'CONNECTION_TEST',
+          reason: '管理画面からテストメールを送信',
+          changedFields: ['lastVerifiedAt', 'lastErrorCategory', 'status'],
+        },
+      }),
+    ]);
+  }
+  async activate(input: Parameters<AdminEmailConfigurationRepository['activate']>[0]) {
+    if ((await this.admin(input.actorUserId))?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const target = await tx.adminEmailConfiguration.findFirst({
+        where: { id: input.configurationId, environment: input.environment },
+      });
+      if (!target) return null;
+      if (!target.lastVerifiedAt || target.lastErrorCategory)
+        throw new ApplicationError('CONFLICT', 'successful connection test required');
+      await tx.adminEmailConfiguration.updateMany({
+        where: { environment: input.environment, status: 'ACTIVE' },
+        data: { status: 'DISABLED', globallyPaused: true },
+      });
+      const row = await tx.adminEmailConfiguration.update({
+        where: { id: target.id },
+        data: { status: 'ACTIVE', globallyPaused: false },
+      });
+      await tx.adminEmailConfigurationAudit.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'ACTIVATE',
+          reason: input.reason,
+          changedFields: ['status', 'globallyPaused'],
+        },
+      });
+      return adminEmailConfiguration(row);
+    });
+  }
+  async pause(input: Parameters<AdminEmailConfigurationRepository['pause']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (!admin || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    const target = await this.client.adminEmailConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    if (!target) return null;
+    const row = await this.client.adminEmailConfiguration.update({
+      where: { id: target.id },
+      data: { globallyPaused: true },
+    });
+    await this.client.adminEmailConfigurationAudit.create({
+      data: {
+        configurationId: row.id,
+        environment: input.environment,
+        actorUserId: input.actorUserId,
+        action: 'PAUSE',
+        reason: input.reason,
+        changedFields: ['globallyPaused'],
+      },
+    });
+    return adminEmailConfiguration(row);
+  }
+  async active(input: Parameters<AdminEmailConfigurationRepository['active']>[0]) {
+    const row = await this.client.adminEmailConfiguration.findFirst({
+      where: {
+        environment: input.environment,
+        status: 'ACTIVE',
+        globallyPaused: false,
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    });
+    return row
+      ? { configuration: adminEmailConfiguration(row), encryptedApiKey: row.encryptedApiKey }
+      : null;
   }
 }
 

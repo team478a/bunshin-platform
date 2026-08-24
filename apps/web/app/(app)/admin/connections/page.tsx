@@ -62,6 +62,14 @@ export default async function ConnectionsPage() {
       </header>
 
       <section className="settings-card">
+        <h2>障害メール</h2>
+        <p>ResendのAPIキー、送信元、通知先を登録し、実際のテストメールで確認します。</p>
+        <Link href="/admin/email" className="button button--secondary">
+          障害メールの登録・接続確認を開く
+        </Link>
+      </section>
+
+      <section className="settings-card">
         <h2>AI・検索サービス</h2>
         <p>対象環境：{currentAiProviderEnvironment()}</p>
         {latestAi.length ? (
