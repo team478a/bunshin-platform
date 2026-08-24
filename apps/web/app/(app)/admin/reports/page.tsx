@@ -1,4 +1,9 @@
-import { ADMIN_USER_STAGES, GetAdminOperationsSnapshot } from '@bunshin/application';
+import {
+  ADMIN_USER_STAGES,
+  GetAdminOperationsSnapshot,
+  GetLineAdminMetrics,
+  ListAdminSupportCases,
+} from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
@@ -17,16 +22,25 @@ export default async function AdminReportsPage({
   const period = resolvePeriod(await searchParams);
   const db = await import('@bunshin/database');
   let snapshot;
+  let lineMetrics;
+  let supportCases;
   try {
-    snapshot = await new GetAdminOperationsSnapshot(
-      new db.PrismaAdminOperationsRepository(),
-    ).execute({
-      actorUserId: actor.userId,
-      environment: currentLineEnvironment(),
-      from: period.from,
-      to: period.to,
-      limit: 200,
-    });
+    [snapshot, lineMetrics, supportCases] = await Promise.all([
+      new GetAdminOperationsSnapshot(new db.PrismaAdminOperationsRepository()).execute({
+        actorUserId: actor.userId,
+        environment: currentLineEnvironment(),
+        from: period.from,
+        to: period.to,
+        limit: 200,
+      }),
+      new GetLineAdminMetrics(new db.PrismaLineAdminMetricsRepository()).execute(
+        actor.userId,
+        currentLineEnvironment(),
+      ),
+      new ListAdminSupportCases(new db.PrismaAdminOperationsRepository()).execute({
+        actorUserId: actor.userId,
+      }),
+    ]);
   } catch (error) {
     if (error instanceof ApplicationError && error.code === 'NOT_FOUND') notFound();
     throw error;
@@ -68,6 +82,28 @@ export default async function AdminReportsPage({
         <p>
           <small>ユーザー一覧は最大5,000件です。件数を超える場合は期間を分けてください。</small>
         </p>
+      </section>
+      <section aria-labelledby="operation-current">
+        <h2 id="operation-current">現在の運用状況</h2>
+        <p>ここは期間ではなく、現在残っている対応件数です。</p>
+        <div className="validation-kpi-grid">
+          <article>
+            <strong>{supportCases.filter((item) => item.status !== 'RESOLVED').length}</strong>
+            <span>未解決の問い合わせ</span>
+          </article>
+          <article>
+            <strong>{lineMetrics.deliveries.pending + lineMetrics.deliveries.processing}</strong>
+            <span>LINE送信待ち</span>
+          </article>
+          <article>
+            <strong>{lineMetrics.deliveries.failed}</strong>
+            <span>LINE送信失敗</span>
+          </article>
+          <article>
+            <strong>{lineMetrics.jobs.dead}</strong>
+            <span>自動再試行終了</span>
+          </article>
+        </div>
       </section>
       <section aria-labelledby="report-summary">
         <h2 id="report-summary">期間内のまとめ</h2>
