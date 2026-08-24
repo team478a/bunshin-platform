@@ -154,6 +154,7 @@ export interface LineMissionNotificationSummary {
   format: LineMissionFormat;
   estimatedMinutes: number;
   topic: string;
+  researched: boolean;
 }
 
 export interface LineMissionNotificationSummaryRepository {
@@ -187,6 +188,8 @@ export function normalizeLineMissionNotificationSummary(
     .replace(/\s+/g, ' ')
     .trim();
   if (!topic) throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission topic');
+  if (typeof input.researched !== 'boolean')
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission research marker');
   return { ...input, topic: topic.slice(0, 60) };
 }
 

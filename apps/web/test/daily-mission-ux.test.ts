@@ -27,6 +27,7 @@ function mission(
     platform: 'X',
     postedAt: null,
     feedback: null,
+    trendContext: null,
   };
 }
 

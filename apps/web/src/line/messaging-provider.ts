@@ -103,6 +103,7 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
                 `作るもの：${format}`,
                 `目安：${summary.estimatedMinutes}分`,
                 `テーマ：${summary.topic}`,
+                ...(summary.researched ? ['新しい情報も参考にした企画です。'] : []),
                 '',
                 'くわしく見る',
                 input.deepLinkUrl,

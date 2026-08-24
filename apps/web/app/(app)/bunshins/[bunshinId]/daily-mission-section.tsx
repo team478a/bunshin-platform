@@ -19,6 +19,17 @@ export type DailyMissionView = {
   platform: 'INSTAGRAM' | 'TIKTOK' | 'X' | 'THREADS' | 'YOUTUBE_SHORTS' | 'OTHER' | null;
   postedAt: string | null;
   feedback: 'GOOD' | 'NEUTRAL' | 'BAD' | null;
+  trendContext: {
+    whyNow: string;
+    fitReason: string;
+    researchedAt: string;
+    evidence: Array<{
+      sourceUrl: string;
+      sourceTitle: string;
+      publishedAt: string | null;
+      retrievedAt: string;
+    }>;
+  } | null;
 };
 
 export type ContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -120,6 +131,51 @@ function MissionIdea({ mission }: { mission: DailyMissionView }) {
         {mission.reason}
       </p>
     </div>
+  );
+}
+
+function displayDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? ''
+    : new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(date);
+}
+
+function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
+  const context = mission.trendContext;
+  if (!context) return null;
+  return (
+    <aside className="mission-trend-context" aria-label="この企画で参考にした新しい情報">
+      <h4>新しい情報も参考にしました</h4>
+      <p>調べた情報をそのまま写さず、あなたに合う企画にしています。</p>
+      <dl>
+        <div>
+          <dt>今おすすめする理由</dt>
+          <dd>{context.whyNow}</dd>
+        </div>
+        <div>
+          <dt>あなたに合う理由</dt>
+          <dd>{context.fitReason}</dd>
+        </div>
+      </dl>
+      <details>
+        <summary>参考にした情報を見る</summary>
+        <ul>
+          {context.evidence.map((item) => (
+            <li key={item.sourceUrl}>
+              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                {item.sourceTitle}
+              </a>
+              <small>
+                {item.publishedAt && `公開：${displayDate(item.publishedAt)} / `}
+                確認：{displayDate(item.retrievedAt)}
+              </small>
+            </li>
+          ))}
+        </ul>
+        <p>情報を確認した日：{displayDate(context.researchedAt)}</p>
+      </details>
+    </aside>
   );
 }
 
@@ -579,6 +635,7 @@ export function DailyMissionSection({
                           </div>
                         </fieldset>
                         <MissionIdea mission={mission} />
+                        <MissionTrendContext mission={mission} />
                         {(selected === 'GUIDED' || selected === 'READY_TO_USE') && (
                           <MissionGuide mission={mission} />
                         )}
