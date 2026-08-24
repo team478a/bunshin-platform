@@ -34,6 +34,8 @@ import type {
   LineConfigurationRepository,
   LineChannelConfiguration,
   LineConfigurationEnvironment,
+  AiProviderConfiguration,
+  AiProviderConfigurationRepository,
   LineNotificationPreference,
   LineNotificationPreferenceRepository,
   JobRepository,
@@ -120,6 +122,30 @@ function lineConfiguration(
     globallyPaused: row.globallyPaused,
     quotaWarningPercent: row.quotaWarningPercent,
     quotaLowPriorityStop: row.quotaLowPriorityStop,
+    keyVersion: row.keyVersion,
+    lastVerifiedAt: row.lastVerifiedAt,
+    lastErrorCategory: row.lastErrorCategory,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function aiProviderConfiguration(
+  row: Prisma.AiProviderConfigurationGetPayload<object>,
+  exposeMask = true,
+): AiProviderConfiguration {
+  return {
+    id: row.id,
+    environment: row.environment,
+    provider: row.provider,
+    version: row.version,
+    status: row.status,
+    apiKeyConfigured: row.encryptedApiKey !== null,
+    apiKeyMask: exposeMask ? row.apiKeyMask : row.encryptedApiKey === null ? null : '登録済み',
+    model: row.model,
+    dailyBudgetUsdMicros: row.dailyBudgetUsdMicros,
+    monthlyBudgetUsdMicros: row.monthlyBudgetUsdMicros,
+    globallyPaused: row.globallyPaused,
     keyVersion: row.keyVersion,
     lastVerifiedAt: row.lastVerifiedAt,
     lastErrorCategory: row.lastErrorCategory,
@@ -1389,6 +1415,70 @@ export class PrismaLineNotificationPreferenceRepository implements LineNotificat
         update: data,
       });
       return lineNotificationPreference(row);
+    });
+  }
+}
+
+export class PrismaAiProviderConfigurationRepository implements AiProviderConfigurationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private admin(actorUserId: string) {
+    return this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+    });
+  }
+
+  async listForAdmin(input: Parameters<AiProviderConfigurationRepository['listForAdmin']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null) return null;
+    const rows = await this.client.aiProviderConfiguration.findMany({
+      where: { environment: input.environment },
+      orderBy: [{ provider: 'asc' }, { version: 'desc' }],
+    });
+    return rows.map((row) =>
+      aiProviderConfiguration(row, ['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)),
+    );
+  }
+
+  async createVersion(input: Parameters<AiProviderConfigurationRepository['createVersion']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const latest = await tx.aiProviderConfiguration.findFirst({
+        where: { environment: input.environment, provider: input.provider },
+        orderBy: { version: 'desc' },
+      });
+      const row = await tx.aiProviderConfiguration.create({
+        data: {
+          environment: input.environment,
+          provider: input.provider,
+          version: (latest?.version ?? 0) + 1,
+          encryptedApiKey: input.apiKey?.encryptedValue ?? null,
+          apiKeyMask: input.apiKey?.mask ?? null,
+          keyVersion: input.apiKey?.keyVersion ?? 1,
+          model: input.model,
+          dailyBudgetUsdMicros: input.dailyBudgetUsdMicros,
+          monthlyBudgetUsdMicros: input.monthlyBudgetUsdMicros,
+          globallyPaused: true,
+        },
+      });
+      await tx.aiProviderConfigurationAudit.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          provider: input.provider,
+          actorUserId: input.actorUserId,
+          action: 'CREATE_VERSION',
+          reason: input.reason,
+          changedFields: [
+            ...(input.apiKey === null ? [] : ['credentials']),
+            'model',
+            'budgetPolicy',
+            'globallyPaused',
+          ],
+        },
+      });
+      return aiProviderConfiguration(row);
     });
   }
 }
