@@ -8,6 +8,7 @@ import {
   ListDailyMissions,
   ListSocialAccountStrategies,
   ListSocialProfiles,
+  ListActiveTrendIdeas,
   ListWeeklyPlans,
 } from '@bunshin/capability-social';
 import {
@@ -106,6 +107,13 @@ export class DailyMissionGenerationService {
       ).execute({ ...scope, socialProfileId: profile.id });
       const strategy = strategies.find(({ status }) => status === 'APPROVED');
       if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
+      const trendIdeas = await new ListActiveTrendIdeas(
+        new db.PrismaTrendResearchRepository(),
+      ).execute({
+        ...scope,
+        socialProfileId: profile.id,
+        at: new Date(),
+      });
       const weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(
         scope,
       );
@@ -197,6 +205,7 @@ export class DailyMissionGenerationService {
         weeklyPlan,
         contentPillars: pillars,
         grantedKnowledge: knowledge,
+        trendIdeas,
       });
       await usage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
       const pillarId = weeklyPlan.items.find(

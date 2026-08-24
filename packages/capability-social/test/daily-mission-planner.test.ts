@@ -246,4 +246,68 @@ describe('GenerateDailyMissionBrief', () => {
       }),
     );
   });
+
+  it('passes only the highest-ranked safe matching trend idea without internal identifiers', async () => {
+    const planner = provider();
+    await new GenerateDailyMissionBrief(planner).execute({
+      ...input,
+      trendIdeas: [
+        {
+          id: 'candidate-trusted',
+          platform: 'X',
+          topic: '今週の話題',
+          hook: '意外な事実から始める',
+          whyNow: '今週注目されている',
+          fitReason: '副業初心者に合う',
+          suggestedFormat: 'TEXT',
+          estimatedMinutes: 5,
+          freshnessScore: 80,
+          fitScore: 90,
+          feasibilityScore: 90,
+          safetyStatus: 'SAFE',
+          expiresAt: new Date('2026-08-22T00:00:00.000Z'),
+          evidenceIds: ['evidence-secret-id'],
+        },
+      ],
+    });
+    const providerInput = planner.generate.mock.calls[0]?.[0];
+    expect(providerInput).toMatchObject({
+      trendIdeas: [
+        {
+          topic: '今週の話題',
+          hook: '意外な事実から始める',
+          whyNow: '今週注目されている',
+          fitReason: '副業初心者に合う',
+        },
+      ],
+    });
+    expect(JSON.stringify(providerInput)).not.toContain('candidate-trusted');
+    expect(JSON.stringify(providerInput)).not.toContain('evidence-secret-id');
+  });
+
+  it('falls back to the normal planner input when no trend idea is executable', async () => {
+    const planner = provider();
+    await new GenerateDailyMissionBrief(planner).execute({
+      ...input,
+      trendIdeas: [
+        {
+          id: 'candidate-review',
+          platform: 'X',
+          topic: '未確認の話題',
+          hook: 'hook',
+          whyNow: 'why',
+          fitReason: 'fit',
+          suggestedFormat: 'TEXT',
+          estimatedMinutes: 5,
+          freshnessScore: 100,
+          fitScore: 100,
+          feasibilityScore: 100,
+          safetyStatus: 'REVIEW_REQUIRED',
+          expiresAt: new Date('2026-08-22T00:00:00.000Z'),
+          evidenceIds: ['evidence-a'],
+        },
+      ],
+    });
+    expect(planner.generate.mock.calls[0]?.[0]).not.toHaveProperty('trendIdeas');
+  });
 });

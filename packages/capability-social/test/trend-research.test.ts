@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   CreateCompletedTrendResearch,
   normalizeCompletedTrendResearchInput,
+  rankTrendIdeaCandidates,
+  type TrendIdeaCandidate,
   type TrendResearchRepository,
 } from '../src';
 
@@ -146,5 +148,60 @@ describe('Trend Research Core', () => {
       socialProfileId: 'profile-1',
       queryVersion: 'weekly-v1',
     });
+  });
+});
+
+describe('Trend candidate ranking', () => {
+  const candidate = (overrides: Partial<TrendIdeaCandidate> = {}) => ({
+    id: 'candidate-a',
+    platform: 'YOUTUBE_SHORTS' as const,
+    topic: '今週の話題',
+    hook: '最初の一言',
+    whyNow: '今週注目されているため',
+    fitReason: '対象者の悩みに合うため',
+    suggestedFormat: 'LIVE_ACTION' as const,
+    estimatedMinutes: 10,
+    freshnessScore: 80,
+    fitScore: 80,
+    feasibilityScore: 80,
+    safetyStatus: 'SAFE' as const,
+    expiresAt,
+    evidenceIds: ['evidence-a'],
+    ...overrides,
+  });
+
+  it('uses a deterministic weighted order with stable tie breaking', () => {
+    const ranked = rankTrendIdeaCandidates({
+      candidates: [
+        candidate({ id: 'candidate-b', fitScore: 90 }),
+        candidate({ id: 'candidate-a', fitScore: 90 }),
+        candidate({ id: 'candidate-c', freshnessScore: 100, fitScore: 70 }),
+      ],
+      platform: 'YOUTUBE_SHORTS',
+      format: 'LIVE_ACTION',
+      availableMinutes: 10,
+      at: completedAt,
+    });
+    expect(ranked.map(({ id }) => id)).toEqual(['candidate-a', 'candidate-b', 'candidate-c']);
+    expect(ranked[0]?.rankingScore).toBe(8_400);
+  });
+
+  it('excludes expired, unsafe, unsupported, over-budget and evidence-free ideas', () => {
+    const ranked = rankTrendIdeaCandidates({
+      candidates: [
+        candidate(),
+        candidate({ id: 'expired', expiresAt: completedAt }),
+        candidate({ id: 'unsafe', safetyStatus: 'REVIEW_REQUIRED' }),
+        candidate({ id: 'wrong-platform', platform: 'INSTAGRAM' }),
+        candidate({ id: 'wrong-format', suggestedFormat: 'AI_VIDEO_PROMPT' }),
+        candidate({ id: 'too-long', estimatedMinutes: 20 }),
+        candidate({ id: 'no-evidence', evidenceIds: [] }),
+      ],
+      platform: 'YOUTUBE_SHORTS',
+      format: 'LIVE_ACTION',
+      availableMinutes: 10,
+      at: completedAt,
+    });
+    expect(ranked.map(({ id }) => id)).toEqual(['candidate-a']);
   });
 });
