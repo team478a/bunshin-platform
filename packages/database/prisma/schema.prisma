@@ -54,6 +54,13 @@ enum PlatformAdminStatus {
   REVOKED
 }
 
+enum PlatformAdminAuditAction {
+  GRANTED
+  ROLE_CHANGED
+  REACTIVATED
+  REVOKED
+}
+
 enum LineConfigurationEnvironment {
   DEVELOPMENT
   STAGING
@@ -445,6 +452,8 @@ model User {
   identities                    AuthIdentity[]
   memberships                   WorkspaceMembership[]
   platformAdmin                 PlatformAdmin?
+  platformAdminAuditsAsTarget   PlatformAdminAudit[]                @relation("PlatformAdminAuditTarget")
+  platformAdminAuditsAsActor    PlatformAdminAudit[]                @relation("PlatformAdminAuditActor")
   bunshins                      Bunshin[]
   ownerKnowledge                OwnerKnowledge[]                    @relation("KnowledgeOwner")
   knowledgeGrants               BunshinKnowledgeGrant[]             @relation("GrantActor")
@@ -555,6 +564,25 @@ model PlatformAdmin {
 
   @@index([status, role])
   @@map("platform_admins")
+}
+
+model PlatformAdminAudit {
+  id             String                   @id @default(uuid()) @db.Uuid
+  targetUserId   String                   @map("target_user_id") @db.Uuid
+  actorUserId    String                   @map("actor_user_id") @db.Uuid
+  action         PlatformAdminAuditAction
+  previousRole   PlatformRole?            @map("previous_role")
+  nextRole       PlatformRole?            @map("next_role")
+  previousStatus PlatformAdminStatus?     @map("previous_status")
+  nextStatus     PlatformAdminStatus?     @map("next_status")
+  reason         String                   @db.VarChar(1000)
+  occurredAt     DateTime                 @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  target         User                     @relation("PlatformAdminAuditTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  actor          User                     @relation("PlatformAdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("platform_admin_audits")
 }
 
 model ProductionGateEvidence {

@@ -892,3 +892,14 @@
 - Approval: 最終承認は同じcommitで他の6項目がすべて現在有効な場合だけ記録できる。後から前提項目を取り消した場合、開始判定も即時に未完了へ戻す。
 - Evidence URL: HTTPSかつGitHub、Vercel、Supabaseの許可ドメインだけを保存する。秘密情報・利用者情報は保存しない。
 - Fail closed: Production環境または対象commitを確定できない場合、記録画面/APIを利用させず開始可能と判定しない。
+
+## D-076: Platform Adminの権限変更を管理画面と追記型監査へ集約する
+
+- 日付: 2026-08-24
+- 状態: Accepted
+- Operation: 登録済みユーザーへの管理権限付与、役割変更、停止、再開を管理画面から実施する。
+- Authorization: 変更は有効なSUPER_ADMINだけに許可し、閲覧は有効なPlatform Adminに許可する。
+- Safety: 自分自身の停止と、最後の有効なSUPER_ADMINの停止・降格を拒否する。
+- Audit: 対象者、実施者、変更前後の役割・状態、理由、日時を追記型履歴へ保存する。
+- Privacy: パスワード、認証Token、API Key、DB接続情報は管理画面・監査履歴へ保存しない。
+- Login operation: Supabaseのメール送信上限を成功として扱わず、利用者へ待機とLINEログインを案内する。

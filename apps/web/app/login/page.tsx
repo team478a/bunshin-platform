@@ -28,6 +28,20 @@ export default async function LoginPage({
             <span>リンクを再送して、最新のメールからもう一度お試しください。</span>
           </div>
         )}
+        {query.error === 'rate-limit' && (
+          <div className="notice notice--danger" role="alert">
+            <strong>短い時間にメールを送りすぎました</strong>
+            <span>
+              しばらく待ってから、ボタンを一度だけ押してください。LINEログインは今すぐ使えます。
+            </span>
+          </div>
+        )}
+        {query.error === 'email' && (
+          <div className="notice notice--danger" role="alert">
+            <strong>メールを送れませんでした</strong>
+            <span>少し時間を空けて再度お試しいただくか、LINEでログインしてください。</span>
+          </div>
+        )}
         <form action="/auth/line" method="post">
           {returnTo && <input name="returnTo" type="hidden" value={returnTo} />}
           <button className="button button--line button--full" type="submit">
