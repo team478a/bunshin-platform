@@ -23,6 +23,13 @@ const labels: Record<Provider, string> = {
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
 };
 const usd = (micros: number) => (micros / 1_000_000).toFixed(2);
+const connectionErrors: Record<string, string> = {
+  CREDENTIAL_INVALID: 'APIキーが正しくないか、利用権限がありません',
+  QUOTA_OR_RATE_LIMIT: '利用上限または短時間の回数制限に達しています',
+  MODEL_UNAVAILABLE: '指定したAIモデルを利用できません',
+  PROVIDER_CONFIGURATION_INVALID: '外部サービス側の設定を確認してください',
+  PROVIDER_UNAVAILABLE: '外部サービスへ一時的に接続できません',
+};
 
 export function AiProviderConfigurationEditor(props: {
   environment: string;
@@ -90,7 +97,7 @@ export function AiProviderConfigurationEditor(props: {
       setMessage(
         tested.success
           ? '接続できました。'
-          : `接続できませんでした：${tested.errorCategory ?? '原因不明'}`,
+          : `接続できませんでした：${connectionErrors[tested.errorCategory ?? ''] ?? '原因を確認できませんでした'}`,
       );
     } else {
       const updated = result.data as Configuration;

@@ -114,7 +114,7 @@ export class LineConnectionTestAdapter {
       client_id: input.loginChannelId,
       client_secret: input.loginChannelSecret,
     });
-    const [login, bot] = await Promise.all([
+    const [login, bot, tokenVerification] = await Promise.all([
       fetch('https://api.line.me/oauth2/v2.1/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -125,10 +125,20 @@ export class LineConnectionTestAdapter {
         headers: { authorization: `Bearer ${input.channelAccessToken}` },
         signal: AbortSignal.timeout(10_000),
       }),
+      fetch('https://api.line.me/v2/oauth/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ access_token: input.channelAccessToken }),
+        signal: AbortSignal.timeout(10_000),
+      }),
     ]);
-    await login.text();
-    if (login.status === 401 || login.status === 403)
+    const loginResponse = await login.text();
+    if (login.status === 401 || login.status === 403 || /invalid[_ -]?client/i.test(loginResponse))
       return { success: false, errorCategory: 'LOGIN_CREDENTIAL_INVALID', botDisplayName: null };
+    if (login.status === 429)
+      return { success: false, errorCategory: 'QUOTA_OR_RATE_LIMIT', botDisplayName: null };
+    if (login.status !== 400)
+      return { success: false, errorCategory: 'LOGIN_CONFIGURATION_INVALID', botDisplayName: null };
     if (!bot.ok) {
       const category =
         bot.status === 401
@@ -141,7 +151,17 @@ export class LineConnectionTestAdapter {
     const value = (await bot.json()) as { displayName?: unknown; basicId?: unknown };
     if (typeof value.displayName !== 'string')
       return { success: false, errorCategory: 'BOT_INFO_INVALID', botDisplayName: null };
-    void input.messagingChannelId;
+    if (tokenVerification.ok) {
+      const verified = (await tokenVerification.json()) as { client_id?: unknown };
+      if (verified.client_id !== input.messagingChannelId)
+        return {
+          success: false,
+          errorCategory: 'MESSAGING_CHANNEL_MISMATCH',
+          botDisplayName: null,
+        };
+    } else if (tokenVerification.status === 429) {
+      return { success: false, errorCategory: 'QUOTA_OR_RATE_LIMIT', botDisplayName: null };
+    }
     void input.messagingChannelSecret;
     return { success: true, errorCategory: null, botDisplayName: value.displayName };
   }
