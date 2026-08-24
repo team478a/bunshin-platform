@@ -376,6 +376,8 @@ SNS別生成ルールやPromptを管理画面から直接編集する機能は�
 
 ### PR 6: LINE安全要約
 
+状態: 完了。配信時にWorkspace/User/Bunshin/Missionを再照合し、MissionContentを取得しない専用projectionからSNS、形式、目安時間、60文字以内のテーマだけを生成する。LINE Provider Portはこの安全要約と既存短期Deep Link以外を受け取らない。
+
 - SNS、やさしい形式名、目安時間、短いテーマ
 - 既存短期Deep Link
 - 長文・指示文・KnowledgeをPushしないテスト

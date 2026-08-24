@@ -32,6 +32,7 @@ export function createLineDeliveryJobHandler(): LineDeliveryJobHandler {
         deliveries,
         new ActiveLineDeliveryConfigurationAdapter(),
         new db.PrismaLineConnectionRepository(),
+        new db.PrismaLineMissionNotificationSummaryRepository(),
         new LineMessagingApiAdapter(),
       ).execute({
         deliveryId,

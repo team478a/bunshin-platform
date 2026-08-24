@@ -1,5 +1,10 @@
 import 'server-only';
-import type { LineMessagingProviderPort, LineProviderFailure } from '@bunshin/application';
+import {
+  normalizeLineMissionNotificationSummary,
+  type LineMessagingProviderPort,
+  type LineMissionNotificationSummary,
+  type LineProviderFailure,
+} from '@bunshin/application';
 
 const endpoint = 'https://api.line.me';
 
@@ -60,9 +65,26 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     accessToken: string;
     recipientId: string;
     deepLinkUrl: string;
+    summary: LineMissionNotificationSummary;
   }) {
     if (!input.accessToken.trim()) return httpFailure(401);
     if (!input.recipientId.trim()) return httpFailure(400);
+    const summary = normalizeLineMissionNotificationSummary(input.summary);
+    const platform = {
+      INSTAGRAM: 'インスタグラム',
+      TIKTOK: 'ティックトック',
+      X: 'X',
+      THREADS: 'スレッズ',
+      YOUTUBE_SHORTS: 'YouTubeショート',
+      OTHER: 'SNS',
+    }[summary.platform];
+    const format = {
+      TEXT: '文章の投稿',
+      SLIDE: 'スライド投稿',
+      LIVE_ACTION: '撮影する動画',
+      AI_VIDEO_PROMPT: 'AIで作る動画',
+      IMAGE: '画像投稿',
+    }[summary.format];
     try {
       const response = await this.request(`${endpoint}/v2/bot/message/push`, {
         method: 'POST',
@@ -75,7 +97,16 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
           messages: [
             {
               type: 'text',
-              text: `今日のミッションができました。\n${input.deepLinkUrl}`,
+              text: [
+                '今日やることができました。',
+                `SNS：${platform}`,
+                `作るもの：${format}`,
+                `目安：${summary.estimatedMinutes}分`,
+                `テーマ：${summary.topic}`,
+                '',
+                'くわしく見る',
+                input.deepLinkUrl,
+              ].join('\n'),
             },
           ],
         }),
