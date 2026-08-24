@@ -1148,6 +1148,104 @@ export class ListLegalDocuments {
     return values;
   }
 }
+
+export const PRODUCTION_GATE_CHECK_KEYS = [
+  'BACKUP_RESTORE',
+  'MIGRATION_HEALTH',
+  'AUTH_SMOKE',
+  'FREE_MVP_SMOKE',
+  'ACCOUNT_DELETION_DRY_RUN',
+  'LINE_GO_NO_GO',
+  'FINAL_APPROVAL',
+] as const;
+export type ProductionGateCheckKey = (typeof PRODUCTION_GATE_CHECK_KEYS)[number];
+export interface ProductionGateEvidence {
+  id: string;
+  environment: 'PRODUCTION';
+  checkKey: ProductionGateCheckKey;
+  commitSha: string;
+  action: 'RECORDED' | 'REVOKED';
+  reason: string;
+  evidenceUrl: string | null;
+  actorUserId: string;
+  occurredAt: Date;
+}
+export interface ProductionGateEvidenceRepository {
+  list(input: {
+    actorUserId: string;
+    environment: 'PRODUCTION';
+    commitSha: string;
+  }): Promise<ProductionGateEvidence[] | null>;
+  append(
+    input: Omit<ProductionGateEvidence, 'id' | 'occurredAt'>,
+  ): Promise<ProductionGateEvidence | null>;
+}
+
+function validProductionCommit(commitSha: string) {
+  return /^[0-9a-f]{40}$/.test(commitSha);
+}
+function validatedEvidenceUrl(value: string | null | undefined) {
+  if (!value) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid evidence URL');
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid evidence URL');
+  if (
+    !['github.com', 'vercel.com', 'supabase.com'].some(
+      (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+    )
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'evidence URL is not allowed');
+  return url.toString();
+}
+export class ListProductionGateEvidence {
+  constructor(private readonly repository: ProductionGateEvidenceRepository) {}
+  async execute(input: { actorUserId: string; environment: 'PRODUCTION'; commitSha: string }) {
+    if (!validProductionCommit(input.commitSha))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid commit SHA');
+    const events = await this.repository.list(input);
+    if (!events) throw new ApplicationError('NOT_FOUND', 'admin page not found');
+    return events;
+  }
+}
+export class RecordProductionGateEvidence {
+  constructor(private readonly repository: ProductionGateEvidenceRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    environment: 'PRODUCTION';
+    commitSha: string;
+    checkKey: ProductionGateCheckKey;
+    action: 'RECORDED' | 'REVOKED';
+    reason: string;
+    evidenceUrl?: string | null;
+  }) {
+    const reason = input.reason.trim();
+    if (
+      !validProductionCommit(input.commitSha) ||
+      !PRODUCTION_GATE_CHECK_KEYS.includes(input.checkKey)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid production gate evidence');
+    if (reason.length < 10 || reason.length > 1000)
+      throw new ApplicationError('VALIDATION_ERROR', 'reason must be 10 to 1000 characters');
+    const result = await this.repository.append({
+      ...input,
+      reason,
+      evidenceUrl: validatedEvidenceUrl(input.evidenceUrl),
+    });
+    if (!result)
+      throw new ApplicationError(
+        input.checkKey === 'FINAL_APPROVAL' ? 'CONFLICT' : 'NOT_FOUND',
+        input.checkKey === 'FINAL_APPROVAL'
+          ? 'all required checks must be current before final approval'
+          : 'admin page not found',
+      );
+    return result;
+  }
+}
 export class CreateLegalDocumentDraft {
   constructor(private readonly repository: LegalDocumentRepository) {}
   async execute(input: {

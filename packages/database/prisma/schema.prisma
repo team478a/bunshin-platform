@@ -112,6 +112,21 @@ enum LegalDocumentStatus {
   RETIRED
 }
 
+enum ProductionGateCheckKey {
+  BACKUP_RESTORE
+  MIGRATION_HEALTH
+  AUTH_SMOKE
+  FREE_MVP_SMOKE
+  ACCOUNT_DELETION_DRY_RUN
+  LINE_GO_NO_GO
+  FINAL_APPROVAL
+}
+
+enum ProductionGateEvidenceAction {
+  RECORDED
+  REVOKED
+}
+
 enum AccountDeletionRequestStatus {
   REQUESTED
   PROCESSING
@@ -453,6 +468,7 @@ model User {
   lineDeliveryRetryRequests     LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
   trendBenchmarkCases           TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations    TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
+  productionGateEvidence        ProductionGateEvidence[]             @relation("ProductionGateEvidenceActor")
 
   @@index([status])
   @@map("users")
@@ -539,6 +555,23 @@ model PlatformAdmin {
 
   @@index([status, role])
   @@map("platform_admins")
+}
+
+model ProductionGateEvidence {
+  id          String                       @id @default(uuid()) @db.Uuid
+  environment LineConfigurationEnvironment
+  checkKey    ProductionGateCheckKey       @map("check_key")
+  commitSha   String                       @map("commit_sha") @db.VarChar(40)
+  action      ProductionGateEvidenceAction
+  reason      String                       @db.VarChar(1000)
+  evidenceUrl String?                      @map("evidence_url") @db.VarChar(2048)
+  actorUserId String                       @map("actor_user_id") @db.Uuid
+  occurredAt  DateTime                     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actor       User                         @relation("ProductionGateEvidenceActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([environment, commitSha, checkKey, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("production_gate_evidence")
 }
 
 model TrendProviderBenchmarkCase {

@@ -5,7 +5,7 @@ export interface ProductionGateItem {
   title: string;
   status: ProductionGateStatus;
   guidance: string;
-  href: '/admin' | '/admin/legal' | '/admin/deletions' | '/admin/guide';
+  href: '/admin' | '/admin/legal' | '/admin/deletions' | '/admin/guide' | '/admin/production-gate';
 }
 
 export function productionGateChecklist(input: {
@@ -15,7 +15,10 @@ export function productionGateChecklist(input: {
   authReady: boolean;
   accountDeletionMode: 'disabled' | 'dry-run' | 'enabled';
   accountDeletionApproved: boolean;
+  recordedManualChecks?: ReadonlySet<string>;
 }) {
+  const manualStatus = (key: string): ProductionGateStatus =>
+    input.recordedManualChecks?.has(key) ? 'READY' : 'MANUAL_CHECK';
   const automatic: ProductionGateItem[] = [
     {
       code: 'PRODUCTION_ENVIRONMENT',
@@ -77,42 +80,49 @@ export function productionGateChecklist(input: {
     {
       code: 'BACKUP_RESTORE_REHEARSAL',
       title: 'バックアップから戻す練習',
-      status: 'MANUAL_CHECK',
+      status: manualStatus('BACKUP_RESTORE'),
       guidance: 'Supabaseのバックアップ状態を確認し、復元練習の日時・担当者・結果を記録します。',
       href: '/admin/guide',
     },
     {
       code: 'PRODUCTION_MIGRATION_AND_HEALTH',
       title: '最新Migrationと本番Health確認',
-      status: 'MANUAL_CHECK',
+      status: manualStatus('MIGRATION_HEALTH'),
       guidance: '最新mainのMigration workflowとHealth Smokeが成功したRunを記録します。',
       href: '/admin/guide',
     },
     {
       code: 'AUTH_SMOKE',
       title: '本番ログイン・ログアウト確認',
-      status: 'MANUAL_CHECK',
+      status: manualStatus('AUTH_SMOKE'),
       guidance: 'LINEとメールでログインし、ログアウト後に保護画面へ戻れないことを確認します。',
       href: '/admin/guide',
     },
     {
       code: 'FREE_MVP_SMOKE',
       title: 'スマートフォンで初回投稿まで確認',
-      status: 'MANUAL_CHECK',
+      status: manualStatus('FREE_MVP_SMOKE'),
       guidance: '分身作成から投稿完了・感想の保存まで、本番テスト利用者で一度通します。',
+      href: '/admin/guide',
+    },
+    {
+      code: 'ACCOUNT_DELETION_DRY_RUN',
+      title: '退会処理の予行練習',
+      status: manualStatus('ACCOUNT_DELETION_DRY_RUN'),
+      guidance: '本番データを削除しないdry-runの結果と、問題がないことを記録します。',
       href: '/admin/guide',
     },
     {
       code: 'LINE_GO_NO_GO',
       title: 'LINE本番開始確認',
-      status: 'MANUAL_CHECK',
+      status: manualStatus('LINE_GO_NO_GO'),
       guidance: 'Webhook疎通、通知同意、上限、緊急停止、Go/No-Go workflowを確認します。',
       href: '/admin/guide',
     },
     {
       code: 'HUMAN_APPROVAL',
       title: '責任者の最終承認',
-      status: 'MANUAL_CHECK',
+      status: manualStatus('FINAL_APPROVAL'),
       guidance: '対象commit、日時、担当者、確認結果を記録してから利用者募集を開始します。',
       href: '/admin/guide',
     },
@@ -123,6 +133,8 @@ export function productionGateChecklist(input: {
     manual,
     automaticReady: automatic.every((item) => item.status === 'READY'),
     actionRequired: automatic.filter((item) => item.status === 'ACTION_REQUIRED').length,
-    launchReady: false,
+    launchReady:
+      automatic.every((item) => item.status === 'READY') &&
+      manual.every((item) => item.status === 'READY'),
   };
 }
