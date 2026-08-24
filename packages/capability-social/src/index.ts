@@ -2508,6 +2508,25 @@ export interface GoldenEvaluationReport {
   passed: boolean;
   violations: GoldenViolationCode[];
 }
+export const GOLDEN_RUN_CONFIGURATION_ERROR_CODES = [
+  'MISSING_OBSERVATION',
+  'DUPLICATE_OBSERVATION',
+  'UNKNOWN_CASE',
+] as const;
+export type GoldenRunConfigurationErrorCode = (typeof GOLDEN_RUN_CONFIGURATION_ERROR_CODES)[number];
+export interface GoldenDatasetObservation {
+  caseId: string;
+  observation: GoldenEvaluationObservation;
+}
+export interface GoldenDatasetRunReport {
+  datasetVersion: string;
+  passed: boolean;
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  reports: GoldenEvaluationReport[];
+  configurationErrors: Array<{ code: GoldenRunConfigurationErrorCode; caseId: string }>;
+}
 
 function goldenUnique<T>(values: T[]) {
   return [...new Set(values)];
@@ -2565,6 +2584,48 @@ export function evaluateGoldenDatasetCase(
     violations.push('UNSAFE_URL');
   const unique = goldenUnique(violations);
   return { caseId: testCase.id, passed: unique.length === 0, violations: unique };
+}
+
+export function runGoldenDatasetRegression(
+  dataset: GoldenDataset,
+  observations: GoldenDatasetObservation[],
+): GoldenDatasetRunReport {
+  const knownIds = new Set(dataset.cases.map((item) => item.id));
+  const grouped = new Map<string, GoldenEvaluationObservation[]>();
+  for (const item of observations) {
+    const values = grouped.get(item.caseId) ?? [];
+    values.push(item.observation);
+    grouped.set(item.caseId, values);
+  }
+  const configurationErrors: GoldenDatasetRunReport['configurationErrors'] = [];
+  for (const caseId of grouped.keys()) {
+    if (!knownIds.has(caseId)) configurationErrors.push({ code: 'UNKNOWN_CASE', caseId });
+  }
+  const reports: GoldenEvaluationReport[] = [];
+  for (const testCase of dataset.cases) {
+    const values = grouped.get(testCase.id) ?? [];
+    if (values.length === 0) {
+      configurationErrors.push({ code: 'MISSING_OBSERVATION', caseId: testCase.id });
+      continue;
+    }
+    if (values.length > 1) {
+      configurationErrors.push({ code: 'DUPLICATE_OBSERVATION', caseId: testCase.id });
+      continue;
+    }
+    const observation = values[0];
+    if (observation) reports.push(evaluateGoldenDatasetCase(testCase, observation));
+  }
+  const passedCases = reports.filter((item) => item.passed).length;
+  const failedCases = dataset.cases.length - passedCases;
+  return {
+    datasetVersion: dataset.version,
+    passed: configurationErrors.length === 0 && failedCases === 0,
+    totalCases: dataset.cases.length,
+    passedCases,
+    failedCases,
+    reports,
+    configurationErrors,
+  };
 }
 
 export function parseGoldenDataset(value: unknown): GoldenDataset {
