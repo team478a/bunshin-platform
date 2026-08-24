@@ -4,6 +4,7 @@ import {
   GetAdminUserDetail,
   SetAdminUserStatus,
   CreateAdminSupportCase,
+  calculateAdminRetention,
   type AdminOperationsRepository,
 } from '../src';
 
@@ -19,6 +20,30 @@ function repository(): AdminOperationsRepository {
 }
 
 describe('admin operations', () => {
+  it('counts D1 and D7 activity only in the matching registration windows', () => {
+    const createdAt = new Date('2026-08-01T10:00:00Z');
+    expect(
+      calculateAdminRetention({
+        cohort: [
+          { userId: 'user-1', createdAt },
+          { userId: 'user-2', createdAt },
+        ],
+        activities: [
+          { userId: 'user-1', occurredAt: new Date('2026-08-02T12:00:00Z') },
+          { userId: 'user-1', occurredAt: new Date('2026-08-08T12:00:00Z') },
+          { userId: 'user-2', occurredAt: new Date('2026-08-09T12:00:00Z') },
+        ],
+        periodEnd: new Date('2026-08-10T10:00:00Z'),
+      }),
+    ).toEqual({
+      d1EligibleUsers: 2,
+      d1ActiveUsers: 1,
+      d1ActiveRate: 0.5,
+      d7EligibleUsers: 2,
+      d7ActiveUsers: 1,
+      d7ActiveRate: 0.5,
+    });
+  });
   it('hides the dashboard when the repository rejects the administrator', async () => {
     const useCase = new GetAdminOperationsSnapshot(repository());
     await expect(

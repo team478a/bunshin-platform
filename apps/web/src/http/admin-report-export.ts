@@ -82,6 +82,26 @@ export async function adminReportExportResponse(request: Request) {
             ],
             ['LINE接続中', snapshot.totals.lineConnectedUsers],
             ['退会処理待ち', snapshot.totals.deletionPendingUsers],
+            ['LINE送信成功', snapshot.totals.lineSent],
+            ['LINE送信失敗', snapshot.totals.lineFailed],
+            ['問い合わせ開始', snapshot.totals.supportCasesCreated],
+            ['問い合わせ解決', snapshot.totals.supportCasesResolved],
+            ['翌日継続の対象者', snapshot.retention.d1EligibleUsers],
+            ['翌日継続ユーザー', snapshot.retention.d1ActiveUsers],
+            [
+              '翌日継続率',
+              snapshot.retention.d1ActiveRate === null
+                ? null
+                : snapshot.retention.d1ActiveRate.toFixed(6),
+            ],
+            ['7日目継続の対象者', snapshot.retention.d7EligibleUsers],
+            ['7日目継続ユーザー', snapshot.retention.d7ActiveUsers],
+            [
+              '7日目継続率',
+              snapshot.retention.d7ActiveRate === null
+                ? null
+                : snapshot.retention.d7ActiveRate.toFixed(6),
+            ],
             ...ADMIN_USER_STAGES.map((stage) => [
               `利用段階：${stageLabels[stage]}`,
               snapshot.funnel[stage],

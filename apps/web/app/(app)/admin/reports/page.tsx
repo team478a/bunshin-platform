@@ -132,6 +132,22 @@ export default async function AdminReportsPage({
             <strong>{snapshot.totals.lineConnectedUsers}</strong>
             <span>LINE接続中</span>
           </article>
+          <article>
+            <strong>{snapshot.totals.lineSent}</strong>
+            <span>LINE送信成功</span>
+          </article>
+          <article>
+            <strong>{snapshot.totals.lineFailed}</strong>
+            <span>LINE送信失敗</span>
+          </article>
+          <article>
+            <strong>{snapshot.totals.supportCasesCreated}</strong>
+            <span>問い合わせ開始</span>
+          </article>
+          <article>
+            <strong>{snapshot.totals.supportCasesResolved}</strong>
+            <span>問い合わせ解決</span>
+          </article>
         </div>
       </section>
       <section aria-labelledby="report-funnel">
@@ -155,6 +171,30 @@ export default async function AdminReportsPage({
               ))}
             </tbody>
           </table>
+        </div>
+      </section>
+      <section aria-labelledby="retention-report">
+        <h2 id="retention-report">登録後の継続利用</h2>
+        <p>登録翌日または7日目までの観測期間が終わった人だけを分母にします。</p>
+        <div className="validation-kpi-grid">
+          <article>
+            <strong>
+              {percentage(snapshot.retention.d1ActiveUsers, snapshot.retention.d1EligibleUsers)}
+            </strong>
+            <span>
+              翌日の継続率（{snapshot.retention.d1ActiveUsers}/{snapshot.retention.d1EligibleUsers}
+              人）
+            </span>
+          </article>
+          <article>
+            <strong>
+              {percentage(snapshot.retention.d7ActiveUsers, snapshot.retention.d7EligibleUsers)}
+            </strong>
+            <span>
+              7日目の継続率（{snapshot.retention.d7ActiveUsers}/{snapshot.retention.d7EligibleUsers}
+              人）
+            </span>
+          </article>
         </div>
       </section>
     </main>
