@@ -405,35 +405,37 @@ enum TrendSafetyStatus {
 }
 
 model User {
-  id                            String                          @id @default(uuid()) @db.Uuid
-  status                        UserStatus                      @default(ACTIVE)
-  displayName                   String                          @map("display_name") @db.VarChar(100)
-  email                         String?                         @db.VarChar(320)
-  createdAt                     DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                     DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                            String                              @id @default(uuid()) @db.Uuid
+  status                        UserStatus                          @default(ACTIVE)
+  displayName                   String                              @map("display_name") @db.VarChar(100)
+  email                         String?                             @db.VarChar(320)
+  createdAt                     DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
   identities                    AuthIdentity[]
   memberships                   WorkspaceMembership[]
   platformAdmin                 PlatformAdmin?
   bunshins                      Bunshin[]
-  ownerKnowledge                OwnerKnowledge[]                @relation("KnowledgeOwner")
-  knowledgeGrants               BunshinKnowledgeGrant[]         @relation("GrantActor")
-  capabilityAssignments         BunshinCapabilityAssignment[]   @relation("CapabilityAssignmentActor")
-  missionActivities             MissionActivity[]               @relation("MissionActivityActor")
-  postRecords                   PostRecord[]                    @relation("PostRecordActor")
-  missionFeedback               MissionFeedback[]               @relation("MissionFeedbackActor")
-  aiUsageEvents                 AiUsageEvent[]                  @relation("AiUsageActor")
-  legalDocuments                LegalDocument[]                 @relation("LegalDocumentAuthor")
+  ownerKnowledge                OwnerKnowledge[]                    @relation("KnowledgeOwner")
+  knowledgeGrants               BunshinKnowledgeGrant[]             @relation("GrantActor")
+  capabilityAssignments         BunshinCapabilityAssignment[]       @relation("CapabilityAssignmentActor")
+  missionActivities             MissionActivity[]                   @relation("MissionActivityActor")
+  postRecords                   PostRecord[]                        @relation("PostRecordActor")
+  missionFeedback               MissionFeedback[]                   @relation("MissionFeedbackActor")
+  aiUsageEvents                 AiUsageEvent[]                      @relation("AiUsageActor")
+  legalDocuments                LegalDocument[]                     @relation("LegalDocumentAuthor")
   legalConsents                 UserLegalConsent[]
   accountDeletionRequests       AccountDeletionRequest[]
-  accountDeletionAudits         AccountDeletionOperationAudit[] @relation("AccountDeletionAuditActor")
-  lineConfigurationAudits       LineConfigurationAudit[]        @relation("LineConfigurationAuditActor")
-  aiProviderConfigurationAudits AiProviderConfigurationAudit[]  @relation("AiProviderConfigurationAuditActor")
+  accountDeletionAudits         AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
+  lineConfigurationAudits       LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
+  aiProviderConfigurationAudits AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
   lineNotificationPreferences   LineNotificationPreference[]
   lineConnections               LineConnection[]
   jobs                          Job[]
   lineMessageDeliveries         LineMessageDelivery[]
   missionDeepLinkStates         MissionDeepLinkState[]
-  lineDeliveryRetryRequests     LineDeliveryRetryRequest[]      @relation("LineDeliveryRetryActor")
+  lineDeliveryRetryRequests     LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
+  trendBenchmarkCases           TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
+  trendBenchmarkObservations    TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
 
   @@index([status])
   @@map("users")
@@ -519,6 +521,50 @@ model PlatformAdmin {
 
   @@index([status, role])
   @@map("platform_admins")
+}
+
+model TrendProviderBenchmarkCase {
+  id              String                              @id @default(uuid()) @db.Uuid
+  environment     LineConfigurationEnvironment
+  caseKey         String                              @map("case_key") @db.VarChar(80)
+  title           String                              @db.VarChar(200)
+  query           String                              @db.VarChar(1000)
+  language        String                              @default("ja") @db.VarChar(12)
+  country         String                              @default("JP") @db.VarChar(12)
+  lookbackDays    Int                                 @default(3) @map("lookback_days")
+  maximumResults  Int                                 @default(3) @map("maximum_results")
+  active          Boolean                             @default(true)
+  createdByUserId String                              @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy       User                                @relation("TrendBenchmarkCaseAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  observations    TrendProviderBenchmarkObservation[]
+
+  @@unique([environment, caseKey])
+  @@index([environment, active, createdAt])
+  @@map("trend_provider_benchmark_cases")
+}
+
+model TrendProviderBenchmarkObservation {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  caseId              String                     @map("case_id") @db.Uuid
+  provider            AiProviderKey
+  successful          Boolean
+  evidence            Json
+  costUsdMicros       Int                        @map("cost_usd_micros")
+  latencyMs           Int                        @map("latency_ms")
+  relevanceRating     Int                        @map("relevance_rating")
+  sourceQualityRating Int                        @map("source_quality_rating")
+  notes               String?                    @db.VarChar(1000)
+  updatedByUserId     String                     @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  benchmarkCase       TrendProviderBenchmarkCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  updatedBy           User                       @relation("TrendBenchmarkObservationEditor", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([caseId, provider])
+  @@index([provider, updatedAt])
+  @@map("trend_provider_benchmark_observations")
 }
 
 model LineChannelConfiguration {
