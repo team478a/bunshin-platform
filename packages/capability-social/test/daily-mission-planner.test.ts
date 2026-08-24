@@ -159,6 +159,7 @@ const output: DailyMissionPlannerOutput = {
   angle: ' 初心者が今日試せる形で伝える ',
   reason: ' 週間計画と対象者の悩みに合うため ',
   estimatedMinutes: 5,
+  usedTrendIdea: false,
 };
 
 function provider(value: DailyMissionPlannerOutput = output) {
@@ -248,8 +249,8 @@ describe('GenerateDailyMissionBrief', () => {
   });
 
   it('passes only the highest-ranked safe matching trend idea without internal identifiers', async () => {
-    const planner = provider();
-    await new GenerateDailyMissionBrief(planner).execute({
+    const planner = provider({ ...output, usedTrendIdea: true });
+    const result = await new GenerateDailyMissionBrief(planner).execute({
       ...input,
       trendIdeas: [
         {
@@ -283,6 +284,13 @@ describe('GenerateDailyMissionBrief', () => {
     });
     expect(JSON.stringify(providerInput)).not.toContain('candidate-trusted');
     expect(JSON.stringify(providerInput)).not.toContain('evidence-secret-id');
+    expect(result.output.trendCandidateId).toBe('candidate-trusted');
+  });
+
+  it('rejects a provider claiming trend use when no eligible idea was supplied', async () => {
+    await expect(
+      new GenerateDailyMissionBrief(provider({ ...output, usedTrendIdea: true })).execute(input),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('falls back to the normal planner input when no trend idea is executable', async () => {

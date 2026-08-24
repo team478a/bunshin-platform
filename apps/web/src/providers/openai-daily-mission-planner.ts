@@ -6,7 +6,7 @@ import type {
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
-export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v2';
+export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v3';
 
 const schema = {
   type: 'object',
@@ -16,8 +16,9 @@ const schema = {
     angle: { type: 'string' },
     reason: { type: 'string' },
     estimatedMinutes: { type: 'integer' },
+    usedTrendIdea: { type: 'boolean' },
   },
-  required: ['topic', 'angle', 'reason', 'estimatedMinutes'],
+  required: ['topic', 'angle', 'reason', 'estimatedMinutes', 'usedTrendIdea'],
 } as const;
 
 type ResponseValue = {
@@ -46,7 +47,7 @@ export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
           {
             role: 'system',
             content:
-              'あなたはBUNSHINのSNS当日企画担当です。確定済み週間計画の対象Itemを、ユーザーが今日実行できるMission Briefにしてください。指定されたBunshin、承認済み戦略、Content Pillar、Grant済みKnowledgeだけを使用します。trendIdeasがある場合は、週間計画と対象者に自然に合うときだけ企画へ反映し、合わない場合は無視してください。トレンドの成果を保証せず、根拠にない事実を追加しないでください。投稿本文、caption、スライド、台本、画像指示、動画Promptは生成せず、topic、angle、reason、estimatedMinutesだけを返してください。estimatedMinutesはavailableMinutes以内にします。',
+              'あなたはBUNSHINのSNS当日企画担当です。確定済み週間計画の対象Itemを、ユーザーが今日実行できるMission Briefにしてください。指定されたBunshin、承認済み戦略、Content Pillar、Grant済みKnowledgeだけを使用します。trendIdeasがある場合は、週間計画と対象者に自然に合うときだけ企画へ反映し、実際に反映した場合だけusedTrendIdeaをtrueにします。trendIdeasがない、または無視した場合はfalseにします。トレンドの成果を保証せず、根拠にない事実を追加しないでください。投稿本文、caption、スライド、台本、画像指示、動画Promptは生成せず、topic、angle、reason、estimatedMinutes、usedTrendIdeaだけを返してください。estimatedMinutesはavailableMinutes以内にします。',
           },
           { role: 'user', content: JSON.stringify(input) },
         ],

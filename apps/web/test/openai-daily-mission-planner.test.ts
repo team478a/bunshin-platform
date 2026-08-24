@@ -47,6 +47,7 @@ describe('OpenAIDailyMissionPlanner', () => {
                     angle: '今日の切り口',
                     reason: '選定理由',
                     estimatedMinutes: 5,
+                    usedTrendIdea: false,
                   }),
                 },
               ],
@@ -63,7 +64,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v2',
+      promptVersion: 'daily-mission-planner-v3',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -81,6 +82,7 @@ describe('OpenAIDailyMissionPlanner', () => {
       'angle',
       'reason',
       'estimatedMinutes',
+      'usedTrendIdea',
     ]);
     expect(request.input[1]?.content).toContain('10年の経験');
   });

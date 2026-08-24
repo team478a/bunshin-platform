@@ -72,6 +72,7 @@ import {
   type DailyMission,
   type DailyMissionRepository,
   type DailyMissionStatus,
+  type MissionTrendContext,
   type MissionDecision,
   type MissionActivity,
   type MissionEngagementRepository,
@@ -2475,7 +2476,9 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
 }
 
 const missionDate = (value: Date) => value.toISOString().slice(0, 10);
-type MissionRow = Prisma.DailyMissionGetPayload<{ include: { content: true } }>;
+type MissionRow = Prisma.DailyMissionGetPayload<{
+  include: { content: true; trendContext: true };
+}>;
 function dailyMission(row: MissionRow): DailyMission {
   if (!row.content) throw new ApplicationError('INTERNAL_ERROR', 'mission content missing');
   return {
@@ -2485,11 +2488,19 @@ function dailyMission(row: MissionRow): DailyMission {
     format: row.format,
     assistanceLevel: row.assistanceLevel,
     content: row.content.contentJson as Record<string, unknown>,
+    trendContext: row.trendContext
+      ? {
+          id: row.trendContext.id,
+          candidateId: row.trendContext.candidateId,
+          snapshot: row.trendContext.snapshot as unknown as MissionTrendContext['snapshot'],
+          createdAt: row.trendContext.createdAt,
+        }
+      : null,
   };
 }
 export class PrismaDailyMissionRepository implements DailyMissionRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
-  private include = { content: true } as const;
+  private include = { content: true, trendContext: true } as const;
   private async authorized(
     client: PrismaClient | Prisma.TransactionClient,
     input: { workspaceId: string; actorUserId: string; bunshinId: string },
@@ -2540,17 +2551,44 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
     try {
       return await this.client.$transaction(async (tx) => {
         if (!(await this.authorized(tx, input, true))) return null;
-        if (
-          input.socialProfileId &&
-          !(await tx.socialProfile.findFirst({
-            where: {
-              id: input.socialProfileId,
-              workspaceId: input.workspaceId,
-              bunshinId: input.bunshinId,
-            },
-          }))
-        )
-          return null;
+        const now = new Date();
+        const socialProfile = input.socialProfileId
+          ? await tx.socialProfile.findFirst({
+              where: {
+                id: input.socialProfileId,
+                workspaceId: input.workspaceId,
+                bunshinId: input.bunshinId,
+              },
+              select: { id: true, platform: true },
+            })
+          : null;
+        if (input.socialProfileId && !socialProfile) return null;
+        if (input.trendCandidateId && !socialProfile) return null;
+        const trendCandidate = input.trendCandidateId
+          ? await tx.trendIdeaCandidate.findFirst({
+              where: {
+                id: input.trendCandidateId,
+                workspaceId: input.workspaceId,
+                bunshinId: input.bunshinId,
+                socialProfileId: socialProfile!.id,
+                platform: socialProfile!.platform,
+                suggestedFormat: input.format,
+                safetyStatus: 'SAFE',
+                status: { in: ['PROPOSED', 'SELECTED'] },
+                expiresAt: { gt: now },
+                evidenceLinks: {
+                  some: { evidence: { status: 'ACTIVE', expiresAt: { gt: now } } },
+                },
+              },
+              include: {
+                evidenceLinks: {
+                  where: { evidence: { status: 'ACTIVE', expiresAt: { gt: now } } },
+                  include: { evidence: true },
+                },
+              },
+            })
+          : null;
+        if (input.trendCandidateId && !trendCandidate) return null;
         if (
           input.weeklyPlanItemId &&
           !(await tx.weeklyPlanItem.findFirst({
@@ -2594,6 +2632,44 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             dailyMissionId: created.id,
           },
         });
+        if (trendCandidate) {
+          const evidence = trendCandidate.evidenceLinks
+            .map(({ evidence }) => evidence)
+            .sort((left, right) => left.sourceUrl.localeCompare(right.sourceUrl));
+          await tx.missionTrendContext.create({
+            data: {
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+              dailyMissionId: created.id,
+              candidateId: trendCandidate.id,
+              snapshot: {
+                candidate: {
+                  topic: trendCandidate.topic,
+                  hook: trendCandidate.hook,
+                  whyNow: trendCandidate.whyNow,
+                  fitReason: trendCandidate.fitReason,
+                  platform: trendCandidate.platform,
+                  format: trendCandidate.suggestedFormat,
+                  freshnessScore: trendCandidate.freshnessScore,
+                  fitScore: trendCandidate.fitScore,
+                  feasibilityScore: trendCandidate.feasibilityScore,
+                },
+                evidence: evidence.map((item) => ({
+                  sourceType: item.sourceType,
+                  sourceUrl: item.sourceUrl,
+                  sourceTitle: item.sourceTitle,
+                  publishedAt: item.publishedAt?.toISOString() ?? null,
+                  retrievedAt: item.retrievedAt.toISOString(),
+                  summary: item.summary,
+                })),
+              },
+            },
+          });
+          await tx.trendIdeaCandidate.update({
+            where: { id: trendCandidate.id },
+            data: { status: 'SELECTED' },
+          });
+        }
         return dailyMission((await this.row(tx, { ...input, dailyMissionId: created.id }))!);
       });
     } catch (error) {

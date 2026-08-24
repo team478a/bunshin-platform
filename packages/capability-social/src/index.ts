@@ -1285,6 +1285,7 @@ export interface DailyMissionPlannerOutput {
   angle: string;
   reason: string;
   estimatedMinutes: number;
+  usedTrendIdea: boolean;
 }
 
 export interface DailyMissionPlannerResult {
@@ -1300,11 +1301,12 @@ export interface DailyMissionPlannerPort {
   generate(input: DailyMissionPlannerProviderInput): Promise<DailyMissionPlannerResult>;
 }
 
-export interface DailyMissionBrief extends DailyMissionPlannerOutput {
+export interface DailyMissionBrief extends Omit<DailyMissionPlannerOutput, 'usedTrendIdea'> {
   missionDate: string;
   socialProfileId: string;
   weeklyPlanItemId: string;
   format: SocialPreferredFormat;
+  trendCandidateId?: string;
 }
 
 export class GenerateDailyMissionBrief {
@@ -1410,6 +1412,10 @@ export class GenerateDailyMissionBrief {
       input.approvedStrategy.availableMinutes,
       'estimated minutes',
     );
+    if (typeof result.output.usedTrendIdea !== 'boolean')
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid trend usage decision');
+    if (result.output.usedTrendIdea && trendIdeas.length === 0)
+      throw new ApplicationError('VALIDATION_ERROR', 'trend idea was not available');
     return {
       ...result,
       output: {
@@ -1421,6 +1427,7 @@ export class GenerateDailyMissionBrief {
         angle: missionString(result.output.angle, 500, 'angle'),
         reason: missionString(result.output.reason, 1000, 'reason'),
         estimatedMinutes,
+        ...(result.output.usedTrendIdea ? { trendCandidateId: trendIdeas[0]!.id } : {}),
       } satisfies DailyMissionBrief,
     };
   }
@@ -1589,6 +1596,32 @@ export const DAILY_MISSION_STATUSES = [
 ] as const;
 export type DailyMissionStatus = (typeof DAILY_MISSION_STATUSES)[number];
 export type MissionContent = Record<string, unknown>;
+export interface MissionTrendContext {
+  id: string;
+  candidateId: string;
+  snapshot: {
+    candidate: {
+      topic: string;
+      hook: string;
+      whyNow: string;
+      fitReason: string;
+      platform: SocialPlatform;
+      format: SocialPreferredFormat;
+      freshnessScore: number;
+      fitScore: number;
+      feasibilityScore: number;
+    };
+    evidence: Array<{
+      sourceType: TrendEvidenceSourceType;
+      sourceUrl: string;
+      sourceTitle: string;
+      publishedAt: string | null;
+      retrievedAt: string;
+      summary: string;
+    }>;
+  };
+  createdAt: Date;
+}
 export interface DailyMission {
   id: string;
   workspaceId: string;
@@ -1612,6 +1645,7 @@ export interface DailyMission {
   createdAt: Date;
   updatedAt: Date;
   content: MissionContent;
+  trendContext?: MissionTrendContext | null;
 }
 export interface DailyMissionScope {
   workspaceId: string;
@@ -1630,6 +1664,7 @@ export interface CreateDailyMissionInput extends DailyMissionScope {
   reason: string;
   content: MissionContent;
   qualityScore?: number | null;
+  trendCandidateId?: string | null;
 }
 export interface DailyMissionRepository {
   create(input: CreateDailyMissionInput): Promise<DailyMission | null>;

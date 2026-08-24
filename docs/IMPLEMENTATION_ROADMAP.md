@@ -221,6 +221,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - Workspace / User / Bunshin isolationとquery最小化
 - 週次冪等Job、quota、原価、期限切れ、通常Mission fallback
 - Candidate Ranking / Daily Mission任意入力 — Core接続完了
+- 採用Trend Candidate / Evidence snapshot — Core Persistence完了
 - Mission画面の出典表示とLINE安全要約
 - SNS無断スクレイピング、成果保証、画像・動画本体生成は含めない
 
