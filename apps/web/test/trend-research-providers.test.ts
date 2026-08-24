@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ExaTrendResearchAdapter } from '../src/providers/exa-trend-research';
 import { FirecrawlTrendResearchAdapter } from '../src/providers/firecrawl-trend-research';
+import { GrokXTrendResearchAdapter } from '../src/providers/grok-x-trend-research';
 import {
   classifyTrendProviderStatus,
   safeTrendResult,
@@ -74,6 +75,37 @@ describe('trend research provider adapters', () => {
       providerKey: 'FIRECRAWL',
       creditsUsed: 2,
       items: [{ title: '今日の話題', highlights: ['概要'] }],
+    });
+  });
+
+  it('Grok X Searchの引用を共通の根拠形式へ変換する', async () => {
+    let sentRequest: RequestInit | undefined;
+    const fetch = vi.fn((_url: string | URL | Request, request?: RequestInit) => {
+      sentRequest = request;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            output_text: '短時間で同じ形式の投稿が増えています。未来の成果は保証できません。',
+            citations: ['https://x.com/example/status/123'],
+            usage: { server_side_tool_usage: { SERVER_SIDE_TOOL_X_SEARCH: 1 } },
+          }),
+        ),
+      );
+    });
+    const result = await new GrokXTrendResearchAdapter({
+      apiKey: 'xai-secret',
+      model: 'grok-4.6',
+      fetch,
+    }).search(query);
+    expect(result).toMatchObject({
+      providerKey: 'GROK_X_SEARCH',
+      creditsUsed: 1,
+      items: [{ url: 'https://x.com/example/status/123' }],
+    });
+    expect(JSON.parse(sentRequest?.body as string)).toMatchObject({
+      model: 'grok-4.6',
+      max_turns: 3,
+      tools: [{ type: 'x_search', from_date: '2026-08-01' }],
     });
   });
 

@@ -240,7 +240,7 @@ export interface PlatformAdminRepository {
   findActivePlatformAdminByUserId(userId: string): Promise<PlatformAdmin | null>;
 }
 
-export const AI_PROVIDER_KEYS = ['OPENAI', 'EXA', 'FIRECRAWL'] as const;
+export const AI_PROVIDER_KEYS = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL'] as const;
 export type AiProviderKey = (typeof AI_PROVIDER_KEYS)[number];
 export type AiProviderConfigurationStatus = 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ERROR';
 export interface AiProviderConfiguration {
@@ -361,9 +361,9 @@ export class CreateAiProviderConfigurationVersion {
     if (reason.length < 3 || reason.length > 500)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
     const model = input.model?.trim() || null;
-    if (input.provider === 'OPENAI' && model === null)
-      throw new ApplicationError('VALIDATION_ERROR', 'OpenAI model is required');
-    if (input.provider !== 'OPENAI' && model !== null)
+    if (['OPENAI', 'GROK'].includes(input.provider) && model === null)
+      throw new ApplicationError('VALIDATION_ERROR', 'AI model is required');
+    if (!['OPENAI', 'GROK'].includes(input.provider) && model !== null)
       throw new ApplicationError('VALIDATION_ERROR', 'model is not supported for this provider');
     if (
       !Number.isSafeInteger(input.dailyBudgetUsdMicros) ||

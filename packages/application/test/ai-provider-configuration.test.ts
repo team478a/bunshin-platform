@@ -94,6 +94,22 @@ describe('CreateAiProviderConfigurationVersion', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
+  it('requires a model for Grok and accepts its prepared draft', async () => {
+    const createVersion = vi.fn(() => Promise.resolve({ ...value, provider: 'GROK' as const }));
+    await new CreateAiProviderConfigurationVersion(repository(createVersion), crypto).execute({
+      actorUserId: 'actor',
+      environment: 'PRODUCTION',
+      provider: 'GROK',
+      reason: 'Xの話題調査を準備',
+      model: 'grok-4.6',
+      dailyBudgetUsdMicros: 1_000_000,
+      monthlyBudgetUsdMicros: 5_000_000,
+    });
+    expect(createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'GROK', model: 'grok-4.6' }),
+    );
+  });
+
   it('rejects a monthly budget below the daily budget', async () => {
     await expect(
       new CreateAiProviderConfigurationVersion(repository(), crypto).execute({
