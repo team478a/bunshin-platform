@@ -1,9 +1,10 @@
-import { ListLineConfigurations } from '@bunshin/application';
+import { ListAiProviderConfigurations, ListLineConfigurations } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../src/line/secure-configuration';
+import { currentAiProviderEnvironment } from '../../../src/ai/secure-provider-configuration';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,10 @@ export default async function OperationsAdminPage() {
     new db.PrismaLineConfigurationRepository(),
   ).execute(user.userId, currentLineEnvironment());
   const activeLine = lineConfigurations.find((item) => item.status === 'ACTIVE');
-  const openAiConfigured = Boolean(process.env['OPENAI_API_KEY']);
+  const aiConfigurations = await new ListAiProviderConfigurations(
+    new db.PrismaAiProviderConfigurationRepository(),
+  ).execute(user.userId, currentAiProviderEnvironment());
+  const preparedProviders = new Set(aiConfigurations.map((item) => item.provider));
 
   return (
     <main className="app-page">
@@ -50,10 +54,13 @@ export default async function OperationsAdminPage() {
 
       <section className="settings-card" aria-labelledby="ai-settings-title">
         <h2 id="ai-settings-title">AIの設定</h2>
-        <p>{statusLabel(openAiConfigured)}</p>
         <p>
-          現在はAPIキーと利用モデルを配備環境から読み込んでいます。次の実装で、この画面から安全に変更できるようにします。
+          {statusLabel(preparedProviders.size > 0, `${preparedProviders.size}サービス準備済み`)}
         </p>
+        <p>文章を作るAIと、話題を調べる検索サービスの予算・APIキーを安全に準備できます。</p>
+        <Link href="/admin/ai" className="button button--secondary">
+          AIと検索の設定を開く
+        </Link>
       </section>
 
       <section className="settings-card" aria-labelledby="line-settings-title">
