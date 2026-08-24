@@ -1,6 +1,7 @@
 import {
   CheckLineOperationalReadiness,
   ListAiProviderConfigurations,
+  ListLegalDocuments,
   ListLineConfigurations,
   ListLineRichMenus,
 } from '@bunshin/application';
@@ -11,6 +12,7 @@ import { currentUserProvider } from '../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../src/line/secure-configuration';
 import { currentAiProviderEnvironment } from '../../../src/ai/secure-provider-configuration';
 import { operationsReadiness } from './operations-readiness';
+import { productionGateChecklist } from './production-gate';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +61,24 @@ export default async function OperationsAdminPage() {
       process.env['NEXT_PUBLIC_SUPABASE_URL'] && environment.SUPABASE_SERVICE_ROLE_KEY,
     ),
   });
+  const legalDocuments = await new ListLegalDocuments(
+    new db.PrismaLegalDocumentRepository(),
+  ).execute(user.userId);
+  const publishedLegalTypes = new Set(
+    legalDocuments.filter((item) => item.status === 'PUBLISHED').map((item) => item.type),
+  );
+  const productionGate = productionGateChecklist({
+    environment: environment.APP_ENV,
+    operationsReady: readiness.ready,
+    legalReady: publishedLegalTypes.has('TERMS') && publishedLegalTypes.has('PRIVACY'),
+    authReady: Boolean(
+      environment.SUPABASE_AUTH_ADMIN_URL &&
+      environment.SUPABASE_SERVICE_ROLE_KEY &&
+      environment.SUPABASE_AUTH_ADMIN_ENV === environment.APP_ENV,
+    ),
+    accountDeletionMode: environment.ACCOUNT_DELETION_EXECUTION_MODE,
+    accountDeletionApproved: environment.ACCOUNT_DELETION_PRODUCTION_APPROVED === 'true',
+  });
 
   return (
     <main className="app-page">
@@ -104,6 +124,44 @@ export default async function OperationsAdminPage() {
         )}
         <Link href="/admin/guide" className="button button--secondary">
           操作と復旧の手順を見る
+        </Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="production-gate-title">
+        <h2 id="production-gate-title">100人検証を始める前の確認</h2>
+        <p>
+          {productionGate.automaticReady
+            ? '機械で確認できる設定はそろっています。人が確認する項目を完了してください。'
+            : `自動確認で${productionGate.actionRequired}件の対応が必要です。`}
+        </p>
+        <h3>自動で確認した項目</h3>
+        <ul>
+          {productionGate.automatic.map((item) => (
+            <li key={item.code}>
+              <strong className={item.status === 'READY' ? 'status-success' : 'status-warning'}>
+                {item.status === 'READY' ? '確認済み：' : '対応が必要：'}
+                {item.title}
+              </strong>
+              <p>{item.guidance}</p>
+              {item.status !== 'READY' ? <Link href={item.href}>確認する</Link> : null}
+            </li>
+          ))}
+        </ul>
+        <h3>人が確認して記録する項目</h3>
+        <p>安全のため、この画面を開いただけでは完了になりません。</p>
+        <ol>
+          {productionGate.manual.map((item) => (
+            <li key={item.code}>
+              <strong>{item.title}</strong>
+              <p>{item.guidance}</p>
+            </li>
+          ))}
+        </ol>
+        <p>
+          <strong className="status-warning">現在の開始判定：確認待ち</strong>
+        </p>
+        <Link href="/admin/guide#production-gate" className="button button--secondary">
+          本番開始の確認手順を見る
         </Link>
       </section>
 
