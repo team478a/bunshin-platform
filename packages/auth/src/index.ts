@@ -38,6 +38,7 @@ export interface SessionUserVerifier {
 
 export interface CurrentUserAccountRepository {
   findActiveByEmailIdentity(providerUserId: string): Promise<CurrentUser | null>;
+  emailIdentityExists(providerUserId: string): Promise<boolean>;
   provisionEmailIdentity(input: VerifiedSessionUser): Promise<CurrentUser>;
 }
 
@@ -50,10 +51,10 @@ export class SessionCurrentUserProvider implements CurrentUserProvider {
   async getCurrentUser(): Promise<CurrentUser | null> {
     const verified = await this.verifier.getVerifiedUser();
     if (verified === null) return null;
-    return (
-      (await this.accounts.findActiveByEmailIdentity(verified.providerUserId)) ??
-      this.accounts.provisionEmailIdentity(verified)
-    );
+    const active = await this.accounts.findActiveByEmailIdentity(verified.providerUserId);
+    if (active) return active;
+    if (await this.accounts.emailIdentityExists(verified.providerUserId)) return null;
+    return this.accounts.provisionEmailIdentity(verified);
   }
 }
 

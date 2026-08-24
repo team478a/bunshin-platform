@@ -3,7 +3,11 @@ import { SessionCurrentUserProvider } from '../src/index';
 
 describe('SessionCurrentUserProvider', () => {
   it('rejects an absent or invalid session', async () => {
-    const accounts = { findActiveByEmailIdentity: vi.fn(), provisionEmailIdentity: vi.fn() };
+    const accounts = {
+      findActiveByEmailIdentity: vi.fn(),
+      emailIdentityExists: vi.fn(),
+      provisionEmailIdentity: vi.fn(),
+    };
     const provider = new SessionCurrentUserProvider(
       { getVerifiedUser: () => Promise.resolve(null) },
       accounts,
@@ -16,6 +20,7 @@ describe('SessionCurrentUserProvider', () => {
     const existing = { userId: 'user-1', authIdentityId: 'identity-1' };
     const accounts = {
       findActiveByEmailIdentity: vi.fn().mockResolvedValue(existing),
+      emailIdentityExists: vi.fn(),
       provisionEmailIdentity: vi.fn(),
     };
     const verified = { providerUserId: 'provider-1', email: 'user@example.com', displayName: null };
@@ -31,6 +36,7 @@ describe('SessionCurrentUserProvider', () => {
     const created = { userId: 'user-1', authIdentityId: 'identity-1' };
     const accounts = {
       findActiveByEmailIdentity: vi.fn().mockResolvedValue(null),
+      emailIdentityExists: vi.fn().mockResolvedValue(false),
       provisionEmailIdentity: vi.fn().mockResolvedValue(created),
     };
     const verified = {
@@ -44,5 +50,26 @@ describe('SessionCurrentUserProvider', () => {
     );
     await expect(provider.getCurrentUser()).resolves.toEqual(created);
     expect(accounts.provisionEmailIdentity).toHaveBeenCalledWith(verified);
+  });
+
+  it('does not recreate a suspended user with an existing identity', async () => {
+    const accounts = {
+      findActiveByEmailIdentity: vi.fn().mockResolvedValue(null),
+      emailIdentityExists: vi.fn().mockResolvedValue(true),
+      provisionEmailIdentity: vi.fn(),
+    };
+    const provider = new SessionCurrentUserProvider(
+      {
+        getVerifiedUser: () =>
+          Promise.resolve({
+            providerUserId: 'provider-1',
+            email: 'user@example.com',
+            displayName: 'User',
+          }),
+      },
+      accounts,
+    );
+    await expect(provider.getCurrentUser()).resolves.toBeNull();
+    expect(accounts.provisionEmailIdentity).not.toHaveBeenCalled();
   });
 });

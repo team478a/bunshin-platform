@@ -61,6 +61,24 @@ enum PlatformAdminAuditAction {
   REVOKED
 }
 
+enum UserOperationAuditAction {
+  SUSPENDED
+  REACTIVATED
+}
+
+enum SupportCaseStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum SupportCasePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 enum LineConfigurationEnvironment {
   DEVELOPMENT
   STAGING
@@ -478,6 +496,12 @@ model User {
   trendBenchmarkCases           TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations    TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
   productionGateEvidence        ProductionGateEvidence[]             @relation("ProductionGateEvidenceActor")
+  userOperationAuditsAsTarget   UserOperationAudit[]                  @relation("UserOperationAuditTarget")
+  userOperationAuditsAsActor    UserOperationAudit[]                  @relation("UserOperationAuditActor")
+  supportCasesAsTarget          SupportCase[]                         @relation("SupportCaseTarget")
+  supportCasesCreated           SupportCase[]                         @relation("SupportCaseCreator")
+  supportCasesAssigned          SupportCase[]                         @relation("SupportCaseAssignee")
+  supportCaseNotes              SupportCaseNote[]
 
   @@index([status])
   @@map("users")
@@ -583,6 +607,57 @@ model PlatformAdminAudit {
   @@index([targetUserId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("platform_admin_audits")
+}
+
+model UserOperationAudit {
+  id             String                   @id @default(uuid()) @db.Uuid
+  targetUserId   String                   @map("target_user_id") @db.Uuid
+  actorUserId    String                   @map("actor_user_id") @db.Uuid
+  action         UserOperationAuditAction
+  previousStatus UserStatus               @map("previous_status")
+  nextStatus     UserStatus               @map("next_status")
+  reason         String                   @db.VarChar(1000)
+  occurredAt     DateTime                 @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  target         User                     @relation("UserOperationAuditTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  actor          User                     @relation("UserOperationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("user_operation_audits")
+}
+
+model SupportCase {
+  id             String              @id @default(uuid()) @db.Uuid
+  targetUserId   String              @map("target_user_id") @db.Uuid
+  createdByUserId String             @map("created_by_user_id") @db.Uuid
+  assigneeUserId String?             @map("assignee_user_id") @db.Uuid
+  subject        String              @db.VarChar(200)
+  status         SupportCaseStatus   @default(OPEN)
+  priority       SupportCasePriority @default(NORMAL)
+  resolvedAt     DateTime?           @map("resolved_at") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  target         User                @relation("SupportCaseTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  creator        User                @relation("SupportCaseCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignee       User?               @relation("SupportCaseAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  notes          SupportCaseNote[]
+
+  @@index([targetUserId, status, updatedAt])
+  @@index([assigneeUserId, status, updatedAt])
+  @@map("support_cases")
+}
+
+model SupportCaseNote {
+  id           String      @id @default(uuid()) @db.Uuid
+  supportCaseId String     @map("support_case_id") @db.Uuid
+  authorUserId String      @map("author_user_id") @db.Uuid
+  content      String      @db.VarChar(2000)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  supportCase  SupportCase @relation(fields: [supportCaseId], references: [id], onDelete: Cascade)
+  author       User        @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([supportCaseId, createdAt])
+  @@map("support_case_notes")
 }
 
 model ProductionGateEvidence {

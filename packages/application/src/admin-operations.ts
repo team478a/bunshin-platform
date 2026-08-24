@@ -62,6 +62,50 @@ export interface AdminUserDetail {
   workspaces: Array<{ id: string; name: string; role: string; status: string }>;
   bunshins: Array<{ id: string; name: string; status: string; createdAt: Date }>;
   timeline: AdminUserTimelineItem[];
+  operationAudits: AdminUserOperationAudit[];
+  supportCases: AdminSupportCase[];
+}
+
+export interface AdminUserOperationAudit {
+  id: string;
+  action: 'SUSPENDED' | 'REACTIVATED';
+  previousStatus: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  nextStatus: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  reason: string;
+  actorDisplayName: string;
+  occurredAt: Date;
+}
+
+export interface AdminSupportCaseNote {
+  id: string;
+  content: string;
+  authorDisplayName: string;
+  createdAt: Date;
+}
+
+export interface AdminSupportCase {
+  id: string;
+  subject: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  assigneeUserId: string | null;
+  assigneeDisplayName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  resolvedAt: Date | null;
+  notes: AdminSupportCaseNote[];
+}
+
+export interface AdminSupportCaseInboxItem {
+  id: string;
+  targetUserId: string;
+  targetDisplayName: string;
+  targetEmail: string | null;
+  subject: string;
+  status: AdminSupportCase['status'];
+  priority: AdminSupportCase['priority'];
+  assigneeDisplayName: string | null;
+  updatedAt: Date;
 }
 
 export interface AdminOperationsRepository {
@@ -78,6 +122,32 @@ export interface AdminOperationsRepository {
     userId: string;
     environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
   }): Promise<AdminUserDetail | null>;
+  setUserStatus(input: {
+    actorUserId: string;
+    userId: string;
+    status: 'ACTIVE' | 'SUSPENDED';
+    reason: string;
+  }): Promise<boolean | null>;
+  createSupportCase(input: {
+    actorUserId: string;
+    userId: string;
+    subject: string;
+    priority: AdminSupportCase['priority'];
+    note: string;
+  }): Promise<boolean | null>;
+  updateSupportCase(input: {
+    actorUserId: string;
+    userId: string;
+    supportCaseId: string;
+    status: AdminSupportCase['status'];
+    priority: AdminSupportCase['priority'];
+    assigneeUserId: string | null;
+    note: string;
+  }): Promise<boolean | null>;
+  listSupportCases(input: {
+    actorUserId: string;
+    status: AdminSupportCase['status'] | null;
+  }): Promise<AdminSupportCaseInboxItem[] | null>;
 }
 
 function validatePeriod(from: Date, to: Date) {
@@ -121,5 +191,92 @@ export class GetAdminUserDetail {
     const value = await this.repository.userDetail(input);
     if (!value) throw new ApplicationError('NOT_FOUND', 'user not found');
     return value;
+  }
+}
+
+const uuidPattern = /^[0-9a-f-]{36}$/i;
+const validReason = (value: string, maximum = 1000) => {
+  const normalized = value.trim();
+  if (normalized.length < 5 || normalized.length > maximum)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid admin reason');
+  return normalized;
+};
+
+export class SetAdminUserStatus {
+  constructor(private readonly repository: AdminOperationsRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    userId: string;
+    status: 'ACTIVE' | 'SUSPENDED';
+    reason: string;
+  }) {
+    if (!uuidPattern.test(input.userId))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid user id');
+    const result = await this.repository.setUserStatus({
+      ...input,
+      reason: validReason(input.reason),
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'user not found');
+    if (!result) throw new ApplicationError('CONFLICT', 'user status cannot be changed');
+  }
+}
+
+export class CreateAdminSupportCase {
+  constructor(private readonly repository: AdminOperationsRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    userId: string;
+    subject: string;
+    priority: AdminSupportCase['priority'];
+    note: string;
+  }) {
+    const subject = input.subject.trim();
+    if (!uuidPattern.test(input.userId) || subject.length < 3 || subject.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid support case');
+    const result = await this.repository.createSupportCase({
+      ...input,
+      subject,
+      note: validReason(input.note, 2000),
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'user not found');
+    if (!result) throw new ApplicationError('FORBIDDEN', 'admin required');
+  }
+}
+
+export class UpdateAdminSupportCase {
+  constructor(private readonly repository: AdminOperationsRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    userId: string;
+    supportCaseId: string;
+    status: AdminSupportCase['status'];
+    priority: AdminSupportCase['priority'];
+    assigneeUserId: string | null;
+    note: string;
+  }) {
+    if (
+      !uuidPattern.test(input.userId) ||
+      !uuidPattern.test(input.supportCaseId) ||
+      (input.assigneeUserId !== null && !uuidPattern.test(input.assigneeUserId))
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid support case');
+    const result = await this.repository.updateSupportCase({
+      ...input,
+      note: validReason(input.note, 2000),
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'support case not found');
+    if (!result) throw new ApplicationError('FORBIDDEN', 'admin required');
+  }
+}
+
+export class ListAdminSupportCases {
+  constructor(private readonly repository: AdminOperationsRepository) {}
+  async execute(input: { actorUserId: string; status?: AdminSupportCase['status'] | null }) {
+    const result = await this.repository.listSupportCases({
+      actorUserId: input.actorUserId,
+      status: input.status ?? null,
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'support inbox not found');
+    return result;
   }
 }
