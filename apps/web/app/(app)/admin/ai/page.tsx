@@ -1,6 +1,7 @@
 import { ListAiProviderConfigurations } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
+import Link from 'next/link';
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { AiProviderConfigurationEditor } from './provider-configuration-editor';
@@ -39,6 +40,13 @@ export default async function AiProviderConfigurationPage() {
             updatedAt: value.updatedAt.toISOString(),
           }))}
         />
+        <section className="settings-card">
+          <h2>トレンド調査サービスをくらべる</h2>
+          <p>同じ質問の結果と費用を記録し、Grok・Exa・Firecrawlを公平に比較します。</p>
+          <Link href="/admin/ai/benchmark" className="button button--secondary">
+            比較画面を開く
+          </Link>
+        </section>
       </main>
     );
   } catch (error) {
