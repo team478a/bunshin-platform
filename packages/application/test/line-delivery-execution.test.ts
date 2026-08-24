@@ -71,6 +71,7 @@ function dependencies(input?: {
       format: 'SLIDE',
       estimatedMinutes: 5,
       topic: '朝の時間を上手に使うコツ',
+      researched: false,
     }),
   } satisfies LineMissionNotificationSummaryRepository;
   const provider = {
@@ -117,6 +118,7 @@ describe('LINE delivery execution', () => {
         format: 'SLIDE',
         estimatedMinutes: 5,
         topic: '朝の時間を上手に使うコツ',
+        researched: false,
       },
     });
     expect(values.repository.recordAttempt).toHaveBeenCalledWith(

@@ -31,6 +31,7 @@ describe('LINE Messaging API adapter', () => {
           format: 'SLIDE',
           estimatedMinutes: 5,
           topic: '朝の時間を上手に使うコツ',
+          researched: true,
         },
       }),
     ).resolves.toEqual({ ok: true });
@@ -45,7 +46,7 @@ describe('LINE Messaging API adapter', () => {
       messages: [
         {
           type: 'text',
-          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
+          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n新しい情報も参考にした企画です。\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
         },
       ],
     });
@@ -66,6 +67,7 @@ describe('LINE Messaging API adapter', () => {
         format: 'TEXT',
         estimatedMinutes: 3,
         topic: `${'安全なテーマ'.repeat(20)}\n投稿本文：送ってはいけない`,
+        researched: false,
       },
     });
     const body = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
@@ -97,6 +99,7 @@ describe('LINE Messaging API adapter', () => {
             format: 'TEXT',
             estimatedMinutes: 3,
             topic: '短いテーマ',
+            researched: false,
           },
         }),
       ).resolves.toEqual({ ok: false, category, retryable });

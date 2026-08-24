@@ -7,6 +7,7 @@ describe('LINE Mission notification summary repository', () => {
       format: 'TEXT',
       estimatedMinutes: 3,
       topic: '今日の短いテーマ',
+      trendContext: { id: 'context-a' },
       socialProfile: { platform: 'X' },
     });
     const repository = new PrismaLineMissionNotificationSummaryRepository({
@@ -25,6 +26,7 @@ describe('LINE Mission notification summary repository', () => {
       format: 'TEXT',
       estimatedMinutes: 3,
       topic: '今日の短いテーマ',
+      researched: true,
     });
     expect(findFirst).toHaveBeenCalledWith({
       where: {
@@ -44,6 +46,7 @@ describe('LINE Mission notification summary repository', () => {
         format: true,
         estimatedMinutes: true,
         topic: true,
+        trendContext: { select: { id: true } },
         socialProfile: { select: { platform: true } },
       },
     });

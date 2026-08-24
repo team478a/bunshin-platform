@@ -2761,6 +2761,7 @@ export class PrismaLineMissionNotificationSummaryRepository implements LineMissi
         format: true,
         estimatedMinutes: true,
         topic: true,
+        trendContext: { select: { id: true } },
         socialProfile: { select: { platform: true } },
       },
     });
@@ -2770,6 +2771,7 @@ export class PrismaLineMissionNotificationSummaryRepository implements LineMissi
       format: mission.format,
       estimatedMinutes: mission.estimatedMinutes,
       topic: mission.topic,
+      researched: mission.trendContext !== null,
     };
   }
 }

@@ -258,6 +258,7 @@ export default async function BunshinPage({
               qualityScore,
               content,
               socialProfileId,
+              trendContext,
             },
             index,
           ) => ({
@@ -278,6 +279,21 @@ export default async function BunshinPage({
               socialProfiles.find((profile) => profile.id === socialProfileId)?.platform ?? null,
             postedAt: missionOutcomes[index]!.post?.postedAt.toISOString() ?? null,
             feedback: missionOutcomes[index]!.feedback?.rating ?? null,
+            trendContext: trendContext
+              ? {
+                  whyNow: trendContext.snapshot.candidate.whyNow,
+                  fitReason: trendContext.snapshot.candidate.fitReason,
+                  researchedAt: trendContext.createdAt.toISOString(),
+                  evidence: trendContext.snapshot.evidence.map(
+                    ({ sourceUrl, sourceTitle, publishedAt, retrievedAt }) => ({
+                      sourceUrl,
+                      sourceTitle,
+                      publishedAt,
+                      retrievedAt,
+                    }),
+                  ),
+                }
+              : null,
           }),
         )}
         lineNotificationPreference={{
