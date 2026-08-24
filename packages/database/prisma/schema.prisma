@@ -69,6 +69,7 @@ enum LineConfigurationStatus {
 
 enum AiProviderKey {
   OPENAI
+  GROK
   EXA
   FIRECRAWL
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 
-type Provider = 'OPENAI' | 'EXA' | 'FIRECRAWL';
+type Provider = 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL';
 type Configuration = {
   id: string;
   provider: Provider;
@@ -18,6 +18,7 @@ type Configuration = {
 };
 const labels: Record<Provider, string> = {
   OPENAI: '文章を作るAI（OpenAI）',
+  GROK: 'Xの話題を調べるAI（Grok）',
   EXA: '話題を調べる検索（Exa）',
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
 };
@@ -43,7 +44,7 @@ export function AiProviderConfigurationEditor(props: {
       body: JSON.stringify({
         provider,
         reason: form.get('reason'),
-        model: provider === 'OPENAI' ? form.get('model') : null,
+        model: provider === 'OPENAI' || provider === 'GROK' ? form.get('model') : null,
         dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
         monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
         apiKey: form.get('apiKey') || null,
@@ -127,10 +128,16 @@ export function AiProviderConfigurationEditor(props: {
               ))}
             </select>
           </label>
-          {provider === 'OPENAI' ? (
+          {provider === 'OPENAI' || provider === 'GROK' ? (
             <label>
               使うAIモデル
-              <input name="model" defaultValue="gpt-5-mini" required maxLength={120} />
+              <input
+                key={provider}
+                name="model"
+                defaultValue={provider === 'GROK' ? 'grok-4.6' : 'gpt-5-mini'}
+                required
+                maxLength={120}
+              />
             </label>
           ) : null}
           <label>
