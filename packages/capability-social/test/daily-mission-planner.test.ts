@@ -1,9 +1,61 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   GenerateDailyMissionBrief,
+  selectDailyMissionFormat,
   type DailyMissionPlannerInput,
   type DailyMissionPlannerOutput,
 } from '../src';
+
+describe('selectDailyMissionFormat', () => {
+  it('prioritizes text for X and rotates away from a recently repeated format', () => {
+    expect(
+      selectDailyMissionFormat({
+        platform: 'X',
+        preferredFormats: ['TEXT', 'IMAGE'],
+        weeklyRecommendedFormat: 'IMAGE',
+        facePolicy: 'FULL_ANONYMOUS',
+        availableMinutes: 5,
+        recentFormats: ['IMAGE'],
+      }),
+    ).toBe('TEXT');
+  });
+
+  it('does not select self-recorded video when face and voice are unavailable', () => {
+    expect(
+      selectDailyMissionFormat({
+        platform: 'INSTAGRAM',
+        preferredFormats: ['LIVE_ACTION', 'SLIDE', 'IMAGE'],
+        weeklyRecommendedFormat: 'LIVE_ACTION',
+        facePolicy: 'FULL_ANONYMOUS',
+        availableMinutes: 20,
+      }),
+    ).toBe('SLIDE');
+  });
+
+  it('uses an executable platform fallback when the explicit preference is impossible', () => {
+    expect(
+      selectDailyMissionFormat({
+        platform: 'TIKTOK',
+        preferredFormats: ['LIVE_ACTION'],
+        weeklyRecommendedFormat: 'LIVE_ACTION',
+        facePolicy: 'FACE_VOICE_NG',
+        availableMinutes: 3,
+      }),
+    ).toBe('IMAGE');
+  });
+
+  it('allows an AI video instruction only when the user selected that format', () => {
+    expect(
+      selectDailyMissionFormat({
+        platform: 'YOUTUBE_SHORTS',
+        preferredFormats: ['AI_VIDEO_PROMPT'],
+        weeklyRecommendedFormat: 'AI_VIDEO_PROMPT',
+        facePolicy: 'FULL_ANONYMOUS',
+        availableMinutes: 3,
+      }),
+    ).toBe('AI_VIDEO_PROMPT');
+  });
+});
 
 const now = new Date('2026-08-21T00:00:00.000Z');
 const input: DailyMissionPlannerInput = {
@@ -26,6 +78,7 @@ const input: DailyMissionPlannerInput = {
     createdAt: now,
     updatedAt: now,
   },
+  facePolicy: 'FULL_ANONYMOUS',
   bunshin: {
     name: 'BUNSHIN',
     objectiveSummary: '発信を継続する',
@@ -177,5 +230,20 @@ describe('GenerateDailyMissionBrief', () => {
     await expect(
       new GenerateDailyMissionBrief(provider({ ...output, estimatedMinutes: 6 })).execute(input),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('replaces the weekly suggestion with a safe format from the scoped profile', async () => {
+    const planner = provider();
+    const result = await new GenerateDailyMissionBrief(planner).execute({
+      ...input,
+      socialProfile: { ...input.socialProfile, preferredFormats: ['IMAGE'] },
+      recentFormats: ['TEXT'],
+    });
+    expect(result.output.format).toBe('IMAGE');
+    expect(planner.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        weeklyItem: expect.objectContaining({ recommendedFormat: 'IMAGE' }),
+      }),
+    );
   });
 });

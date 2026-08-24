@@ -367,6 +367,8 @@ SNS別生成ルールやPromptを管理画面から直接編集する機能は�
 
 ### PR 5: SNS別投稿セット強化
 
+状態: 自動選択Domain PolicyとDaily Mission生成への接続を完了。既存の形式別schema、SNS別許可形式、文字数・時間・ハッシュタグ検証を再利用し、外部AI利用可否を示す専用項目は将来の設定追加まで明示的な`AI_VIDEO_PROMPT`希望で代用する。
+
 - SNS・形式別必須成果物
 - 自動選択Domain Policy
 - facePolicy、時間、最近の形式の判定

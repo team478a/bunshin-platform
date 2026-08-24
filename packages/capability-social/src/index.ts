@@ -2,6 +2,7 @@ import {
   RequireActiveBunshinCapability,
   type BunshinCapabilityAssignmentRepository,
 } from '@bunshin/application';
+import type { FacePolicy } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 
 export const SOCIAL_PLATFORMS = [
@@ -1189,10 +1190,63 @@ export interface DailyMissionPlannerInput {
     audienceSummary: string;
     personalitySummary: string;
   };
+  facePolicy: FacePolicy;
+  recentFormats?: SocialPreferredFormat[];
   approvedStrategy: SocialAccountStrategy;
   weeklyPlan: WeeklyPlan;
   contentPillars: ContentPillar[];
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+}
+
+const PLATFORM_FORMAT_PRIORITY: Record<SocialPlatform, readonly SocialPreferredFormat[]> = {
+  INSTAGRAM: ['SLIDE', 'IMAGE', 'LIVE_ACTION', 'AI_VIDEO_PROMPT', 'TEXT'],
+  TIKTOK: ['LIVE_ACTION', 'AI_VIDEO_PROMPT', 'IMAGE'],
+  X: ['TEXT', 'IMAGE'],
+  THREADS: ['TEXT', 'IMAGE'],
+  YOUTUBE_SHORTS: ['LIVE_ACTION', 'AI_VIDEO_PROMPT'],
+  OTHER: SOCIAL_PREFERRED_FORMATS,
+};
+
+export function selectDailyMissionFormat(input: {
+  platform: SocialPlatform;
+  preferredFormats: SocialPreferredFormat[];
+  weeklyRecommendedFormat: SocialPreferredFormat;
+  facePolicy: FacePolicy;
+  availableMinutes: 3 | 5 | 10 | 20;
+  recentFormats?: SocialPreferredFormat[];
+}): SocialPreferredFormat {
+  const supported = PLATFORM_FORMATS[input.platform];
+  const preferred = input.preferredFormats.filter((format) => supported.includes(format));
+  const base = preferred.length > 0 ? preferred : [...PLATFORM_FORMAT_PRIORITY[input.platform]];
+  const isExecutable = (format: SocialPreferredFormat) => {
+    if (
+      format === 'LIVE_ACTION' &&
+      (!['FACE_OK', 'FACE_NG_VOICE_OK'].includes(input.facePolicy) || input.availableMinutes < 10)
+    )
+      return false;
+    if (format === 'SLIDE' && input.availableMinutes < 5) return false;
+    if (format === 'AI_VIDEO_PROMPT' && !preferred.includes('AI_VIDEO_PROMPT')) return false;
+    return true;
+  };
+  const executable = base.filter(isExecutable);
+  const fallback = PLATFORM_FORMAT_PRIORITY[input.platform].filter(
+    (format) => supported.includes(format) && isExecutable(format),
+  );
+  const candidates = executable.length > 0 ? executable : fallback;
+  if (candidates.length === 0)
+    throw new ApplicationError('VALIDATION_ERROR', 'no executable format for platform');
+  const recent = new Set(input.recentFormats?.slice(-2) ?? []);
+  const nonRepeated = candidates.filter((format) => !recent.has(format));
+  const selectable = nonRepeated.length > 0 ? nonRepeated : candidates;
+  if (
+    selectable.includes(input.weeklyRecommendedFormat) &&
+    input.preferredFormats.includes(input.weeklyRecommendedFormat)
+  )
+    return input.weeklyRecommendedFormat;
+  return (
+    PLATFORM_FORMAT_PRIORITY[input.platform].find((format) => selectable.includes(format)) ??
+    selectable[0]!
+  );
 }
 
 export interface DailyMissionPlannerProviderInput {
@@ -1293,6 +1347,15 @@ export class GenerateDailyMissionBrief {
     );
     if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
 
+    const selectedFormat = selectDailyMissionFormat({
+      platform: input.socialProfile.platform,
+      preferredFormats: input.socialProfile.preferredFormats,
+      weeklyRecommendedFormat: item.recommendedFormat,
+      facePolicy: input.facePolicy,
+      availableMinutes: input.approvedStrategy.availableMinutes,
+      ...(input.recentFormats ? { recentFormats: input.recentFormats } : {}),
+    });
+
     const result = await this.planner.generate({
       missionDate,
       timezone: timezoneValue,
@@ -1310,7 +1373,7 @@ export class GenerateDailyMissionBrief {
       weeklyItem: {
         goal: item.goal,
         angle: item.angle,
-        recommendedFormat: item.recommendedFormat,
+        recommendedFormat: selectedFormat,
         notes: item.notes,
       },
       contentPillar: { title: pillar.title, description: pillar.description },
@@ -1328,7 +1391,7 @@ export class GenerateDailyMissionBrief {
         missionDate,
         socialProfileId: input.socialProfile.id,
         weeklyPlanItemId: item.id,
-        format: item.recommendedFormat,
+        format: selectedFormat,
         topic: missionString(result.output.topic, 200, 'topic'),
         angle: missionString(result.output.angle, 500, 'angle'),
         reason: missionString(result.output.reason, 1000, 'reason'),
