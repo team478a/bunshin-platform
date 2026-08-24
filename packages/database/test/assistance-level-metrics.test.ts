@@ -10,7 +10,11 @@ describe('assistance level metrics', () => {
         { dailyMissionId: 'mission-1', type: 'VIEWED', dailyMission: level },
         { dailyMissionId: 'mission-1', type: 'VIEWED', dailyMission: level },
         { dailyMissionId: 'mission-1', type: 'ACCEPTED', dailyMission: level },
-        { dailyMissionId: 'mission-1', type: 'COPIED_TEXT', dailyMission: level },
+        {
+          dailyMissionId: 'mission-1',
+          type: 'COPIED_IMAGE_INSTRUCTION',
+          dailyMission: level,
+        },
       ],
       posts: [{ dailyMissionId: 'mission-1', dailyMission: level }],
       feedback: [{ dailyMissionId: 'mission-1', rating: 'GOOD', dailyMission: level }],

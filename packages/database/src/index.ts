@@ -917,7 +917,13 @@ export class PrismaLineAdminFunnelRepository implements LineAdminFunnelRepositor
               activities: {
                 where: {
                   type: {
-                    in: ['COPIED_TEXT', 'COPIED_SLIDE', 'COPIED_VIDEO_PROMPT', 'COPIED_SCRIPT'],
+                    in: [
+                      'COPIED_TEXT',
+                      'COPIED_SLIDE',
+                      'COPIED_IMAGE_INSTRUCTION',
+                      'COPIED_VIDEO_PROMPT',
+                      'COPIED_SCRIPT',
+                    ],
                   },
                   occurredAt: { lt: input.to },
                 },
@@ -5456,6 +5462,7 @@ const rate = (numerator: number, denominator: number) =>
 const validationCopyTypes = new Set([
   'COPIED_TEXT',
   'COPIED_SLIDE',
+  'COPIED_IMAGE_INSTRUCTION',
   'COPIED_VIDEO_PROMPT',
   'COPIED_SCRIPT',
 ]);
@@ -5546,6 +5553,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
     const copyTypes = [
       'COPIED_TEXT',
       'COPIED_SLIDE',
+      'COPIED_IMAGE_INSTRUCTION',
       'COPIED_VIDEO_PROMPT',
       'COPIED_SCRIPT',
     ] as const;
@@ -5842,6 +5850,7 @@ type AdminUserRow = Prisma.UserGetPayload<{ select: typeof adminUserSelect }>;
 const copyActivityTypes = new Set([
   'COPIED_TEXT',
   'COPIED_SLIDE',
+  'COPIED_IMAGE_INSTRUCTION',
   'COPIED_VIDEO_PROMPT',
   'COPIED_SCRIPT',
 ]);
@@ -6111,7 +6120,15 @@ export class PrismaTrendOperationsRepository implements TrendOperationsRepositor
         this.client.missionActivity.findMany({
           where: {
             occurredAt: { lt: input.to },
-            type: { in: ['COPIED_TEXT', 'COPIED_SLIDE', 'COPIED_VIDEO_PROMPT', 'COPIED_SCRIPT'] },
+            type: {
+              in: [
+                'COPIED_TEXT',
+                'COPIED_SLIDE',
+                'COPIED_IMAGE_INSTRUCTION',
+                'COPIED_VIDEO_PROMPT',
+                'COPIED_SCRIPT',
+              ],
+            },
             dailyMission: { is: { trendContext: { is: missionPeriod } } },
           },
           distinct: ['dailyMissionId'],

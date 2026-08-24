@@ -193,6 +193,19 @@ describe('Mission Decision / Activity HTTP contract', () => {
         )
       ).status,
     ).toBe(200);
+    expect(
+      (
+        await recordMissionActivityResponse(
+          request('activities', {
+            type: 'COPIED_IMAGE_INSTRUCTION',
+            idempotencyKey: 'copy-image-1',
+          }),
+          'workspace-1',
+          'bunshin-1',
+          missionId,
+        )
+      ).status,
+    ).toBe(200);
   });
   it('blocks unauthenticated, cross-scope and suspended mutations', async () => {
     state.user = null;

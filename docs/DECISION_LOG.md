@@ -371,7 +371,7 @@
 - UX: 投稿案の表示後は採用/不採用を先に提示し、採用後だけformat別コピー操作を表示する
 - Rejection: 不採用理由はワンタップを基本とし、OTHERだけ任意詳細を許可する
 - Copy: Clipboard API成功後にだけformat別COPY Activityをappendし、失敗操作を計測しない
-- IMAGE: 専用Activity typeが未定義のため画像制作指示を誤分類せず、今回はcaptionの`COPIED_TEXT`だけを提供する
+- IMAGE: 画像制作指示は`COPIED_IMAGE_INSTRUCTION`、投稿文は`COPIED_TEXT`として別々にコピー・計測する。指示文本文はActivity metadataやlogへ保存しない
 - Activity: VIEWEDは内容を開いた行動として記録し、Mission lifecycleのVIEWEDとは別責務のRaw Eventとする
 - 禁止: PostRecord、Feedback、AI生成、Provider、LINE、Jobを混在させない
 - 詳細: `docs/PHASE3_SLICE_3_6B_IMPLEMENTATION_REPORT.md`

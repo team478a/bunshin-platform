@@ -31,6 +31,9 @@ const activitySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('VIEWED'), idempotencyKey: idempotencyKeySchema }).strict(),
   z.object({ type: z.literal('COPIED_TEXT'), idempotencyKey: idempotencyKeySchema }).strict(),
   z
+    .object({ type: z.literal('COPIED_IMAGE_INSTRUCTION'), idempotencyKey: idempotencyKeySchema })
+    .strict(),
+  z
     .object({ type: z.literal('COPIED_VIDEO_PROMPT'), idempotencyKey: idempotencyKeySchema })
     .strict(),
   z.object({ type: z.literal('COPIED_SCRIPT'), idempotencyKey: idempotencyKeySchema }).strict(),
