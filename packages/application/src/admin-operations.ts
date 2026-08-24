@@ -171,7 +171,7 @@ export class GetAdminOperationsSnapshot {
     const query = input.query?.trim() ?? '';
     if (query.length > 100) throw new ApplicationError('VALIDATION_ERROR', 'query is too long');
     const limit = input.limit ?? 100;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 200)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5_000)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid limit');
     const value = await this.repository.snapshot({ ...input, query, limit });
     if (!value) throw new ApplicationError('NOT_FOUND', 'admin page not found');
