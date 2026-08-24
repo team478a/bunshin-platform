@@ -67,6 +67,19 @@ enum LineConfigurationStatus {
   ERROR
 }
 
+enum AiProviderKey {
+  OPENAI
+  EXA
+  FIRECRAWL
+}
+
+enum AiProviderConfigurationStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
 enum LineNotificationFrequency {
   DAILY
   WEEKDAYS
@@ -391,34 +404,35 @@ enum TrendSafetyStatus {
 }
 
 model User {
-  id                          String                          @id @default(uuid()) @db.Uuid
-  status                      UserStatus                      @default(ACTIVE)
-  displayName                 String                          @map("display_name") @db.VarChar(100)
-  email                       String?                         @db.VarChar(320)
-  createdAt                   DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
-  identities                  AuthIdentity[]
-  memberships                 WorkspaceMembership[]
-  platformAdmin               PlatformAdmin?
-  bunshins                    Bunshin[]
-  ownerKnowledge              OwnerKnowledge[]                @relation("KnowledgeOwner")
-  knowledgeGrants             BunshinKnowledgeGrant[]         @relation("GrantActor")
-  capabilityAssignments       BunshinCapabilityAssignment[]   @relation("CapabilityAssignmentActor")
-  missionActivities           MissionActivity[]               @relation("MissionActivityActor")
-  postRecords                 PostRecord[]                    @relation("PostRecordActor")
-  missionFeedback             MissionFeedback[]               @relation("MissionFeedbackActor")
-  aiUsageEvents               AiUsageEvent[]                  @relation("AiUsageActor")
-  legalDocuments              LegalDocument[]                 @relation("LegalDocumentAuthor")
-  legalConsents               UserLegalConsent[]
-  accountDeletionRequests     AccountDeletionRequest[]
-  accountDeletionAudits       AccountDeletionOperationAudit[] @relation("AccountDeletionAuditActor")
-  lineConfigurationAudits     LineConfigurationAudit[]        @relation("LineConfigurationAuditActor")
-  lineNotificationPreferences LineNotificationPreference[]
-  lineConnections             LineConnection[]
-  jobs                        Job[]
-  lineMessageDeliveries       LineMessageDelivery[]
-  missionDeepLinkStates       MissionDeepLinkState[]
-  lineDeliveryRetryRequests   LineDeliveryRetryRequest[]      @relation("LineDeliveryRetryActor")
+  id                            String                          @id @default(uuid()) @db.Uuid
+  status                        UserStatus                      @default(ACTIVE)
+  displayName                   String                          @map("display_name") @db.VarChar(100)
+  email                         String?                         @db.VarChar(320)
+  createdAt                     DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  identities                    AuthIdentity[]
+  memberships                   WorkspaceMembership[]
+  platformAdmin                 PlatformAdmin?
+  bunshins                      Bunshin[]
+  ownerKnowledge                OwnerKnowledge[]                @relation("KnowledgeOwner")
+  knowledgeGrants               BunshinKnowledgeGrant[]         @relation("GrantActor")
+  capabilityAssignments         BunshinCapabilityAssignment[]   @relation("CapabilityAssignmentActor")
+  missionActivities             MissionActivity[]               @relation("MissionActivityActor")
+  postRecords                   PostRecord[]                    @relation("PostRecordActor")
+  missionFeedback               MissionFeedback[]               @relation("MissionFeedbackActor")
+  aiUsageEvents                 AiUsageEvent[]                  @relation("AiUsageActor")
+  legalDocuments                LegalDocument[]                 @relation("LegalDocumentAuthor")
+  legalConsents                 UserLegalConsent[]
+  accountDeletionRequests       AccountDeletionRequest[]
+  accountDeletionAudits         AccountDeletionOperationAudit[] @relation("AccountDeletionAuditActor")
+  lineConfigurationAudits       LineConfigurationAudit[]        @relation("LineConfigurationAuditActor")
+  aiProviderConfigurationAudits AiProviderConfigurationAudit[]  @relation("AiProviderConfigurationAuditActor")
+  lineNotificationPreferences   LineNotificationPreference[]
+  lineConnections               LineConnection[]
+  jobs                          Job[]
+  lineMessageDeliveries         LineMessageDelivery[]
+  missionDeepLinkStates         MissionDeepLinkState[]
+  lineDeliveryRetryRequests     LineDeliveryRetryRequest[]      @relation("LineDeliveryRetryActor")
 
   @@index([status])
   @@map("users")
@@ -555,6 +569,49 @@ model LineConfigurationAudit {
   @@index([environment, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("line_configuration_audits")
+}
+
+model AiProviderConfiguration {
+  id                     String                         @id @default(uuid()) @db.Uuid
+  environment            LineConfigurationEnvironment
+  provider               AiProviderKey
+  version                Int
+  status                 AiProviderConfigurationStatus  @default(DRAFT)
+  encryptedApiKey        String?                        @map("encrypted_api_key") @db.Text
+  apiKeyMask             String?                        @map("api_key_mask") @db.VarChar(16)
+  model                  String?                        @db.VarChar(120)
+  dailyBudgetUsdMicros   Int                            @default(1000000) @map("daily_budget_usd_micros")
+  monthlyBudgetUsdMicros Int                            @default(5000000) @map("monthly_budget_usd_micros")
+  globallyPaused         Boolean                        @default(true) @map("globally_paused")
+  keyVersion             Int                            @default(1) @map("key_version")
+  lastVerifiedAt         DateTime?                      @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory      String?                        @map("last_error_category") @db.VarChar(80)
+  createdAt              DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  audits                 AiProviderConfigurationAudit[]
+
+  @@unique([environment, provider, version])
+  @@index([environment, provider, status])
+  @@map("ai_provider_configurations")
+}
+
+model AiProviderConfigurationAudit {
+  id              String                       @id @default(uuid()) @db.Uuid
+  configurationId String                       @map("configuration_id") @db.Uuid
+  environment     LineConfigurationEnvironment
+  provider        AiProviderKey
+  actorUserId     String                       @map("actor_user_id") @db.Uuid
+  action          String                       @db.VarChar(40)
+  reason          String                       @db.VarChar(500)
+  changedFields   Json                         @map("changed_fields")
+  occurredAt      DateTime                     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  configuration   AiProviderConfiguration      @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  actor           User                         @relation("AiProviderConfigurationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([configurationId, occurredAt])
+  @@index([environment, provider, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("ai_provider_configuration_audits")
 }
 
 model LineNotificationPreference {
