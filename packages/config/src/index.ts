@@ -22,6 +22,9 @@ const serverSchema = z
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
     LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
     LINE_ADMIN_ALERT_WEBHOOK_ALLOWED_HOSTS: z.string().min(1).optional(),
+    RESEND_ADMIN_ALERT_API_KEY: z.string().min(16).optional(),
+    RESEND_ADMIN_ALERT_FROM: z.email().optional(),
+    RESEND_ADMIN_ALERT_TO: z.string().min(3).optional(),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   })
   .superRefine((value, context) => {
@@ -102,6 +105,31 @@ const serverSchema = z
         path: ['SUPABASE_AUTH_ADMIN_URL'],
         message: 'Enabled account deletion requires Auth administration configuration',
       });
+    }
+    const resendValues = [
+      value.RESEND_ADMIN_ALERT_API_KEY,
+      value.RESEND_ADMIN_ALERT_FROM,
+      value.RESEND_ADMIN_ALERT_TO,
+    ];
+    if (
+      resendValues.some((item) => item !== undefined) &&
+      resendValues.some((item) => item === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['RESEND_ADMIN_ALERT_API_KEY'],
+        message: 'Resend administrator alert configuration must be provided together',
+      });
+    }
+    if (value.RESEND_ADMIN_ALERT_TO) {
+      const recipients = value.RESEND_ADMIN_ALERT_TO.split(',').map((item) => item.trim());
+      if (recipients.length > 10 || recipients.some((item) => !z.email().safeParse(item).success)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['RESEND_ADMIN_ALERT_TO'],
+          message: 'Resend administrator alert recipients must be at most 10 valid emails',
+        });
+      }
     }
   });
 
