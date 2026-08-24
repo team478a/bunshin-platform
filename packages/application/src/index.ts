@@ -683,6 +683,7 @@ export class PublishLineRichMenu {
     environment: LineConfigurationEnvironment;
     reason: string;
   }) {
+    const reason = richMenuReason(input.reason);
     const menu = await this.repository.getForPublish({ ...input, operation: 'PUBLISH' });
     if (menu === null) throw new ApplicationError('NOT_FOUND', 'verified rich menu not found');
     if (menu.status !== 'VERIFIED' && menu.status !== 'ACTIVE')
@@ -691,7 +692,7 @@ export class PublishLineRichMenu {
     const published = await this.provider.publish({ menu, idempotencyKey });
     const value = await this.repository.activate({
       ...input,
-      reason: richMenuReason(input.reason),
+      reason,
       lineRichMenuId: published.lineRichMenuId,
       syncedAt: new Date(),
     });
@@ -710,8 +711,9 @@ export class DisableLineRichMenu {
     environment: LineConfigurationEnvironment;
     reason: string;
   }) {
+    const reason = richMenuReason(input.reason);
     const menu = await this.repository.getForPublish({ ...input, operation: 'DISABLE' });
-    if (menu === null || menu.lineRichMenuId === null)
+    if (menu === null || menu.status !== 'ACTIVE' || menu.lineRichMenuId === null)
       throw new ApplicationError('NOT_FOUND', 'published rich menu not found');
     await this.provider.disable({
       lineRichMenuId: menu.lineRichMenuId,
@@ -719,7 +721,7 @@ export class DisableLineRichMenu {
     });
     const value = await this.repository.disable({
       ...input,
-      reason: richMenuReason(input.reason),
+      reason,
       syncedAt: new Date(),
     });
     if (value === null) throw new ApplicationError('NOT_FOUND', 'rich menu not found');

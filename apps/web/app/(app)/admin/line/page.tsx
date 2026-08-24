@@ -2,6 +2,7 @@ import {
   GetLineAdminFunnel,
   GetLineAdminMetrics,
   ListLineConfigurations,
+  ListLineRichMenus,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
@@ -12,6 +13,7 @@ import {
 } from '../../../../src/line/secure-configuration';
 import { LineConfigurationEditor } from './line-configuration-editor';
 import { LineDeliveryRetryPanel } from './line-delivery-retry-panel';
+import { LineRichMenuEditor } from './line-rich-menu-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +57,10 @@ export default async function LineConfigurationPage({
     const configurations = await new ListLineConfigurations(
       new db.PrismaLineConfigurationRepository(),
     ).execute(user.userId, environment);
+    const richMenus = await new ListLineRichMenus(new db.PrismaLineRichMenuRepository()).execute({
+      actorUserId: user.userId,
+      environment,
+    });
     const metrics = await new GetLineAdminMetrics(
       new db.PrismaLineAdminMetricsRepository(),
     ).execute(user.userId, environment);
@@ -155,6 +161,15 @@ export default async function LineConfigurationPage({
           failures={metrics.retryableFailures.map((failure) => ({
             ...failure,
             failedAt: failure.failedAt.toISOString(),
+          }))}
+        />
+        <LineRichMenuEditor
+          environment={environment}
+          initialMenus={richMenus.map((value) => ({
+            ...value,
+            lastSyncedAt: value.lastSyncedAt?.toISOString() ?? null,
+            createdAt: value.createdAt.toISOString(),
+            updatedAt: value.updatedAt.toISOString(),
           }))}
         />
         <LineConfigurationEditor
