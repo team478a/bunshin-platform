@@ -31,6 +31,7 @@ const repository = (): AiProviderConfigurationRepository => ({
   recordConnectionTest: vi.fn(),
   activate: vi.fn(() => Promise.resolve(configuration)),
   pause: vi.fn(),
+  getActiveForRuntime: vi.fn(),
 });
 
 describe('AI provider operations', () => {

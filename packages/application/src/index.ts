@@ -315,6 +315,18 @@ export interface AiProviderConfigurationRepository {
     environment: LineConfigurationEnvironment;
     reason: string;
   }): Promise<AiProviderConfiguration | null>;
+  getActiveForRuntime(input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    dailyFrom: Date;
+    monthlyFrom: Date;
+    now: Date;
+  }): Promise<{
+    configuration: AiProviderConfiguration;
+    encryptedApiKey: string;
+    dailySpentUsdMicros: number;
+    monthlySpentUsdMicros: number;
+  } | null>;
 }
 
 export class ListAiProviderConfigurations {
@@ -441,6 +453,42 @@ export class PauseAiProviderConfiguration {
       reason: validatedAdminReason(input.reason),
     });
     if (value === null) throw new ApplicationError('NOT_FOUND', 'configuration not found');
+    return value;
+  }
+}
+
+export class ResolveAiProviderRuntimeConfiguration {
+  constructor(private readonly repository: AiProviderConfigurationRepository) {}
+  async execute(input: {
+    environment: LineConfigurationEnvironment;
+    provider: AiProviderKey;
+    now?: Date;
+  }) {
+    const now = input.now ?? new Date();
+    const dailyFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const monthlyFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const value = await this.repository.getActiveForRuntime({
+      ...input,
+      now,
+      dailyFrom,
+      monthlyFrom,
+    });
+    if (value === null)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'active provider configuration required');
+    const { configuration } = value;
+    if (
+      configuration.environment !== input.environment ||
+      configuration.provider !== input.provider
+    )
+      throw new ApplicationError('CONFIGURATION_ERROR', 'provider configuration scope mismatch');
+    if (configuration.status !== 'ACTIVE' || configuration.globallyPaused)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'provider is paused');
+    if (configuration.lastVerifiedAt === null || configuration.lastErrorCategory !== null)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'verified provider configuration required');
+    if (value.dailySpentUsdMicros >= configuration.dailyBudgetUsdMicros)
+      throw new ApplicationError('CONFLICT', 'daily provider budget reached');
+    if (value.monthlySpentUsdMicros >= configuration.monthlyBudgetUsdMicros)
+      throw new ApplicationError('CONFLICT', 'monthly provider budget reached');
     return value;
   }
 }
