@@ -2,6 +2,7 @@ import {
   CheckLineOperationalReadiness,
   ListAiProviderConfigurations,
   ListLegalDocuments,
+  ListProductionGateEvidence,
   ListLineConfigurations,
   ListLineRichMenus,
 } from '@bunshin/application';
@@ -67,6 +68,19 @@ export default async function OperationsAdminPage() {
   const publishedLegalTypes = new Set(
     legalDocuments.filter((item) => item.status === 'PUBLISHED').map((item) => item.type),
   );
+  const commitSha = process.env['VERCEL_GIT_COMMIT_SHA']?.toLowerCase() ?? '';
+  const gateEvidence =
+    environment.APP_ENV === 'production' && /^[0-9a-f]{40}$/.test(commitSha)
+      ? await new ListProductionGateEvidence(
+          new db.PrismaProductionGateEvidenceRepository(),
+        ).execute({ actorUserId: user.userId, environment: 'PRODUCTION', commitSha })
+      : [];
+  const latestGateEvidence = new Map(
+    gateEvidence.map((item) => [item.checkKey, item.action] as const),
+  );
+  const recordedManualChecks = new Set(
+    [...latestGateEvidence].filter(([, action]) => action === 'RECORDED').map(([key]) => key),
+  );
   const productionGate = productionGateChecklist({
     environment: environment.APP_ENV,
     operationsReady: readiness.ready,
@@ -78,6 +92,7 @@ export default async function OperationsAdminPage() {
     ),
     accountDeletionMode: environment.ACCOUNT_DELETION_EXECUTION_MODE,
     accountDeletionApproved: environment.ACCOUNT_DELETION_PRODUCTION_APPROVED === 'true',
+    recordedManualChecks,
   });
 
   return (
@@ -158,10 +173,15 @@ export default async function OperationsAdminPage() {
           ))}
         </ol>
         <p>
-          <strong className="status-warning">現在の開始判定：確認待ち</strong>
+          <strong className={productionGate.launchReady ? 'status-success' : 'status-warning'}>
+            現在の開始判定：{productionGate.launchReady ? '開始できます' : '確認待ち'}
+          </strong>
         </p>
         <Link href="/admin/guide#production-gate" className="button button--secondary">
           本番開始の確認手順を見る
+        </Link>{' '}
+        <Link href="/admin/production-gate" className="button button--secondary">
+          確認結果を記録する
         </Link>
       </section>
 

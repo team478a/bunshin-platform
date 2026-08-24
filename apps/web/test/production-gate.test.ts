@@ -19,6 +19,23 @@ describe('production gate checklist', () => {
     });
   });
 
+  it('becomes ready only when every check for the current commit is recorded', () => {
+    const recordedManualChecks = new Set([
+      'BACKUP_RESTORE',
+      'MIGRATION_HEALTH',
+      'AUTH_SMOKE',
+      'FREE_MVP_SMOKE',
+      'ACCOUNT_DELETION_DRY_RUN',
+      'LINE_GO_NO_GO',
+      'FINAL_APPROVAL',
+    ]);
+    expect(productionGateChecklist({ ...readyInput, recordedManualChecks }).launchReady).toBe(true);
+    recordedManualChecks.delete('AUTH_SMOKE');
+    expect(productionGateChecklist({ ...readyInput, recordedManualChecks }).launchReady).toBe(
+      false,
+    );
+  });
+
   it('does not allow a Preview or Staging environment to look production-ready', () => {
     const value = productionGateChecklist({ ...readyInput, environment: 'staging' });
     expect(value.automaticReady).toBe(false);

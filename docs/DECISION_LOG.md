@@ -880,3 +880,15 @@
 - Fail closed: Preview／StagingをProduction Readyと表示しない。自動確認がすべて成功しても、人間確認を完了した証拠がなければ開始可能と表示しない。
 - Secret: 管理画面には設定の有無と案内だけを表示し、DB URL、Service Role Key、親鍵、Cron Secretを表示・保存しない。
 - Authority: 本画面は外部DashboardやGitHub Actionsを操作せず、Production利用開始の権限を自動付与しない。
+
+## D-075: Production Gateの人間確認は対象commit別の追記型証跡として保存する
+
+- 日付: 2026-08-24
+- 状態: Accepted
+- Decision: 復元訓練、Migration/Health、認証、FREE MVP実端末、退会dry-run、LINE Go/No-Go、最終承認を`ProductionGateEvidence`へ保存する。
+- Scope: Productionのみを対象にし、`VERCEL_GIT_COMMIT_SHA`と一致する40桁SHAをサーバー側で固定する。別commitの証跡は引き継がない。
+- Audit: 確認と取消を上書きせず`RECORDED` / `REVOKED`イベントとして追記し、実施者・日時・理由を残す。
+- Authorization: 閲覧は有効なPlatform Admin、記録と取消はSUPER_ADMINだけに許可する。
+- Approval: 最終承認は同じcommitで他の6項目がすべて現在有効な場合だけ記録できる。後から前提項目を取り消した場合、開始判定も即時に未完了へ戻す。
+- Evidence URL: HTTPSかつGitHub、Vercel、Supabaseの許可ドメインだけを保存する。秘密情報・利用者情報は保存しない。
+- Fail closed: Production環境または対象commitを確定できない場合、記録画面/APIを利用させず開始可能と判定しない。
