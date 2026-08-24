@@ -146,6 +146,10 @@ describe('Mission Decision and Activity core', () => {
       normalizeMissionActivityMetadata('COPIED_SLIDE', { slideIndex: 2, content: 'secret' }),
     ).toThrow();
     expect(() => normalizeMissionActivityMetadata('COPIED_TEXT', { body: 'full post' })).toThrow();
+    expect(normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', null)).toBeNull();
+    expect(() =>
+      normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', { prompt: 'secret' }),
+    ).toThrow();
     await expect(
       new RecordMissionActivity(missions, new Assignments(), new Engagement()).execute({
         ...scope,

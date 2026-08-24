@@ -1986,6 +1986,7 @@ export const MISSION_ACTIVITY_TYPES = [
   'REJECTED',
   'COPIED_TEXT',
   'COPIED_SLIDE',
+  'COPIED_IMAGE_INSTRUCTION',
   'COPIED_VIDEO_PROMPT',
   'COPIED_SCRIPT',
   'POSTED',
@@ -2040,7 +2041,13 @@ export interface MissionEngagementRepository {
     actorUserId: string;
     bunshinId: string;
     dailyMissionId: string;
-    type: 'VIEWED' | 'COPIED_TEXT' | 'COPIED_SLIDE' | 'COPIED_VIDEO_PROMPT' | 'COPIED_SCRIPT';
+    type:
+      | 'VIEWED'
+      | 'COPIED_TEXT'
+      | 'COPIED_SLIDE'
+      | 'COPIED_IMAGE_INSTRUCTION'
+      | 'COPIED_VIDEO_PROMPT'
+      | 'COPIED_SCRIPT';
     idempotencyKey: string;
     metadata: Record<string, unknown> | null;
   }): Promise<MissionActivity | null>;
@@ -2133,7 +2140,13 @@ export class RecordMissionActivity extends DailyMissionMutation {
     actorUserId: string;
     bunshinId: string;
     dailyMissionId: string;
-    type: 'VIEWED' | 'COPIED_TEXT' | 'COPIED_SLIDE' | 'COPIED_VIDEO_PROMPT' | 'COPIED_SCRIPT';
+    type:
+      | 'VIEWED'
+      | 'COPIED_TEXT'
+      | 'COPIED_SLIDE'
+      | 'COPIED_IMAGE_INSTRUCTION'
+      | 'COPIED_VIDEO_PROMPT'
+      | 'COPIED_SCRIPT';
     idempotencyKey: string;
     metadata?: Record<string, unknown> | null;
   }) {

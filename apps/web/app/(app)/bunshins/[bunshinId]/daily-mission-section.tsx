@@ -303,7 +303,14 @@ export function copyOptions(mission: DailyMissionView) {
       { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },
     ].filter((item): item is typeof item & { value: string } => item.value !== null);
   }
-  return caption ? [{ label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const }] : [];
+  return [
+    {
+      label: '画像を作るための説明をコピー',
+      value: text(content['imageInstruction']),
+      type: 'COPIED_IMAGE_INSTRUCTION' as const,
+    },
+    { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },
+  ].filter((item): item is typeof item & { value: string } => item.value !== null);
 }
 
 export function DailyMissionSection({

@@ -14,6 +14,7 @@ const activityLabels: Record<string, string> = {
   REJECTED: '投稿案を見送り',
   COPIED_TEXT: '投稿文をコピー',
   COPIED_SLIDE: 'スライドをコピー',
+  COPIED_IMAGE_INSTRUCTION: '画像作成の説明をコピー',
   COPIED_VIDEO_PROMPT: '動画作成の説明をコピー',
   COPIED_SCRIPT: '撮影台本をコピー',
   POSTED: '投稿完了',

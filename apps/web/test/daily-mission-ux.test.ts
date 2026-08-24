@@ -103,8 +103,32 @@ describe('Daily Mission copy UX', () => {
       { script: [{ seconds: '0-3', text: 'フック' }], caption: '投稿文' },
       ['撮影台本をコピー', '投稿文をコピー'],
     ],
-    ['IMAGE', { imageInstruction: '制作指示', caption: '投稿文' }, ['投稿文をコピー']],
+    [
+      'IMAGE',
+      { imageInstruction: '制作指示', caption: '投稿文' },
+      ['画像を作るための説明をコピー', '投稿文をコピー'],
+    ],
   ] as const)('provides the intended %s actions', (format, content, labels) => {
     expect(copyOptions(mission(format, content)).map(({ label }) => label)).toEqual(labels);
+  });
+
+  it('copies only the image instruction and records it separately from the caption', () => {
+    expect(
+      copyOptions(
+        mission('IMAGE', {
+          imageInstruction: '白い背景に青い円を置く',
+          overlayText: '画像内の文字',
+          caption: '投稿文',
+          internalNote: 'コピー禁止',
+        }),
+      ),
+    ).toEqual([
+      {
+        label: '画像を作るための説明をコピー',
+        value: '白い背景に青い円を置く',
+        type: 'COPIED_IMAGE_INSTRUCTION',
+      },
+      { label: '投稿文をコピー', value: '投稿文', type: 'COPIED_TEXT' },
+    ]);
   });
 });

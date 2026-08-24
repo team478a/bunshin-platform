@@ -219,7 +219,7 @@ COPIED_IMAGE_INSTRUCTION
 COPIED_VIDEO_INSTRUCTION
 ```
 
-既存の`COPIED_TEXT`、`COPIED_SLIDE`、`COPIED_VIDEO_PROMPT`、`COPIED_SCRIPT`との重複を実装前に整理する。過去イベントの意味を変更せず、必要最小限だけ追加する。
+画像制作指示は`COPIED_IMAGE_INSTRUCTION`として投稿文の`COPIED_TEXT`と分離して記録する。既存の`COPIED_SLIDE`、`COPIED_VIDEO_PROMPT`、`COPIED_SCRIPT`を含め、過去イベントの意味は変更しない。
 
 ## 9. MissionContentの移行方針
 
