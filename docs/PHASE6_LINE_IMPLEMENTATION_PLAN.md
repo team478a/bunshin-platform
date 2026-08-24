@@ -114,6 +114,7 @@ Vercel Cronはtriggerだけに使用し、長い処理やretry状態をHTTP requ
 - timeout、rate limit、blocked、invalid recipient、credential、quotaの分類とJob retry接続（完了）
 - 環境別の用途分離鍵で署名したsingle-use短期stateを使うMission Deep Link（発行・消費Coreと送信時発行まで完了）
 - Mission Deep LinkのApplication Callback、click記録、理由付き手動再送、集計ベースの外部管理者警告は完了
+- 未ログインでMission Deep Linkを開いた利用者は、LINE認証と必要な規約同意の後に元のMissionへ復帰する。戻り先は短時間のHttpOnly Cookieで保持し、`/today?state=...`以外を拒否する。復帰後も署名、single-use、環境、User／Workspace／Bunshin／Mission所有権を再検証する
 
 ### 6-G: Admin / KPI / Production Gate
 

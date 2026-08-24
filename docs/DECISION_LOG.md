@@ -690,7 +690,8 @@
 - Activity: 消費したstate ID由来の冪等keyで`VIEWED`を記録し、tokenやLINE user IDをActivityへ保存しない
 - Redirect: 遷移先はDBで検証済みのBunshin IDから固定pathを構築し、外部return URLを受け付けない
 - Failure: 無効、期限切れ、再利用、別User、別環境は同じ404境界で拒否する
-- Separation: 未ログインからLINE Login後に元URLへ戻す処理は6-Bの認証導線へ残す
+- Authentication return: 未ログイン時は、`/today?state=...`だけを許可する短時間のHttpOnly Cookieへ戻り先を保存する。LINE Loginおよび必要な規約同意の完了後にCookieを削除して復帰し、任意URL、外部origin、追加query、fragmentを拒否する
+- Ownership: Cookieは認可情報として扱わない。復帰した`/today`で署名、single-use、環境、User／Workspace／Bunshin／Mission所有権を必ず再検証する
 
 ## D-060: 管理者再送は同一失敗attemptにつき理由付き1回へ限定する
 
