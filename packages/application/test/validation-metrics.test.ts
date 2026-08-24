@@ -34,6 +34,22 @@ const snapshot = {
     aiPricedCalls: 0,
     aiEstimatedCostUsdMicros: null,
   },
+  assistanceLevels: [
+    {
+      level: 'READY_TO_USE' as const,
+      missions: 1,
+      viewed: 1,
+      accepted: 1,
+      copied: 1,
+      posted: 1,
+      feedback: 1,
+      goodFeedback: 1,
+      acceptanceRate: 1,
+      copyRate: 1,
+      postRate: 1,
+      goodFeedbackRate: 1,
+    },
+  ],
 };
 
 describe('GetValidationMetrics', () => {

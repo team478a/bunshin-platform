@@ -64,6 +64,20 @@ export interface ValidationMetricsSnapshot {
     aiPricedCalls: number;
     aiEstimatedCostUsdMicros: number | null;
   };
+  assistanceLevels: Array<{
+    level: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
+    missions: number;
+    viewed: number;
+    accepted: number;
+    copied: number;
+    posted: number;
+    feedback: number;
+    goodFeedback: number;
+    acceptanceRate: number | null;
+    copyRate: number | null;
+    postRate: number | null;
+    goodFeedbackRate: number | null;
+  }>;
 }
 
 export interface RecordAiUsageInput {

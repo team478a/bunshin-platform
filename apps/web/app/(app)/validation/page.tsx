@@ -36,6 +36,11 @@ export default async function ValidationPage({
     throw error;
   }
   const outcomes = metrics.outcomes;
+  const assistanceLabels = {
+    IDEA_ONLY: '企画だけ',
+    GUIDED: '作り方まで',
+    READY_TO_USE: '完成版',
+  } as const;
 
   return (
     <main className="validation-dashboard">
@@ -134,6 +139,37 @@ export default async function ValidationPage({
                 <tr key={label}>
                   <th scope="row">{label}</th>
                   <td>{count}人</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="assistance-heading">
+        <h2 id="assistance-heading">どこまで作ると行動しやすいか</h2>
+        <p>投稿案の見せ方ごとに、見た後の行動を比べます。投稿内容や個人名は表示しません。</p>
+        <div className="validation-table-wrap">
+          <table className="validation-table">
+            <thead>
+              <tr>
+                <th scope="col">見せ方</th>
+                <th scope="col">作成</th>
+                <th scope="col">採用率</th>
+                <th scope="col">採用→コピー</th>
+                <th scope="col">コピー→投稿</th>
+                <th scope="col">自分らしい</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.assistanceLevels.map((item) => (
+                <tr key={item.level}>
+                  <th scope="row">{assistanceLabels[item.level]}</th>
+                  <td>{item.missions}件</td>
+                  <td>{percentage(item.acceptanceRate)}</td>
+                  <td>{percentage(item.copyRate)}</td>
+                  <td>{percentage(item.postRate)}</td>
+                  <td>{percentage(item.goodFeedbackRate)}</td>
                 </tr>
               ))}
             </tbody>

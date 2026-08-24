@@ -5337,6 +5337,74 @@ export class PrismaTrendResearchRepository implements TrendResearchRepository {
 const uniqueCount = (values: string[]) => new Set(values).size;
 const rate = (numerator: number, denominator: number) =>
   denominator === 0 ? null : numerator / denominator;
+const validationCopyTypes = new Set([
+  'COPIED_TEXT',
+  'COPIED_SLIDE',
+  'COPIED_VIDEO_PROMPT',
+  'COPIED_SCRIPT',
+]);
+
+export function summarizeAssistanceLevels(input: {
+  missions: Array<{ id: string; assistanceLevel: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE' }>;
+  activities: Array<{
+    dailyMissionId: string;
+    type: string;
+    dailyMission: { assistanceLevel: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE' };
+  }>;
+  posts: Array<{
+    dailyMissionId: string;
+    dailyMission: { assistanceLevel: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE' };
+  }>;
+  feedback: Array<{
+    dailyMissionId: string;
+    rating: string;
+    dailyMission: { assistanceLevel: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE' };
+  }>;
+}) {
+  return (['IDEA_ONLY', 'GUIDED', 'READY_TO_USE'] as const).map((level) => {
+    const missionIds = new Set(
+      input.missions.filter(({ assistanceLevel }) => assistanceLevel === level).map(({ id }) => id),
+    );
+    const activities = input.activities.filter(
+      ({ dailyMission }) => dailyMission.assistanceLevel === level,
+    );
+    const viewed = new Set(
+      activities
+        .filter(({ type }) => type === 'VIEWED')
+        .map(({ dailyMissionId }) => dailyMissionId),
+    ).size;
+    const accepted = new Set(
+      activities
+        .filter(({ type }) => type === 'ACCEPTED')
+        .map(({ dailyMissionId }) => dailyMissionId),
+    ).size;
+    const copied = new Set(
+      activities
+        .filter(({ type }) => validationCopyTypes.has(type))
+        .map(({ dailyMissionId }) => dailyMissionId),
+    ).size;
+    const posts = input.posts.filter(({ dailyMission }) => dailyMission.assistanceLevel === level);
+    const feedback = input.feedback.filter(
+      ({ dailyMission }) => dailyMission.assistanceLevel === level,
+    );
+    const good = feedback.filter(({ rating }) => rating === 'GOOD').length;
+    const posted = new Set(posts.map(({ dailyMissionId }) => dailyMissionId)).size;
+    return {
+      level,
+      missions: missionIds.size,
+      viewed,
+      accepted,
+      copied,
+      posted,
+      feedback: feedback.length,
+      goodFeedback: good,
+      acceptanceRate: rate(accepted, viewed),
+      copyRate: rate(copied, accepted),
+      postRate: rate(posted, copied),
+      goodFeedbackRate: rate(good, feedback.length),
+    };
+  });
+}
 
 export class PrismaValidationMetricsRepository implements ValidationMetricsRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -5365,58 +5433,86 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       'COPIED_VIDEO_PROMPT',
       'COPIED_SCRIPT',
     ] as const;
-    const [registrations, bunshins, activations, strategies, activities, posts, feedback, aiUsage] =
-      await Promise.all([
-        this.client.workspaceMembership.findMany({
-          where: {
-            workspaceId: input.workspaceId,
-            status: 'ACTIVE',
-            user: { createdAt: occurred },
-          },
-          select: { userId: true, user: { select: { createdAt: true } } },
-        }),
-        this.client.bunshin.findMany({
-          where: { workspaceId: input.workspaceId, createdAt: occurred },
-          select: { ownerUserId: true },
-        }),
-        this.client.bunshinCapabilityAssignment.findMany({
-          where: {
-            workspaceId: input.workspaceId,
-            capabilityType: 'SOCIAL',
-            activatedAt: occurred,
-          },
-          select: { assignedByUserId: true },
-        }),
-        this.client.socialAccountStrategy.findMany({
-          where: { workspaceId: input.workspaceId, createdAt: occurred },
-          select: {
-            status: true,
-            approvedAt: true,
-            bunshin: { select: { ownerUserId: true } },
-          },
-        }),
-        this.client.missionActivity.findMany({
-          where: { workspaceId: input.workspaceId, occurredAt: occurred },
-          select: { actorUserId: true, type: true },
-        }),
-        this.client.postRecord.findMany({
-          where: { workspaceId: input.workspaceId, postedAt: occurred },
-          select: { actorUserId: true, postedAt: true },
-        }),
-        this.client.missionFeedback.findMany({
-          where: { workspaceId: input.workspaceId, createdAt: occurred },
-          select: { actorUserId: true, rating: true },
-        }),
-        this.client.aiUsageEvent.findMany({
-          where: { workspaceId: input.workspaceId, occurredAt: occurred },
-          select: {
-            status: true,
-            inputTokens: true,
-            outputTokens: true,
-            estimatedCostUsdMicros: true,
-          },
-        }),
-      ]);
+    const [
+      registrations,
+      bunshins,
+      activations,
+      strategies,
+      missions,
+      activities,
+      posts,
+      feedback,
+      aiUsage,
+    ] = await Promise.all([
+      this.client.workspaceMembership.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          user: { createdAt: occurred },
+        },
+        select: { userId: true, user: { select: { createdAt: true } } },
+      }),
+      this.client.bunshin.findMany({
+        where: { workspaceId: input.workspaceId, createdAt: occurred },
+        select: { ownerUserId: true },
+      }),
+      this.client.bunshinCapabilityAssignment.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          capabilityType: 'SOCIAL',
+          activatedAt: occurred,
+        },
+        select: { assignedByUserId: true },
+      }),
+      this.client.socialAccountStrategy.findMany({
+        where: { workspaceId: input.workspaceId, createdAt: occurred },
+        select: {
+          status: true,
+          approvedAt: true,
+          bunshin: { select: { ownerUserId: true } },
+        },
+      }),
+      this.client.dailyMission.findMany({
+        where: { workspaceId: input.workspaceId, createdAt: occurred },
+        select: { id: true, assistanceLevel: true },
+      }),
+      this.client.missionActivity.findMany({
+        where: { workspaceId: input.workspaceId, occurredAt: occurred },
+        select: {
+          actorUserId: true,
+          dailyMissionId: true,
+          type: true,
+          dailyMission: { select: { assistanceLevel: true } },
+        },
+      }),
+      this.client.postRecord.findMany({
+        where: { workspaceId: input.workspaceId, postedAt: occurred },
+        select: {
+          actorUserId: true,
+          dailyMissionId: true,
+          postedAt: true,
+          dailyMission: { select: { assistanceLevel: true } },
+        },
+      }),
+      this.client.missionFeedback.findMany({
+        where: { workspaceId: input.workspaceId, createdAt: occurred },
+        select: {
+          actorUserId: true,
+          dailyMissionId: true,
+          rating: true,
+          dailyMission: { select: { assistanceLevel: true } },
+        },
+      }),
+      this.client.aiUsageEvent.findMany({
+        where: { workspaceId: input.workspaceId, occurredAt: occurred },
+        select: {
+          status: true,
+          inputTokens: true,
+          outputTokens: true,
+          estimatedCostUsdMicros: true,
+        },
+      }),
+    ]);
 
     const matureCohort = registrations.filter(
       ({ user }) => user.createdAt.getTime() + 8 * 24 * 60 * 60 * 1000 <= input.period.to.getTime(),
@@ -5489,6 +5585,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
     const pricedAiUsage = aiUsage.filter(
       ({ estimatedCostUsdMicros }) => estimatedCostUsdMicros !== null,
     );
+    const assistanceLevels = summarizeAssistanceLevels({ missions, activities, posts, feedback });
 
     return {
       period: input.period,
@@ -5531,6 +5628,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
                 ),
               ),
       },
+      assistanceLevels,
     };
   }
 }
