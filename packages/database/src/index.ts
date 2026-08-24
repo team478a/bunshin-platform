@@ -34,6 +34,8 @@ import type {
   LineConfigurationRepository,
   LineChannelConfiguration,
   LineConfigurationEnvironment,
+  LineRichMenu,
+  LineRichMenuRepository,
   AiProviderConfiguration,
   AiProviderConfigurationRepository,
   LineNotificationPreference,
@@ -125,6 +127,38 @@ function lineConfiguration(
     keyVersion: row.keyVersion,
     lastVerifiedAt: row.lastVerifiedAt,
     lastErrorCategory: row.lastErrorCategory,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+type LineRichMenuRow = Prisma.LineRichMenuGetPayload<{ include: { areas: true } }>;
+function lineRichMenu(row: LineRichMenuRow): LineRichMenu {
+  return {
+    id: row.id,
+    environment: row.environment,
+    version: row.version,
+    name: row.name,
+    description: row.description,
+    status: row.status,
+    imageObjectKey: row.imageObjectKey,
+    imageSha256: row.imageSha256,
+    imageContentType: row.imageContentType,
+    imageWidth: row.imageWidth,
+    imageHeight: row.imageHeight,
+    lineRichMenuId: row.lineRichMenuId,
+    lastSyncedAt: row.lastSyncedAt,
+    lastErrorCategory: row.lastErrorCategory,
+    areas: row.areas
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map(({ action, x, y, width, height, sortOrder }) => ({
+        action,
+        x,
+        y,
+        width,
+        height,
+        sortOrder,
+      })),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -1623,6 +1657,184 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
       monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
     };
+  }
+}
+
+export class PrismaLineRichMenuRepository implements LineRichMenuRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private admin(actorUserId: string) {
+    return this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+    });
+  }
+
+  async listForAdmin(input: Parameters<LineRichMenuRepository['listForAdmin']>[0]) {
+    if ((await this.admin(input.actorUserId)) === null) return null;
+    const rows = await this.client.lineRichMenu.findMany({
+      where: { environment: input.environment },
+      include: { areas: true },
+      orderBy: { version: 'desc' },
+    });
+    return rows.map(lineRichMenu);
+  }
+
+  async getForPublish(input: Parameters<LineRichMenuRepository['getForPublish']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (
+      admin === null ||
+      (input.operation === 'PUBLISH' && admin.role !== 'SUPER_ADMIN') ||
+      (input.operation === 'DISABLE' && !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role))
+    )
+      return null;
+    const row = await this.client.lineRichMenu.findFirst({
+      where: { id: input.richMenuId, environment: input.environment },
+      include: { areas: true },
+    });
+    return row === null ? null : lineRichMenu(row);
+  }
+
+  async createDraft(input: Parameters<LineRichMenuRepository['createDraft']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    return this.client.$transaction(
+      async (tx) => {
+        const latest = await tx.lineRichMenu.findFirst({
+          where: { environment: input.environment },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        const row = await tx.lineRichMenu.create({
+          data: {
+            environment: input.environment,
+            version: (latest?.version ?? 0) + 1,
+            name: input.name,
+            description: input.description,
+            imageObjectKey: input.imageObjectKey,
+            imageSha256: input.imageSha256,
+            imageContentType: input.imageContentType,
+            imageWidth: input.imageWidth,
+            imageHeight: input.imageHeight,
+            areas: { create: input.areas },
+          },
+          include: { areas: true },
+        });
+        await tx.lineRichMenuAudit.create({
+          data: {
+            richMenuId: row.id,
+            environment: input.environment,
+            actorUserId: input.actorUserId,
+            action: 'CREATE_DRAFT',
+            reason: input.reason,
+            metadata: { version: row.version, imageSha256: row.imageSha256 },
+          },
+        });
+        return lineRichMenu(row);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async markVerified(input: Parameters<LineRichMenuRepository['markVerified']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    return this.client.$transaction(async (tx) => {
+      const target = await tx.lineRichMenu.findFirst({
+        where: {
+          id: input.richMenuId,
+          environment: input.environment,
+          status: { in: ['DRAFT', 'ERROR'] },
+        },
+      });
+      if (target === null) return null;
+      const row = await tx.lineRichMenu.update({
+        where: { id: target.id },
+        data: { status: 'VERIFIED', lastErrorCategory: null },
+        include: { areas: true },
+      });
+      await tx.lineRichMenuAudit.create({
+        data: {
+          richMenuId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'VERIFY',
+          reason: input.reason,
+          metadata: { fromStatus: target.status, toStatus: row.status },
+        },
+      });
+      return lineRichMenu(row);
+    });
+  }
+
+  async activate(input: Parameters<LineRichMenuRepository['activate']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const target = await tx.lineRichMenu.findFirst({
+        where: {
+          id: input.richMenuId,
+          environment: input.environment,
+          status: { in: ['VERIFIED', 'ACTIVE'] },
+        },
+      });
+      if (target === null) return null;
+      await tx.lineRichMenu.updateMany({
+        where: {
+          environment: input.environment,
+          status: 'ACTIVE',
+          id: { not: target.id },
+        },
+        data: { status: 'DISABLED' },
+      });
+      const row = await tx.lineRichMenu.update({
+        where: { id: target.id },
+        data: {
+          status: 'ACTIVE',
+          lineRichMenuId: input.lineRichMenuId,
+          lastSyncedAt: input.syncedAt,
+          lastErrorCategory: null,
+        },
+        include: { areas: true },
+      });
+      await tx.lineRichMenuAudit.create({
+        data: {
+          richMenuId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'ACTIVATE',
+          reason: input.reason,
+          metadata: { lineRichMenuId: input.lineRichMenuId, version: row.version },
+        },
+      });
+      return lineRichMenu(row);
+    });
+  }
+
+  async disable(input: Parameters<LineRichMenuRepository['disable']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    return this.client.$transaction(async (tx) => {
+      const target = await tx.lineRichMenu.findFirst({
+        where: { id: input.richMenuId, environment: input.environment, status: 'ACTIVE' },
+      });
+      if (target === null) return null;
+      const row = await tx.lineRichMenu.update({
+        where: { id: target.id },
+        data: { status: 'DISABLED', lastSyncedAt: input.syncedAt },
+        include: { areas: true },
+      });
+      await tx.lineRichMenuAudit.create({
+        data: {
+          richMenuId: row.id,
+          environment: input.environment,
+          actorUserId: input.actorUserId,
+          action: 'DISABLE',
+          reason: input.reason,
+          metadata: { lineRichMenuId: row.lineRichMenuId, version: row.version },
+        },
+      });
+      return lineRichMenu(row);
+    });
   }
 }
 

@@ -67,6 +67,21 @@ enum LineConfigurationStatus {
   ERROR
 }
 
+enum LineRichMenuStatus {
+  DRAFT
+  VERIFIED
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+enum LineRichMenuAction {
+  OPEN_TODAY
+  OPEN_BUNSHINS
+  OPEN_NOTIFICATION_SETTINGS
+  OPEN_ACCOUNT
+}
+
 enum AiProviderKey {
   OPENAI
   GROK
@@ -427,6 +442,7 @@ model User {
   accountDeletionRequests       AccountDeletionRequest[]
   accountDeletionAudits         AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
   lineConfigurationAudits       LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
+  lineRichMenuAudits            LineRichMenuAudit[]                 @relation("LineRichMenuAuditActor")
   aiProviderConfigurationAudits AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
   lineNotificationPreferences   LineNotificationPreference[]
   lineConnections               LineConnection[]
@@ -616,6 +632,66 @@ model LineConfigurationAudit {
   @@index([environment, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("line_configuration_audits")
+}
+
+model LineRichMenu {
+  id                String                       @id @default(uuid()) @db.Uuid
+  environment       LineConfigurationEnvironment
+  version           Int
+  name              String                       @db.VarChar(120)
+  description       String?                      @db.VarChar(500)
+  status            LineRichMenuStatus           @default(DRAFT)
+  imageObjectKey    String                       @map("image_object_key") @db.VarChar(500)
+  imageSha256       String                       @map("image_sha256") @db.Char(64)
+  imageContentType  String                       @map("image_content_type") @db.VarChar(40)
+  imageWidth        Int                          @map("image_width")
+  imageHeight       Int                          @map("image_height")
+  lineRichMenuId    String?                      @map("line_rich_menu_id") @db.VarChar(128)
+  lastSyncedAt      DateTime?                    @map("last_synced_at") @db.Timestamptz(6)
+  lastErrorCategory String?                      @map("last_error_category") @db.VarChar(80)
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  areas             LineRichMenuArea[]
+  audits            LineRichMenuAudit[]
+
+  @@unique([environment, version])
+  @@index([environment, status, createdAt])
+  @@map("line_rich_menus")
+}
+
+model LineRichMenuArea {
+  id         String             @id @default(uuid()) @db.Uuid
+  richMenuId String             @map("rich_menu_id") @db.Uuid
+  action     LineRichMenuAction
+  x          Int
+  y          Int
+  width      Int
+  height     Int
+  sortOrder  Int                @map("sort_order")
+  richMenu   LineRichMenu       @relation(fields: [richMenuId], references: [id], onDelete: Cascade)
+
+  @@unique([richMenuId, action])
+  @@unique([richMenuId, sortOrder])
+  @@index([richMenuId])
+  @@map("line_rich_menu_areas")
+}
+
+model LineRichMenuAudit {
+  id          String                       @id @default(uuid()) @db.Uuid
+  richMenuId  String                       @map("rich_menu_id") @db.Uuid
+  environment LineConfigurationEnvironment
+  actorUserId String                       @map("actor_user_id") @db.Uuid
+  action      String                       @db.VarChar(40)
+  reason      String                       @db.VarChar(500)
+  metadata    Json
+  occurredAt  DateTime                     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  richMenu    LineRichMenu                 @relation(fields: [richMenuId], references: [id], onDelete: Restrict)
+  actor       User                         @relation("LineRichMenuAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([richMenuId, occurredAt])
+  @@index([environment, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("line_rich_menu_audits")
 }
 
 model AiProviderConfiguration {
