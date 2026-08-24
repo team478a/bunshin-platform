@@ -1,7 +1,10 @@
 import 'server-only';
 import {
+  ActivateAiProviderConfiguration,
   CreateAiProviderConfigurationVersion,
   ListAiProviderConfigurations,
+  PauseAiProviderConfiguration,
+  TestAiProviderConfigurationConnection,
   type AiProviderConfiguration,
 } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -9,6 +12,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import {
   AesGcmAiProviderSecretCrypto,
+  AiProviderConnectionTestAdapter,
   currentAiProviderEnvironment,
 } from '../ai/secure-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
@@ -24,6 +28,8 @@ const createSchema = z
     apiKey: z.string().min(8).max(2000).nullable().optional(),
   })
   .strict();
+const actionSchema = z.object({ reason: z.string().min(3).max(500) }).strict();
+const uuid = z.string().uuid();
 
 async function actor() {
   const user = await (await currentUserProvider()).getCurrentUser();
@@ -103,4 +109,50 @@ export function createAiProviderConfigurationResponse(request: Request) {
     },
     201,
   );
+}
+
+export function testAiProviderConfigurationResponse(request: Request, idValue: string) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const id = uuid.safeParse(idValue);
+    if (!id.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid id');
+    return new TestAiProviderConfigurationConnection(
+      await repository(),
+      new AesGcmAiProviderSecretCrypto(),
+      new AiProviderConnectionTestAdapter(),
+    ).execute({
+      actorUserId: await actor(),
+      configurationId: id.data,
+      environment: currentAiProviderEnvironment(),
+    });
+  });
+}
+
+async function statusAction(request: Request, idValue: string, action: 'activate' | 'pause') {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const id = uuid.safeParse(idValue);
+    const parsed = actionSchema.safeParse(await json(request));
+    if (!id.success || !parsed.success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const input = {
+      actorUserId: await actor(),
+      configurationId: id.data,
+      environment: currentAiProviderEnvironment(),
+      reason: parsed.data.reason,
+    };
+    const value =
+      action === 'activate'
+        ? await new ActivateAiProviderConfiguration(await repository()).execute(input)
+        : await new PauseAiProviderConfiguration(await repository()).execute(input);
+    return dto(value);
+  });
+}
+
+export function activateAiProviderConfigurationResponse(request: Request, idValue: string) {
+  return statusAction(request, idValue, 'activate');
+}
+
+export function pauseAiProviderConfigurationResponse(request: Request, idValue: string) {
+  return statusAction(request, idValue, 'pause');
 }

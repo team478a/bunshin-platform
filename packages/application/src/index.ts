@@ -268,6 +268,13 @@ export interface EncryptedAiProviderApiKey {
 }
 export interface AiProviderSecretCryptoPort {
   encrypt(value: string): EncryptedAiProviderApiKey;
+  decrypt(value: string): string;
+}
+export interface AiProviderConnectionTestPort {
+  validate(input: { provider: AiProviderKey; apiKey: string; model: string | null }): Promise<{
+    success: boolean;
+    errorCategory: string | null;
+  }>;
 }
 export interface AiProviderConfigurationRepository {
   listForAdmin(input: {
@@ -283,6 +290,30 @@ export interface AiProviderConfigurationRepository {
     dailyBudgetUsdMicros: number;
     monthlyBudgetUsdMicros: number;
     apiKey: EncryptedAiProviderApiKey | null;
+  }): Promise<AiProviderConfiguration | null>;
+  getForConnectionTest(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+  }): Promise<{ configuration: AiProviderConfiguration; encryptedApiKey: string } | null>;
+  recordConnectionTest(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+    success: boolean;
+    errorCategory: string | null;
+  }): Promise<void>;
+  activate(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+    reason: string;
+  }): Promise<AiProviderConfiguration | null>;
+  pause(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+    reason: string;
   }): Promise<AiProviderConfiguration | null>;
 }
 
@@ -341,6 +372,75 @@ export class CreateAiProviderConfigurationVersion {
       apiKey: rawApiKey === null ? null : this.crypto.encrypt(rawApiKey),
     });
     if (value === null) throw new ApplicationError('FORBIDDEN', 'super admin required');
+    return value;
+  }
+}
+
+const validatedAdminReason = (value: string) => {
+  const reason = value.trim();
+  if (reason.length < 3 || reason.length > 500)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+  return reason;
+};
+
+export class TestAiProviderConfigurationConnection {
+  constructor(
+    private readonly repository: AiProviderConfigurationRepository,
+    private readonly crypto: AiProviderSecretCryptoPort,
+    private readonly provider: AiProviderConnectionTestPort,
+  ) {}
+  async execute(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+  }) {
+    const stored = await this.repository.getForConnectionTest(input);
+    if (stored === null) throw new ApplicationError('NOT_FOUND', 'configuration not found');
+    let result: { success: boolean; errorCategory: string | null };
+    try {
+      result = await this.provider.validate({
+        provider: stored.configuration.provider,
+        apiKey: this.crypto.decrypt(stored.encryptedApiKey),
+        model: stored.configuration.model,
+      });
+    } catch {
+      result = { success: false, errorCategory: 'PROVIDER_UNAVAILABLE' };
+    }
+    await this.repository.recordConnectionTest({ ...input, ...result });
+    return result;
+  }
+}
+
+export class ActivateAiProviderConfiguration {
+  constructor(private readonly repository: AiProviderConfigurationRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+    reason: string;
+  }) {
+    const value = await this.repository.activate({
+      ...input,
+      reason: validatedAdminReason(input.reason),
+    });
+    if (value === null) throw new ApplicationError('NOT_FOUND', 'configuration not found');
+    return value;
+  }
+}
+
+export class PauseAiProviderConfiguration {
+  constructor(private readonly repository: AiProviderConfigurationRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    configurationId: string;
+    environment: LineConfigurationEnvironment;
+    reason: string;
+  }) {
+    const value = await this.repository.pause({
+      ...input,
+      reason: validatedAdminReason(input.reason),
+    });
+    if (value === null) throw new ApplicationError('NOT_FOUND', 'configuration not found');
     return value;
   }
 }

@@ -30,13 +30,17 @@ const repository = (
 ): AiProviderConfigurationRepository => ({
   listForAdmin: vi.fn(),
   createVersion,
+  getForConnectionTest: vi.fn(),
+  recordConnectionTest: vi.fn(),
+  activate: vi.fn(),
+  pause: vi.fn(),
 });
 const encrypt = vi.fn(() => ({
   encryptedValue: 'sealed-key',
   mask: '••••1234',
   keyVersion: 1,
 }));
-const crypto: AiProviderSecretCryptoPort = { encrypt };
+const crypto: AiProviderSecretCryptoPort = { encrypt, decrypt: vi.fn() };
 
 describe('CreateAiProviderConfigurationVersion', () => {
   it('allows preparing a paused OpenAI draft before an API key is available', async () => {
