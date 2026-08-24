@@ -914,3 +914,15 @@
 - LINE: Channel Access Tokenの検証応答に`client_id`がある場合、登録したMessaging Channel IDとの一致を必須とする。
 - Keep in environment: ENCRYPTION_KEY、DB接続情報、Supabase Service Role Key、CRON_SECRET、Vercel認証情報は管理画面へ移さない。
 - Audit: 作成、接続確認、有効化、停止は対象環境・版・実施者・理由を既存の追記型監査履歴へ残す。
+
+## D-078: ユーザー停止と問い合わせ対応を管理画面へ集約する
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- User status: 利用停止・再開はSUPER_ADMINだけに許可し、理由と変更前後の状態を追記型監査へ保存する。
+- Protection: 退会済みユーザー、同じ状態、有効なPlatform Adminはユーザー管理画面から変更しない。管理者権限は専用画面で先に管理する。
+- Notification: 利用停止時はLINE通知を無効化する。再開時は本人の同意なく通知を再開しない。
+- Authentication: 停止中ユーザーの既存Supabase sessionを有効ユーザーとして解決せず、同じ外部Identityから新規Userを重複作成しない。
+- Support: 問い合わせは対象ユーザー、件名、優先度、状態、担当管理者、追記型メモを分離保存する。
+- Authorization: 問い合わせ作成・更新はSUPER_ADMIN、OPERATOR、SUPPORTに許可し、READ_ONLYは閲覧だけとする。
+- Privacy: 対応メモへパスワード、API Key、Token、投稿本文などの秘密情報を保存しない。メモの編集・削除機能は作らず、訂正も追記する。

@@ -3321,6 +3321,15 @@ export class PrismaCurrentUserAccountRepository implements CurrentUserAccountRep
     return identity === null ? null : { userId: identity.userId, authIdentityId: identity.id };
   }
 
+  async emailIdentityExists(providerUserId: string): Promise<boolean> {
+    return Boolean(
+      await this.client.authIdentity.findFirst({
+        where: { provider: 'EMAIL', providerUserId },
+        select: { id: true },
+      }),
+    );
+  }
+
   async provisionEmailIdentity(input: VerifiedSessionUser): Promise<CurrentUser> {
     const existing = await this.findActiveByEmailIdentity(input.providerUserId);
     if (existing !== null) return existing;
@@ -6147,10 +6156,30 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
     input: Parameters<AdminOperationsRepository['userDetail']>[0],
   ): Promise<AdminUserDetail | null> {
     if (!(await this.authorized(input.actorUserId))) return null;
-    const row = await this.client.user.findUnique({
-      where: { id: input.userId },
-      select: adminUserSelect,
-    });
+    const [row, operationAudits, supportCases] = await Promise.all([
+      this.client.user.findUnique({
+        where: { id: input.userId },
+        select: adminUserSelect,
+      }),
+      this.client.userOperationAudit.findMany({
+        where: { targetUserId: input.userId },
+        include: { actor: { select: { displayName: true } } },
+        orderBy: { occurredAt: 'desc' },
+        take: 50,
+      }),
+      this.client.supportCase.findMany({
+        where: { targetUserId: input.userId },
+        include: {
+          assignee: { select: { displayName: true } },
+          notes: {
+            include: { author: { select: { displayName: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+        orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
+        take: 50,
+      }),
+    ]);
     if (!row) return null;
     const timeline = [
       ...row.missionActivities.map((item) => ({
@@ -6192,7 +6221,167 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         createdAt: item.createdAt,
       })),
       timeline,
+      operationAudits: operationAudits.map((audit) => ({
+        id: audit.id,
+        action: audit.action,
+        previousStatus: audit.previousStatus,
+        nextStatus: audit.nextStatus,
+        reason: audit.reason,
+        actorDisplayName: audit.actor.displayName,
+        occurredAt: audit.occurredAt,
+      })),
+      supportCases: supportCases.map((supportCase) => ({
+        id: supportCase.id,
+        subject: supportCase.subject,
+        status: supportCase.status,
+        priority: supportCase.priority,
+        assigneeUserId: supportCase.assigneeUserId,
+        assigneeDisplayName: supportCase.assignee?.displayName ?? null,
+        createdAt: supportCase.createdAt,
+        updatedAt: supportCase.updatedAt,
+        resolvedAt: supportCase.resolvedAt,
+        notes: supportCase.notes.map((note) => ({
+          id: note.id,
+          content: note.content,
+          authorDisplayName: note.author.displayName,
+          createdAt: note.createdAt,
+        })),
+      })),
     };
+  }
+
+  async setUserStatus(
+    input: Parameters<AdminOperationsRepository['setUserStatus']>[0],
+  ): Promise<boolean | null> {
+    return this.client.$transaction(async (tx) => {
+      const actor = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        select: { id: true },
+      });
+      if (!actor) return null;
+      const target = await tx.user.findUnique({
+        where: { id: input.userId },
+        include: { platformAdmin: { select: { status: true } } },
+      });
+      if (!target) return null;
+      if (
+        target.status === 'DELETED' ||
+        target.status === input.status ||
+        target.platformAdmin?.status === 'ACTIVE'
+      )
+        return false;
+      await tx.user.update({ where: { id: target.id }, data: { status: input.status } });
+      if (input.status === 'SUSPENDED') {
+        await tx.lineNotificationPreference.updateMany({
+          where: { userId: target.id, enabled: true },
+          data: { enabled: false },
+        });
+      }
+      await tx.userOperationAudit.create({
+        data: {
+          targetUserId: target.id,
+          actorUserId: input.actorUserId,
+          action: input.status === 'SUSPENDED' ? 'SUSPENDED' : 'REACTIVATED',
+          previousStatus: target.status,
+          nextStatus: input.status,
+          reason: input.reason,
+        },
+      });
+      return true;
+    });
+  }
+
+  async createSupportCase(
+    input: Parameters<AdminOperationsRepository['createSupportCase']>[0],
+  ): Promise<boolean | null> {
+    return this.client.$transaction(async (tx) => {
+      const admin = await tx.platformAdmin.findFirst({
+        where: {
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          role: { in: ['SUPER_ADMIN', 'OPERATOR', 'SUPPORT'] },
+        },
+        select: { id: true },
+      });
+      if (!admin) return false;
+      if (!(await tx.user.findUnique({ where: { id: input.userId }, select: { id: true } })))
+        return null;
+      await tx.supportCase.create({
+        data: {
+          targetUserId: input.userId,
+          createdByUserId: input.actorUserId,
+          assigneeUserId: input.actorUserId,
+          subject: input.subject,
+          priority: input.priority,
+          notes: { create: { authorUserId: input.actorUserId, content: input.note } },
+        },
+      });
+      return true;
+    });
+  }
+
+  async updateSupportCase(
+    input: Parameters<AdminOperationsRepository['updateSupportCase']>[0],
+  ): Promise<boolean | null> {
+    return this.client.$transaction(async (tx) => {
+      const admin = await tx.platformAdmin.findFirst({
+        where: {
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          role: { in: ['SUPER_ADMIN', 'OPERATOR', 'SUPPORT'] },
+        },
+        select: { id: true },
+      });
+      if (!admin) return false;
+      const supportCase = await tx.supportCase.findFirst({
+        where: { id: input.supportCaseId, targetUserId: input.userId },
+        select: { id: true },
+      });
+      if (!supportCase) return null;
+      if (input.assigneeUserId) {
+        const assignee = await tx.platformAdmin.findFirst({
+          where: { userId: input.assigneeUserId, status: 'ACTIVE' },
+          select: { id: true },
+        });
+        if (!assignee) return false;
+      }
+      await tx.supportCase.update({
+        where: { id: supportCase.id },
+        data: {
+          status: input.status,
+          priority: input.priority,
+          assigneeUserId: input.assigneeUserId,
+          resolvedAt: input.status === 'RESOLVED' ? new Date() : null,
+          notes: { create: { authorUserId: input.actorUserId, content: input.note } },
+        },
+      });
+      return true;
+    });
+  }
+
+  async listSupportCases(input: Parameters<AdminOperationsRepository['listSupportCases']>[0]) {
+    if (!(await this.authorized(input.actorUserId))) return null;
+    return (
+      await this.client.supportCase.findMany({
+        where: input.status ? { status: input.status } : {},
+        include: {
+          target: { select: { displayName: true, email: true } },
+          assignee: { select: { displayName: true } },
+        },
+        orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
+        take: 200,
+      })
+    ).map((item) => ({
+      id: item.id,
+      targetUserId: item.targetUserId,
+      targetDisplayName: item.target.displayName,
+      targetEmail: item.target.email,
+      subject: item.subject,
+      status: item.status,
+      priority: item.priority,
+      assigneeDisplayName: item.assignee?.displayName ?? null,
+      updatedAt: item.updatedAt,
+    }));
   }
 }
 

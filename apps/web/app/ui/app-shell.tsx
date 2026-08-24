@@ -14,6 +14,7 @@ const adminNavigation = [
   { href: '/admin', label: '運用設定' },
   { href: '/admin/connections', label: 'APIキーと接続確認' },
   { href: '/admin/users', label: 'ユーザーと利用状況' },
+  { href: '/admin/support', label: '問い合わせ対応' },
   { href: '/admin/access', label: '管理者と権限' },
   { href: '/admin/trends', label: 'トレンド企画' },
   { href: '/admin/line', label: 'LINE運用' },
