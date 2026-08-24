@@ -1589,6 +1589,41 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
     });
     return aiProviderConfiguration(row);
   }
+
+  async getActiveForRuntime(
+    input: Parameters<AiProviderConfigurationRepository['getActiveForRuntime']>[0],
+  ) {
+    const row = await this.client.aiProviderConfiguration.findFirst({
+      where: {
+        environment: input.environment,
+        provider: input.provider,
+        status: 'ACTIVE',
+        globallyPaused: false,
+      },
+    });
+    if (row?.encryptedApiKey == null) return null;
+    const provider = input.provider.toLowerCase();
+    const [daily, monthly] = await Promise.all([
+      this.client.aiUsageEvent.aggregate({
+        where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
+        _sum: { estimatedCostUsdMicros: true },
+      }),
+      this.client.aiUsageEvent.aggregate({
+        where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
+        _sum: { estimatedCostUsdMicros: true },
+      }),
+    ]);
+    const safeNumber = (value: bigint | null) =>
+      value === null
+        ? 0
+        : Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
+    return {
+      configuration: aiProviderConfiguration(row),
+      encryptedApiKey: row.encryptedApiKey,
+      dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
+      monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
+    };
+  }
 }
 
 export class PrismaLineConfigurationRepository implements LineConfigurationRepository {

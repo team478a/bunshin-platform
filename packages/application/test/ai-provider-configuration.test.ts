@@ -34,6 +34,7 @@ const repository = (
   recordConnectionTest: vi.fn(),
   activate: vi.fn(),
   pause: vi.fn(),
+  getActiveForRuntime: vi.fn(),
 });
 const encrypt = vi.fn(() => ({
   encryptedValue: 'sealed-key',
