@@ -47,6 +47,12 @@ const errorCategory = (error: unknown) => {
   return 'INTERNAL_ERROR';
 };
 
+const daysBefore = (date: string, days: number) => {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() - days);
+  return value.toISOString().slice(0, 10);
+};
+
 export class DailyMissionGenerationService {
   async execute(input: Input) {
     const started = Date.now();
@@ -81,6 +87,13 @@ export class DailyMissionGenerationService {
         if (input.existingPolicy === 'RETURN') return existing;
         throw new ApplicationError('CONFLICT', 'daily mission already exists');
       }
+      const recentFormats = (
+        await new ListDailyMissions(missions).execute({
+          ...scope,
+          from: daysBefore(input.missionDate, 7),
+          to: daysBefore(input.missionDate, 1),
+        })
+      ).map(({ format }) => format);
       const profiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
         scope,
       );
@@ -177,6 +190,8 @@ export class DailyMissionGenerationService {
         missionDate: input.missionDate,
         timezone,
         socialProfile: profile,
+        facePolicy: bunshin.personality?.facePolicy ?? 'FULL_ANONYMOUS',
+        recentFormats,
         bunshin: bunshinContext,
         approvedStrategy: strategy,
         weeklyPlan,

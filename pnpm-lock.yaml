@@ -133,6 +133,9 @@ importers:
       '@bunshin/application':
         specifier: workspace:*
         version: link:../application
+      '@bunshin/platform-domain':
+        specifier: workspace:*
+        version: link:../platform-domain
       '@bunshin/shared':
         specifier: workspace:*
         version: link:../shared
