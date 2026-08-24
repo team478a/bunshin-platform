@@ -17,6 +17,7 @@ import {
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
@@ -49,6 +50,7 @@ const errorCategory = (error: unknown) => {
 export class DailyMissionGenerationService {
   async execute(input: Input) {
     const started = Date.now();
+    let runtimeModel = process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
     const logger = createLogger().child({
       workspaceId: input.workspaceId,
       bunshinId: input.bunshinId,
@@ -117,8 +119,8 @@ export class DailyMissionGenerationService {
       if (!claim.acquired)
         throw new ApplicationError('CONFLICT', 'daily mission generation is in progress');
       generationId = claim.record.id;
-      const apiKey = process.env['OPENAI_API_KEY'];
-      if (!apiKey) throw new ApplicationError('CONFIGURATION_ERROR', 'OPENAI_API_KEY is required');
+      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+      runtimeModel = model;
       let timezone = input.timezone;
       if (!timezone) {
         const preference = await new db.PrismaLineNotificationPreferenceRepository().getScoped(
@@ -168,9 +170,7 @@ export class DailyMissionGenerationService {
       const brief = await new GenerateDailyMissionBrief(
         new OpenAIDailyMissionPlanner({
           apiKey,
-          ...(process.env['OPENAI_DAILY_MISSION_PLANNER_MODEL']
-            ? { model: process.env['OPENAI_DAILY_MISSION_PLANNER_MODEL'] }
-            : {}),
+          model,
         }),
       ).execute({
         ...scope,
@@ -189,13 +189,10 @@ export class DailyMissionGenerationService {
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
-      const contentModel =
-        process.env['OPENAI_CONTENT_GENERATOR_MODEL'] ??
-        process.env['OPENAI_MISSION_CONTENT_MODEL'];
       const generator = new GenerateMissionContent(
         new OpenAIMissionContentGenerator({
           apiKey,
-          ...(contentModel ? { model: contentModel } : {}),
+          model,
         }),
       );
       const contentInput = {
@@ -211,9 +208,7 @@ export class DailyMissionGenerationService {
       const checker = new CheckMissionQuality(
         new OpenAIMissionQualityChecker({
           apiKey,
-          ...(process.env['OPENAI_MISSION_QUALITY_MODEL']
-            ? { model: process.env['OPENAI_MISSION_QUALITY_MODEL'] }
-            : {}),
+          model,
         }),
       );
       const qualityInput = () => ({
@@ -259,7 +254,7 @@ export class DailyMissionGenerationService {
           ...scope,
           taskType: 'DAILY_MISSION_PIPELINE',
           provider: 'openai',
-          model: process.env['OPENAI_DAILY_MISSION_PLANNER_MODEL'] ?? 'gpt-5.2',
+          model: runtimeModel,
           promptVersion: 'daily-mission-pipeline-v1',
           status: 'FAILED',
           inputTokens: null,

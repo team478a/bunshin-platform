@@ -1632,7 +1632,6 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
         environment: input.environment,
         provider: input.provider,
         status: 'ACTIVE',
-        globallyPaused: false,
       },
     });
     if (row?.encryptedApiKey == null) return null;

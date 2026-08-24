@@ -4,6 +4,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import {
   OpenAIBunshinProposalGenerator,
   type BunshinProposal,
@@ -99,22 +100,22 @@ export async function bunshinProposalsResponse(
       audience: labels.audience[parsed.data.audience],
       tone: labels.tone[parsed.data.tone],
     };
-    const apiKey = process.env['OPENAI_API_KEY'];
     let proposals: BunshinProposal[];
     let source: 'AI' | 'FALLBACK' = 'FALLBACK';
-    if (apiKey) {
+    try {
+      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
       try {
         proposals = await new OpenAIBunshinProposalGenerator({
           apiKey,
-          ...(process.env['OPENAI_BUNSHIN_PROPOSAL_MODEL']
-            ? { model: process.env['OPENAI_BUNSHIN_PROPOSAL_MODEL'] }
-            : {}),
+          model,
         }).generate(input);
         source = 'AI';
       } catch {
         proposals = fallback(input);
       }
-    } else proposals = fallback(input);
+    } catch {
+      proposals = fallback(input);
+    }
     return Response.json(
       { data: { proposals, source }, requestId },
       { headers: { 'cache-control': 'no-store' } },

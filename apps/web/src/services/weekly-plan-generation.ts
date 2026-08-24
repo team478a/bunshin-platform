@@ -21,6 +21,7 @@ import {
   type WeeklyPlanRepository,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import {
   OpenAIWeeklyPlanner,
@@ -58,6 +59,7 @@ export interface WeeklyPlanGenerationDependencies {
   bunshins: BunshinRepository;
   knowledge: KnowledgeGrantRepository;
   planner: WeeklyPlannerPort;
+  providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
   recordUsage(event: UsageEvent): Promise<void>;
   now(): number;
@@ -170,7 +172,7 @@ export class WeeklyPlanGenerationService {
           ...input,
           taskType: 'WEEKLY_PLANNER',
           provider: 'openai',
-          model: process.env['OPENAI_WEEKLY_PLANNER_MODEL'] ?? 'gpt-5.2',
+          model: this.dependencies.providerModel,
           promptVersion: WEEKLY_PLANNER_PROMPT_VERSION,
           status: 'FAILED',
           inputTokens: null,
@@ -185,8 +187,7 @@ export class WeeklyPlanGenerationService {
 }
 
 export async function createWeeklyPlanGenerationService() {
-  const apiKey = process.env['OPENAI_API_KEY'];
-  if (!apiKey) throw new ApplicationError('CONFIGURATION_ERROR', 'OPENAI_API_KEY is required');
+  const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
   const db = await import('@bunshin/database');
   const preferences = new db.PrismaLineNotificationPreferenceRepository();
   return new WeeklyPlanGenerationService({
@@ -199,10 +200,9 @@ export async function createWeeklyPlanGenerationService() {
     knowledge: new db.PrismaKnowledgeGrantRepository(),
     planner: new OpenAIWeeklyPlanner({
       apiKey,
-      ...(process.env['OPENAI_WEEKLY_PLANNER_MODEL']
-        ? { model: process.env['OPENAI_WEEKLY_PLANNER_MODEL'] }
-        : {}),
+      model,
     }),
+    providerModel: model,
     async resolveTimezone(scope) {
       const value = await preferences.getScoped(scope);
       if (!value.accessible)

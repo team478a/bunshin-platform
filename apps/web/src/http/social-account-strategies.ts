@@ -15,6 +15,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 
 const createSchema = z
@@ -187,13 +188,13 @@ export function generateSocialAccountStrategyResponse(
     async () => {
       let usageActor: string | null = null;
       let providerAttempted = false;
+      let runtimeModel = process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
       try {
         requireSameOrigin(request);
         const parsed = generateSchema.safeParse(await body(request));
         if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-        const apiKey = process.env['OPENAI_API_KEY'];
-        if (!apiKey)
-          throw new ApplicationError('CONFIGURATION_ERROR', 'OPENAI_API_KEY is required');
+        const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+        runtimeModel = model;
         const actor = await actorUserId();
         usageActor = actor;
         const { bunshins, grants, profiles, strategies, assignments } =
@@ -221,9 +222,7 @@ export function generateSocialAccountStrategyResponse(
         const result = await new GenerateSocialAccountStrategy(
           new OpenAIStrategyGenerator({
             apiKey,
-            ...(process.env['OPENAI_STRATEGY_MODEL']
-              ? { model: process.env['OPENAI_STRATEGY_MODEL'] }
-              : {}),
+            model,
           }),
         ).execute({
           wizardTopic: parsed.data.wizardTopic,
@@ -290,7 +289,7 @@ export function generateSocialAccountStrategyResponse(
           await import('../providers/openai-strategy-generator');
         logger.error('strategy generation failed', {
           status: 'failed',
-          model: process.env['OPENAI_STRATEGY_MODEL'] ?? 'gpt-5.2',
+          model: runtimeModel,
           promptVersion: SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION,
           latency: Date.now() - started,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
@@ -302,7 +301,7 @@ export function generateSocialAccountStrategyResponse(
             actorUserId: usageActor,
             taskType: 'STRATEGY_GENERATOR',
             provider: 'openai',
-            model: process.env['OPENAI_STRATEGY_MODEL'] ?? 'gpt-5.2',
+            model: runtimeModel,
             promptVersion: SOCIAL_ACCOUNT_STRATEGY_PROMPT_VERSION,
             status: 'FAILED',
             inputTokens: null,
