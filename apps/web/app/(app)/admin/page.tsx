@@ -1,10 +1,16 @@
-import { ListAiProviderConfigurations, ListLineConfigurations } from '@bunshin/application';
+import {
+  CheckLineOperationalReadiness,
+  ListAiProviderConfigurations,
+  ListLineConfigurations,
+  ListLineRichMenus,
+} from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../src/line/secure-configuration';
 import { currentAiProviderEnvironment } from '../../../src/ai/secure-provider-configuration';
+import { operationsReadiness } from './operations-readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +41,24 @@ export default async function OperationsAdminPage() {
     new db.PrismaAiProviderConfigurationRepository(),
   ).execute(user.userId, currentAiProviderEnvironment());
   const preparedProviders = new Set(aiConfigurations.map((item) => item.provider));
+  const richMenus = await new ListLineRichMenus(new db.PrismaLineRichMenuRepository()).execute({
+    actorUserId: user.userId,
+    environment: currentLineEnvironment(),
+  });
+  const lineAssessment = await new CheckLineOperationalReadiness(
+    new db.PrismaLineOperationalSnapshotRepository(),
+  ).execute(currentLineEnvironment());
+  const readiness = operationsReadiness({
+    aiConfigurations,
+    lineConfigurations,
+    lineAssessment,
+    richMenus,
+    encryptionKeyReady: Boolean(environment.ENCRYPTION_KEY),
+    cronSecretReady: Boolean(environment.CRON_SECRET),
+    storageReady: Boolean(
+      process.env['NEXT_PUBLIC_SUPABASE_URL'] && environment.SUPABASE_SERVICE_ROLE_KEY,
+    ),
+  });
 
   return (
     <main className="app-page">
@@ -50,6 +74,37 @@ export default async function OperationsAdminPage() {
           <strong>{currentLineEnvironment()}</strong>
         </p>
         <p>別の環境に登録した秘密情報は、この環境から使用できません。</p>
+      </section>
+
+      <section className="settings-card" aria-labelledby="readiness-title">
+        <h2 id="readiness-title">いまの運用状態</h2>
+        <p>
+          {statusLabel(
+            readiness.ready,
+            '今すぐ直す項目はありません',
+            `${readiness.actionRequired}件の対応が必要です`,
+          )}
+        </p>
+        {readiness.checkCount > 0 ? <p>念のため確認する項目：{readiness.checkCount}件</p> : null}
+        {readiness.warnings.length > 0 ? (
+          <ul>
+            {readiness.warnings.map((warning) => (
+              <li key={warning.code}>
+                <strong>
+                  {warning.level === 'ACTION_REQUIRED' ? '対応が必要：' : '確認：'}
+                  {warning.title}
+                </strong>
+                <p>{warning.guidance}</p>
+                <Link href={warning.href}>設定を確認する</Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>AI、LINE、LINEメニュー、定期処理の設定を確認できました。</p>
+        )}
+        <Link href="/admin/guide" className="button button--secondary">
+          操作と復旧の手順を見る
+        </Link>
       </section>
 
       <section className="settings-card" aria-labelledby="ai-settings-title">
@@ -81,8 +136,17 @@ export default async function OperationsAdminPage() {
 
       <section className="settings-card" aria-labelledby="rich-menu-title">
         <h2 id="rich-menu-title">LINEのメニュー</h2>
-        <p>{statusLabel(false, '公開中', 'まだ作成されていません')}</p>
-        <p>次の実装で、画像とボタンを選び、LINEの下部メニューを公開できるようにします。</p>
+        <p>
+          {statusLabel(
+            readiness.activeRichMenuVersion !== null,
+            `第${readiness.activeRichMenuVersion ?? '-'}版を公開中`,
+            '公開中のメニューはありません',
+          )}
+        </p>
+        <p>画像とボタンの並びを選び、LINEの下部メニューを公開・切替・停止できます。</p>
+        <Link href="/admin/line" className="button button--secondary">
+          LINEメニューを開く
+        </Link>
       </section>
 
       <section className="settings-card" aria-labelledby="system-settings-title">
@@ -107,6 +171,12 @@ export default async function OperationsAdminPage() {
           <Link href="/admin/deletions" className="settings-row">
             <span>
               <strong>退会処理</strong>
+            </span>
+            <span aria-hidden="true">›</span>
+          </Link>
+          <Link href="/admin/guide" className="settings-row">
+            <span>
+              <strong>操作と復旧の手順</strong>
             </span>
             <span aria-hidden="true">›</span>
           </Link>
