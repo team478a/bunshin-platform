@@ -223,6 +223,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 - Candidate Ranking / Daily Mission任意入力 — Core接続完了
 - 採用Trend Candidate / Evidence snapshot — Core Persistence完了
 - Mission画面の出典表示とLINE安全要約 — 完了
+- トレンド調査・候補・Mission採用・投稿・鮮度・失敗の管理指標 — 完了（実原価は未計測表示）
 - SNS無断スクレイピング、成果保証、画像・動画本体生成は含めない
 
 ### Phase 7-E: Controlled Learning / AI Agent Compatibility
