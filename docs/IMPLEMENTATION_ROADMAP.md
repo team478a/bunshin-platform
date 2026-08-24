@@ -57,7 +57,7 @@ FREEではBUNSHINが戦略・企画・文章・構成・外部AI向けPrompt・�
 - DailyMission / MissionContent aggregate
 - format別strict validation
 - lifecycle、日付一意性、tenant/Bunshin境界
-- API/UIはPhase 5で実装済み、AI生成は未実装
+- API/UIはPhase 5、AI生成はPhase 4で実装済み
 
 ### 3.5 Social Account Strategy — 完了
 
@@ -126,8 +126,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 
 - 6-0: 実装計画、認証Session ADR、schema・秘密値・migration境界の確定
 - 6-A: Secure Configuration。環境分離、暗号化設定、自動生成URL、管理画面、接続テスト、Audit、rotation（完了）
-- 6-B0: Auth Session Spike。Supabase Custom OIDC採用、Provider/Application Callback分離、環境別外部設定Gate（実装中）
-- 6-B: LINE Identity。LINE Login、既存Userへの明示連携、解除、LINE内ブラウザ（6-B0レビュー・外部設定後）
+- 6-B0（完了）: Supabase Custom OIDC採用、Provider/Application Callback分離、環境別外部設定Gate
+- 6-B: LINE LoginとLINE起点sessionは完了。既存Userへの追加Identityの明示連携・解除は、複数認証手段を利用者へ提供する段階まで保留
 - 6-C: Webhook / Connection Core。署名、follow/unfollow、友だち状態、環境別冪等性、未送信取消、recipient resolver（完了。postback業務処理とProduction接続は後続）
 - 6-D: Notification Preferences。通知同意、時刻、timezone、頻度、停止（完了）
 - 6-E: Job / Mission Automation。Job Core、lease、retry、Producer、認証Scheduler / Worker、Weekly / Daily handler、Vercel Cron設定まで完了
@@ -174,6 +174,7 @@ LINE設定とLINE公式アカウントはProduction / Stagingで分離する。�
 - LINEリッチメニュー管理画面（テンプレート、画像登録、確認、公開・切替・停止）（完了）
 - 環境分離、版管理、接続確認、監査履歴
 - 設定状態の一括確認、警告、操作・復旧ガイド（完了）
+- 100人検証開始前の自動確認と、人間確認を混同しないProduction Gate一覧（完了）
 
 DB接続、Session、暗号化親鍵、Cron認証等の起動に必要な秘密値は管理画面へ移さない。
 
@@ -181,19 +182,19 @@ DB接続、Session、暗号化親鍵、Cron認証等の起動に必要な秘密�
 
 100-user Validation開始前に、`docs/UI_DESIGN_FOUNDATION.md`を基準として主要利用導線を刷新する。
 
-- UI-0: Design Foundation、Decision、PR分割（文書）
-- UI-1: Token / Primitive / Login / Confirm / Consent
-- UI-2: Authenticated App Shell / Bottom Navigation / Profile
-- UI-3: Bunshin Onboarding
-- UI-4: Home / Today / Mission Decision・Copy・Post・Feedback
-- UI-5: SOCIAL Settingsの情報設計
-- UI-6: Admin Shell / Responsive / Accessibility / Final QA
+- UI-0: Design Foundation、Decision、PR分割（完了）
+- UI-1: Token / Primitive / Login / Confirm / Consent（完了）
+- UI-2: Authenticated App Shell / Bottom Navigation / Profile（完了）
+- UI-3: Bunshin Onboarding（完了）
+- UI-4: Home / Today / Mission Decision・Copy・Post・Feedback（完了）
+- UI-5: SOCIAL Settingsの情報設計（完了）
+- UI-6: Admin Shell / Responsive / Accessibility / Final QA（完了。実端末のProduction smokeは人間確認待ち）
 
 UI変更では既存Coreの意味、Isolation、外部Provider境界を変更しない。FREE検証開始条件へ、スマートフォンでLoginから初回投稿完了まで到達できることを追加する。
 
 ### Phase 7-C: Adaptive Content Assistance
 
-状態: 作成支援レベルのCore PersistenceとSocialProfile初期設定API/UIを実装。Mission表示以降は未実装。詳細は`ADAPTIVE_CONTENT_ASSISTANCE_PLAN.md`を正本とする。
+状態: 第1段階完了。作成支援レベル、SNS別自動選択、Missionの段階表示、形式別コピー、安全なLINE要約、支援レベル別KPIを実装済み。第2段階の段階生成は利用実績と原価確認後に再判断する。
 
 SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要とする支援量で今日のMissionを実行できるようにする。
 
@@ -210,7 +211,7 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 
 ### Phase 7-D: Evidence-based Trend Research
 
-状態: Core Persistence完了。Provider / Job / UIは未実装。詳細は`TREND_RESEARCH_DELIVERY_PLAN.md`を正本とする。
+状態: Core Persistence、Provider比較Adapter、候補Ranking、Mission入力・Evidence snapshot、Mission／管理UI、KPIは完了。本番Provider採用、外部接続、週次Research Job、実原価計測は未実装。
 
 - 「バズ保証」ではなく、最新情報を調べた利用者向け動画企画を提供する
 - 初期FREE検証は週1回、最大3候補を基本とする

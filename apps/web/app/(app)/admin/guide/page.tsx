@@ -30,6 +30,22 @@ export default async function OperationsGuidePage() {
         <Link href="/admin">運用設定へ戻る</Link>
       </section>
 
+      <section className="settings-card" id="production-gate">
+        <h2>100人検証を始める前の手順</h2>
+        <p>次の項目は、管理画面だけでは安全を確認できません。結果を運用記録へ残します。</p>
+        <ol>
+          <li>最新mainのMigrationとHealth Smokeが成功していることを確認する</li>
+          <li>Supabaseのバックアップ状態を確認し、復元練習を行う</li>
+          <li>本番でLINE・メールのログインとログアウトを試す</li>
+          <li>スマートフォンで分身作成から投稿完了・感想保存まで通す</li>
+          <li>退会処理をdry-runし、対象件数とエラーを確認する</li>
+          <li>LINE Webhook、通知上限、緊急停止、Go/No-Goを確認する</li>
+          <li>対象commit、実施日時、担当者、結果を記録し、責任者が承認する</li>
+        </ol>
+        <p>すべて終わるまでは、管理画面の自動確認が緑でも利用者募集を開始しません。</p>
+        <Link href="/admin">本番開始の確認画面へ戻る</Link>
+      </section>
+
       <section className="settings-card">
         <h2>AIが文章を作れない</h2>
         <ol>

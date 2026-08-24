@@ -870,3 +870,13 @@
 - Reuse: MissionActivity、PostRecord、MissionFeedback、BunshinMemoryを正本とし、汎用Outcome／Preference tableを先に重複作成しない。
 - Gate: 本文書の人間レビュー前にProvider Registry、Learning、Skill、Agent Runtime、MCPを実装しない。
 - 詳細: `docs/AI_AGENT_COMPATIBILITY_REBASELINE.md`、`docs/adr/AI_AGENT_RUNTIME_BOUNDARY_ADR.md`
+
+## D-074: Production Gateは自動確認と人間承認を分離する
+
+- 日付: 2026-08-24
+- 状態: Accepted
+- Automatic: 実行環境、AI／LINE／定期処理、公開中の法務文書、Auth管理設定、退会実行モードは管理画面で自動判定する。
+- Manual: Migration／Health run、backup復元、実ログイン、スマートフォンsmoke、LINE Go/No-Go、責任者承認は人間が実行・記録する。
+- Fail closed: Preview／StagingをProduction Readyと表示しない。自動確認がすべて成功しても、人間確認を完了した証拠がなければ開始可能と表示しない。
+- Secret: 管理画面には設定の有無と案内だけを表示し、DB URL、Service Role Key、親鍵、Cron Secretを表示・保存しない。
+- Authority: 本画面は外部DashboardやGitHub Actionsを操作せず、Production利用開始の権限を自動付与しない。
