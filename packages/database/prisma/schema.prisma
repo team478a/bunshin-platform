@@ -121,6 +121,13 @@ enum AiProviderConfigurationStatus {
   ERROR
 }
 
+enum AdminEmailConfigurationStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
 enum LineNotificationFrequency {
   DAILY
   WEEKDAYS
@@ -487,6 +494,7 @@ model User {
   lineConfigurationAudits       LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
   lineRichMenuAudits            LineRichMenuAudit[]                 @relation("LineRichMenuAuditActor")
   aiProviderConfigurationAudits AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
+  adminEmailConfigurationAudits AdminEmailConfigurationAudit[]      @relation("AdminEmailConfigurationAuditActor")
   lineNotificationPreferences   LineNotificationPreference[]
   lineConnections               LineConnection[]
   jobs                          Job[]
@@ -873,6 +881,46 @@ model AiProviderConfigurationAudit {
   @@index([environment, provider, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("ai_provider_configuration_audits")
+}
+
+model AdminEmailConfiguration {
+  id                String                        @id @default(uuid()) @db.Uuid
+  environment       LineConfigurationEnvironment
+  version           Int
+  status            AdminEmailConfigurationStatus @default(DRAFT)
+  encryptedApiKey   String                        @map("encrypted_api_key") @db.Text
+  apiKeyMask        String                        @map("api_key_mask") @db.VarChar(16)
+  fromEmail         String                        @map("from_email") @db.VarChar(320)
+  recipientEmails   Json                          @map("recipient_emails")
+  globallyPaused    Boolean                       @default(true) @map("globally_paused")
+  keyVersion        Int                           @default(1) @map("key_version")
+  lastVerifiedAt    DateTime?                     @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory String?                       @map("last_error_category") @db.VarChar(80)
+  createdAt         DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  audits            AdminEmailConfigurationAudit[]
+
+  @@unique([environment, version])
+  @@index([environment, status])
+  @@map("admin_email_configurations")
+}
+
+model AdminEmailConfigurationAudit {
+  id              String                       @id @default(uuid()) @db.Uuid
+  configurationId String                       @map("configuration_id") @db.Uuid
+  environment     LineConfigurationEnvironment
+  actorUserId     String                       @map("actor_user_id") @db.Uuid
+  action          String                       @db.VarChar(40)
+  reason          String                       @db.VarChar(500)
+  changedFields   Json                         @map("changed_fields")
+  occurredAt      DateTime                     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  configuration   AdminEmailConfiguration      @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  actor           User                         @relation("AdminEmailConfigurationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([configurationId, occurredAt])
+  @@index([environment, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("admin_email_configuration_audits")
 }
 
 model LineNotificationPreference {

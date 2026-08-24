@@ -9,6 +9,7 @@ import { toApiError } from '@bunshin/shared';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { LineOperationalAlertWebhook } from '../line/operational-alert-webhook';
 import { LineOperationalAlertResend } from '../line/operational-alert-resend';
+import { AesGcmAdminEmailSecretCrypto } from '../email/secure-admin-email-configuration';
 import { authorizeCronRequest } from './cron-security';
 
 const logger = createLogger();
@@ -28,7 +29,19 @@ async function checker() {
   return new CheckLineOperationalReadiness(new db.PrismaLineOperationalSnapshotRepository());
 }
 
-function notifier(configuration: ReturnType<typeof getServerEnvironment>) {
+async function notifier(configuration: ReturnType<typeof getServerEnvironment>) {
+  const db = await import('@bunshin/database');
+  const stored = await new db.PrismaAdminEmailConfigurationRepository().active({
+    environment: currentLineEnvironment(),
+  });
+  if (stored) {
+    const crypto = new AesGcmAdminEmailSecretCrypto();
+    return new LineOperationalAlertResend({
+      apiKey: crypto.decrypt(stored.encryptedApiKey),
+      from: stored.configuration.fromEmail,
+      to: stored.configuration.recipientEmails,
+    });
+  }
   if (
     configuration.RESEND_ADMIN_ALERT_API_KEY &&
     configuration.RESEND_ADMIN_ALERT_FROM &&
@@ -60,7 +73,8 @@ async function respond(request: Request, sendAlerts: boolean): Promise<Response>
     authorizeCronRequest(request, configuration.CRON_SECRET);
     const useCase = await checker();
     const result = await useCase.execute(currentLineEnvironment());
-    const alertPort = notifier(configuration);
+    const alertPort =
+      sendAlerts || configuration.APP_ENV === 'production' ? await notifier(configuration) : null;
     if (sendAlerts && result.alerts.length > 0 && alertPort) await alertPort.notify(result);
     const alertingConfigured = alertPort !== null;
     const operational =

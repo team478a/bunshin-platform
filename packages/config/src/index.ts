@@ -18,6 +18,7 @@ const serverSchema = z
     ACCOUNT_DELETION_PRODUCTION_APPROVED: z.enum(['true', 'false']).default('false'),
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     AI_PROVIDER_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
+    ADMIN_EMAIL_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
     LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
