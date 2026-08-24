@@ -20,6 +20,9 @@ describe('AI provider secure configuration', () => {
     expect(sealed.mask).toBe('••••1234');
     expect(sealed.keyVersion).toBe(2);
     expect(sealed.encryptedValue.split('.')).toHaveLength(4);
+    expect(new AesGcmAiProviderSecretCrypto().decrypt(sealed.encryptedValue)).toBe(
+      'provider-secret-1234',
+    );
   });
 
   it('requires the server-side parent encryption key', () => {

@@ -62,6 +62,51 @@ export function AiProviderConfigurationEditor(props: {
     setBusy(false);
   }
 
+  async function action(id: string, name: 'test' | 'activate' | 'pause') {
+    const reason = name === 'test' ? null : window.prompt('操作する理由を入力してください。');
+    if (name !== 'test' && !reason) return;
+    if (
+      name === 'activate' &&
+      props.environment === 'PRODUCTION' &&
+      !window.confirm('本番で外部サービスを使い始めます。接続確認と予算を確認しましたか？')
+    )
+      return;
+    setBusy(true);
+    setMessage('');
+    const response = await fetch(`/api/admin/ai-provider-configurations/${id}/${name}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+    });
+    const result = (await response.json()) as {
+      data?: Configuration | { success: boolean; errorCategory: string | null };
+      error?: { message?: string };
+    };
+    if (!response.ok || !result.data) {
+      setMessage(result.error?.message ?? '操作できませんでした。');
+    } else if (name === 'test') {
+      const tested = result.data as { success: boolean; errorCategory: string | null };
+      setMessage(
+        tested.success
+          ? '接続できました。'
+          : `接続できませんでした：${tested.errorCategory ?? '原因不明'}`,
+      );
+    } else {
+      const updated = result.data as Configuration;
+      setConfigurations((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? updated
+            : name === 'activate' && item.provider === updated.provider && item.status === 'ACTIVE'
+              ? { ...item, status: 'DISABLED', globallyPaused: true }
+              : item,
+        ),
+      );
+      setMessage(name === 'activate' ? 'この設定を使い始めました。' : 'すぐに停止しました。');
+    }
+    setBusy(false);
+  }
+
   return (
     <>
       <section className="settings-card">
@@ -133,6 +178,9 @@ export function AiProviderConfigurationEditor(props: {
       </section>
       <section className="settings-card">
         <h2>保存した設定</h2>
+        <p>
+          「接続できるか確認」は外部サービスへ最小の確認リクエストを送り、検索サービスでは少量の利用枠を使う場合があります。
+        </p>
         {configurations.length === 0 ? (
           <p>まだ設定はありません。</p>
         ) : (
@@ -159,6 +207,21 @@ export function AiProviderConfigurationEditor(props: {
                   上限：1日 ${usd(item.dailyBudgetUsdMicros)}／1か月 $
                   {usd(item.monthlyBudgetUsdMicros)}
                 </p>
+                {item.apiKeyConfigured ? (
+                  <button disabled={busy} onClick={() => void action(item.id, 'test')}>
+                    接続できるか確認
+                  </button>
+                ) : null}
+                {item.status !== 'ACTIVE' && item.lastVerifiedAt && !item.lastErrorCategory ? (
+                  <button disabled={busy} onClick={() => void action(item.id, 'activate')}>
+                    この設定を使い始める
+                  </button>
+                ) : null}
+                {item.status === 'ACTIVE' && !item.globallyPaused ? (
+                  <button disabled={busy} onClick={() => void action(item.id, 'pause')}>
+                    緊急停止
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>

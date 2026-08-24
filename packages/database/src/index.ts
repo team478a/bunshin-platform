@@ -1481,6 +1481,114 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       return aiProviderConfiguration(row);
     });
   }
+
+  async getForConnectionTest(
+    input: Parameters<AiProviderConfigurationRepository['getForConnectionTest']>[0],
+  ) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    const row = await this.client.aiProviderConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    if (row?.encryptedApiKey == null) return null;
+    return { configuration: aiProviderConfiguration(row), encryptedApiKey: row.encryptedApiKey };
+  }
+
+  async recordConnectionTest(
+    input: Parameters<AiProviderConfigurationRepository['recordConnectionTest']>[0],
+  ) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin === null || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role))
+      throw new ApplicationError('FORBIDDEN', 'admin required');
+    const target = await this.client.aiProviderConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    if (target === null) throw new ApplicationError('NOT_FOUND', 'configuration not found');
+    await this.client.$transaction([
+      this.client.aiProviderConfiguration.update({
+        where: { id: target.id },
+        data: {
+          ...(input.success
+            ? { lastVerifiedAt: new Date(), status: 'DRAFT' }
+            : { status: 'ERROR' }),
+          lastErrorCategory: input.errorCategory,
+        },
+      }),
+      this.client.aiProviderConfigurationAudit.create({
+        data: {
+          configurationId: target.id,
+          environment: input.environment,
+          provider: target.provider,
+          actorUserId: input.actorUserId,
+          action: 'CONNECTION_TEST',
+          reason: '管理画面から接続テストを実行',
+          changedFields: ['lastVerifiedAt', 'lastErrorCategory', 'status'],
+        },
+      }),
+    ]);
+  }
+
+  async activate(input: Parameters<AiProviderConfigurationRepository['activate']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin?.role !== 'SUPER_ADMIN') return null;
+    return this.client.$transaction(async (tx) => {
+      const target = await tx.aiProviderConfiguration.findFirst({
+        where: { id: input.configurationId, environment: input.environment },
+      });
+      if (target === null) return null;
+      if (
+        target.encryptedApiKey === null ||
+        target.lastVerifiedAt === null ||
+        target.lastErrorCategory
+      )
+        throw new ApplicationError('CONFLICT', 'successful connection test required');
+      await tx.aiProviderConfiguration.updateMany({
+        where: { environment: input.environment, provider: target.provider, status: 'ACTIVE' },
+        data: { status: 'DISABLED', globallyPaused: true },
+      });
+      const row = await tx.aiProviderConfiguration.update({
+        where: { id: target.id },
+        data: { status: 'ACTIVE', globallyPaused: false },
+      });
+      await tx.aiProviderConfigurationAudit.create({
+        data: {
+          configurationId: row.id,
+          environment: input.environment,
+          provider: row.provider,
+          actorUserId: input.actorUserId,
+          action: 'ACTIVATE',
+          reason: input.reason,
+          changedFields: ['status', 'globallyPaused'],
+        },
+      });
+      return aiProviderConfiguration(row);
+    });
+  }
+
+  async pause(input: Parameters<AiProviderConfigurationRepository['pause']>[0]) {
+    const admin = await this.admin(input.actorUserId);
+    if (admin?.role !== 'SUPER_ADMIN' && admin?.role !== 'OPERATOR') return null;
+    const target = await this.client.aiProviderConfiguration.findFirst({
+      where: { id: input.configurationId, environment: input.environment },
+    });
+    if (target === null) return null;
+    const row = await this.client.aiProviderConfiguration.update({
+      where: { id: target.id },
+      data: { globallyPaused: true },
+    });
+    await this.client.aiProviderConfigurationAudit.create({
+      data: {
+        configurationId: row.id,
+        environment: input.environment,
+        provider: row.provider,
+        actorUserId: input.actorUserId,
+        action: 'PAUSE',
+        reason: input.reason,
+        changedFields: ['globallyPaused'],
+      },
+    });
+    return aiProviderConfiguration(row);
+  }
 }
 
 export class PrismaLineConfigurationRepository implements LineConfigurationRepository {
