@@ -50,7 +50,7 @@ describe('Mission Deep Link landing', () => {
   it('requires a verified session before consuming state', async () => {
     mocks.currentUser.mockResolvedValue(null);
     await expect(TodayPage({ searchParams: Promise.resolve({ state: 'opaque' }) })).rejects.toThrow(
-      'REDIRECT:/login',
+      'REDIRECT:/login?returnTo=%2Ftoday%3Fstate%3Dopaque',
     );
     expect(mocks.consume).not.toHaveBeenCalled();
   });

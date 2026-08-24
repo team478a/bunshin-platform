@@ -3,6 +3,7 @@ import { RecordMissionActivity } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../src/auth/current-user';
+import { missionReturnPath } from '../../src/auth/line-return';
 import { HkdfMissionDeepLinkSigner } from '../../src/line/mission-deep-link-signer';
 import { currentLineEnvironment } from '../../src/line/secure-configuration';
 
@@ -13,10 +14,11 @@ export default async function TodayPage({
 }: {
   searchParams: Promise<{ state?: string }>;
 }) {
-  const user = await (await currentUserProvider()).getCurrentUser();
-  if (!user) redirect('/login');
   const token = (await searchParams).state;
-  if (!token || token.length > 2048) notFound();
+  const returnPath = token ? missionReturnPath(token) : null;
+  if (!token || !returnPath) notFound();
+  const user = await (await currentUserProvider()).getCurrentUser();
+  if (!user) redirect(`/login?returnTo=${encodeURIComponent(returnPath)}`);
   const db = await import('@bunshin/database');
   try {
     const state = await new ConsumeMissionDeepLinkState(

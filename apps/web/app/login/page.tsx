@@ -1,11 +1,13 @@
 import { PublicShell } from '../ui/public-shell';
+import { safeLineAuthReturnPath } from '../../src/auth/line-return';
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string; returnTo?: string }>;
 }) {
   const query = await searchParams;
+  const returnTo = safeLineAuthReturnPath(query.returnTo);
   return (
     <PublicShell narrow>
       <section className="auth-panel" aria-labelledby="login-title">
@@ -27,6 +29,7 @@ export default async function LoginPage({
           </div>
         )}
         <form action="/auth/line" method="post">
+          {returnTo && <input name="returnTo" type="hidden" value={returnTo} />}
           <button className="button button--line button--full" type="submit">
             <span className="button__line-mark" aria-hidden="true">
               LINE

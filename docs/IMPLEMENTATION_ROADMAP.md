@@ -135,7 +135,7 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - 6-F2a（完了）: Messaging Provider Port / LINE Adapter、配信lease、Provider障害分類、quota優先制御Core
 - 6-F2b1（完了）: Mission生成成功後の配信Job、Connection resolver、短期Deep Link発行、Push、retry分類の接続
 - 6-F2b2a（完了）: verified sessionでのsingle-use Mission Callback、所有権再検証、VIEWED記録
-- 6-F2b2b（未実装）: LINE Identity接続後の未ログイン復帰。管理者警告は6-G2b2で実装済み
+- 6-F2b2b（完了）: LINE通知から未ログインで開いた場合、LINE認証と必要な規約同意の後に、短期Cookieで保持した元のMissionへ安全に復帰する。戻り先は`/today?state=...`だけを許可し、Mission所有権は復帰後に再検証する
 - 6-G1（完了）: 環境別の通知可能数、配信状態、失敗分類、Retry / Dead Jobを管理画面・APIで可視化
 - 6-G2a（完了）: 再試行可能なFAILED配信の理由付き限定再送、環境別監査、同一失敗回の二重操作防止
 - 6-G2b1（完了）: 環境別LINE Funnel、Open率、通知→投稿完了率、解除・ブロック相当率の管理API/UI

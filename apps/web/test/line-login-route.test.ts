@@ -64,6 +64,39 @@ describe('LINE login routes', () => {
     });
   });
 
+  it('stores only an allowed Mission return path in a short-lived secure cookie', async () => {
+    const response = await startLineLogin(
+      new Request('https://bunshin.example/auth/line', {
+        method: 'POST',
+        headers: {
+          origin: 'https://bunshin.example',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ returnTo: '/today?state=mission-token' }),
+      }),
+    );
+
+    expect(response.headers.get('set-cookie')).toContain('bunshin_line_auth_return=');
+    expect(response.headers.get('set-cookie')).toContain('HttpOnly');
+    expect(response.headers.get('set-cookie')).toContain('Secure');
+    expect(response.headers.get('set-cookie')).toContain('SameSite=lax');
+  });
+
+  it('does not store an external return URL', async () => {
+    const response = await startLineLogin(
+      new Request('https://bunshin.example/auth/line', {
+        method: 'POST',
+        headers: {
+          origin: 'https://bunshin.example',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ returnTo: 'https://evil.example/today?state=stolen' }),
+      }),
+    );
+
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('exchanges a valid callback code and enters the application', async () => {
     const response = await completeLineLogin(
       new Request('https://bunshin.example/auth/line/callback?code=one-time-code'),
@@ -72,6 +105,21 @@ describe('LINE login routes', () => {
     expect(state.exchangeCodeForSession).toHaveBeenCalledWith('one-time-code');
     expect(response.status).toBe(303);
     expect(response.headers.get('location')).toBe('https://bunshin.example/bunshins');
+  });
+
+  it('returns to the Mission landing after successful authentication', async () => {
+    const response = await completeLineLogin(
+      new Request('https://bunshin.example/auth/line/callback?code=one-time-code', {
+        headers: {
+          cookie: `bunshin_line_auth_return=${encodeURIComponent('/today?state=mission-token')}`,
+        },
+      }),
+    );
+
+    expect(response.headers.get('location')).toBe(
+      'https://bunshin.example/today?state=mission-token',
+    );
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
   });
 
   it('rejects provider errors without exchanging a session', async () => {
