@@ -382,6 +382,8 @@ SNS別生成ルールやPromptを管理画面から直接編集する機能は�
 
 ### PR 7: 管理指標
 
+状態: 支援レベル別のMission数、採用率、採用からコピー率、コピーから投稿率、GOOD率を既存Validation API/UIへ追加済み。集計はWorkspace内のIDと分類だけを使用し、投稿本文・個人情報を返さない。
+
 - 支援レベル別Funnel
 - Copy / Posted / Feedback
 - AI使用量・見積原価
