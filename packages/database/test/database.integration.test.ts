@@ -25,6 +25,7 @@ import {
   ConfirmWeeklyPlan,
   ExpireWeeklyPlan,
   CreateDailyMission,
+  GetDailyMission,
   ListDailyMissions,
   TransitionDailyMission,
   GetMissionDecision,
@@ -79,6 +80,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.missionTrendContext.deleteMany();
     await client.trendIdeaCandidateEvidence.deleteMany();
     await client.trendIdeaCandidate.deleteMany();
     await client.trendEvidence.deleteMany();
@@ -2761,14 +2763,16 @@ integration('database ownership boundaries', () => {
       preferredFormats: ['LIVE_ACTION'],
     });
     const repository = new PrismaTrendResearchRepository(client);
-    const completedAt = new Date('2026-08-24T00:00:00.000Z');
-    const expiresAt = new Date('2026-08-31T00:00:00.000Z');
+    const completedAt = new Date();
+    const expiresAt = new Date(completedAt.getTime() + 7 * 86_400_000);
+    const periodStart = completedAt.toISOString().slice(0, 10);
+    const periodEnd = expiresAt.toISOString().slice(0, 10);
     const created = await new CreateCompletedTrendResearch(repository, assignments).execute({
       ...ownerScope(owner, bunshin.id),
       socialProfileId: profile.id,
       platform: 'YOUTUBE_SHORTS',
-      periodStart: '2026-08-24',
-      periodEnd: '2026-08-30',
+      periodStart,
+      periodEnd,
       queryVersion: 'weekly-v1',
       providerKey: 'test',
       completedAt,
@@ -2804,6 +2808,51 @@ integration('database ownership boundaries', () => {
       ],
     });
     expect(created.candidates[0]?.evidenceIds).toEqual([created.evidence[0]?.id]);
+    const mission = await new CreateDailyMission(
+      new PrismaDailyMissionRepository(client),
+      assignments,
+    ).execute({
+      ...ownerScope(owner, bunshin.id),
+      socialProfileId: profile.id,
+      missionDate: periodStart,
+      format: 'LIVE_ACTION',
+      estimatedMinutes: 10,
+      topic: 'Idea',
+      angle: 'Hookから伝える',
+      reason: '根拠のある今週の話題',
+      trendCandidateId: created.candidates[0]!.id,
+      content: {
+        topic: 'Idea',
+        estimatedMinutes: 10,
+        shootingInstruction: 'スマートフォンで撮影する',
+        script: [
+          { seconds: '0-3', role: 'HOOK', text: 'Hook' },
+          { seconds: '4-10', role: 'CTA', text: '続きを確認してください' },
+        ],
+        caption: '今週の話題を紹介します',
+      },
+    });
+    expect(mission.trendContext).toMatchObject({
+      candidateId: created.candidates[0]!.id,
+      snapshot: {
+        candidate: { topic: 'Idea', platform: 'YOUTUBE_SHORTS', format: 'LIVE_ACTION' },
+        evidence: [
+          {
+            sourceUrl: 'https://example.com/video',
+            sourceTitle: 'Source',
+            summary: 'Summary',
+          },
+        ],
+      },
+    });
+    await expect(
+      new GetDailyMission(new PrismaDailyMissionRepository(client)).execute({
+        workspaceId: outsider.workspace.id,
+        actorUserId: outsider.user.id,
+        bunshinId: bunshin.id,
+        dailyMissionId: mission.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
       new ListActiveTrendIdeas(repository).execute({
         ...ownerScope(owner, bunshin.id),
@@ -2842,8 +2891,8 @@ integration('database ownership boundaries', () => {
         ...ownerScope(owner, bunshin.id),
         socialProfileId: profile.id,
         platform: 'YOUTUBE_SHORTS',
-        periodStart: '2026-08-24',
-        periodEnd: '2026-08-30',
+        periodStart,
+        periodEnd,
         queryVersion: 'weekly-v1',
         providerKey: 'test',
         completedAt,
