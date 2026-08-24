@@ -35,7 +35,8 @@ const repository = (): AiProviderConfigurationRepository => ({
 
 describe('AI provider operations', () => {
   it('decrypts only inside the connection test and records the result', async () => {
-    const repo = repository();
+    const recordConnectionTest = vi.fn();
+    const repo = { ...repository(), recordConnectionTest };
     const validate = vi.fn(() => Promise.resolve({ success: true, errorCategory: null }));
     await new TestAiProviderConfigurationConnection(
       repo,
@@ -49,9 +50,7 @@ describe('AI provider operations', () => {
     expect(validate).toHaveBeenCalledWith(
       expect.objectContaining({ apiKey: 'plain-key', provider: 'OPENAI' }),
     );
-    expect(repo.recordConnectionTest).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true }),
-    );
+    expect(recordConnectionTest).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
   it('requires an auditable reason before activation', async () => {
