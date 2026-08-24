@@ -126,6 +126,7 @@ describe('WeeklyPlanGenerationService', () => {
           .mockResolvedValue([{ type: 'SKILL', title: '経験', content: '10年の経験' }]),
       } as never,
       planner: { generate },
+      providerModel: 'gpt-test',
       resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
       recordUsage,
       now: () => now.valueOf(),

@@ -39,6 +39,9 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),
 }));
 vi.mock('@bunshin/database', () => ({
+  PrismaAiProviderConfigurationRepository: class {
+    getActiveForRuntime = vi.fn().mockResolvedValue(null);
+  },
   PrismaSocialAccountStrategyRepository: class {
     createVersion = state.create;
     list = state.list;
