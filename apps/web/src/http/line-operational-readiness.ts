@@ -8,6 +8,7 @@ import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { LineOperationalAlertWebhook } from '../line/operational-alert-webhook';
+import { LineOperationalAlertResend } from '../line/operational-alert-resend';
 import { authorizeCronRequest } from './cron-security';
 
 const logger = createLogger();
@@ -28,6 +29,16 @@ async function checker() {
 }
 
 function notifier(configuration: ReturnType<typeof getServerEnvironment>) {
+  if (
+    configuration.RESEND_ADMIN_ALERT_API_KEY &&
+    configuration.RESEND_ADMIN_ALERT_FROM &&
+    configuration.RESEND_ADMIN_ALERT_TO
+  )
+    return new LineOperationalAlertResend({
+      apiKey: configuration.RESEND_ADMIN_ALERT_API_KEY,
+      from: configuration.RESEND_ADMIN_ALERT_FROM,
+      to: configuration.RESEND_ADMIN_ALERT_TO.split(',').map((value) => value.trim()),
+    });
   if (!configuration.LINE_ADMIN_ALERT_WEBHOOK_URL) return null;
   return new LineOperationalAlertWebhook({
     url: configuration.LINE_ADMIN_ALERT_WEBHOOK_URL,

@@ -88,4 +88,26 @@ describe('environment validation', () => {
       }).ACCOUNT_DELETION_EXECUTION_MODE,
     ).toBe('enabled');
   });
+
+  it('requires a complete Resend alert configuration and valid recipients', () => {
+    expect(() =>
+      parseServerEnvironment({ ...valid, RESEND_ADMIN_ALERT_API_KEY: 're_test_secret_key' }),
+    ).toThrow('RESEND_ADMIN_ALERT_API_KEY');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        RESEND_ADMIN_ALERT_API_KEY: 're_test_secret_key',
+        RESEND_ADMIN_ALERT_FROM: 'alerts@example.com',
+        RESEND_ADMIN_ALERT_TO: 'not-an-email',
+      }),
+    ).toThrow('RESEND_ADMIN_ALERT_TO');
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        RESEND_ADMIN_ALERT_API_KEY: 're_test_secret_key',
+        RESEND_ADMIN_ALERT_FROM: 'alerts@example.com',
+        RESEND_ADMIN_ALERT_TO: 'first@example.com,second@example.com',
+      }).RESEND_ADMIN_ALERT_FROM,
+    ).toBe('alerts@example.com');
+  });
 });

@@ -15,6 +15,14 @@
 - `LINE_ADMIN_ALERT_WEBHOOK_ALLOWED_HOSTS`: 上記URLのhostを完全一致で列挙する。複数はcomma区切り
 - `LINE_ADMIN_ALERT_WEBHOOK_TOKEN`: 受信側がBearer認証を利用する場合だけ登録する
 
+管理者へメールで通知する場合は、上記Webhookの代わりに次を登録する。Resend設定がそろっている場合はメールを優先する。
+
+- `RESEND_ADMIN_ALERT_API_KEY`: 送信専用のResend APIキー
+- `RESEND_ADMIN_ALERT_FROM`: Resendで認証済みドメインの送信元メールアドレス
+- `RESEND_ADMIN_ALERT_TO`: 通知先メールアドレス。最大10件、comma区切り
+
+送信元には認証メールと分離したsubdomainを推奨する。APIキーをPR、ログ、Audit Logへ記録しない。同一障害は環境とfingerprintから作る冪等キーで重複送信を防ぐ。
+
 Preview / DevelopmentにはProductionのURL・Tokenを複製しない。登録後に再Deployする。
 
 ## 3. GitHub Environment
@@ -41,7 +49,7 @@ Vercel Cronまたは認可済み運用端末から`/api/internal/line/readiness`
 
 ## 5. 外部通知疎通
 
-異常状態をProduction DBへ故意に作らない。まず専用の受信側検証環境でAdapter testを行い、本番ではVercel Cronの実行結果と受信側監査で確認する。受信側は`x-bunshin-alert-key`を冪等keyとして扱い、同一状態の重複通知を抑止する。
+異常状態をProduction DBへ故意に作らない。まず専用の受信側検証環境でAdapter testを行い、本番ではVercel Cronの実行結果と受信側監査で確認する。Webhook受信側は`x-bunshin-alert-key`を冪等keyとして扱い、Resendは`Idempotency-Key`を使って同一状態の重複通知を抑止する。
 
 ## 6. Go/No-Go実行
 
