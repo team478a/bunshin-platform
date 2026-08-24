@@ -903,3 +903,14 @@
 - Audit: 対象者、実施者、変更前後の役割・状態、理由、日時を追記型履歴へ保存する。
 - Privacy: パスワード、認証Token、API Key、DB接続情報は管理画面・監査履歴へ保存しない。
 - Login operation: Supabaseのメール送信上限を成功として扱わず、利用者へ待機とLINEログインを案内する。
+
+## D-077: 日常利用する外部サービス認証情報は管理画面から版管理する
+
+- 日付: 2026-08-24
+- 状態: Accepted
+- Scope: OpenAI、Grok、Exa、FirecrawlのAPIキーとLINE Channel Secret／Access Tokenを管理画面から登録し、環境別・版別に管理する。
+- Secret: 平文はAES-256-GCMで暗号化して保存し、保存後は末尾マスクと登録有無だけを表示する。ログと監査履歴へ平文を残さない。
+- Test: 有効化前にProviderへ最小リクエストを送り、認証、利用上限、モデル不一致、Channel不一致、通信障害を固定分類する。
+- LINE: Channel Access Tokenの検証応答に`client_id`がある場合、登録したMessaging Channel IDとの一致を必須とする。
+- Keep in environment: ENCRYPTION_KEY、DB接続情報、Supabase Service Role Key、CRON_SECRET、Vercel認証情報は管理画面へ移さない。
+- Audit: 作成、接続確認、有効化、停止は対象環境・版・実施者・理由を既存の追記型監査履歴へ残す。

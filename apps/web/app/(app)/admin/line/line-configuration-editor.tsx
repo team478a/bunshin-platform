@@ -23,6 +23,17 @@ type Configuration = {
   lastErrorCategory: string | null;
 };
 
+const connectionErrors: Record<string, string> = {
+  LOGIN_CREDENTIAL_INVALID: 'LINEログインのChannel IDまたはSecretが正しくありません',
+  LOGIN_CONFIGURATION_INVALID: 'LINEログインの接続確認で予期しない応答がありました',
+  ACCESS_TOKEN_INVALID: 'Channel Access Tokenが正しくないか失効しています',
+  MESSAGING_CHANNEL_MISMATCH: 'Access TokenとMessaging Channel IDが一致しません',
+  QUOTA_OR_RATE_LIMIT: 'LINE側の利用上限または短時間の回数制限に達しています',
+  MESSAGING_CONFIGURATION_INVALID: 'Messaging APIの設定を確認してください',
+  BOT_INFO_INVALID: 'LINE公式アカウントの情報を確認できませんでした',
+  PROVIDER_UNAVAILABLE: 'LINEへ一時的に接続できません',
+};
+
 export function LineConfigurationEditor(props: {
   environment: string;
   urls: LineEndpointUrls;
@@ -104,11 +115,15 @@ export function LineConfigurationEditor(props: {
       );
       setMessage('本番で使う設定を切り替えました。');
     } else {
-      const tested = result.data as { success: boolean; botDisplayName: string | null };
+      const tested = result.data as {
+        success: boolean;
+        botDisplayName: string | null;
+        errorCategory: string | null;
+      };
       setMessage(
         tested.success
           ? `接続成功：${tested.botDisplayName ?? 'LINE公式アカウント'}`
-          : '接続テストに失敗しました。',
+          : `接続できませんでした：${connectionErrors[tested.errorCategory ?? ''] ?? '原因を確認できませんでした'}`,
       );
     }
     setBusy(false);
