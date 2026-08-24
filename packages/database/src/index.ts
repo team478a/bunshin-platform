@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
-import { LINE_ADMIN_RETRYABLE_FAILURES } from '@bunshin/application';
+import { calculateAdminRetention, LINE_ADMIN_RETRYABLE_FAILURES } from '@bunshin/application';
 import type {
   AccountTransaction,
   AccountUnitOfWork,
@@ -6205,56 +6205,113 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         }
       : {};
     const period = { gte: input.from, lt: input.to };
-    const [rows, cohortRows, users, activeUsers, periodPosts, periodAi, lineUsers, deletionUsers] =
-      await Promise.all([
-        this.client.user.findMany({
-          where: search,
-          select: adminUserSelect,
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: input.limit + 1,
-        }),
-        this.client.user.findMany({
-          where: { createdAt: period },
-          select: {
-            ...adminUserSelect,
-            missionActivities: {
-              ...adminUserSelect.missionActivities,
-              where: { occurredAt: { lt: input.to } },
-            },
-            postRecords: {
-              ...adminUserSelect.postRecords,
-              where: { postedAt: { lt: input.to } },
-            },
-            aiUsageEvents: {
-              ...adminUserSelect.aiUsageEvents,
-              where: { occurredAt: { lt: input.to } },
-            },
+    const [
+      rows,
+      cohortRows,
+      users,
+      activeUsers,
+      periodPosts,
+      periodAi,
+      lineUsers,
+      deletionUsers,
+      lineSent,
+      lineFailed,
+      supportCasesCreated,
+      supportCasesResolved,
+    ] = await Promise.all([
+      this.client.user.findMany({
+        where: search,
+        select: adminUserSelect,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: input.limit + 1,
+      }),
+      this.client.user.findMany({
+        where: { createdAt: period },
+        select: {
+          ...adminUserSelect,
+          missionActivities: {
+            ...adminUserSelect.missionActivities,
+            where: { occurredAt: { lt: input.to } },
           },
-          orderBy: { createdAt: 'asc' },
-          take: 5001,
-        }),
-        this.client.user.count(),
-        this.client.user.count({ where: { status: 'ACTIVE' } }),
-        this.client.postRecord.count({ where: { postedAt: period } }),
-        this.client.aiUsageEvent.findMany({
-          where: { occurredAt: period },
-          select: { status: true, estimatedCostUsdMicros: true },
-        }),
-        this.client.lineConnection.findMany({
-          where: { environment: input.environment, status: 'ACTIVE' },
-          distinct: ['userId'],
-          select: { userId: true },
-        }),
-        this.client.accountDeletionRequest.findMany({
-          where: { status: { in: ['REQUESTED', 'PROCESSING', 'BLOCKED'] } },
-          distinct: ['userId'],
-          select: { userId: true },
-        }),
-      ]);
+          postRecords: {
+            ...adminUserSelect.postRecords,
+            where: { postedAt: { lt: input.to } },
+          },
+          aiUsageEvents: {
+            ...adminUserSelect.aiUsageEvents,
+            where: { occurredAt: { lt: input.to } },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 5001,
+      }),
+      this.client.user.count(),
+      this.client.user.count({ where: { status: 'ACTIVE' } }),
+      this.client.postRecord.count({ where: { postedAt: period } }),
+      this.client.aiUsageEvent.findMany({
+        where: { occurredAt: period },
+        select: { status: true, estimatedCostUsdMicros: true },
+      }),
+      this.client.lineConnection.findMany({
+        where: { environment: input.environment, status: 'ACTIVE' },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
+      this.client.accountDeletionRequest.findMany({
+        where: { status: { in: ['REQUESTED', 'PROCESSING', 'BLOCKED'] } },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
+      this.client.lineMessageDelivery.count({
+        where: { environment: input.environment, status: 'SENT', sentAt: period },
+      }),
+      this.client.lineMessageDeliveryAttempt.count({
+        where: {
+          delivery: { environment: input.environment },
+          status: 'FAILED',
+          attemptedAt: period,
+        },
+      }),
+      this.client.supportCase.count({ where: { createdAt: period } }),
+      this.client.supportCase.count({ where: { status: 'RESOLVED', resolvedAt: period } }),
+    ]);
     const visible = rows
       .slice(0, input.limit)
       .map((row) => adminUserSummary(row, input.environment));
     const cohort = cohortRows.slice(0, 5000).map((row) => adminUserSummary(row, input.environment));
+    const cohortCreatedAt = new Map(
+      cohortRows.slice(0, 5000).map((row) => [row.id, row.createdAt]),
+    );
+    const d1EligibleIds = [...cohortCreatedAt]
+      .filter(([, createdAt]) => createdAt.getTime() + 2 * 86_400_000 <= input.to.getTime())
+      .map(([id]) => id);
+    const d7EligibleIds = [...cohortCreatedAt]
+      .filter(([, createdAt]) => createdAt.getTime() + 8 * 86_400_000 <= input.to.getTime())
+      .map(([id]) => id);
+    const retentionIds = [...new Set([...d1EligibleIds, ...d7EligibleIds])];
+    const [retentionActivities, retentionPosts] = retentionIds.length
+      ? await Promise.all([
+          this.client.missionActivity.findMany({
+            where: { actorUserId: { in: retentionIds }, occurredAt: { lt: input.to } },
+            select: { actorUserId: true, occurredAt: true },
+          }),
+          this.client.postRecord.findMany({
+            where: { actorUserId: { in: retentionIds }, postedAt: { lt: input.to } },
+            select: { actorUserId: true, postedAt: true },
+          }),
+        ])
+      : [[], []];
+    const retention = calculateAdminRetention({
+      cohort: [...cohortCreatedAt].map(([userId, createdAt]) => ({ userId, createdAt })),
+      activities: [
+        ...retentionActivities.map((item) => ({
+          userId: item.actorUserId,
+          occurredAt: item.occurredAt,
+        })),
+        ...retentionPosts.map((item) => ({ userId: item.actorUserId, occurredAt: item.postedAt })),
+      ],
+      periodEnd: input.to,
+    });
     const stageIndex = new Map<AdminUserStage, number>([
       ['REGISTERED', 0],
       ['BUNSHIN_CREATED', 1],
@@ -6289,8 +6346,13 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         lineConnectedUsers: lineUsers.length,
         attentionUsers: visible.filter(({ attentionReason }) => attentionReason !== null).length,
         deletionPendingUsers: deletionUsers.length,
+        lineSent,
+        lineFailed,
+        supportCasesCreated,
+        supportCasesResolved,
       },
       funnel,
+      retention,
       users: visible,
       truncated: rows.length > input.limit || cohortRows.length > 5000,
     };

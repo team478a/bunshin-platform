@@ -44,10 +44,53 @@ export interface AdminOperationsSnapshot {
     lineConnectedUsers: number;
     attentionUsers: number;
     deletionPendingUsers: number;
+    lineSent: number;
+    lineFailed: number;
+    supportCasesCreated: number;
+    supportCasesResolved: number;
   };
   funnel: Record<AdminUserStage, number>;
+  retention: {
+    d1EligibleUsers: number;
+    d1ActiveUsers: number;
+    d1ActiveRate: number | null;
+    d7EligibleUsers: number;
+    d7ActiveUsers: number;
+    d7ActiveRate: number | null;
+  };
   users: AdminUserSummary[];
   truncated: boolean;
+}
+
+export function calculateAdminRetention(input: {
+  cohort: Array<{ userId: string; createdAt: Date }>;
+  activities: Array<{ userId: string; occurredAt: Date }>;
+  periodEnd: Date;
+}) {
+  const createdAtByUser = new Map(input.cohort.map((item) => [item.userId, item.createdAt]));
+  const d1Eligible = input.cohort.filter(
+    (item) => item.createdAt.getTime() + 2 * 86_400_000 <= input.periodEnd.getTime(),
+  );
+  const d7Eligible = input.cohort.filter(
+    (item) => item.createdAt.getTime() + 8 * 86_400_000 <= input.periodEnd.getTime(),
+  );
+  const d1Active = new Set<string>();
+  const d7Active = new Set<string>();
+  for (const activity of input.activities) {
+    const createdAt = createdAtByUser.get(activity.userId);
+    if (!createdAt) continue;
+    const elapsed = activity.occurredAt.getTime() - createdAt.getTime();
+    if (elapsed >= 86_400_000 && elapsed < 2 * 86_400_000) d1Active.add(activity.userId);
+    if (elapsed >= 7 * 86_400_000 && elapsed < 8 * 86_400_000) d7Active.add(activity.userId);
+  }
+  return {
+    d1EligibleUsers: d1Eligible.length,
+    d1ActiveUsers: d1Active.size,
+    d1ActiveRate: d1Eligible.length ? d1Active.size / d1Eligible.length : null,
+    d7EligibleUsers: d7Eligible.length,
+    d7ActiveUsers: d7Active.size,
+    d7ActiveRate: d7Eligible.length ? d7Active.size / d7Eligible.length : null,
+  };
 }
 
 export interface AdminUserTimelineItem {
