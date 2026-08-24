@@ -3426,6 +3426,119 @@ export class PrismaPlatformAdminRepository implements PlatformAdminRepository {
     const row = await this.client.platformAdmin.findFirst({ where: { userId, status: 'ACTIVE' } });
     return row === null ? null : { ...row, role: row.role, status: row.status };
   }
+
+  async listForManagement(actorUserId: string) {
+    const actor = await this.client.platformAdmin.findFirst({
+      where: { userId: actorUserId, status: 'ACTIVE' },
+      select: { role: true },
+    });
+    if (!actor) return null;
+    const [admins, audits] = await Promise.all([
+      this.client.platformAdmin.findMany({
+        include: { user: { select: { displayName: true, email: true } } },
+        orderBy: [{ status: 'asc' }, { grantedAt: 'asc' }],
+      }),
+      this.client.platformAdminAudit.findMany({
+        include: {
+          target: { select: { displayName: true, email: true } },
+          actor: { select: { displayName: true, email: true } },
+        },
+        orderBy: { occurredAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+    return { actorRole: actor.role, admins, audits };
+  }
+
+  async grantOrUpdate(input: {
+    actorUserId: string;
+    email: string;
+    role: 'SUPER_ADMIN' | 'OPERATOR' | 'SUPPORT';
+    reason: string;
+  }): Promise<void> {
+    await this.client.$transaction(async (tx) => {
+      const actor = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+      });
+      if (!actor) throw new ApplicationError('FORBIDDEN', 'super admin required');
+      const target = await tx.user.findFirst({
+        where: { email: { equals: input.email, mode: 'insensitive' }, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!target) throw new ApplicationError('NOT_FOUND', 'active user not found');
+      const current = await tx.platformAdmin.findUnique({ where: { userId: target.id } });
+      if (
+        current?.status === 'ACTIVE' &&
+        current.role === 'SUPER_ADMIN' &&
+        input.role !== 'SUPER_ADMIN'
+      ) {
+        const superAdminCount = await tx.platformAdmin.count({
+          where: { status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        });
+        if (superAdminCount <= 1)
+          throw new ApplicationError('CONFLICT', 'last super admin cannot be demoted');
+      }
+      const action = current
+        ? current.status === 'REVOKED'
+          ? 'REACTIVATED'
+          : 'ROLE_CHANGED'
+        : 'GRANTED';
+      await tx.platformAdmin.upsert({
+        where: { userId: target.id },
+        create: { userId: target.id, role: input.role, status: 'ACTIVE' },
+        update: { role: input.role, status: 'ACTIVE', revokedAt: null },
+      });
+      await tx.platformAdminAudit.create({
+        data: {
+          targetUserId: target.id,
+          actorUserId: input.actorUserId,
+          action,
+          previousRole: current?.role ?? null,
+          nextRole: input.role,
+          previousStatus: current?.status ?? null,
+          nextStatus: 'ACTIVE',
+          reason: input.reason,
+        },
+      });
+    });
+  }
+
+  async revoke(input: { actorUserId: string; adminId: string; reason: string }): Promise<void> {
+    await this.client.$transaction(async (tx) => {
+      const actor = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+      });
+      if (!actor) throw new ApplicationError('FORBIDDEN', 'super admin required');
+      const target = await tx.platformAdmin.findUnique({ where: { id: input.adminId } });
+      if (!target || target.status !== 'ACTIVE')
+        throw new ApplicationError('NOT_FOUND', 'active admin not found');
+      if (target.userId === input.actorUserId)
+        throw new ApplicationError('CONFLICT', 'self revocation is not allowed');
+      if (target.role === 'SUPER_ADMIN') {
+        const count = await tx.platformAdmin.count({
+          where: { status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        });
+        if (count <= 1)
+          throw new ApplicationError('CONFLICT', 'last super admin cannot be revoked');
+      }
+      await tx.platformAdmin.update({
+        where: { id: target.id },
+        data: { status: 'REVOKED', revokedAt: new Date() },
+      });
+      await tx.platformAdminAudit.create({
+        data: {
+          targetUserId: target.userId,
+          actorUserId: input.actorUserId,
+          action: 'REVOKED',
+          previousRole: target.role,
+          nextRole: target.role,
+          previousStatus: target.status,
+          nextStatus: 'REVOKED',
+          reason: input.reason,
+        },
+      });
+    });
+  }
 }
 
 function legalDocument(row: Prisma.LegalDocumentGetPayload<object>): LegalDocument {

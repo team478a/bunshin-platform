@@ -13,13 +13,20 @@ export async function POST(request: Request): Promise<Response> {
     if (!input.success) return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
     const supabase = await createSupabaseServerClient();
     const environment = getServerEnvironment();
-    await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithOtp({
       email: input.data.email,
       options: {
         shouldCreateUser: true,
         emailRedirectTo: `${environment.APP_URL}/auth/confirm`,
       },
     });
+    if (error) {
+      const rateLimited = error.status === 429 || error.code === 'over_email_send_rate_limit';
+      return NextResponse.redirect(
+        new URL(`/login?error=${rateLimited ? 'rate-limit' : 'email'}`, request.url),
+        303,
+      );
+    }
     return NextResponse.redirect(new URL('/login?sent=1', request.url), 303);
   } catch {
     return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
