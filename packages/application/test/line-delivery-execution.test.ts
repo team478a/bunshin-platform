@@ -6,6 +6,7 @@ import {
   type LineMessageDelivery,
   type LineMessageDeliveryRepository,
   type LineMessagingProviderPort,
+  type LineMissionNotificationSummaryRepository,
   type LineRecipientResolverPort,
 } from '../src';
 
@@ -64,6 +65,14 @@ function dependencies(input?: {
   const recipient = {
     resolve: vi.fn().mockResolvedValue('provider-user-a'),
   } satisfies LineRecipientResolverPort;
+  const summary = {
+    resolve: vi.fn().mockResolvedValue({
+      platform: 'INSTAGRAM',
+      format: 'SLIDE',
+      estimatedMinutes: 5,
+      topic: '朝の時間を上手に使うコツ',
+    }),
+  } satisfies LineMissionNotificationSummaryRepository;
   const provider = {
     getQuota: vi
       .fn()
@@ -72,7 +81,7 @@ function dependencies(input?: {
       .fn()
       .mockResolvedValue(input?.pushFailure ? { ok: false, ...input.pushFailure } : { ok: true }),
   } satisfies LineMessagingProviderPort;
-  return { repository, configuration, recipient, provider };
+  return { repository, configuration, recipient, summary, provider };
 }
 
 async function execute(
@@ -83,6 +92,7 @@ async function execute(
     values.repository,
     values.configuration,
     values.recipient,
+    values.summary,
     values.provider,
     () => now,
   ).execute({
@@ -102,6 +112,12 @@ describe('LINE delivery execution', () => {
       accessToken: 'sealed-outside-application',
       recipientId: 'provider-user-a',
       deepLinkUrl: 'https://app.example.com/today?state=opaque',
+      summary: {
+        platform: 'INSTAGRAM',
+        format: 'SLIDE',
+        estimatedMinutes: 5,
+        topic: '朝の時間を上手に使うコツ',
+      },
     });
     expect(values.repository.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -146,6 +162,32 @@ describe('LINE delivery execution', () => {
     expect(values.provider.pushMissionNotification).toHaveBeenCalledWith(
       expect.objectContaining({ deepLinkUrl: 'https://app.example.com/today?state=opaque' }),
     );
+  });
+
+  it('resolves only the scoped safe Mission projection and never accepts Mission content', async () => {
+    const values = dependencies();
+    await execute(values);
+    expect(values.summary.resolve).toHaveBeenCalledWith({
+      workspaceId: 'workspace-a',
+      bunshinId: 'bunshin-a',
+      actorUserId: 'user-a',
+      dailyMissionId: 'mission-a',
+    });
+    const providerInput = values.provider.pushMissionNotification.mock.calls[0]?.[0];
+    expect(providerInput).not.toHaveProperty('content');
+    expect(providerInput).not.toHaveProperty('knowledge');
+    expect(providerInput).not.toHaveProperty('memory');
+  });
+
+  it('fails closed when the scoped Mission summary is unavailable', async () => {
+    const values = dependencies();
+    values.summary.resolve.mockResolvedValue(null);
+    await expect(execute(values)).resolves.toEqual({
+      status: 'FAILED',
+      category: 'MISSION_UNAVAILABLE',
+      retryable: false,
+    });
+    expect(values.provider.pushMissionNotification).not.toHaveBeenCalled();
   });
 
   it('stops low-priority reminders at the configured quota threshold', async () => {

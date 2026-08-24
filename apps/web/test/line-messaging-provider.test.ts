@@ -26,6 +26,12 @@ describe('LINE Messaging API adapter', () => {
         accessToken: 'access-token',
         recipientId: 'provider-user-a',
         deepLinkUrl: 'https://app.example.com/today?state=opaque',
+        summary: {
+          platform: 'INSTAGRAM',
+          format: 'SLIDE',
+          estimatedMinutes: 5,
+          topic: '朝の時間を上手に使うコツ',
+        },
       }),
     ).resolves.toEqual({ ok: true });
     const init = request.mock.calls[0]?.[1];
@@ -39,12 +45,35 @@ describe('LINE Messaging API adapter', () => {
       messages: [
         {
           type: 'text',
-          text: '今日のミッションができました。\nhttps://app.example.com/today?state=opaque',
+          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
         },
       ],
     });
     expect(JSON.stringify(body)).not.toContain('Knowledge');
     expect(JSON.stringify(body)).not.toContain('投稿本文');
+    expect(JSON.stringify(body)).not.toContain('動画生成プロンプト');
+    expect(JSON.stringify(body)).not.toContain('Memory');
+  });
+
+  it('removes line breaks and limits the short topic before sending', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    await new LineMessagingApiAdapter(request).pushMissionNotification({
+      accessToken: 'access-token',
+      recipientId: 'provider-user-a',
+      deepLinkUrl: 'https://app.example.com/today?state=opaque',
+      summary: {
+        platform: 'X',
+        format: 'TEXT',
+        estimatedMinutes: 3,
+        topic: `${'安全なテーマ'.repeat(20)}\n投稿本文：送ってはいけない`,
+      },
+    });
+    const body = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
+      messages: Array<{ text: string }>;
+    };
+    expect(body.messages[0]?.text).not.toContain('\n投稿本文');
+    expect(body.messages[0]?.text).not.toContain('送ってはいけない');
+    expect(body.messages[0]?.text).toContain('SNS：X');
   });
 
   it.each([
@@ -63,6 +92,12 @@ describe('LINE Messaging API adapter', () => {
           accessToken: 'access-token',
           recipientId: 'provider-user-a',
           deepLinkUrl: 'https://app.example.com/today?state=opaque',
+          summary: {
+            platform: 'X',
+            format: 'TEXT',
+            estimatedMinutes: 3,
+            topic: '短いテーマ',
+          },
         }),
       ).resolves.toEqual({ ok: false, category, retryable });
     },

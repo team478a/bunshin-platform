@@ -11,6 +11,7 @@ export type LineMessagingErrorCategory =
   | 'QUOTA_LOW_PRIORITY_STOP'
   | 'QUOTA_EXHAUSTED'
   | 'RECIPIENT_UNAVAILABLE'
+  | 'MISSION_UNAVAILABLE'
   | 'INVALID_RECIPIENT'
   | 'BLOCKED'
   | 'CREDENTIAL_INVALID'
@@ -130,6 +131,65 @@ export interface LineRecipientResolverPort {
   }): Promise<string | null>;
 }
 
+export const LINE_MISSION_PLATFORMS = [
+  'INSTAGRAM',
+  'TIKTOK',
+  'X',
+  'THREADS',
+  'YOUTUBE_SHORTS',
+  'OTHER',
+] as const;
+export type LineMissionPlatform = (typeof LINE_MISSION_PLATFORMS)[number];
+export const LINE_MISSION_FORMATS = [
+  'TEXT',
+  'SLIDE',
+  'LIVE_ACTION',
+  'AI_VIDEO_PROMPT',
+  'IMAGE',
+] as const;
+export type LineMissionFormat = (typeof LINE_MISSION_FORMATS)[number];
+
+export interface LineMissionNotificationSummary {
+  platform: LineMissionPlatform;
+  format: LineMissionFormat;
+  estimatedMinutes: number;
+  topic: string;
+}
+
+export interface LineMissionNotificationSummaryRepository {
+  resolve(input: {
+    workspaceId: string;
+    bunshinId: string;
+    actorUserId: string;
+    dailyMissionId: string;
+  }): Promise<LineMissionNotificationSummary | null>;
+}
+
+export function normalizeLineMissionNotificationSummary(
+  input: LineMissionNotificationSummary,
+): LineMissionNotificationSummary {
+  if (!LINE_MISSION_PLATFORMS.includes(input.platform))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission platform');
+  if (!LINE_MISSION_FORMATS.includes(input.format))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission format');
+  if (
+    !Number.isInteger(input.estimatedMinutes) ||
+    input.estimatedMinutes < 1 ||
+    input.estimatedMinutes > 120
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission estimated minutes');
+  const topic = [...input.topic]
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 ? ' ' : character;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!topic) throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission topic');
+  return { ...input, topic: topic.slice(0, 60) };
+}
+
 export type LineProviderFailure = {
   ok: false;
   category: Exclude<
@@ -140,6 +200,7 @@ export type LineProviderFailure = {
     | 'QUOTA_LOW_PRIORITY_STOP'
     | 'QUOTA_EXHAUSTED'
     | 'RECIPIENT_UNAVAILABLE'
+    | 'MISSION_UNAVAILABLE'
   >;
   retryable: boolean;
 };
@@ -152,6 +213,7 @@ export interface LineMessagingProviderPort {
     accessToken: string;
     recipientId: string;
     deepLinkUrl: string;
+    summary: LineMissionNotificationSummary;
   }): Promise<{ ok: true } | LineProviderFailure>;
 }
 
@@ -192,6 +254,7 @@ export class ExecuteLineMissionDelivery {
     private readonly repository: LineMessageDeliveryRepository,
     private readonly configuration: LineDeliveryConfigurationPort,
     private readonly recipientResolver: LineRecipientResolverPort,
+    private readonly summaryRepository: LineMissionNotificationSummaryRepository,
     private readonly provider: LineMessagingProviderPort,
     private readonly now = () => new Date(),
     private readonly leaseMilliseconds = 30_000,
@@ -270,7 +333,16 @@ export class ExecuteLineMissionDelivery {
       return failWithoutProvider('CANCELLED', policy.category ?? 'QUOTA_EXHAUSTED', false);
 
     let deepLinkUrl: string;
+    let summary: LineMissionNotificationSummary;
     try {
+      const resolvedSummary = await this.summaryRepository.resolve({
+        workspaceId: claim.delivery.workspaceId,
+        bunshinId: claim.delivery.bunshinId,
+        actorUserId: input.actorUserId,
+        dailyMissionId: claim.delivery.dailyMissionId,
+      });
+      if (!resolvedSummary) return failWithoutProvider('FAILED', 'MISSION_UNAVAILABLE', false);
+      summary = normalizeLineMissionNotificationSummary(resolvedSummary);
       deepLinkUrl =
         typeof input.deepLinkUrl === 'string' ? input.deepLinkUrl : await input.deepLinkUrl();
       this.validateDeepLink(deepLinkUrl, input.environment);
@@ -282,6 +354,7 @@ export class ExecuteLineMissionDelivery {
         accessToken: configuration.accessToken,
         recipientId,
         deepLinkUrl,
+        summary,
       }),
     );
     if (!result.ok) return this.recordProviderFailure(claim, input, result, now);

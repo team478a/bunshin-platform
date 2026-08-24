@@ -47,6 +47,7 @@ import type {
   MissionAutomationCandidateRepository,
   LineMessageDelivery,
   LineMessageDeliveryRepository,
+  LineMissionNotificationSummaryRepository,
   LineAdminMetricsRepository,
   LineDeliveryRetryRepository,
   LineAdminFunnelRepository,
@@ -2659,6 +2660,41 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
         }),
       );
     });
+  }
+}
+
+export class PrismaLineMissionNotificationSummaryRepository implements LineMissionNotificationSummaryRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async resolve(input: Parameters<LineMissionNotificationSummaryRepository['resolve']>[0]) {
+    const mission = await this.client.dailyMission.findFirst({
+      where: {
+        id: input.dailyMissionId,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        bunshin: {
+          status: { not: 'ARCHIVED' },
+          workspace: {
+            status: 'ACTIVE',
+            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          },
+        },
+        socialProfile: { is: { status: 'ACTIVE' } },
+      },
+      select: {
+        format: true,
+        estimatedMinutes: true,
+        topic: true,
+        socialProfile: { select: { platform: true } },
+      },
+    });
+    if (!mission?.socialProfile) return null;
+    return {
+      platform: mission.socialProfile.platform,
+      format: mission.format,
+      estimatedMinutes: mission.estimatedMinutes,
+      topic: mission.topic,
+    };
   }
 }
 
