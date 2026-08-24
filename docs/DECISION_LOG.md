@@ -926,3 +926,14 @@
 - Support: 問い合わせは対象ユーザー、件名、優先度、状態、担当管理者、追記型メモを分離保存する。
 - Authorization: 問い合わせ作成・更新はSUPER_ADMIN、OPERATOR、SUPPORTに許可し、READ_ONLYは閲覧だけとする。
 - Privacy: 対応メモへパスワード、API Key、Token、投稿本文などの秘密情報を保存しない。メモの編集・削除機能は作らず、訂正も追記する。
+
+## D-079: 運用通知は現在状態から再計算し原因解消で自動解除する
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- Scope: AI接続・予算・失敗、LINE設定・配信、定期処理、退会処理、問い合わせを管理画面の通知センターへ集約する。
+- Source: 通知専用tableを初期実装では作らず、正本となる設定・Usage・Job・Delivery・Support・Deletionの現在状態から表示時に再計算する。
+- Severity: サービス停止・予算到達・自動復旧不能をCRITICAL、停止や80％予算・緊急問い合わせをWARNING、自動再試行や通常問い合わせをINFOとする。
+- Resolution: 既読操作で隠さず、原因が解消されたときだけ次回集計から消す。
+- Authorization: 有効なPlatform Adminだけが閲覧でき、通知から既存の権限保護された対応画面へ移動する。
+- Privacy: API Key、Token、投稿本文、ユーザーの秘密情報を通知へ含めない。

@@ -1,5 +1,6 @@
 import {
   CheckLineOperationalReadiness,
+  GetAdminAlerts,
   ListAiProviderConfigurations,
   ListLegalDocuments,
   ListProductionGateEvidence,
@@ -36,6 +37,10 @@ export default async function OperationsAdminPage() {
   if (!admin) notFound();
 
   const environment = getServerEnvironment();
+  const alertCenter = await new GetAdminAlerts(new db.PrismaAdminAlertRepository()).execute({
+    actorUserId: user.userId,
+    environment: currentLineEnvironment(),
+  });
   const lineConfigurations = await new ListLineConfigurations(
     new db.PrismaLineConfigurationRepository(),
   ).execute(user.userId, currentLineEnvironment());
@@ -109,6 +114,25 @@ export default async function OperationsAdminPage() {
           <strong>{currentLineEnvironment()}</strong>
         </p>
         <p>別の環境に登録した秘密情報は、この環境から使用できません。</p>
+      </section>
+
+      <section className="settings-card" aria-labelledby="alert-center-title">
+        <h2 id="alert-center-title">運用通知</h2>
+        <p>
+          {alertCenter.alerts.length === 0 ? (
+            <strong className="status-success">今すぐ確認する通知はありません</strong>
+          ) : (
+            <strong className="status-warning">
+              {alertCenter.alerts.filter((item) => item.severity === 'CRITICAL').length}
+              件の緊急対応、
+              {alertCenter.alerts.filter((item) => item.severity === 'WARNING').length}
+              件の確認があります
+            </strong>
+          )}
+        </p>
+        <Link href="/admin/alerts" className="button button--secondary">
+          運用通知を確認する
+        </Link>
       </section>
 
       <section className="settings-card" aria-labelledby="readiness-title">

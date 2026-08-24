@@ -61,6 +61,8 @@ import type {
   AdminUserDetail,
   AdminUserStage,
   AdminUserSummary,
+  AdminAlertRepository,
+  AdminAlertSnapshot,
   TrendOperationsRepository,
   TrendOperationsSnapshot,
   ProductionGateEvidence,
@@ -6382,6 +6384,115 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
       assigneeDisplayName: item.assignee?.displayName ?? null,
       updatedAt: item.updatedAt,
     }));
+  }
+}
+
+export class PrismaAdminAlertRepository implements AdminAlertRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async snapshot(
+    input: Parameters<AdminAlertRepository['snapshot']>[0],
+  ): Promise<AdminAlertSnapshot | null> {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: input.actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    const [
+      configurations,
+      lineConfiguration,
+      failedDeliveries,
+      lineJobs,
+      otherDeadJobs,
+      blockedDeletions,
+      openSupportCases,
+      urgentSupportCases,
+    ] = await Promise.all([
+      this.client.aiProviderConfiguration.findMany({
+        where: { environment: input.environment, status: 'ACTIVE' },
+        orderBy: { provider: 'asc' },
+      }),
+      this.client.lineChannelConfiguration.findFirst({
+        where: { environment: input.environment, status: 'ACTIVE' },
+      }),
+      this.client.lineMessageDelivery.count({
+        where: { environment: input.environment, status: 'FAILED' },
+      }),
+      this.client.job.groupBy({
+        by: ['status'],
+        where: {
+          environment: input.environment,
+          jobType: 'LINE_MISSION_DELIVER',
+          status: { in: ['RETRY_SCHEDULED', 'DEAD'] },
+        },
+        _count: { _all: true },
+      }),
+      this.client.job.count({
+        where: {
+          environment: input.environment,
+          jobType: { not: 'LINE_MISSION_DELIVER' },
+          status: 'DEAD',
+        },
+      }),
+      this.client.accountDeletionRequest.count({ where: { status: 'BLOCKED' } }),
+      this.client.supportCase.count({ where: { status: 'OPEN' } }),
+      this.client.supportCase.count({ where: { status: 'OPEN', priority: 'URGENT' } }),
+    ]);
+    const safeNumber = (value: bigint | null) =>
+      value === null
+        ? 0
+        : Number(value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : value);
+    const ai = await Promise.all(
+      configurations.map(async (configuration) => {
+        const provider = configuration.provider.toLowerCase();
+        const [daily, monthly, recentFailures] = await Promise.all([
+          this.client.aiUsageEvent.aggregate({
+            where: { provider, occurredAt: { gte: input.dailyFrom, lt: input.now } },
+            _sum: { estimatedCostUsdMicros: true },
+          }),
+          this.client.aiUsageEvent.aggregate({
+            where: { provider, occurredAt: { gte: input.monthlyFrom, lt: input.now } },
+            _sum: { estimatedCostUsdMicros: true },
+          }),
+          this.client.aiUsageEvent.count({
+            where: {
+              provider,
+              status: 'FAILED',
+              occurredAt: { gte: input.recentFrom, lt: input.now },
+            },
+          }),
+        ]);
+        return {
+          provider: configuration.provider,
+          globallyPaused: configuration.globallyPaused,
+          lastErrorCategory: configuration.lastErrorCategory,
+          dailyBudgetUsdMicros: Number(configuration.dailyBudgetUsdMicros),
+          monthlyBudgetUsdMicros: Number(configuration.monthlyBudgetUsdMicros),
+          dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
+          monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
+          recentFailures,
+        };
+      }),
+    );
+    const lineJobCount = (status: 'RETRY_SCHEDULED' | 'DEAD') =>
+      lineJobs.find((item) => item.status === status)?._count._all ?? 0;
+    return {
+      ai,
+      line: {
+        active: Boolean(lineConfiguration),
+        verified: Boolean(
+          lineConfiguration?.lastVerifiedAt && !lineConfiguration.lastErrorCategory,
+        ),
+        globallyPaused: lineConfiguration?.globallyPaused ?? false,
+        failedDeliveries,
+        retryScheduledJobs: lineJobCount('RETRY_SCHEDULED'),
+        deadJobs: lineJobCount('DEAD'),
+      },
+      otherDeadJobs,
+      blockedDeletions,
+      openSupportCases,
+      urgentSupportCases,
+    };
   }
 }
 

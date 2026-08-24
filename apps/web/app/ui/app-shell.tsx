@@ -12,6 +12,7 @@ const navigation = [
 
 const adminNavigation = [
   { href: '/admin', label: '運用設定' },
+  { href: '/admin/alerts', label: '運用通知' },
   { href: '/admin/connections', label: 'APIキーと接続確認' },
   { href: '/admin/users', label: 'ユーザーと利用状況' },
   { href: '/admin/support', label: '問い合わせ対応' },
