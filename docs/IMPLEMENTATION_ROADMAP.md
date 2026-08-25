@@ -276,7 +276,7 @@ Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を�
 
 ### Phase 7-L: 外部成果計測URL連携
 
-状態: L5 本人確認画面・コピー前再検証・LINE安全要約まで完了。L6のGroup管理画面・設定漏れ・利用履歴・CSV部分取込／出力は未着手。
+状態: L6-A Group管理画面・設定漏れ・利用履歴・CSV出力まで完了。L6-BのCSV部分取込は未着手。
 
 - L0: 現行監査、責任分離、所有権、URL優先順位、DB／API／UI／CSV境界 — 文書完了
 - L1: External System、Allowed Domain、Member Identity、Tracking Link Core、選択Policy — 完了
@@ -284,7 +284,8 @@ Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を�
 - L3: Product Pack Version方針、SNS別Placement Template — 完了
 - L4: Mission生成への決定的差し込み、atomic Usage Snapshot — 完了
 - L5: 本人確認画面、コピー前再検証、LINE安全要約 — 完了
-- L6: Group管理画面、設定漏れ、利用履歴、CSV部分取込／出力
+- L6-A: Group管理画面、設定漏れ、利用履歴、CSV出力 — 完了
+- L6-B: CSV部分取込、行別検証、部分成功
 - L7: Isolation／E2E／スマートフォン／Production Gate
 
 クリック、申込み、購入、成約、報酬、顧客、独自Cookie、短縮URL、redirect、自動投稿、外部API同期は本Phaseへ含めない。成果帰属はGroup Membership単位とし、Bunshin／人格単位にしない。

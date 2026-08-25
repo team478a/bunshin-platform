@@ -245,6 +245,14 @@ export default async function OperationsAdminPage() {
         </Link>
       </section>
 
+      <section className="settings-card" aria-labelledby="external-tracking-title">
+        <h2 id="external-tracking-title">参加者の専用URL</h2>
+        <p>紹介URLの登録、期限、設定漏れ、投稿案で使った履歴を管理します。</p>
+        <Link href="/admin/external-tracking" className="button button--secondary">
+          専用URL管理を開く
+        </Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="campaign-title">
         <h2 id="campaign-title">参加募集</h2>
         <p>募集期間、人数、テーマ、公式素材を決め、本人が自由に参加できる募集を管理します。</p>
