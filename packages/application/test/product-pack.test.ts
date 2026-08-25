@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ProductPackService, type ProductPackRepository } from '../src';
 
 class Repository implements ProductPackRepository {
-  list() {
+  list(): Promise<object[] | null> {
     return Promise.resolve([]);
   }
   get() {
