@@ -3,6 +3,7 @@ import {
   CreateDailyMission,
   ListDailyMissions,
   TransitionDailyMission,
+  normalizeCreateDailyMission,
   normalizeMissionContent,
   type DailyMission,
   type DailyMissionRepository,
@@ -104,6 +105,50 @@ const input = {
 };
 
 describe('Daily Mission core', () => {
+  it('validates an atomic generation context before persistence', () => {
+    const generationContext = {
+      generatedAt: now,
+      payload: {
+        personality: { id: 'personality-1', version: 2 },
+        selectedMemories: [{ id: 'memory-1', summary: '経験', selectionReason: 'Missionに関連' }],
+        knowledge: [{ id: 'knowledge-1' }],
+        socialProfile: { id: 'profile-1' },
+        strategy: { id: 'strategy-1', version: 1 },
+        weeklyPlan: { id: 'plan-1' },
+        contentPillar: { id: 'pillar-1' },
+        productPack: null,
+        trendCandidates: [],
+        promptVersion: 'content-v3',
+        provider: 'openai',
+        model: 'gpt-test',
+        quality: {
+          verdict: 'PASS' as const,
+          issueCodes: [],
+          repairCount: 0,
+        },
+      },
+    };
+    expect(() => normalizeCreateDailyMission({ ...input, generationContext })).not.toThrow();
+    expect(() =>
+      normalizeCreateDailyMission({
+        ...input,
+        generationContext: {
+          ...generationContext,
+          payload: { ...generationContext.payload, selectedMemories: [] },
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      normalizeCreateDailyMission({
+        ...input,
+        generationContext: {
+          ...generationContext,
+          payload: { ...generationContext.payload, provider: '' },
+        },
+      }),
+    ).toThrow();
+  });
+
   it('normalizes a mission and requires ACTIVE SOCIAL', async () => {
     const value = await new CreateDailyMission(new Missions(), new Assignments()).execute(input);
     expect(value).toMatchObject({ topic: '基礎', missionDate: '2026-08-19' });

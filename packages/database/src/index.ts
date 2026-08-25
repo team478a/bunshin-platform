@@ -1,5 +1,9 @@
 import { Prisma, PrismaClient } from '@prisma/client';
-import { calculateAdminRetention, LINE_ADMIN_RETRYABLE_FAILURES } from '@bunshin/application';
+import {
+  calculateAdminRetention,
+  GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
+  LINE_ADMIN_RETRYABLE_FAILURES,
+} from '@bunshin/application';
 import type {
   AccountTransaction,
   AccountUnitOfWork,
@@ -3006,6 +3010,18 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             data: { status: 'SELECTED' },
           });
         }
+        if (input.generationContext) {
+          await tx.generationContextSnapshot.create({
+            data: {
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+              dailyMissionId: created.id,
+              schemaVersion: GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
+              payload: input.generationContext.payload as unknown as Prisma.InputJsonValue,
+              generatedAt: input.generationContext.generatedAt,
+            },
+          });
+        }
         return dailyMission((await this.row(tx, { ...input, dailyMissionId: created.id }))!);
       });
     } catch (error) {
@@ -3222,7 +3238,9 @@ function generationContextSnapshot(
 export class PrismaGenerationContextSnapshotRepository implements GenerationContextSnapshotRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  async create(input: Parameters<GenerationContextSnapshotRepository['create']>[0]) {
+  private async authorizedMission(
+    input: Parameters<GenerationContextSnapshotRepository['find']>[0],
+  ) {
     const mission = await this.client.dailyMission.findFirst({
       where: {
         id: input.dailyMissionId,
@@ -3236,8 +3254,32 @@ export class PrismaGenerationContextSnapshotRepository implements GenerationCont
           },
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        bunshin: {
+          select: {
+            ownerUserId: true,
+            workspace: {
+              select: {
+                memberships: {
+                  where: { userId: input.actorUserId, status: 'ACTIVE' },
+                  select: { role: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
     });
+    const role = mission?.bunshin.workspace.memberships[0]?.role;
+    return mission && role && canManageBunshin(role, input.actorUserId, mission.bunshin.ownerUserId)
+      ? mission
+      : null;
+  }
+
+  async create(input: Parameters<GenerationContextSnapshotRepository['create']>[0]) {
+    const mission = await this.authorizedMission(input);
     if (!mission) return null;
     try {
       const row = await this.client.generationContextSnapshot.create({
@@ -3260,18 +3302,12 @@ export class PrismaGenerationContextSnapshotRepository implements GenerationCont
   }
 
   async find(input: Parameters<GenerationContextSnapshotRepository['find']>[0]) {
+    if (!(await this.authorizedMission(input))) return null;
     const row = await this.client.generationContextSnapshot.findFirst({
       where: {
         dailyMissionId: input.dailyMissionId,
         workspaceId: input.workspaceId,
         bunshinId: input.bunshinId,
-        bunshin: {
-          status: { not: 'ARCHIVED' },
-          workspace: {
-            status: 'ACTIVE',
-            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
-          },
-        },
       },
     });
     return row ? generationContextSnapshot(row) : null;

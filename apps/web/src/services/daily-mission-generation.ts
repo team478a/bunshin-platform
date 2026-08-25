@@ -281,9 +281,13 @@ export class DailyMissionGenerationService {
         approvedStrategy: strategyContext,
         selectedMemories,
       });
+      let repairCount = 0;
+      const qualityIssueCodes = new Set<string>();
       let quality = await checker.execute(qualityInput());
+      for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
       await usage('quality:0', 'QUALITY_CHECKER', quality);
       if (quality.output.verdict === 'REVISE') {
+        repairCount = 1;
         content = await generator.execute({
           ...contentInput,
           repairInstructions: quality.output.issues.map(
@@ -292,6 +296,7 @@ export class DailyMissionGenerationService {
         });
         await usage('content:1', 'CONTENT_REPAIR', content);
         quality = await checker.execute(qualityInput());
+        for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
         await usage('quality:1', 'QUALITY_CHECKER', quality);
       }
       if (quality.output.verdict !== 'PASS')
@@ -302,6 +307,36 @@ export class DailyMissionGenerationService {
         assistanceLevel: profile.defaultAssistanceLevel,
         content: content.output,
         qualityScore: quality.output.score,
+        generationContext: {
+          generatedAt: new Date(),
+          payload: {
+            personality: currentPersonality
+              ? { id: currentPersonality.id, version: currentPersonality.version }
+              : null,
+            selectedMemories: selectedMemories.map(({ id, summary, selectionReason }) => ({
+              id,
+              summary,
+              selectionReason,
+            })),
+            knowledge: granted.map(({ id }) => ({ id })),
+            socialProfile: { id: profile.id },
+            strategy: { id: strategy.id, version: strategy.version },
+            weeklyPlan: { id: weeklyPlan.id },
+            contentPillar: { id: pillar.id },
+            productPack: null,
+            trendCandidates: brief.output.trendCandidateId
+              ? [{ id: brief.output.trendCandidateId }]
+              : [],
+            promptVersion: content.promptVersion,
+            provider: 'openai',
+            model: content.model,
+            quality: {
+              verdict: 'PASS',
+              issueCodes: [...qualityIssueCodes],
+              repairCount,
+            },
+          },
+        },
       });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });

@@ -1,6 +1,8 @@
 import {
   RequireActiveBunshinCapability,
+  validateGenerationContextSnapshot,
   type BunshinCapabilityAssignmentRepository,
+  type GenerationContextSnapshotPayload,
   type SelectedBunshinMemory,
 } from '@bunshin/application';
 import type { FacePolicy } from '@bunshin/platform-domain';
@@ -1702,6 +1704,10 @@ export interface CreateDailyMissionInput extends DailyMissionScope {
   content: MissionContent;
   qualityScore?: number | null;
   trendCandidateId?: string | null;
+  generationContext?: {
+    payload: GenerationContextSnapshotPayload;
+    generatedAt: Date;
+  };
 }
 export interface DailyMissionRepository {
   create(input: CreateDailyMissionInput): Promise<DailyMission | null>;
@@ -1930,6 +1936,7 @@ export function normalizeCreateDailyMission(
     input.qualityScore === undefined || input.qualityScore === null
       ? input.qualityScore
       : missionInteger(input.qualityScore, 0, 100, 'quality score');
+  if (input.generationContext) validateGenerationContextSnapshot(input.generationContext.payload);
   return {
     ...input,
     missionDate: localDate(input.missionDate),
