@@ -48,6 +48,11 @@ export interface ProductPackRepository {
   revokeAssignment(
     input: ProductPackScope & { assignmentId: string; revokedAt: Date },
   ): Promise<object | null>;
+  resolveForGeneration(input: ProductPackScope & { bunshinId: string; at: Date }): Promise<{
+    productPackId: string;
+    versionId: string;
+    version: number;
+  } | null>;
 }
 
 const text = (value: string, field: string, max: number) => {
@@ -119,5 +124,9 @@ export class ProductPackService {
       await this.repository.revokeAssignment({ ...input, revokedAt: new Date() }),
       'assignment unavailable',
     );
+  }
+
+  resolveForGeneration(input: ProductPackScope & { bunshinId: string; at?: Date }) {
+    return this.repository.resolveForGeneration({ ...input, at: input.at ?? new Date() });
   }
 }
