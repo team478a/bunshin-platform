@@ -257,6 +257,20 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 
 人格と個人Memory／Knowledgeは本人Workspaceに残し、公式商品情報はOrganization Workspace所有のProduct Packとして分離する。両者はGeneration Context Builderでのみ統合し、生成時に解決した公開Versionと参照resourceをSnapshotへ固定する。本人同意、Bunshin割当、Workspace境界が揃わない場合は生成へ利用しない。
 
+### Phase 7-G: グループ発信
+
+詳細は`docs/GROUP_BROADCAST_REBASELINE.md`を正本とする。
+
+- G1: Group / Membership / Invitation / Consent / Isolation
+- G2: Product Pack / Version / Rule / Asset / Assignment
+- G3: 本人Evidence / Advertising Classification / PR固定表記 / 監査
+- G4: 任意参加Campaign / Participation
+- G5: 投稿比率、Weekly Plan、生成、LINE/Web導線
+- G6: 類似検査、利用制限、KPI、1社先行テスト
+- G7: 検証後の承認型人格学習
+
+Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を飛ばしてG7へ進まない。
+
 ## Phase 8: Share / Referral / Segmentation Preparation
 
 FREE継続率を確認してから着手する。

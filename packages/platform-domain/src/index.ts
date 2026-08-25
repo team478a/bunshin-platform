@@ -50,6 +50,56 @@ export interface WorkspaceMembership {
   updatedAt: Date;
 }
 
+export const GROUP_STATUSES = ['ACTIVE', 'SUSPENDED', 'ARCHIVED'] as const;
+export type GroupStatus = (typeof GROUP_STATUSES)[number];
+
+export const GROUP_ROLES = ['MANAGER', 'PARTICIPANT'] as const;
+export type GroupRole = (typeof GROUP_ROLES)[number];
+
+export const GROUP_MEMBERSHIP_STATUSES = ['INVITED', 'ACTIVE', 'DECLINED', 'REVOKED'] as const;
+export type GroupMembershipStatus = (typeof GROUP_MEMBERSHIP_STATUSES)[number];
+
+export const GROUP_INVITATION_STATUSES = ['ACTIVE', 'EXHAUSTED', 'EXPIRED', 'REVOKED'] as const;
+export type GroupInvitationStatus = (typeof GROUP_INVITATION_STATUSES)[number];
+
+export interface Group {
+  id: string;
+  workspaceId: string;
+  name: string;
+  status: GroupStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GroupMembership {
+  id: string;
+  workspaceId: string;
+  groupId: string;
+  userId: string;
+  role: GroupRole;
+  status: GroupMembershipStatus;
+  consentedAt: Date | null;
+  declinedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GroupInvitation {
+  id: string;
+  workspaceId: string;
+  groupId: string;
+  tokenHash: string;
+  role: GroupRole;
+  status: GroupInvitationStatus;
+  expiresAt: Date;
+  maxUses: number;
+  usedCount: number;
+  createdByUserId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface PlatformAdmin {
   id: string;
   userId: string;

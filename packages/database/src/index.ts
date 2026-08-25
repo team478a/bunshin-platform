@@ -83,6 +83,7 @@ import type {
   PersonalityVersionContent,
   PersonalityVersionRepository,
   PersonalityVersionScope,
+  GroupParticipationRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -118,6 +119,9 @@ import type {
   OwnerKnowledge,
   BunshinKnowledgeGrant,
   BunshinMemory,
+  Group,
+  GroupInvitation,
+  GroupMembership,
 } from '@bunshin/platform-domain';
 import { canManageBunshin } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
@@ -7361,5 +7365,180 @@ export class PrismaTrendOperationsRepository implements TrendOperationsRepositor
               ),
       },
     };
+  }
+}
+
+const groupRecord = (row: Prisma.GroupGetPayload<object>): Group => ({ ...row });
+const groupMembershipRecord = (row: Prisma.GroupMembershipGetPayload<object>): GroupMembership => ({
+  ...row,
+});
+const groupInvitationRecord = (row: Prisma.GroupInvitationGetPayload<object>): GroupInvitation => ({
+  ...row,
+});
+
+export class PrismaGroupParticipationRepository implements GroupParticipationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async canManage(workspaceId: string, actorUserId: string) {
+    return this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId,
+        userId: actorUserId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+        workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  async createGroup(input: Parameters<GroupParticipationRepository['createGroup']>[0]) {
+    if ((await this.canManage(input.workspaceId, input.actorUserId)) === null) return null;
+    const created = await this.client.group.create({
+      data: { workspaceId: input.workspaceId, name: input.name },
+    });
+    return groupRecord(created);
+  }
+
+  async createInvitation(input: Parameters<GroupParticipationRepository['createInvitation']>[0]) {
+    if ((await this.canManage(input.workspaceId, input.actorUserId)) === null) return null;
+    const group = await this.client.group.findFirst({
+      where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (group === null) return null;
+    const created = await this.client.groupInvitation.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        tokenHash: input.tokenHash,
+        role: input.role,
+        expiresAt: input.expiresAt,
+        maxUses: input.maxUses,
+        createdByUserId: input.actorUserId,
+      },
+    });
+    return groupInvitationRecord(created);
+  }
+
+  async acceptInvitation(input: Parameters<GroupParticipationRepository['acceptInvitation']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const invitation = await tx.groupInvitation.findFirst({
+        where: {
+          tokenHash: input.tokenHash,
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          expiresAt: { gt: input.now },
+          group: { status: 'ACTIVE' },
+        },
+      });
+      if (invitation === null || invitation.usedCount >= invitation.maxUses) return null;
+      const existingWorkspaceMembership = await tx.workspaceMembership.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+          },
+        },
+      });
+      if (existingWorkspaceMembership !== null && existingWorkspaceMembership.status !== 'ACTIVE')
+        return null;
+      if (existingWorkspaceMembership === null) {
+        await tx.workspaceMembership.create({
+          data: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            role: 'MEMBER',
+          },
+        });
+      }
+      const consumed = await tx.groupInvitation.updateMany({
+        where: { id: invitation.id, status: 'ACTIVE', usedCount: invitation.usedCount },
+        data: { usedCount: { increment: 1 } },
+      });
+      if (consumed.count !== 1) return null;
+      const nextUses = invitation.usedCount + 1;
+      if (nextUses >= invitation.maxUses) {
+        await tx.groupInvitation.update({
+          where: { id: invitation.id },
+          data: { status: 'EXHAUSTED' },
+        });
+      }
+      const membership = await tx.groupMembership.upsert({
+        where: { groupId_userId: { groupId: invitation.groupId, userId: input.actorUserId } },
+        create: {
+          workspaceId: input.workspaceId,
+          groupId: invitation.groupId,
+          userId: input.actorUserId,
+          role: invitation.role,
+          status: 'ACTIVE',
+          consentedAt: input.now,
+        },
+        update: {
+          role: invitation.role,
+          status: 'ACTIVE',
+          consentedAt: input.now,
+          declinedAt: null,
+          revokedAt: null,
+        },
+      });
+      return groupMembershipRecord(membership);
+    });
+  }
+
+  async declineInvitation(input: Parameters<GroupParticipationRepository['declineInvitation']>[0]) {
+    const invitation = await this.client.groupInvitation.findFirst({
+      where: {
+        tokenHash: input.tokenHash,
+        workspaceId: input.workspaceId,
+        status: 'ACTIVE',
+        expiresAt: { gt: input.now },
+      },
+    });
+    if (invitation === null) return null;
+    const membership = await this.client.groupMembership.upsert({
+      where: { groupId_userId: { groupId: invitation.groupId, userId: input.actorUserId } },
+      create: {
+        workspaceId: input.workspaceId,
+        groupId: invitation.groupId,
+        userId: input.actorUserId,
+        role: invitation.role,
+        status: 'DECLINED',
+        declinedAt: input.now,
+      },
+      update: { status: 'DECLINED', consentedAt: null, declinedAt: input.now },
+    });
+    return groupMembershipRecord(membership);
+  }
+
+  async leaveGroup(input: Parameters<GroupParticipationRepository['leaveGroup']>[0]) {
+    const membership = await this.client.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+      },
+    });
+    if (membership === null) return null;
+    return groupMembershipRecord(
+      await this.client.groupMembership.update({
+        where: { id: membership.id },
+        data: { status: 'REVOKED', revokedAt: input.now },
+      }),
+    );
+  }
+
+  async listMemberships(input: Parameters<GroupParticipationRepository['listMemberships']>[0]) {
+    const workspaceMembership = await this.client.workspaceMembership.findFirst({
+      where: { workspaceId: input.workspaceId, userId: input.actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (workspaceMembership === null) return null;
+    const rows = await this.client.groupMembership.findMany({
+      where: { workspaceId: input.workspaceId, userId: input.actorUserId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(groupMembershipRecord);
   }
 }
