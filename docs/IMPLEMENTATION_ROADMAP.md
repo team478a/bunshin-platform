@@ -276,10 +276,10 @@ Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を�
 
 ### Phase 7-L: 外部成果計測URL連携
 
-状態: L0設計レビュー中。`EXTERNAL_TRACKING_LINK_REBASELINE.md`を正本候補とする。
+状態: L1 Core実装完了。L2の管理API・監査は未着手。
 
 - L0: 現行監査、責任分離、所有権、URL優先順位、DB／API／UI／CSV境界 — 文書完了
-- L1: External System、Allowed Domain、Tracking Link Core、選択Policy
+- L1: External System、Allowed Domain、Member Identity、Tracking Link Core、選択Policy — 完了
 - L2: 管理API、URL安全検証、停止・期限切れ、監査
 - L3: Product Pack Version方針、SNS別Placement Template
 - L4: Mission生成への決定的差し込み、atomic Usage Snapshot

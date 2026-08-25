@@ -156,6 +156,38 @@ enum CampaignSimilarityVerdict {
   POSSIBLE_DUPLICATE
 }
 
+enum ExternalTrackingSystemStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ExternalTrackingDomainStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ExternalTrackingMemberIdentityStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ExternalTrackingLinkScopeType {
+  GROUP
+  MEMBER
+  PRODUCT
+  CAMPAIGN
+  PRODUCT_MEMBER
+  CAMPAIGN_MEMBER
+}
+
+enum ExternalTrackingLinkStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  DELETED
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -583,56 +615,64 @@ enum TrendSafetyStatus {
 }
 
 model User {
-  id                            String                              @id @default(uuid()) @db.Uuid
-  status                        UserStatus                          @default(ACTIVE)
-  displayName                   String                              @map("display_name") @db.VarChar(100)
-  email                         String?                             @db.VarChar(320)
-  createdAt                     DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                     DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
-  identities                    AuthIdentity[]
-  memberships                   WorkspaceMembership[]
-  groupMemberships              GroupMembership[]
-  groupInvitationsCreated       GroupInvitation[]                   @relation("GroupInvitationCreator")
-  platformAdmin                 PlatformAdmin?
-  platformAdminAuditsAsTarget   PlatformAdminAudit[]                @relation("PlatformAdminAuditTarget")
-  platformAdminAuditsAsActor    PlatformAdminAudit[]                @relation("PlatformAdminAuditActor")
-  bunshins                      Bunshin[]
-  ownerKnowledge                OwnerKnowledge[]                    @relation("KnowledgeOwner")
-  knowledgeGrants               BunshinKnowledgeGrant[]             @relation("GrantActor")
-  capabilityAssignments         BunshinCapabilityAssignment[]       @relation("CapabilityAssignmentActor")
-  missionActivities             MissionActivity[]                   @relation("MissionActivityActor")
-  postRecords                   PostRecord[]                        @relation("PostRecordActor")
-  missionFeedback               MissionFeedback[]                   @relation("MissionFeedbackActor")
-  aiUsageEvents                 AiUsageEvent[]                      @relation("AiUsageActor")
-  legalDocuments                LegalDocument[]                     @relation("LegalDocumentAuthor")
-  legalConsents                 UserLegalConsent[]
-  accountDeletionRequests       AccountDeletionRequest[]
-  accountDeletionAudits         AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
-  lineConfigurationAudits       LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
-  lineRichMenuAudits            LineRichMenuAudit[]                 @relation("LineRichMenuAuditActor")
-  aiProviderConfigurationAudits AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
-  adminEmailConfigurationAudits AdminEmailConfigurationAudit[]      @relation("AdminEmailConfigurationAuditActor")
-  lineNotificationPreferences   LineNotificationPreference[]
-  lineConnections               LineConnection[]
-  jobs                          Job[]
-  lineMessageDeliveries         LineMessageDelivery[]
-  missionDeepLinkStates         MissionDeepLinkState[]
-  lineDeliveryRetryRequests     LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
-  trendBenchmarkCases           TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
-  trendBenchmarkObservations    TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
-  productionGateEvidence        ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
-  userOperationAuditsAsTarget   UserOperationAudit[]                @relation("UserOperationAuditTarget")
-  userOperationAuditsAsActor    UserOperationAudit[]                @relation("UserOperationAuditActor")
-  supportCasesAsTarget          SupportCase[]                       @relation("SupportCaseTarget")
-  supportCasesCreated           SupportCase[]                       @relation("SupportCaseCreator")
-  supportCasesAssigned          SupportCase[]                       @relation("SupportCaseAssignee")
-  supportCaseNotes              SupportCaseNote[]
-  personalityVersionsCreated    BunshinPersonalityVersion[]
-  userEvidenceCreated           UserEvidence[]                      @relation("UserEvidenceCreator")
-  advertisingSafetyReviews      AdvertisingSafetyReview[]           @relation("AdvertisingSafetyReviewActor")
-  campaignsCreated              Campaign[]                          @relation("CampaignCreator")
-  campaignParticipations        CampaignParticipation[]
-  campaignActivities            CampaignActivity[]                  @relation("CampaignActivityActor")
+  id                                String                              @id @default(uuid()) @db.Uuid
+  status                            UserStatus                          @default(ACTIVE)
+  displayName                       String                              @map("display_name") @db.VarChar(100)
+  email                             String?                             @db.VarChar(320)
+  createdAt                         DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  identities                        AuthIdentity[]
+  memberships                       WorkspaceMembership[]
+  groupMemberships                  GroupMembership[]
+  groupInvitationsCreated           GroupInvitation[]                   @relation("GroupInvitationCreator")
+  platformAdmin                     PlatformAdmin?
+  platformAdminAuditsAsTarget       PlatformAdminAudit[]                @relation("PlatformAdminAuditTarget")
+  platformAdminAuditsAsActor        PlatformAdminAudit[]                @relation("PlatformAdminAuditActor")
+  bunshins                          Bunshin[]
+  ownerKnowledge                    OwnerKnowledge[]                    @relation("KnowledgeOwner")
+  knowledgeGrants                   BunshinKnowledgeGrant[]             @relation("GrantActor")
+  capabilityAssignments             BunshinCapabilityAssignment[]       @relation("CapabilityAssignmentActor")
+  missionActivities                 MissionActivity[]                   @relation("MissionActivityActor")
+  postRecords                       PostRecord[]                        @relation("PostRecordActor")
+  missionFeedback                   MissionFeedback[]                   @relation("MissionFeedbackActor")
+  aiUsageEvents                     AiUsageEvent[]                      @relation("AiUsageActor")
+  legalDocuments                    LegalDocument[]                     @relation("LegalDocumentAuthor")
+  legalConsents                     UserLegalConsent[]
+  accountDeletionRequests           AccountDeletionRequest[]
+  accountDeletionAudits             AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
+  lineConfigurationAudits           LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
+  lineRichMenuAudits                LineRichMenuAudit[]                 @relation("LineRichMenuAuditActor")
+  aiProviderConfigurationAudits     AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
+  adminEmailConfigurationAudits     AdminEmailConfigurationAudit[]      @relation("AdminEmailConfigurationAuditActor")
+  lineNotificationPreferences       LineNotificationPreference[]
+  lineConnections                   LineConnection[]
+  jobs                              Job[]
+  lineMessageDeliveries             LineMessageDelivery[]
+  missionDeepLinkStates             MissionDeepLinkState[]
+  lineDeliveryRetryRequests         LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
+  trendBenchmarkCases               TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
+  trendBenchmarkObservations        TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
+  productionGateEvidence            ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
+  userOperationAuditsAsTarget       UserOperationAudit[]                @relation("UserOperationAuditTarget")
+  userOperationAuditsAsActor        UserOperationAudit[]                @relation("UserOperationAuditActor")
+  supportCasesAsTarget              SupportCase[]                       @relation("SupportCaseTarget")
+  supportCasesCreated               SupportCase[]                       @relation("SupportCaseCreator")
+  supportCasesAssigned              SupportCase[]                       @relation("SupportCaseAssignee")
+  supportCaseNotes                  SupportCaseNote[]
+  personalityVersionsCreated        BunshinPersonalityVersion[]
+  userEvidenceCreated               UserEvidence[]                      @relation("UserEvidenceCreator")
+  advertisingSafetyReviews          AdvertisingSafetyReview[]           @relation("AdvertisingSafetyReviewActor")
+  campaignsCreated                  Campaign[]                          @relation("CampaignCreator")
+  campaignParticipations            CampaignParticipation[]
+  campaignActivities                CampaignActivity[]                  @relation("CampaignActivityActor")
+  externalTrackingSystemsCreated    ExternalTrackingSystem[]            @relation("ExternalTrackingSystemCreator")
+  externalTrackingSystemsUpdated    ExternalTrackingSystem[]            @relation("ExternalTrackingSystemUpdater")
+  externalTrackingDomainsCreated    ExternalTrackingAllowedDomain[]     @relation("ExternalTrackingDomainCreator")
+  externalTrackingDomainsUpdated    ExternalTrackingAllowedDomain[]     @relation("ExternalTrackingDomainUpdater")
+  externalTrackingIdentitiesCreated ExternalTrackingMemberIdentity[]    @relation("ExternalTrackingIdentityCreator")
+  externalTrackingIdentitiesUpdated ExternalTrackingMemberIdentity[]    @relation("ExternalTrackingIdentityUpdater")
+  externalTrackingLinksCreated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkCreator")
+  externalTrackingLinksUpdated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkUpdater")
 
   @@index([status])
   @@map("users")
@@ -653,12 +693,12 @@ model AuthIdentity {
 }
 
 model Workspace {
-  id                          String                        @id @default(uuid()) @db.Uuid
+  id                          String                           @id @default(uuid()) @db.Uuid
   type                        WorkspaceType
-  name                        String                        @db.VarChar(120)
-  status                      WorkspaceStatus               @default(ACTIVE)
-  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  name                        String                           @db.VarChar(120)
+  status                      WorkspaceStatus                  @default(ACTIVE)
+  createdAt                   DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
   memberships                 WorkspaceMembership[]
   groups                      Group[]
   groupMemberships            GroupMembership[]
@@ -696,9 +736,13 @@ model Workspace {
   personalityVersions         BunshinPersonalityVersion[]
   userEvidence                UserEvidence[]
   advertisingSafetyReviews    AdvertisingSafetyReview[]
-  campaignsOwned              Campaign[]                    @relation("CampaignOwnerWorkspace")
-  campaignParticipations      CampaignParticipation[]       @relation("CampaignParticipantWorkspace")
+  campaignsOwned              Campaign[]                       @relation("CampaignOwnerWorkspace")
+  campaignParticipations      CampaignParticipation[]          @relation("CampaignParticipantWorkspace")
   campaignSimilarityReviews   CampaignSimilarityReview[]
+  externalTrackingSystems     ExternalTrackingSystem[]
+  externalTrackingDomains     ExternalTrackingAllowedDomain[]
+  externalTrackingIdentities  ExternalTrackingMemberIdentity[]
+  externalTrackingLinks       ExternalTrackingLink[]
 
   @@index([status])
   @@map("workspaces")
@@ -721,17 +765,21 @@ model WorkspaceMembership {
 }
 
 model Group {
-  id           String            @id @default(uuid()) @db.Uuid
-  workspaceId  String            @map("workspace_id") @db.Uuid
-  name         String            @db.VarChar(120)
-  status       GroupStatus       @default(ACTIVE)
-  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  memberships  GroupMembership[]
-  invitations  GroupInvitation[]
-  productPacks ProductPack[]
-  campaigns    Campaign[]
+  id                         String                           @id @default(uuid()) @db.Uuid
+  workspaceId                String                           @map("workspace_id") @db.Uuid
+  name                       String                           @db.VarChar(120)
+  status                     GroupStatus                      @default(ACTIVE)
+  createdAt                  DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                  Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships                GroupMembership[]
+  invitations                GroupInvitation[]
+  productPacks               ProductPack[]
+  campaigns                  Campaign[]
+  externalTrackingSystems    ExternalTrackingSystem[]
+  externalTrackingDomains    ExternalTrackingAllowedDomain[]
+  externalTrackingIdentities ExternalTrackingMemberIdentity[]
+  externalTrackingLinks      ExternalTrackingLink[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -739,20 +787,21 @@ model Group {
 }
 
 model GroupMembership {
-  id          String                @id @default(uuid()) @db.Uuid
-  workspaceId String                @map("workspace_id") @db.Uuid
-  groupId     String                @map("group_id") @db.Uuid
-  userId      String                @map("user_id") @db.Uuid
-  role        GroupRole             @default(PARTICIPANT)
-  status      GroupMembershipStatus @default(INVITED)
-  consentedAt DateTime?             @map("consented_at") @db.Timestamptz(6)
-  declinedAt  DateTime?             @map("declined_at") @db.Timestamptz(6)
-  revokedAt   DateTime?             @map("revoked_at") @db.Timestamptz(6)
-  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group                 @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                         String                           @id @default(uuid()) @db.Uuid
+  workspaceId                String                           @map("workspace_id") @db.Uuid
+  groupId                    String                           @map("group_id") @db.Uuid
+  userId                     String                           @map("user_id") @db.Uuid
+  role                       GroupRole                        @default(PARTICIPANT)
+  status                     GroupMembershipStatus            @default(INVITED)
+  consentedAt                DateTime?                        @map("consented_at") @db.Timestamptz(6)
+  declinedAt                 DateTime?                        @map("declined_at") @db.Timestamptz(6)
+  revokedAt                  DateTime?                        @map("revoked_at") @db.Timestamptz(6)
+  createdAt                  DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                  Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                      Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user                       User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalTrackingIdentities ExternalTrackingMemberIdentity[]
 
   @@unique([groupId, userId])
   @@index([workspaceId, userId, status])
@@ -783,17 +832,18 @@ model GroupInvitation {
 }
 
 model ProductPack {
-  id          String                  @id @default(uuid()) @db.Uuid
-  workspaceId String                  @map("workspace_id") @db.Uuid
-  groupId     String                  @map("group_id") @db.Uuid
-  name        String                  @db.VarChar(160)
-  status      ProductPackStatus       @default(DRAFT)
-  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group       Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  versions    ProductPackVersion[]
-  assignments ProductPackAssignment[]
+  id                    String                  @id @default(uuid()) @db.Uuid
+  workspaceId           String                  @map("workspace_id") @db.Uuid
+  groupId               String                  @map("group_id") @db.Uuid
+  name                  String                  @db.VarChar(160)
+  status                ProductPackStatus       @default(DRAFT)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                 Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  versions              ProductPackVersion[]
+  assignments           ProductPackAssignment[]
+  externalTrackingLinks ExternalTrackingLink[]
 
   @@unique([workspaceId, groupId, name])
   @@index([workspaceId, status])
@@ -894,10 +944,132 @@ model Campaign {
   weeklyPlanItems                WeeklyPlanItem[]
   dailyMissions                  DailyMission[]
   similarityReviews              CampaignSimilarityReview[]
+  externalTrackingLinks          ExternalTrackingLink[]
 
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
   @@map("campaigns")
+}
+
+model ExternalTrackingSystem {
+  id               String                           @id @default(uuid()) @db.Uuid
+  workspaceId      String                           @map("workspace_id") @db.Uuid
+  groupId          String                           @map("group_id") @db.Uuid
+  name             String                           @db.VarChar(160)
+  systemType       String                           @map("system_type") @db.VarChar(80)
+  externalSystemId String?                          @map("external_system_id") @db.VarChar(255)
+  status           ExternalTrackingSystemStatus     @default(ACTIVE)
+  createdByUserId  String                           @map("created_by_user_id") @db.Uuid
+  updatedByUserId  String                           @map("updated_by_user_id") @db.Uuid
+  createdAt        DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group            Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy        User                             @relation("ExternalTrackingSystemCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy        User                             @relation("ExternalTrackingSystemUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  allowedDomains   ExternalTrackingAllowedDomain[]
+  memberIdentities ExternalTrackingMemberIdentity[]
+  links            ExternalTrackingLink[]
+
+  @@unique([workspaceId, groupId, name])
+  @@index([groupId, status])
+  @@map("external_tracking_systems")
+}
+
+model ExternalTrackingAllowedDomain {
+  id              String                       @id @default(uuid()) @db.Uuid
+  workspaceId     String                       @map("workspace_id") @db.Uuid
+  groupId         String                       @map("group_id") @db.Uuid
+  systemId        String                       @map("system_id") @db.Uuid
+  hostname        String                       @db.VarChar(253)
+  allowSubdomains Boolean                      @default(false) @map("allow_subdomains")
+  shortener       Boolean                      @default(false)
+  status          ExternalTrackingDomainStatus @default(ACTIVE)
+  createdByUserId String                       @map("created_by_user_id") @db.Uuid
+  updatedByUserId String                       @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group                        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  system          ExternalTrackingSystem       @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  createdBy       User                         @relation("ExternalTrackingDomainCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy       User                         @relation("ExternalTrackingDomainUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  links           ExternalTrackingLink[]
+
+  @@unique([systemId, hostname])
+  @@index([workspaceId, groupId, status])
+  @@map("external_tracking_allowed_domains")
+}
+
+model ExternalTrackingMemberIdentity {
+  id                String                               @id @default(uuid()) @db.Uuid
+  workspaceId       String                               @map("workspace_id") @db.Uuid
+  groupId           String                               @map("group_id") @db.Uuid
+  systemId          String                               @map("system_id") @db.Uuid
+  groupMembershipId String                               @map("group_membership_id") @db.Uuid
+  commonUserId      String?                              @map("common_user_id") @db.VarChar(255)
+  agencyId          String?                              @map("agency_id") @db.VarChar(255)
+  externalMemberId  String?                              @map("external_member_id") @db.VarChar(255)
+  status            ExternalTrackingMemberIdentityStatus @default(ACTIVE)
+  createdByUserId   String                               @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String                               @map("updated_by_user_id") @db.Uuid
+  createdAt         DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  system            ExternalTrackingSystem               @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  groupMembership   GroupMembership                      @relation(fields: [groupMembershipId], references: [id], onDelete: Cascade)
+  createdBy         User                                 @relation("ExternalTrackingIdentityCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy         User                                 @relation("ExternalTrackingIdentityUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  links             ExternalTrackingLink[]
+
+  @@unique([systemId, groupMembershipId])
+  @@index([workspaceId, groupId, status])
+  @@map("external_tracking_member_identities")
+}
+
+model ExternalTrackingLink {
+  id               String                          @id @default(uuid()) @db.Uuid
+  workspaceId      String                          @map("workspace_id") @db.Uuid
+  groupId          String                          @map("group_id") @db.Uuid
+  systemId         String                          @map("system_id") @db.Uuid
+  allowedDomainId  String                          @map("allowed_domain_id") @db.Uuid
+  memberIdentityId String?                         @map("member_identity_id") @db.Uuid
+  productPackId    String?                         @map("product_pack_id") @db.Uuid
+  campaignId       String?                         @map("campaign_id") @db.Uuid
+  scopeType        ExternalTrackingLinkScopeType   @map("scope_type")
+  scopeKey         String                          @map("scope_key") @db.VarChar(500)
+  name             String                          @db.VarChar(160)
+  externalLinkId   String?                         @map("external_link_id") @db.VarChar(255)
+  referralToken    String?                         @map("referral_token") @db.VarChar(500)
+  url              String                          @db.VarChar(2048)
+  status           ExternalTrackingLinkStatus      @default(DRAFT)
+  startsAt         DateTime?                       @map("starts_at") @db.Timestamptz(6)
+  expiresAt        DateTime?                       @map("expires_at") @db.Timestamptz(6)
+  notes            String?                         @db.VarChar(1000)
+  createdByUserId  String                          @map("created_by_user_id") @db.Uuid
+  updatedByUserId  String                          @map("updated_by_user_id") @db.Uuid
+  activatedAt      DateTime?                       @map("activated_at") @db.Timestamptz(6)
+  suspendedAt      DateTime?                       @map("suspended_at") @db.Timestamptz(6)
+  deletedAt        DateTime?                       @map("deleted_at") @db.Timestamptz(6)
+  createdAt        DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group            Group                           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  system           ExternalTrackingSystem          @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  allowedDomain    ExternalTrackingAllowedDomain   @relation(fields: [allowedDomainId], references: [id], onDelete: Restrict)
+  memberIdentity   ExternalTrackingMemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict)
+  productPack      ProductPack?                    @relation(fields: [productPackId], references: [id], onDelete: Restrict)
+  campaign         Campaign?                       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  createdBy        User                            @relation("ExternalTrackingLinkCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy        User                            @relation("ExternalTrackingLinkUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, status])
+  @@index([systemId, scopeKey, status])
+  @@index([memberIdentityId, status])
+  @@index([productPackId, status])
+  @@index([campaignId, status])
+  @@map("external_tracking_links")
 }
 
 model CampaignSimilarityReview {
