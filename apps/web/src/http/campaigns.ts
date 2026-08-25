@@ -18,6 +18,8 @@ const createSchema = z
     maxRelatedPerWeek: z.number().int().min(0).max(7).default(2),
     maxAdsPerWeek: z.number().int().min(0).max(7).default(1),
     cooldownDays: z.number().int().min(0).max(30).default(2),
+    generationLimitPerParticipant: z.number().int().min(1).max(365).default(60),
+    similarityThresholdBasisPoints: z.number().int().min(7000).max(10000).default(8500),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
     assetIds: z.array(uuid).max(100),

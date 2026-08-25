@@ -151,6 +151,11 @@ enum CampaignActivityAction {
   WITHDRAWN
 }
 
+enum CampaignSimilarityVerdict {
+  UNIQUE
+  POSSIBLE_DUPLICATE
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -692,6 +697,7 @@ model Workspace {
   advertisingSafetyReviews    AdvertisingSafetyReview[]
   campaignsOwned              Campaign[]                    @relation("CampaignOwnerWorkspace")
   campaignParticipations      CampaignParticipation[]       @relation("CampaignParticipantWorkspace")
+  campaignSimilarityReviews   CampaignSimilarityReview[]
 
   @@index([status])
   @@map("workspaces")
@@ -855,39 +861,63 @@ model ProductPackAsset {
 }
 
 model Campaign {
-  id                   String                  @id @default(uuid()) @db.Uuid
-  workspaceId          String                  @map("workspace_id") @db.Uuid
-  groupId              String                  @map("group_id") @db.Uuid
-  productPackVersionId String                  @map("product_pack_version_id") @db.Uuid
-  name                 String                  @db.VarChar(160)
-  theme                String                  @db.VarChar(1000)
-  targetSummary        String                  @map("target_summary") @db.VarChar(1000)
-  participationLimit   Int                     @map("participation_limit")
-  maxRelatedPerWeek    Int                     @default(2) @map("max_related_per_week")
-  maxAdsPerWeek        Int                     @default(1) @map("max_ads_per_week")
-  cooldownDays         Int                     @default(2) @map("cooldown_days")
-  startsAt             DateTime                @map("starts_at") @db.Timestamptz(6)
-  endsAt               DateTime                @map("ends_at") @db.Timestamptz(6)
-  status               CampaignStatus          @default(DRAFT)
-  createdByUserId      String                  @map("created_by_user_id") @db.Uuid
-  openedAt             DateTime?               @map("opened_at") @db.Timestamptz(6)
-  closedAt             DateTime?               @map("closed_at") @db.Timestamptz(6)
-  cancelledAt          DateTime?               @map("cancelled_at") @db.Timestamptz(6)
-  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace            Workspace               @relation("CampaignOwnerWorkspace", fields: [workspaceId], references: [id], onDelete: Cascade)
-  group                Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  productPackVersion   ProductPackVersion      @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
-  createdBy            User                    @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  assets               CampaignAsset[]
-  participations       CampaignParticipation[]
-  activities           CampaignActivity[]
-  weeklyPlanItems       WeeklyPlanItem[]
-  dailyMissions         DailyMission[]
+  id                             String                     @id @default(uuid()) @db.Uuid
+  workspaceId                    String                     @map("workspace_id") @db.Uuid
+  groupId                        String                     @map("group_id") @db.Uuid
+  productPackVersionId           String                     @map("product_pack_version_id") @db.Uuid
+  name                           String                     @db.VarChar(160)
+  theme                          String                     @db.VarChar(1000)
+  targetSummary                  String                     @map("target_summary") @db.VarChar(1000)
+  participationLimit             Int                        @map("participation_limit")
+  maxRelatedPerWeek              Int                        @default(2) @map("max_related_per_week")
+  maxAdsPerWeek                  Int                        @default(1) @map("max_ads_per_week")
+  cooldownDays                   Int                        @default(2) @map("cooldown_days")
+  generationLimitPerParticipant  Int                        @default(60) @map("generation_limit_per_participant")
+  similarityThresholdBasisPoints Int                        @default(8500) @map("similarity_threshold_basis_points")
+  startsAt                       DateTime                   @map("starts_at") @db.Timestamptz(6)
+  endsAt                         DateTime                   @map("ends_at") @db.Timestamptz(6)
+  status                         CampaignStatus             @default(DRAFT)
+  createdByUserId                String                     @map("created_by_user_id") @db.Uuid
+  openedAt                       DateTime?                  @map("opened_at") @db.Timestamptz(6)
+  closedAt                       DateTime?                  @map("closed_at") @db.Timestamptz(6)
+  cancelledAt                    DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                      Workspace                  @relation("CampaignOwnerWorkspace", fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                          Group                      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  productPackVersion             ProductPackVersion         @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  createdBy                      User                       @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assets                         CampaignAsset[]
+  participations                 CampaignParticipation[]
+  activities                     CampaignActivity[]
+  weeklyPlanItems                WeeklyPlanItem[]
+  dailyMissions                  DailyMission[]
+  similarityReviews              CampaignSimilarityReview[]
 
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
   @@map("campaigns")
+}
+
+model CampaignSimilarityReview {
+  id                       String                    @id @default(uuid()) @db.Uuid
+  campaignId               String                    @map("campaign_id") @db.Uuid
+  dailyMissionId           String?                   @unique @map("daily_mission_id") @db.Uuid
+  participantWorkspaceId   String                    @map("participant_workspace_id") @db.Uuid
+  bunshinId                String                    @map("bunshin_id") @db.Uuid
+  contentFingerprint       String                    @map("content_fingerprint") @db.Char(64)
+  simhash                  String                    @db.Char(16)
+  maxSimilarityBasisPoints Int                       @map("max_similarity_basis_points")
+  verdict                  CampaignSimilarityVerdict
+  createdAt                DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  campaign                 Campaign                  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  dailyMission             DailyMission?             @relation(fields: [dailyMissionId], references: [id], onDelete: Cascade)
+  participantWorkspace     Workspace                 @relation(fields: [participantWorkspaceId], references: [id], onDelete: Cascade)
+  bunshin                  Bunshin                   @relation(fields: [participantWorkspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@index([campaignId, verdict])
+  @@map("campaign_similarity_reviews")
 }
 
 model CampaignAsset {
@@ -1545,6 +1575,7 @@ model Bunshin {
   userEvidence                UserEvidence[]
   advertisingSafetyReviews    AdvertisingSafetyReview[]
   campaignParticipations      CampaignParticipation[]
+  campaignSimilarityReviews   CampaignSimilarityReview[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -1901,26 +1932,26 @@ model WeeklyPlan {
 }
 
 model WeeklyPlanItem {
-  id                String                @id @default(uuid()) @db.Uuid
-  workspaceId       String                @map("workspace_id") @db.Uuid
-  bunshinId         String                @map("bunshin_id") @db.Uuid
-  weeklyPlanId      String                @map("weekly_plan_id") @db.Uuid
-  scheduledDate     DateTime              @map("scheduled_date") @db.Date
-  contentPillarId   String                @map("content_pillar_id") @db.Uuid
-  goal              String                @db.VarChar(200)
-  angle             String                @db.VarChar(500)
-  recommendedFormat SocialPreferredFormat @map("recommended_format")
-  notes             String?               @db.VarChar(1000)
-  campaignId        String?               @map("campaign_id") @db.Uuid
+  id                String                    @id @default(uuid()) @db.Uuid
+  workspaceId       String                    @map("workspace_id") @db.Uuid
+  bunshinId         String                    @map("bunshin_id") @db.Uuid
+  weeklyPlanId      String                    @map("weekly_plan_id") @db.Uuid
+  scheduledDate     DateTime                  @map("scheduled_date") @db.Date
+  contentPillarId   String                    @map("content_pillar_id") @db.Uuid
+  goal              String                    @db.VarChar(200)
+  angle             String                    @db.VarChar(500)
+  recommendedFormat SocialPreferredFormat     @map("recommended_format")
+  notes             String?                   @db.VarChar(1000)
+  campaignId        String?                   @map("campaign_id") @db.Uuid
   classification    AdvertisingClassification @default(ORGANIC)
-  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin           Bunshin               @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  weeklyPlan        WeeklyPlan            @relation(fields: [workspaceId, bunshinId, weeklyPlanId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  contentPillar     ContentPillar         @relation(fields: [workspaceId, bunshinId, contentPillarId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin           Bunshin                   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  weeklyPlan        WeeklyPlan                @relation(fields: [workspaceId, bunshinId, weeklyPlanId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  contentPillar     ContentPillar             @relation(fields: [workspaceId, bunshinId, contentPillarId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   dailyMissions     DailyMission[]
-  campaign          Campaign?             @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  campaign          Campaign?                 @relation(fields: [campaignId], references: [id], onDelete: Restrict)
 
   @@unique([weeklyPlanId, scheduledDate])
   @@unique([workspaceId, bunshinId, id])
@@ -1931,44 +1962,45 @@ model WeeklyPlanItem {
 }
 
 model DailyMission {
-  id                    String                     @id @default(uuid()) @db.Uuid
-  workspaceId           String                     @map("workspace_id") @db.Uuid
-  bunshinId             String                     @map("bunshin_id") @db.Uuid
-  socialProfileId       String?                    @map("social_profile_id") @db.Uuid
-  weeklyPlanItemId      String?                    @map("weekly_plan_item_id") @db.Uuid
-  campaignId            String?                    @map("campaign_id") @db.Uuid
-  classification        AdvertisingClassification @default(ORGANIC)
-  missionDate           DateTime                   @map("mission_date") @db.Date
-  status                DailyMissionStatus         @default(GENERATED)
-  format                SocialPreferredFormat
-  assistanceLevel       ContentAssistanceLevel     @default(READY_TO_USE) @map("assistance_level")
-  estimatedMinutes      Int                        @map("estimated_minutes")
-  topic                 String                     @db.VarChar(200)
-  angle                 String                     @db.VarChar(500)
-  reason                String                     @db.VarChar(1000)
-  qualityScore          Int?                       @map("quality_score")
-  viewedAt              DateTime?                  @map("viewed_at") @db.Timestamptz(6)
-  startedAt             DateTime?                  @map("started_at") @db.Timestamptz(6)
-  completedAt           DateTime?                  @map("completed_at") @db.Timestamptz(6)
-  skippedAt             DateTime?                  @map("skipped_at") @db.Timestamptz(6)
-  expiredAt             DateTime?                  @map("expired_at") @db.Timestamptz(6)
-  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace             Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin               Bunshin                    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  socialProfile         SocialProfile?             @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  weeklyPlanItem        WeeklyPlanItem?            @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  content               MissionContent?
-  decision              MissionDecision?
-  activities            MissionActivity[]
-  postRecord            PostRecord?
-  feedback              MissionFeedback?
-  lineMessageDeliveries LineMessageDelivery[]
-  deepLinkStates        MissionDeepLinkState[]
-  trendContext          MissionTrendContext?
-  generationContext     GenerationContextSnapshot?
-  safetyReviews         AdvertisingSafetyReview[]
-  campaign              Campaign?                  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  id                       String                     @id @default(uuid()) @db.Uuid
+  workspaceId              String                     @map("workspace_id") @db.Uuid
+  bunshinId                String                     @map("bunshin_id") @db.Uuid
+  socialProfileId          String?                    @map("social_profile_id") @db.Uuid
+  weeklyPlanItemId         String?                    @map("weekly_plan_item_id") @db.Uuid
+  campaignId               String?                    @map("campaign_id") @db.Uuid
+  classification           AdvertisingClassification  @default(ORGANIC)
+  missionDate              DateTime                   @map("mission_date") @db.Date
+  status                   DailyMissionStatus         @default(GENERATED)
+  format                   SocialPreferredFormat
+  assistanceLevel          ContentAssistanceLevel     @default(READY_TO_USE) @map("assistance_level")
+  estimatedMinutes         Int                        @map("estimated_minutes")
+  topic                    String                     @db.VarChar(200)
+  angle                    String                     @db.VarChar(500)
+  reason                   String                     @db.VarChar(1000)
+  qualityScore             Int?                       @map("quality_score")
+  viewedAt                 DateTime?                  @map("viewed_at") @db.Timestamptz(6)
+  startedAt                DateTime?                  @map("started_at") @db.Timestamptz(6)
+  completedAt              DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  skippedAt                DateTime?                  @map("skipped_at") @db.Timestamptz(6)
+  expiredAt                DateTime?                  @map("expired_at") @db.Timestamptz(6)
+  createdAt                DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                  Bunshin                    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile            SocialProfile?             @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  weeklyPlanItem           WeeklyPlanItem?            @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  content                  MissionContent?
+  decision                 MissionDecision?
+  activities               MissionActivity[]
+  postRecord               PostRecord?
+  feedback                 MissionFeedback?
+  lineMessageDeliveries    LineMessageDelivery[]
+  deepLinkStates           MissionDeepLinkState[]
+  trendContext             MissionTrendContext?
+  generationContext        GenerationContextSnapshot?
+  safetyReviews            AdvertisingSafetyReview[]
+  campaignSimilarityReview CampaignSimilarityReview?
+  campaign                 Campaign?                  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])

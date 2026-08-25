@@ -50,6 +50,8 @@ export interface CampaignRepository {
       maxRelatedPerWeek: number;
       maxAdsPerWeek: number;
       cooldownDays: number;
+      generationLimitPerParticipant: number;
+      similarityThresholdBasisPoints: number;
       startsAt: Date;
       endsAt: Date;
       assetIds: string[];
@@ -109,6 +111,8 @@ export class CampaignService {
       maxRelatedPerWeek?: number;
       maxAdsPerWeek?: number;
       cooldownDays?: number;
+      generationLimitPerParticipant?: number;
+      similarityThresholdBasisPoints?: number;
       startsAt: Date;
       endsAt: Date;
       assetIds?: string[];
@@ -125,6 +129,8 @@ export class CampaignService {
     const maxRelatedPerWeek = input.maxRelatedPerWeek ?? 2;
     const maxAdsPerWeek = input.maxAdsPerWeek ?? 1;
     const cooldownDays = input.cooldownDays ?? 2;
+    const generationLimitPerParticipant = input.generationLimitPerParticipant ?? 60;
+    const similarityThresholdBasisPoints = input.similarityThresholdBasisPoints ?? 8500;
     if (
       !Number.isInteger(maxRelatedPerWeek) ||
       maxRelatedPerWeek < 0 ||
@@ -134,7 +140,13 @@ export class CampaignService {
       maxAdsPerWeek > maxRelatedPerWeek ||
       !Number.isInteger(cooldownDays) ||
       cooldownDays < 0 ||
-      cooldownDays > 30
+      cooldownDays > 30 ||
+      !Number.isInteger(generationLimitPerParticipant) ||
+      generationLimitPerParticipant < 1 ||
+      generationLimitPerParticipant > 365 ||
+      !Number.isInteger(similarityThresholdBasisPoints) ||
+      similarityThresholdBasisPoints < 7000 ||
+      similarityThresholdBasisPoints > 10000
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid campaign planning policy');
     const assetIds = [...new Set(input.assetIds ?? [])];
@@ -147,6 +159,8 @@ export class CampaignService {
       maxRelatedPerWeek,
       maxAdsPerWeek,
       cooldownDays,
+      generationLimitPerParticipant,
+      similarityThresholdBasisPoints,
       now: new Date(),
     });
     if (result === null) throw new ApplicationError('NOT_FOUND', 'campaign context unavailable');

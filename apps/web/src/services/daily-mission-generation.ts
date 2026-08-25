@@ -20,6 +20,7 @@ import {
   ProductPackService,
   CampaignService,
   AdvertisingSafetyService,
+  CampaignSafetyValidationService,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -28,6 +29,7 @@ import { recordAiUsageSafely } from '../observability/ai-usage';
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
+import { campaignContentSignature } from './campaign-content-signature';
 
 interface Input {
   workspaceId: string;
@@ -319,6 +321,29 @@ export class DailyMissionGenerationService {
       }
       if (quality.output.verdict !== 'PASS')
         throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
+      const campaignSignature = campaign ? campaignContentSignature(content.output) : null;
+      const similarity =
+        campaign && campaignSignature
+          ? await new CampaignSafetyValidationService(
+              new db.PrismaCampaignSafetyRepository(),
+            ).inspect({
+              ...scope,
+              campaignId: campaign.id,
+              ...campaignSignature,
+              at: new Date(`${input.missionDate}T12:00:00.000Z`),
+            })
+          : null;
+      if (campaign && campaignSignature && similarity?.verdict === 'POSSIBLE_DUPLICATE') {
+        await new CampaignSafetyValidationService(new db.PrismaCampaignSafetyRepository()).record({
+          ...scope,
+          campaignId: campaign.id,
+          dailyMissionId: null,
+          at: new Date(`${input.missionDate}T12:00:00.000Z`),
+          ...campaignSignature,
+          ...similarity,
+        });
+        throw new ApplicationError('CONTENT_REJECTED', 'campaign content is too similar');
+      }
       const advertisingInput = campaign
         ? {
             ...scope,
@@ -388,6 +413,15 @@ export class DailyMissionGenerationService {
         await new AdvertisingSafetyService(new db.PrismaAdvertisingSafetyRepository()).review({
           ...advertisingInput,
           dailyMissionId: created.id,
+        });
+      if (campaign && campaignSignature && similarity)
+        await new CampaignSafetyValidationService(new db.PrismaCampaignSafetyRepository()).record({
+          ...scope,
+          campaignId: campaign.id,
+          dailyMissionId: created.id,
+          at: new Date(`${input.missionDate}T12:00:00.000Z`),
+          ...campaignSignature,
+          ...similarity,
         });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });

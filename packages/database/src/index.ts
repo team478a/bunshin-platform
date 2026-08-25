@@ -89,6 +89,7 @@ import type {
   AdvertisingSafetyRepository,
   CampaignRepository,
   CampaignPlanningContext,
+  CampaignSafetyRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -8115,7 +8116,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
   async listManaged(input: Parameters<CampaignRepository['listManaged']>[0]) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
-    return this.client.campaign.findMany({
+    const campaigns = await this.client.campaign.findMany({
       where: { workspaceId: input.workspaceId },
       include: {
         group: { select: { name: true } },
@@ -8124,9 +8125,40 @@ export class PrismaCampaignRepository implements CampaignRepository {
         },
         assets: { include: { productPackAsset: true }, orderBy: { sortOrder: 'asc' } },
         participations: { select: { status: true } },
+        dailyMissions: {
+          select: {
+            decision: { select: { decision: true } },
+            activities: {
+              where: {
+                type: {
+                  in: ['COPIED_TEXT', 'COPIED_SLIDE', 'COPIED_VIDEO_PROMPT', 'COPIED_SCRIPT'],
+                },
+              },
+              select: { id: true },
+            },
+            postRecord: { select: { id: true } },
+            feedback: { select: { rating: true } },
+          },
+        },
+        _count: {
+          select: {
+            similarityReviews: { where: { verdict: 'POSSIBLE_DUPLICATE' } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
+    return campaigns.map(({ dailyMissions, ...campaign }) => ({
+      ...campaign,
+      metrics: {
+        generated: dailyMissions.length,
+        accepted: dailyMissions.filter(({ decision }) => decision?.decision === 'ACCEPTED').length,
+        copied: dailyMissions.filter(({ activities }) => activities.length > 0).length,
+        posted: dailyMissions.filter(({ postRecord }) => postRecord !== null).length,
+        feedbackGood: dailyMissions.filter(({ feedback }) => feedback?.rating === 'GOOD').length,
+        duplicateRejected: campaign._count.similarityReviews,
+      },
+    }));
   }
 
   async createDraft(input: Parameters<CampaignRepository['createDraft']>[0]) {
@@ -8163,6 +8195,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
           maxRelatedPerWeek: input.maxRelatedPerWeek,
           maxAdsPerWeek: input.maxAdsPerWeek,
           cooldownDays: input.cooldownDays,
+          generationLimitPerParticipant: input.generationLimitPerParticipant,
+          similarityThresholdBasisPoints: input.similarityThresholdBasisPoints,
           startsAt: input.startsAt,
           endsAt: input.endsAt,
           createdByUserId: input.actorUserId,
@@ -8413,5 +8447,108 @@ export class PrismaCampaignRepository implements CampaignRepository {
       this.planningWhere({ ...input, from: input.at, to: input.at }),
     );
     return rows[0] ? this.planningContext(rows[0]) : null;
+  }
+}
+
+export class PrismaCampaignSafetyRepository implements CampaignSafetyRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private eligible(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    campaignId: string;
+    at: Date;
+  }): Prisma.CampaignWhereInput {
+    return {
+      id: input.campaignId,
+      status: 'OPEN',
+      startsAt: { lte: input.at },
+      endsAt: { gt: input.at },
+      group: {
+        status: 'ACTIVE',
+        memberships: {
+          some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
+        },
+      },
+      participations: {
+        some: {
+          participantWorkspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          bunshinId: input.bunshinId,
+          status: 'ACCEPTED',
+        },
+      },
+      productPackVersion: {
+        status: 'PUBLISHED',
+        assignments: { some: { bunshinId: input.bunshinId, status: 'ACTIVE' } },
+      },
+    };
+  }
+
+  async inspect(input: Parameters<CampaignSafetyRepository['inspect']>[0]) {
+    const bunshin = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        workspace: { type: 'PERSONAL', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    if (!bunshin) return null;
+    const campaign = await this.client.campaign.findFirst({
+      where: this.eligible(input),
+      select: {
+        generationLimitPerParticipant: true,
+        similarityThresholdBasisPoints: true,
+        similarityReviews: {
+          where: { verdict: 'UNIQUE' },
+          select: { simhash: true },
+          orderBy: { createdAt: 'desc' },
+          take: 500,
+        },
+        _count: { select: { dailyMissions: { where: { bunshinId: input.bunshinId } } } },
+      },
+    });
+    if (!campaign) return null;
+    return {
+      generationLimit: campaign.generationLimitPerParticipant,
+      generatedCount: campaign._count.dailyMissions,
+      similarityThresholdBasisPoints: campaign.similarityThresholdBasisPoints,
+      candidates: campaign.similarityReviews,
+    };
+  }
+
+  async record(input: Parameters<CampaignSafetyRepository['record']>[0]) {
+    if (input.dailyMissionId) {
+      const mission = await this.client.dailyMission.findFirst({
+        where: {
+          id: input.dailyMissionId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          campaignId: input.campaignId,
+          bunshin: { ownerUserId: input.actorUserId },
+        },
+        select: { id: true },
+      });
+      if (!mission) return null;
+    } else {
+      const eligible = await this.inspect(input);
+      if (!eligible) return null;
+    }
+    return this.client.campaignSimilarityReview.create({
+      data: {
+        campaignId: input.campaignId,
+        dailyMissionId: input.dailyMissionId,
+        participantWorkspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        contentFingerprint: input.contentFingerprint,
+        simhash: input.simhash,
+        maxSimilarityBasisPoints: input.maxSimilarityBasisPoints,
+        verdict: input.verdict,
+      },
+    });
   }
 }
