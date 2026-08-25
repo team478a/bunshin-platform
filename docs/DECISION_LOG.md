@@ -937,3 +937,16 @@
 - Resolution: 既読操作で隠さず、原因が解消されたときだけ次回集計から消す。
 - Authorization: 有効なPlatform Adminだけが閲覧でき、通知から既存の権限保護された対応画面へ移動する。
 - Privacy: API Key、Token、投稿本文、ユーザーの秘密情報を通知へ含めない。
+
+## D-080: 人格・個人Memoryと公式商品パックを分離し生成Contextでのみ統合する
+
+- 日付: 2026-08-25
+- 状態: Proposed
+- Ownership: 人格、Memory、個人Knowledgeは本人Workspace／Bunshinに残し、Product PackはOrganization Workspaceが所有する。
+- Consent: Product Packの利用にはUserの明示参加と対象Bunshinへの明示割当を必須とし、本部側から参加者のMemory、Knowledge、投稿全文を参照しない。
+- Version: AssignmentはPackを参照し、生成時に最新PUBLISHED Versionを解決する。実際に使用したVersionはGeneration Snapshotへ固定する。
+- Precedence: 商品名、価格、仕様、禁止表現などの公式事実はProduct Pack Versionを優先し、個人体験は本人Knowledge／Memoryとして分離する。
+- Context: Provider非依存のGeneration Context Builderでscope、Grant、Participation、Assignmentを再検証し、秘密値、raw response、思考過程を保存しない。
+- Learning: 行動データから人格やMemoryを直接変更せず、Learning Proposalと本人承認を経由して新VersionまたはMemoryを作る。
+- Gate: 所有権、Version解決、個人体験境界、Snapshot保持期間、初期対象業種・法域の人間レビュー前にコード、Prisma Schema、Migrationへ進まない。
+- 詳細: `docs/PERSONALITY_LEARNING_PRODUCT_PACK_REBASELINE.md`、`docs/adr/GENERATION_CONTEXT_PRODUCT_PACK_BOUNDARY_ADR.md`
