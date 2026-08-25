@@ -87,6 +87,7 @@ import type {
   GroupParticipationRepository,
   ProductPackRepository,
   AdvertisingSafetyRepository,
+  CampaignRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -7956,6 +7957,239 @@ export class PrismaAdvertisingSafetyRepository implements AdvertisingSafetyRepos
       where: { workspaceId: input.workspaceId, bunshinId: input.bunshinId },
       orderBy: { reviewedAt: 'desc' },
       take: 100,
+    });
+  }
+}
+
+export class PrismaCampaignRepository implements CampaignRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private manage(workspaceId: string, actorUserId: string) {
+    return this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId,
+        userId: actorUserId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+        workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  async listManaged(input: Parameters<CampaignRepository['listManaged']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.campaign.findMany({
+      where: { workspaceId: input.workspaceId },
+      include: {
+        group: { select: { name: true } },
+        productPackVersion: {
+          select: { version: true, productPack: { select: { name: true } } },
+        },
+        assets: { include: { productPackAsset: true }, orderBy: { sortOrder: 'asc' } },
+        participations: { select: { status: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createDraft(input: Parameters<CampaignRepository['createDraft']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const version = await tx.productPackVersion.findFirst({
+        where: {
+          id: input.productPackVersionId,
+          status: 'PUBLISHED',
+          productPack: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            status: 'ACTIVE',
+            group: { status: 'ACTIVE' },
+          },
+        },
+        select: { id: true },
+      });
+      if (!version) return null;
+      const assets = await tx.productPackAsset.findMany({
+        where: { id: { in: input.assetIds }, productPackVersionId: version.id },
+        select: { id: true },
+      });
+      if (assets.length !== input.assetIds.length) return null;
+      const campaign = await tx.campaign.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          productPackVersionId: version.id,
+          name: input.name,
+          theme: input.theme,
+          targetSummary: input.targetSummary,
+          participationLimit: input.participationLimit,
+          startsAt: input.startsAt,
+          endsAt: input.endsAt,
+          createdByUserId: input.actorUserId,
+          assets: {
+            create: input.assetIds.map((productPackAssetId, sortOrder) => ({
+              productPackAssetId,
+              sortOrder,
+            })),
+          },
+        },
+      });
+      await tx.campaignActivity.create({
+        data: {
+          campaignId: campaign.id,
+          actorUserId: input.actorUserId,
+          action: 'CREATED',
+          toStatus: 'DRAFT',
+        },
+      });
+      return campaign;
+    });
+  }
+
+  async transition(input: Parameters<CampaignRepository['transition']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const changed = await tx.campaign.updateMany({
+        where: {
+          id: input.campaignId,
+          workspaceId: input.workspaceId,
+          status: input.from,
+          ...(input.to === 'OPEN' ? { endsAt: { gt: input.now } } : {}),
+        },
+        data: {
+          status: input.to,
+          ...(input.to === 'OPEN' ? { openedAt: input.now } : {}),
+          ...(input.to === 'CLOSED' ? { closedAt: input.now } : {}),
+          ...(input.to === 'CANCELLED' ? { cancelledAt: input.now } : {}),
+        },
+      });
+      if (changed.count !== 1) return null;
+      await tx.campaignActivity.create({
+        data: {
+          campaignId: input.campaignId,
+          actorUserId: input.actorUserId,
+          action: input.to === 'OPEN' ? 'OPENED' : input.to === 'CLOSED' ? 'CLOSED' : 'CANCELLED',
+          fromStatus: input.from,
+          toStatus: input.to,
+          reason: input.reason,
+        },
+      });
+      return tx.campaign.findUnique({ where: { id: input.campaignId } });
+    });
+  }
+
+  private participant(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
+    return this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        workspace: { type: 'PERSONAL', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  async listAvailable(input: Parameters<CampaignRepository['listAvailable']>[0]) {
+    if (!(await this.participant(input))) return null;
+    return this.client.campaign.findMany({
+      where: {
+        status: 'OPEN',
+        startsAt: { lte: input.now },
+        endsAt: { gt: input.now },
+        group: {
+          status: 'ACTIVE',
+          memberships: {
+            some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
+          },
+        },
+        productPackVersion: {
+          assignments: {
+            some: { bunshinId: input.bunshinId, status: 'ACTIVE' },
+          },
+        },
+      },
+      include: {
+        group: { select: { name: true } },
+        productPackVersion: {
+          select: { version: true, productPack: { select: { name: true } } },
+        },
+        assets: { include: { productPackAsset: true }, orderBy: { sortOrder: 'asc' } },
+        participations: { where: { userId: input.actorUserId } },
+      },
+      orderBy: { startsAt: 'asc' },
+    });
+  }
+
+  async decide(input: Parameters<CampaignRepository['decide']>[0]) {
+    if (!(await this.participant(input))) return null;
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.campaignId}::text, 0))`;
+      const campaign = await tx.campaign.findFirst({
+        where: {
+          id: input.campaignId,
+          status: 'OPEN',
+          startsAt: { lte: input.now },
+          endsAt: { gt: input.now },
+          group: {
+            status: 'ACTIVE',
+            memberships: {
+              some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
+            },
+          },
+          productPackVersion: {
+            assignments: { some: { bunshinId: input.bunshinId, status: 'ACTIVE' } },
+          },
+        },
+      });
+      if (!campaign) return null;
+      const previous = await tx.campaignParticipation.findUnique({
+        where: { campaignId_userId: { campaignId: campaign.id, userId: input.actorUserId } },
+      });
+      if (input.decision === 'WITHDRAWN' && previous?.status !== 'ACCEPTED') return null;
+      if (input.decision === 'ACCEPTED' && previous?.status !== 'ACCEPTED') {
+        const accepted = await tx.campaignParticipation.count({
+          where: { campaignId: campaign.id, status: 'ACCEPTED' },
+        });
+        if (accepted >= campaign.participationLimit) return null;
+      }
+      const timestamps = {
+        consentedAt: input.decision === 'ACCEPTED' ? input.now : null,
+        declinedAt: input.decision === 'DECLINED' ? input.now : null,
+        heldAt: input.decision === 'ON_HOLD' ? input.now : null,
+        withdrawnAt: input.decision === 'WITHDRAWN' ? input.now : null,
+      };
+      const participation = await tx.campaignParticipation.upsert({
+        where: { campaignId_userId: { campaignId: campaign.id, userId: input.actorUserId } },
+        create: {
+          campaignId: campaign.id,
+          participantWorkspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          bunshinId: input.bunshinId,
+          status: input.decision,
+          ...timestamps,
+        },
+        update: { status: input.decision, bunshinId: input.bunshinId, ...timestamps },
+      });
+      const action = {
+        ACCEPTED: 'ACCEPTED',
+        DECLINED: 'DECLINED',
+        ON_HOLD: 'HELD',
+        WITHDRAWN: 'WITHDRAWN',
+      } as const;
+      await tx.campaignActivity.create({
+        data: {
+          campaignId: campaign.id,
+          actorUserId: input.actorUserId,
+          action: action[input.decision],
+          fromStatus: previous?.status ?? null,
+          toStatus: input.decision,
+          reason: input.reason,
+        },
+      });
+      return participation;
     });
   }
 }

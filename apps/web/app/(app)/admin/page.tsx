@@ -236,6 +236,14 @@ export default async function OperationsAdminPage() {
         </Link>
       </section>
 
+      <section className="settings-card" aria-labelledby="campaign-title">
+        <h2 id="campaign-title">参加募集</h2>
+        <p>募集期間、人数、テーマ、公式素材を決め、本人が自由に参加できる募集を管理します。</p>
+        <Link href="/admin/campaigns" className="button button--secondary">
+          参加募集を開く
+        </Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="line-settings-title">
         <h2 id="line-settings-title">LINEの設定</h2>
         <p>
