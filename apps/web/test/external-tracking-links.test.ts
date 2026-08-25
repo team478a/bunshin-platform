@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   currentUser: null as { userId: string } | null,
   createLink: vi.fn(),
   listConfiguration: vi.fn(),
+  upsertIdentity: vi.fn(),
   upsertPlacement: vi.fn(),
 }));
 
@@ -27,7 +28,7 @@ vi.mock('@bunshin/database', () => ({
     );
     createSystem = vi.fn();
     addAllowedDomain = vi.fn();
-    upsertMemberIdentity = vi.fn();
+    upsertMemberIdentity = state.upsertIdentity;
     createLink = state.createLink;
     activateLink = vi.fn();
     suspendLink = vi.fn();
@@ -44,6 +45,7 @@ vi.mock('@bunshin/database', () => ({
 import {
   createExternalTrackingLinkResponse,
   exportExternalTrackingResponse,
+  importExternalTrackingCsvResponse,
   listExternalTrackingConfigurationResponse,
   upsertExternalLinkPlacementResponse,
 } from '../src/http/external-tracking-links';
@@ -67,6 +69,7 @@ describe('external tracking admin HTTP', () => {
     state.currentUser = { userId: id };
     state.listConfiguration.mockResolvedValue({ links: [], audits: [] });
     state.createLink.mockResolvedValue({ id });
+    state.upsertIdentity.mockResolvedValue({ id });
     state.upsertPlacement.mockResolvedValue({ id });
   });
 
@@ -176,5 +179,52 @@ describe('external tracking admin HTTP', () => {
     );
     expect(response.status).toBe(400);
     expect(state.upsertPlacement).not.toHaveBeenCalled();
+  });
+
+  it('CSVの正常行だけを登録し、不正行は理由を返す', async () => {
+    state.listConfiguration.mockResolvedValue({
+      systems: [
+        {
+          id,
+          status: 'ACTIVE',
+          allowedDomains: [
+            {
+              id,
+              hostname: 'example.jp',
+              allowSubdomains: false,
+              shortener: false,
+              status: 'ACTIVE',
+            },
+          ],
+        },
+      ],
+      members: [],
+      products: [],
+      campaigns: [],
+      links: [],
+    });
+    const form = new FormData();
+    form.set('groupId', id);
+    form.set('systemId', id);
+    form.set('allowedDomainId', id);
+    form.set(
+      'file',
+      new File(
+        ['url,url_name\nhttps://example.jp/good,正常\nhttps://evil.example/bad,不正'],
+        'links.csv',
+        { type: 'text/csv' },
+      ),
+    );
+    const response = await importExternalTrackingCsvResponse(
+      request(`/api/workspaces/${id}/external-tracking/import`, { method: 'POST', body: form }),
+      id,
+    );
+    expect(response.status).toBe(200);
+    expect(state.createLink).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({ total: 2, imported: 1, failed: 1 }),
+      }),
+    );
   });
 });
