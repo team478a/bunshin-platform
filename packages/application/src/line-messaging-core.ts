@@ -156,6 +156,7 @@ export interface LineMissionNotificationSummary {
   topic: string;
   researched: boolean;
   campaign?: { name: string; classification: 'PRODUCT_RELATED' | 'ADVERTISEMENT' } | null;
+  externalLinkIncluded?: boolean;
 }
 
 export interface LineMissionNotificationSummaryRepository {
@@ -191,6 +192,8 @@ export function normalizeLineMissionNotificationSummary(
   if (!topic) throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission topic');
   if (typeof input.researched !== 'boolean')
     throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission research marker');
+  if (input.externalLinkIncluded !== undefined && typeof input.externalLinkIncluded !== 'boolean')
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission external link marker');
   const campaign = input.campaign
     ? {
         name: input.campaign.name.replace(/\s+/g, ' ').trim().slice(0, 60),

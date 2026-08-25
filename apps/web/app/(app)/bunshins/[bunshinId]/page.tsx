@@ -320,6 +320,7 @@ export default async function BunshinPage({
                 content,
                 socialProfileId,
                 trendContext,
+                linkUsage,
               },
               index,
             ) => ({
@@ -355,6 +356,12 @@ export default async function BunshinPage({
                         retrievedAt,
                       }),
                     ),
+                  }
+                : null,
+              externalLinkUsage: linkUsage
+                ? {
+                    ...linkUsage,
+                    expiresAt: linkUsage.expiresAt?.toISOString() ?? null,
                   }
                 : null,
             }),

@@ -32,6 +32,14 @@ export type DailyMissionView = {
       retrievedAt: string;
     }>;
   } | null;
+  externalLinkUsage?: {
+    linkName: string;
+    insertedUrl: string;
+    expiresAt: string | null;
+    productName: string;
+    campaignName: string | null;
+    advertisingClassification: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
+  } | null;
 };
 
 export type ContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -469,6 +477,28 @@ export function DailyMissionSection({
     if (pendingAction !== null) return;
     setError(null);
     setPendingAction(`${id}:copy`);
+    const authorization = await fetch(`${endpoint}/${encodeURIComponent(id)}/copy-authorization`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (!authorization.ok) {
+      setError('専用URLを確認できませんでした。少し待ってから、もう一度お試しください。');
+      setPendingAction(null);
+      return;
+    }
+    const result = (await authorization.json()) as {
+      data?: { allowed?: boolean; reason?: string };
+    };
+    if (!result.data?.allowed) {
+      setError(
+        result.data?.reason === 'LINK_CHANGED'
+          ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
+          : 'この紹介URLは今は使えません。管理者へお問い合わせください。',
+      );
+      setPendingAction(null);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(value);
     } catch {
@@ -660,6 +690,30 @@ export function DailyMissionSection({
                             <h4>完成版</h4>
                             <MissionContent mission={mission} />
                           </div>
+                        )}
+                        {mission.externalLinkUsage && (
+                          <aside className="mission-link-summary">
+                            <h4>あなた専用の紹介URLを入れました</h4>
+                            <p>
+                              <strong>紹介するもの：</strong>
+                              {mission.externalLinkUsage.productName}
+                            </p>
+                            {mission.externalLinkUsage.campaignName && (
+                              <p>
+                                <strong>参加する企画：</strong>
+                                {mission.externalLinkUsage.campaignName}
+                              </p>
+                            )}
+                            <p className="mission-link-summary__url">
+                              {mission.externalLinkUsage.insertedUrl}
+                            </p>
+                            <p>
+                              {mission.externalLinkUsage.expiresAt
+                                ? `使える期限：${displayDate(mission.externalLinkUsage.expiresAt)}`
+                                : '使える期限：期限なし'}
+                            </p>
+                            <p>コピーする直前に、今も使えるURLか自動で確認します。</p>
+                          </aside>
                         )}
                       </>
                     );

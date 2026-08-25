@@ -112,6 +112,9 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
                     ]
                   : []),
                 ...(summary.researched ? ['新しい情報も参考にした企画です。'] : []),
+                ...(summary.externalLinkIncluded
+                  ? ['あなた専用の紹介URLを入れました。URLは確認画面で安全に表示します。']
+                  : []),
                 '',
                 'くわしく見る',
                 input.deepLinkUrl,

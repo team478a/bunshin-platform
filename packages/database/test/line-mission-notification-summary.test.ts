@@ -9,6 +9,7 @@ describe('LINE Mission notification summary repository', () => {
       topic: '今日の短いテーマ',
       trendContext: { id: 'context-a' },
       socialProfile: { platform: 'X' },
+      contentLinkUsage: { id: 'usage-a' },
     });
     const repository = new PrismaLineMissionNotificationSummaryRepository({
       dailyMission: { findFirst },
@@ -27,6 +28,7 @@ describe('LINE Mission notification summary repository', () => {
       estimatedMinutes: 3,
       topic: '今日の短いテーマ',
       researched: true,
+      externalLinkIncluded: true,
     });
     expect(findFirst).toHaveBeenCalledWith({
       where: {
@@ -86,6 +88,7 @@ describe('LINE Mission notification summary repository', () => {
         socialProfile: { select: { platform: true } },
         classification: true,
         campaign: { select: { name: true } },
+        contentLinkUsage: { select: { id: true } },
       },
     });
     expect(findFirst.mock.calls[0]?.[0].select).not.toHaveProperty('content');

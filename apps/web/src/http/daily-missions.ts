@@ -1,5 +1,6 @@
 import 'server-only';
 import {
+  AuthorizeDailyMissionCopy,
   CreateDailyMission,
   GetDailyMission,
   ListDailyMissions,
@@ -208,6 +209,24 @@ export function getDailyMissionResponse(
         dailyMissionId: resourceId(dailyMissionId),
       }),
     );
+  });
+}
+
+export function authorizeDailyMissionCopyResponse(
+  request: Request,
+  workspaceId: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    if (!emptySchema.safeParse(await jsonBody(request)).success)
+      throw new ApplicationError('VALIDATION_ERROR', 'empty body required');
+    const { missions } = await repositories();
+    return new AuthorizeDailyMissionCopy(missions).execute({
+      ...(await scope(workspaceId, bunshinId)),
+      dailyMissionId: resourceId(dailyMissionId),
+    });
   });
 }
 
