@@ -156,6 +156,10 @@ export default async function BunshinPage({
           <Link href={`/bunshins/${bunshin.id}/evidence?workspaceId=${workspaceId}`}>
             経験の根拠と広告の安全確認
           </Link>
+          {' ／ '}
+          <Link href={`/bunshins/${bunshin.id}/campaigns?workspaceId=${workspaceId}`}>
+            参加できる募集
+          </Link>
         </p>
         <BunshinEditor
           workspaceId={workspaceId}

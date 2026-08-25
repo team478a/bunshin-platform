@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { parseProductPackFacts, parseProductPackRules } from './view-model';
+import { parseProductPackAssets, parseProductPackFacts, parseProductPackRules } from './view-model';
 
 type Group = { id: string; name: string };
 type Version = {
@@ -90,6 +90,7 @@ export function ProductPackAdminEditor({
       forbiddenExpressions: formText(data, 'forbiddenExpressions'),
       conditionalExpressions: formText(data, 'conditionalExpressions'),
     });
+    const assets = parseProductPackAssets(formText(data, 'assets'));
     void run(() =>
       api(`/api/workspaces/${workspaceId}/product-packs/${packId}/versions`, {
         summary: formText(data, 'summary'),
@@ -100,7 +101,7 @@ export function ProductPackAdminEditor({
         suitableFor: [],
         unsuitableFor: [],
         rules,
-        assets: [],
+        assets,
         validFrom: null,
         validUntil: null,
       }),
@@ -182,6 +183,13 @@ export function ProductPackAdminEditor({
               <p>
                 ここで登録した内容は、投稿前の安全確認に使われます。秘密情報や個人情報は入力しないでください。
               </p>
+              <label>
+                公式素材（1行に「種類|名前|httpsのURL|利用条件」）
+                <textarea
+                  name="assets"
+                  placeholder="IMAGE|商品画像|https://example.com/item.png|SNS投稿に利用可"
+                />
+              </label>
               <button type="submit">下書きを作る</button>
             </form>
             <h3>保存した版</h3>

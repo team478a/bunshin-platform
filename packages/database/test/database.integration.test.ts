@@ -12,6 +12,7 @@ import {
   GroupParticipationService,
   ProductPackService,
   AdvertisingSafetyService,
+  CampaignService,
 } from '@bunshin/application';
 import {
   ActivateSocialProfile,
@@ -82,6 +83,7 @@ import {
   PrismaGroupParticipationRepository,
   PrismaProductPackRepository,
   PrismaAdvertisingSafetyRepository,
+  PrismaCampaignRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -93,6 +95,10 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.campaignActivity.deleteMany();
+    await client.campaignParticipation.deleteMany();
+    await client.campaignAsset.deleteMany();
+    await client.campaign.deleteMany();
     await client.advertisingSafetyReview.deleteMany();
     await client.userEvidence.deleteMany();
     await client.productPackAssignment.deleteMany();
@@ -3221,6 +3227,50 @@ integration('database ownership boundaries', () => {
         bunshinId: bunshin.id,
         actorUserId: owner.user.id,
         evidenceId: evidence.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('keeps campaign management and participation isolated by Workspace, User, and Bunshin', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Campaign Owner' });
+    const participant = await accounts.execute({ displayName: 'Campaign Participant' });
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Campaign Organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+      },
+    });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: participant.workspace.id,
+      actorUserId: participant.user.id,
+      name: 'Campaign Bunshin',
+      slug: `campaign-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const service = new CampaignService(new PrismaCampaignRepository(client));
+    await expect(
+      service.listManaged({
+        workspaceId: organization.id,
+        actorUserId: participant.user.id,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.listAvailable({
+        workspaceId: participant.workspace.id,
+        actorUserId: owner.user.id,
+        bunshinId: bunshin.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      service.listAvailable({
+        workspaceId: owner.workspace.id,
+        actorUserId: participant.user.id,
+        bunshinId: bunshin.id,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });

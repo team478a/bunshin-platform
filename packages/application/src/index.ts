@@ -2317,3 +2317,4 @@ export * from './memory-selector';
 export * from './group-participation';
 export * from './product-pack';
 export * from './advertising-safety';
+export * from './campaign-participation';

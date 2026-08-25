@@ -53,3 +53,25 @@ export function parseProductPackRules({
 
   return [...required, ...forbidden, ...conditional];
 }
+
+export function parseProductPackAssets(value: string) {
+  return nonEmptyLines(value).flatMap((line) => {
+    const [type, label, url, usageTerms] = line.split('|').map((part) => part.trim());
+    if (!type || !['IMAGE', 'VIDEO', 'DOCUMENT', 'LINK'].includes(type)) return [];
+    if (!label || !url || !usageTerms) return [];
+    try {
+      if (new URL(url).protocol !== 'https:') return [];
+    } catch {
+      return [];
+    }
+    return [
+      {
+        type: type as 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LINK',
+        label,
+        url,
+        usageTerms,
+        validUntil: null,
+      },
+    ];
+  });
+}

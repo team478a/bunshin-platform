@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseProductPackFacts, parseProductPackRules } from './view-model';
+import { parseProductPackAssets, parseProductPackFacts, parseProductPackRules } from './view-model';
 
 describe('公式商品パック管理画面', () => {
   it('1行1項目の入力を確認済み事実へ変換する', () => {
@@ -29,6 +29,22 @@ describe('公式商品パック管理画面', () => {
       },
       { type: 'FORBIDDEN_EXPRESSION', value: '必ず治る', condition: null },
       { type: 'CONDITIONAL_EXPRESSION', value: '税込表記', condition: '価格を書く' },
+    ]);
+  });
+
+  it('HTTPSの公式素材だけを送信対象へ変換する', () => {
+    expect(
+      parseProductPackAssets(
+        'IMAGE|商品画像|https://example.com/item.png|投稿に利用可\nVIDEO|危険|http://example.com/a.mp4|利用可',
+      ),
+    ).toEqual([
+      {
+        type: 'IMAGE',
+        label: '商品画像',
+        url: 'https://example.com/item.png',
+        usageTerms: '投稿に利用可',
+        validUntil: null,
+      },
     ]);
   });
 });

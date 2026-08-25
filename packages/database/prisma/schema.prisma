@@ -126,6 +126,31 @@ enum AdvertisingSafetyVerdict {
   BLOCKED
 }
 
+enum CampaignStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum CampaignParticipationStatus {
+  ACCEPTED
+  DECLINED
+  ON_HOLD
+  WITHDRAWN
+}
+
+enum CampaignActivityAction {
+  CREATED
+  OPENED
+  CLOSED
+  CANCELLED
+  ACCEPTED
+  DECLINED
+  HELD
+  WITHDRAWN
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -599,6 +624,9 @@ model User {
   personalityVersionsCreated    BunshinPersonalityVersion[]
   userEvidenceCreated           UserEvidence[]                      @relation("UserEvidenceCreator")
   advertisingSafetyReviews      AdvertisingSafetyReview[]           @relation("AdvertisingSafetyReviewActor")
+  campaignsCreated              Campaign[]                          @relation("CampaignCreator")
+  campaignParticipations        CampaignParticipation[]
+  campaignActivities            CampaignActivity[]                  @relation("CampaignActivityActor")
 
   @@index([status])
   @@map("users")
@@ -662,6 +690,8 @@ model Workspace {
   personalityVersions         BunshinPersonalityVersion[]
   userEvidence                UserEvidence[]
   advertisingSafetyReviews    AdvertisingSafetyReview[]
+  campaignsOwned              Campaign[]                    @relation("CampaignOwnerWorkspace")
+  campaignParticipations      CampaignParticipation[]       @relation("CampaignParticipantWorkspace")
 
   @@index([status])
   @@map("workspaces")
@@ -694,6 +724,7 @@ model Group {
   memberships  GroupMembership[]
   invitations  GroupInvitation[]
   productPacks ProductPack[]
+  campaigns    Campaign[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -786,6 +817,7 @@ model ProductPackVersion {
   assets          ProductPackAsset[]
   assignments     ProductPackAssignment[]
   safetyReviews   AdvertisingSafetyReview[]
+  campaigns       Campaign[]
 
   @@unique([productPackId, version])
   @@index([productPackId, status])
@@ -816,9 +848,94 @@ model ProductPackAsset {
   validUntil           DateTime?            @map("valid_until") @db.Timestamptz(6)
   createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   productPackVersion   ProductPackVersion   @relation(fields: [productPackVersionId], references: [id], onDelete: Cascade)
+  campaignAssets       CampaignAsset[]
 
   @@index([productPackVersionId, type])
   @@map("product_pack_assets")
+}
+
+model Campaign {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  groupId              String                  @map("group_id") @db.Uuid
+  productPackVersionId String                  @map("product_pack_version_id") @db.Uuid
+  name                 String                  @db.VarChar(160)
+  theme                String                  @db.VarChar(1000)
+  targetSummary        String                  @map("target_summary") @db.VarChar(1000)
+  participationLimit   Int                     @map("participation_limit")
+  startsAt             DateTime                @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime                @map("ends_at") @db.Timestamptz(6)
+  status               CampaignStatus          @default(DRAFT)
+  createdByUserId      String                  @map("created_by_user_id") @db.Uuid
+  openedAt             DateTime?               @map("opened_at") @db.Timestamptz(6)
+  closedAt             DateTime?               @map("closed_at") @db.Timestamptz(6)
+  cancelledAt          DateTime?               @map("cancelled_at") @db.Timestamptz(6)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace            Workspace               @relation("CampaignOwnerWorkspace", fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  productPackVersion   ProductPackVersion      @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  createdBy            User                    @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assets               CampaignAsset[]
+  participations       CampaignParticipation[]
+  activities           CampaignActivity[]
+
+  @@index([workspaceId, status, startsAt, endsAt])
+  @@index([groupId, status])
+  @@map("campaigns")
+}
+
+model CampaignAsset {
+  id                 String           @id @default(uuid()) @db.Uuid
+  campaignId         String           @map("campaign_id") @db.Uuid
+  productPackAssetId String           @map("product_pack_asset_id") @db.Uuid
+  sortOrder          Int              @default(0) @map("sort_order")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  campaign           Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  productPackAsset   ProductPackAsset @relation(fields: [productPackAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, productPackAssetId])
+  @@map("campaign_assets")
+}
+
+model CampaignParticipation {
+  id                     String                      @id @default(uuid()) @db.Uuid
+  campaignId             String                      @map("campaign_id") @db.Uuid
+  participantWorkspaceId String                      @map("participant_workspace_id") @db.Uuid
+  userId                 String                      @map("user_id") @db.Uuid
+  bunshinId              String                      @map("bunshin_id") @db.Uuid
+  status                 CampaignParticipationStatus
+  consentedAt            DateTime?                   @map("consented_at") @db.Timestamptz(6)
+  declinedAt             DateTime?                   @map("declined_at") @db.Timestamptz(6)
+  heldAt                 DateTime?                   @map("held_at") @db.Timestamptz(6)
+  withdrawnAt            DateTime?                   @map("withdrawn_at") @db.Timestamptz(6)
+  createdAt              DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  campaign               Campaign                    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  participantWorkspace   Workspace                   @relation("CampaignParticipantWorkspace", fields: [participantWorkspaceId], references: [id], onDelete: Cascade)
+  user                   User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bunshin                Bunshin                     @relation(fields: [participantWorkspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([participantWorkspaceId, userId, status])
+  @@index([campaignId, status])
+  @@map("campaign_participations")
+}
+
+model CampaignActivity {
+  id          String                 @id @default(uuid()) @db.Uuid
+  campaignId  String                 @map("campaign_id") @db.Uuid
+  actorUserId String                 @map("actor_user_id") @db.Uuid
+  action      CampaignActivityAction
+  fromStatus  String?                @map("from_status") @db.VarChar(40)
+  toStatus    String                 @map("to_status") @db.VarChar(40)
+  reason      String?                @db.VarChar(500)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  campaign    Campaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  actor       User                   @relation("CampaignActivityActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([campaignId, createdAt])
+  @@map("campaign_activities")
 }
 
 model ProductPackAssignment {
@@ -1422,6 +1539,7 @@ model Bunshin {
   productPackAssignments      ProductPackAssignment[]
   userEvidence                UserEvidence[]
   advertisingSafetyReviews    AdvertisingSafetyReview[]
+  campaignParticipations      CampaignParticipation[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])

@@ -8,6 +8,11 @@ import { requireSameOrigin } from '../auth/request-security';
 
 const uuid = z.string().uuid();
 const nullableDate = z.string().datetime().nullable().optional();
+const httpsUrl = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((value) => new URL(value).protocol === 'https:', 'https required');
 const versionSchema = z
   .object({
     summary: z.string().min(1).max(1000),
@@ -41,7 +46,7 @@ const versionSchema = z
         z
           .object({
             type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'LINK']),
-            url: z.string().url().max(2048),
+            url: httpsUrl,
             label: z.string().min(1).max(200),
             usageTerms: z.string().min(1).max(2000),
             validUntil: nullableDate,

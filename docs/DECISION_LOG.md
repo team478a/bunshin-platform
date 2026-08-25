@@ -2,6 +2,17 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-082: Campaignは企業所有、Participationは本人の明示判断として分離する
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- 決定: CampaignはOrganization Workspace、Group、公開済みProduct Pack Versionへ固定し、素材はそのVersionの公式素材だけを参照する
+- 決定: Campaignは対象説明、テーマ、募集期間、参加上限を持ち、`DRAFT -> OPEN -> CLOSED | CANCELLED`だけを許可する
+- 決定: 参加者本人だけがPersonal Workspace内の本人所有Bunshinを指定し、参加・保留・辞退・参加取消を選択できる。管理者の代理参加は許可しない
+- 決定: 参加時にACTIVE Group Membership、参加同意、Bunshin所有権、Product Pack Assignment、募集期間を再検証する
+- 決定: 参加上限はCampaign単位のDB advisory lock内で判定し、すべての状態変更をCampaign Activityへ保存する
+- 境界: Campaignは一斉配信、自動投稿、報酬、ランキング、Weekly Plan比率を実行しない。これらはG4へ含めない
+
 ## D-081: 広告安全性を構造化入力による決定的Gateとして記録する
 
 - 日付: 2026-08-25
