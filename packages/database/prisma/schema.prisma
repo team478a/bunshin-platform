@@ -188,6 +188,13 @@ enum ExternalTrackingLinkStatus {
   DELETED
 }
 
+enum ExternalTrackingAuditAction {
+  CREATED
+  UPDATED
+  ACTIVATED
+  SUSPENDED
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -673,6 +680,7 @@ model User {
   externalTrackingIdentitiesUpdated ExternalTrackingMemberIdentity[]    @relation("ExternalTrackingIdentityUpdater")
   externalTrackingLinksCreated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkCreator")
   externalTrackingLinksUpdated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkUpdater")
+  externalTrackingAuditsPerformed   ExternalTrackingAuditLog[]          @relation("ExternalTrackingAuditActor")
 
   @@index([status])
   @@map("users")
@@ -743,6 +751,7 @@ model Workspace {
   externalTrackingDomains     ExternalTrackingAllowedDomain[]
   externalTrackingIdentities  ExternalTrackingMemberIdentity[]
   externalTrackingLinks       ExternalTrackingLink[]
+  externalTrackingAudits      ExternalTrackingAuditLog[]
 
   @@index([status])
   @@map("workspaces")
@@ -780,6 +789,7 @@ model Group {
   externalTrackingDomains    ExternalTrackingAllowedDomain[]
   externalTrackingIdentities ExternalTrackingMemberIdentity[]
   externalTrackingLinks      ExternalTrackingLink[]
+  externalTrackingAudits     ExternalTrackingAuditLog[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -1070,6 +1080,26 @@ model ExternalTrackingLink {
   @@index([productPackId, status])
   @@index([campaignId, status])
   @@map("external_tracking_links")
+}
+
+model ExternalTrackingAuditLog {
+  id                String                      @id @default(uuid()) @db.Uuid
+  workspaceId       String                      @map("workspace_id") @db.Uuid
+  groupId           String                      @map("group_id") @db.Uuid
+  resourceType      String                      @map("resource_type") @db.VarChar(50)
+  resourceId        String                      @map("resource_id") @db.Uuid
+  action            ExternalTrackingAuditAction
+  beforeData        Json?                       @map("before_data")
+  afterData         Json?                       @map("after_data")
+  performedByUserId String                      @map("performed_by_user_id") @db.Uuid
+  performedAt       DateTime                    @default(now()) @map("performed_at") @db.Timestamptz(6)
+  workspace         Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  performedBy       User                        @relation("ExternalTrackingAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, performedAt])
+  @@index([resourceType, resourceId, performedAt])
+  @@map("external_tracking_audit_logs")
 }
 
 model CampaignSimilarityReview {

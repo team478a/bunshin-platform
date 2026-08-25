@@ -7908,6 +7908,83 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
     });
   }
 
+  async listConfiguration(
+    input: Parameters<ExternalTrackingLinkRepository['listConfiguration']>[0],
+  ) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    const group = await this.client.group.findFirst({
+      where: { id: input.groupId, workspaceId: input.workspaceId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!group) return null;
+    const [systems, identities, links, audits] = await this.client.$transaction([
+      this.client.externalTrackingSystem.findMany({
+        where: { workspaceId: input.workspaceId, groupId: input.groupId },
+        include: { allowedDomains: { orderBy: { hostname: 'asc' } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.client.externalTrackingMemberIdentity.findMany({
+        where: { workspaceId: input.workspaceId, groupId: input.groupId },
+        include: {
+          groupMembership: { select: { id: true, userId: true, role: true, status: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.client.externalTrackingLink.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: { not: 'DELETED' },
+        },
+        include: {
+          system: { select: { id: true, name: true, status: true } },
+          allowedDomain: { select: { id: true, hostname: true, status: true } },
+          memberIdentity: { select: { id: true, groupMembershipId: true } },
+          productPack: { select: { id: true, name: true } },
+          campaign: { select: { id: true, name: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.client.externalTrackingAuditLog.findMany({
+        where: { workspaceId: input.workspaceId, groupId: input.groupId },
+        orderBy: { performedAt: 'desc' },
+        take: 100,
+      }),
+    ]);
+    return {
+      group,
+      systems,
+      identities,
+      links: links.map((link) => ({
+        ...link,
+        effectiveStatus:
+          link.status === 'ACTIVE' && link.expiresAt && link.expiresAt <= input.at
+            ? 'EXPIRED'
+            : link.status,
+      })),
+      audits,
+    };
+  }
+
+  async getAllowedDomain(input: Parameters<ExternalTrackingLinkRepository['getAllowedDomain']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.externalTrackingAllowedDomain.findFirst({
+      where: {
+        id: input.allowedDomainId,
+        workspaceId: input.workspaceId,
+        status: 'ACTIVE',
+        system: { status: 'ACTIVE' },
+      },
+      select: {
+        id: true,
+        hostname: true,
+        allowSubdomains: true,
+        shortener: true,
+        status: true,
+      },
+    });
+  }
+
   async createSystem(input: Parameters<ExternalTrackingLinkRepository['createSystem']>[0]) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
     const group = await this.client.group.findFirst({
@@ -7915,16 +7992,30 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
       select: { id: true },
     });
     if (!group) return null;
-    return this.client.externalTrackingSystem.create({
-      data: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        name: input.name,
-        systemType: input.systemType,
-        externalSystemId: input.externalSystemId,
-        createdByUserId: input.actorUserId,
-        updatedByUserId: input.actorUserId,
-      },
+    return this.client.$transaction(async (tx) => {
+      const created = await tx.externalTrackingSystem.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          name: input.name,
+          systemType: input.systemType,
+          externalSystemId: input.externalSystemId,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: created.workspaceId,
+          groupId: created.groupId,
+          resourceType: 'SYSTEM',
+          resourceId: created.id,
+          action: 'CREATED',
+          afterData: { name: created.name, systemType: created.systemType, status: created.status },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return created;
     });
   }
 
@@ -7934,17 +8025,36 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
       where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
     });
     if (!system) return null;
-    return this.client.externalTrackingAllowedDomain.create({
-      data: {
-        workspaceId: input.workspaceId,
-        groupId: system.groupId,
-        systemId: system.id,
-        hostname: input.hostname,
-        allowSubdomains: input.allowSubdomains,
-        shortener: input.shortener,
-        createdByUserId: input.actorUserId,
-        updatedByUserId: input.actorUserId,
-      },
+    return this.client.$transaction(async (tx) => {
+      const created = await tx.externalTrackingAllowedDomain.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: system.groupId,
+          systemId: system.id,
+          hostname: input.hostname,
+          allowSubdomains: input.allowSubdomains,
+          shortener: input.shortener,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: created.workspaceId,
+          groupId: created.groupId,
+          resourceType: 'DOMAIN',
+          resourceId: created.id,
+          action: 'CREATED',
+          afterData: {
+            hostname: created.hostname,
+            allowSubdomains: created.allowSubdomains,
+            shortener: created.shortener,
+            status: created.status,
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return created;
     });
   }
 
@@ -7967,7 +8077,15 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         },
       });
       if (!membership) return null;
-      return tx.externalTrackingMemberIdentity.upsert({
+      const before = await tx.externalTrackingMemberIdentity.findUnique({
+        where: {
+          systemId_groupMembershipId: {
+            systemId: system.id,
+            groupMembershipId: membership.id,
+          },
+        },
+      });
+      const saved = await tx.externalTrackingMemberIdentity.upsert({
         where: {
           systemId_groupMembershipId: {
             systemId: system.id,
@@ -7993,6 +8111,24 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
           updatedByUserId: input.actorUserId,
         },
       });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: saved.workspaceId,
+          groupId: saved.groupId,
+          resourceType: 'MEMBER_IDENTITY',
+          resourceId: saved.id,
+          action: before ? 'UPDATED' : 'CREATED',
+          beforeData: before ? { status: before.status } : Prisma.JsonNull,
+          afterData: {
+            status: saved.status,
+            hasCommonUserId: Boolean(saved.commonUserId),
+            hasAgencyId: Boolean(saved.agencyId),
+            hasExternalMemberId: Boolean(saved.externalMemberId),
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return saved;
     });
   }
 
@@ -8043,7 +8179,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         }))
       )
         return null;
-      return tx.externalTrackingLink.create({
+      const created = await tx.externalTrackingLink.create({
         data: {
           workspaceId: input.workspaceId,
           groupId: system.groupId,
@@ -8065,6 +8201,26 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
           updatedByUserId: input.actorUserId,
         },
       });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: created.workspaceId,
+          groupId: created.groupId,
+          resourceType: 'LINK',
+          resourceId: created.id,
+          action: 'CREATED',
+          afterData: {
+            name: created.name,
+            scopeType: created.scopeType,
+            scopeKey: created.scopeKey,
+            status: created.status,
+            allowedDomainId: created.allowedDomainId,
+            startsAt: created.startsAt,
+            expiresAt: created.expiresAt,
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return created;
     });
   }
 
@@ -8093,7 +8249,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         select: { id: true },
       });
       if (duplicate) return null;
-      return tx.externalTrackingLink.update({
+      const updated = await tx.externalTrackingLink.update({
         where: { id: link.id },
         data: {
           status: 'ACTIVE',
@@ -8102,6 +8258,19 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
           updatedByUserId: input.actorUserId,
         },
       });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: updated.workspaceId,
+          groupId: updated.groupId,
+          resourceType: 'LINK',
+          resourceId: updated.id,
+          action: 'ACTIVATED',
+          beforeData: { status: link.status },
+          afterData: { status: updated.status },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return updated;
     });
   }
 
@@ -8112,9 +8281,87 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
       select: { id: true },
     });
     if (!link) return null;
-    return this.client.externalTrackingLink.update({
-      where: { id: link.id },
-      data: { status: 'SUSPENDED', suspendedAt: input.now, updatedByUserId: input.actorUserId },
+    return this.client.$transaction(async (tx) => {
+      const updated = await tx.externalTrackingLink.update({
+        where: { id: link.id },
+        data: {
+          status: 'SUSPENDED',
+          suspendedAt: input.now,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: updated.workspaceId,
+          groupId: updated.groupId,
+          resourceType: 'LINK',
+          resourceId: updated.id,
+          action: 'SUSPENDED',
+          beforeData: { status: 'ACTIVE' },
+          afterData: { status: updated.status },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return updated;
+    });
+  }
+
+  async updateLink(input: Parameters<ExternalTrackingLinkRepository['updateLink']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const link = await tx.externalTrackingLink.findFirst({
+        where: {
+          id: input.linkId,
+          workspaceId: input.workspaceId,
+          status: { in: ['DRAFT', 'SUSPENDED'] },
+        },
+      });
+      if (!link) return null;
+      const domain = await tx.externalTrackingAllowedDomain.findFirst({
+        where: {
+          id: input.allowedDomainId,
+          workspaceId: input.workspaceId,
+          groupId: link.groupId,
+          systemId: link.systemId,
+          status: 'ACTIVE',
+        },
+      });
+      if (!domain) return null;
+      const updated = await tx.externalTrackingLink.update({
+        where: { id: link.id },
+        data: {
+          allowedDomainId: domain.id,
+          name: input.name,
+          url: input.url,
+          startsAt: input.startsAt,
+          expiresAt: input.expiresAt,
+          notes: input.notes,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: updated.workspaceId,
+          groupId: updated.groupId,
+          resourceType: 'LINK',
+          resourceId: updated.id,
+          action: 'UPDATED',
+          beforeData: {
+            name: link.name,
+            allowedDomainId: link.allowedDomainId,
+            startsAt: link.startsAt,
+            expiresAt: link.expiresAt,
+          },
+          afterData: {
+            name: updated.name,
+            allowedDomainId: updated.allowedDomainId,
+            startsAt: updated.startsAt,
+            expiresAt: updated.expiresAt,
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return updated;
     });
   }
 
