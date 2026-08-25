@@ -25,6 +25,7 @@ const context = {
     objectiveSummary: '継続',
     audienceSummary: '初心者',
     personalitySummary: '丁寧',
+    personality: null,
   },
   approvedStrategy: {
     concept: '専門家型',

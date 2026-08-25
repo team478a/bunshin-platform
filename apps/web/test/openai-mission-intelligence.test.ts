@@ -18,6 +18,20 @@ const base = {
     objectiveSummary: '継続',
     audienceSummary: '初心者',
     personalitySummary: '丁寧',
+    personality: {
+      versionId: 'personality-version-2',
+      version: 2,
+      tone: 'やさしい',
+      formality: 'ふつう',
+      energyLevel: '落ち着いている',
+      expertiseLevel: '初心者向け',
+      sentenceStyle: '短い文',
+      firstPerson: 'わたし',
+      forbiddenExpressions: ['絶対'],
+      preferredExpressions: ['いっしょに'],
+      visualDirection: null,
+      facePolicy: 'FULL_ANONYMOUS' as const,
+    },
   },
   approvedStrategy: {
     concept: '専門家型',
@@ -64,7 +78,7 @@ describe('OpenAIMissionContentGenerator', () => {
       grantedKnowledge: [],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v1',
+      promptVersion: 'mission-content-generator-v2',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -77,6 +91,8 @@ describe('OpenAIMissionContentGenerator', () => {
       strict: true,
       name: 'mission_content_text',
     });
+    expect(JSON.stringify(request)).toContain('personality-version-2');
+    expect(JSON.stringify(request)).toContain('絶対');
     expect(Object.keys(request.text.format.schema.properties)).toEqual([
       'body',
       'threadParts',
@@ -168,7 +184,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v1',
+      promptVersion: 'mission-quality-checker-v2',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;

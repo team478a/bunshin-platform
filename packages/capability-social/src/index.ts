@@ -1189,6 +1189,20 @@ export interface DailyMissionPlannerInput {
     objectiveSummary: string;
     audienceSummary: string;
     personalitySummary: string;
+    personality: {
+      versionId: string;
+      version: number;
+      tone: string;
+      formality: string;
+      energyLevel: string;
+      expertiseLevel: string;
+      sentenceStyle: string;
+      firstPerson: string;
+      forbiddenExpressions: string[];
+      preferredExpressions: string[];
+      visualDirection: string | null;
+      facePolicy: FacePolicy;
+    } | null;
   };
   facePolicy: FacePolicy;
   recentFormats?: SocialPreferredFormat[];

@@ -84,6 +84,7 @@ const input: DailyMissionPlannerInput = {
     objectiveSummary: '発信を継続する',
     audienceSummary: '副業初心者',
     personalitySummary: '丁寧',
+    personality: null,
   },
   approvedStrategy: {
     id: 'strategy-trusted',
