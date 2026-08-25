@@ -2,6 +2,19 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-084: グループ類似検査は本文共有ではなく非可逆署名と集計で行う
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- Signature: Mission ContentをNFKC正規化し、SHA-256 fingerprintと文字3-gram由来の64-bit SimHashを生成する。本文、Prompt、Knowledge、Memory、他参加者の識別情報は類似検査記録へ保存しない。
+- Gate: Campaign Missionは保存前に同じCampaignの合格済み署名と比較する。閾値以上は`POSSIBLE_DUPLICATE`として本文なしの監査記録を残し、Missionを保存しない。
+- Limit: Campaignの参加人数上限に加え、1参加者あたりの生成上限をサーバー側で検査する。上限到達時は生成を停止する。
+- Isolation: 比較対象は本人が参加中で、Group同意、公開商品版、対象Bunshin Assignmentが有効な同一Campaignだけとする。別Campaign、別企業から横断検索しない。
+- Admin privacy: 企業管理画面には生成、採用、コピー、投稿完了、GOOD評価、重複停止の件数と率だけを表示し、投稿案本文や参加者別行動を表示しない。
+- Pilot: 1社・1商品・10〜22人・30〜60日を推奨条件として画面に表示する。実利用者を自動参加させず、結果を成功と自動判定しない。
+- Scope: SNS自動投稿、報酬、ランキング、課金、自動人格学習は含めない。
+- 詳細: `docs/GROUP_SAFETY_VALIDATION_REPORT.md`
+
 ## D-083: Campaign投稿は決定的な比率制御と送信直前の参加再検証を必須とする
 
 - 日付: 2026-08-25

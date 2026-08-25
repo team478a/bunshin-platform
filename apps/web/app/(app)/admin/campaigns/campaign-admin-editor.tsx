@@ -17,12 +17,22 @@ type Campaign = {
   maxRelatedPerWeek: number;
   maxAdsPerWeek: number;
   cooldownDays: number;
+  generationLimitPerParticipant: number;
+  similarityThresholdBasisPoints: number;
   startsAt: string;
   endsAt: string;
   status: 'DRAFT' | 'OPEN' | 'CLOSED' | 'CANCELLED';
   group: { name: string };
   productPackVersion: { version: number; productPack: { name: string } };
   participations: Array<{ status: string }>;
+  metrics: {
+    generated: number;
+    accepted: number;
+    copied: number;
+    posted: number;
+    feedbackGood: number;
+    duplicateRejected: number;
+  };
 };
 
 const value = (data: FormData, name: string) => {
@@ -85,6 +95,8 @@ export function CampaignAdminEditor({
         maxRelatedPerWeek: Number(value(data, 'maxRelatedPerWeek')),
         maxAdsPerWeek: Number(value(data, 'maxAdsPerWeek')),
         cooldownDays: Number(value(data, 'cooldownDays')),
+        generationLimitPerParticipant: Number(value(data, 'generationLimitPerParticipant')),
+        similarityThresholdBasisPoints: Number(value(data, 'similarityThresholdBasisPoints')),
         startsAt: new Date(value(data, 'startsAt')).toISOString(),
         endsAt: new Date(value(data, 'endsAt')).toISOString(),
         assetIds: data
@@ -155,6 +167,29 @@ export function CampaignAdminEditor({
               <input name="cooldownDays" type="number" min="0" max="30" defaultValue="2" required />
             </label>
             <label>
+              1人が作れる企画の上限
+              <input
+                name="generationLimitPerParticipant"
+                type="number"
+                min="1"
+                max="365"
+                defaultValue="60"
+                required
+              />
+            </label>
+            <label>
+              重複とみなす近さ（70〜100％）
+              <input
+                name="similarityThresholdBasisPoints"
+                type="number"
+                min="7000"
+                max="10000"
+                step="100"
+                defaultValue="8500"
+                required
+              />
+            </label>
+            <label>
               開始日時
               <input name="startsAt" type="datetime-local" required />
             </label>
@@ -186,6 +221,11 @@ export function CampaignAdminEditor({
         const accepted = campaign.participations.filter(
           (item) => item.status === 'ACCEPTED',
         ).length;
+        const durationDays = Math.ceil(
+          (new Date(campaign.endsAt).valueOf() - new Date(campaign.startsAt).valueOf()) / 86400000,
+        );
+        const pilotReady =
+          accepted >= 10 && accepted <= 22 && durationDays >= 30 && durationDays <= 60;
         return (
           <section className="settings-card" key={campaign.id}>
             <h2>{campaign.name}</h2>
@@ -200,6 +240,30 @@ export function CampaignAdminEditor({
             <p>
               週の商品投稿は最大{campaign.maxRelatedPerWeek}件（商品紹介は最大
               {campaign.maxAdsPerWeek}件）、間を{campaign.cooldownDays}日あけます。
+            </p>
+            <p>
+              1人最大{campaign.generationLimitPerParticipant}件 ／ 類似度
+              {campaign.similarityThresholdBasisPoints / 100}%以上は保存しません。
+            </p>
+            <p>
+              企画 {campaign.metrics.generated}件 ／ 採用 {campaign.metrics.accepted}件 ／ コピー{' '}
+              {campaign.metrics.copied}件 ／ 投稿完了 {campaign.metrics.posted}件 ／ よかった{' '}
+              {campaign.metrics.feedbackGood}件
+            </p>
+            <p>似すぎて停止した企画：{campaign.metrics.duplicateRejected}件</p>
+            <p>
+              採用率：
+              {campaign.metrics.generated
+                ? `${Math.round((campaign.metrics.accepted / campaign.metrics.generated) * 100)}%`
+                : 'まだ計測できません'}{' '}
+              ／ 投稿完了率：
+              {campaign.metrics.generated
+                ? `${Math.round((campaign.metrics.posted / campaign.metrics.generated) * 100)}%`
+                : 'まだ計測できません'}
+            </p>
+            <p>
+              先行テスト：{pilotReady ? '推奨人数・期間を満たしています' : '準備中'}（参加
+              {accepted}人・{durationDays}日間）
             </p>
             {campaign.status === 'DRAFT' ? (
               <button type="button" onClick={() => void transition(campaign, 'OPEN')}>

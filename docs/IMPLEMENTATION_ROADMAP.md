@@ -267,7 +267,7 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 - G3-B: Daily Mission生成フローへの自動Gate接続 — 完了
 - G4: 任意参加Campaign / Participation / 期間・上限・公式素材 / 管理・本人API/UI / 監査 — 完了
 - G5: 投稿比率、Weekly Plan、生成、LINE/Web導線 — 完了
-- G6: 類似検査、利用制限、KPI、1社先行テスト
+- G6: 類似検査、利用制限、KPI、1社先行テスト — 基盤完了（実運用検証待ち）
 - G7: 検証後の承認型人格学習
 
 Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を飛ばしてG7へ進まない。
