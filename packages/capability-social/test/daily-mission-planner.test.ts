@@ -133,6 +133,8 @@ const input: DailyMissionPlannerInput = {
         angle: '失敗から学んだこと',
         recommendedFormat: 'TEXT',
         notes: null,
+        campaignId: null,
+        classification: 'ORGANIC',
         createdAt: now,
         updatedAt: now,
       },
@@ -190,6 +192,8 @@ describe('GenerateDailyMissionBrief', () => {
       angle: '初心者が今日試せる形で伝える',
       reason: '週間計画と対象者の悩みに合うため',
       estimatedMinutes: 5,
+      campaignId: null,
+      classification: 'ORGANIC',
     });
     expect(planner.generate).toHaveBeenCalledWith(
       expect.objectContaining({

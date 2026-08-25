@@ -2510,6 +2510,8 @@ integration('database ownership boundaries', () => {
           angle: '失敗から学ぶ',
           recommendedFormat: 'TEXT',
           notes: null,
+          campaignId: null,
+          classification: 'ORGANIC',
         },
       ],
     });
@@ -2535,6 +2537,8 @@ integration('database ownership boundaries', () => {
             angle: 'scope外',
             recommendedFormat: 'TEXT',
             notes: null,
+            campaignId: null,
+            classification: 'ORGANIC',
           },
         ],
       }),
@@ -3273,6 +3277,102 @@ integration('database ownership boundaries', () => {
         bunshinId: bunshin.id,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    const group = await client.group.create({
+      data: { workspaceId: organization.id, name: `Planning Group ${randomUUID()}` },
+    });
+    await client.groupMembership.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        userId: participant.user.id,
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const pack = await client.productPack.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        name: `Planning Pack ${randomUUID()}`,
+        status: 'ACTIVE',
+      },
+    });
+    const version = await client.productPackVersion.create({
+      data: {
+        productPackId: pack.id,
+        version: 1,
+        status: 'PUBLISHED',
+        summary: '公式商品',
+        providerName: '公式店',
+        targetCustomer: '初心者',
+        facts: { price: '1000円' },
+        faq: [],
+        suitableFor: [],
+        unsuitableFor: [],
+        publishedAt: new Date(),
+        createdByUserId: owner.user.id,
+      },
+    });
+    await client.productPackAssignment.create({
+      data: {
+        workspaceId: organization.id,
+        productPackId: pack.id,
+        productPackVersionId: version.id,
+        bunshinId: bunshin.id,
+        consentedAt: new Date(),
+        assignedByUserId: participant.user.id,
+      },
+    });
+    const campaign = await client.campaign.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        productPackVersionId: version.id,
+        name: '任意企画',
+        theme: '正しい使い方',
+        targetSummary: '初心者',
+        participationLimit: 10,
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: new Date(Date.now() + 86_400_000),
+        status: 'OPEN',
+        createdByUserId: owner.user.id,
+        participations: {
+          create: {
+            participantWorkspaceId: participant.workspace.id,
+            userId: participant.user.id,
+            bunshinId: bunshin.id,
+            status: 'ACCEPTED',
+            consentedAt: new Date(),
+          },
+        },
+      },
+    });
+    await expect(
+      service.listPlanningContexts({
+        workspaceId: participant.workspace.id,
+        actorUserId: participant.user.id,
+        bunshinId: bunshin.id,
+        from: new Date(),
+        to: new Date(Date.now() + 60_000),
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: campaign.id })]);
+    await service.decide({
+      workspaceId: participant.workspace.id,
+      actorUserId: participant.user.id,
+      bunshinId: bunshin.id,
+      campaignId: campaign.id,
+      decision: 'WITHDRAWN',
+    });
+    await expect(
+      service.listPlanningContexts({
+        workspaceId: participant.workspace.id,
+        actorUserId: participant.user.id,
+        bunshinId: bunshin.id,
+        from: new Date(),
+        to: new Date(Date.now() + 60_000),
+      }),
+    ).resolves.toEqual([]);
   });
 });
 

@@ -2,6 +2,19 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-083: Campaign投稿は決定的な比率制御と送信直前の参加再検証を必須とする
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- Classification: Weekly Plan ItemとDaily Missionを`ORGANIC`、`PRODUCT_RELATED`、`ADVERTISEMENT`へ分類し、Campaignなしは`ORGANIC`だけ、Campaignありは商品関連分類だけを許可する。
+- Planning: Campaignごとに週間の商品関連上限、広告上限、クールダウン日数を持ち、AIの指示だけに頼らずApplication層とDB境界で検証する。
+- Context: 本人が明示参加し、Group在籍同意、公開済みProduct Pack Version、対象Bunshinへの有効Assignmentがすべて揃うCampaignだけを生成Contextへ渡す。公式事実、ルール、Campaign指定素材をVersion固定して利用する。
+- Safety Gate: Campaign Missionは永続化前に広告分類、公式事実、必須表示、Evidenceを決定的に検査し、不合格なら保存しない。合格Missionだけに追記型Advertising Safety Reviewを残す。
+- Revocation: Weekly Plan保存時、Daily Mission保存時、LINE通知取得時に参加条件を再検証する。参加撤回、Group退出、Assignment解除、Campaign終了後は新規生成と通知を停止する。
+- Delivery: Webには分類を明示する。LINEへはCampaign名と分類の安全な要約だけを送り、Mission本文、商品パック全文、個人情報は含めずWeb確認へ誘導する。
+- Scope: SNS自動投稿、グループ類似検査、自動人格学習、報酬、ランキング、課金はG5へ含めない。
+- 詳細: `docs/GROUP_CAMPAIGN_PLANNING_REPORT.md`
+
 ## D-082: Campaignは企業所有、Participationは本人の明示判断として分離する
 
 - 日付: 2026-08-25

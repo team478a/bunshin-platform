@@ -155,6 +155,7 @@ export interface LineMissionNotificationSummary {
   estimatedMinutes: number;
   topic: string;
   researched: boolean;
+  campaign?: { name: string; classification: 'PRODUCT_RELATED' | 'ADVERTISEMENT' } | null;
 }
 
 export interface LineMissionNotificationSummaryRepository {
@@ -190,7 +191,22 @@ export function normalizeLineMissionNotificationSummary(
   if (!topic) throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission topic');
   if (typeof input.researched !== 'boolean')
     throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission research marker');
-  return { ...input, topic: topic.slice(0, 60) };
+  const campaign = input.campaign
+    ? {
+        name: input.campaign.name.replace(/\s+/g, ' ').trim().slice(0, 60),
+        classification: input.campaign.classification,
+      }
+    : null;
+  if (
+    campaign &&
+    (!campaign.name || !['PRODUCT_RELATED', 'ADVERTISEMENT'].includes(campaign.classification))
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE Mission campaign');
+  return {
+    ...input,
+    topic: topic.slice(0, 60),
+    ...(input.campaign === undefined ? {} : { campaign }),
+  };
 }
 
 export type LineProviderFailure = {

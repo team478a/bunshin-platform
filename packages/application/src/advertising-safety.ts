@@ -149,15 +149,7 @@ export class AdvertisingSafetyService {
   }
 
   async review(input: AdvertisingReviewInput) {
-    const content = clean(input.content, 'content', 20_000);
-    if (new Set(input.evidenceIds).size !== input.evidenceIds.length)
-      throw new ApplicationError('VALIDATION_ERROR', 'duplicate evidence');
-    const material = await this.repository.prepareReview({
-      ...input,
-      evidenceIds: input.evidenceIds,
-    });
-    if (!material) throw new ApplicationError('NOT_FOUND', 'review context unavailable');
-    const inspected = inspectAdvertisingContent({ ...input, content, material });
+    const { content, material, inspected } = await this.inspect(input);
     const value = await this.repository.saveReview({
       ...input,
       dailyMissionId: input.dailyMissionId ?? null,
@@ -170,6 +162,22 @@ export class AdvertisingSafetyService {
     });
     if (!value) throw new ApplicationError('NOT_FOUND', 'review context unavailable');
     return value;
+  }
+
+  async inspect(input: AdvertisingReviewInput) {
+    const content = clean(input.content, 'content', 20_000);
+    if (new Set(input.evidenceIds).size !== input.evidenceIds.length)
+      throw new ApplicationError('VALIDATION_ERROR', 'duplicate evidence');
+    const material = await this.repository.prepareReview({
+      ...input,
+      evidenceIds: input.evidenceIds,
+    });
+    if (!material) throw new ApplicationError('NOT_FOUND', 'review context unavailable');
+    return {
+      content,
+      material,
+      inspected: inspectAdvertisingContent({ ...input, content, material }),
+    };
   }
 
   async listReviews(input: AdvertisingSafetyScope) {

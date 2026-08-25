@@ -39,6 +39,8 @@ const input = {
     angle: '失敗談',
     recommendedFormat: 'TEXT' as const,
     notes: null,
+    campaignId: null,
+    classification: 'ORGANIC' as const,
   },
   contentPillar: { title: '実践', description: null },
   grantedKnowledge: [{ type: 'SKILL', title: '経験', content: '10年の経験' }],
@@ -78,7 +80,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v4',
+      promptVersion: 'daily-mission-planner-v5',
       inputTokens: 90,
       outputTokens: 30,
     });

@@ -21,6 +21,8 @@ export interface GenerationContextSnapshotPayload {
   weeklyPlan: GenerationContextReference;
   contentPillar: GenerationContextReference;
   productPack: GenerationContextReference | null;
+  campaign?: GenerationContextReference | null;
+  classification?: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
   trendCandidates: GenerationContextReference[];
   promptVersion: string;
   provider: string;

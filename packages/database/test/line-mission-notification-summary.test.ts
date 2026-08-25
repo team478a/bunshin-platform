@@ -41,6 +41,42 @@ describe('LINE Mission notification summary repository', () => {
           },
         },
         socialProfile: { is: { status: 'ACTIVE' } },
+        OR: [
+          { campaignId: null },
+          {
+            campaign: {
+              is: {
+                status: 'OPEN',
+                startsAt: { lte: expect.any(Date) },
+                endsAt: { gt: expect.any(Date) },
+                group: {
+                  status: 'ACTIVE',
+                  memberships: {
+                    some: {
+                      userId: 'user-a',
+                      status: 'ACTIVE',
+                      consentedAt: { not: null },
+                    },
+                  },
+                },
+                participations: {
+                  some: {
+                    participantWorkspaceId: 'workspace-a',
+                    userId: 'user-a',
+                    bunshinId: 'bunshin-a',
+                    status: 'ACCEPTED',
+                  },
+                },
+                productPackVersion: {
+                  status: 'PUBLISHED',
+                  assignments: {
+                    some: { bunshinId: 'bunshin-a', status: 'ACTIVE' },
+                  },
+                },
+              },
+            },
+          },
+        ],
       },
       select: {
         format: true,
@@ -48,6 +84,8 @@ describe('LINE Mission notification summary repository', () => {
         topic: true,
         trendContext: { select: { id: true } },
         socialProfile: { select: { platform: true } },
+        classification: true,
+        campaign: { select: { name: true } },
       },
     });
     expect(findFirst.mock.calls[0]?.[0].select).not.toHaveProperty('content');

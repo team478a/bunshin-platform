@@ -87,7 +87,7 @@ describe('OpenAIMissionContentGenerator', () => {
       grantedKnowledge: [],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v3',
+      promptVersion: 'mission-content-generator-v4',
       inputTokens: 100,
       outputTokens: 50,
     });

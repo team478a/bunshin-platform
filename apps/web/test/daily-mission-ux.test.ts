@@ -20,6 +20,8 @@ function mission(
     topic: 'topic',
     angle: 'angle',
     reason: 'reason',
+    campaignId: null,
+    classification: 'ORGANIC',
     qualityScore: 90,
     content,
     decision: 'ACCEPTED',

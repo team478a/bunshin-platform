@@ -4,6 +4,8 @@ import {
   type BunshinCapabilityAssignmentRepository,
   type GenerationContextSnapshotPayload,
   type SelectedBunshinMemory,
+  type CampaignPlanningContext,
+  type CampaignContentClassification,
 } from '@bunshin/application';
 import type { FacePolicy } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
@@ -810,6 +812,8 @@ export interface WeeklyPlanItem {
   angle: string;
   recommendedFormat: SocialPreferredFormat;
   notes: string | null;
+  campaignId: string | null;
+  classification: CampaignContentClassification;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -852,6 +856,8 @@ export interface WeeklyPlanRepository {
         angle: string;
         recommendedFormat: SocialPreferredFormat;
         notes: string | null;
+        campaignId: string | null;
+        classification: CampaignContentClassification;
       }>;
     },
   ): Promise<WeeklyPlan | null>;
@@ -910,6 +916,7 @@ export interface WeeklyPlannerInput {
   };
   contentPillars: Array<{ id: string; title: string; description: string | null; weight: number }>;
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+  campaigns?: CampaignPlanningContext[];
 }
 export interface WeeklyPlannerOutput {
   strategySummary: string;
@@ -920,6 +927,8 @@ export interface WeeklyPlannerOutput {
     angle: string;
     recommendedFormat: SocialPreferredFormat;
     notes: string | null;
+    campaignId: string | null;
+    classification: CampaignContentClassification;
   }>;
 }
 export interface WeeklyPlannerResult {
@@ -954,6 +963,8 @@ export class GenerateWeeklyPlan {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid generated weekly items');
     const pillarIds = new Set(input.contentPillars.map(({ id }) => id));
     const dates = new Set<string>();
+    const campaignValues = input.campaigns ?? [];
+    const campaigns = new Map(campaignValues.map((campaign) => [campaign.id, campaign]));
     const start = new Date(`${weekStartDate}T00:00:00Z`).valueOf();
     const items = result.output.items.map((item) => {
       const scheduledDate = localDate(item.scheduledDate);
@@ -965,6 +976,11 @@ export class GenerateWeeklyPlan {
       dates.add(scheduledDate);
       if (!pillarIds.has(item.contentPillarId))
         throw new ApplicationError('VALIDATION_ERROR', 'generated pillar is outside context');
+      const campaign = item.campaignId ? campaigns.get(item.campaignId) : null;
+      if (item.classification === 'ORGANIC' && item.campaignId !== null)
+        throw new ApplicationError('VALIDATION_ERROR', 'organic item cannot use campaign');
+      if (item.classification !== 'ORGANIC' && !campaign)
+        throw new ApplicationError('VALIDATION_ERROR', 'campaign item is outside context');
       return {
         scheduledDate,
         contentPillarId: item.contentPillarId,
@@ -972,8 +988,37 @@ export class GenerateWeeklyPlan {
         angle: weeklyText(item.angle, 500, 'angle'),
         recommendedFormat: weeklyFormat(item.recommendedFormat),
         notes: weeklyNullable(item.notes, 1000) ?? null,
+        campaignId: item.campaignId,
+        classification: validateEnum(
+          item.classification,
+          ['ORGANIC', 'PRODUCT_RELATED', 'ADVERTISEMENT'] as const,
+          'classification',
+        ),
       };
     });
+    for (const campaign of campaignValues) {
+      const related = items.filter(
+        (item) => item.campaignId === campaign.id && item.classification === 'PRODUCT_RELATED',
+      );
+      const ads = items.filter(
+        (item) => item.campaignId === campaign.id && item.classification === 'ADVERTISEMENT',
+      );
+      if (
+        related.length + ads.length > campaign.maxRelatedPerWeek ||
+        ads.length > campaign.maxAdsPerWeek
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'campaign posting ratio exceeded');
+      const promotionalDates = [...related, ...ads]
+        .map(({ scheduledDate }) => new Date(`${scheduledDate}T00:00:00Z`).valueOf())
+        .sort((left, right) => left - right);
+      if (
+        promotionalDates.some(
+          (value, index) =>
+            index > 0 && value - promotionalDates[index - 1]! <= campaign.cooldownDays * 86400000,
+        )
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'campaign cooldown violated');
+    }
     return {
       ...result,
       output: {
@@ -1214,6 +1259,7 @@ export interface DailyMissionPlannerInput {
   contentPillars: ContentPillar[];
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
   trendIdeas?: TrendIdeaCandidate[];
+  campaign?: CampaignPlanningContext | null;
 }
 
 const PLATFORM_FORMAT_PRIORITY: Record<SocialPlatform, readonly SocialPreferredFormat[]> = {
@@ -1286,7 +1332,10 @@ export interface DailyMissionPlannerProviderInput {
     angle: string;
     recommendedFormat: SocialPreferredFormat;
     notes: string | null;
+    campaignId: string | null;
+    classification: CampaignContentClassification;
   };
+  campaign?: CampaignPlanningContext | null;
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
   trendIdeas?: Array<{
@@ -1324,6 +1373,8 @@ export interface DailyMissionBrief extends Omit<DailyMissionPlannerOutput, 'used
   weeklyPlanItemId: string;
   format: SocialPreferredFormat;
   trendCandidateId?: string;
+  campaignId: string | null;
+  classification: CampaignContentClassification;
 }
 
 export class GenerateDailyMissionBrief {
@@ -1409,7 +1460,10 @@ export class GenerateDailyMissionBrief {
         angle: item.angle,
         recommendedFormat: selectedFormat,
         notes: item.notes,
+        campaignId: item.campaignId,
+        classification: item.classification,
       },
+      campaign: input.campaign ?? null,
       contentPillar: { title: pillar.title, description: pillar.description },
       grantedKnowledge: input.grantedKnowledge,
       ...(trendIdeas.length > 0
@@ -1444,6 +1498,8 @@ export class GenerateDailyMissionBrief {
         angle: missionString(result.output.angle, 500, 'angle'),
         reason: missionString(result.output.reason, 1000, 'reason'),
         estimatedMinutes,
+        campaignId: item.campaignId,
+        classification: item.classification,
         ...(result.output.usedTrendIdea ? { trendCandidateId: trendIdeas[0]!.id } : {}),
       } satisfies DailyMissionBrief,
     };
@@ -1458,6 +1514,7 @@ export interface MissionContentGeneratorInput {
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
   selectedMemories: SelectedBunshinMemory[];
+  campaign?: CampaignPlanningContext | null;
   repairInstructions?: string[];
 }
 
@@ -1667,6 +1724,8 @@ export interface DailyMission {
   bunshinId: string;
   socialProfileId: string | null;
   weeklyPlanItemId: string | null;
+  campaignId: string | null;
+  classification: CampaignContentClassification;
   missionDate: string;
   status: DailyMissionStatus;
   format: SocialPreferredFormat;
@@ -1694,6 +1753,8 @@ export interface DailyMissionScope {
 export interface CreateDailyMissionInput extends DailyMissionScope {
   socialProfileId?: string | null;
   weeklyPlanItemId?: string | null;
+  campaignId?: string | null;
+  classification?: CampaignContentClassification;
   missionDate: string;
   format: SocialPreferredFormat;
   assistanceLevel?: ContentAssistanceLevel;
@@ -1932,6 +1993,13 @@ export function normalizeCreateDailyMission(
   input: CreateDailyMissionInput,
 ): CreateDailyMissionInput {
   const format = weeklyFormat(input.format);
+  const classification = validateEnum(
+    input.classification ?? 'ORGANIC',
+    ['ORGANIC', 'PRODUCT_RELATED', 'ADVERTISEMENT'] as const,
+    'classification',
+  );
+  if ((classification === 'ORGANIC') !== !input.campaignId)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid campaign classification');
   const quality =
     input.qualityScore === undefined || input.qualityScore === null
       ? input.qualityScore
@@ -1941,6 +2009,8 @@ export function normalizeCreateDailyMission(
     ...input,
     missionDate: localDate(input.missionDate),
     format,
+    campaignId: input.campaignId ?? null,
+    classification,
     assistanceLevel: parseContentAssistanceLevel(
       input.assistanceLevel ?? DEFAULT_CONTENT_ASSISTANCE_LEVEL,
     ),

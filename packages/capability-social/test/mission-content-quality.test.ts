@@ -16,6 +16,8 @@ const brief: DailyMissionBrief = {
   angle: '初心者が今日試せる',
   reason: '週間計画に合う',
   estimatedMinutes: 5,
+  campaignId: null,
+  classification: 'ORGANIC',
 };
 const context = {
   platform: 'X' as const,

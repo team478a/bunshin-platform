@@ -21,6 +21,12 @@ class Repository implements CampaignRepository {
     this.last = input;
     return Promise.resolve({ id: 'participation', status: input.decision });
   }
+  listPlanningContexts() {
+    return Promise.resolve([]);
+  }
+  resolvePlanningContext() {
+    return Promise.resolve(null);
+  }
 }
 
 const admin = { workspaceId: 'workspace', actorUserId: 'user' };
@@ -45,6 +51,9 @@ describe('CampaignService', () => {
       theme: 'テーマ',
       targetSummary: '対象',
       assetIds: ['asset'],
+      maxRelatedPerWeek: 2,
+      maxAdsPerWeek: 1,
+      cooldownDays: 2,
     });
   });
 

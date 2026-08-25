@@ -6,6 +6,8 @@ import {
   type BunshinCapabilityAssignmentRepository,
   type BunshinRepository,
   type KnowledgeGrantRepository,
+  CampaignService,
+  type CampaignRepository,
 } from '@bunshin/application';
 import {
   CreateGeneratedWeeklyPlan,
@@ -59,6 +61,7 @@ export interface WeeklyPlanGenerationDependencies {
   bunshins: BunshinRepository;
   knowledge: KnowledgeGrantRepository;
   planner: WeeklyPlannerPort;
+  campaigns?: CampaignRepository;
   providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
   recordUsage(event: UsageEvent): Promise<void>;
@@ -117,6 +120,15 @@ export class WeeklyPlanGenerationService {
       const granted = await new ListGrantedKnowledgeForBunshin(this.dependencies.knowledge).execute(
         input,
       );
+      const weekEnd = new Date(`${input.weekStartDate}T23:59:59.999Z`);
+      weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+      const campaigns = this.dependencies.campaigns
+        ? await new CampaignService(this.dependencies.campaigns).listPlanningContexts({
+            ...input,
+            from: new Date(`${input.weekStartDate}T00:00:00.000Z`),
+            to: weekEnd,
+          })
+        : [];
       providerAttempted = true;
       const result = await new GenerateWeeklyPlan(this.dependencies.planner).execute({
         weekStartDate: input.weekStartDate,
@@ -143,6 +155,7 @@ export class WeeklyPlanGenerationService {
           weight,
         })),
         grantedKnowledge: granted.map(({ type, title, content }) => ({ type, title, content })),
+        campaigns,
       });
       const plan = await new CreateGeneratedWeeklyPlan(
         this.dependencies.plans,
@@ -198,6 +211,7 @@ export async function createWeeklyPlanGenerationService() {
     strategies: new db.PrismaSocialAccountStrategyRepository(),
     bunshins: new db.PrismaBunshinRepository(),
     knowledge: new db.PrismaKnowledgeGrantRepository(),
+    campaigns: new db.PrismaCampaignRepository(),
     planner: new OpenAIWeeklyPlanner({
       apiKey,
       model,

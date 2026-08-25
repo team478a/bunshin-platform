@@ -2,6 +2,29 @@ import { ApplicationError } from '@bunshin/shared';
 
 export type CampaignStatus = 'DRAFT' | 'OPEN' | 'CLOSED' | 'CANCELLED';
 export type CampaignDecision = 'ACCEPTED' | 'DECLINED' | 'ON_HOLD' | 'WITHDRAWN';
+export type CampaignContentClassification = 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
+
+export interface CampaignPlanningContext {
+  id: string;
+  name: string;
+  theme: string;
+  targetSummary: string;
+  startsAt: Date;
+  endsAt: Date;
+  maxRelatedPerWeek: number;
+  maxAdsPerWeek: number;
+  cooldownDays: number;
+  productPack: {
+    versionId: string;
+    version: number;
+    summary: string;
+    providerName: string;
+    targetCustomer: string;
+    facts: Record<string, string>;
+    rules: Array<{ type: string; value: string; condition: string | null }>;
+    assets: Array<{ type: string; url: string; label: string; usageTerms: string }>;
+  };
+}
 
 export interface CampaignAdminScope {
   workspaceId: string;
@@ -24,6 +47,9 @@ export interface CampaignRepository {
       theme: string;
       targetSummary: string;
       participationLimit: number;
+      maxRelatedPerWeek: number;
+      maxAdsPerWeek: number;
+      cooldownDays: number;
       startsAt: Date;
       endsAt: Date;
       assetIds: string[];
@@ -48,6 +74,12 @@ export interface CampaignRepository {
       reason: string | null;
     },
   ): Promise<object | null>;
+  listPlanningContexts(
+    input: CampaignParticipantScope & { from: Date; to: Date },
+  ): Promise<CampaignPlanningContext[] | null>;
+  resolvePlanningContext(
+    input: CampaignParticipantScope & { campaignId: string; at: Date },
+  ): Promise<CampaignPlanningContext | null>;
 }
 
 const text = (value: string, field: string, max: number) => {
@@ -74,6 +106,9 @@ export class CampaignService {
       theme: string;
       targetSummary: string;
       participationLimit: number;
+      maxRelatedPerWeek?: number;
+      maxAdsPerWeek?: number;
+      cooldownDays?: number;
       startsAt: Date;
       endsAt: Date;
       assetIds?: string[];
@@ -87,6 +122,21 @@ export class CampaignService {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid participationLimit');
     if (input.startsAt >= input.endsAt)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid campaign period');
+    const maxRelatedPerWeek = input.maxRelatedPerWeek ?? 2;
+    const maxAdsPerWeek = input.maxAdsPerWeek ?? 1;
+    const cooldownDays = input.cooldownDays ?? 2;
+    if (
+      !Number.isInteger(maxRelatedPerWeek) ||
+      maxRelatedPerWeek < 0 ||
+      maxRelatedPerWeek > 7 ||
+      !Number.isInteger(maxAdsPerWeek) ||
+      maxAdsPerWeek < 0 ||
+      maxAdsPerWeek > maxRelatedPerWeek ||
+      !Number.isInteger(cooldownDays) ||
+      cooldownDays < 0 ||
+      cooldownDays > 30
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid campaign planning policy');
     const assetIds = [...new Set(input.assetIds ?? [])];
     const result = await this.repository.createDraft({
       ...input,
@@ -94,6 +144,9 @@ export class CampaignService {
       theme: text(input.theme, 'theme', 1000),
       targetSummary: text(input.targetSummary, 'targetSummary', 1000),
       assetIds,
+      maxRelatedPerWeek,
+      maxAdsPerWeek,
+      cooldownDays,
       now: new Date(),
     });
     if (result === null) throw new ApplicationError('NOT_FOUND', 'campaign context unavailable');
@@ -140,6 +193,26 @@ export class CampaignService {
       now: new Date(),
     });
     if (result === null) throw new ApplicationError('NOT_FOUND', 'campaign unavailable');
+    return result;
+  }
+
+  async listPlanningContexts(input: CampaignParticipantScope & { from: Date; to: Date }) {
+    if (input.from > input.to)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid campaign planning period');
+    const result = await this.repository.listPlanningContexts(input);
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'participant scope unavailable');
+    return result;
+  }
+
+  async resolvePlanningContext(
+    input: CampaignParticipantScope & { campaignId: string; at?: Date },
+  ) {
+    const result = await this.repository.resolvePlanningContext({
+      ...input,
+      at: input.at ?? new Date(),
+    });
+    if (result === null)
+      throw new ApplicationError('NOT_FOUND', 'campaign planning context unavailable');
     return result;
   }
 }

@@ -29,6 +29,8 @@ const mission: DailyMission = {
   bunshinId: 'bunshin-1',
   socialProfileId: null,
   weeklyPlanItemId: null,
+  campaignId: null,
+  classification: 'ORGANIC',
   missionDate: '2026-08-19',
   status: 'GENERATED',
   format: 'SLIDE',

@@ -24,6 +24,8 @@ export interface WeeklyPlanItemView {
   angle: string;
   recommendedFormat: SocialPreferredFormat;
   notes: string | null;
+  campaignId?: string | null;
+  classification?: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
 }
 
 export interface WeeklyPlanView {
@@ -370,6 +372,13 @@ export function WeeklyPlanSection({
                       <p>
                         {item.goal} — {item.angle}（{formatLabels[item.recommendedFormat]}）
                       </p>
+                      {item.classification && item.classification !== 'ORGANIC' ? (
+                        <p>
+                          {item.classification === 'ADVERTISEMENT'
+                            ? '商品を紹介する企画（PR）'
+                            : '商品に関係する企画'}
+                        </p>
+                      ) : null}
                       {item.notes ? <p>{item.notes}</p> : null}
                       {editable ? (
                         <div className="weekly-plan-actions">
