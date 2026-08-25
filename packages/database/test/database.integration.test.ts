@@ -5,6 +5,9 @@ import {
   RequireActiveBunshinCapability,
   RecordGenerationContextSnapshot,
   GetGenerationContextSnapshot,
+  CreatePersonalityVersion,
+  ListPersonalityVersions,
+  RestorePersonalityVersion,
   requireAccessibleWorkspace,
 } from '@bunshin/application';
 import {
@@ -58,6 +61,7 @@ import {
   PrismaDailyMissionRepository,
   PrismaDailyMissionGenerationRepository,
   PrismaGenerationContextSnapshotRepository,
+  PrismaPersonalityVersionRepository,
   PrismaMissionEngagementRepository,
   PrismaMissionOutcomeRepository,
   PrismaLegalConsentRepository,
@@ -119,6 +123,7 @@ integration('database ownership boundaries', () => {
     await client.bunshinKnowledgeGrant.deleteMany();
     await client.ownerKnowledge.deleteMany();
     await client.platformAdmin.deleteMany();
+    await client.bunshinPersonalityVersion.deleteMany();
     await client.bunshinPersonality.deleteMany();
     await client.bunshinAudience.deleteMany();
     await client.bunshinObjective.deleteMany();
@@ -1569,6 +1574,57 @@ integration('database ownership boundaries', () => {
       },
     });
     expect(created).toMatchObject({ status: 'DRAFT', objectives: [{ priority: 1 }] });
+    const personalityVersions = new PrismaPersonalityVersionRepository(client);
+    await expect(
+      new ListPersonalityVersions(personalityVersions).execute({
+        workspaceId: owner.workspace.id,
+        bunshinId: created.id,
+        actorUserId: owner.user.id,
+      }),
+    ).resolves.toMatchObject([{ version: 1, source: 'INITIAL', tone: 'calm' }]);
+    const second = await new CreatePersonalityVersion(personalityVersions).execute({
+      workspaceId: owner.workspace.id,
+      bunshinId: created.id,
+      actorUserId: owner.user.id,
+      source: 'MANUAL',
+      changeReason: '話し方を調整',
+      content: {
+        tone: 'friendly',
+        formality: 'neutral',
+        energyLevel: 'medium',
+        expertiseLevel: 'expert',
+        sentenceStyle: 'concise',
+        firstPerson: '私',
+        forbiddenExpressions: [],
+        preferredExpressions: ['一緒に'],
+        visualDirection: null,
+        facePolicy: 'FULL_ANONYMOUS',
+      },
+    });
+    expect(second).toMatchObject({ version: 2, source: 'MANUAL', tone: 'friendly' });
+    await expect(
+      new ListPersonalityVersions(personalityVersions).execute({
+        workspaceId: owner.workspace.id,
+        bunshinId: created.id,
+        actorUserId: outsider.user.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const initial = (
+      await new ListPersonalityVersions(personalityVersions).execute({
+        workspaceId: owner.workspace.id,
+        bunshinId: created.id,
+        actorUserId: owner.user.id,
+      })
+    ).find(({ version }) => version === 1)!;
+    await expect(
+      new RestorePersonalityVersion(personalityVersions).execute({
+        workspaceId: owner.workspace.id,
+        bunshinId: created.id,
+        actorUserId: owner.user.id,
+        versionId: initial.id,
+        changeReason: '初期人格へ戻す',
+      }),
+    ).resolves.toMatchObject({ version: 3, source: 'RESTORE', tone: 'calm' });
     const sibling = await repository.create({
       workspaceId: owner.workspace.id,
       actorUserId: owner.user.id,
