@@ -5448,19 +5448,7 @@ export class PrismaBunshinMemoryRepository implements BunshinMemoryRepository {
     );
   }
   async list(input: Parameters<BunshinMemoryRepository['list']>[0]) {
-    const accessible = await this.client.bunshin.findFirst({
-      where: {
-        id: input.bunshinId,
-        workspaceId: input.workspaceId,
-        status: { not: 'ARCHIVED' },
-        workspace: {
-          status: 'ACTIVE',
-          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
-        },
-      },
-      select: { id: true },
-    });
-    if (!accessible) return [];
+    if (!(await this.managed(input))) return [];
     const rows = await this.client.bunshinMemory.findMany({
       where: {
         workspaceId: input.workspaceId,

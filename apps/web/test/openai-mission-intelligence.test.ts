@@ -40,6 +40,15 @@ const base = {
     ctaStrategy: 'プロフィール',
     postingPolicy: '平日',
   },
+  selectedMemories: [
+    {
+      id: 'memory-1',
+      type: 'EXPERIENCE' as const,
+      summary: '副業を始めた経験',
+      content: '最初は毎日5分だけ発信した',
+      selectionReason: 'Missionとの関連語 2件・重要度 4/5',
+    },
+  ],
 };
 
 describe('OpenAIMissionContentGenerator', () => {
@@ -78,7 +87,7 @@ describe('OpenAIMissionContentGenerator', () => {
       grantedKnowledge: [],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v2',
+      promptVersion: 'mission-content-generator-v3',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -93,6 +102,7 @@ describe('OpenAIMissionContentGenerator', () => {
     });
     expect(JSON.stringify(request)).toContain('personality-version-2');
     expect(JSON.stringify(request)).toContain('絶対');
+    expect(JSON.stringify(request)).toContain('最初は毎日5分だけ発信した');
     expect(Object.keys(request.text.format.schema.properties)).toEqual([
       'body',
       'threadParts',
@@ -184,7 +194,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v2',
+      promptVersion: 'mission-quality-checker-v3',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;

@@ -1140,6 +1140,23 @@ integration('database ownership boundaries', () => {
     });
     expect(created).not.toBeNull();
     if (created === null) throw new Error('memory creation failed');
+    const sameWorkspaceMember = await client.user.create({
+      data: { displayName: 'Same Workspace Member' },
+    });
+    await client.workspaceMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        userId: sameWorkspaceMember.id,
+        role: 'MEMBER',
+      },
+    });
+    expect(
+      await repository.list({
+        workspaceId: owner.workspace.id,
+        actorUserId: sameWorkspaceMember.id,
+        bunshinId: first.id,
+      }),
+    ).toEqual([]);
     expect(
       await repository.list({
         workspaceId: owner.workspace.id,
