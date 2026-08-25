@@ -262,7 +262,7 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 詳細は`docs/GROUP_BROADCAST_REBASELINE.md`を正本とする。
 
 - G1: Group / Membership / Invitation / Consent / Isolation
-- G2: Product Pack / Version / Rule / Asset / Assignment
+- G2: Product Pack / Version / Rule / Asset / Assignment — Core Persistence完了。管理API/UI・Generation Context接続は未実装
 - G3: 本人Evidence / Advertising Classification / PR固定表記 / 監査
 - G4: 任意参加Campaign / Participation
 - G5: 投稿比率、Weekly Plan、生成、LINE/Web導線
