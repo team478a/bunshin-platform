@@ -200,6 +200,48 @@ a {
   font: inherit;
 }
 
+.personality-section form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.personality-section label {
+  display: grid;
+  gap: 0.45rem;
+  font-weight: 700;
+}
+
+.personality-section input,
+.personality-section textarea,
+.personality-section select {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid #c9d1da;
+  border-radius: 0.75rem;
+  background: white;
+  color: #182230;
+  font: inherit;
+}
+
+.personality-section textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.personality-history {
+  display: grid;
+  gap: 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.personality-history li span,
+.personality-history li p {
+  display: block;
+  margin-top: 0.25rem;
+  color: #667085;
+}
+
 .capability-section {
   margin: 40px 0;
 }

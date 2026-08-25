@@ -3,6 +3,7 @@ import {
   ListBunshinCapabilityAssignments,
   ListBunshinMemories,
   GetLineNotificationPreference,
+  ListPersonalityVersions,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -44,10 +45,18 @@ export default async function BunshinPage({
       PrismaMissionEngagementRepository,
       PrismaMissionOutcomeRepository,
       PrismaLineNotificationPreferenceRepository,
+      PrismaPersonalityVersionRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
       bunshinId: (await params).bunshinId,
+      actorUserId: currentUser.userId,
+    });
+    const personalityVersions = await new ListPersonalityVersions(
+      new PrismaPersonalityVersionRepository(),
+    ).execute({
+      workspaceId,
+      bunshinId: bunshin.id,
       actorUserId: currentUser.userId,
     });
     const owned = await new PrismaOwnerKnowledgeRepository().listOwned({
@@ -144,6 +153,41 @@ export default async function BunshinPage({
       <BunshinEditor
         workspaceId={workspaceId}
         bunshin={bunshin}
+        personalityVersions={personalityVersions.map(
+          ({
+            id,
+            version,
+            source,
+            changeReason,
+            tone,
+            formality,
+            energyLevel,
+            expertiseLevel,
+            sentenceStyle,
+            firstPerson,
+            forbiddenExpressions,
+            preferredExpressions,
+            visualDirection,
+            facePolicy,
+            createdAt,
+          }) => ({
+            id,
+            version,
+            source,
+            changeReason,
+            tone,
+            formality,
+            energyLevel,
+            expertiseLevel,
+            sentenceStyle,
+            firstPerson,
+            forbiddenExpressions,
+            preferredExpressions,
+            visualDirection,
+            facePolicy,
+            createdAt: createdAt.toISOString(),
+          }),
+        )}
         knowledge={owned.map(({ id, title, type }) => ({
           id,
           title,
