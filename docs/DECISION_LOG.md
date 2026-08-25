@@ -2,6 +2,17 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-086: トレンド調査は設定確認と本番実行証跡の両方を開始条件にする
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- Automatic: ProductionでGrok、Exa、FirecrawlのいずれかがACTIVE、非停止、接続確認済みであることを管理画面から自動確認する。
+- Manual: 実際の本番データで週次調査を1回実行し、Evidence、Candidate、期限、Mission採用、設定原価を人が確認して対象commitへ証跡を残す。
+- Approval: `TREND_RESEARCH_SMOKE`が記録されていなければ最終承認を保存できない。別commitへ確認結果を暗黙継承しない。
+- Failure: Provider未設定・停止・接続未確認を開始前に表示する。調査障害時に通常Missionを止めない既存フォールバックは維持する。
+- Boundary: グループ発信の1社先行テストは人格学習G7の開始条件であり、一般FREE検証の開始判定へ混ぜない。
+- 詳細: `docs/PRODUCTION_VALIDATION_DASHBOARD_REPORT.md`
+
 ## D-085: トレンド調査は週次冪等Jobと管理予算で実行する
 
 - 日付: 2026-08-25

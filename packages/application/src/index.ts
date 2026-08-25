@@ -1343,6 +1343,7 @@ export const PRODUCTION_GATE_CHECK_KEYS = [
   'FREE_MVP_SMOKE',
   'ACCOUNT_DELETION_DRY_RUN',
   'LINE_GO_NO_GO',
+  'TREND_RESEARCH_SMOKE',
   'FINAL_APPROVAL',
 ] as const;
 export type ProductionGateCheckKey = (typeof PRODUCTION_GATE_CHECK_KEYS)[number];

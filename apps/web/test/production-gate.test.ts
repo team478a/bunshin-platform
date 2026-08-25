@@ -6,6 +6,7 @@ const readyInput = {
   operationsReady: true,
   legalReady: true,
   authReady: true,
+  trendResearchReady: true,
   accountDeletionMode: 'enabled' as const,
   accountDeletionApproved: true,
 };
@@ -27,6 +28,7 @@ describe('production gate checklist', () => {
       'FREE_MVP_SMOKE',
       'ACCOUNT_DELETION_DRY_RUN',
       'LINE_GO_NO_GO',
+      'TREND_RESEARCH_SMOKE',
       'FINAL_APPROVAL',
     ]);
     expect(productionGateChecklist({ ...readyInput, recordedManualChecks }).launchReady).toBe(true);
@@ -56,5 +58,18 @@ describe('production gate checklist', () => {
     expect(
       value.automatic.filter((item) => item.status === 'ACTION_REQUIRED').map((item) => item.code),
     ).toEqual(['LEGAL_DOCUMENTS', 'AUTH_ADMINISTRATION', 'ACCOUNT_DELETION_EXECUTION']);
+  });
+
+  it('話題調査の設定と実運用確認を別々に判定する', () => {
+    const missing = productionGateChecklist({ ...readyInput, trendResearchReady: false });
+    expect(missing.automatic).toContainEqual(
+      expect.objectContaining({
+        code: 'TREND_RESEARCH_CONFIGURATION',
+        status: 'ACTION_REQUIRED',
+      }),
+    );
+    expect(missing.manual).toContainEqual(
+      expect.objectContaining({ code: 'TREND_RESEARCH_SMOKE', status: 'MANUAL_CHECK' }),
+    );
   });
 });

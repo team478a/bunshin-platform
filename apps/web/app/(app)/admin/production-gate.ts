@@ -5,7 +5,13 @@ export interface ProductionGateItem {
   title: string;
   status: ProductionGateStatus;
   guidance: string;
-  href: '/admin' | '/admin/legal' | '/admin/deletions' | '/admin/guide' | '/admin/production-gate';
+  href:
+    | '/admin'
+    | '/admin/ai'
+    | '/admin/legal'
+    | '/admin/deletions'
+    | '/admin/guide'
+    | '/admin/production-gate';
 }
 
 export function productionGateChecklist(input: {
@@ -13,6 +19,7 @@ export function productionGateChecklist(input: {
   operationsReady: boolean;
   legalReady: boolean;
   authReady: boolean;
+  trendResearchReady: boolean;
   accountDeletionMode: 'disabled' | 'dry-run' | 'enabled';
   accountDeletionApproved: boolean;
   recordedManualChecks?: ReadonlySet<string>;
@@ -56,6 +63,15 @@ export function productionGateChecklist(input: {
         ? '認証情報を安全に削除するための設定があります。'
         : 'Supabase Auth管理用の本番設定を確認してください。値は管理画面へ入力しません。',
       href: '/admin/deletions',
+    },
+    {
+      code: 'TREND_RESEARCH_CONFIGURATION',
+      title: '話題調査サービスの本番設定',
+      status: input.trendResearchReady ? 'READY' : 'ACTION_REQUIRED',
+      guidance: input.trendResearchReady
+        ? '接続確認済みの話題調査サービスが使用中です。'
+        : 'Grok、Exa、Firecrawlのいずれかを登録し、接続確認後に使用中へ切り替えてください。',
+      href: '/admin/ai',
     },
     {
       code: 'ACCOUNT_DELETION_EXECUTION',
@@ -117,6 +133,14 @@ export function productionGateChecklist(input: {
       title: 'LINE本番開始確認',
       status: manualStatus('LINE_GO_NO_GO'),
       guidance: 'Webhook疎通、通知同意、上限、緊急停止、Go/No-Go workflowを確認します。',
+      href: '/admin/guide',
+    },
+    {
+      code: 'TREND_RESEARCH_SMOKE',
+      title: '本番データで話題調査を確認',
+      status: manualStatus('TREND_RESEARCH_SMOKE'),
+      guidance:
+        '週次調査を1回実行し、出典、候補、期限、Missionへの反映、設定原価が正しいことを確認します。',
       href: '/admin/guide',
     },
     {

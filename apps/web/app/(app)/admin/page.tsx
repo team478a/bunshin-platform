@@ -49,6 +49,14 @@ export default async function OperationsAdminPage() {
     new db.PrismaAiProviderConfigurationRepository(),
   ).execute(user.userId, currentAiProviderEnvironment());
   const preparedProviders = new Set(aiConfigurations.map((item) => item.provider));
+  const trendResearchReady = aiConfigurations.some(
+    (item) =>
+      ['GROK', 'EXA', 'FIRECRAWL'].includes(item.provider) &&
+      item.status === 'ACTIVE' &&
+      !item.globallyPaused &&
+      Boolean(item.lastVerifiedAt) &&
+      !item.lastErrorCategory,
+  );
   const richMenus = await new ListLineRichMenus(new db.PrismaLineRichMenuRepository()).execute({
     actorUserId: user.userId,
     environment: currentLineEnvironment(),
@@ -95,6 +103,7 @@ export default async function OperationsAdminPage() {
       environment.SUPABASE_SERVICE_ROLE_KEY &&
       environment.SUPABASE_AUTH_ADMIN_ENV === environment.APP_ENV,
     ),
+    trendResearchReady,
     accountDeletionMode: environment.ACCOUNT_DELETION_EXECUTION_MODE,
     accountDeletionApproved: environment.ACCOUNT_DELETION_PRODUCTION_APPROVED === 'true',
     recordedManualChecks,

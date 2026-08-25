@@ -1,6 +1,6 @@
 # FREE SOCIAL MVP Production Gate
 
-更新日: 2026-08-21
+更新日: 2026-08-25
 
 ## 判定
 
@@ -36,8 +36,8 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 - [ ] Supabase Auth Site URLとRedirect URL allowlistがProduction URLだけを許可する
 - [x] Vercel ProductionのSupabase公開認証設定がreadinessで`authentication: ok`になる
 - [ ] Production Magic Linkでlogin/logoutできる
-- [ ] `OPENAI_API_KEY`がVercel Productionだけに設定されている
-- [ ] Planner / Content / Qualityのmodel環境変数を確認した
+- [ ] 管理画面でProduction用OpenAI設定を接続確認し、使用中へ切り替えた
+- [ ] Planner / Content / Qualityで使用するモデルを管理画面で確認した
 - [ ] AI失敗時に本文・Knowledge・keyがログへ出ないことを確認した
 - [ ] Vercel Function上限60秒、Provider timeout 45秒が反映されている
 
@@ -72,6 +72,17 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 - [ ] LINE通知同意、quota、緊急停止、担当者、rollbackを人間が確認した
 
 詳細手順は`LINE_PRODUCTION_GO_NO_GO_RUNBOOK.md`を正本とする。LINE Pushを伴わない技術Gate成功だけでは実ユーザー送信を開始しない。
+
+## G. Trend Research Production Gate
+
+- [ ] 管理画面でGrok、Exa、Firecrawlのいずれかを接続確認し、使用中へ切り替えた
+- [ ] 1回の調査金額、1日・1か月の利用上限、全体停止状態を確認した
+- [ ] 本番データで週次調査を1回実行した
+- [ ] 出典、候補、有効期限、Daily Missionへの反映が正しいことを確認した
+- [ ] 実行履歴と設定原価が管理画面へ記録された
+- [ ] 対象commitへ`TREND_RESEARCH_SMOKE`の確認証跡を記録した
+
+調査障害時に通常の投稿企画が継続することも確認する。検索結果本文、APIキー、利用者情報は証跡へ記録しない。
 
 ## Go / No-Go
 

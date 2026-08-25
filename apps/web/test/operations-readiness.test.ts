@@ -50,6 +50,12 @@ const line = {
   createdAt: now,
   updatedAt: now,
 } satisfies LineChannelConfiguration;
+const trend = {
+  ...ai,
+  id: 'trend',
+  provider: 'GROK',
+  model: 'grok-4-fast',
+} satisfies AiProviderConfiguration;
 const richMenu = {
   id: 'menu',
   environment: 'PRODUCTION',
@@ -81,7 +87,7 @@ describe('operationsReadiness', () => {
   it('必須設定と使用中設定が揃えば運用可能と判定する', () => {
     expect(
       operationsReadiness({
-        aiConfigurations: [ai],
+        aiConfigurations: [ai, trend],
         lineConfigurations: [line],
         lineAssessment: assessment,
         richMenus: [richMenu],
@@ -116,10 +122,26 @@ describe('operationsReadiness', () => {
     expect(value.warnings.map((item) => item.title)).toEqual(
       expect.arrayContaining([
         '文章作成AIが全体停止中です',
+        '使用中の話題調査サービスがありません',
         '使用中のLINE設定がありません',
         '公開中のLINEメニューがありません',
         '秘密情報を守る鍵がありません',
       ]),
+    );
+  });
+
+  it('話題調査サービスは接続確認済みの使用中設定を必須にする', () => {
+    const value = operationsReadiness({
+      aiConfigurations: [ai, { ...trend, lastVerifiedAt: null }],
+      lineConfigurations: [line],
+      lineAssessment: assessment,
+      richMenus: [richMenu],
+      encryptionKeyReady: true,
+      cronSecretReady: true,
+      storageReady: true,
+    });
+    expect(value.warnings).toContainEqual(
+      expect.objectContaining({ code: 'TREND_PROVIDER_UNVERIFIED', level: 'ACTION_REQUIRED' }),
     );
   });
 });
