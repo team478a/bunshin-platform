@@ -6,6 +6,7 @@ import {
   ListPersonalityVersions,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
+import Link from 'next/link';
 import {
   ListContentPillars,
   ListSocialProfiles,
@@ -150,146 +151,168 @@ export default async function BunshinPage({
       })),
     );
     return (
-      <BunshinEditor
-        workspaceId={workspaceId}
-        bunshin={bunshin}
-        personalityVersions={personalityVersions.map(
-          ({
+      <>
+        <p>
+          <Link href={`/bunshins/${bunshin.id}/evidence?workspaceId=${workspaceId}`}>
+            経験の根拠と広告の安全確認
+          </Link>
+        </p>
+        <BunshinEditor
+          workspaceId={workspaceId}
+          bunshin={bunshin}
+          personalityVersions={personalityVersions.map(
+            ({
+              id,
+              version,
+              source,
+              changeReason,
+              tone,
+              formality,
+              energyLevel,
+              expertiseLevel,
+              sentenceStyle,
+              firstPerson,
+              forbiddenExpressions,
+              preferredExpressions,
+              visualDirection,
+              facePolicy,
+              createdAt,
+            }) => ({
+              id,
+              version,
+              source,
+              changeReason,
+              tone,
+              formality,
+              energyLevel,
+              expertiseLevel,
+              sentenceStyle,
+              firstPerson,
+              forbiddenExpressions,
+              preferredExpressions,
+              visualDirection,
+              facePolicy,
+              createdAt: createdAt.toISOString(),
+            }),
+          )}
+          knowledge={owned.map(({ id, title, type }) => ({
             id,
-            version,
-            source,
-            changeReason,
-            tone,
-            formality,
-            energyLevel,
-            expertiseLevel,
-            sentenceStyle,
-            firstPerson,
-            forbiddenExpressions,
-            preferredExpressions,
-            visualDirection,
-            facePolicy,
-            createdAt,
-          }) => ({
-            id,
-            version,
-            source,
-            changeReason,
-            tone,
-            formality,
-            energyLevel,
-            expertiseLevel,
-            sentenceStyle,
-            firstPerson,
-            forbiddenExpressions,
-            preferredExpressions,
-            visualDirection,
-            facePolicy,
-            createdAt: createdAt.toISOString(),
-          }),
-        )}
-        knowledge={owned.map(({ id, title, type }) => ({
-          id,
-          title,
-          type,
-          granted: granted.some((item) => item.id === id),
-        }))}
-        memories={memories.map(
-          ({ id, type, content, summary, confidence, importance, active }) => ({
-            id,
+            title,
             type,
-            content,
-            summary,
-            confidence,
-            importance,
+            granted: granted.some((item) => item.id === id),
+          }))}
+          memories={memories.map(
+            ({ id, type, content, summary, confidence, importance, active }) => ({
+              id,
+              type,
+              content,
+              summary,
+              confidence,
+              importance,
+              active,
+            }),
+          )}
+          socialCapabilityStatus={
+            capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
+          }
+          socialProfiles={socialProfiles.map(
+            ({
+              id,
+              platform,
+              handle,
+              profileUrl,
+              purpose,
+              postingFrequency,
+              preferredFormats,
+              defaultAssistanceLevel,
+              status,
+            }) => ({
+              id,
+              platform,
+              handle,
+              profileUrl,
+              purpose,
+              postingFrequency,
+              preferredFormats,
+              defaultAssistanceLevel,
+              status,
+            }),
+          )}
+          socialStrategies={socialStrategies.map(
+            ({
+              id,
+              socialProfileId,
+              platform,
+              concept,
+              positioning,
+              targetSummary,
+              version,
+              status,
+            }) => ({
+              id,
+              socialProfileId,
+              platform,
+              concept,
+              positioning,
+              targetSummary,
+              version,
+              status,
+            }),
+          )}
+          contentPillars={contentPillars.map(({ id, title, description, weight, active }) => ({
+            id,
+            title,
+            description,
+            weight,
             active,
-          }),
-        )}
-        socialCapabilityStatus={
-          capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
-        }
-        socialProfiles={socialProfiles.map(
-          ({
-            id,
-            platform,
-            handle,
-            profileUrl,
-            purpose,
-            postingFrequency,
-            preferredFormats,
-            defaultAssistanceLevel,
-            status,
-          }) => ({
-            id,
-            platform,
-            handle,
-            profileUrl,
-            purpose,
-            postingFrequency,
-            preferredFormats,
-            defaultAssistanceLevel,
-            status,
-          }),
-        )}
-        socialStrategies={socialStrategies.map(
-          ({
-            id,
-            socialProfileId,
-            platform,
-            concept,
-            positioning,
-            targetSummary,
-            version,
-            status,
-          }) => ({
-            id,
-            socialProfileId,
-            platform,
-            concept,
-            positioning,
-            targetSummary,
-            version,
-            status,
-          }),
-        )}
-        contentPillars={contentPillars.map(({ id, title, description, weight, active }) => ({
-          id,
-          title,
-          description,
-          weight,
-          active,
-        }))}
-        weeklyPlans={weeklyPlans.map(
-          ({ id, weekStartDate, timezone, strategySummary, status, items }) => ({
-            id,
-            weekStartDate,
-            timezone,
-            strategySummary,
-            status,
-            items: items.map(
-              ({
-                id: itemId,
-                scheduledDate,
-                contentPillarId,
-                goal,
+          }))}
+          weeklyPlans={weeklyPlans.map(
+            ({ id, weekStartDate, timezone, strategySummary, status, items }) => ({
+              id,
+              weekStartDate,
+              timezone,
+              strategySummary,
+              status,
+              items: items.map(
+                ({
+                  id: itemId,
+                  scheduledDate,
+                  contentPillarId,
+                  goal,
+                  angle,
+                  recommendedFormat,
+                  notes,
+                }) => ({
+                  id: itemId,
+                  scheduledDate,
+                  contentPillarId,
+                  goal,
+                  angle,
+                  recommendedFormat,
+                  notes,
+                }),
+              ),
+            }),
+          )}
+          dailyMissions={dailyMissions.map(
+            (
+              {
+                id,
+                missionDate,
+                status,
+                format,
+                assistanceLevel,
+                estimatedMinutes,
+                topic,
                 angle,
-                recommendedFormat,
-                notes,
-              }) => ({
-                id: itemId,
-                scheduledDate,
-                contentPillarId,
-                goal,
-                angle,
-                recommendedFormat,
-                notes,
-              }),
-            ),
-          }),
-        )}
-        dailyMissions={dailyMissions.map(
-          (
-            {
+                reason,
+                qualityScore,
+                content,
+                socialProfileId,
+                trendContext,
+              },
+              index,
+            ) => ({
               id,
               missionDate,
               status,
@@ -301,59 +324,44 @@ export default async function BunshinPage({
               reason,
               qualityScore,
               content,
-              socialProfileId,
-              trendContext,
-            },
-            index,
-          ) => ({
-            id,
-            missionDate,
-            status,
-            format,
-            assistanceLevel,
-            estimatedMinutes,
-            topic,
-            angle,
-            reason,
-            qualityScore,
-            content,
-            decision: missionDecisions[index]!.decision,
-            rejectionReason: missionDecisions[index]!.rejectionReason,
-            platform:
-              socialProfiles.find((profile) => profile.id === socialProfileId)?.platform ?? null,
-            postedAt: missionOutcomes[index]!.post?.postedAt.toISOString() ?? null,
-            feedback: missionOutcomes[index]!.feedback?.rating ?? null,
-            trendContext: trendContext
-              ? {
-                  whyNow: trendContext.snapshot.candidate.whyNow,
-                  fitReason: trendContext.snapshot.candidate.fitReason,
-                  researchedAt: trendContext.createdAt.toISOString(),
-                  evidence: trendContext.snapshot.evidence.map(
-                    ({ sourceUrl, sourceTitle, publishedAt, retrievedAt }) => ({
-                      sourceUrl,
-                      sourceTitle,
-                      publishedAt,
-                      retrievedAt,
-                    }),
-                  ),
-                }
+              decision: missionDecisions[index]!.decision,
+              rejectionReason: missionDecisions[index]!.rejectionReason,
+              platform:
+                socialProfiles.find((profile) => profile.id === socialProfileId)?.platform ?? null,
+              postedAt: missionOutcomes[index]!.post?.postedAt.toISOString() ?? null,
+              feedback: missionOutcomes[index]!.feedback?.rating ?? null,
+              trendContext: trendContext
+                ? {
+                    whyNow: trendContext.snapshot.candidate.whyNow,
+                    fitReason: trendContext.snapshot.candidate.fitReason,
+                    researchedAt: trendContext.createdAt.toISOString(),
+                    evidence: trendContext.snapshot.evidence.map(
+                      ({ sourceUrl, sourceTitle, publishedAt, retrievedAt }) => ({
+                        sourceUrl,
+                        sourceTitle,
+                        publishedAt,
+                        retrievedAt,
+                      }),
+                    ),
+                  }
+                : null,
+            }),
+          )}
+          lineNotificationPreference={{
+            enabled: lineNotificationPreference.enabled,
+            consentGranted: lineNotificationPreference.notificationConsentAt !== null,
+            localTime: lineNotificationPreference.localTime,
+            timezone: lineNotificationPreference.timezone,
+            frequency: lineNotificationPreference.frequency,
+            quietHoursStart: lineNotificationPreference.quietHoursStart,
+            quietHoursEnd: lineNotificationPreference.quietHoursEnd,
+            pausedUntil: lineNotificationPreference.pausedUntil
+              ? lineNotificationPreference.pausedUntil.toISOString()
               : null,
-          }),
-        )}
-        lineNotificationPreference={{
-          enabled: lineNotificationPreference.enabled,
-          consentGranted: lineNotificationPreference.notificationConsentAt !== null,
-          localTime: lineNotificationPreference.localTime,
-          timezone: lineNotificationPreference.timezone,
-          frequency: lineNotificationPreference.frequency,
-          quietHoursStart: lineNotificationPreference.quietHoursStart,
-          quietHoursEnd: lineNotificationPreference.quietHoursEnd,
-          pausedUntil: lineNotificationPreference.pausedUntil
-            ? lineNotificationPreference.pausedUntil.toISOString()
-            : null,
-          reminderEnabled: lineNotificationPreference.reminderEnabled,
-        }}
-      />
+            reminderEnabled: lineNotificationPreference.reminderEnabled,
+          }}
+        />
+      </>
     );
   } catch {
     notFound();

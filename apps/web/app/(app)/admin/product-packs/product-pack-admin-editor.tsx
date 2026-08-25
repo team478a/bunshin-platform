@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { parseProductPackFacts } from './view-model';
+import { parseProductPackFacts, parseProductPackRules } from './view-model';
 
 type Group = { id: string; name: string };
 type Version = {
@@ -85,6 +85,11 @@ export function ProductPackAdminEditor({
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const facts = parseProductPackFacts(formText(data, 'facts'));
+    const rules = parseProductPackRules({
+      requiredDisclosures: formText(data, 'requiredDisclosures'),
+      forbiddenExpressions: formText(data, 'forbiddenExpressions'),
+      conditionalExpressions: formText(data, 'conditionalExpressions'),
+    });
     void run(() =>
       api(`/api/workspaces/${workspaceId}/product-packs/${packId}/versions`, {
         summary: formText(data, 'summary'),
@@ -94,7 +99,7 @@ export function ProductPackAdminEditor({
         faq: [],
         suitableFor: [],
         unsuitableFor: [],
-        rules: [],
+        rules,
         assets: [],
         validFrom: null,
         validUntil: null,
@@ -159,6 +164,24 @@ export function ProductPackAdminEditor({
                 確認済みの事実（1行に「項目=内容」）
                 <textarea name="facts" required placeholder="価格=月額1,000円" />
               </label>
+              <label>
+                投稿に必ず入れる表記（1行に1つ）
+                <textarea name="requiredDisclosures" placeholder="#PR" />
+              </label>
+              <label>
+                投稿で使ってはいけない表現（1行に1つ）
+                <textarea name="forbiddenExpressions" placeholder="必ず治る" />
+              </label>
+              <label>
+                条件によって必要になる表記（1行に「条件=&gt;必要な表記」）
+                <textarea
+                  name="conditionalExpressions"
+                  placeholder="価格を書く=&gt;税込価格であることを明記"
+                />
+              </label>
+              <p>
+                ここで登録した内容は、投稿前の安全確認に使われます。秘密情報や個人情報は入力しないでください。
+              </p>
               <button type="submit">下書きを作る</button>
             </form>
             <h3>保存した版</h3>
