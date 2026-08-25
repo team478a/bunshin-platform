@@ -510,6 +510,7 @@ model User {
   supportCasesCreated           SupportCase[]                         @relation("SupportCaseCreator")
   supportCasesAssigned          SupportCase[]                         @relation("SupportCaseAssignee")
   supportCaseNotes              SupportCaseNote[]
+  personalityVersionsCreated   BunshinPersonalityVersion[]
 
   @@index([status])
   @@map("users")
@@ -565,6 +566,7 @@ model Workspace {
   trendIdeaCandidates         TrendIdeaCandidate[]
   missionTrendContexts        MissionTrendContext[]
   generationContextSnapshots GenerationContextSnapshot[]
+  personalityVersions        BunshinPersonalityVersion[]
 
   @@index([status])
   @@map("workspaces")
@@ -1112,6 +1114,7 @@ model Bunshin {
   trendIdeaCandidates         TrendIdeaCandidate[]
   missionTrendContexts        MissionTrendContext[]
   generationContextSnapshots GenerationContextSnapshot[]
+  personalityVersions        BunshinPersonalityVersion[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -1755,8 +1758,42 @@ model BunshinPersonality {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
   bunshin              Bunshin    @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
+  versions             BunshinPersonalityVersion[]
 
   @@map("bunshin_personalities")
+}
+
+model BunshinPersonalityVersion {
+  id                   String     @id @default(uuid()) @db.Uuid
+  workspaceId          String     @map("workspace_id") @db.Uuid
+  bunshinId            String     @map("bunshin_id") @db.Uuid
+  personalityId        String     @map("personality_id") @db.Uuid
+  version              Int
+  source               String     @db.VarChar(20)
+  changeReason         String     @map("change_reason") @db.VarChar(500)
+  basedOnVersionId     String?    @map("based_on_version_id") @db.Uuid
+  tone                 String     @db.VarChar(100)
+  formality            String     @db.VarChar(100)
+  energyLevel          String     @map("energy_level") @db.VarChar(100)
+  expertiseLevel       String     @map("expertise_level") @db.VarChar(100)
+  sentenceStyle        String     @map("sentence_style") @db.VarChar(500)
+  firstPerson          String     @map("first_person") @db.VarChar(50)
+  forbiddenExpressions Json       @map("forbidden_expressions")
+  preferredExpressions Json       @map("preferred_expressions")
+  visualDirection      String?    @map("visual_direction") @db.VarChar(500)
+  facePolicy           FacePolicy @map("face_policy")
+  createdByUserId      String     @map("created_by_user_id") @db.Uuid
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace            Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin              Bunshin    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  personality          BunshinPersonality @relation(fields: [personalityId], references: [id], onDelete: Restrict)
+  createdBy            User       @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([personalityId, version])
+  @@unique([workspaceId, bunshinId, id])
+  @@index([workspaceId, bunshinId, version])
+  @@index([createdByUserId, createdAt])
+  @@map("bunshin_personality_versions")
 }
 
 model LineMessageDelivery {

@@ -75,6 +75,10 @@ import type {
   GenerationContextSnapshot,
   GenerationContextSnapshotPayload,
   GenerationContextSnapshotRepository,
+  BunshinPersonalityVersion,
+  PersonalityVersionContent,
+  PersonalityVersionRepository,
+  PersonalityVersionScope,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -4850,6 +4854,29 @@ export class PrismaBunshinRepository implements BunshinRepository {
         data,
         include: bunshinRelations,
       });
+      if (row.personality) {
+        await tx.bunshinPersonalityVersion.create({
+          data: {
+            workspaceId: row.workspaceId,
+            bunshinId: row.id,
+            personalityId: row.personality.id,
+            version: 1,
+            source: 'INITIAL',
+            changeReason: '分身作成時の初期人格',
+            tone: row.personality.tone,
+            formality: row.personality.formality,
+            energyLevel: row.personality.energyLevel,
+            expertiseLevel: row.personality.expertiseLevel,
+            sentenceStyle: row.personality.sentenceStyle,
+            firstPerson: row.personality.firstPerson,
+            forbiddenExpressions: row.personality.forbiddenExpressions as Prisma.InputJsonValue,
+            preferredExpressions: row.personality.preferredExpressions as Prisma.InputJsonValue,
+            visualDirection: row.personality.visualDirection,
+            facePolicy: row.personality.facePolicy,
+            createdByUserId: input.actorUserId,
+          },
+        });
+      }
       return bunshinAggregate(row);
     });
   }
@@ -4944,6 +4971,170 @@ export class PrismaBunshinRepository implements BunshinRepository {
       return bunshinAggregate(
         await tx.bunshin.update({ where: { id: authorized.id }, data, include: bunshinRelations }),
       );
+    });
+  }
+}
+
+function personalityVersion(
+  row: Prisma.BunshinPersonalityVersionGetPayload<object>,
+): BunshinPersonalityVersion {
+  if (!['INITIAL', 'MANUAL', 'LEARNING', 'RESTORE'].includes(row.source))
+    throw new ApplicationError('DATABASE_UNAVAILABLE', 'invalid personality version source');
+  return {
+    ...row,
+    source: row.source as BunshinPersonalityVersion['source'],
+    forbiddenExpressions: stringArray(row.forbiddenExpressions, 'forbiddenExpressions'),
+    preferredExpressions: stringArray(row.preferredExpressions, 'preferredExpressions'),
+  };
+}
+
+export class PrismaPersonalityVersionRepository implements PersonalityVersionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async managedPersonality(tx: Prisma.TransactionClient, input: PersonalityVersionScope) {
+    const row = await tx.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: { status: 'ACTIVE' },
+      },
+      select: {
+        id: true,
+        ownerUserId: true,
+        personality: { select: { id: true } },
+        workspace: {
+          select: {
+            memberships: {
+              where: { userId: input.actorUserId, status: 'ACTIVE' },
+              select: { role: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    const membership = row?.workspace.memberships[0];
+    if (
+      !row ||
+      !membership ||
+      !canManageBunshin(membership.role, input.actorUserId, row.ownerUserId)
+    )
+      return null;
+    return row.personality;
+  }
+
+  private async write(
+    tx: Prisma.TransactionClient,
+    input: PersonalityVersionScope & {
+      content: PersonalityVersionContent;
+      source: BunshinPersonalityVersion['source'];
+      changeReason: string;
+      basedOnVersionId: string | null;
+    },
+  ) {
+    const personality = await this.managedPersonality(tx, input);
+    if (!personality) return null;
+    if (input.basedOnVersionId) {
+      const base = await tx.bunshinPersonalityVersion.findFirst({
+        where: {
+          id: input.basedOnVersionId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          personalityId: personality.id,
+        },
+        select: { id: true },
+      });
+      if (!base) return null;
+    }
+    const latest = await tx.bunshinPersonalityVersion.aggregate({
+      where: { personalityId: personality.id },
+      _max: { version: true },
+    });
+    await tx.bunshinPersonality.update({
+      where: { id: personality.id },
+      data: {
+        ...input.content,
+        forbiddenExpressions: input.content.forbiddenExpressions,
+        preferredExpressions: input.content.preferredExpressions,
+      },
+    });
+    const row = await tx.bunshinPersonalityVersion.create({
+      data: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        personalityId: personality.id,
+        version: (latest._max.version ?? 0) + 1,
+        source: input.source,
+        changeReason: input.changeReason,
+        basedOnVersionId: input.basedOnVersionId,
+        ...input.content,
+        forbiddenExpressions: input.content.forbiddenExpressions,
+        preferredExpressions: input.content.preferredExpressions,
+        createdByUserId: input.actorUserId,
+      },
+    });
+    return personalityVersion(row);
+  }
+
+  async create(input: Parameters<PersonalityVersionRepository['create']>[0]) {
+    try {
+      return await this.client.$transaction((tx) =>
+        this.write(tx, { ...input, basedOnVersionId: input.basedOnVersionId ?? null }),
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError('CONFLICT', 'personality version changed concurrently');
+      throw error;
+    }
+  }
+
+  async restore(input: Parameters<PersonalityVersionRepository['restore']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const personality = await this.managedPersonality(tx, input);
+      if (!personality) return null;
+      const target = await tx.bunshinPersonalityVersion.findFirst({
+        where: {
+          id: input.versionId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          personalityId: personality.id,
+        },
+      });
+      if (!target) return null;
+      return this.write(tx, {
+        ...input,
+        source: 'RESTORE',
+        basedOnVersionId: target.id,
+        content: {
+          tone: target.tone,
+          formality: target.formality,
+          energyLevel: target.energyLevel,
+          expertiseLevel: target.expertiseLevel,
+          sentenceStyle: target.sentenceStyle,
+          firstPerson: target.firstPerson,
+          forbiddenExpressions: stringArray(target.forbiddenExpressions, 'forbiddenExpressions'),
+          preferredExpressions: stringArray(target.preferredExpressions, 'preferredExpressions'),
+          visualDirection: target.visualDirection,
+          facePolicy: target.facePolicy,
+        },
+      });
+    });
+  }
+
+  async list(input: Parameters<PersonalityVersionRepository['list']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const personality = await this.managedPersonality(tx, input);
+      if (!personality) return null;
+      const rows = await tx.bunshinPersonalityVersion.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          personalityId: personality.id,
+        },
+        orderBy: { version: 'desc' },
+      });
+      return rows.map(personalityVersion);
     });
   }
 }
