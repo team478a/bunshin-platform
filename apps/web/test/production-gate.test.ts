@@ -29,12 +29,20 @@ describe('production gate checklist', () => {
       'ACCOUNT_DELETION_DRY_RUN',
       'LINE_GO_NO_GO',
       'TREND_RESEARCH_SMOKE',
+      'EXTERNAL_TRACKING_SMOKE',
       'FINAL_APPROVAL',
     ]);
     expect(productionGateChecklist({ ...readyInput, recordedManualChecks }).launchReady).toBe(true);
     recordedManualChecks.delete('AUTH_SMOKE');
     expect(productionGateChecklist({ ...readyInput, recordedManualChecks }).launchReady).toBe(
       false,
+    );
+  });
+
+  it('専用URLの本番確認を最終承認と分離する', () => {
+    const value = productionGateChecklist({ ...readyInput, recordedManualChecks: new Set() });
+    expect(value.manual).toContainEqual(
+      expect.objectContaining({ code: 'EXTERNAL_TRACKING_SMOKE', status: 'MANUAL_CHECK' }),
     );
   });
 

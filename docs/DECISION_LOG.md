@@ -1087,3 +1087,13 @@
 - Identity: 参加者はGroup Membership IDまたは完全一致したメールで解決し、同意済みの有効参加者だけを外部Identityへ紐付ける。
 - Catalog: 商品・企画は同じWorkspace／GroupのIDまたは完全一致名で解決し、曖昧な行や商品と企画を同時指定した行を拒否する。
 - Idempotency: 外部Link ID、または参加者・商品・企画・URLの組み合わせが既存または同一CSV内で重複する場合は再登録しない。
+
+## D-085: 外部成果URLの実利用開始を専用Production Gateで保護する
+
+- 日付: 2026-08-26
+- 状態: Accepted
+- Gate: 最新mainの本番環境で、テスト参加者・商品・専用URLを使ったスマートフォンE2EとIsolation確認を必須にする。
+- Evidence: 対象commit別に`EXTERNAL_TRACKING_SMOKE`を追記型記録し、この確認を含む全項目が揃うまで`FINAL_APPROVAL`を保存しない。
+- Revalidation: URL停止後の古い投稿案拒否、新URLでの再生成、過去Snapshot不変を同じ実査で確認する。
+- Privacy: 証跡には完全URL、紹介Token、メール、投稿本文、顧客・報酬情報を保存しない。
+- Scope: Gateは外部URLを使う商品投稿の開始条件であり、クリック・成果・報酬計測をBUNSHINへ追加する許可ではない。

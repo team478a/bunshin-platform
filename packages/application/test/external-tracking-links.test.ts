@@ -76,6 +76,39 @@ describe('external tracking link policy', () => {
     expect(selected?.scopeType).toBe('PRODUCT');
   });
 
+  it('開始前・外部サービス停止・別商品・別企画のURLへ漏れない', () => {
+    const selected = selectExternalTrackingLink({
+      groupId: 'group-a',
+      groupMembershipId: 'member-a',
+      productPackId: 'product-a',
+      campaignId: 'campaign-a',
+      at,
+      links: [
+        link('CAMPAIGN_MEMBER', { startsAt: new Date('2026-08-26T12:00:00.000Z') }),
+        link('PRODUCT_MEMBER', { systemStatus: 'SUSPENDED' }),
+        link('CAMPAIGN', { campaignId: 'campaign-b' }),
+        link('PRODUCT', { productPackId: 'product-b' }),
+      ],
+    });
+    expect(selected).toBeNull();
+  });
+
+  it('成果帰属は人格ではなく同じ参加者IDで一貫する', () => {
+    const links = [link('MEMBER')];
+    const input = {
+      groupId: 'group-a',
+      groupMembershipId: 'member-a',
+      productPackId: 'product-a',
+      campaignId: null,
+      at,
+      links,
+    };
+    const firstBunshin = selectExternalTrackingLink(input);
+    const secondBunshin = selectExternalTrackingLink(input);
+    expect(firstBunshin?.id).toBe(secondBunshin?.id);
+    expect(firstBunshin?.groupMembershipId).toBe('member-a');
+  });
+
   it('同じ優先順位が複数あれば推測で選ばない', () => {
     expect(() =>
       selectExternalTrackingLink({

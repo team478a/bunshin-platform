@@ -41,10 +41,34 @@ export default async function OperationsGuidePage() {
           <li>退会処理をdry-runし、対象件数とエラーを確認する</li>
           <li>LINE Webhook、通知上限、緊急停止、Go/No-Goを確認する</li>
           <li>話題調査を1回実行し、出典、候補、期限、今日の企画への反映、金額記録を確認する</li>
+          <li>
+            テスト用の専用URLを登録し、スマートフォンで投稿案への挿入、コピー、使用履歴、停止後の拒否を確認する
+          </li>
           <li>対象commit、実施日時、担当者、結果を記録し、責任者が承認する</li>
         </ol>
         <p>すべて終わるまでは、管理画面の自動確認が緑でも利用者募集を開始しません。</p>
         <Link href="/admin">本番開始の確認画面へ戻る</Link>
+      </section>
+
+      <section className="settings-card" id="external-tracking-smoke">
+        <h2>専用URLの本番確認</h2>
+        <ol>
+          <li>テスト用の外部サービスと許可ドメインを登録する</li>
+          <li>グループ共通URLとテスト参加者専用URLを下書き登録し、内容確認後に使用を始める</li>
+          <li>
+            テスト商品から投稿案を作り、「あなた専用の紹介URLを入れました」と表示されることを確認する
+          </li>
+          <li>スマートフォンで採用後にコピーし、正しい参加者専用URLが1回だけ入ることを確認する</li>
+          <li>管理画面の使用履歴に、日時・参加者・商品・URLの記録があることを確認する</li>
+          <li>URLを停止し、古い投稿案を再度コピーできないことを確認する</li>
+          <li>別参加者でログインし、テスト参加者のURLや履歴が見えないことを確認する</li>
+          <li>CSV取込では正常行だけ下書きになり、エラー行に理由が表示されることを確認する</li>
+        </ol>
+        <p>
+          実在顧客、購入者情報、報酬額は使いません。確認後はテストURLを停止し、対象commitへ確認記録を残します。
+        </p>
+        <Link href="/admin/external-tracking">専用URLの管理を開く</Link>{' '}
+        <Link href="/admin/production-gate">本番開始の確認記録を開く</Link>
       </section>
 
       <section className="settings-card">
