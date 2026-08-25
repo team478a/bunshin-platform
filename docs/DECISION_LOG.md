@@ -2,6 +2,18 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-087: 外部成果計測URLは参加者帰属の直接URLとして決定的に挿入する
+
+- 日付: 2026-08-25
+- 状態: Proposed
+- Responsibility: ワタシ企画室は専用URLの登録、選択、挿入、使用Snapshotだけを担当し、クリック、成約、報酬、顧客、不正判定を持たない。
+- Ownership: URLはGroup／Group Membership／Product Pack／Campaignの組合せへ属し、Bunshinや人格を成果帰属単位にしない。
+- Selection: Campaign＋Member、Product＋Member、Member、Campaign、Product、Groupの順で決定し、同順位重複はfail closedとする。
+- Navigation: MVPでは独自短縮URLやredirectを発行せず、Allowlistで検証した外部完全URLを投稿本文へ直接挿入する。
+- Snapshot: URL変更後も過去Missionで使用した完全URLを追跡できるよう、Missionと同一transactionで利用Snapshotを固定する。監査ログには完全queryを残さない。
+- Generation: AIへURL選択・変更を任せず、品質・広告安全検査後の決定的Post Processorで差し込む。
+- Status: Core実装前に`docs/EXTERNAL_TRACKING_LINK_REBASELINE.md`の人間レビュー事項を確定する。
+
 ## D-086: トレンド調査は設定確認と本番実行証跡の両方を開始条件にする
 
 - 日付: 2026-08-25

@@ -35,6 +35,11 @@
 - [Phase 3実行計画](PHASE3_EXECUTION_PLAN.md)
 - [Slice 3.1 Social Profile実装指示書](PHASE3_SLICE_3_1_IMPLEMENTATION_INSTRUCTION.md)
 
+## Phase 7拡張計画
+
+- [グループ発信](GROUP_BROADCAST_REBASELINE.md)
+- [外部成果計測URL連携](EXTERNAL_TRACKING_LINK_REBASELINE.md)
+
 ## 文書の優先順位
 
 矛盾がある場合は次の順で判断します。
