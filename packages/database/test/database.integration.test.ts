@@ -9,6 +9,7 @@ import {
   ListPersonalityVersions,
   RestorePersonalityVersion,
   requireAccessibleWorkspace,
+  GroupParticipationService,
 } from '@bunshin/application';
 import {
   ActivateSocialProfile,
@@ -76,6 +77,7 @@ import {
   PrismaLineDeliveryRetryRepository,
   PrismaLineAdminFunnelRepository,
   PrismaTrendResearchRepository,
+  PrismaGroupParticipationRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -87,6 +89,9 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.groupInvitation.deleteMany();
+    await client.groupMembership.deleteMany();
+    await client.group.deleteMany();
     await client.generationContextSnapshot.deleteMany();
     await client.missionTrendContext.deleteMany();
     await client.trendIdeaCandidateEvidence.deleteMany();
@@ -3067,6 +3072,71 @@ integration('database ownership boundaries', () => {
         ],
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+  it('keeps group consent and invitations isolated by Workspace', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Group Owner' });
+    const participant = await accounts.execute({ displayName: 'Group Participant' });
+    const other = await accounts.execute({ displayName: 'Other Workspace User' });
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+      },
+    });
+    const service = new GroupParticipationService(new PrismaGroupParticipationRepository(client));
+    const group = await service.createGroup({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      name: '先行テスト参加者',
+    });
+    const tokenHash = randomUUID().replaceAll('-', '').padEnd(64, 'a');
+    await service.createInvitation({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      groupId: group.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(
+      service.acceptInvitation({
+        workspaceId: other.workspace.id,
+        actorUserId: other.user.id,
+        tokenHash,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const joined = await service.acceptInvitation({
+      workspaceId: organization.id,
+      actorUserId: participant.user.id,
+      tokenHash,
+    });
+    expect(joined).toMatchObject({
+      workspaceId: organization.id,
+      groupId: group.id,
+      userId: participant.user.id,
+      status: 'ACTIVE',
+    });
+    expect(joined.consentedAt).toBeInstanceOf(Date);
+    await expect(
+      service.acceptInvitation({
+        workspaceId: organization.id,
+        actorUserId: other.user.id,
+        tokenHash,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const left = await service.leaveGroup({
+      workspaceId: organization.id,
+      actorUserId: participant.user.id,
+      groupId: group.id,
+    });
+    expect(left.status).toBe('REVOKED');
+    await expect(
+      service.listMemberships({
+        workspaceId: organization.id,
+        actorUserId: other.user.id,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
