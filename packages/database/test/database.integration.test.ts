@@ -10,6 +10,7 @@ import {
   RestorePersonalityVersion,
   requireAccessibleWorkspace,
   GroupParticipationService,
+  ProductPackService,
 } from '@bunshin/application';
 import {
   ActivateSocialProfile,
@@ -78,6 +79,7 @@ import {
   PrismaLineAdminFunnelRepository,
   PrismaTrendResearchRepository,
   PrismaGroupParticipationRepository,
+  PrismaProductPackRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -89,6 +91,11 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.productPackAssignment.deleteMany();
+    await client.productPackAsset.deleteMany();
+    await client.productPackRule.deleteMany();
+    await client.productPackVersion.deleteMany();
+    await client.productPack.deleteMany();
     await client.groupInvitation.deleteMany();
     await client.groupMembership.deleteMany();
     await client.group.deleteMany();
@@ -3137,6 +3144,41 @@ integration('database ownership boundaries', () => {
         actorUserId: other.user.id,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('keeps official product-pack management isolated by organization Workspace', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Pack Owner' });
+    const outsider = await accounts.execute({ displayName: 'Pack Outsider' });
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Pack Organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+        groups: { create: { name: `Pack Group ${randomUUID()}` } },
+      },
+      include: { groups: true },
+    });
+    const service = new ProductPackService(new PrismaProductPackRepository(client));
+    const pack = await service.createPack({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      groupId: organization.groups[0]!.id,
+      name: '公式商品',
+    });
+    await expect(
+      service.list({
+        workspaceId: organization.id,
+        actorUserId: outsider.user.id,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.get({
+        workspaceId: outsider.workspace.id,
+        actorUserId: owner.user.id,
+        productPackId: (pack as { id: string }).id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 

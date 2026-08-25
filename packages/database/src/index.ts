@@ -7560,6 +7560,31 @@ export class PrismaProductPackRepository implements ProductPackRepository {
     });
   }
 
+  async list(input: Parameters<ProductPackRepository['list']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.productPack.findMany({
+      where: { workspaceId: input.workspaceId },
+      include: {
+        group: { select: { id: true, name: true } },
+        versions: { orderBy: { version: 'desc' }, include: { rules: true, assets: true } },
+        assignments: { where: { status: 'ACTIVE' } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  async get(input: Parameters<ProductPackRepository['get']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.productPack.findFirst({
+      where: { id: input.productPackId, workspaceId: input.workspaceId },
+      include: {
+        group: { select: { id: true, name: true } },
+        versions: { orderBy: { version: 'desc' }, include: { rules: true, assets: true } },
+        assignments: { include: { bunshin: { select: { id: true, name: true } } } },
+      },
+    });
+  }
+
   async createPack(input: Parameters<ProductPackRepository['createPack']>[0]) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
     const group = await this.client.group.findFirst({
@@ -7711,6 +7736,24 @@ export class PrismaProductPackRepository implements ProductPackRepository {
     return this.client.productPackAssignment.update({
       where: { id: row.id },
       data: { status: 'REVOKED', revokedAt: input.revokedAt },
+    });
+  }
+
+  async suspend(input: Parameters<ProductPackRepository['suspend']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const pack = await tx.productPack.findFirst({
+        where: { id: input.productPackId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      });
+      if (!pack) return null;
+      await tx.productPackAssignment.updateMany({
+        where: { productPackId: pack.id, status: 'ACTIVE' },
+        data: { status: 'REVOKED', revokedAt: input.suspendedAt },
+      });
+      return tx.productPack.update({
+        where: { id: pack.id },
+        data: { status: 'SUSPENDED' },
+      });
     });
   }
 

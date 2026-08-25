@@ -220,6 +220,14 @@ export default async function OperationsAdminPage() {
         </Link>
       </section>
 
+      <section className="settings-card" aria-labelledby="product-pack-title">
+        <h2 id="product-pack-title">公式商品パック</h2>
+        <p>グループへ提供する公式情報の下書き、公開、停止、利用状況を管理します。</p>
+        <Link href="/admin/product-packs" className="button button--secondary">
+          公式商品パックを開く
+        </Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="line-settings-title">
         <h2 id="line-settings-title">LINEの設定</h2>
         <p>

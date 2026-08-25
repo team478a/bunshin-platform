@@ -30,6 +30,8 @@ export interface ProductPackVersionInput {
 }
 
 export interface ProductPackRepository {
+  list(input: ProductPackScope): Promise<object[] | null>;
+  get(input: ProductPackScope & { productPackId: string }): Promise<object | null>;
   createPack(input: ProductPackScope & { groupId: string; name: string }): Promise<object | null>;
   createDraftVersion(
     input: ProductPackScope & { productPackId: string; content: ProductPackVersionInput },
@@ -47,6 +49,9 @@ export interface ProductPackRepository {
   ): Promise<object | null>;
   revokeAssignment(
     input: ProductPackScope & { assignmentId: string; revokedAt: Date },
+  ): Promise<object | null>;
+  suspend(
+    input: ProductPackScope & { productPackId: string; suspendedAt: Date },
   ): Promise<object | null>;
   resolveForGeneration(input: ProductPackScope & { bunshinId: string; at: Date }): Promise<{
     productPackId: string;
@@ -68,6 +73,16 @@ export class ProductPackService {
   private result<T extends object>(value: T | null, message: string): T {
     if (value === null) throw new ApplicationError('NOT_FOUND', message);
     return value;
+  }
+
+  async list(input: ProductPackScope) {
+    const values = await this.repository.list(input);
+    if (values === null) throw new ApplicationError('FORBIDDEN', 'workspace management denied');
+    return values;
+  }
+
+  async get(input: ProductPackScope & { productPackId: string }) {
+    return this.result(await this.repository.get(input), 'product pack unavailable');
   }
 
   async createPack(input: ProductPackScope & { groupId: string; name: string }) {
@@ -123,6 +138,13 @@ export class ProductPackService {
     return this.result(
       await this.repository.revokeAssignment({ ...input, revokedAt: new Date() }),
       'assignment unavailable',
+    );
+  }
+
+  async suspend(input: ProductPackScope & { productPackId: string }) {
+    return this.result(
+      await this.repository.suspend({ ...input, suspendedAt: new Date() }),
+      'product pack unavailable',
     );
   }
 
