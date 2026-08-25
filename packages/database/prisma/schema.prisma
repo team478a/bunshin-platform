@@ -694,6 +694,7 @@ model User {
   externalTrackingAuditsPerformed   ExternalTrackingAuditLog[]          @relation("ExternalTrackingAuditActor")
   externalLinkPlacementsCreated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementCreator")
   externalLinkPlacementsUpdated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementUpdater")
+  contentLinkUsages                 ContentLinkUsage[]                  @relation("ContentLinkUsageUser")
 
   @@index([status])
   @@map("users")
@@ -766,6 +767,7 @@ model Workspace {
   externalTrackingLinks       ExternalTrackingLink[]
   externalTrackingAudits      ExternalTrackingAuditLog[]
   externalLinkPlacements      ExternalLinkPlacementTemplate[]
+  contentLinkUsages           ContentLinkUsage[]
 
   @@index([status])
   @@map("workspaces")
@@ -805,6 +807,7 @@ model Group {
   externalTrackingLinks      ExternalTrackingLink[]
   externalTrackingAudits     ExternalTrackingAuditLog[]
   externalLinkPlacements     ExternalLinkPlacementTemplate[]
+  contentLinkUsages          ContentLinkUsage[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -827,6 +830,7 @@ model GroupMembership {
   group                      Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user                       User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalTrackingIdentities ExternalTrackingMemberIdentity[]
+  contentLinkUsages          ContentLinkUsage[]
 
   @@unique([groupId, userId])
   @@index([workspaceId, userId, status])
@@ -869,6 +873,7 @@ model ProductPack {
   versions              ProductPackVersion[]
   assignments           ProductPackAssignment[]
   externalTrackingLinks ExternalTrackingLink[]
+  contentLinkUsages     ContentLinkUsage[]
 
   @@unique([workspaceId, groupId, name])
   @@index([workspaceId, status])
@@ -887,6 +892,7 @@ model ProductPackVersion {
   faq                            Json
   suitableFor                    String[]                        @map("suitable_for")
   unsuitableFor                  String[]                        @map("unsuitable_for")
+  allowLinklessPosts             Boolean                         @default(false) @map("allow_linkless_posts")
   validFrom                      DateTime?                       @map("valid_from") @db.Timestamptz(6)
   validUntil                     DateTime?                       @map("valid_until") @db.Timestamptz(6)
   publishedAt                    DateTime?                       @map("published_at") @db.Timestamptz(6)
@@ -901,6 +907,7 @@ model ProductPackVersion {
   safetyReviews                  AdvertisingSafetyReview[]
   campaigns                      Campaign[]
   externalLinkPlacementTemplates ExternalLinkPlacementTemplate[]
+  contentLinkUsages              ContentLinkUsage[]
 
   @@unique([productPackId, version])
   @@index([productPackId, status])
@@ -928,6 +935,7 @@ model ExternalLinkPlacementTemplate {
   productPackVersion   ProductPackVersion          @relation(fields: [productPackVersionId], references: [id], onDelete: Cascade)
   createdBy            User                        @relation("ExternalLinkPlacementCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   updatedBy            User                        @relation("ExternalLinkPlacementUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  contentLinkUsages    ContentLinkUsage[]
 
   @@unique([productPackVersionId, platform, format])
   @@index([workspaceId, groupId, status])
@@ -998,6 +1006,7 @@ model Campaign {
   dailyMissions                  DailyMission[]
   similarityReviews              CampaignSimilarityReview[]
   externalTrackingLinks          ExternalTrackingLink[]
+  contentLinkUsages              ContentLinkUsage[]
 
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
@@ -1082,40 +1091,41 @@ model ExternalTrackingMemberIdentity {
 }
 
 model ExternalTrackingLink {
-  id               String                          @id @default(uuid()) @db.Uuid
-  workspaceId      String                          @map("workspace_id") @db.Uuid
-  groupId          String                          @map("group_id") @db.Uuid
-  systemId         String                          @map("system_id") @db.Uuid
-  allowedDomainId  String                          @map("allowed_domain_id") @db.Uuid
-  memberIdentityId String?                         @map("member_identity_id") @db.Uuid
-  productPackId    String?                         @map("product_pack_id") @db.Uuid
-  campaignId       String?                         @map("campaign_id") @db.Uuid
-  scopeType        ExternalTrackingLinkScopeType   @map("scope_type")
-  scopeKey         String                          @map("scope_key") @db.VarChar(500)
-  name             String                          @db.VarChar(160)
-  externalLinkId   String?                         @map("external_link_id") @db.VarChar(255)
-  referralToken    String?                         @map("referral_token") @db.VarChar(500)
-  url              String                          @db.VarChar(2048)
-  status           ExternalTrackingLinkStatus      @default(DRAFT)
-  startsAt         DateTime?                       @map("starts_at") @db.Timestamptz(6)
-  expiresAt        DateTime?                       @map("expires_at") @db.Timestamptz(6)
-  notes            String?                         @db.VarChar(1000)
-  createdByUserId  String                          @map("created_by_user_id") @db.Uuid
-  updatedByUserId  String                          @map("updated_by_user_id") @db.Uuid
-  activatedAt      DateTime?                       @map("activated_at") @db.Timestamptz(6)
-  suspendedAt      DateTime?                       @map("suspended_at") @db.Timestamptz(6)
-  deletedAt        DateTime?                       @map("deleted_at") @db.Timestamptz(6)
-  createdAt        DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace        Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group            Group                           @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  system           ExternalTrackingSystem          @relation(fields: [systemId], references: [id], onDelete: Cascade)
-  allowedDomain    ExternalTrackingAllowedDomain   @relation(fields: [allowedDomainId], references: [id], onDelete: Restrict)
-  memberIdentity   ExternalTrackingMemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict)
-  productPack      ProductPack?                    @relation(fields: [productPackId], references: [id], onDelete: Restrict)
-  campaign         Campaign?                       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  createdBy        User                            @relation("ExternalTrackingLinkCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  updatedBy        User                            @relation("ExternalTrackingLinkUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  id                String                          @id @default(uuid()) @db.Uuid
+  workspaceId       String                          @map("workspace_id") @db.Uuid
+  groupId           String                          @map("group_id") @db.Uuid
+  systemId          String                          @map("system_id") @db.Uuid
+  allowedDomainId   String                          @map("allowed_domain_id") @db.Uuid
+  memberIdentityId  String?                         @map("member_identity_id") @db.Uuid
+  productPackId     String?                         @map("product_pack_id") @db.Uuid
+  campaignId        String?                         @map("campaign_id") @db.Uuid
+  scopeType         ExternalTrackingLinkScopeType   @map("scope_type")
+  scopeKey          String                          @map("scope_key") @db.VarChar(500)
+  name              String                          @db.VarChar(160)
+  externalLinkId    String?                         @map("external_link_id") @db.VarChar(255)
+  referralToken     String?                         @map("referral_token") @db.VarChar(500)
+  url               String                          @db.VarChar(2048)
+  status            ExternalTrackingLinkStatus      @default(DRAFT)
+  startsAt          DateTime?                       @map("starts_at") @db.Timestamptz(6)
+  expiresAt         DateTime?                       @map("expires_at") @db.Timestamptz(6)
+  notes             String?                         @db.VarChar(1000)
+  createdByUserId   String                          @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String                          @map("updated_by_user_id") @db.Uuid
+  activatedAt       DateTime?                       @map("activated_at") @db.Timestamptz(6)
+  suspendedAt       DateTime?                       @map("suspended_at") @db.Timestamptz(6)
+  deletedAt         DateTime?                       @map("deleted_at") @db.Timestamptz(6)
+  createdAt         DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  system            ExternalTrackingSystem          @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  allowedDomain     ExternalTrackingAllowedDomain   @relation(fields: [allowedDomainId], references: [id], onDelete: Restrict)
+  memberIdentity    ExternalTrackingMemberIdentity? @relation(fields: [memberIdentityId], references: [id], onDelete: Restrict)
+  productPack       ProductPack?                    @relation(fields: [productPackId], references: [id], onDelete: Restrict)
+  campaign          Campaign?                       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  createdBy         User                            @relation("ExternalTrackingLinkCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy         User                            @relation("ExternalTrackingLinkUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  contentLinkUsages ContentLinkUsage[]
 
   @@index([workspaceId, groupId, status])
   @@index([systemId, scopeKey, status])
@@ -1821,6 +1831,7 @@ model Bunshin {
   productPackAssignments      ProductPackAssignment[]
   userEvidence                UserEvidence[]
   advertisingSafetyReviews    AdvertisingSafetyReview[]
+  contentLinkUsages           ContentLinkUsage[]
   campaignParticipations      CampaignParticipation[]
   campaignSimilarityReviews   CampaignSimilarityReview[]
 
@@ -2248,6 +2259,7 @@ model DailyMission {
   safetyReviews            AdvertisingSafetyReview[]
   campaignSimilarityReview CampaignSimilarityReview?
   campaign                 Campaign?                  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  contentLinkUsage         ContentLinkUsage?
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -2257,6 +2269,44 @@ model DailyMission {
   @@index([weeklyPlanItemId])
   @@index([campaignId, classification])
   @@map("daily_missions")
+}
+
+model ContentLinkUsage {
+  id                        String                         @id @default(uuid()) @db.Uuid
+  workspaceId               String                         @map("workspace_id") @db.Uuid
+  bunshinId                 String                         @map("bunshin_id") @db.Uuid
+  dailyMissionId            String                         @unique @map("daily_mission_id") @db.Uuid
+  groupId                   String                         @map("group_id") @db.Uuid
+  groupMembershipId         String                         @map("group_membership_id") @db.Uuid
+  userId                    String                         @map("user_id") @db.Uuid
+  productPackId             String                         @map("product_pack_id") @db.Uuid
+  productPackVersionId      String                         @map("product_pack_version_id") @db.Uuid
+  campaignId                String?                        @map("campaign_id") @db.Uuid
+  externalTrackingLinkId    String                         @map("external_tracking_link_id") @db.Uuid
+  placementTemplateId       String?                        @map("placement_template_id") @db.Uuid
+  insertedUrlSnapshot       String                         @map("inserted_url_snapshot") @db.VarChar(2048)
+  linkNameSnapshot          String                         @map("link_name_snapshot") @db.VarChar(160)
+  expiresAtSnapshot         DateTime?                      @map("expires_at_snapshot") @db.Timestamptz(6)
+  placementTemplateVersion  Int?                           @map("placement_template_version")
+  advertisingClassification AdvertisingClassification      @map("advertising_classification")
+  createdAt                 DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace                 Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                   Bunshin                        @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission              DailyMission                   @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade)
+  group                     Group                          @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  groupMembership           GroupMembership                @relation(fields: [groupMembershipId], references: [id], onDelete: Restrict)
+  user                      User                           @relation("ContentLinkUsageUser", fields: [userId], references: [id], onDelete: Restrict)
+  productPack               ProductPack                    @relation(fields: [productPackId], references: [id], onDelete: Restrict)
+  productPackVersion        ProductPackVersion             @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  campaign                  Campaign?                      @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  externalTrackingLink      ExternalTrackingLink           @relation(fields: [externalTrackingLinkId], references: [id], onDelete: Restrict)
+  placementTemplate         ExternalLinkPlacementTemplate? @relation(fields: [placementTemplateId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@index([groupId, groupMembershipId, createdAt])
+  @@index([productPackId, campaignId, createdAt])
+  @@index([externalTrackingLinkId, createdAt])
+  @@map("content_link_usages")
 }
 
 model MissionTrendContext {

@@ -97,8 +97,11 @@ describe('GenerateWeeklyPlan', () => {
     maxAdsPerWeek: 1,
     cooldownDays: 2,
     productPack: {
+      productPackId: 'pack-1',
+      groupId: 'group-1',
       versionId: 'version-1',
       version: 1,
+      allowLinklessPosts: false,
       summary: '公式商品',
       providerName: '公式店',
       targetCustomer: '初心者',

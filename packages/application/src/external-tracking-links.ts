@@ -19,6 +19,7 @@ export interface AllowedTrackingDomain {
 
 export interface ExternalTrackingLinkCandidate {
   id: string;
+  name: string;
   groupId: string;
   scopeType: ExternalTrackingLinkScopeType;
   groupMembershipId: string | null;

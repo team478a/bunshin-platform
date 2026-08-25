@@ -21,6 +21,7 @@ const link = (
   overrides: Partial<ExternalTrackingLinkCandidate> = {},
 ): ExternalTrackingLinkCandidate => ({
   id: `link-${scopeType}`,
+  name: `${scopeType} link`,
   groupId: 'group-a',
   scopeType,
   groupMembershipId: scopeType.includes('MEMBER') || scopeType === 'MEMBER' ? 'member-a' : null,

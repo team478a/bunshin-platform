@@ -37,6 +37,7 @@ vi.mock('@bunshin/database', () => ({
   PrismaExternalLinkPlacementRepository: class {
     list = vi.fn();
     upsert = state.upsertPlacement;
+    resolveForGeneration = vi.fn();
   },
 }));
 

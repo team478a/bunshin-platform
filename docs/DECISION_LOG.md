@@ -1045,3 +1045,14 @@
 - Learning: 行動データから人格やMemoryを直接変更せず、Learning Proposalと本人承認を経由して新VersionまたはMemoryを作る。
 - Gate: 所有権、Version解決、個人体験境界、Snapshot保持期間、初期対象業種・法域の人間レビュー前にコード、Prisma Schema、Migrationへ進まない。
 - 詳細: `docs/PERSONALITY_LEARNING_PRODUCT_PACK_REBASELINE.md`、`docs/adr/GENERATION_CONTEXT_PRODUCT_PACK_BOUNDARY_ADR.md`
+
+## D-081: 専用URLはAI生成後にサーバーで差し込み、利用時点を固定保存する
+
+- 日付: 2026-08-26
+- 状態: Accepted
+- Selection: URLはGroup Membership単位で、Campaign＋参加者からGroup共通までの固定優先順位によりサーバーが選ぶ。AIには選択・変更させない。
+- Post process: 品質検査後、商品版・SNS・投稿形式に対応するPlacement Templateを使い、TEXT本文または投稿captionへ決定的に1回だけ差し込む。
+- Missing link: 商品投稿は専用URLがなければ停止する。公開済み`ProductPackVersion.allowLinklessPosts=true`の場合だけURLなしを許可する。
+- Atomic: Mission、Mission Content、Generation Contextと`ContentLinkUsage`を同じDB transactionで保存する。保存直前に所有権・有効期間・選択順位・URL・Placement版を再検証する。
+- Snapshot: 使用URL、Link名、有効期限、商品版、Campaign、参加者、Placement版を固定し、設定変更後も過去履歴を書き換えない。
+- Isolation: 他Workspace、他Group、他参加者、未参加Campaign、未割当商品版のURLは選択・保存しない。

@@ -15,8 +15,11 @@ export interface CampaignPlanningContext {
   maxAdsPerWeek: number;
   cooldownDays: number;
   productPack: {
+    productPackId: string;
+    groupId: string;
     versionId: string;
     version: number;
+    allowLinklessPosts: boolean;
     summary: string;
     providerName: string;
     targetCustomer: string;

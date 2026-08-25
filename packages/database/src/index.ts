@@ -4,6 +4,7 @@ import {
   calculateAdminRetention,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
+  selectExternalTrackingLink,
 } from '@bunshin/application';
 import type {
   AccountTransaction,
@@ -3116,8 +3117,17 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             weeklyItem.classification !== (input.classification ?? 'ORGANIC'))
         )
           return null;
+        let eligibleCampaign: {
+          id: string;
+          groupId: string;
+          productPackVersion: {
+            id: string;
+            productPackId: string;
+            allowLinklessPosts: boolean;
+          };
+        } | null = null;
         if (input.campaignId) {
-          const eligible = await tx.campaign.findFirst({
+          eligibleCampaign = await tx.campaign.findFirst({
             where: {
               id: input.campaignId,
               status: 'OPEN',
@@ -3148,9 +3158,141 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
                 },
               },
             },
+            select: {
+              id: true,
+              groupId: true,
+              productPackVersion: {
+                select: { id: true, productPackId: true, allowLinklessPosts: true },
+              },
+            },
+          });
+          if (!eligibleCampaign) return null;
+        }
+        let resolvedLink: {
+          id: string;
+          name: string;
+          url: string;
+          expiresAt: Date | null;
+        } | null = null;
+        let groupMembershipId: string | null = null;
+        let placementTemplate: { id: string; version: number } | null = null;
+        if (input.externalLinkUsage) {
+          if (
+            !eligibleCampaign ||
+            input.externalLinkUsage.groupId !== eligibleCampaign.groupId ||
+            input.externalLinkUsage.productPackId !==
+              eligibleCampaign.productPackVersion.productPackId ||
+            input.externalLinkUsage.productPackVersionId !==
+              eligibleCampaign.productPackVersion.id ||
+            input.externalLinkUsage.campaignId !== eligibleCampaign.id ||
+            !socialProfile
+          )
+            return null;
+          const membership = await tx.groupMembership.findFirst({
+            where: {
+              groupId: eligibleCampaign.groupId,
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              consentedAt: { not: null },
+            },
             select: { id: true },
           });
-          if (!eligible) return null;
+          if (!membership) return null;
+          groupMembershipId = membership.id;
+          const linkAt = new Date(`${input.missionDate}T12:00:00.000Z`);
+          const candidates = await tx.externalTrackingLink.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: eligibleCampaign.groupId,
+              status: 'ACTIVE',
+              deletedAt: null,
+              system: { status: 'ACTIVE' },
+              allowedDomain: { status: 'ACTIVE' },
+              AND: [
+                { OR: [{ startsAt: null }, { startsAt: { lte: linkAt } }] },
+                { OR: [{ expiresAt: null }, { expiresAt: { gt: linkAt } }] },
+              ],
+              OR: [
+                { scopeType: 'GROUP' },
+                {
+                  scopeType: 'MEMBER',
+                  memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+                },
+                {
+                  scopeType: 'PRODUCT',
+                  productPackId: eligibleCampaign.productPackVersion.productPackId,
+                },
+                {
+                  scopeType: 'PRODUCT_MEMBER',
+                  productPackId: eligibleCampaign.productPackVersion.productPackId,
+                  memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+                },
+                { scopeType: 'CAMPAIGN', campaignId: eligibleCampaign.id },
+                {
+                  scopeType: 'CAMPAIGN_MEMBER',
+                  campaignId: eligibleCampaign.id,
+                  memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+                },
+              ],
+            },
+            include: { system: true, allowedDomain: true, memberIdentity: true },
+          });
+          const selected = selectExternalTrackingLink({
+            groupId: eligibleCampaign.groupId,
+            groupMembershipId: membership.id,
+            productPackId: eligibleCampaign.productPackVersion.productPackId,
+            campaignId: eligibleCampaign.id,
+            at: linkAt,
+            links: candidates.map((link) => ({
+              id: link.id,
+              name: link.name,
+              groupId: link.groupId,
+              scopeType: link.scopeType,
+              groupMembershipId: link.memberIdentity?.groupMembershipId ?? null,
+              productPackId: link.productPackId,
+              campaignId: link.campaignId,
+              url: link.url,
+              status: link.status,
+              startsAt: link.startsAt,
+              expiresAt: link.expiresAt,
+              systemStatus: link.system.status,
+              domain: {
+                id: link.allowedDomain.id,
+                hostname: link.allowedDomain.hostname,
+                allowSubdomains: link.allowedDomain.allowSubdomains,
+                shortener: link.allowedDomain.shortener,
+                status: link.allowedDomain.status,
+              },
+            })),
+          });
+          if (
+            !selected ||
+            selected.id !== input.externalLinkUsage.externalTrackingLinkId ||
+            selected.url !== input.externalLinkUsage.insertedUrl ||
+            JSON.stringify(input.content).split(selected.url).length - 1 !== 1
+          )
+            return null;
+          resolvedLink = selected;
+          if (input.externalLinkUsage.placementTemplateId) {
+            placementTemplate = await tx.externalLinkPlacementTemplate.findFirst({
+              where: {
+                id: input.externalLinkUsage.placementTemplateId,
+                workspaceId: input.workspaceId,
+                groupId: eligibleCampaign.groupId,
+                productPackVersionId: eligibleCampaign.productPackVersion.id,
+                platform: socialProfile.platform,
+                format: input.format,
+                status: 'ACTIVE',
+                urlLocked: true,
+                version: input.externalLinkUsage.placementTemplateVersion ?? -1,
+              },
+              select: { id: true, version: true },
+            });
+            if (!placementTemplate) return null;
+          } else if (input.externalLinkUsage.placementTemplateVersion !== null) return null;
+        } else if (eligibleCampaign && !eligibleCampaign.productPackVersion.allowLinklessPosts) {
+          return null;
         }
         const created = await tx.dailyMission.create({
           data: {
@@ -3186,6 +3328,28 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             dailyMissionId: created.id,
           },
         });
+        if (input.externalLinkUsage && eligibleCampaign && resolvedLink && groupMembershipId) {
+          await tx.contentLinkUsage.create({
+            data: {
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+              dailyMissionId: created.id,
+              groupId: eligibleCampaign.groupId,
+              groupMembershipId,
+              userId: input.actorUserId,
+              productPackId: eligibleCampaign.productPackVersion.productPackId,
+              productPackVersionId: eligibleCampaign.productPackVersion.id,
+              campaignId: eligibleCampaign.id,
+              externalTrackingLinkId: resolvedLink.id,
+              placementTemplateId: placementTemplate?.id ?? null,
+              insertedUrlSnapshot: resolvedLink.url,
+              linkNameSnapshot: resolvedLink.name,
+              expiresAtSnapshot: resolvedLink.expiresAt,
+              placementTemplateVersion: placementTemplate?.version ?? null,
+              advertisingClassification: input.classification ?? 'ORGANIC',
+            },
+          });
+        }
         if (trendCandidate) {
           const evidence = trendCandidate.evidenceLinks
             .map(({ evidence }) => evidence)
@@ -8460,6 +8624,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
       groupMembershipId: membership.id,
       links: links.map((link) => ({
         id: link.id,
+        name: link.name,
         groupId: link.groupId,
         scopeType: link.scopeType,
         groupMembershipId: link.memberIdentity?.groupMembershipId ?? null,
@@ -8589,6 +8754,38 @@ export class PrismaExternalLinkPlacementRepository implements ExternalLinkPlacem
       return saved;
     });
   }
+
+  async resolveForGeneration(
+    input: Parameters<ExternalLinkPlacementRepository['resolveForGeneration']>[0],
+  ) {
+    const assignment = await this.client.productPackAssignment.findFirst({
+      where: {
+        productPackVersionId: input.productPackVersionId,
+        bunshinId: input.bunshinId,
+        status: 'ACTIVE',
+        bunshin: {
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          status: 'ACTIVE',
+        },
+        productPackVersion: { status: 'PUBLISHED' },
+      },
+      select: { id: true },
+    });
+    if (!assignment) return { accessible: false, placement: null };
+    const placement = await this.client.externalLinkPlacementTemplate.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        productPackVersionId: input.productPackVersionId,
+        platform: input.platform,
+        format: input.format,
+        status: 'ACTIVE',
+        urlLocked: true,
+      },
+      select: { id: true, target: true, template: true, version: true },
+    });
+    return { accessible: true, placement };
+  }
 }
 
 export class PrismaProductPackRepository implements ProductPackRepository {
@@ -8668,6 +8865,7 @@ export class PrismaProductPackRepository implements ProductPackRepository {
           faq: c.faq,
           suitableFor: c.suitableFor,
           unsuitableFor: c.unsuitableFor,
+          allowLinklessPosts: c.allowLinklessPosts ?? false,
           validFrom: c.validFrom ?? null,
           validUntil: c.validUntil ?? null,
           createdByUserId: input.actorUserId,
@@ -8837,7 +9035,10 @@ export class PrismaProductPackRepository implements ProductPackRepository {
       },
       select: {
         productPackId: true,
-        productPackVersion: { select: { id: true, version: true } },
+        productPack: { select: { groupId: true } },
+        productPackVersion: {
+          select: { id: true, version: true, allowLinklessPosts: true },
+        },
       },
     });
     return row
@@ -8845,6 +9046,8 @@ export class PrismaProductPackRepository implements ProductPackRepository {
           productPackId: row.productPackId,
           versionId: row.productPackVersion.id,
           version: row.productPackVersion.version,
+          groupId: row.productPack.groupId,
+          allowLinklessPosts: row.productPackVersion.allowLinklessPosts,
         }
       : null;
   }
@@ -9326,8 +9529,11 @@ export class PrismaCampaignRepository implements CampaignRepository {
       maxAdsPerWeek: row.maxAdsPerWeek,
       cooldownDays: row.cooldownDays,
       productPack: {
+        productPackId: row.productPackVersion.productPackId,
+        groupId: row.groupId,
         versionId: row.productPackVersion.id,
         version: row.productPackVersion.version,
+        allowLinklessPosts: row.productPackVersion.allowLinklessPosts,
         summary: row.productPackVersion.summary,
         providerName: row.productPackVersion.providerName,
         targetCustomer: row.productPackVersion.targetCustomer,

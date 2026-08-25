@@ -21,6 +21,9 @@ import {
   CampaignService,
   AdvertisingSafetyService,
   CampaignSafetyValidationService,
+  ExternalTrackingLinkService,
+  ExternalLinkPlacementService,
+  applyExternalLinkPlacement,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -321,7 +324,63 @@ export class DailyMissionGenerationService {
       }
       if (quality.output.verdict !== 'PASS')
         throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
-      const campaignSignature = campaign ? campaignContentSignature(content.output) : null;
+      let missionContent = content.output;
+      let externalLinkUsage:
+        | {
+            groupId: string;
+            productPackId: string;
+            productPackVersionId: string;
+            campaignId: string;
+            externalTrackingLinkId: string;
+            insertedUrl: string;
+            placementTemplateId: string | null;
+            placementTemplateVersion: number | null;
+          }
+        | undefined;
+      if (campaign) {
+        const trackingLink = await new ExternalTrackingLinkService(
+          new db.PrismaExternalTrackingLinkRepository(),
+        ).resolve({
+          ...scope,
+          groupId: campaign.productPack.groupId,
+          productPackId: campaign.productPack.productPackId,
+          campaignId: campaign.id,
+          at: new Date(`${input.missionDate}T12:00:00.000Z`),
+        });
+        if (!trackingLink && !campaign.productPack.allowLinklessPosts)
+          throw new ApplicationError(
+            'CONFLICT',
+            'この商品に使用できる専用URLが設定されていません。管理者へお問い合わせください。',
+          );
+        if (trackingLink) {
+          const placement = await new ExternalLinkPlacementService(
+            new db.PrismaExternalLinkPlacementRepository(),
+          ).resolveForGeneration({
+            ...scope,
+            productPackVersionId: campaign.productPack.versionId,
+            platform: profile.platform,
+            format: brief.output.format,
+          });
+          missionContent = applyExternalLinkPlacement({
+            content: missionContent,
+            url: trackingLink.url,
+            platform: profile.platform,
+            format: brief.output.format,
+            placement,
+          });
+          externalLinkUsage = {
+            groupId: campaign.productPack.groupId,
+            productPackId: campaign.productPack.productPackId,
+            productPackVersionId: campaign.productPack.versionId,
+            campaignId: campaign.id,
+            externalTrackingLinkId: trackingLink.id,
+            insertedUrl: trackingLink.url,
+            placementTemplateId: placement.id,
+            placementTemplateVersion: placement.version,
+          };
+        }
+      }
+      const campaignSignature = campaign ? campaignContentSignature(missionContent) : null;
       const similarity =
         campaign && campaignSignature
           ? await new CampaignSafetyValidationService(
@@ -352,7 +411,7 @@ export class DailyMissionGenerationService {
             evidenceRequirement: 'NONE' as const,
             evidenceIds: [],
             officialClaims: campaign.productPack.facts,
-            content: JSON.stringify(content.output),
+            content: JSON.stringify(missionContent),
           }
         : null;
       if (advertisingInput) {
@@ -368,7 +427,7 @@ export class DailyMissionGenerationService {
         ...scope,
         ...brief.output,
         assistanceLevel: profile.defaultAssistanceLevel,
-        content: content.output,
+        content: missionContent,
         qualityScore: quality.output.score,
         campaignId: weeklyItem.campaignId,
         classification: weeklyItem.classification,
@@ -408,6 +467,7 @@ export class DailyMissionGenerationService {
             },
           },
         },
+        ...(externalLinkUsage ? { externalLinkUsage } : {}),
       });
       if (advertisingInput)
         await new AdvertisingSafetyService(new db.PrismaAdvertisingSafetyRepository()).review({
