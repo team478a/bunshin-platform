@@ -7,6 +7,7 @@ import { CapabilitySection } from './capability-section';
 import type { SocialCapabilityStatus } from './capability-section';
 import { MemorySection } from './memory-section';
 import type { MemoryView } from './memory-section';
+import { PersonalitySection, type PersonalityVersionView } from './personality-section';
 import { SocialProfileSection, type SocialProfileView } from './social-profile-section';
 import { ContentPillarSection, type ContentPillarView } from './content-pillar-section';
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
@@ -20,6 +21,7 @@ import {
 export function BunshinEditor({
   workspaceId,
   bunshin,
+  personalityVersions,
   knowledge,
   memories,
   socialCapabilityStatus,
@@ -32,6 +34,7 @@ export function BunshinEditor({
 }: {
   workspaceId: string;
   bunshin: BunshinAggregate;
+  personalityVersions: PersonalityVersionView[];
   knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
   memories: MemoryView[];
   socialCapabilityStatus: SocialCapabilityStatus;
@@ -146,6 +149,16 @@ export function BunshinEditor({
               変更を保存
             </button>
           </form>
+        </details>
+        <details className="settings-disclosure">
+          <summary>話し方をくわしく決める</summary>
+          <div className="settings-disclosure__content">
+            <PersonalitySection
+              workspaceId={workspaceId}
+              bunshinId={bunshin.id}
+              versions={personalityVersions}
+            />
+          </div>
         </details>
       </section>
 

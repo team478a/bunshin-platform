@@ -5021,7 +5021,7 @@ export class PrismaPersonalityVersionRepository implements PersonalityVersionRep
       !canManageBunshin(membership.role, input.actorUserId, row.ownerUserId)
     )
       return null;
-    return row.personality;
+    return { personality: row.personality };
   }
 
   private async write(
@@ -5033,7 +5033,8 @@ export class PrismaPersonalityVersionRepository implements PersonalityVersionRep
       basedOnVersionId: string | null;
     },
   ) {
-    const personality = await this.managedPersonality(tx, input);
+    const access = await this.managedPersonality(tx, input);
+    const personality = access?.personality;
     if (!personality) return null;
     if (input.basedOnVersionId) {
       const base = await tx.bunshinPersonalityVersion.findFirst({
@@ -5091,7 +5092,8 @@ export class PrismaPersonalityVersionRepository implements PersonalityVersionRep
 
   async restore(input: Parameters<PersonalityVersionRepository['restore']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const personality = await this.managedPersonality(tx, input);
+      const access = await this.managedPersonality(tx, input);
+      const personality = access?.personality;
       if (!personality) return null;
       const target = await tx.bunshinPersonalityVersion.findFirst({
         where: {
@@ -5124,8 +5126,10 @@ export class PrismaPersonalityVersionRepository implements PersonalityVersionRep
 
   async list(input: Parameters<PersonalityVersionRepository['list']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const personality = await this.managedPersonality(tx, input);
-      if (!personality) return null;
+      const access = await this.managedPersonality(tx, input);
+      if (!access) return null;
+      const personality = access.personality;
+      if (!personality) return [];
       const rows = await tx.bunshinPersonalityVersion.findMany({
         where: {
           workspaceId: input.workspaceId,
