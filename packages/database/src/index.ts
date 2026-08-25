@@ -8195,7 +8195,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
       select: { id: true, name: true, status: true },
     });
     if (!group) return null;
-    const [systems, identities, links, audits] = await this.client.$transaction([
+    const [systems, identities, links, audits, members, usages] = await this.client.$transaction([
       this.client.externalTrackingSystem.findMany({
         where: { workspaceId: input.workspaceId, groupId: input.groupId },
         include: { allowedDomains: { orderBy: { hostname: 'asc' } } },
@@ -8228,6 +8228,35 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         orderBy: { performedAt: 'desc' },
         take: 100,
       }),
+      this.client.groupMembership.findMany({
+        where: { workspaceId: input.workspaceId, groupId: input.groupId, status: 'ACTIVE' },
+        select: {
+          id: true,
+          role: true,
+          consentedAt: true,
+          user: { select: { id: true, displayName: true, email: true } },
+        },
+        orderBy: { user: { displayName: 'asc' } },
+      }),
+      this.client.contentLinkUsage.findMany({
+        where: { workspaceId: input.workspaceId, groupId: input.groupId },
+        select: {
+          id: true,
+          createdAt: true,
+          insertedUrlSnapshot: true,
+          linkNameSnapshot: true,
+          expiresAtSnapshot: true,
+          advertisingClassification: true,
+          groupMembership: {
+            select: { id: true, user: { select: { displayName: true } } },
+          },
+          productPack: { select: { id: true, name: true } },
+          campaign: { select: { id: true, name: true } },
+          dailyMission: { select: { id: true, missionDate: true, format: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      }),
     ]);
     return {
       group,
@@ -8241,6 +8270,19 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
             : link.status,
       })),
       audits,
+      members: members.map((member) => ({
+        ...member,
+        identityConfigured: identities.some(
+          (identity) => identity.groupMembershipId === member.id && identity.status === 'ACTIVE',
+        ),
+        activeLinkCount: links.filter(
+          (link) =>
+            link.memberIdentity?.groupMembershipId === member.id &&
+            link.status === 'ACTIVE' &&
+            (!link.expiresAt || link.expiresAt > input.at),
+        ).length,
+      })),
+      usages,
     };
   }
 

@@ -43,6 +43,7 @@ vi.mock('@bunshin/database', () => ({
 
 import {
   createExternalTrackingLinkResponse,
+  exportExternalTrackingResponse,
   listExternalTrackingConfigurationResponse,
   upsertExternalLinkPlacementResponse,
 } from '../src/http/external-tracking-links';
@@ -76,6 +77,34 @@ describe('external tracking admin HTTP', () => {
       id,
     );
     expect(response.status).toBe(401);
+  });
+
+  it('認可済みのURL一覧をUTF-8 CSVで出力する', async () => {
+    state.listConfiguration.mockResolvedValue({
+      links: [
+        {
+          name: '参加者URL',
+          effectiveStatus: 'ACTIVE',
+          scopeType: 'MEMBER',
+          url: 'https://example.jp/product?ref=member-a',
+          startsAt: null,
+          expiresAt: null,
+          updatedAt: new Date('2026-08-26T00:00:00Z'),
+        },
+      ],
+      usages: [],
+    });
+    const response = await exportExternalTrackingResponse(
+      request(`/api/workspaces/${id}/external-tracking/export?groupId=${id}&kind=links`),
+      id,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/csv');
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const body = new TextDecoder().decode(bytes);
+    expect(body).toContain('参加者URL');
+    expect(body).toContain('https://example.jp/product?ref=member-a');
   });
 
   it('許可domain外URLを保存しない', async () => {
