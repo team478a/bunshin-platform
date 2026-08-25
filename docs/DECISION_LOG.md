@@ -2,6 +2,17 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-081: 広告安全性を構造化入力による決定的Gateとして記録する
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- 決定: 本人の利用経験・結果・資格は本人WorkspaceとBunshin所有の`UserEvidence`へ保存し、Trend EvidenceやOrganization所有Product Packへ複製しない
+- 決定: 投稿を`ORGANIC | PRODUCT_RELATED | ADVERTISEMENT`へ明示分類し、本人事実を使う場合はACTIVE Evidenceを必須にする
+- 決定: 広告には`#PR`、Product Packの必須表記、禁止表現、条件付き表記、公式事実の完全一致をAIより前に決定的に検査する
+- 決定: 判定不能・不一致・根拠不足は`BLOCKED`とし、文章本文は監査DBへ保存せずSHA-256 hash、使用resource ID、issue codeだけを保存する
+- 決定: Daily Missionへの自動Gate接続は、G5で投稿分類と商品投稿計画が生成入力へ加わる時点で実装する。G3-Aで分類を推測しない
+- 境界: 本部は商品関連の判定結果を閲覧できるが、個人Evidence本文、投稿本文、通常投稿は閲覧しない
+
 ## D-062: グループ発信を独立した安全境界として段階実装する
 
 - 日付: 2026-08-25

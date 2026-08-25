@@ -228,6 +228,14 @@ export default async function OperationsAdminPage() {
         </Link>
       </section>
 
+      <section className="settings-card" aria-labelledby="advertising-safety-title">
+        <h2 id="advertising-safety-title">広告の安全確認</h2>
+        <p>公式商品に関する表記・事実確認の結果を、個人の投稿文を見ずに確認します。</p>
+        <Link href="/admin/advertising-safety" className="button button--secondary">
+          広告の安全確認を開く
+        </Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="line-settings-title">
         <h2 id="line-settings-title">LINEの設定</h2>
         <p>

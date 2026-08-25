@@ -11,6 +11,7 @@ import {
   requireAccessibleWorkspace,
   GroupParticipationService,
   ProductPackService,
+  AdvertisingSafetyService,
 } from '@bunshin/application';
 import {
   ActivateSocialProfile,
@@ -80,6 +81,7 @@ import {
   PrismaTrendResearchRepository,
   PrismaGroupParticipationRepository,
   PrismaProductPackRepository,
+  PrismaAdvertisingSafetyRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -91,6 +93,8 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.advertisingSafetyReview.deleteMany();
+    await client.userEvidence.deleteMany();
     await client.productPackAssignment.deleteMany();
     await client.productPackAsset.deleteMany();
     await client.productPackRule.deleteMany();
@@ -3177,6 +3181,46 @@ integration('database ownership boundaries', () => {
         workspaceId: outsider.workspace.id,
         actorUserId: owner.user.id,
         productPackId: (pack as { id: string }).id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('keeps personal evidence isolated by Workspace, User, and Bunshin', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Evidence Owner' });
+    const outsider = await accounts.execute({ displayName: 'Evidence Outsider' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Evidence Bunshin',
+      slug: `evidence-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'Objective',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Personality',
+    });
+    const service = new AdvertisingSafetyService(new PrismaAdvertisingSafetyRepository(client));
+    const evidence = await service.createEvidence({
+      workspaceId: owner.workspace.id,
+      bunshinId: bunshin.id,
+      actorUserId: owner.user.id,
+      type: 'USAGE',
+      title: '利用経験',
+      claim: '本人が利用した',
+    });
+    await expect(
+      service.listEvidence({
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        actorUserId: outsider.user.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      service.revokeEvidence({
+        workspaceId: outsider.workspace.id,
+        bunshinId: bunshin.id,
+        actorUserId: owner.user.id,
+        evidenceId: evidence.id,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });

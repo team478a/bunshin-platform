@@ -98,6 +98,34 @@ enum ProductPackAssignmentStatus {
   REVOKED
 }
 
+enum UserEvidenceType {
+  EXPERIENCE
+  USAGE
+  RESULT
+  QUALIFICATION
+}
+
+enum UserEvidenceStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum AdvertisingClassification {
+  ORGANIC
+  PRODUCT_RELATED
+  ADVERTISEMENT
+}
+
+enum AdvertisingEvidenceRequirement {
+  NONE
+  PERSONAL_EVIDENCE
+}
+
+enum AdvertisingSafetyVerdict {
+  PASS
+  BLOCKED
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -569,6 +597,8 @@ model User {
   supportCasesAssigned          SupportCase[]                       @relation("SupportCaseAssignee")
   supportCaseNotes              SupportCaseNote[]
   personalityVersionsCreated    BunshinPersonalityVersion[]
+  userEvidenceCreated           UserEvidence[]                      @relation("UserEvidenceCreator")
+  advertisingSafetyReviews      AdvertisingSafetyReview[]           @relation("AdvertisingSafetyReviewActor")
 
   @@index([status])
   @@map("users")
@@ -630,6 +660,8 @@ model Workspace {
   missionTrendContexts        MissionTrendContext[]
   generationContextSnapshots  GenerationContextSnapshot[]
   personalityVersions         BunshinPersonalityVersion[]
+  userEvidence                UserEvidence[]
+  advertisingSafetyReviews    AdvertisingSafetyReview[]
 
   @@index([status])
   @@map("workspaces")
@@ -731,28 +763,29 @@ model ProductPack {
 }
 
 model ProductPackVersion {
-  id              String                   @id @default(uuid()) @db.Uuid
-  productPackId   String                   @map("product_pack_id") @db.Uuid
+  id              String                    @id @default(uuid()) @db.Uuid
+  productPackId   String                    @map("product_pack_id") @db.Uuid
   version         Int
-  status          ProductPackVersionStatus @default(DRAFT)
-  summary         String                   @db.VarChar(1000)
-  providerName    String                   @map("provider_name") @db.VarChar(200)
-  targetCustomer  String                   @map("target_customer") @db.VarChar(1000)
+  status          ProductPackVersionStatus  @default(DRAFT)
+  summary         String                    @db.VarChar(1000)
+  providerName    String                    @map("provider_name") @db.VarChar(200)
+  targetCustomer  String                    @map("target_customer") @db.VarChar(1000)
   facts           Json
   faq             Json
-  suitableFor     String[]                 @map("suitable_for")
-  unsuitableFor   String[]                 @map("unsuitable_for")
-  validFrom       DateTime?                @map("valid_from") @db.Timestamptz(6)
-  validUntil      DateTime?                @map("valid_until") @db.Timestamptz(6)
-  publishedAt     DateTime?                @map("published_at") @db.Timestamptz(6)
-  supersededAt    DateTime?                @map("superseded_at") @db.Timestamptz(6)
-  createdByUserId String                   @map("created_by_user_id") @db.Uuid
-  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
-  productPack     ProductPack              @relation(fields: [productPackId], references: [id], onDelete: Cascade)
+  suitableFor     String[]                  @map("suitable_for")
+  unsuitableFor   String[]                  @map("unsuitable_for")
+  validFrom       DateTime?                 @map("valid_from") @db.Timestamptz(6)
+  validUntil      DateTime?                 @map("valid_until") @db.Timestamptz(6)
+  publishedAt     DateTime?                 @map("published_at") @db.Timestamptz(6)
+  supersededAt    DateTime?                 @map("superseded_at") @db.Timestamptz(6)
+  createdByUserId String                    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  productPack     ProductPack               @relation(fields: [productPackId], references: [id], onDelete: Cascade)
   rules           ProductPackRule[]
   assets          ProductPackAsset[]
   assignments     ProductPackAssignment[]
+  safetyReviews   AdvertisingSafetyReview[]
 
   @@unique([productPackId, version])
   @@index([productPackId, status])
@@ -808,6 +841,55 @@ model ProductPackAssignment {
   @@unique([productPackId, bunshinId])
   @@index([workspaceId, bunshinId, status])
   @@map("product_pack_assignments")
+}
+
+model UserEvidence {
+  id              String             @id @default(uuid()) @db.Uuid
+  workspaceId     String             @map("workspace_id") @db.Uuid
+  bunshinId       String             @map("bunshin_id") @db.Uuid
+  type            UserEvidenceType
+  title           String             @db.VarChar(160)
+  claim           String             @db.VarChar(1000)
+  sourceUrl       String?            @map("source_url") @db.VarChar(2048)
+  occurredAt      DateTime?          @map("occurred_at") @db.Timestamptz(6)
+  status          UserEvidenceStatus @default(ACTIVE)
+  createdByUserId String             @map("created_by_user_id") @db.Uuid
+  revokedAt       DateTime?          @map("revoked_at") @db.Timestamptz(6)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bunshin         Bunshin            @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy       User               @relation("UserEvidenceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, bunshinId, status])
+  @@map("user_evidence")
+}
+
+model AdvertisingSafetyReview {
+  id                   String                         @id @default(uuid()) @db.Uuid
+  workspaceId          String                         @map("workspace_id") @db.Uuid
+  bunshinId            String                         @map("bunshin_id") @db.Uuid
+  dailyMissionId       String?                        @map("daily_mission_id") @db.Uuid
+  productPackVersionId String?                        @map("product_pack_version_id") @db.Uuid
+  classification       AdvertisingClassification
+  evidenceRequirement  AdvertisingEvidenceRequirement @map("evidence_requirement")
+  evidenceIds          String[]                       @map("evidence_ids") @db.Uuid
+  officialClaims       Json                           @map("official_claims")
+  requiredDisclosures  String[]                       @map("required_disclosures")
+  issueCodes           String[]                       @map("issue_codes")
+  verdict              AdvertisingSafetyVerdict
+  contentHash          String                         @map("content_hash") @db.Char(64)
+  reviewedByUserId     String                         @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt           DateTime                       @default(now()) @map("reviewed_at") @db.Timestamptz(6)
+  workspace            Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bunshin              Bunshin                        @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+  dailyMission         DailyMission?                  @relation(fields: [dailyMissionId], references: [id], onDelete: SetNull)
+  productPackVersion   ProductPackVersion?            @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  reviewedBy           User                           @relation("AdvertisingSafetyReviewActor", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, bunshinId, reviewedAt])
+  @@index([productPackVersionId, verdict])
+  @@map("advertising_safety_reviews")
 }
 
 model PlatformAdmin {
@@ -1338,6 +1420,8 @@ model Bunshin {
   generationContextSnapshots  GenerationContextSnapshot[]
   personalityVersions         BunshinPersonalityVersion[]
   productPackAssignments      ProductPackAssignment[]
+  userEvidence                UserEvidence[]
+  advertisingSafetyReviews    AdvertisingSafetyReview[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -1754,6 +1838,7 @@ model DailyMission {
   deepLinkStates        MissionDeepLinkState[]
   trendContext          MissionTrendContext?
   generationContext     GenerationContextSnapshot?
+  safetyReviews         AdvertisingSafetyReview[]
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
