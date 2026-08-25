@@ -55,6 +55,8 @@ const plan: WeeklyPlan = {
       angle: '最初の3手',
       recommendedFormat: 'SLIDE',
       notes: null,
+      campaignId: null,
+      classification: 'ORGANIC',
       createdAt: now,
       updatedAt: now,
     },

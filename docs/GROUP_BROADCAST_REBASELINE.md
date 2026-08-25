@@ -43,6 +43,8 @@ Campaign、Participation、対象・期間・上限・素材・テーマ、参�
 
 通常／商品周辺／商品紹介の比率とクールダウンをWeekly Planへ接続し、1案生成、本人修正、採否、投稿完了、LINE/Web導線を完成させる。
 
+実装済み。Weekly Planは`ORGANIC`、`PRODUCT_RELATED`、`ADVERTISEMENT`を区別し、Campaignごとの週間上限とクールダウンをサーバー側で検証する。Daily Missionは参加中Campaignの公開済み商品情報・ルール・素材だけを生成Contextへ渡し、保存前に広告安全Gateを通す。WebとLINEには安全なCampaign名と分類だけを表示し、参加撤回・グループ退出・商品割当解除後は新規生成と通知を停止する。
+
 ### G6: 安全検証
 
 グループ類似検査、生成・招待制限、監査、KPIを実装し、1社・1商品・10〜22人・30〜60日で検証する。

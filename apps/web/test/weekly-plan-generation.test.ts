@@ -92,6 +92,8 @@ describe('WeeklyPlanGenerationService', () => {
             angle: '最初の一歩',
             recommendedFormat: 'TEXT',
             notes: null,
+            campaignId: null,
+            classification: 'ORGANIC',
           },
         ],
       },

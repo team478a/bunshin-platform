@@ -21,6 +21,7 @@ const input: WeeklyPlannerInput = {
   },
   contentPillars: [{ id: 'pillar-1', title: '実践', description: null, weight: 100 }],
   grantedKnowledge: [],
+  campaigns: [],
 };
 
 const output: WeeklyPlannerOutput = {
@@ -33,6 +34,8 @@ const output: WeeklyPlannerOutput = {
       angle: ' 失敗談 ',
       recommendedFormat: 'TEXT',
       notes: ' ',
+      campaignId: null,
+      classification: 'ORGANIC',
     },
   ],
 };
@@ -81,5 +84,59 @@ describe('GenerateWeeklyPlan', () => {
       new GenerateWeeklyPlan(provider).execute({ ...input, contentPillars: [] }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  const campaign = {
+    id: 'campaign-1',
+    name: '公式企画',
+    theme: '商品の正しい使い方',
+    targetSummary: '初心者',
+    startsAt: new Date('2026-08-01T00:00:00Z'),
+    endsAt: new Date('2026-09-01T00:00:00Z'),
+    maxRelatedPerWeek: 2,
+    maxAdsPerWeek: 1,
+    cooldownDays: 2,
+    productPack: {
+      versionId: 'version-1',
+      version: 1,
+      summary: '公式商品',
+      providerName: '公式店',
+      targetCustomer: '初心者',
+      facts: { price: '1000円' },
+      rules: [],
+      assets: [],
+    },
+  };
+
+  it('商品投稿の週上限をサーバー側で拒否する', async () => {
+    const campaignItem = {
+      ...output.items[0]!,
+      campaignId: campaign.id,
+      classification: 'ADVERTISEMENT' as const,
+    };
+    await expect(
+      new GenerateWeeklyPlan(
+        planner({
+          ...output,
+          items: [campaignItem, { ...campaignItem, scheduledDate: '2026-08-21' }],
+        }),
+      ).execute({ ...input, campaigns: [campaign] }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('商品投稿を近い日に連続させない', async () => {
+    const campaignItem = {
+      ...output.items[0]!,
+      campaignId: campaign.id,
+      classification: 'PRODUCT_RELATED' as const,
+    };
+    await expect(
+      new GenerateWeeklyPlan(
+        planner({
+          ...output,
+          items: [campaignItem, { ...campaignItem, scheduledDate: '2026-08-18' }],
+        }),
+      ).execute({ ...input, campaigns: [campaign] }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

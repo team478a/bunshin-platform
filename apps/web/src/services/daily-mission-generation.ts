@@ -18,6 +18,8 @@ import {
   RequireActiveBunshinCapability,
   SelectBunshinMemories,
   ProductPackService,
+  CampaignService,
+  AdvertisingSafetyService,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -130,6 +132,16 @@ export class DailyMissionGenerationService {
       );
       if (!weeklyPlan)
         throw new ApplicationError('NOT_FOUND', 'confirmed weekly plan item not found for date');
+      const weeklyItem = weeklyPlan.items.find(
+        ({ scheduledDate }) => scheduledDate === input.missionDate,
+      )!;
+      const campaign = weeklyItem.campaignId
+        ? await new CampaignService(new db.PrismaCampaignRepository()).resolvePlanningContext({
+            ...scope,
+            campaignId: weeklyItem.campaignId,
+            at: new Date(`${input.missionDate}T12:00:00.000Z`),
+          })
+        : null;
       const pillars = await new ListContentPillars(new db.PrismaContentPillarRepository()).execute(
         scope,
       );
@@ -232,6 +244,7 @@ export class DailyMissionGenerationService {
         contentPillars: pillars,
         grantedKnowledge: knowledge,
         trendIdeas,
+        campaign,
       });
       await usage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
       const pillarId = weeklyPlan.items.find(
@@ -268,6 +281,7 @@ export class DailyMissionGenerationService {
         contentPillar: { title: pillar.title, description: pillar.description },
         grantedKnowledge: knowledge,
         selectedMemories,
+        campaign,
       };
       let content = await generator.execute(contentInput);
       await usage('content:0', 'CONTENT_GENERATOR', content);
@@ -305,12 +319,34 @@ export class DailyMissionGenerationService {
       }
       if (quality.output.verdict !== 'PASS')
         throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
+      const advertisingInput = campaign
+        ? {
+            ...scope,
+            productPackVersionId: campaign.productPack.versionId,
+            classification: weeklyItem.classification,
+            evidenceRequirement: 'NONE' as const,
+            evidenceIds: [],
+            officialClaims: campaign.productPack.facts,
+            content: JSON.stringify(content.output),
+          }
+        : null;
+      if (advertisingInput) {
+        const safety = await new AdvertisingSafetyService(
+          new db.PrismaAdvertisingSafetyRepository(),
+        ).inspect(advertisingInput);
+        if (safety.inspected.verdict !== 'PASS')
+          throw new ApplicationError('CONTENT_REJECTED', 'campaign content failed safety gate', {
+            issueCodes: safety.inspected.issueCodes,
+          });
+      }
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,
         ...brief.output,
         assistanceLevel: profile.defaultAssistanceLevel,
         content: content.output,
         qualityScore: quality.output.score,
+        campaignId: weeklyItem.campaignId,
+        classification: weeklyItem.classification,
         generationContext: {
           generatedAt: new Date(),
           payload: {
@@ -327,9 +363,13 @@ export class DailyMissionGenerationService {
             strategy: { id: strategy.id, version: strategy.version },
             weeklyPlan: { id: weeklyPlan.id },
             contentPillar: { id: pillar.id },
-            productPack: productPack
-              ? { id: productPack.versionId, version: productPack.version }
-              : null,
+            productPack: campaign
+              ? { id: campaign.productPack.versionId, version: campaign.productPack.version }
+              : productPack
+                ? { id: productPack.versionId, version: productPack.version }
+                : null,
+            campaign: campaign ? { id: campaign.id } : null,
+            classification: weeklyItem.classification,
             trendCandidates: brief.output.trendCandidateId
               ? [{ id: brief.output.trendCandidateId }]
               : [],
@@ -344,6 +384,11 @@ export class DailyMissionGenerationService {
           },
         },
       });
+      if (advertisingInput)
+        await new AdvertisingSafetyService(new db.PrismaAdvertisingSafetyRepository()).review({
+          ...advertisingInput,
+          dailyMissionId: created.id,
+        });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });
       } catch {

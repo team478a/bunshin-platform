@@ -88,6 +88,7 @@ import type {
   ProductPackRepository,
   AdvertisingSafetyRepository,
   CampaignRepository,
+  CampaignPlanningContext,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -2616,6 +2617,48 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
           new Set(input.items.map(({ contentPillarId }) => contentPillarId)).size
         )
           return null;
+        const campaignIds = [
+          ...new Set(input.items.flatMap(({ campaignId }) => (campaignId ? [campaignId] : []))),
+        ];
+        if (campaignIds.length > 0) {
+          const campaigns = await tx.campaign.count({
+            where: {
+              id: { in: campaignIds },
+              status: 'OPEN',
+              startsAt: {
+                lt: new Date(
+                  Date.parse(`${input.weekStartDate}T00:00:00.000Z`) + 7 * 24 * 60 * 60 * 1000,
+                ),
+              },
+              endsAt: { gt: new Date(`${input.weekStartDate}T00:00:00.000Z`) },
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+              participations: {
+                some: {
+                  userId: input.actorUserId,
+                  bunshinId: input.bunshinId,
+                  participantWorkspaceId: input.workspaceId,
+                  status: 'ACCEPTED',
+                },
+              },
+              productPackVersion: {
+                status: 'PUBLISHED',
+                assignments: {
+                  some: { bunshinId: input.bunshinId, status: 'ACTIVE' },
+                },
+              },
+            },
+          });
+          if (campaigns !== campaignIds.length) return null;
+        }
         const plan = await tx.weeklyPlan.create({
           data: {
             workspaceId: input.workspaceId,
@@ -2636,6 +2679,8 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
             angle: item.angle,
             recommendedFormat: item.recommendedFormat,
             notes: item.notes,
+            campaignId: item.campaignId,
+            classification: item.classification,
           })),
         });
         return weeklyPlan((await this.plan(tx, { ...input, weeklyPlanId: plan.id }))!);
@@ -2937,23 +2982,66 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             })
           : null;
         if (input.trendCandidateId && !trendCandidate) return null;
+        const weeklyItem = input.weeklyPlanItemId
+          ? await tx.weeklyPlanItem.findFirst({
+              where: {
+                id: input.weeklyPlanItemId,
+                workspaceId: input.workspaceId,
+                bunshinId: input.bunshinId,
+              },
+            })
+          : null;
+        if (input.weeklyPlanItemId && !weeklyItem) return null;
         if (
-          input.weeklyPlanItemId &&
-          !(await tx.weeklyPlanItem.findFirst({
-            where: {
-              id: input.weeklyPlanItemId,
-              workspaceId: input.workspaceId,
-              bunshinId: input.bunshinId,
-            },
-          }))
+          weeklyItem &&
+          (weeklyItem.campaignId !== (input.campaignId ?? null) ||
+            weeklyItem.classification !== (input.classification ?? 'ORGANIC'))
         )
           return null;
+        if (input.campaignId) {
+          const eligible = await tx.campaign.findFirst({
+            where: {
+              id: input.campaignId,
+              status: 'OPEN',
+              startsAt: { lte: new Date(`${input.missionDate}T23:59:59.999Z`) },
+              endsAt: { gt: new Date(`${input.missionDate}T00:00:00.000Z`) },
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+              participations: {
+                some: {
+                  participantWorkspaceId: input.workspaceId,
+                  userId: input.actorUserId,
+                  bunshinId: input.bunshinId,
+                  status: 'ACCEPTED',
+                },
+              },
+              productPackVersion: {
+                status: 'PUBLISHED',
+                assignments: {
+                  some: { bunshinId: input.bunshinId, status: 'ACTIVE' },
+                },
+              },
+            },
+            select: { id: true },
+          });
+          if (!eligible) return null;
+        }
         const created = await tx.dailyMission.create({
           data: {
             workspaceId: input.workspaceId,
             bunshinId: input.bunshinId,
             socialProfileId: input.socialProfileId ?? null,
             weeklyPlanItemId: input.weeklyPlanItemId ?? null,
+            campaignId: input.campaignId ?? null,
+            classification: input.classification ?? 'ORGANIC',
             missionDate: new Date(`${input.missionDate}T00:00:00Z`),
             format: input.format,
             assistanceLevel: input.assistanceLevel ?? 'READY_TO_USE',
@@ -3116,6 +3204,42 @@ export class PrismaLineMissionNotificationSummaryRepository implements LineMissi
           },
         },
         socialProfile: { is: { status: 'ACTIVE' } },
+        OR: [
+          { campaignId: null },
+          {
+            campaign: {
+              is: {
+                status: 'OPEN',
+                startsAt: { lte: new Date() },
+                endsAt: { gt: new Date() },
+                group: {
+                  status: 'ACTIVE',
+                  memberships: {
+                    some: {
+                      userId: input.actorUserId,
+                      status: 'ACTIVE',
+                      consentedAt: { not: null },
+                    },
+                  },
+                },
+                participations: {
+                  some: {
+                    participantWorkspaceId: input.workspaceId,
+                    userId: input.actorUserId,
+                    bunshinId: input.bunshinId,
+                    status: 'ACCEPTED',
+                  },
+                },
+                productPackVersion: {
+                  status: 'PUBLISHED',
+                  assignments: {
+                    some: { bunshinId: input.bunshinId, status: 'ACTIVE' },
+                  },
+                },
+              },
+            },
+          },
+        ],
       },
       select: {
         format: true,
@@ -3123,6 +3247,8 @@ export class PrismaLineMissionNotificationSummaryRepository implements LineMissi
         topic: true,
         trendContext: { select: { id: true } },
         socialProfile: { select: { platform: true } },
+        classification: true,
+        campaign: { select: { name: true } },
       },
     });
     if (!mission?.socialProfile) return null;
@@ -3132,6 +3258,9 @@ export class PrismaLineMissionNotificationSummaryRepository implements LineMissi
       estimatedMinutes: mission.estimatedMinutes,
       topic: mission.topic,
       researched: mission.trendContext !== null,
+      ...(mission.campaign && mission.classification !== 'ORGANIC'
+        ? { campaign: { name: mission.campaign.name, classification: mission.classification } }
+        : {}),
     };
   }
 }
@@ -7961,6 +8090,13 @@ export class PrismaAdvertisingSafetyRepository implements AdvertisingSafetyRepos
   }
 }
 
+type CampaignPlanningRow = Prisma.CampaignGetPayload<{
+  include: {
+    productPackVersion: { include: { rules: true } };
+    assets: { include: { productPackAsset: true } };
+  };
+}>;
+
 export class PrismaCampaignRepository implements CampaignRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -8024,6 +8160,9 @@ export class PrismaCampaignRepository implements CampaignRepository {
           theme: input.theme,
           targetSummary: input.targetSummary,
           participationLimit: input.participationLimit,
+          maxRelatedPerWeek: input.maxRelatedPerWeek,
+          maxAdsPerWeek: input.maxAdsPerWeek,
+          cooldownDays: input.cooldownDays,
           startsAt: input.startsAt,
           endsAt: input.endsAt,
           createdByUserId: input.actorUserId,
@@ -8191,5 +8330,88 @@ export class PrismaCampaignRepository implements CampaignRepository {
       });
       return participation;
     });
+  }
+
+  private planningWhere(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    campaignId?: string;
+    from: Date;
+    to: Date;
+  }): Prisma.CampaignWhereInput {
+    return {
+      ...(input.campaignId ? { id: input.campaignId } : {}),
+      status: 'OPEN',
+      startsAt: { lte: input.to },
+      endsAt: { gt: input.from },
+      group: {
+        status: 'ACTIVE',
+        memberships: {
+          some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
+        },
+      },
+      participations: {
+        some: {
+          participantWorkspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          bunshinId: input.bunshinId,
+          status: 'ACCEPTED',
+        },
+      },
+      productPackVersion: {
+        status: 'PUBLISHED',
+        assignments: { some: { bunshinId: input.bunshinId, status: 'ACTIVE' } },
+      },
+    };
+  }
+
+  private planningContext(row: CampaignPlanningRow): CampaignPlanningContext {
+    return {
+      id: row.id,
+      name: row.name,
+      theme: row.theme,
+      targetSummary: row.targetSummary,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      maxRelatedPerWeek: row.maxRelatedPerWeek,
+      maxAdsPerWeek: row.maxAdsPerWeek,
+      cooldownDays: row.cooldownDays,
+      productPack: {
+        versionId: row.productPackVersion.id,
+        version: row.productPackVersion.version,
+        summary: row.productPackVersion.summary,
+        providerName: row.productPackVersion.providerName,
+        targetCustomer: row.productPackVersion.targetCustomer,
+        facts: row.productPackVersion.facts as Record<string, string>,
+        rules: row.productPackVersion.rules,
+        assets: row.assets.map(({ productPackAsset }) => productPackAsset),
+      },
+    };
+  }
+
+  private planningRows(where: Prisma.CampaignWhereInput) {
+    return this.client.campaign.findMany({
+      where,
+      include: {
+        productPackVersion: { include: { rules: { orderBy: { sortOrder: 'asc' } } } },
+        assets: { include: { productPackAsset: true }, orderBy: { sortOrder: 'asc' } },
+      },
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  async listPlanningContexts(input: Parameters<CampaignRepository['listPlanningContexts']>[0]) {
+    if (!(await this.participant(input))) return null;
+    const rows = await this.planningRows(this.planningWhere(input));
+    return rows.map((row) => this.planningContext(row));
+  }
+
+  async resolvePlanningContext(input: Parameters<CampaignRepository['resolvePlanningContext']>[0]) {
+    if (!(await this.participant(input))) return null;
+    const rows = await this.planningRows(
+      this.planningWhere({ ...input, from: input.at, to: input.at }),
+    );
+    return rows[0] ? this.planningContext(rows[0]) : null;
   }
 }

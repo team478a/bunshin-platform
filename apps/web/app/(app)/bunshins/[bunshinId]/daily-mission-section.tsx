@@ -12,6 +12,8 @@ export type DailyMissionView = {
   topic: string;
   angle: string;
   reason: string;
+  campaignId: string | null;
+  classification: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
   qualityScore: number | null;
   content: Record<string, unknown>;
   decision: 'PENDING' | 'ACCEPTED' | 'REJECTED';
@@ -577,6 +579,13 @@ export function DailyMissionSection({
                           : 'AI動画の作り方'}
                 </span>
                 <span>約{mission.estimatedMinutes}分</span>
+                {mission.classification !== 'ORGANIC' && (
+                  <span>
+                    {mission.classification === 'ADVERTISEMENT'
+                      ? '商品を紹介する企画（PR）'
+                      : '商品に関係する企画'}
+                  </span>
+                )}
               </div>
               <p className="mission-reason">{mission.reason}</p>
               <button type="button" disabled={busy} onClick={() => void view(mission)}>

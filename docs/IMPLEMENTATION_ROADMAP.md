@@ -264,9 +264,9 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 - G1: Group / Membership / Invitation / Consent / Isolation — 完了
 - G2: Product Pack / Version / Rule / Asset / Assignment / 管理API・UI / Generation Context接続 — 完了
 - G3-A: 本人Evidence / Advertising Classification / PR固定表記 / 固定事実照合 / 監査 — 完了
-- G3-B: Daily Mission生成フローへの自動Gate接続 — G5の分類・計画入力と同時に実装
+- G3-B: Daily Mission生成フローへの自動Gate接続 — 完了
 - G4: 任意参加Campaign / Participation / 期間・上限・公式素材 / 管理・本人API/UI / 監査 — 完了
-- G5: 投稿比率、Weekly Plan、生成、LINE/Web導線
+- G5: 投稿比率、Weekly Plan、生成、LINE/Web導線 — 完了
 - G6: 類似検査、利用制限、KPI、1社先行テスト
 - G7: 検証後の承認型人格学習
 

@@ -103,6 +103,14 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
                 `作るもの：${format}`,
                 `目安：${summary.estimatedMinutes}分`,
                 `テーマ：${summary.topic}`,
+                ...(summary.campaign
+                  ? [
+                      `公式企画：${summary.campaign.name}`,
+                      summary.campaign.classification === 'ADVERTISEMENT'
+                        ? '商品紹介の投稿です。内容を確認してから使ってください。'
+                        : '商品に関係する企画です。内容を確認してから使ってください。',
+                    ]
+                  : []),
                 ...(summary.researched ? ['新しい情報も参考にした企画です。'] : []),
                 '',
                 'くわしく見る',

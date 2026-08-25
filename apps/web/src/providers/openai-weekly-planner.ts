@@ -7,7 +7,7 @@ import {
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
-export const WEEKLY_PLANNER_PROMPT_VERSION = 'weekly-planner-v1';
+export const WEEKLY_PLANNER_PROMPT_VERSION = 'weekly-planner-v2';
 const schema = {
   type: 'object',
   additionalProperties: false,
@@ -27,6 +27,11 @@ const schema = {
           angle: { type: 'string' },
           recommendedFormat: { type: 'string', enum: SOCIAL_PREFERRED_FORMATS },
           notes: { type: ['string', 'null'] },
+          campaignId: { type: ['string', 'null'] },
+          classification: {
+            type: 'string',
+            enum: ['ORGANIC', 'PRODUCT_RELATED', 'ADVERTISEMENT'],
+          },
         },
         required: [
           'scheduledDate',
@@ -35,6 +40,8 @@ const schema = {
           'angle',
           'recommendedFormat',
           'notes',
+          'campaignId',
+          'classification',
         ],
       },
     },
@@ -65,7 +72,7 @@ export class OpenAIWeeklyPlanner implements WeeklyPlannerPort {
           {
             role: 'system',
             content:
-              'あなたはBUNSHINのSNS週間企画担当です。対象Bunshin、承認済み戦略、Active Content Pillar、Grant済みKnowledgeだけを使い、指定週内で実行可能な日本語計画を作成してください。画像・動画そのものや自動投稿は行いません。',
+              'あなたはBUNSHINのSNS週間企画担当です。対象Bunshin、承認済み戦略、Active Content Pillar、Grant済みKnowledge、本人が参加中のCampaignだけを使い、指定週内で実行可能な日本語計画を作成してください。通常投稿はORGANICかつcampaignId=nullです。商品周辺はPRODUCT_RELATED、直接の商品紹介はADVERTISEMENTとして対象campaignIdを付けます。各Campaignの上限とcooldownDaysを必ず守り、商品投稿だけで週を埋めません。画像・動画そのものや自動投稿は行いません。',
           },
           { role: 'user', content: JSON.stringify(input) },
         ],

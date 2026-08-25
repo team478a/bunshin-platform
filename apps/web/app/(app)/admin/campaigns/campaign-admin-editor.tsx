@@ -14,6 +14,9 @@ type Campaign = {
   theme: string;
   targetSummary: string;
   participationLimit: number;
+  maxRelatedPerWeek: number;
+  maxAdsPerWeek: number;
+  cooldownDays: number;
   startsAt: string;
   endsAt: string;
   status: 'DRAFT' | 'OPEN' | 'CLOSED' | 'CANCELLED';
@@ -79,6 +82,9 @@ export function CampaignAdminEditor({
         theme: value(data, 'theme'),
         targetSummary: value(data, 'targetSummary'),
         participationLimit: Number(value(data, 'participationLimit')),
+        maxRelatedPerWeek: Number(value(data, 'maxRelatedPerWeek')),
+        maxAdsPerWeek: Number(value(data, 'maxAdsPerWeek')),
+        cooldownDays: Number(value(data, 'cooldownDays')),
         startsAt: new Date(value(data, 'startsAt')).toISOString(),
         endsAt: new Date(value(data, 'endsAt')).toISOString(),
         assetIds: data
@@ -130,6 +136,25 @@ export function CampaignAdminEditor({
               <input name="participationLimit" type="number" min="1" max="10000" required />
             </label>
             <label>
+              1週間の商品周辺投稿（最大）
+              <input
+                name="maxRelatedPerWeek"
+                type="number"
+                min="0"
+                max="7"
+                defaultValue="2"
+                required
+              />
+            </label>
+            <label>
+              1週間の商品紹介投稿（最大）
+              <input name="maxAdsPerWeek" type="number" min="0" max="7" defaultValue="1" required />
+            </label>
+            <label>
+              商品投稿を続けない日数
+              <input name="cooldownDays" type="number" min="0" max="30" defaultValue="2" required />
+            </label>
+            <label>
               開始日時
               <input name="startsAt" type="datetime-local" required />
             </label>
@@ -171,6 +196,10 @@ export function CampaignAdminEditor({
             <p>{campaign.theme}</p>
             <p>
               参加：{accepted} / {campaign.participationLimit}人 ／ 状態：{campaign.status}
+            </p>
+            <p>
+              週の商品投稿は最大{campaign.maxRelatedPerWeek}件（商品紹介は最大
+              {campaign.maxAdsPerWeek}件）、間を{campaign.cooldownDays}日あけます。
             </p>
             {campaign.status === 'DRAFT' ? (
               <button type="button" onClick={() => void transition(campaign, 'OPEN')}>

@@ -863,6 +863,9 @@ model Campaign {
   theme                String                  @db.VarChar(1000)
   targetSummary        String                  @map("target_summary") @db.VarChar(1000)
   participationLimit   Int                     @map("participation_limit")
+  maxRelatedPerWeek    Int                     @default(2) @map("max_related_per_week")
+  maxAdsPerWeek        Int                     @default(1) @map("max_ads_per_week")
+  cooldownDays         Int                     @default(2) @map("cooldown_days")
   startsAt             DateTime                @map("starts_at") @db.Timestamptz(6)
   endsAt               DateTime                @map("ends_at") @db.Timestamptz(6)
   status               CampaignStatus          @default(DRAFT)
@@ -879,6 +882,8 @@ model Campaign {
   assets               CampaignAsset[]
   participations       CampaignParticipation[]
   activities           CampaignActivity[]
+  weeklyPlanItems       WeeklyPlanItem[]
+  dailyMissions         DailyMission[]
 
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
@@ -1906,6 +1911,8 @@ model WeeklyPlanItem {
   angle             String                @db.VarChar(500)
   recommendedFormat SocialPreferredFormat @map("recommended_format")
   notes             String?               @db.VarChar(1000)
+  campaignId        String?               @map("campaign_id") @db.Uuid
+  classification    AdvertisingClassification @default(ORGANIC)
   createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -1913,11 +1920,13 @@ model WeeklyPlanItem {
   weeklyPlan        WeeklyPlan            @relation(fields: [workspaceId, bunshinId, weeklyPlanId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   contentPillar     ContentPillar         @relation(fields: [workspaceId, bunshinId, contentPillarId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   dailyMissions     DailyMission[]
+  campaign          Campaign?             @relation(fields: [campaignId], references: [id], onDelete: Restrict)
 
   @@unique([weeklyPlanId, scheduledDate])
   @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, scheduledDate])
   @@index([contentPillarId])
+  @@index([campaignId, classification])
   @@map("weekly_plan_items")
 }
 
@@ -1927,6 +1936,8 @@ model DailyMission {
   bunshinId             String                     @map("bunshin_id") @db.Uuid
   socialProfileId       String?                    @map("social_profile_id") @db.Uuid
   weeklyPlanItemId      String?                    @map("weekly_plan_item_id") @db.Uuid
+  campaignId            String?                    @map("campaign_id") @db.Uuid
+  classification        AdvertisingClassification @default(ORGANIC)
   missionDate           DateTime                   @map("mission_date") @db.Date
   status                DailyMissionStatus         @default(GENERATED)
   format                SocialPreferredFormat
@@ -1957,6 +1968,7 @@ model DailyMission {
   trendContext          MissionTrendContext?
   generationContext     GenerationContextSnapshot?
   safetyReviews         AdvertisingSafetyReview[]
+  campaign              Campaign?                  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -1964,6 +1976,7 @@ model DailyMission {
   @@index([workspaceId, bunshinId, status, missionDate])
   @@index([socialProfileId])
   @@index([weeklyPlanItemId])
+  @@index([campaignId, classification])
   @@map("daily_missions")
 }
 

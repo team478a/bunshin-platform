@@ -61,7 +61,7 @@ describe('OpenAIWeeklyPlanner', () => {
     );
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'weekly-planner-v1',
+      promptVersion: 'weekly-planner-v2',
       inputTokens: 100,
       outputTokens: 50,
     });
