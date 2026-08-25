@@ -33,6 +33,12 @@ export interface ExternalTrackingLinkCandidate {
 }
 
 export interface ExternalTrackingLinkRepository {
+  listConfiguration(
+    input: ExternalTrackingAdminScope & { groupId: string; at: Date },
+  ): Promise<object | null>;
+  getAllowedDomain(
+    input: ExternalTrackingAdminScope & { allowedDomainId: string },
+  ): Promise<AllowedTrackingDomain | null>;
   createSystem(
     input: ExternalTrackingAdminScope & {
       groupId: string;
@@ -81,6 +87,18 @@ export interface ExternalTrackingLinkRepository {
   ): Promise<object | null>;
   suspendLink(
     input: ExternalTrackingAdminScope & { linkId: string; now: Date },
+  ): Promise<object | null>;
+  updateLink(
+    input: ExternalTrackingAdminScope & {
+      linkId: string;
+      name: string;
+      allowedDomainId: string;
+      url: string;
+      startsAt: Date | null;
+      expiresAt: Date | null;
+      notes: string | null;
+      now: Date;
+    },
   ): Promise<object | null>;
   listResolutionCandidates(input: {
     workspaceId: string;
@@ -268,6 +286,12 @@ export class ExternalTrackingLinkService {
     return value;
   }
 
+  listConfiguration(input: ExternalTrackingAdminScope & { groupId: string; at?: Date }) {
+    return this.repository
+      .listConfiguration({ ...input, at: input.at ?? new Date() })
+      .then((value) => this.result(value, 'group unavailable'));
+  }
+
   createSystem(
     input: ExternalTrackingAdminScope & {
       groupId: string;
@@ -326,7 +350,7 @@ export class ExternalTrackingLinkService {
   async createLink(
     input: ExternalTrackingAdminScope & {
       systemId: string;
-      allowedDomain: AllowedTrackingDomain;
+      allowedDomainId: string;
       memberIdentityId?: string | null;
       productPackId?: string | null;
       campaignId?: string | null;
@@ -343,10 +367,15 @@ export class ExternalTrackingLinkService {
     if (input.startsAt && input.expiresAt && input.startsAt >= input.expiresAt)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid tracking link validity');
     const scopeKey = externalTrackingScopeKey(input);
+    const allowedDomain = await this.repository.getAllowedDomain({
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      allowedDomainId: input.allowedDomainId,
+    });
+    if (!allowedDomain) throw new ApplicationError('NOT_FOUND', 'allowed domain unavailable');
     return this.result(
       await this.repository.createLink({
         ...input,
-        allowedDomainId: input.allowedDomain.id,
         memberIdentityId: input.memberIdentityId ?? null,
         productPackId: input.productPackId ?? null,
         campaignId: input.campaignId ?? null,
@@ -354,12 +383,41 @@ export class ExternalTrackingLinkService {
         name: requiredText(input.name, 'name', 160),
         externalLinkId: optionalText(input.externalLinkId, 'externalLinkId', 255),
         referralToken: optionalText(input.referralToken, 'referralToken', 500),
-        url: validateExternalTrackingUrl(input.url, input.allowedDomain),
+        url: validateExternalTrackingUrl(input.url, allowedDomain),
         startsAt: input.startsAt ?? null,
         expiresAt: input.expiresAt ?? null,
         notes: optionalText(input.notes, 'notes', 1000),
       }),
       'tracking link scope unavailable',
+    );
+  }
+
+  async updateLink(
+    input: ExternalTrackingAdminScope & {
+      linkId: string;
+      allowedDomainId: string;
+      name: string;
+      url: string;
+      startsAt?: Date | null;
+      expiresAt?: Date | null;
+      notes?: string | null;
+    },
+  ) {
+    if (input.startsAt && input.expiresAt && input.startsAt >= input.expiresAt)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid tracking link validity');
+    const allowedDomain = await this.repository.getAllowedDomain(input);
+    if (!allowedDomain) throw new ApplicationError('NOT_FOUND', 'allowed domain unavailable');
+    return this.result(
+      await this.repository.updateLink({
+        ...input,
+        name: requiredText(input.name, 'name', 160),
+        url: validateExternalTrackingUrl(input.url, allowedDomain),
+        startsAt: input.startsAt ?? null,
+        expiresAt: input.expiresAt ?? null,
+        notes: optionalText(input.notes, 'notes', 1000),
+        now: new Date(),
+      }),
+      'tracking link unavailable',
     );
   }
 
