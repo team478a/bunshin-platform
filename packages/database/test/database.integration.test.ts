@@ -2646,6 +2646,24 @@ integration('database ownership boundaries', () => {
         caption: 'caption',
         hashtags: [],
       },
+      generationContext: {
+        generatedAt: new Date('2026-08-19T01:00:00.000Z'),
+        payload: {
+          personality: null,
+          selectedMemories: [],
+          knowledge: [],
+          socialProfile: { id: 'profile-snapshot' },
+          strategy: { id: 'strategy-snapshot', version: 1 },
+          weeklyPlan: { id: 'plan-snapshot' },
+          contentPillar: { id: 'pillar-snapshot' },
+          productPack: null,
+          trendCandidates: [],
+          promptVersion: 'daily-mission-v1',
+          provider: 'openai',
+          model: 'gpt-test',
+          quality: { verdict: 'PASS' as const, issueCodes: [], repairCount: 0 },
+        },
+      },
     };
     const created = await create.execute(input);
     expect(created).toMatchObject({
@@ -2655,27 +2673,15 @@ integration('database ownership boundaries', () => {
       content: expect.objectContaining({ topic: '基礎' }),
     });
     const snapshots = new PrismaGenerationContextSnapshotRepository(client);
-    const snapshot = await new RecordGenerationContextSnapshot(snapshots).execute({
+    const snapshot = await new GetGenerationContextSnapshot(snapshots).execute({
       ...ownerScope(owner, bunshin.id),
       dailyMissionId: created.id,
-      generatedAt: new Date('2026-08-19T01:00:00.000Z'),
-      payload: {
-        personality: null,
-        selectedMemories: [],
-        knowledge: [],
-        socialProfile: { id: 'profile-snapshot' },
-        strategy: { id: 'strategy-snapshot', version: 1 },
-        weeklyPlan: { id: 'plan-snapshot' },
-        contentPillar: { id: 'pillar-snapshot' },
-        productPack: null,
-        trendCandidates: [],
-        promptVersion: 'daily-mission-v1',
-        provider: 'openai',
-        model: 'gpt-test',
-        quality: { verdict: 'PASS', issueCodes: [], repairCount: 0 },
-      },
     });
-    expect(snapshot).toMatchObject({ dailyMissionId: created.id, schemaVersion: 1 });
+    expect(snapshot).toMatchObject({
+      dailyMissionId: created.id,
+      schemaVersion: 1,
+      generatedAt: new Date('2026-08-19T01:00:00.000Z'),
+    });
     await expect(
       new RecordGenerationContextSnapshot(snapshots).execute({
         ...ownerScope(owner, bunshin.id),
@@ -2689,6 +2695,24 @@ integration('database ownership boundaries', () => {
         workspaceId: owner.workspace.id,
         bunshinId: bunshin.id,
         actorUserId: snapshotOutsider.user.id,
+        dailyMissionId: created.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const snapshotWorkspaceMember = await client.user.create({
+      data: { displayName: 'Snapshot Workspace Member' },
+    });
+    await client.workspaceMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        userId: snapshotWorkspaceMember.id,
+        role: 'MEMBER',
+      },
+    });
+    await expect(
+      new GetGenerationContextSnapshot(snapshots).execute({
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        actorUserId: snapshotWorkspaceMember.id,
         dailyMissionId: created.id,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
