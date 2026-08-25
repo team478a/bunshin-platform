@@ -1310,6 +1310,7 @@ model AiProviderConfiguration {
   model                  String?                        @db.VarChar(120)
   dailyBudgetUsdMicros   Int                            @default(1000000) @map("daily_budget_usd_micros")
   monthlyBudgetUsdMicros Int                            @default(5000000) @map("monthly_budget_usd_micros")
+  requestCostUsdMicros   Int                            @default(0) @map("request_cost_usd_micros")
   globallyPaused         Boolean                        @default(true) @map("globally_paused")
   keyVersion             Int                            @default(1) @map("key_version")
   lastVerifiedAt         DateTime?                      @map("last_verified_at") @db.Timestamptz(6)

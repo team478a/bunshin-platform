@@ -11,6 +11,7 @@ import type {
 export const MISSION_AUTOMATION_JOB_TYPES = [
   'WEEKLY_PLAN_PREPARE',
   'DAILY_MISSION_GENERATE',
+  'TREND_RESEARCH_REFRESH',
 ] as const;
 export type MissionAutomationJobType = (typeof MISSION_AUTOMATION_JOB_TYPES)[number];
 
@@ -23,6 +24,9 @@ export interface MissionAutomationScope {
 export interface MissionAutomationScopeRepository {
   validateWeekly(input: MissionAutomationScope & { weekStartDate: string }): Promise<boolean>;
   validateDaily(input: MissionAutomationScope & { missionDate: string }): Promise<boolean>;
+  validateTrend(
+    input: MissionAutomationScope & { socialProfileId: string; periodStart: string },
+  ): Promise<boolean>;
 }
 
 export interface MissionAutomationCandidateRepository {
@@ -259,12 +263,18 @@ export class ExecuteMissionAutomationJob {
     const reference = /^(weekly-plan|daily-mission):(\d{4}-\d{2}-\d{2})$/.exec(
       job.payloadReference,
     );
-    if (!handler || !reference)
+    const trendReference = /^trend-research:([0-9a-f-]{36}):(\d{4}-\d{2}-\d{2})$/.exec(
+      job.payloadReference,
+    );
+    if (!handler || (!reference && !trendReference))
       return this.fail.execute(job, workerId, {
         errorCategory: 'UNSUPPORTED_JOB',
         retryable: false,
       });
-    const date = localDate(reference[2]!, job.jobType === 'WEEKLY_PLAN_PREPARE');
+    const date = localDate(
+      (reference?.[2] ?? trendReference?.[2])!,
+      job.jobType !== 'DAILY_MISSION_GENERATE',
+    );
     const scope = {
       workspaceId: job.workspaceId,
       bunshinId: job.bunshinId,
@@ -273,7 +283,13 @@ export class ExecuteMissionAutomationJob {
     const eligible =
       job.jobType === 'WEEKLY_PLAN_PREPARE'
         ? await this.scopes.validateWeekly({ ...scope, weekStartDate: date })
-        : await this.scopes.validateDaily({ ...scope, missionDate: date });
+        : job.jobType === 'DAILY_MISSION_GENERATE'
+          ? await this.scopes.validateDaily({ ...scope, missionDate: date })
+          : await this.scopes.validateTrend({
+              ...scope,
+              socialProfileId: trendReference![1]!,
+              periodStart: date,
+            });
     if (!eligible)
       return this.fail.execute(job, workerId, {
         errorCategory: 'SCOPE_NO_LONGER_ELIGIBLE',

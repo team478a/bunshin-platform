@@ -12,6 +12,7 @@ type Configuration = {
   model: string | null;
   dailyBudgetUsdMicros: number;
   monthlyBudgetUsdMicros: number;
+  requestCostUsdMicros?: number;
   globallyPaused: boolean;
   lastVerifiedAt: string | null;
   lastErrorCategory: string | null;
@@ -54,6 +55,7 @@ export function AiProviderConfigurationEditor(props: {
         model: provider === 'OPENAI' || provider === 'GROK' ? form.get('model') : null,
         dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
         monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
+        requestCostUsd: Number(form.get('requestCostUsd')),
         apiKey: form.get('apiKey') || null,
       }),
     });
@@ -176,6 +178,19 @@ export function AiProviderConfigurationEditor(props: {
             />
           </label>
           <label>
+            1回の調査にかかる金額（米ドル）
+            <input
+              name="requestCostUsd"
+              type="number"
+              defaultValue="0"
+              min="0"
+              max="1000"
+              step="0.000001"
+              required
+            />
+            <small>サービスの料金表にある1回分の金額です。不明なら0のまま保存できます。</small>
+          </label>
+          <label>
             変更した理由
             <input
               name="reason"
@@ -221,6 +236,7 @@ export function AiProviderConfigurationEditor(props: {
                   上限：1日 ${usd(item.dailyBudgetUsdMicros)}／1か月 $
                   {usd(item.monthlyBudgetUsdMicros)}
                 </p>
+                <p>調査1回の原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
                 {item.apiKeyConfigured ? (
                   <button disabled={busy} onClick={() => void action(item.id, 'test')}>
                     接続できるか確認

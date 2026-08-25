@@ -2,6 +2,19 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-085: トレンド調査は週次冪等Jobと管理予算で実行する
+
+- 日付: 2026-08-25
+- 状態: Accepted
+- Schedule: 毎週月曜00:00 UTCに、ACTIVE SOCIAL、ACTIVE SocialProfile、APPROVED Strategyを持つBunshinだけを列挙し、Workspace・Bunshin・SocialProfile・週を含む一意キーでJobを登録する。
+- Revalidation: Job実行直前にWorkspace Membership、Bunshin所有権、SOCIAL Assignment、SocialProfile、Strategyを再検証し、撤回済みscopeではProviderを呼ばない。
+- Provider: 管理画面で接続確認・有効化されたGrok、Exa、Firecrawlの設定だけを使い、Coreは共通Portに依存する。APIキー未登録・停止・予算到達時は調査を行わず、通常Mission生成を継続する。
+- Cost: Provider設定に「調査1回の原価」を持たせ、実行ごとにAI Usageへ記録する。0または不明は未計測として管理画面に明示し、推測値を実費として表示しない。
+- Expiry: Research Run、Evidence、Candidateはscope内で期限切れへ遷移し、期限切れ情報をMission入力へ渡さない。
+- Failure: 認証、quota、rate limit、network、invalid responseを分類し、retry可否をJobへ反映する。失敗内容に検索結果本文やAPIキーを残さない。
+- Scope: SNS自動投稿、成果保証、無断スクレイピング、画像・動画本体生成は含めない。
+- 詳細: `docs/TREND_RESEARCH_OPERATIONS_REPORT.md`
+
 ## D-084: グループ類似検査は本文共有ではなく非可逆署名と集計で行う
 
 - 日付: 2026-08-25

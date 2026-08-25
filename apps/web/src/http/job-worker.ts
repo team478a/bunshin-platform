@@ -36,14 +36,17 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createWeeklyPlanJobHandler },
     { createDailyMissionJobHandler },
     { createLineDeliveryJobHandler },
+    { createTrendResearchJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
     import('../jobs/line-delivery-job-handler'),
+    import('../jobs/trend-research-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
-    .register('DAILY_MISSION_GENERATE', createDailyMissionJobHandler());
+    .register('DAILY_MISSION_GENERATE', createDailyMissionJobHandler())
+    .register('TREND_RESEARCH_REFRESH', createTrendResearchJobHandler());
   const db = await import('@bunshin/database');
   const jobs = new db.PrismaJobRepository();
   const complete = new CompleteJob(jobs);

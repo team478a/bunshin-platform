@@ -268,6 +268,7 @@ export interface AiProviderConfiguration {
   model: string | null;
   dailyBudgetUsdMicros: number;
   monthlyBudgetUsdMicros: number;
+  requestCostUsdMicros?: number;
   globallyPaused: boolean;
   keyVersion: number;
   lastVerifiedAt: Date | null;
@@ -303,6 +304,7 @@ export interface AiProviderConfigurationRepository {
     model: string | null;
     dailyBudgetUsdMicros: number;
     monthlyBudgetUsdMicros: number;
+    requestCostUsdMicros?: number;
     apiKey: EncryptedAiProviderApiKey | null;
   }): Promise<AiProviderConfiguration | null>;
   getForConnectionTest(input: {
@@ -365,6 +367,7 @@ export class CreateAiProviderConfigurationVersion {
     model?: string | null;
     dailyBudgetUsdMicros: number;
     monthlyBudgetUsdMicros: number;
+    requestCostUsdMicros?: number;
     apiKey?: string | null;
   }) {
     if (!LINE_CONFIGURATION_ENVIRONMENTS.includes(input.environment))
@@ -383,7 +386,9 @@ export class CreateAiProviderConfigurationVersion {
       !Number.isSafeInteger(input.dailyBudgetUsdMicros) ||
       !Number.isSafeInteger(input.monthlyBudgetUsdMicros) ||
       input.dailyBudgetUsdMicros < 0 ||
-      input.monthlyBudgetUsdMicros < input.dailyBudgetUsdMicros
+      input.monthlyBudgetUsdMicros < input.dailyBudgetUsdMicros ||
+      !Number.isSafeInteger(input.requestCostUsdMicros ?? 0) ||
+      (input.requestCostUsdMicros ?? 0) < 0
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid budget');
     const rawApiKey = input.apiKey?.trim() || null;
@@ -395,6 +400,7 @@ export class CreateAiProviderConfigurationVersion {
       model,
       dailyBudgetUsdMicros: input.dailyBudgetUsdMicros,
       monthlyBudgetUsdMicros: input.monthlyBudgetUsdMicros,
+      requestCostUsdMicros: input.requestCostUsdMicros ?? 0,
       apiKey: rawApiKey === null ? null : this.crypto.encrypt(rawApiKey),
     });
     if (value === null) throw new ApplicationError('FORBIDDEN', 'super admin required');
@@ -2311,6 +2317,7 @@ export * from './admin-operations';
 export * from './admin-alert-center';
 export * from './admin-audit-log';
 export * from './trend-operations';
+export * from './trend-research-jobs';
 export * from './generation-context';
 export * from './personality-version';
 export * from './memory-selector';
