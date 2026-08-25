@@ -2319,6 +2319,7 @@ export * from './admin-alert-center';
 export * from './admin-audit-log';
 export * from './trend-operations';
 export * from './trend-research-jobs';
+export * from './external-tracking-links';
 export * from './generation-context';
 export * from './personality-version';
 export * from './memory-selector';

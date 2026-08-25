@@ -93,6 +93,7 @@ import type {
   CampaignRepository,
   CampaignPlanningContext,
   CampaignSafetyRepository,
+  ExternalTrackingLinkRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -7888,6 +7889,348 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
       orderBy: { createdAt: 'desc' },
     });
     return rows.map(groupMembershipRecord);
+  }
+}
+
+export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLinkRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private manage(workspaceId: string, actorUserId: string) {
+    return this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId,
+        userId: actorUserId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+        workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  async createSystem(input: Parameters<ExternalTrackingLinkRepository['createSystem']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    const group = await this.client.group.findFirst({
+      where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!group) return null;
+    return this.client.externalTrackingSystem.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        name: input.name,
+        systemType: input.systemType,
+        externalSystemId: input.externalSystemId,
+        createdByUserId: input.actorUserId,
+        updatedByUserId: input.actorUserId,
+      },
+    });
+  }
+
+  async addAllowedDomain(input: Parameters<ExternalTrackingLinkRepository['addAllowedDomain']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    const system = await this.client.externalTrackingSystem.findFirst({
+      where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+    });
+    if (!system) return null;
+    return this.client.externalTrackingAllowedDomain.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: system.groupId,
+        systemId: system.id,
+        hostname: input.hostname,
+        allowSubdomains: input.allowSubdomains,
+        shortener: input.shortener,
+        createdByUserId: input.actorUserId,
+        updatedByUserId: input.actorUserId,
+      },
+    });
+  }
+
+  async upsertMemberIdentity(
+    input: Parameters<ExternalTrackingLinkRepository['upsertMemberIdentity']>[0],
+  ) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const system = await tx.externalTrackingSystem.findFirst({
+        where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      });
+      if (!system) return null;
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          id: input.groupMembershipId,
+          workspaceId: input.workspaceId,
+          groupId: system.groupId,
+          status: 'ACTIVE',
+          consentedAt: { not: null },
+        },
+      });
+      if (!membership) return null;
+      return tx.externalTrackingMemberIdentity.upsert({
+        where: {
+          systemId_groupMembershipId: {
+            systemId: system.id,
+            groupMembershipId: membership.id,
+          },
+        },
+        create: {
+          workspaceId: input.workspaceId,
+          groupId: system.groupId,
+          systemId: system.id,
+          groupMembershipId: membership.id,
+          commonUserId: input.commonUserId,
+          agencyId: input.agencyId,
+          externalMemberId: input.externalMemberId,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+        update: {
+          commonUserId: input.commonUserId,
+          agencyId: input.agencyId,
+          externalMemberId: input.externalMemberId,
+          status: 'ACTIVE',
+          updatedByUserId: input.actorUserId,
+        },
+      });
+    });
+  }
+
+  async createLink(input: Parameters<ExternalTrackingLinkRepository['createLink']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const system = await tx.externalTrackingSystem.findFirst({
+        where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      });
+      if (!system) return null;
+      const domain = await tx.externalTrackingAllowedDomain.findFirst({
+        where: {
+          id: input.allowedDomainId,
+          workspaceId: input.workspaceId,
+          groupId: system.groupId,
+          systemId: system.id,
+          status: 'ACTIVE',
+        },
+      });
+      if (!domain) return null;
+      if (input.memberIdentityId) {
+        const member = await tx.externalTrackingMemberIdentity.findFirst({
+          where: {
+            id: input.memberIdentityId,
+            workspaceId: input.workspaceId,
+            groupId: system.groupId,
+            systemId: system.id,
+            status: 'ACTIVE',
+          },
+        });
+        if (!member) return null;
+      }
+      if (
+        input.productPackId &&
+        !(await tx.productPack.findFirst({
+          where: {
+            id: input.productPackId,
+            workspaceId: input.workspaceId,
+            groupId: system.groupId,
+          },
+        }))
+      )
+        return null;
+      if (
+        input.campaignId &&
+        !(await tx.campaign.findFirst({
+          where: { id: input.campaignId, workspaceId: input.workspaceId, groupId: system.groupId },
+        }))
+      )
+        return null;
+      return tx.externalTrackingLink.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: system.groupId,
+          systemId: system.id,
+          allowedDomainId: domain.id,
+          memberIdentityId: input.memberIdentityId,
+          productPackId: input.productPackId,
+          campaignId: input.campaignId,
+          scopeType: input.scopeType,
+          scopeKey: input.scopeKey,
+          name: input.name,
+          externalLinkId: input.externalLinkId,
+          referralToken: input.referralToken,
+          url: input.url,
+          startsAt: input.startsAt,
+          expiresAt: input.expiresAt,
+          notes: input.notes,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+    });
+  }
+
+  async activateLink(input: Parameters<ExternalTrackingLinkRepository['activateLink']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const link = await tx.externalTrackingLink.findFirst({
+        where: {
+          id: input.linkId,
+          workspaceId: input.workspaceId,
+          status: { in: ['DRAFT', 'SUSPENDED'] },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
+          system: { status: 'ACTIVE' },
+          allowedDomain: { status: 'ACTIVE' },
+        },
+      });
+      if (!link) return null;
+      const duplicate = await tx.externalTrackingLink.findFirst({
+        where: {
+          systemId: link.systemId,
+          scopeKey: link.scopeKey,
+          status: 'ACTIVE',
+          deletedAt: null,
+          id: { not: link.id },
+        },
+        select: { id: true },
+      });
+      if (duplicate) return null;
+      return tx.externalTrackingLink.update({
+        where: { id: link.id },
+        data: {
+          status: 'ACTIVE',
+          activatedAt: input.now,
+          suspendedAt: null,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+    });
+  }
+
+  async suspendLink(input: Parameters<ExternalTrackingLinkRepository['suspendLink']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    const link = await this.client.externalTrackingLink.findFirst({
+      where: { id: input.linkId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!link) return null;
+    return this.client.externalTrackingLink.update({
+      where: { id: link.id },
+      data: { status: 'SUSPENDED', suspendedAt: input.now, updatedByUserId: input.actorUserId },
+    });
+  }
+
+  async listResolutionCandidates(
+    input: Parameters<ExternalTrackingLinkRepository['listResolutionCandidates']>[0],
+  ) {
+    const bunshin = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    if (!bunshin) return null;
+    const membership = await this.client.groupMembership.findFirst({
+      where: {
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+      },
+    });
+    if (!membership) return null;
+    const assignment = await this.client.productPackAssignment.findFirst({
+      where: {
+        bunshinId: input.bunshinId,
+        productPackId: input.productPackId,
+        status: 'ACTIVE',
+        productPack: { groupId: input.groupId },
+      },
+      select: { id: true },
+    });
+    if (!assignment) return null;
+    if (input.campaignId) {
+      const participation = await this.client.campaignParticipation.findFirst({
+        where: {
+          campaignId: input.campaignId,
+          participantWorkspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          bunshinId: input.bunshinId,
+          status: 'ACCEPTED',
+          campaign: {
+            groupId: input.groupId,
+            status: 'OPEN',
+            startsAt: { lte: input.at },
+            endsAt: { gt: input.at },
+            productPackVersion: { productPackId: input.productPackId },
+          },
+        },
+        select: { id: true },
+      });
+      if (!participation) return null;
+    }
+    const links = await this.client.externalTrackingLink.findMany({
+      where: {
+        workspaceId: membership.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+        deletedAt: null,
+        system: { status: 'ACTIVE' },
+        allowedDomain: { status: 'ACTIVE' },
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: input.at } }] },
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: input.at } }] },
+        ],
+        OR: [
+          { scopeType: 'GROUP' },
+          {
+            scopeType: 'MEMBER',
+            memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+          },
+          { scopeType: 'PRODUCT', productPackId: input.productPackId },
+          {
+            scopeType: 'PRODUCT_MEMBER',
+            productPackId: input.productPackId,
+            memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+          },
+          ...(input.campaignId
+            ? [
+                { scopeType: 'CAMPAIGN' as const, campaignId: input.campaignId },
+                {
+                  scopeType: 'CAMPAIGN_MEMBER' as const,
+                  campaignId: input.campaignId,
+                  memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' as const },
+                },
+              ]
+            : []),
+        ],
+      },
+      include: { system: true, allowedDomain: true, memberIdentity: true },
+    });
+    return {
+      groupMembershipId: membership.id,
+      links: links.map((link) => ({
+        id: link.id,
+        groupId: link.groupId,
+        scopeType: link.scopeType,
+        groupMembershipId: link.memberIdentity?.groupMembershipId ?? null,
+        productPackId: link.productPackId,
+        campaignId: link.campaignId,
+        url: link.url,
+        status: link.status,
+        startsAt: link.startsAt,
+        expiresAt: link.expiresAt,
+        systemStatus: link.system.status,
+        domain: {
+          id: link.allowedDomain.id,
+          hostname: link.allowedDomain.hostname,
+          allowSubdomains: link.allowedDomain.allowSubdomains,
+          shortener: link.allowedDomain.shortener,
+          status: link.allowedDomain.status,
+        },
+      })),
+    };
   }
 }
 
