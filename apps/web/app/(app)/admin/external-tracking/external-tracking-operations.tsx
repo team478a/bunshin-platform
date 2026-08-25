@@ -70,6 +70,9 @@ export function ExternalTrackingOperations({
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
+  const [importErrors, setImportErrors] = useState<Array<{ rowNumber: number; message: string }>>(
+    [],
+  );
   const [busy, setBusy] = useState(false);
   const base = `/api/workspaces/${workspaceId}/external-tracking`;
   async function send(path: string, body: Record<string, unknown>) {
@@ -100,6 +103,37 @@ export function ExternalTrackingOperations({
       systemName: system.name,
     })),
   );
+  async function importCsv(form: HTMLFormElement) {
+    setBusy(true);
+    setMessage(null);
+    setImportErrors([]);
+    try {
+      const response = await fetch(`${base}/import`, { method: 'POST', body: new FormData(form) });
+      const payload = (await response.json()) as {
+        data?: {
+          total: number;
+          imported: number;
+          failed: number;
+          results: Array<{ rowNumber: number; status: string; message: string }>;
+        };
+      };
+      if (!response.ok || !payload.data) {
+        setMessage('取り込めませんでした。ファイルと設定を確認してください。');
+        return;
+      }
+      setMessage(
+        `${payload.data.total}行中、${payload.data.imported}行を下書きで登録しました。失敗は${payload.data.failed}行です。`,
+      );
+      setImportErrors(
+        payload.data.results
+          .filter((item) => item.status === 'ERROR')
+          .map(({ rowNumber, message }) => ({ rowNumber, message })),
+      );
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       {message && (
@@ -278,6 +312,74 @@ export function ExternalTrackingOperations({
           </form>
         ) : (
           <p>先に使ってよいドメインを登録してください。</p>
+        )}
+      </section>
+      <section className="settings-card">
+        <h2>CSVでまとめて登録</h2>
+        <p>正常な行だけを下書きで登録します。失敗した行は、行番号と理由を表示します。</p>
+        <p>
+          見出し：
+          <code>
+            participant_id,email,external_member_id,agency_id,product_code,campaign_code,url_name,external_link_id,url,starts_at,expires_at
+          </code>
+        </p>
+        {domains.length ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void importCsv(event.currentTarget);
+            }}
+          >
+            <input type="hidden" name="groupId" value={groupId} />
+            <label>
+              外部サービス
+              <select
+                name="systemId"
+                onChange={(event) => {
+                  const form = event.currentTarget.form;
+                  const first = domains.find((item) => item.systemId === event.currentTarget.value);
+                  const domainSelect = form?.elements.namedItem('allowedDomainId');
+                  if (first && domainSelect instanceof HTMLSelectElement)
+                    domainSelect.value = first.id;
+                }}
+              >
+                {systems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              許可ドメイン
+              <select name="allowedDomainId">
+                {domains.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.hostname}（{item.systemName}）
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              CSVファイル（最大5MB・1,000行）
+              <input name="file" type="file" accept=".csv,text/csv" required />
+            </label>
+            <button disabled={busy}>取り込む</button>
+          </form>
+        ) : (
+          <p>先に外部サービスと使ってよいドメインを登録してください。</p>
+        )}
+        {importErrors.length > 0 && (
+          <div className="notice" role="alert">
+            <strong>登録できなかった行</strong>
+            <ul>
+              {importErrors.map((item) => (
+                <li key={item.rowNumber}>
+                  {item.rowNumber}行目：{item.message}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
       <section className="settings-card">
