@@ -109,9 +109,8 @@ Mission、Mission Content、Generation Context Snapshot、Advertising Safety Rev
 
 ### 4.8 Product Pack
 
-商品情報と専用URLは別resourceのまま維持する。`ProductPackVersion`へ次だけを追加候補とする。
+商品情報と専用URLは別resourceのまま維持する。`ProductPackVersion`には次の例外方針を版ごとに固定する。
 
-- `standardLandingPageUrl` nullable
 - `allowLinklessPosts` boolean default false
 
 `allowLinklessPosts`は公開版へ固定する商品方針である。Campaignが商品版の禁止を勝手に緩和できない。専用URLはProduct Pack Versionの本文、facts、rules、assetsへ複製しない。

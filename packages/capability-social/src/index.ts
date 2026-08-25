@@ -1769,6 +1769,16 @@ export interface CreateDailyMissionInput extends DailyMissionScope {
     payload: GenerationContextSnapshotPayload;
     generatedAt: Date;
   };
+  externalLinkUsage?: {
+    groupId: string;
+    productPackId: string;
+    productPackVersionId: string;
+    campaignId: string;
+    externalTrackingLinkId: string;
+    insertedUrl: string;
+    placementTemplateId: string | null;
+    placementTemplateVersion: number | null;
+  };
 }
 export interface DailyMissionRepository {
   create(input: CreateDailyMissionInput): Promise<DailyMission | null>;
@@ -2005,6 +2015,18 @@ export function normalizeCreateDailyMission(
       ? input.qualityScore
       : missionInteger(input.qualityScore, 0, 100, 'quality score');
   if (input.generationContext) validateGenerationContextSnapshot(input.generationContext.payload);
+  if (input.externalLinkUsage) {
+    if (classification === 'ORGANIC' || input.externalLinkUsage.campaignId !== input.campaignId)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid external link usage');
+    let url: URL;
+    try {
+      url = new URL(input.externalLinkUsage.insertedUrl);
+    } catch {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid external link usage');
+    }
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid external link usage');
+  }
   return {
     ...input,
     missionDate: localDate(input.missionDate),

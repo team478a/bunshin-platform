@@ -17,6 +17,7 @@ export interface ProductPackVersionInput {
   faq: Array<{ question: string; answer: string }>;
   suitableFor: string[];
   unsuitableFor: string[];
+  allowLinklessPosts?: boolean;
   validFrom?: Date | null;
   validUntil?: Date | null;
   rules: Array<{ type: ProductPackRuleType; value: string; condition?: string | null }>;
@@ -57,6 +58,8 @@ export interface ProductPackRepository {
     productPackId: string;
     versionId: string;
     version: number;
+    groupId: string;
+    allowLinklessPosts: boolean;
   } | null>;
 }
 
@@ -102,6 +105,7 @@ export class ProductPackService {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid validity');
     const normalized: ProductPackVersionInput = {
       ...content,
+      allowLinklessPosts: content.allowLinklessPosts ?? false,
       summary: text(content.summary, 'summary', 1000),
       providerName: text(content.providerName, 'providerName', 200),
       targetCustomer: text(content.targetCustomer, 'targetCustomer', 1000),

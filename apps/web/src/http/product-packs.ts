@@ -28,6 +28,7 @@ const versionSchema = z
       .max(100),
     suitableFor: z.array(z.string().min(1).max(500)).max(100),
     unsuitableFor: z.array(z.string().min(1).max(500)).max(100),
+    allowLinklessPosts: z.boolean().optional(),
     validFrom: nullableDate,
     validUntil: nullableDate,
     rules: z
@@ -104,6 +105,7 @@ export function createProductPackVersionResponse(
       const parsed = versionSchema.parse(await body(request));
       const content: ProductPackVersionInput = {
         ...parsed,
+        allowLinklessPosts: parsed.allowLinklessPosts ?? false,
         validFrom: toDate(parsed.validFrom),
         validUntil: toDate(parsed.validUntil),
         rules: parsed.rules.map((rule) => ({

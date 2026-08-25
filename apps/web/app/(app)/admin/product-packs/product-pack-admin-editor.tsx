@@ -100,6 +100,7 @@ export function ProductPackAdminEditor({
         faq: [],
         suitableFor: [],
         unsuitableFor: [],
+        allowLinklessPosts: data.get('allowLinklessPosts') === 'on',
         rules,
         assets,
         validFrom: null,
@@ -190,6 +191,11 @@ export function ProductPackAdminEditor({
                   placeholder="IMAGE|商品画像|https://example.com/item.png|SNS投稿に利用可"
                 />
               </label>
+              <label>
+                <input type="checkbox" name="allowLinklessPosts" />
+                専用URLがなくても商品投稿を作れるようにする
+              </label>
+              <p>通常はチェックしません。専用URLがない商品投稿は、安全のため作成を止めます。</p>
               <button type="submit">下書きを作る</button>
             </form>
             <h3>保存した版</h3>
