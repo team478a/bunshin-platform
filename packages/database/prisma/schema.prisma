@@ -564,6 +564,7 @@ model Workspace {
   trendEvidence               TrendEvidence[]
   trendIdeaCandidates         TrendIdeaCandidate[]
   missionTrendContexts        MissionTrendContext[]
+  generationContextSnapshots GenerationContextSnapshot[]
 
   @@index([status])
   @@map("workspaces")
@@ -1110,6 +1111,7 @@ model Bunshin {
   trendEvidence               TrendEvidence[]
   trendIdeaCandidates         TrendIdeaCandidate[]
   missionTrendContexts        MissionTrendContext[]
+  generationContextSnapshots GenerationContextSnapshot[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -1525,6 +1527,7 @@ model DailyMission {
   lineMessageDeliveries LineMessageDelivery[]
   deepLinkStates        MissionDeepLinkState[]
   trendContext          MissionTrendContext?
+  generationContext     GenerationContextSnapshot?
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -1551,6 +1554,24 @@ model MissionTrendContext {
   @@unique([workspaceId, bunshinId, dailyMissionId])
   @@index([workspaceId, bunshinId, candidateId])
   @@map("mission_trend_contexts")
+}
+
+model GenerationContextSnapshot {
+  id             String       @id @default(uuid()) @db.Uuid
+  workspaceId    String       @map("workspace_id") @db.Uuid
+  bunshinId      String       @map("bunshin_id") @db.Uuid
+  dailyMissionId String       @unique @map("daily_mission_id") @db.Uuid
+  schemaVersion  Int          @map("schema_version")
+  payload        Json
+  generatedAt    DateTime     @map("generated_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin        Bunshin      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  dailyMission   DailyMission @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@index([workspaceId, bunshinId, generatedAt])
+  @@map("generation_context_snapshots")
 }
 
 model DailyMissionGeneration {

@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   CreateUserWithPersonalWorkspace,
   RequireActiveBunshinCapability,
+  RecordGenerationContextSnapshot,
+  GetGenerationContextSnapshot,
   requireAccessibleWorkspace,
 } from '@bunshin/application';
 import {
@@ -55,6 +57,7 @@ import {
   PrismaWeeklyPlanRepository,
   PrismaDailyMissionRepository,
   PrismaDailyMissionGenerationRepository,
+  PrismaGenerationContextSnapshotRepository,
   PrismaMissionEngagementRepository,
   PrismaMissionOutcomeRepository,
   PrismaLegalConsentRepository,
@@ -80,6 +83,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.generationContextSnapshot.deleteMany();
     await client.missionTrendContext.deleteMany();
     await client.trendIdeaCandidateEvidence.deleteMany();
     await client.trendIdeaCandidate.deleteMany();
@@ -2577,6 +2581,44 @@ integration('database ownership boundaries', () => {
       assistanceLevel: 'GUIDED',
       content: expect.objectContaining({ topic: '基礎' }),
     });
+    const snapshots = new PrismaGenerationContextSnapshotRepository(client);
+    const snapshot = await new RecordGenerationContextSnapshot(snapshots).execute({
+      ...ownerScope(owner, bunshin.id),
+      dailyMissionId: created.id,
+      generatedAt: new Date('2026-08-19T01:00:00.000Z'),
+      payload: {
+        personality: null,
+        selectedMemories: [],
+        knowledge: [],
+        socialProfile: { id: 'profile-snapshot' },
+        strategy: { id: 'strategy-snapshot', version: 1 },
+        weeklyPlan: { id: 'plan-snapshot' },
+        contentPillar: { id: 'pillar-snapshot' },
+        productPack: null,
+        trendCandidates: [],
+        promptVersion: 'daily-mission-v1',
+        provider: 'openai',
+        model: 'gpt-test',
+        quality: { verdict: 'PASS', issueCodes: [], repairCount: 0 },
+      },
+    });
+    expect(snapshot).toMatchObject({ dailyMissionId: created.id, schemaVersion: 1 });
+    await expect(
+      new RecordGenerationContextSnapshot(snapshots).execute({
+        ...ownerScope(owner, bunshin.id),
+        dailyMissionId: created.id,
+        payload: snapshot.payload,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const snapshotOutsider = await accounts.execute({ displayName: 'Snapshot Outsider' });
+    await expect(
+      new GetGenerationContextSnapshot(snapshots).execute({
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        actorUserId: snapshotOutsider.user.id,
+        dailyMissionId: created.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     const engagement = new PrismaMissionEngagementRepository(client);
     await expect(
       new GetMissionDecision(engagement).execute({
