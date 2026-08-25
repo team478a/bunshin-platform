@@ -276,12 +276,12 @@ Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を�
 
 ### Phase 7-L: 外部成果計測URL連携
 
-状態: L2管理API・監査まで完了。L3のProduct Pack Version／Placement Templateは未着手。
+状態: L3 Product Pack Version別・SNS別Placement Template Coreまで完了。L4のMission生成への決定的差し込みとUsage Snapshotは未着手。
 
 - L0: 現行監査、責任分離、所有権、URL優先順位、DB／API／UI／CSV境界 — 文書完了
 - L1: External System、Allowed Domain、Member Identity、Tracking Link Core、選択Policy — 完了
 - L2: 管理API、URL安全検証、停止・期限切れ、監査 — 完了
-- L3: Product Pack Version方針、SNS別Placement Template
+- L3: Product Pack Version方針、SNS別Placement Template — 完了
 - L4: Mission生成への決定的差し込み、atomic Usage Snapshot
 - L5: 本人確認画面、コピー前再検証、LINE安全要約
 - L6: Group管理画面、設定漏れ、利用履歴、CSV部分取込／出力

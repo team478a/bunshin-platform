@@ -81,11 +81,11 @@ MVPでは秘密情報やAPI資格情報を持たない。将来Adapter設定が�
 ### 4.5 ExternalLinkPlacementTemplate
 
 - id / workspaceId / groupId
-- productPackId nullable / campaignId nullable / platform nullable
-- template / urlLocked / status / version
+- productPackVersionId / platform / format / target
+- template / urlLocked（常にtrue） / status / version
 - createdByUserId / updatedByUserId / createdAt / updatedAt
 
-テンプレートには`{{referral_url}}`を最大1回だけ許可する。他の命令変数、HTML、scriptを解釈しない。該当テンプレートがなければ`詳しくはこちら\n{{referral_url}}`を本文末尾へ使用する。プラットフォーム別文言を将来追加できるが、MVPで自由な実行コードにはしない。
+テンプレートには`{{referral_url}}`を必ず1回だけ許可する。他の命令変数、HTML、script、URLそのものを保存・解釈しない。該当テンプレートがなければ`詳しくはこちら\n{{referral_url}}`を本文末尾へ使用する。プラットフォーム別文言を将来追加できるが、MVPで自由な実行コードにはしない。編集対象は`DRAFT`の商品パック版に限定し、公開済み版の差し込み設定を後から変更しない。
 
 ### 4.6 ContentLinkUsage
 
