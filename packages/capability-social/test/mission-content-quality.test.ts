@@ -36,6 +36,15 @@ const context = {
   },
   contentPillar: { title: '実践', description: null },
   grantedKnowledge: [{ type: 'SKILL', title: '経験', content: '10年の経験' }],
+  selectedMemories: [
+    {
+      id: 'secret-memory-id',
+      type: 'EXPERIENCE' as const,
+      summary: '副業の経験',
+      content: '毎日5分続けた',
+      selectionReason: 'Missionとの関連語 2件・重要度 4/5',
+    },
+  ],
 };
 
 const contents: Record<SocialPreferredFormat, MissionContent> = {
@@ -111,6 +120,8 @@ describe('GenerateMissionContent', () => {
     const payload = JSON.stringify(generator.generate.mock.calls[0]?.[0]);
     expect(payload).not.toContain('profile-secret-id');
     expect(payload).not.toContain('item-secret-id');
+    expect(payload).not.toContain('secret-memory-id');
+    expect(payload).toContain('毎日5分続けた');
   });
 
   it('rejects incomplete generated content', async () => {
@@ -180,9 +191,11 @@ describe('CheckMissionQuality', () => {
       content: contents.TEXT,
       bunshin: context.bunshin,
       approvedStrategy: context.approvedStrategy,
+      selectedMemories: context.selectedMemories,
     });
     expect(result.output).toEqual({ verdict: 'PASS', score: 85, issues: [] });
     expect(JSON.stringify(checker.check.mock.calls[0]?.[0])).not.toContain('secret-id');
+    expect(JSON.stringify(checker.check.mock.calls[0]?.[0])).toContain('毎日5分続けた');
   });
 
   it('forces scores below 70 to fail even when provider approves', async () => {
@@ -214,6 +227,7 @@ describe('CheckMissionQuality', () => {
       content: contents.TEXT,
       bunshin: context.bunshin,
       approvedStrategy: context.approvedStrategy,
+      selectedMemories: context.selectedMemories,
     });
     expect(result.output.verdict).toBe('REJECT');
   });
@@ -242,6 +256,7 @@ describe('CheckMissionQuality', () => {
       content: contents.TEXT,
       bunshin: context.bunshin,
       approvedStrategy: context.approvedStrategy,
+      selectedMemories: context.selectedMemories,
     });
     expect(result.output).toEqual({ verdict: 'REVISE', score: 80, issues: [issue] });
   });

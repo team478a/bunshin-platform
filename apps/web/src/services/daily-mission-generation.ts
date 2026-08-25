@@ -16,6 +16,7 @@ import {
   ListGrantedKnowledgeForBunshin,
   ListPersonalityVersions,
   RequireActiveBunshinCapability,
+  SelectBunshinMemories,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -234,6 +235,21 @@ export class DailyMissionGenerationService {
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
+      const selectedMemories = await new SelectBunshinMemories(
+        new db.PrismaBunshinMemoryRepository(),
+      ).execute({
+        ...scope,
+        query: [
+          brief.output.topic,
+          brief.output.angle,
+          brief.output.reason,
+          pillar.title,
+          pillar.description ?? '',
+          strategy.targetSummary,
+        ].join('\n'),
+        maxItems: 5,
+        maxCharacters: 3000,
+      });
       const generator = new GenerateMissionContent(
         new OpenAIMissionContentGenerator({
           apiKey,
@@ -247,6 +263,7 @@ export class DailyMissionGenerationService {
         approvedStrategy: strategyContext,
         contentPillar: { title: pillar.title, description: pillar.description },
         grantedKnowledge: knowledge,
+        selectedMemories,
       };
       let content = await generator.execute(contentInput);
       await usage('content:0', 'CONTENT_GENERATOR', content);
@@ -262,6 +279,7 @@ export class DailyMissionGenerationService {
         content: content.output,
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
+        selectedMemories,
       });
       let quality = await checker.execute(qualityInput());
       await usage('quality:0', 'QUALITY_CHECKER', quality);

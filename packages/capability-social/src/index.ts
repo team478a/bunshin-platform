@@ -1,6 +1,7 @@
 import {
   RequireActiveBunshinCapability,
   type BunshinCapabilityAssignmentRepository,
+  type SelectedBunshinMemory,
 } from '@bunshin/application';
 import type { FacePolicy } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
@@ -1454,17 +1455,19 @@ export interface MissionContentGeneratorInput {
   approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+  selectedMemories: SelectedBunshinMemory[];
   repairInstructions?: string[];
 }
 
 export interface MissionContentGeneratorProviderInput extends Omit<
   MissionContentGeneratorInput,
-  'brief'
+  'brief' | 'selectedMemories'
 > {
   brief: Pick<
     DailyMissionBrief,
     'missionDate' | 'format' | 'topic' | 'angle' | 'reason' | 'estimatedMinutes'
   >;
+  selectedMemories: Array<Omit<SelectedBunshinMemory, 'id'>>;
 }
 
 export interface MissionContentGeneratorResult {
@@ -1493,9 +1496,18 @@ export class GenerateMissionContent {
       );
     }
     const { missionDate, format, topic, angle, reason, estimatedMinutes } = input.brief;
+    const selectedMemories = input.selectedMemories.map(
+      ({ type, summary, content, selectionReason }) => ({
+        type,
+        summary,
+        content,
+        selectionReason,
+      }),
+    );
     const result = await this.generator.generate({
       ...input,
       brief: { missionDate, format, topic, angle, reason, estimatedMinutes },
+      selectedMemories,
     });
     const output = normalizeMissionContent(input.brief.format, result.output);
     validatePlatformContent(input.platform, input.brief, output);
@@ -1512,16 +1524,18 @@ export interface MissionQualityCheckerInput {
   content: MissionContent;
   bunshin: DailyMissionPlannerInput['bunshin'];
   approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
+  selectedMemories: SelectedBunshinMemory[];
 }
 
 export interface MissionQualityCheckerProviderInput extends Omit<
   MissionQualityCheckerInput,
-  'brief'
+  'brief' | 'selectedMemories'
 > {
   brief: Pick<
     DailyMissionBrief,
     'missionDate' | 'format' | 'topic' | 'angle' | 'reason' | 'estimatedMinutes'
   >;
+  selectedMemories: Array<Omit<SelectedBunshinMemory, 'id'>>;
 }
 
 export const MISSION_QUALITY_VERDICTS = ['PASS', 'REVISE', 'REJECT'] as const;
@@ -1561,10 +1575,19 @@ export class CheckMissionQuality {
     assertPlatformFormat(input.platform, input.brief.format);
     const content = normalizeMissionContent(input.brief.format, input.content);
     const { missionDate, format, topic, angle, reason, estimatedMinutes } = input.brief;
+    const selectedMemories = input.selectedMemories.map(
+      ({ type, summary, content, selectionReason }) => ({
+        type,
+        summary,
+        content,
+        selectionReason,
+      }),
+    );
     const result = await this.checker.check({
       ...input,
       brief: { missionDate, format, topic, angle, reason, estimatedMinutes },
       content,
+      selectedMemories,
     });
     const score = missionInteger(result.output.score, 0, 100, 'quality score');
     if (!Array.isArray(result.output.issues) || result.output.issues.length > 10)
