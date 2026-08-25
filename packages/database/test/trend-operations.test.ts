@@ -31,6 +31,12 @@ function client(activeAdmin = true) {
     trendProviderBenchmarkObservation: {
       findMany: vi.fn().mockResolvedValue([{ costUsdMicros: 1000 }, { costUsdMicros: 3000 }]),
     },
+    aiUsageEvent: {
+      findMany: vi.fn().mockResolvedValue([
+        { status: 'SUCCESS', provider: 'exa', errorCode: null, estimatedCostUsdMicros: 2_500n },
+        { status: 'SUCCESS', provider: 'exa', errorCode: null, estimatedCostUsdMicros: null },
+      ]),
+    },
   };
 }
 
@@ -49,7 +55,7 @@ describe('Prisma trend operations repository', () => {
       missions: { attributed: 2, accepted: 1, rejected: 1, copied: 1, posted: 1 },
       evidence: { total: 2, available: 1, expired: 1 },
       providers: [{ providerKey: 'EXA', runs: 2, failed: 1 }],
-      cost: { measuredUsdMicros: null, unpricedRuns: 2, benchmarkAverageUsdMicros: 2000 },
+      cost: { measuredUsdMicros: 2500, unpricedRuns: 1, benchmarkAverageUsdMicros: 2000 },
     });
     expect(JSON.stringify(db.trendResearchRun.findMany.mock.calls[0]?.[0])).not.toContain('topic');
     expect(JSON.stringify(db.trendEvidence.findMany.mock.calls[0]?.[0])).not.toContain('summary');

@@ -212,20 +212,20 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 
 ### Phase 7-D: Evidence-based Trend Research
 
-状態: Core Persistence、Provider比較Adapter、候補Ranking、Mission入力・Evidence snapshot、Mission／管理UI、KPIは完了。本番Provider採用、外部接続、週次Research Job、実原価計測は未実装。
+状態: 運用コード完了。本番ProviderのAPIキー登録・接続確認・有効化と実運用評価待ち。
 
 - 「バズ保証」ではなく、最新情報を調べた利用者向け動画企画を提供する
 - 初期FREE検証は週1回、最大3候補を基本とする
 - `TrendResearchPort`と交換可能なProvider Adapter
-- Provider比較spike（Exa／Firecrawl共通契約・安全変換・失敗分類）: 完了。本番採用と外部接続は未承認
+- Provider比較spike（Grok／Exa／Firecrawl共通契約・安全変換・失敗分類）: 完了。本番利用は管理画面で明示的に有効化する
 - Evidence、取得日時、有効期限、適合理由を持つ候補
 - Research Run / Evidence / Candidate Core Persistence — 完了
 - Workspace / User / Bunshin isolationとquery最小化
-- 週次冪等Job、quota、原価、期限切れ、通常Mission fallback
+- 週次冪等Job、quota、原価、期限切れ、通常Mission fallback — 完了
 - Candidate Ranking / Daily Mission任意入力 — Core接続完了
 - 採用Trend Candidate / Evidence snapshot — Core Persistence完了
 - Mission画面の出典表示とLINE安全要約 — 完了
-- トレンド調査・候補・Mission採用・投稿・鮮度・失敗の管理指標 — 完了（実原価は未計測表示）
+- トレンド調査・候補・Mission採用・投稿・鮮度・失敗・設定原価の管理指標 — 完了
 - SNS無断スクレイピング、成果保証、画像・動画本体生成は含めない
 
 ### Phase 7-E: Controlled Learning / AI Agent Compatibility

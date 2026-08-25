@@ -52,6 +52,9 @@ import type {
   Job,
   MissionAutomationScopeRepository,
   MissionAutomationCandidateRepository,
+  TrendResearchAutomationCandidateRepository,
+  TrendResearchExpiryRepository,
+  TrendResearchGenerationContextRepository,
   LineMessageDelivery,
   LineMessageDeliveryRepository,
   LineMissionNotificationSummaryRepository,
@@ -213,6 +216,7 @@ function aiProviderConfiguration(
     model: row.model,
     dailyBudgetUsdMicros: row.dailyBudgetUsdMicros,
     monthlyBudgetUsdMicros: row.monthlyBudgetUsdMicros,
+    requestCostUsdMicros: row.requestCostUsdMicros,
     globallyPaused: row.globallyPaused,
     keyVersion: row.keyVersion,
     lastVerifiedAt: row.lastVerifiedAt,
@@ -465,6 +469,21 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
       })) > 0
     );
   }
+
+  async validateTrend(input: Parameters<MissionAutomationScopeRepository['validateTrend']>[0]) {
+    if (!(await this.base(input))) return false;
+    return (
+      (await this.client.socialProfile.count({
+        where: {
+          id: input.socialProfileId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'ACTIVE',
+          accountStrategies: { some: { status: 'APPROVED' } },
+        },
+      })) > 0
+    );
+  }
 }
 
 export class PrismaMissionAutomationCandidateRepository implements MissionAutomationCandidateRepository {
@@ -487,6 +506,101 @@ export class PrismaMissionAutomationCandidateRepository implements MissionAutoma
     return {
       candidates: rows.slice(0, limit).map(lineNotificationPreference),
       truncated: rows.length > limit,
+    };
+  }
+}
+
+export class PrismaTrendResearchAutomationCandidateRepository implements TrendResearchAutomationCandidateRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async listEligible(limit: number) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid trend scheduler candidate limit');
+    const rows = await this.client.socialProfile.findMany({
+      where: {
+        status: 'ACTIVE',
+        accountStrategies: { some: { status: 'APPROVED' } },
+        bunshin: {
+          status: { not: 'ARCHIVED' },
+          ownerUser: { status: 'ACTIVE' },
+          workspace: { status: 'ACTIVE', memberships: { some: { status: 'ACTIVE' } } },
+          capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
+        },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        bunshinId: true,
+        bunshin: { select: { ownerUserId: true } },
+      },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+    });
+    return {
+      candidates: rows.slice(0, limit).map((row) => ({
+        workspaceId: row.workspaceId,
+        bunshinId: row.bunshinId,
+        actorUserId: row.bunshin.ownerUserId,
+        socialProfileId: row.id,
+      })),
+      truncated: rows.length > limit,
+    };
+  }
+}
+
+export class PrismaTrendResearchGenerationContextRepository implements TrendResearchGenerationContextRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async get(input: Parameters<TrendResearchGenerationContextRepository['get']>[0]) {
+    const profile = await this.client.socialProfile.findFirst({
+      where: {
+        id: input.socialProfileId,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        status: 'ACTIVE',
+        bunshin: {
+          status: { not: 'ARCHIVED' },
+          ownerUserId: input.actorUserId,
+          ownerUser: { status: 'ACTIVE' },
+          workspace: {
+            status: 'ACTIVE',
+            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          },
+          capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
+        },
+      },
+      include: {
+        accountStrategies: {
+          where: { status: 'APPROVED' },
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { concept: true, targetSummary: true },
+        },
+        bunshin: {
+          select: {
+            contentPillars: {
+              where: { active: true, deletedAt: null },
+              orderBy: [{ weight: 'desc' }, { id: 'asc' }],
+              take: 5,
+              select: { title: true },
+            },
+          },
+        },
+      },
+    });
+    const strategy = profile?.accountStrategies[0];
+    if (!profile || !strategy) return null;
+    return {
+      workspaceId: profile.workspaceId,
+      bunshinId: profile.bunshinId,
+      actorUserId: input.actorUserId,
+      socialProfileId: profile.id,
+      platform: profile.platform,
+      purpose: profile.purpose,
+      preferredFormats: parsePreferredFormats(profile.preferredFormats),
+      concept: strategy.concept,
+      targetSummary: strategy.targetSummary,
+      contentPillars: profile.bunshin.contentPillars.map(({ title }) => title),
     };
   }
 }
@@ -1683,6 +1797,7 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
           model: input.model,
           dailyBudgetUsdMicros: input.dailyBudgetUsdMicros,
           monthlyBudgetUsdMicros: input.monthlyBudgetUsdMicros,
+          requestCostUsdMicros: input.requestCostUsdMicros ?? 0,
           globallyPaused: true,
         },
       });
@@ -6331,6 +6446,68 @@ export class PrismaTrendResearchRepository implements TrendResearchRepository {
   }
 }
 
+export class PrismaTrendResearchExpiryRepository implements TrendResearchExpiryRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async expire(input: Parameters<TrendResearchExpiryRepository['expire']>[0]) {
+    const scope = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        workspace: {
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+        OR: [
+          { ownerUserId: input.actorUserId },
+          {
+            workspace: {
+              memberships: {
+                some: {
+                  userId: input.actorUserId,
+                  status: 'ACTIVE',
+                  role: { in: ['OWNER', 'ADMIN'] },
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!scope) return null;
+    return this.client.$transaction(async (tx) => {
+      const candidates = await tx.trendIdeaCandidate.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: { in: ['PROPOSED', 'SELECTED'] },
+          expiresAt: { lte: input.at },
+        },
+        data: { status: 'EXPIRED' },
+      });
+      const evidence = await tx.trendEvidence.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'ACTIVE',
+          expiresAt: { lte: input.at },
+        },
+        data: { status: 'EXPIRED' },
+      });
+      const runs = await tx.trendResearchRun.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'COMPLETED',
+          expiresAt: { lte: input.at },
+        },
+        data: { status: 'EXPIRED' },
+      });
+      return { runs: runs.count, evidence: evidence.count, candidates: candidates.count };
+    });
+  }
+}
+
 const uniqueCount = (values: string[]) => new Set(values).size;
 const rate = (numerator: number, denominator: number) =>
   denominator === 0 ? null : numerator / denominator;
@@ -7386,56 +7563,74 @@ export class PrismaTrendOperationsRepository implements TrendOperationsRepositor
     const period = { gte: input.from, lt: input.to };
     const runPeriod = { createdAt: period };
     const missionPeriod = { createdAt: period };
-    const [runs, candidates, evidence, attributed, decisions, copied, posted, benchmarkCosts] =
-      await Promise.all([
-        this.client.trendResearchRun.findMany({
-          where: runPeriod,
-          select: { status: true, providerKey: true, failureCategory: true },
-        }),
-        this.client.trendIdeaCandidate.findMany({
-          where: { researchRun: { is: runPeriod } },
-          select: { status: true, safetyStatus: true, freshnessScore: true },
-        }),
-        this.client.trendEvidence.findMany({
-          where: { researchRun: { is: runPeriod } },
-          select: { status: true, expiresAt: true },
-        }),
-        this.client.missionTrendContext.count({ where: missionPeriod }),
-        this.client.missionDecision.findMany({
-          where: {
-            decidedAt: { lt: input.to },
-            dailyMission: { is: { trendContext: { is: missionPeriod } } },
+    const [
+      runs,
+      candidates,
+      evidence,
+      attributed,
+      decisions,
+      copied,
+      posted,
+      benchmarkCosts,
+      trendUsage,
+    ] = await Promise.all([
+      this.client.trendResearchRun.findMany({
+        where: runPeriod,
+        select: { status: true, providerKey: true, failureCategory: true },
+      }),
+      this.client.trendIdeaCandidate.findMany({
+        where: { researchRun: { is: runPeriod } },
+        select: { status: true, safetyStatus: true, freshnessScore: true },
+      }),
+      this.client.trendEvidence.findMany({
+        where: { researchRun: { is: runPeriod } },
+        select: { status: true, expiresAt: true },
+      }),
+      this.client.missionTrendContext.count({ where: missionPeriod }),
+      this.client.missionDecision.findMany({
+        where: {
+          decidedAt: { lt: input.to },
+          dailyMission: { is: { trendContext: { is: missionPeriod } } },
+        },
+        select: { decision: true },
+      }),
+      this.client.missionActivity.findMany({
+        where: {
+          occurredAt: { lt: input.to },
+          type: {
+            in: [
+              'COPIED_TEXT',
+              'COPIED_SLIDE',
+              'COPIED_IMAGE_INSTRUCTION',
+              'COPIED_VIDEO_PROMPT',
+              'COPIED_SCRIPT',
+            ],
           },
-          select: { decision: true },
-        }),
-        this.client.missionActivity.findMany({
-          where: {
-            occurredAt: { lt: input.to },
-            type: {
-              in: [
-                'COPIED_TEXT',
-                'COPIED_SLIDE',
-                'COPIED_IMAGE_INSTRUCTION',
-                'COPIED_VIDEO_PROMPT',
-                'COPIED_SCRIPT',
-              ],
-            },
-            dailyMission: { is: { trendContext: { is: missionPeriod } } },
-          },
-          distinct: ['dailyMissionId'],
-          select: { dailyMissionId: true },
-        }),
-        this.client.postRecord.count({
-          where: {
-            postedAt: { lt: input.to },
-            dailyMission: { is: { trendContext: { is: missionPeriod } } },
-          },
-        }),
-        this.client.trendProviderBenchmarkObservation.findMany({
-          where: { benchmarkCase: { is: { environment: input.environment, active: true } } },
-          select: { costUsdMicros: true },
-        }),
-      ]);
+          dailyMission: { is: { trendContext: { is: missionPeriod } } },
+        },
+        distinct: ['dailyMissionId'],
+        select: { dailyMissionId: true },
+      }),
+      this.client.postRecord.count({
+        where: {
+          postedAt: { lt: input.to },
+          dailyMission: { is: { trendContext: { is: missionPeriod } } },
+        },
+      }),
+      this.client.trendProviderBenchmarkObservation.findMany({
+        where: { benchmarkCase: { is: { environment: input.environment, active: true } } },
+        select: { costUsdMicros: true },
+      }),
+      this.client.aiUsageEvent.findMany({
+        where: { taskType: 'TREND_RESEARCH', occurredAt: period },
+        select: {
+          status: true,
+          provider: true,
+          errorCode: true,
+          estimatedCostUsdMicros: true,
+        },
+      }),
+    ]);
     const providerMap = new Map<string, { runs: number; failed: number }>();
     const failureMap = new Map<string, number>();
     for (const run of runs) {
@@ -7448,14 +7643,24 @@ export class PrismaTrendOperationsRepository implements TrendOperationsRepositor
         failureMap.set(category, (failureMap.get(category) ?? 0) + 1);
       }
     }
+    for (const usage of trendUsage.filter(({ status }) => status === 'FAILED')) {
+      const provider = providerMap.get(usage.provider) ?? { runs: 0, failed: 0 };
+      provider.runs += 1;
+      provider.failed += 1;
+      providerMap.set(usage.provider, provider);
+      const category = usage.errorCode ?? '原因未分類';
+      failureMap.set(category, (failureMap.get(category) ?? 0) + 1);
+    }
     const freshnessTotal = candidates.reduce((sum, value) => sum + value.freshnessScore, 0);
     const asOf = input.to < new Date() ? input.to : new Date();
     return {
       period: { from: input.from, to: input.to },
       research: {
-        total: runs.length,
+        total: runs.length + trendUsage.filter(({ status }) => status === 'FAILED').length,
         completed: runs.filter(({ status }) => status === 'COMPLETED').length,
-        failed: runs.filter(({ status }) => status === 'FAILED').length,
+        failed:
+          runs.filter(({ status }) => status === 'FAILED').length +
+          trendUsage.filter(({ status }) => status === 'FAILED').length,
         expired: runs.filter(({ status }) => status === 'EXPIRED').length,
         failureCategories: [...failureMap.entries()]
           .map(([category, count]) => ({ category, count }))
@@ -7488,8 +7693,16 @@ export class PrismaTrendOperationsRepository implements TrendOperationsRepositor
         .map(([providerKey, value]) => ({ providerKey, ...value }))
         .sort((a, b) => a.providerKey.localeCompare(b.providerKey)),
       cost: {
-        measuredUsdMicros: null,
-        unpricedRuns: runs.length,
+        measuredUsdMicros: trendUsage.some(
+          ({ estimatedCostUsdMicros }) => estimatedCostUsdMicros !== null,
+        )
+          ? Number(
+              trendUsage.reduce((sum, value) => sum + (value.estimatedCostUsdMicros ?? 0n), 0n),
+            )
+          : null,
+        unpricedRuns: trendUsage.filter(
+          ({ estimatedCostUsdMicros }) => estimatedCostUsdMicros === null,
+        ).length,
         benchmarkAverageUsdMicros:
           benchmarkCosts.length === 0
             ? null

@@ -52,6 +52,7 @@ const jobRepository = (): JobRepository => ({
 const scopes = (eligible = true): MissionAutomationScopeRepository => ({
   validateWeekly: vi.fn(() => Promise.resolve(eligible)),
   validateDaily: vi.fn(() => Promise.resolve(eligible)),
+  validateTrend: vi.fn(() => Promise.resolve(eligible)),
 });
 
 describe('Mission automation jobs', () => {

@@ -25,6 +25,7 @@ const createSchema = z
     model: z.string().max(120).nullable().optional(),
     dailyBudgetUsd: z.number().min(0).max(10_000),
     monthlyBudgetUsd: z.number().min(0).max(100_000),
+    requestCostUsd: z.number().min(0).max(1_000).optional(),
     apiKey: z.string().min(8).max(2000).nullable().optional(),
   })
   .strict();
@@ -103,6 +104,7 @@ export function createAiProviderConfigurationResponse(request: Request) {
           model: parsed.data.model ?? null,
           dailyBudgetUsdMicros: micros(parsed.data.dailyBudgetUsd),
           monthlyBudgetUsdMicros: micros(parsed.data.monthlyBudgetUsd),
+          requestCostUsdMicros: micros(parsed.data.requestCostUsd ?? 0),
           apiKey: parsed.data.apiKey ?? null,
         }),
       );

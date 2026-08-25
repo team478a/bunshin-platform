@@ -2,10 +2,13 @@ import 'server-only';
 import {
   EnqueueJob,
   RunMissionAutomationScheduler,
+  RunTrendResearchScheduler,
   ScheduleDailyMissionGeneration,
+  ScheduleWeeklyTrendResearch,
   ScheduleWeeklyPlanPreparation,
   type JobEnvironment,
   type MissionAutomationScheduleSummary,
+  type TrendResearchScheduleSummary,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
@@ -20,18 +23,33 @@ const runtimeEnvironment = {
 } as const satisfies Record<string, JobEnvironment>;
 
 export interface MissionSchedulerPort {
-  execute(environment: JobEnvironment): Promise<MissionAutomationScheduleSummary>;
+  execute(
+    environment: JobEnvironment,
+  ): Promise<MissionAutomationScheduleSummary & { trend?: TrendResearchScheduleSummary }>;
 }
 
 async function configuredScheduler(): Promise<MissionSchedulerPort> {
   const db = await import('@bunshin/database');
   const jobs = new db.PrismaJobRepository();
   const scopes = new db.PrismaMissionAutomationScopeRepository();
-  return new RunMissionAutomationScheduler(
+  const mission = new RunMissionAutomationScheduler(
     new db.PrismaMissionAutomationCandidateRepository(),
     new ScheduleWeeklyPlanPreparation(new EnqueueJob(jobs), scopes),
     new ScheduleDailyMissionGeneration(new EnqueueJob(jobs), scopes),
   );
+  const trend = new RunTrendResearchScheduler(
+    new db.PrismaTrendResearchAutomationCandidateRepository(),
+    new ScheduleWeeklyTrendResearch(new EnqueueJob(jobs), scopes),
+  );
+  return {
+    async execute(environment) {
+      const [missionResult, trendResult] = await Promise.all([
+        mission.execute(environment),
+        trend.execute(environment),
+      ]);
+      return { ...missionResult, trend: trendResult };
+    },
+  };
 }
 
 export async function missionSchedulerResponse(

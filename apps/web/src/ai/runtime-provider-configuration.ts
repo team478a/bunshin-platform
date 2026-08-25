@@ -16,6 +16,15 @@ export interface OpenAiRuntimeConfiguration {
   source: 'ADMIN_CONFIGURATION' | 'LEGACY_ENVIRONMENT';
 }
 
+export interface TrendRuntimeConfiguration {
+  provider: 'GROK' | 'EXA' | 'FIRECRAWL';
+  apiKey: string;
+  model: string | null;
+  dailyBudgetUsdMicros: number;
+  monthlyBudgetUsdMicros: number;
+  requestCostUsdMicros: number;
+}
+
 interface Dependencies {
   repository: AiProviderConfigurationRepository;
   crypto: AiProviderSecretCryptoPort;
@@ -62,4 +71,37 @@ export async function resolveOpenAiRuntimeConfiguration(
       source: 'LEGACY_ENVIRONMENT',
     };
   }
+}
+
+export async function resolveTrendRuntimeConfiguration(input?: {
+  repository?: AiProviderConfigurationRepository;
+  crypto?: AiProviderSecretCryptoPort;
+  preferredProviders?: Array<'GROK' | 'EXA' | 'FIRECRAWL'>;
+}): Promise<TrendRuntimeConfiguration> {
+  let repository = input?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const crypto = input?.crypto ?? new AesGcmAiProviderSecretCrypto();
+  const providers = input?.preferredProviders ?? ['GROK', 'EXA', 'FIRECRAWL'];
+  for (const provider of providers) {
+    try {
+      const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
+        environment: currentAiProviderEnvironment(),
+        provider,
+      });
+      return {
+        provider,
+        apiKey: crypto.decrypt(resolved.encryptedApiKey),
+        model: resolved.configuration.model,
+        dailyBudgetUsdMicros: resolved.configuration.dailyBudgetUsdMicros,
+        monthlyBudgetUsdMicros: resolved.configuration.monthlyBudgetUsdMicros,
+        requestCostUsdMicros: resolved.configuration.requestCostUsdMicros ?? 0,
+      };
+    } catch (error) {
+      if (!isMissingActiveConfiguration(error)) throw error;
+    }
+  }
+  throw new ApplicationError('CONFIGURATION_ERROR', 'active trend provider configuration required');
 }
