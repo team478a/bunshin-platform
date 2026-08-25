@@ -17,6 +17,9 @@ class Repository implements ProductPackRepository {
   revokeAssignment(input: Parameters<ProductPackRepository['revokeAssignment']>[0]) {
     return Promise.resolve(input);
   }
+  resolveForGeneration() {
+    return Promise.resolve(null);
+  }
 }
 
 describe('ProductPackService', () => {

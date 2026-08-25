@@ -17,6 +17,7 @@ import {
   ListPersonalityVersions,
   RequireActiveBunshinCapability,
   SelectBunshinMemories,
+  ProductPackService,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -97,6 +98,9 @@ export class DailyMissionGenerationService {
           to: daysBefore(input.missionDate, 1),
         })
       ).map(({ format }) => format);
+      const productPack = await new ProductPackService(
+        new db.PrismaProductPackRepository(),
+      ).resolveForGeneration(scope);
       const profiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
         scope,
       );
@@ -323,7 +327,9 @@ export class DailyMissionGenerationService {
             strategy: { id: strategy.id, version: strategy.version },
             weeklyPlan: { id: weeklyPlan.id },
             contentPillar: { id: pillar.id },
-            productPack: null,
+            productPack: productPack
+              ? { id: productPack.versionId, version: productPack.version }
+              : null,
             trendCandidates: brief.output.trendCandidateId
               ? [{ id: brief.output.trendCandidateId }]
               : [],

@@ -7713,4 +7713,49 @@ export class PrismaProductPackRepository implements ProductPackRepository {
       data: { status: 'REVOKED', revokedAt: input.revokedAt },
     });
   }
+
+  async resolveForGeneration(input: Parameters<ProductPackRepository['resolveForGeneration']>[0]) {
+    const row = await this.client.productPackAssignment.findFirst({
+      where: {
+        bunshinId: input.bunshinId,
+        status: 'ACTIVE',
+        bunshin: {
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          status: 'ACTIVE',
+        },
+        productPack: {
+          status: 'ACTIVE',
+          group: {
+            status: 'ACTIVE',
+            memberships: {
+              some: {
+                userId: input.actorUserId,
+                status: 'ACTIVE',
+                consentedAt: { not: null },
+              },
+            },
+          },
+        },
+        productPackVersion: {
+          status: 'PUBLISHED',
+          AND: [
+            { OR: [{ validFrom: null }, { validFrom: { lte: input.at } }] },
+            { OR: [{ validUntil: null }, { validUntil: { gt: input.at } }] },
+          ],
+        },
+      },
+      select: {
+        productPackId: true,
+        productPackVersion: { select: { id: true, version: true } },
+      },
+    });
+    return row
+      ? {
+          productPackId: row.productPackId,
+          versionId: row.productPackVersion.id,
+          version: row.productPackVersion.version,
+        }
+      : null;
+  }
 }
