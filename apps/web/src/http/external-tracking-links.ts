@@ -1,5 +1,5 @@
 import 'server-only';
-import { ExternalTrackingLinkService } from '@bunshin/application';
+import { ExternalLinkPlacementService, ExternalTrackingLinkService } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -68,6 +68,16 @@ const updateSchema = z
     notes: z.string().min(1).max(1000).nullable().optional(),
   })
   .strict();
+const placementSchema = z
+  .object({
+    productPackVersionId: uuid,
+    platform: z.enum(['INSTAGRAM', 'TIKTOK', 'X', 'THREADS', 'YOUTUBE_SHORTS', 'OTHER']),
+    format: z.enum(['TEXT', 'SLIDE', 'LIVE_ACTION', 'AI_VIDEO_PROMPT', 'IMAGE']),
+    target: z.enum(['BODY', 'CAPTION', 'DESCRIPTION']),
+    template: z.string().min(1).max(2000),
+    status: z.enum(['ACTIVE', 'DISABLED']).optional(),
+  })
+  .strict();
 
 const toDate = (value: string | null | undefined) => (value ? new Date(value) : null);
 
@@ -78,6 +88,16 @@ async function service(workspaceId: string) {
   return {
     scope: { workspaceId: uuid.parse(workspaceId), actorUserId: user.userId },
     value: new ExternalTrackingLinkService(new db.PrismaExternalTrackingLinkRepository()),
+  };
+}
+
+async function placementService(workspaceId: string) {
+  const user = await (await currentUserProvider()).getCurrentUser();
+  if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+  const db = await import('@bunshin/database');
+  return {
+    scope: { workspaceId: uuid.parse(workspaceId), actorUserId: user.userId },
+    value: new ExternalLinkPlacementService(new db.PrismaExternalLinkPlacementRepository()),
   };
 }
 
@@ -216,5 +236,24 @@ export function transitionExternalTrackingLinkResponse(
     const { scope, value } = await service(workspaceId);
     const input = { ...scope, linkId: uuid.parse(linkId) };
     return action === 'activate' ? value.activateLink(input) : value.suspendLink(input);
+  });
+}
+
+export function listExternalLinkPlacementsResponse(request: Request, workspaceId: string) {
+  return respond(request, async () => {
+    const productPackVersionId = uuid.parse(
+      new URL(request.url).searchParams.get('productPackVersionId'),
+    );
+    const { scope, value } = await placementService(workspaceId);
+    return value.list({ ...scope, productPackVersionId });
+  });
+}
+
+export function upsertExternalLinkPlacementResponse(request: Request, workspaceId: string) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const input = placementSchema.parse(await json(request));
+    const { scope, value } = await placementService(workspaceId);
+    return value.upsert({ ...scope, ...input, status: input.status ?? 'ACTIVE' });
   });
 }

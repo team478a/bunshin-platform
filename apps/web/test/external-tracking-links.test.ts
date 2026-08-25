@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   currentUser: null as { userId: string } | null,
   createLink: vi.fn(),
   listConfiguration: vi.fn(),
+  upsertPlacement: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -33,11 +34,16 @@ vi.mock('@bunshin/database', () => ({
     updateLink = vi.fn();
     listResolutionCandidates = vi.fn();
   },
+  PrismaExternalLinkPlacementRepository: class {
+    list = vi.fn();
+    upsert = state.upsertPlacement;
+  },
 }));
 
 import {
   createExternalTrackingLinkResponse,
   listExternalTrackingConfigurationResponse,
+  upsertExternalLinkPlacementResponse,
 } from '../src/http/external-tracking-links';
 
 function request(path: string, init?: RequestInit) {
@@ -59,6 +65,7 @@ describe('external tracking admin HTTP', () => {
     state.currentUser = { userId: id };
     state.listConfiguration.mockResolvedValue({ links: [], audits: [] });
     state.createLink.mockResolvedValue({ id });
+    state.upsertPlacement.mockResolvedValue({ id });
   });
 
   it('未認証では設定一覧を返さない', async () => {
@@ -99,5 +106,45 @@ describe('external tracking admin HTTP', () => {
       id,
     );
     expect(response.status).toBe(403);
+  });
+
+  it('安全な差し込み設定だけを保存する', async () => {
+    const response = await upsertExternalLinkPlacementResponse(
+      request(`/api/workspaces/${id}/external-tracking/placements`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          productPackVersionId: id,
+          platform: 'X',
+          format: 'TEXT',
+          target: 'BODY',
+          template: '詳しくはこちら\n{{referral_url}}',
+        }),
+      }),
+      id,
+    );
+    expect(response.status).toBe(200);
+    expect(state.upsertPlacement).toHaveBeenCalledWith(
+      expect.objectContaining({ urlLocked: true, status: 'ACTIVE' }),
+    );
+  });
+
+  it('未知の変数を含む差し込み設定を保存しない', async () => {
+    const response = await upsertExternalLinkPlacementResponse(
+      request(`/api/workspaces/${id}/external-tracking/placements`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          productPackVersionId: id,
+          platform: 'X',
+          format: 'TEXT',
+          target: 'BODY',
+          template: '{{secret}}',
+        }),
+      }),
+      id,
+    );
+    expect(response.status).toBe(400);
+    expect(state.upsertPlacement).not.toHaveBeenCalled();
   });
 });

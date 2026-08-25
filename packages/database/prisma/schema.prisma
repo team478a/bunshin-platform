@@ -195,6 +195,17 @@ enum ExternalTrackingAuditAction {
   SUSPENDED
 }
 
+enum ExternalLinkPlacementTarget {
+  BODY
+  CAPTION
+  DESCRIPTION
+}
+
+enum ExternalLinkPlacementStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -681,6 +692,8 @@ model User {
   externalTrackingLinksCreated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkCreator")
   externalTrackingLinksUpdated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkUpdater")
   externalTrackingAuditsPerformed   ExternalTrackingAuditLog[]          @relation("ExternalTrackingAuditActor")
+  externalLinkPlacementsCreated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementCreator")
+  externalLinkPlacementsUpdated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementUpdater")
 
   @@index([status])
   @@map("users")
@@ -752,6 +765,7 @@ model Workspace {
   externalTrackingIdentities  ExternalTrackingMemberIdentity[]
   externalTrackingLinks       ExternalTrackingLink[]
   externalTrackingAudits      ExternalTrackingAuditLog[]
+  externalLinkPlacements      ExternalLinkPlacementTemplate[]
 
   @@index([status])
   @@map("workspaces")
@@ -790,6 +804,7 @@ model Group {
   externalTrackingIdentities ExternalTrackingMemberIdentity[]
   externalTrackingLinks      ExternalTrackingLink[]
   externalTrackingAudits     ExternalTrackingAuditLog[]
+  externalLinkPlacements     ExternalLinkPlacementTemplate[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -861,34 +876,62 @@ model ProductPack {
 }
 
 model ProductPackVersion {
-  id              String                    @id @default(uuid()) @db.Uuid
-  productPackId   String                    @map("product_pack_id") @db.Uuid
-  version         Int
-  status          ProductPackVersionStatus  @default(DRAFT)
-  summary         String                    @db.VarChar(1000)
-  providerName    String                    @map("provider_name") @db.VarChar(200)
-  targetCustomer  String                    @map("target_customer") @db.VarChar(1000)
-  facts           Json
-  faq             Json
-  suitableFor     String[]                  @map("suitable_for")
-  unsuitableFor   String[]                  @map("unsuitable_for")
-  validFrom       DateTime?                 @map("valid_from") @db.Timestamptz(6)
-  validUntil      DateTime?                 @map("valid_until") @db.Timestamptz(6)
-  publishedAt     DateTime?                 @map("published_at") @db.Timestamptz(6)
-  supersededAt    DateTime?                 @map("superseded_at") @db.Timestamptz(6)
-  createdByUserId String                    @map("created_by_user_id") @db.Uuid
-  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  productPack     ProductPack               @relation(fields: [productPackId], references: [id], onDelete: Cascade)
-  rules           ProductPackRule[]
-  assets          ProductPackAsset[]
-  assignments     ProductPackAssignment[]
-  safetyReviews   AdvertisingSafetyReview[]
-  campaigns       Campaign[]
+  id                             String                          @id @default(uuid()) @db.Uuid
+  productPackId                  String                          @map("product_pack_id") @db.Uuid
+  version                        Int
+  status                         ProductPackVersionStatus        @default(DRAFT)
+  summary                        String                          @db.VarChar(1000)
+  providerName                   String                          @map("provider_name") @db.VarChar(200)
+  targetCustomer                 String                          @map("target_customer") @db.VarChar(1000)
+  facts                          Json
+  faq                            Json
+  suitableFor                    String[]                        @map("suitable_for")
+  unsuitableFor                  String[]                        @map("unsuitable_for")
+  validFrom                      DateTime?                       @map("valid_from") @db.Timestamptz(6)
+  validUntil                     DateTime?                       @map("valid_until") @db.Timestamptz(6)
+  publishedAt                    DateTime?                       @map("published_at") @db.Timestamptz(6)
+  supersededAt                   DateTime?                       @map("superseded_at") @db.Timestamptz(6)
+  createdByUserId                String                          @map("created_by_user_id") @db.Uuid
+  createdAt                      DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  productPack                    ProductPack                     @relation(fields: [productPackId], references: [id], onDelete: Cascade)
+  rules                          ProductPackRule[]
+  assets                         ProductPackAsset[]
+  assignments                    ProductPackAssignment[]
+  safetyReviews                  AdvertisingSafetyReview[]
+  campaigns                      Campaign[]
+  externalLinkPlacementTemplates ExternalLinkPlacementTemplate[]
 
   @@unique([productPackId, version])
   @@index([productPackId, status])
   @@map("product_pack_versions")
+}
+
+model ExternalLinkPlacementTemplate {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  workspaceId          String                      @map("workspace_id") @db.Uuid
+  groupId              String                      @map("group_id") @db.Uuid
+  productPackVersionId String                      @map("product_pack_version_id") @db.Uuid
+  platform             SocialPlatform
+  format               SocialPreferredFormat
+  target               ExternalLinkPlacementTarget @default(BODY)
+  template             String                      @db.VarChar(2000)
+  urlLocked            Boolean                     @default(true) @map("url_locked")
+  status               ExternalLinkPlacementStatus @default(ACTIVE)
+  version              Int                         @default(1)
+  createdByUserId      String                      @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String                      @map("updated_by_user_id") @db.Uuid
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace            Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                Group                       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  productPackVersion   ProductPackVersion          @relation(fields: [productPackVersionId], references: [id], onDelete: Cascade)
+  createdBy            User                        @relation("ExternalLinkPlacementCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy            User                        @relation("ExternalLinkPlacementUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([productPackVersionId, platform, format])
+  @@index([workspaceId, groupId, status])
+  @@map("external_link_placement_templates")
 }
 
 model ProductPackRule {

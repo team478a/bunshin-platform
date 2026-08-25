@@ -94,6 +94,7 @@ import type {
   CampaignPlanningContext,
   CampaignSafetyRepository,
   ExternalTrackingLinkRepository,
+  ExternalLinkPlacementRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -8478,6 +8479,115 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         },
       })),
     };
+  }
+}
+
+export class PrismaExternalLinkPlacementRepository implements ExternalLinkPlacementRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private manage(workspaceId: string, actorUserId: string) {
+    return this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId,
+        userId: actorUserId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+        workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  async list(input: Parameters<ExternalLinkPlacementRepository['list']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    const version = await this.client.productPackVersion.findFirst({
+      where: {
+        id: input.productPackVersionId,
+        productPack: { workspaceId: input.workspaceId },
+      },
+      select: { id: true },
+    });
+    if (!version) return null;
+    return this.client.externalLinkPlacementTemplate.findMany({
+      where: { workspaceId: input.workspaceId, productPackVersionId: version.id },
+      orderBy: [{ platform: 'asc' }, { format: 'asc' }],
+    });
+  }
+
+  async upsert(input: Parameters<ExternalLinkPlacementRepository['upsert']>[0]) {
+    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    return this.client.$transaction(async (tx) => {
+      const productVersion = await tx.productPackVersion.findFirst({
+        where: {
+          id: input.productPackVersionId,
+          status: 'DRAFT',
+          productPack: { workspaceId: input.workspaceId },
+        },
+        include: { productPack: { select: { groupId: true } } },
+      });
+      if (!productVersion) return null;
+      const key = {
+        productPackVersionId_platform_format: {
+          productPackVersionId: productVersion.id,
+          platform: input.platform,
+          format: input.format,
+        },
+      };
+      const before = await tx.externalLinkPlacementTemplate.findUnique({ where: key });
+      const saved = await tx.externalLinkPlacementTemplate.upsert({
+        where: key,
+        create: {
+          workspaceId: input.workspaceId,
+          groupId: productVersion.productPack.groupId,
+          productPackVersionId: productVersion.id,
+          platform: input.platform,
+          format: input.format,
+          target: input.target,
+          template: input.template,
+          urlLocked: true,
+          status: input.status,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+        update: {
+          target: input.target,
+          template: input.template,
+          urlLocked: true,
+          status: input.status,
+          version: { increment: 1 },
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: saved.workspaceId,
+          groupId: saved.groupId,
+          resourceType: 'PLACEMENT_TEMPLATE',
+          resourceId: saved.id,
+          action: before ? 'UPDATED' : 'CREATED',
+          beforeData: before
+            ? {
+                platform: before.platform,
+                format: before.format,
+                target: before.target,
+                status: before.status,
+                version: before.version,
+                templateHash: createHash('sha256').update(before.template).digest('hex'),
+              }
+            : Prisma.JsonNull,
+          afterData: {
+            platform: saved.platform,
+            format: saved.format,
+            target: saved.target,
+            status: saved.status,
+            version: saved.version,
+            templateHash: createHash('sha256').update(saved.template).digest('hex'),
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return saved;
+    });
   }
 }
 
