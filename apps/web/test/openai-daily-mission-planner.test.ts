@@ -11,6 +11,20 @@ const input = {
     objectiveSummary: '継続',
     audienceSummary: '初心者',
     personalitySummary: '丁寧',
+    personality: {
+      versionId: 'personality-version-2',
+      version: 2,
+      tone: 'やさしい',
+      formality: 'ふつう',
+      energyLevel: '落ち着いている',
+      expertiseLevel: '初心者向け',
+      sentenceStyle: '短い文',
+      firstPerson: 'わたし',
+      forbiddenExpressions: ['絶対'],
+      preferredExpressions: ['いっしょに'],
+      visualDirection: null,
+      facePolicy: 'FULL_ANONYMOUS' as const,
+    },
   },
   approvedStrategy: {
     concept: '専門家型',
@@ -64,7 +78,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v3',
+      promptVersion: 'daily-mission-planner-v4',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -85,6 +99,8 @@ describe('OpenAIDailyMissionPlanner', () => {
       'usedTrendIdea',
     ]);
     expect(request.input[1]?.content).toContain('10年の経験');
+    expect(request.input[1]?.content).toContain('personality-version-2');
+    expect(request.input[1]?.content).toContain('いっしょに');
   });
 
   it('maps provider errors without exposing credentials', async () => {

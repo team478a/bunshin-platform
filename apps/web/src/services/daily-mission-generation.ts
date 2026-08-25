@@ -14,6 +14,7 @@ import {
 import {
   GetBunshin,
   ListGrantedKnowledgeForBunshin,
+  ListPersonalityVersions,
   RequireActiveBunshinCapability,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
@@ -128,6 +129,10 @@ export class DailyMissionGenerationService {
         scope,
       );
       const bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
+      const personalityVersions = await new ListPersonalityVersions(
+        new db.PrismaPersonalityVersionRepository(),
+      ).execute(scope);
+      const currentPersonality = personalityVersions[0] ?? null;
       const granted = await new ListGrantedKnowledgeForBunshin(
         new db.PrismaKnowledgeGrantRepository(),
       ).execute(scope);
@@ -156,6 +161,22 @@ export class DailyMissionGenerationService {
         objectiveSummary: bunshin.objectiveSummary,
         audienceSummary: bunshin.audienceSummary,
         personalitySummary: bunshin.personalitySummary,
+        personality: currentPersonality
+          ? {
+              versionId: currentPersonality.id,
+              version: currentPersonality.version,
+              tone: currentPersonality.tone,
+              formality: currentPersonality.formality,
+              energyLevel: currentPersonality.energyLevel,
+              expertiseLevel: currentPersonality.expertiseLevel,
+              sentenceStyle: currentPersonality.sentenceStyle,
+              firstPerson: currentPersonality.firstPerson,
+              forbiddenExpressions: currentPersonality.forbiddenExpressions,
+              preferredExpressions: currentPersonality.preferredExpressions,
+              visualDirection: currentPersonality.visualDirection,
+              facePolicy: currentPersonality.facePolicy,
+            }
+          : null,
       };
       const strategyContext = {
         concept: strategy.concept,
@@ -265,7 +286,7 @@ export class DailyMissionGenerationService {
         qualityScore: quality.output.score,
       });
       try {
-        await generations.complete({ ...scope, id: generationId, dailyMissionId: created.id });
+        await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });
       } catch {
         logger.error('daily mission generation observation update failed', {
           errorCode: 'OBSERVATION_UPDATE_FAILED',
