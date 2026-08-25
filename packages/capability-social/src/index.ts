@@ -1744,6 +1744,14 @@ export interface DailyMission {
   updatedAt: Date;
   content: MissionContent;
   trendContext?: MissionTrendContext | null;
+  linkUsage?: {
+    linkName: string;
+    insertedUrl: string;
+    expiresAt: Date | null;
+    productName: string;
+    campaignName: string | null;
+    advertisingClassification: CampaignContentClassification;
+  } | null;
 }
 export interface DailyMissionScope {
   workspaceId: string;
@@ -1787,6 +1795,9 @@ export interface DailyMissionRepository {
   transition(
     input: DailyMissionScope & { dailyMissionId: string; status: DailyMissionStatus },
   ): Promise<DailyMission | null>;
+  authorizeCopy(
+    input: DailyMissionScope & { dailyMissionId: string; at: Date },
+  ): Promise<{ allowed: boolean; reason: 'READY' | 'LINK_CHANGED' | 'LINK_UNAVAILABLE' } | null>;
 }
 
 const missionString = (value: unknown, maximum: number, field: string) => {
@@ -2088,6 +2099,14 @@ export class GetDailyMission {
   constructor(private readonly missions: DailyMissionRepository) {}
   async execute(input: DailyMissionScope & { dailyMissionId: string }) {
     const value = await this.missions.find(input);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return value;
+  }
+}
+export class AuthorizeDailyMissionCopy {
+  constructor(private readonly missions: DailyMissionRepository) {}
+  async execute(input: DailyMissionScope & { dailyMissionId: string; at?: Date }) {
+    const value = await this.missions.authorizeCopy({ ...input, at: input.at ?? new Date() });
     if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return value;
   }

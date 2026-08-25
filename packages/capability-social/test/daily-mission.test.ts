@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AuthorizeDailyMissionCopy,
   CreateDailyMission,
   ListDailyMissions,
   TransitionDailyMission,
@@ -50,6 +51,12 @@ const mission: DailyMission = {
   content: slide,
 };
 class Missions implements DailyMissionRepository {
+  constructor(
+    private readonly copyAuthorization: {
+      allowed: boolean;
+      reason: 'READY' | 'LINK_CHANGED' | 'LINK_UNAVAILABLE';
+    } = { allowed: true, reason: 'READY' },
+  ) {}
   create(input: Parameters<DailyMissionRepository['create']>[0]) {
     return Promise.resolve({ ...mission, ...input });
   }
@@ -58,6 +65,9 @@ class Missions implements DailyMissionRepository {
   }
   find() {
     return Promise.resolve(mission);
+  }
+  authorizeCopy() {
+    return Promise.resolve(this.copyAuthorization);
   }
   transition(input: Parameters<DailyMissionRepository['transition']>[0]) {
     return Promise.resolve({ ...mission, status: input.status });
@@ -107,6 +117,19 @@ const input = {
 };
 
 describe('Daily Mission core', () => {
+  it('returns the server-side copy authorization result', async () => {
+    await expect(
+      new AuthorizeDailyMissionCopy(
+        new Missions({ allowed: false, reason: 'LINK_CHANGED' }),
+      ).execute({
+        workspaceId: 'workspace-1',
+        actorUserId: 'user-1',
+        bunshinId: 'bunshin-1',
+        dailyMissionId: 'mission-1',
+        at: now,
+      }),
+    ).resolves.toEqual({ allowed: false, reason: 'LINK_CHANGED' });
+  });
   it('validates an atomic generation context before persistence', () => {
     const generationContext = {
       generatedAt: now,

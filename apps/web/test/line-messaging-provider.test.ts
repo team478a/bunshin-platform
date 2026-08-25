@@ -32,6 +32,7 @@ describe('LINE Messaging API adapter', () => {
           estimatedMinutes: 5,
           topic: '朝の時間を上手に使うコツ',
           researched: true,
+          externalLinkIncluded: true,
         },
       }),
     ).resolves.toEqual({ ok: true });
@@ -46,7 +47,7 @@ describe('LINE Messaging API adapter', () => {
       messages: [
         {
           type: 'text',
-          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n新しい情報も参考にした企画です。\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
+          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n新しい情報も参考にした企画です。\nあなた専用の紹介URLを入れました。URLは確認画面で安全に表示します。\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
         },
       ],
     });
@@ -54,6 +55,7 @@ describe('LINE Messaging API adapter', () => {
     expect(JSON.stringify(body)).not.toContain('投稿本文');
     expect(JSON.stringify(body)).not.toContain('動画生成プロンプト');
     expect(JSON.stringify(body)).not.toContain('Memory');
+    expect(JSON.stringify(body)).not.toContain('ref=');
   });
 
   it('removes line breaks and limits the short topic before sending', async () => {

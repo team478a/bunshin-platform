@@ -1056,3 +1056,13 @@
 - Atomic: Mission、Mission Content、Generation Contextと`ContentLinkUsage`を同じDB transactionで保存する。保存直前に所有権・有効期間・選択順位・URL・Placement版を再検証する。
 - Snapshot: 使用URL、Link名、有効期限、商品版、Campaign、参加者、Placement版を固定し、設定変更後も過去履歴を書き換えない。
 - Isolation: 他Workspace、他Group、他参加者、未参加Campaign、未割当商品版のURLは選択・保存しない。
+
+## D-082: 専用URLはコピー直前に再検証しLINEへ完全URLを送らない
+
+- 日付: 2026-08-26
+- 状態: Accepted
+- User view: 本人画面には、使用した商品・企画・専用URL・生成時点の期限を平易な日本語で表示する。
+- Copy gate: コピー直前にサーバー側で現在の所属、同意、URL状態、有効期間、適用優先順位、Snapshot一致を再検証する。
+- Stale content: URLが停止・期限切れ・差し替え・優先順位変更された場合は、古い投稿案のコピーを拒否し、再生成を案内する。
+- Organic: URLを使用しない通常投稿も同じ認可APIを通すが、外部URL検証なしでコピーを許可する。
+- LINE: LINE通知には完全な専用URL、紹介Token、投稿本文を含めず、「専用URLを設定済み」という安全な要約と署名付き確認画面への導線だけを含める。
