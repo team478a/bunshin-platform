@@ -244,6 +244,19 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 
 AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直接操作させない。既存Activity、PostRecord、Feedback、BunshinMemoryを正本とし、重複tableを先に作らない。
 
+### Phase 7-P: 人格学習・公式商品パック
+
+状態: P0設計レビュー中。実装コード、Prisma Schema、Migrationは未着手。`PERSONALITY_LEARNING_PRODUCT_PACK_REBASELINE.md`を正本候補とする。
+
+- P0: 現行監査、所有権、参加同意、商品版固定、生成Context境界 — 文書レビュー
+- P1: Generation Context Builder、人格Version、Memory選択、生成Snapshot
+- P2: Organization所有のProduct Pack、公開Version、Rule、Asset、招待、参加、Bunshin割当
+- P3: Learning Proposal、本人承認、取消、人格Version／Memoryへの安全な反映
+- P4: 決定的商品ルール検査、AI意味検査、重複回避、運用画面
+- P5: 十分な同意済みデータが蓄積した後の類似度・匿名集計
+
+人格と個人Memory／Knowledgeは本人Workspaceに残し、公式商品情報はOrganization Workspace所有のProduct Packとして分離する。両者はGeneration Context Builderでのみ統合し、生成時に解決した公開Versionと参照resourceをSnapshotへ固定する。本人同意、Bunshin割当、Workspace境界が揃わない場合は生成へ利用しない。
+
 ## Phase 8: Share / Referral / Segmentation Preparation
 
 FREE継続率を確認してから着手する。
