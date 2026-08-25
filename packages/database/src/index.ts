@@ -7541,6 +7541,7 @@ export class PrismaProductionGateEvidenceRepository implements ProductionGateEvi
           'FREE_MVP_SMOKE',
           'ACCOUNT_DELETION_DRY_RUN',
           'LINE_GO_NO_GO',
+          'TREND_RESEARCH_SMOKE',
         ] as const;
         if (!required.every((key) => latest.get(key) === 'RECORDED')) return null;
       }

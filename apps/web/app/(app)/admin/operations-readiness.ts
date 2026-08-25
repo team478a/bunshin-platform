@@ -75,6 +75,29 @@ export function operationsReadiness(input: {
       href: '/admin/ai',
     });
 
+  const activeTrendProvider = input.aiConfigurations.find(
+    (item) =>
+      ['GROK', 'EXA', 'FIRECRAWL'].includes(item.provider) &&
+      item.status === 'ACTIVE' &&
+      !item.globallyPaused,
+  );
+  if (!activeTrendProvider)
+    warnings.push({
+      code: 'TREND_PROVIDER_ACTIVE_MISSING',
+      level: 'ACTION_REQUIRED',
+      title: '使用中の話題調査サービスがありません',
+      guidance: 'Grok、Exa、Firecrawlのいずれかを登録し、接続確認後に使用中へ切り替えてください。',
+      href: '/admin/ai',
+    });
+  else if (!activeTrendProvider.lastVerifiedAt || activeTrendProvider.lastErrorCategory)
+    warnings.push({
+      code: 'TREND_PROVIDER_UNVERIFIED',
+      level: 'ACTION_REQUIRED',
+      title: '話題調査サービスの接続確認が必要です',
+      guidance: 'AI設定画面で話題調査サービスの接続テストを行ってください。',
+      href: '/admin/ai',
+    });
+
   for (const alert of input.lineAssessment.alerts) {
     const known = lineAlertText[alert.code];
     warnings.push({

@@ -40,10 +40,25 @@ export default async function OperationsGuidePage() {
           <li>スマートフォンで分身作成から投稿完了・感想保存まで通す</li>
           <li>退会処理をdry-runし、対象件数とエラーを確認する</li>
           <li>LINE Webhook、通知上限、緊急停止、Go/No-Goを確認する</li>
+          <li>話題調査を1回実行し、出典、候補、期限、今日の企画への反映、金額記録を確認する</li>
           <li>対象commit、実施日時、担当者、結果を記録し、責任者が承認する</li>
         </ol>
         <p>すべて終わるまでは、管理画面の自動確認が緑でも利用者募集を開始しません。</p>
         <Link href="/admin">本番開始の確認画面へ戻る</Link>
+      </section>
+
+      <section className="settings-card">
+        <h2>話題調査が動かない</h2>
+        <ol>
+          <li>AI設定でGrok、Exa、Firecrawlのいずれかが使用中か確認する</li>
+          <li>全体停止になっていないか確認する</li>
+          <li>接続テストを行う</li>
+          <li>1回の調査金額、1日と1か月の上限を確認する</li>
+          <li>話題調査画面で失敗理由と最後の成功日時を確認する</li>
+        </ol>
+        <p>調査に失敗しても、通常の投稿企画は止まりません。</p>
+        <Link href="/admin/ai">AIと検索の設定を開く</Link>{' '}
+        <Link href="/admin/trends">話題調査の状態を見る</Link>
       </section>
 
       <section className="settings-card">

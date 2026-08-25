@@ -159,6 +159,7 @@ LINE設定とLINE公式アカウントはProduction / Stagingで分離する。�
 - Production Gate監査、backup/restore・incident手順、health smoke workflow（完了）
 - Auth公開設定・最新migration・Health Smoke完了。本番Dashboard残確認、restore rehearsal、Magic Link / FREE MVP smoke、退会dry-run、Go承認は未完了
 - Production Gate証跡管理（コード完了）: 対象commit別の確認・取消履歴、SUPER_ADMIN限定更新、最終承認の前提確認、管理画面の開始判定。Migration適用と実際の証跡登録は本番運用時に行う
+- トレンド調査Production Gate（コード完了）: Provider自動確認、本番調査smoke証跡、最終承認の前提接続。APIキー登録、接続確認、本番smoke記録は運用時に行う
 
 ここで100人規模のFREE検証を行う。
 
@@ -176,6 +177,7 @@ LINE設定とLINE公式アカウントはProduction / Stagingで分離する。�
 - 環境分離、版管理、接続確認、監査履歴
 - 設定状態の一括確認、警告、操作・復旧ガイド（完了）
 - 100人検証開始前の自動確認と、人間確認を混同しないProduction Gate一覧（完了）
+- 話題調査Providerの自動確認、実行smoke証跡、操作・復旧ガイド（完了）
 
 DB接続、Session、暗号化親鍵、Cron認証等の起動に必要な秘密値は管理画面へ移さない。
 
