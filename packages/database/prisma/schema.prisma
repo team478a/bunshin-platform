@@ -67,6 +67,37 @@ enum GroupInvitationStatus {
   REVOKED
 }
 
+enum ProductPackStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ProductPackVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum ProductPackRuleType {
+  REQUIRED_DISCLOSURE
+  FORBIDDEN_EXPRESSION
+  CONDITIONAL_EXPRESSION
+}
+
+enum ProductPackAssetType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  LINK
+}
+
+enum ProductPackAssignmentStatus {
+  ACTIVE
+  REVOKED
+}
+
 enum PlatformRole {
   SUPER_ADMIN
   OPERATOR
@@ -530,14 +561,14 @@ model User {
   lineDeliveryRetryRequests     LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
   trendBenchmarkCases           TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations    TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
-  productionGateEvidence        ProductionGateEvidence[]             @relation("ProductionGateEvidenceActor")
-  userOperationAuditsAsTarget   UserOperationAudit[]                  @relation("UserOperationAuditTarget")
-  userOperationAuditsAsActor    UserOperationAudit[]                  @relation("UserOperationAuditActor")
-  supportCasesAsTarget          SupportCase[]                         @relation("SupportCaseTarget")
-  supportCasesCreated           SupportCase[]                         @relation("SupportCaseCreator")
-  supportCasesAssigned          SupportCase[]                         @relation("SupportCaseAssignee")
+  productionGateEvidence        ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
+  userOperationAuditsAsTarget   UserOperationAudit[]                @relation("UserOperationAuditTarget")
+  userOperationAuditsAsActor    UserOperationAudit[]                @relation("UserOperationAuditActor")
+  supportCasesAsTarget          SupportCase[]                       @relation("SupportCaseTarget")
+  supportCasesCreated           SupportCase[]                       @relation("SupportCaseCreator")
+  supportCasesAssigned          SupportCase[]                       @relation("SupportCaseAssignee")
   supportCaseNotes              SupportCaseNote[]
-  personalityVersionsCreated   BunshinPersonalityVersion[]
+  personalityVersionsCreated    BunshinPersonalityVersion[]
 
   @@index([status])
   @@map("users")
@@ -568,6 +599,8 @@ model Workspace {
   groups                      Group[]
   groupMemberships            GroupMembership[]
   groupInvitations            GroupInvitation[]
+  productPacks                ProductPack[]
+  productPackAssignments      ProductPackAssignment[]
   bunshins                    Bunshin[]
   ownerKnowledge              OwnerKnowledge[]
   knowledgeGrants             BunshinKnowledgeGrant[]
@@ -595,8 +628,8 @@ model Workspace {
   trendEvidence               TrendEvidence[]
   trendIdeaCandidates         TrendIdeaCandidate[]
   missionTrendContexts        MissionTrendContext[]
-  generationContextSnapshots GenerationContextSnapshot[]
-  personalityVersions        BunshinPersonalityVersion[]
+  generationContextSnapshots  GenerationContextSnapshot[]
+  personalityVersions         BunshinPersonalityVersion[]
 
   @@index([status])
   @@map("workspaces")
@@ -619,15 +652,16 @@ model WorkspaceMembership {
 }
 
 model Group {
-  id          String      @id @default(uuid()) @db.Uuid
-  workspaceId String      @map("workspace_id") @db.Uuid
-  name        String      @db.VarChar(120)
-  status      GroupStatus @default(ACTIVE)
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  memberships GroupMembership[]
-  invitations GroupInvitation[]
+  id           String            @id @default(uuid()) @db.Uuid
+  workspaceId  String            @map("workspace_id") @db.Uuid
+  name         String            @db.VarChar(120)
+  status       GroupStatus       @default(ACTIVE)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships  GroupMembership[]
+  invitations  GroupInvitation[]
+  productPacks ProductPack[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -676,6 +710,104 @@ model GroupInvitation {
   @@index([workspaceId, groupId, status])
   @@index([expiresAt, status])
   @@map("group_invitations")
+}
+
+model ProductPack {
+  id          String                  @id @default(uuid()) @db.Uuid
+  workspaceId String                  @map("workspace_id") @db.Uuid
+  groupId     String                  @map("group_id") @db.Uuid
+  name        String                  @db.VarChar(160)
+  status      ProductPackStatus       @default(DRAFT)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group       Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  versions    ProductPackVersion[]
+  assignments ProductPackAssignment[]
+
+  @@unique([workspaceId, groupId, name])
+  @@index([workspaceId, status])
+  @@map("product_packs")
+}
+
+model ProductPackVersion {
+  id              String                   @id @default(uuid()) @db.Uuid
+  productPackId   String                   @map("product_pack_id") @db.Uuid
+  version         Int
+  status          ProductPackVersionStatus @default(DRAFT)
+  summary         String                   @db.VarChar(1000)
+  providerName    String                   @map("provider_name") @db.VarChar(200)
+  targetCustomer  String                   @map("target_customer") @db.VarChar(1000)
+  facts           Json
+  faq             Json
+  suitableFor     String[]                 @map("suitable_for")
+  unsuitableFor   String[]                 @map("unsuitable_for")
+  validFrom       DateTime?                @map("valid_from") @db.Timestamptz(6)
+  validUntil      DateTime?                @map("valid_until") @db.Timestamptz(6)
+  publishedAt     DateTime?                @map("published_at") @db.Timestamptz(6)
+  supersededAt    DateTime?                @map("superseded_at") @db.Timestamptz(6)
+  createdByUserId String                   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  productPack     ProductPack              @relation(fields: [productPackId], references: [id], onDelete: Cascade)
+  rules           ProductPackRule[]
+  assets          ProductPackAsset[]
+  assignments     ProductPackAssignment[]
+
+  @@unique([productPackId, version])
+  @@index([productPackId, status])
+  @@map("product_pack_versions")
+}
+
+model ProductPackRule {
+  id                   String              @id @default(uuid()) @db.Uuid
+  productPackVersionId String              @map("product_pack_version_id") @db.Uuid
+  type                 ProductPackRuleType
+  value                String              @db.VarChar(1000)
+  condition            String?             @db.VarChar(1000)
+  sortOrder            Int                 @default(0) @map("sort_order")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  productPackVersion   ProductPackVersion  @relation(fields: [productPackVersionId], references: [id], onDelete: Cascade)
+
+  @@index([productPackVersionId, type])
+  @@map("product_pack_rules")
+}
+
+model ProductPackAsset {
+  id                   String               @id @default(uuid()) @db.Uuid
+  productPackVersionId String               @map("product_pack_version_id") @db.Uuid
+  type                 ProductPackAssetType
+  url                  String               @db.VarChar(2048)
+  label                String               @db.VarChar(200)
+  usageTerms           String               @map("usage_terms") @db.VarChar(2000)
+  validUntil           DateTime?            @map("valid_until") @db.Timestamptz(6)
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  productPackVersion   ProductPackVersion   @relation(fields: [productPackVersionId], references: [id], onDelete: Cascade)
+
+  @@index([productPackVersionId, type])
+  @@map("product_pack_assets")
+}
+
+model ProductPackAssignment {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  workspaceId          String                      @map("workspace_id") @db.Uuid
+  productPackId        String                      @map("product_pack_id") @db.Uuid
+  productPackVersionId String                      @map("product_pack_version_id") @db.Uuid
+  bunshinId            String                      @map("bunshin_id") @db.Uuid
+  status               ProductPackAssignmentStatus @default(ACTIVE)
+  consentedAt          DateTime                    @map("consented_at") @db.Timestamptz(6)
+  assignedByUserId     String                      @map("assigned_by_user_id") @db.Uuid
+  revokedAt            DateTime?                   @map("revoked_at") @db.Timestamptz(6)
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace            Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  productPack          ProductPack                 @relation(fields: [productPackId], references: [id], onDelete: Cascade)
+  productPackVersion   ProductPackVersion          @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  bunshin              Bunshin                     @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
+
+  @@unique([productPackId, bunshinId])
+  @@index([workspaceId, bunshinId, status])
+  @@map("product_pack_assignments")
 }
 
 model PlatformAdmin {
@@ -728,20 +860,20 @@ model UserOperationAudit {
 }
 
 model SupportCase {
-  id             String              @id @default(uuid()) @db.Uuid
-  targetUserId   String              @map("target_user_id") @db.Uuid
-  createdByUserId String             @map("created_by_user_id") @db.Uuid
-  assigneeUserId String?             @map("assignee_user_id") @db.Uuid
-  subject        String              @db.VarChar(200)
-  status         SupportCaseStatus   @default(OPEN)
-  priority       SupportCasePriority @default(NORMAL)
-  resolvedAt     DateTime?           @map("resolved_at") @db.Timestamptz(6)
-  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
-  target         User                @relation("SupportCaseTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
-  creator        User                @relation("SupportCaseCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  assignee       User?               @relation("SupportCaseAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
-  notes          SupportCaseNote[]
+  id              String              @id @default(uuid()) @db.Uuid
+  targetUserId    String              @map("target_user_id") @db.Uuid
+  createdByUserId String              @map("created_by_user_id") @db.Uuid
+  assigneeUserId  String?             @map("assignee_user_id") @db.Uuid
+  subject         String              @db.VarChar(200)
+  status          SupportCaseStatus   @default(OPEN)
+  priority        SupportCasePriority @default(NORMAL)
+  resolvedAt      DateTime?           @map("resolved_at") @db.Timestamptz(6)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  target          User                @relation("SupportCaseTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  creator         User                @relation("SupportCaseCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignee        User?               @relation("SupportCaseAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  notes           SupportCaseNote[]
 
   @@index([targetUserId, status, updatedAt])
   @@index([assigneeUserId, status, updatedAt])
@@ -749,13 +881,13 @@ model SupportCase {
 }
 
 model SupportCaseNote {
-  id           String      @id @default(uuid()) @db.Uuid
-  supportCaseId String     @map("support_case_id") @db.Uuid
-  authorUserId String      @map("author_user_id") @db.Uuid
-  content      String      @db.VarChar(2000)
-  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  supportCase  SupportCase @relation(fields: [supportCaseId], references: [id], onDelete: Cascade)
-  author       User        @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  id            String      @id @default(uuid()) @db.Uuid
+  supportCaseId String      @map("support_case_id") @db.Uuid
+  authorUserId  String      @map("author_user_id") @db.Uuid
+  content       String      @db.VarChar(2000)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  supportCase   SupportCase @relation(fields: [supportCaseId], references: [id], onDelete: Cascade)
+  author        User        @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
 
   @@index([supportCaseId, createdAt])
   @@map("support_case_notes")
@@ -977,20 +1109,20 @@ model AiProviderConfigurationAudit {
 }
 
 model AdminEmailConfiguration {
-  id                String                        @id @default(uuid()) @db.Uuid
+  id                String                         @id @default(uuid()) @db.Uuid
   environment       LineConfigurationEnvironment
   version           Int
-  status            AdminEmailConfigurationStatus @default(DRAFT)
-  encryptedApiKey   String                        @map("encrypted_api_key") @db.Text
-  apiKeyMask        String                        @map("api_key_mask") @db.VarChar(16)
-  fromEmail         String                        @map("from_email") @db.VarChar(320)
-  recipientEmails   Json                          @map("recipient_emails")
-  globallyPaused    Boolean                       @default(true) @map("globally_paused")
-  keyVersion        Int                           @default(1) @map("key_version")
-  lastVerifiedAt    DateTime?                     @map("last_verified_at") @db.Timestamptz(6)
-  lastErrorCategory String?                       @map("last_error_category") @db.VarChar(80)
-  createdAt         DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status            AdminEmailConfigurationStatus  @default(DRAFT)
+  encryptedApiKey   String                         @map("encrypted_api_key") @db.Text
+  apiKeyMask        String                         @map("api_key_mask") @db.VarChar(16)
+  fromEmail         String                         @map("from_email") @db.VarChar(320)
+  recipientEmails   Json                           @map("recipient_emails")
+  globallyPaused    Boolean                        @default(true) @map("globally_paused")
+  keyVersion        Int                            @default(1) @map("key_version")
+  lastVerifiedAt    DateTime?                      @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory String?                        @map("last_error_category") @db.VarChar(80)
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
   audits            AdminEmailConfigurationAudit[]
 
   @@unique([environment, version])
@@ -1203,8 +1335,9 @@ model Bunshin {
   trendEvidence               TrendEvidence[]
   trendIdeaCandidates         TrendIdeaCandidate[]
   missionTrendContexts        MissionTrendContext[]
-  generationContextSnapshots GenerationContextSnapshot[]
-  personalityVersions        BunshinPersonalityVersion[]
+  generationContextSnapshots  GenerationContextSnapshot[]
+  personalityVersions         BunshinPersonalityVersion[]
+  productPackAssignments      ProductPackAssignment[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -1587,31 +1720,31 @@ model WeeklyPlanItem {
 }
 
 model DailyMission {
-  id                    String                 @id @default(uuid()) @db.Uuid
-  workspaceId           String                 @map("workspace_id") @db.Uuid
-  bunshinId             String                 @map("bunshin_id") @db.Uuid
-  socialProfileId       String?                @map("social_profile_id") @db.Uuid
-  weeklyPlanItemId      String?                @map("weekly_plan_item_id") @db.Uuid
-  missionDate           DateTime               @map("mission_date") @db.Date
-  status                DailyMissionStatus     @default(GENERATED)
+  id                    String                     @id @default(uuid()) @db.Uuid
+  workspaceId           String                     @map("workspace_id") @db.Uuid
+  bunshinId             String                     @map("bunshin_id") @db.Uuid
+  socialProfileId       String?                    @map("social_profile_id") @db.Uuid
+  weeklyPlanItemId      String?                    @map("weekly_plan_item_id") @db.Uuid
+  missionDate           DateTime                   @map("mission_date") @db.Date
+  status                DailyMissionStatus         @default(GENERATED)
   format                SocialPreferredFormat
-  assistanceLevel       ContentAssistanceLevel @default(READY_TO_USE) @map("assistance_level")
-  estimatedMinutes      Int                    @map("estimated_minutes")
-  topic                 String                 @db.VarChar(200)
-  angle                 String                 @db.VarChar(500)
-  reason                String                 @db.VarChar(1000)
-  qualityScore          Int?                   @map("quality_score")
-  viewedAt              DateTime?              @map("viewed_at") @db.Timestamptz(6)
-  startedAt             DateTime?              @map("started_at") @db.Timestamptz(6)
-  completedAt           DateTime?              @map("completed_at") @db.Timestamptz(6)
-  skippedAt             DateTime?              @map("skipped_at") @db.Timestamptz(6)
-  expiredAt             DateTime?              @map("expired_at") @db.Timestamptz(6)
-  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin               Bunshin                @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  socialProfile         SocialProfile?         @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  weeklyPlanItem        WeeklyPlanItem?        @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  assistanceLevel       ContentAssistanceLevel     @default(READY_TO_USE) @map("assistance_level")
+  estimatedMinutes      Int                        @map("estimated_minutes")
+  topic                 String                     @db.VarChar(200)
+  angle                 String                     @db.VarChar(500)
+  reason                String                     @db.VarChar(1000)
+  qualityScore          Int?                       @map("quality_score")
+  viewedAt              DateTime?                  @map("viewed_at") @db.Timestamptz(6)
+  startedAt             DateTime?                  @map("started_at") @db.Timestamptz(6)
+  completedAt           DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  skippedAt             DateTime?                  @map("skipped_at") @db.Timestamptz(6)
+  expiredAt             DateTime?                  @map("expired_at") @db.Timestamptz(6)
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin               Bunshin                    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile         SocialProfile?             @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  weeklyPlanItem        WeeklyPlanItem?            @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   content               MissionContent?
   decision              MissionDecision?
   activities            MissionActivity[]
@@ -1833,51 +1966,51 @@ model BunshinAudience {
 }
 
 model BunshinPersonality {
-  id                   String     @id @default(uuid()) @db.Uuid
-  bunshinId            String     @unique @map("bunshin_id") @db.Uuid
-  tone                 String     @db.VarChar(100)
-  formality            String     @db.VarChar(100)
-  energyLevel          String     @map("energy_level") @db.VarChar(100)
-  expertiseLevel       String     @map("expertise_level") @db.VarChar(100)
-  sentenceStyle        String     @map("sentence_style") @db.VarChar(500)
-  firstPerson          String     @map("first_person") @db.VarChar(50)
-  forbiddenExpressions Json       @map("forbidden_expressions")
-  preferredExpressions Json       @map("preferred_expressions")
-  visualDirection      String?    @map("visual_direction") @db.VarChar(500)
-  facePolicy           FacePolicy @map("face_policy")
-  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  bunshin              Bunshin    @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
+  id                   String                      @id @default(uuid()) @db.Uuid
+  bunshinId            String                      @unique @map("bunshin_id") @db.Uuid
+  tone                 String                      @db.VarChar(100)
+  formality            String                      @db.VarChar(100)
+  energyLevel          String                      @map("energy_level") @db.VarChar(100)
+  expertiseLevel       String                      @map("expertise_level") @db.VarChar(100)
+  sentenceStyle        String                      @map("sentence_style") @db.VarChar(500)
+  firstPerson          String                      @map("first_person") @db.VarChar(50)
+  forbiddenExpressions Json                        @map("forbidden_expressions")
+  preferredExpressions Json                        @map("preferred_expressions")
+  visualDirection      String?                     @map("visual_direction") @db.VarChar(500)
+  facePolicy           FacePolicy                  @map("face_policy")
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bunshin              Bunshin                     @relation(fields: [bunshinId], references: [id], onDelete: Cascade)
   versions             BunshinPersonalityVersion[]
 
   @@map("bunshin_personalities")
 }
 
 model BunshinPersonalityVersion {
-  id                   String     @id @default(uuid()) @db.Uuid
-  workspaceId          String     @map("workspace_id") @db.Uuid
-  bunshinId            String     @map("bunshin_id") @db.Uuid
-  personalityId        String     @map("personality_id") @db.Uuid
+  id                   String             @id @default(uuid()) @db.Uuid
+  workspaceId          String             @map("workspace_id") @db.Uuid
+  bunshinId            String             @map("bunshin_id") @db.Uuid
+  personalityId        String             @map("personality_id") @db.Uuid
   version              Int
-  source               String     @db.VarChar(20)
-  changeReason         String     @map("change_reason") @db.VarChar(500)
-  basedOnVersionId     String?    @map("based_on_version_id") @db.Uuid
-  tone                 String     @db.VarChar(100)
-  formality            String     @db.VarChar(100)
-  energyLevel          String     @map("energy_level") @db.VarChar(100)
-  expertiseLevel       String     @map("expertise_level") @db.VarChar(100)
-  sentenceStyle        String     @map("sentence_style") @db.VarChar(500)
-  firstPerson          String     @map("first_person") @db.VarChar(50)
-  forbiddenExpressions Json       @map("forbidden_expressions")
-  preferredExpressions Json       @map("preferred_expressions")
-  visualDirection      String?    @map("visual_direction") @db.VarChar(500)
-  facePolicy           FacePolicy @map("face_policy")
-  createdByUserId      String     @map("created_by_user_id") @db.Uuid
-  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  workspace            Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin              Bunshin    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  source               String             @db.VarChar(20)
+  changeReason         String             @map("change_reason") @db.VarChar(500)
+  basedOnVersionId     String?            @map("based_on_version_id") @db.Uuid
+  tone                 String             @db.VarChar(100)
+  formality            String             @db.VarChar(100)
+  energyLevel          String             @map("energy_level") @db.VarChar(100)
+  expertiseLevel       String             @map("expertise_level") @db.VarChar(100)
+  sentenceStyle        String             @map("sentence_style") @db.VarChar(500)
+  firstPerson          String             @map("first_person") @db.VarChar(50)
+  forbiddenExpressions Json               @map("forbidden_expressions")
+  preferredExpressions Json               @map("preferred_expressions")
+  visualDirection      String?            @map("visual_direction") @db.VarChar(500)
+  facePolicy           FacePolicy         @map("face_policy")
+  createdByUserId      String             @map("created_by_user_id") @db.Uuid
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin              Bunshin            @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   personality          BunshinPersonality @relation(fields: [personalityId], references: [id], onDelete: Restrict)
-  createdBy            User       @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdBy            User               @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@unique([personalityId, version])
   @@unique([workspaceId, bunshinId, id])

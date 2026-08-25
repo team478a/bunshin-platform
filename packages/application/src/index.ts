@@ -2315,3 +2315,4 @@ export * from './generation-context';
 export * from './personality-version';
 export * from './memory-selector';
 export * from './group-participation';
+export * from './product-pack';
