@@ -1979,6 +1979,15 @@ export class PrismaAdminEmailConfigurationRepository implements AdminEmailConfig
       ? { configuration: adminEmailConfiguration(row), encryptedApiKey: row.encryptedApiKey }
       : null;
   }
+  async hasConfiguration(
+    input: Parameters<AdminEmailConfigurationRepository['hasConfiguration']>[0],
+  ) {
+    return (
+      (await this.client.adminEmailConfiguration.count({
+        where: { environment: input.environment },
+      })) > 0
+    );
+  }
 }
 
 export class PrismaLineRichMenuRepository implements LineRichMenuRepository {

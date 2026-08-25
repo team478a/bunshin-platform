@@ -31,7 +31,8 @@ async function checker() {
 
 async function notifier(configuration: ReturnType<typeof getServerEnvironment>) {
   const db = await import('@bunshin/database');
-  const stored = await new db.PrismaAdminEmailConfigurationRepository().active({
+  const repository = new db.PrismaAdminEmailConfigurationRepository();
+  const stored = await repository.active({
     environment: currentLineEnvironment(),
   });
   if (stored) {
@@ -42,6 +43,9 @@ async function notifier(configuration: ReturnType<typeof getServerEnvironment>) 
       to: stored.configuration.recipientEmails,
     });
   }
+  // Once an environment has been migrated to database-managed settings, a paused,
+  // unverified, or erroneous version must fail closed instead of reviving legacy secrets.
+  if (await repository.hasConfiguration({ environment: currentLineEnvironment() })) return null;
   if (
     configuration.RESEND_ADMIN_ALERT_API_KEY &&
     configuration.RESEND_ADMIN_ALERT_FROM &&
