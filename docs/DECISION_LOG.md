@@ -1097,3 +1097,12 @@
 - Revalidation: URL停止後の古い投稿案拒否、新URLでの再生成、過去Snapshot不変を同じ実査で確認する。
 - Privacy: 証跡には完全URL、紹介Token、メール、投稿本文、顧客・報酬情報を保存しない。
 - Scope: Gateは外部URLを使う商品投稿の開始条件であり、クリック・成果・報酬計測をBUNSHINへ追加する許可ではない。
+
+## D-086: Server Componentの認証確認ではCookie書込制限を画面障害にしない
+
+- 日付: 2026-08-26
+- 状態: Accepted
+- Incident: Supabase session更新時の`setAll`がServer ComponentのCookie書込制限に触れ、ログイン済み画面が500になった。
+- Boundary: Cookieを更新可能なRoute Handlerでは従来どおり保存し、読み取り専用Server Componentでは書込制限だけを無視して当該requestの認証確認を継続する。
+- Failure: Supabaseの`getUser`失敗や未認証を成功扱いにはせず、既存どおり未認証として処理する。
+- Test: 書込可能Contextでの保存と、書込禁止Contextで例外を画面まで伝播させないことを自動テストする。

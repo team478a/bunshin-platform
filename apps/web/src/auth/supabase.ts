@@ -38,7 +38,12 @@ export async function createSupabaseServerClient() {
     cookies: {
       getAll: () => store.getAll(),
       setAll: (values) => {
-        for (const { name, value, options } of values) store.set(name, value, options);
+        try {
+          for (const { name, value, options } of values) store.set(name, value, options);
+        } catch {
+          // Server Components cannot write cookies. The refreshed credentials remain
+          // valid for this request; Route Handlers can still persist them normally.
+        }
       },
     },
   });
