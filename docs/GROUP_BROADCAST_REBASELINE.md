@@ -55,6 +55,12 @@ Campaign、Participation、対象・期間・上限・素材・テーマ、参�
 
 先行テスト後にLearning Proposal、本人承認、取消、復元、学習前後KPIを実装する。
 
+### G6-I: グループ限定SNS画像生成パイロット
+
+特定Groupの先行テストでは、Daily Missionの`IMAGE`投稿から文字入り完成画像を生成する限定実験を追加できる。FREE一般ユーザーへ開放せず、Group参加同意、Campaign参加、商品割当、広告安全Gate、利用上限を生成開始時とJob実行直前に再検証する。
+
+画像生成は人物・背景素材をProvider Adapterで作り、正確な日本語文字を管理テンプレートで合成する。LINEからはDaily Mission確認画面へ移動するだけとし、自動生成・自動投稿を行わない。所有権、予算、Storage、削除、管理者の可視範囲、Go / No-Goは`docs/GROUP_SNS_IMAGE_GENERATION_REBASELINE.md`を正本とする。
+
 ## 5. G1の設計判断
 
 - Workspace Membershipは契約組織へのアクセス、Group Membershipは組織内の参加単位として分離する。
