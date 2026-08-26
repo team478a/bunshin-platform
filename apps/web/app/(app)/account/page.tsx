@@ -36,6 +36,13 @@ export default async function AccountPage() {
             </span>
             <span aria-hidden="true">›</span>
           </Link>
+          <Link href="/groups" className="settings-row">
+            <span>
+              <strong>グループ</strong>
+              <small>参加中のグループと、管理できる機能</small>
+            </span>
+            <span aria-hidden="true">›</span>
+          </Link>
         </nav>
       </section>
 
