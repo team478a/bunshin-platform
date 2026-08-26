@@ -8007,7 +8007,7 @@ const groupInvitationRecord = (row: Prisma.GroupInvitationGetPayload<object>): G
 export class PrismaGroupParticipationRepository implements GroupParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  private async canManage(workspaceId: string, actorUserId: string) {
+  private async canManageWorkspace(workspaceId: string, actorUserId: string) {
     return this.client.workspaceMembership.findFirst({
       where: {
         workspaceId,
@@ -8020,16 +8020,49 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
     });
   }
 
+  private async canManageGroup(workspaceId: string, groupId: string, actorUserId: string) {
+    const workspaceManager = await this.canManageWorkspace(workspaceId, actorUserId);
+    if (workspaceManager !== null) return true;
+    return Boolean(
+      await this.client.groupMembership.findFirst({
+        where: {
+          workspaceId,
+          groupId,
+          userId: actorUserId,
+          role: 'MANAGER',
+          status: 'ACTIVE',
+          group: { workspaceId, status: 'ACTIVE' },
+          workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+        },
+        select: { id: true },
+      }),
+    );
+  }
+
   async createGroup(input: Parameters<GroupParticipationRepository['createGroup']>[0]) {
-    if ((await this.canManage(input.workspaceId, input.actorUserId)) === null) return null;
-    const created = await this.client.group.create({
-      data: { workspaceId: input.workspaceId, name: input.name },
+    if ((await this.canManageWorkspace(input.workspaceId, input.actorUserId)) === null) return null;
+    const created = await this.client.$transaction(async (tx) => {
+      const group = await tx.group.create({
+        data: { workspaceId: input.workspaceId, name: input.name },
+      });
+      await tx.groupMembership.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: group.id,
+          userId: input.actorUserId,
+          role: 'MANAGER',
+          status: 'ACTIVE',
+          consentedAt: new Date(),
+        },
+      });
+      return group;
     });
     return groupRecord(created);
   }
 
   async createInvitation(input: Parameters<GroupParticipationRepository['createInvitation']>[0]) {
-    if ((await this.canManage(input.workspaceId, input.actorUserId)) === null) return null;
+    if (!(await this.canManageGroup(input.workspaceId, input.groupId, input.actorUserId)))
+      return null;
     const group = await this.client.group.findFirst({
       where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
       select: { id: true },

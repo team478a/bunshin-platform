@@ -3112,6 +3112,17 @@ integration('database ownership boundaries', () => {
       actorUserId: owner.user.id,
       name: '先行テスト参加者',
     });
+    await expect(
+      client.groupMembership.findUnique({
+        where: { groupId_userId: { groupId: group.id, userId: owner.user.id } },
+      }),
+    ).resolves.toMatchObject({
+      workspaceId: organization.id,
+      groupId: group.id,
+      userId: owner.user.id,
+      role: 'MANAGER',
+      status: 'ACTIVE',
+    });
     const tokenHash = randomUUID().replaceAll('-', '').padEnd(64, 'a');
     await service.createInvitation({
       workspaceId: organization.id,
@@ -3156,6 +3167,73 @@ integration('database ownership boundaries', () => {
       service.listMemberships({
         workspaceId: organization.id,
         actorUserId: other.user.id,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('allows an active Group Manager to invite only within that Group', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Permission Owner' });
+    const manager = await accounts.execute({ displayName: 'Permission Manager' });
+    const participant = await accounts.execute({ displayName: 'Permission Participant' });
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Permission Organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+      },
+    });
+    const service = new GroupParticipationService(new PrismaGroupParticipationRepository(client));
+    const managedGroup = await service.createGroup({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      name: `Managed Group ${randomUUID()}`,
+    });
+    const otherGroup = await service.createGroup({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      name: `Other Group ${randomUUID()}`,
+    });
+    const managerToken = randomUUID().replaceAll('-', '').padEnd(64, 'b');
+    await service.createInvitation({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      groupId: managedGroup.id,
+      tokenHash: managerToken,
+      role: 'MANAGER',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await service.acceptInvitation({
+      workspaceId: organization.id,
+      actorUserId: manager.user.id,
+      tokenHash: managerToken,
+    });
+
+    await expect(
+      service.createInvitation({
+        workspaceId: organization.id,
+        actorUserId: manager.user.id,
+        groupId: managedGroup.id,
+        tokenHash: randomUUID().replaceAll('-', '').padEnd(64, 'c'),
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    ).resolves.toMatchObject({ groupId: managedGroup.id, role: 'PARTICIPANT' });
+    await expect(
+      service.createInvitation({
+        workspaceId: organization.id,
+        actorUserId: manager.user.id,
+        groupId: otherGroup.id,
+        tokenHash: randomUUID().replaceAll('-', '').padEnd(64, 'd'),
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.createInvitation({
+        workspaceId: organization.id,
+        actorUserId: participant.user.id,
+        groupId: managedGroup.id,
+        tokenHash: randomUUID().replaceAll('-', '').padEnd(64, 'e'),
+        expiresAt: new Date(Date.now() + 60_000),
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
