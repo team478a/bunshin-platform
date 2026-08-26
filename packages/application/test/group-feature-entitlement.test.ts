@@ -30,6 +30,15 @@ const repository = () =>
       dailyLimit: 3,
       monthlyLimit: 50,
     }),
+    consumeAccess: vi.fn().mockResolvedValue({
+      allowed: true,
+      reason: 'ALLOWED',
+      dailyLimit: 3,
+      monthlyLimit: 50,
+      dailyUsed: 1,
+      monthlyUsed: 1,
+      alreadyConsumed: false,
+    }),
   }) as unknown as GroupFeatureEntitlementRepository;
 
 describe('GroupFeatureEntitlementService', () => {
@@ -88,5 +97,32 @@ describe('GroupFeatureEntitlementService', () => {
       dailyLimit: 3,
       monthlyLimit: 50,
     });
+  });
+
+  it('validates and normalizes idempotent usage consumption', async () => {
+    const value = repository();
+    await new GroupFeatureEntitlementService(value).consumeAccess({
+      ...scope,
+      featureKey: ' social.trend_research ',
+      operationKey: 'operation-123',
+      localDate: '2026-08-26',
+      now,
+    });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(value.consumeAccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        featureKey: 'SOCIAL.TREND_RESEARCH',
+        operationKey: 'operation-123',
+        localDate: '2026-08-26',
+      }),
+    );
+    await expect(
+      new GroupFeatureEntitlementService(value).consumeAccess({
+        ...scope,
+        featureKey: 'SOCIAL',
+        operationKey: 'short',
+        localDate: '2026-08-26',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

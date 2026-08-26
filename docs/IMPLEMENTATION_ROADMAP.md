@@ -282,7 +282,8 @@ SNS、ブログ、LINE、商品パックなど今後増える機能を、管理�
 - H2: システム管理者によるGroup機能設定UI — 完了
 - H3: Group Managerによる参加者機能設定UI — 完了
 - H3-A: システム管理者・Group Managerの招待発行、本人同意、参加導線 — 完了
-- H4: SOCIAL画像生成など既存機能の共通Gate接続
+- H4: Group Campaign投稿生成の共通Gate接続、日次・月次利用量の原子的記録、管理画面表示 — 完了
+- H4-A: SOCIAL画像生成のProvider実行直前へ同じ共通Gateを接続 — Phase 7-IのProvider実装時
 - H5: BLOG追加時のカタログ登録とBLOG固有Gate接続
 
 Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ再委譲できる。管理役割、Group機能権限、Bunshin Capabilityの3層を混在させず、未設定は拒否する。

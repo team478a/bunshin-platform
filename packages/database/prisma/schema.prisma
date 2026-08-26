@@ -723,6 +723,7 @@ model User {
   groupFeatureAssignmentsSet        GroupMemberFeatureAssignment[]      @relation("GroupMemberFeatureAssignmentActor")
   groupFeatureAuditsPerformed       GroupFeatureAuditLog[]              @relation("GroupFeatureAuditActor")
   groupMembershipAuditsPerformed    GroupMembershipAuditLog[]           @relation("GroupMembershipAuditActor")
+  groupFeatureUsageEvents           GroupFeatureUsageEvent[]            @relation("GroupFeatureUsageActor")
 
   @@index([status])
   @@map("users")
@@ -800,6 +801,7 @@ model Workspace {
   groupFeatureAssignments     GroupMemberFeatureAssignment[]
   groupFeatureAudits          GroupFeatureAuditLog[]
   groupMembershipAudits       GroupMembershipAuditLog[]
+  groupFeatureUsageEvents     GroupFeatureUsageEvent[]
 
   @@index([status])
   @@map("workspaces")
@@ -844,6 +846,7 @@ model Group {
   featureAssignments         GroupMemberFeatureAssignment[]
   featureAudits              GroupFeatureAuditLog[]
   membershipAudits           GroupMembershipAuditLog[]
+  featureUsageEvents         GroupFeatureUsageEvent[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -870,6 +873,7 @@ model GroupMembership {
   featureAssignments         GroupMemberFeatureAssignment[]
   featureAudits              GroupFeatureAuditLog[]
   membershipAudits           GroupMembershipAuditLog[]
+  featureUsageEvents         GroupFeatureUsageEvent[]
 
   @@unique([groupId, userId])
   @@index([workspaceId, userId, status])
@@ -934,6 +938,7 @@ model FeatureDefinition {
   groupPolicies     GroupFeaturePolicy[]
   memberAssignments GroupMemberFeatureAssignment[]
   audits            GroupFeatureAuditLog[]
+  usageEvents       GroupFeatureUsageEvent[]
 
   @@index([parentKey, status])
   @@map("feature_definitions")
@@ -1010,6 +1015,29 @@ model GroupFeatureAuditLog {
   @@index([workspaceId, groupId, occurredAt])
   @@index([groupMembershipId, occurredAt])
   @@map("group_feature_audit_logs")
+}
+
+model GroupFeatureUsageEvent {
+  id                String            @id @default(uuid()) @db.Uuid
+  workspaceId       String            @map("workspace_id") @db.Uuid
+  groupId           String            @map("group_id") @db.Uuid
+  groupMembershipId String            @map("group_membership_id") @db.Uuid
+  featureKey        String            @map("feature_key") @db.VarChar(120)
+  actorUserId       String            @map("actor_user_id") @db.Uuid
+  operationKey      String            @map("operation_key") @db.VarChar(200)
+  localDate         String            @map("local_date") @db.VarChar(10)
+  localMonth        String            @map("local_month") @db.VarChar(7)
+  occurredAt        DateTime          @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership   GroupMembership   @relation(fields: [groupMembershipId], references: [id], onDelete: Cascade)
+  feature           FeatureDefinition @relation(fields: [featureKey], references: [key], onDelete: Restrict)
+  actorUser         User              @relation("GroupFeatureUsageActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([groupMembershipId, featureKey, operationKey])
+  @@index([workspaceId, groupId, featureKey, localDate])
+  @@index([groupMembershipId, featureKey, localMonth])
+  @@map("group_feature_usage_events")
 }
 
 model ProductPack {
