@@ -120,6 +120,66 @@ export function AiProviderConfigurationEditor(props: {
   return (
     <>
       <section className="settings-card">
+        <h2>現在の設定状況</h2>
+        <p>未登録のサービスも表示しています。秘密の値は保存後に再表示しません。</p>
+        <div className="settings-status-list">
+          {(Object.keys(labels) as Provider[]).map((value) => {
+            const item = configurations.find((configuration) => configuration.provider === value);
+            return (
+              <article className="settings-status-item" key={value}>
+                <h3>{labels[value]}</h3>
+                <p>登録：{item?.apiKeyConfigured ? (item.apiKeyMask ?? '登録済み') : '未登録'}</p>
+                <p>
+                  接続：
+                  {!item?.lastVerifiedAt
+                    ? '未確認'
+                    : item.lastErrorCategory
+                      ? 'エラー'
+                      : '確認済み'}
+                  ／ 使用：{item?.status === 'ACTIVE' ? '使用中' : '停止中'}
+                </p>
+                <p>
+                  次にすること：
+                  {!item?.apiKeyConfigured
+                    ? 'APIキーを登録する'
+                    : !item.lastVerifiedAt || item.lastErrorCategory
+                      ? '接続できるか確認する'
+                      : item.status !== 'ACTIVE'
+                        ? 'この設定を使い始める'
+                        : '設定済みです'}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <h2>APIキーを準備する手順</h2>
+        <ol>
+          <li>利用するサービスの公式管理画面でAPIキーを作ります。</li>
+          <li>APIキーを下のフォームへ一度だけ貼り付け、予算と変更理由を入力します。</li>
+          <li>保存した設定で「接続できるか確認」を押します。</li>
+          <li>成功したら「この設定を使い始める」を押します。</li>
+        </ol>
+        <ul>
+          <li>
+            OpenAI：<a href="https://platform.openai.com/api-keys">APIキー管理を開く</a>
+          </li>
+          <li>
+            Grok：<a href="https://console.x.ai/">xAI Consoleを開く</a>
+          </li>
+          <li>
+            Exa：<a href="https://dashboard.exa.ai/">Exa Dashboardを開く</a>
+          </li>
+          <li>
+            Firecrawl：<a href="https://www.firecrawl.dev/app/api-keys">APIキー管理を開く</a>
+          </li>
+        </ul>
+        <p>APIキーはチャット、変更理由、メモ欄へ書かないでください。</p>
+      </section>
+
+      <section className="settings-card">
         <h2>新しい設定を準備する</h2>
         <p>APIキーがまだなくても保存できます。新しい設定は必ず停止した状態になります。</p>
         {message ? <p role="status">{message}</p> : null}
