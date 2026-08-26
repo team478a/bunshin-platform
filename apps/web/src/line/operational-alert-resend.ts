@@ -49,9 +49,9 @@ export class LineOperationalAlertResend implements LineOperationalAlertPort {
       body: JSON.stringify({
         from: this.options.from,
         to: this.options.to,
-        subject: `【BUNSHIN】LINE運用の確認が必要です（${assessment.environment}）`,
+        subject: `【ワタシワークス】LINE運用の確認が必要です（${assessment.environment}）`,
         text: [
-          'BUNSHINのLINE運用で確認が必要な状態を検知しました。',
+          'ワタシワークスのLINE運用で確認が必要な状態を検知しました。',
           '',
           ...lines,
           '',

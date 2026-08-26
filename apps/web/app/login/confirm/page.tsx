@@ -21,13 +21,13 @@ export default async function LoginConfirmPage({
         <div className="page-heading page-heading--center">
           <p className="eyebrow">メール確認済み</p>
           <h1 id="confirm-title">ログインを確認</h1>
-          <p>このブラウザでBUNSHINを開きます。</p>
+          <p>このブラウザでワタシワークスを開きます。</p>
         </div>
         <form className="form-stack" action="/auth/confirm" method="post">
           <input type="hidden" name="token_hash" value={query.token_hash} />
           <input type="hidden" name="type" value="email" />
           <button className="button button--primary button--full" type="submit">
-            BUNSHINへログイン
+            ワタシワークスへログイン
           </button>
         </form>
         <p className="auth-panel__help">このリンクは一度だけ使用できます。</p>

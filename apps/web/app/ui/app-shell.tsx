@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className={`app-shell${isAdmin ? ' app-shell--admin' : ''}`}>
       <header className="app-header">
-        <Link href="/bunshins" className="brand-link" aria-label="BUNSHIN ホーム">
+        <Link href="/bunshins" className="brand-link" aria-label="ワタシワークス ホーム">
           <BrandMark />
         </Link>
         {isAdmin ? (

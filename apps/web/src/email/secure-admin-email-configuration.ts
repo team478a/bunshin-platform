@@ -87,8 +87,8 @@ export class ResendAdminEmailConnectionTestAdapter {
       body: JSON.stringify({
         from: input.fromEmail,
         to: input.recipientEmails,
-        subject: '【BUNSHIN】管理者メールの接続確認',
-        text: 'BUNSHIN管理画面からの接続確認に成功しました。',
+        subject: '【ワタシワークス】管理者メールの接続確認',
+        text: 'ワタシワークス管理画面からの接続確認に成功しました。',
       }),
     });
     if (response.ok) return { success: true, errorCategory: null };
