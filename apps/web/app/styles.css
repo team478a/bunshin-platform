@@ -2141,6 +2141,23 @@ body:has(.app-shell) > .site-footer {
   margin-top: 8px;
 }
 
+.settings-save-action {
+  grid-column: 1 / -1;
+  padding: 16px;
+  border: 2px solid var(--color-primary);
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+}
+
+.settings-save-action p {
+  margin: 0 0 12px;
+}
+
+.settings-save-action [role='status'] {
+  margin: 12px 0 0;
+  font-weight: 700;
+}
+
 @media (min-width: 760px) {
   .settings-status-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
