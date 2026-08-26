@@ -1802,6 +1802,16 @@ a {
   transform: translateY(1px);
 }
 
+.button:disabled {
+  color: #667085;
+  border-color: #d7dce5;
+  background: #eef0f4;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+}
+
 .button--line {
   gap: 10px;
   color: white;
@@ -2155,6 +2165,16 @@ body:has(.app-shell) > .site-footer {
 
 .settings-save-action [role='status'] {
   margin: 12px 0 0;
+  font-weight: 700;
+}
+
+.settings-action-message {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  color: var(--color-text);
+  border: 1px solid var(--color-primary);
+  border-radius: 10px;
+  background: var(--color-primary-soft);
   font-weight: 700;
 }
 
