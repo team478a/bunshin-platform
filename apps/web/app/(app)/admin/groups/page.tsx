@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import Link from 'next/link';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { GroupAdminEditor } from './group-admin-editor';
 
@@ -12,23 +13,20 @@ export default async function GroupAdminPage({
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
-  if (!(await new db.PrismaPlatformAdminRepository().findActivePlatformAdminByUserId(user.userId)))
-    notFound();
+  const platformAdmin =
+    await new db.PrismaPlatformAdminRepository().findActivePlatformAdminByUserId(user.userId);
+  if (!platformAdmin) notFound();
 
-  const memberships = await db.prisma.workspaceMembership.findMany({
+  const workspaces = await db.prisma.workspace.findMany({
     where: {
-      userId: user.userId,
       status: 'ACTIVE',
-      role: { in: ['OWNER', 'ADMIN'] },
-      workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+      type: 'ORGANIZATION',
     },
-    select: { workspace: { select: { id: true, name: true } } },
-    orderBy: { workspace: { name: 'asc' } },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
   });
   const requested = (await searchParams).workspaceId;
-  const workspace =
-    memberships.find((item) => item.workspace.id === requested)?.workspace ??
-    memberships[0]?.workspace;
+  const workspace = workspaces.find((item) => item.id === requested) ?? workspaces[0];
 
   if (!workspace)
     return (
@@ -61,7 +59,7 @@ export default async function GroupAdminPage({
         <label>
           管理する団体
           <select name="workspaceId" defaultValue={workspace.id}>
-            {memberships.map(({ workspace: item }) => (
+            {workspaces.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}
               </option>
@@ -81,7 +79,10 @@ export default async function GroupAdminPage({
               <li key={group.id}>
                 <strong>{group.name}</strong> — 状態：{group.status}／参加者：
                 {group._count.memberships}人／商品：{group._count.productPacks}件／募集：
-                {group._count.campaigns}件
+                {group._count.campaigns}件<br />
+                <Link href={`/admin/groups/${group.id}/features`}>
+                  このグループで使える機能を設定
+                </Link>
               </li>
             ))}
           </ul>

@@ -278,8 +278,8 @@ Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を�
 
 SNS、ブログ、LINE、商品パックなど今後増える機能を、管理役割とは別にGroupと参加者へ割り当てる共通基盤とする。
 
-- H1: 拡張可能な機能カタログ、Group利用方針、参加者割当、上限、期間、監査、Isolation — 実装中
-- H2: システム管理者によるGroup機能設定API/UI
+- H1: 拡張可能な機能カタログ、Group利用方針、参加者割当、上限、期間、監査、Isolation — 完了
+- H2: システム管理者によるGroup機能設定UI — 完了
 - H3: Group Managerによる参加者機能設定API/UI
 - H4: SOCIAL画像生成など既存機能の共通Gate接続
 - H5: BLOG追加時のカタログ登録とBLOG固有Gate接続
