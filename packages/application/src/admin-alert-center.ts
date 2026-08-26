@@ -99,8 +99,8 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
     alerts.push({
       code: 'LINE_CONFIGURATION_UNAVAILABLE',
       severity: 'CRITICAL',
-      title: 'LINE通知の設定を利用できません',
-      guidance: '使用中の設定と接続確認結果を確認してください。',
+      title: 'LINE通知を送れません',
+      guidance: 'LINEの設定画面を開き、表示される「次にすること」を行ってください。',
       count: null,
       href: '/admin/line',
     });
