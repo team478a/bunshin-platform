@@ -1106,3 +1106,17 @@
 - Boundary: Cookieを更新可能なRoute Handlerでは従来どおり保存し、読み取り専用Server Componentでは書込制限だけを無視して当該requestの認証確認を継続する。
 - Failure: Supabaseの`getUser`失敗や未認証を成功扱いにはせず、既存どおり未認証として処理する。
 - Test: 書込可能Contextでの保存と、書込禁止Contextで例外を画面まで伝播させないことを自動テストする。
+
+## D-087: SNS画像生成は特定Group限定のProductionパイロットとして検証する
+
+- 日付: 2026-08-26
+- 状態: Proposed
+- Scope: Daily Missionの`IMAGE`投稿からInstagram 4:5の文字入り完成画像を生成するが、FREE一般ユーザーへ公開しない。
+- Gate: ProductionでPlatform Adminが明示許可したGroup、同意済みACTIVE Membership、本人Bunshin、許可中Campaign / Product Packだけを対象とする。
+- Architecture: 人物・背景はProvider Port / Adapterで生成し、日本語文字・図形は管理されたSatori / resvg / Sharpテンプレートで決定的に合成する。AI生成HTMLと任意外部URL取得を禁止する。
+- Ownership: 本人参考素材、人格、Memory、Knowledgeは本人所有のままとし、Group公式素材と混在させない。Group管理者へ通常投稿、Prompt、個人画像、完成画像を集計権限だけで開示しない。
+- Cost: User / Workspace / Group単位の上限、実原価、再試行、採否を分離記録し、緊急停止を必須とする。1採用20円は固定仕様ではなく実測指標とする。
+- Validation: 10テーマで接続・費用・安全性を先に確認し、その後50テーマ比較とスマートフォンE2Eを行う。越境、秘密漏えい、二重課金、重大な広告安全違反で即時停止する。
+- Environment: Stagingは新設せず、本番限定公開と対象commit別の追記型Production Gateで保護する。
+- General release: Phase 10の一般向け画像・動画Providerは前倒しせず、GroupパイロットのGo基準達成後も別途人間判断する。
+- Detail: `docs/GROUP_SNS_IMAGE_GENERATION_REBASELINE.md`

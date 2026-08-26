@@ -274,6 +274,20 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 
 Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を飛ばしてG7へ進まない。
 
+### Phase 7-I: グループ限定SNS画像生成パイロット
+
+詳細は`docs/GROUP_SNS_IMAGE_GENERATION_REBASELINE.md`を正本とする。
+
+- I0: 既存実装監査、限定公開、所有権、予算、Storage、Go / No-Go — 文書完了
+- I1: 10テーマ方式比較と検証手順の確認
+- I2: Domain、状態遷移、Provider Port、DB、Isolation
+- I3: 5テンプレート、Satori / resvg / Sharp描画、非公開Storage
+- I4: OpenAI Image Adapter、Job、Usage、上限、緊急停止
+- I5: 利用者API/UI、採否、再生成、download、LINE導線
+- I6: Group / Platform管理、50テーマ比較、Security、Production Gate
+
+FREE一般ユーザーへは開放せず、Productionで明示許可したGroupと同意済みACTIVE Membershipだけを対象とする。Phase 10の一般向け画像・動画Providerを前倒ししない。越境、秘密漏えい、二重課金、重大な広告安全違反が1件でもあれば全体停止する。
+
 ### Phase 7-L: 外部成果計測URL連携
 
 状態: L7のIsolation自動テスト、スマートフォンE2E手順、Production Gate接続まで完了。本番実査と確認記録は運用時に行う。
