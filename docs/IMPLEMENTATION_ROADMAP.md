@@ -279,7 +279,7 @@ Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を�
 詳細は`docs/GROUP_SNS_IMAGE_GENERATION_REBASELINE.md`を正本とする。
 
 - I0: 既存実装監査、限定公開、所有権、予算、Storage、Go / No-Go — 文書完了
-- I1: 10テーマ方式比較と検証手順の確認
+- I1: 10テーマ方式比較と検証手順の確認 — 手順・評価票完了（テーマ、予算、評価者の確定と実査待ち）
 - I2: Domain、状態遷移、Provider Port、DB、Isolation
 - I3: 5テンプレート、Satori / resvg / Sharp描画、非公開Storage
 - I4: OpenAI Image Adapter、Job、Usage、上限、緊急停止
