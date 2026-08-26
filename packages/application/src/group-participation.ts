@@ -1,4 +1,10 @@
-import type { Group, GroupInvitation, GroupMembership, GroupRole } from '@bunshin/platform-domain';
+import type {
+  Group,
+  GroupInvitation,
+  GroupMembership,
+  GroupMembershipStatus,
+  GroupRole,
+} from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 
 export interface GroupActorScope {
@@ -27,6 +33,16 @@ export interface GroupParticipationRepository {
     input: GroupActorScope & { groupId: string; now: Date },
   ): Promise<GroupMembership | null>;
   listMemberships(input: GroupActorScope): Promise<GroupMembership[] | null>;
+  updateMembership(
+    input: GroupActorScope & {
+      groupId: string;
+      groupMembershipId: string;
+      role: GroupRole;
+      status: Extract<GroupMembershipStatus, 'ACTIVE' | 'SUSPENDED' | 'REVOKED'>;
+      reason: string;
+      now: Date;
+    },
+  ): Promise<GroupMembership | null>;
 }
 
 const required = (value: string, field: string, maximum: number) => {
@@ -100,6 +116,27 @@ export class GroupParticipationService {
   async listMemberships(input: GroupActorScope) {
     const result = await this.repository.listMemberships(input);
     if (result === null) throw new ApplicationError('FORBIDDEN', 'workspace access denied');
+    return result;
+  }
+
+  async updateMembership(
+    input: GroupActorScope & {
+      groupId: string;
+      groupMembershipId: string;
+      role: GroupRole;
+      status: Extract<GroupMembershipStatus, 'ACTIVE' | 'SUSPENDED' | 'REVOKED'>;
+      reason: string;
+      now?: Date;
+    },
+  ) {
+    const reason = required(input.reason, 'reason', 1000);
+    if (reason.length < 5) throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+    const result = await this.repository.updateMembership({
+      ...input,
+      reason,
+      now: input.now ?? new Date(),
+    });
+    if (result === null) throw new ApplicationError('FORBIDDEN', 'membership management denied');
     return result;
   }
 }

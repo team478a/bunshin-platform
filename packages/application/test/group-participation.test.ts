@@ -49,6 +49,21 @@ class Repository implements GroupParticipationRepository {
   listMemberships() {
     return Promise.resolve([]);
   }
+  updateMembership(input: Parameters<GroupParticipationRepository['updateMembership']>[0]) {
+    return Promise.resolve({
+      id: input.groupMembershipId,
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      userId: 'user-2',
+      role: input.role,
+      status: input.status,
+      consentedAt: now,
+      declinedAt: null,
+      revokedAt: input.status === 'REVOKED' ? input.now : null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
 }
 
 describe('GroupParticipationService', () => {
@@ -77,5 +92,19 @@ describe('GroupParticipationService', () => {
     await expect(service.createGroup({ ...scope, name: ' ' })).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
+  });
+
+  it('requires a meaningful reason for membership changes', async () => {
+    const service = new GroupParticipationService(new Repository());
+    await expect(
+      service.updateMembership({
+        ...scope,
+        groupId: 'group-1',
+        groupMembershipId: 'membership-1',
+        role: 'PARTICIPANT',
+        status: 'SUSPENDED',
+        reason: '短い',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

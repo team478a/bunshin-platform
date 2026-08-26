@@ -1,4 +1,4 @@
-import { GroupFeatureEntitlementService } from '@bunshin/application';
+import { GroupFeatureEntitlementService, GroupParticipationService } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import type { Route } from 'next';
 import Link from 'next/link';
@@ -20,6 +20,15 @@ const assignmentSchema = z.object({
   monthlyLimit: z.string().max(20),
   startsAt: z.string().max(40),
   endsAt: z.string().max(40),
+  reason: z.string().trim().min(5).max(1000),
+});
+
+const membershipSchema = z.object({
+  workspaceId: z.uuid(),
+  groupId: z.uuid(),
+  groupMembershipId: z.uuid(),
+  role: z.enum(['MANAGER', 'PARTICIPANT']),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'REVOKED']),
   reason: z.string().trim().min(5).max(1000),
 });
 
@@ -75,6 +84,30 @@ async function saveMemberFeatureAssignment(formData: FormData) {
   redirect(memberPath(input.data.groupId, input.data.groupMembershipId, '&saved=1'));
 }
 
+async function saveMembership(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const input = membershipSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/groups');
+  try {
+    const db = await import('@bunshin/database');
+    await new GroupParticipationService(
+      new db.PrismaGroupParticipationRepository(),
+    ).updateMembership({ ...input.data, actorUserId: actor.userId });
+  } catch (error) {
+    const code =
+      error instanceof ApplicationError && error.code === 'VALIDATION_ERROR'
+        ? 'member-invalid'
+        : error instanceof ApplicationError && error.code === 'FORBIDDEN'
+          ? 'member-forbidden'
+          : 'member-failed';
+    redirect(memberPath(input.data.groupId, input.data.groupMembershipId, `&error=${code}`));
+  }
+  revalidatePath(memberPath(input.data.groupId));
+  redirect(memberPath(input.data.groupId, input.data.groupMembershipId, '&memberSaved=1'));
+}
+
 function localDateTime(value: Date | null): string {
   if (!value) return '';
   return value
@@ -91,37 +124,61 @@ export default async function GroupMemberFeaturesPage({
   searchParams,
 }: {
   params: Promise<{ groupId: string }>;
-  searchParams: Promise<{ member?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{
+    member?: string;
+    saved?: string;
+    memberSaved?: string;
+    error?: string;
+  }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
   const groupId = z.uuid().safeParse((await params).groupId);
   if (!groupId.success) notFound();
   const db = await import('@bunshin/database');
-  const manager = await db.prisma.groupMembership.findFirst({
-    where: {
-      groupId: groupId.data,
-      userId: actor.userId,
-      role: 'MANAGER',
-      status: 'ACTIVE',
-      group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
-    },
+  const groupScope = await db.prisma.group.findFirst({
+    where: { id: groupId.data, status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
     select: { workspaceId: true },
   });
-  if (!manager) notFound();
+  if (!groupScope) notFound();
+  const [manager, workspaceManager, platformAdmin] = await Promise.all([
+    db.prisma.groupMembership.findFirst({
+      where: { groupId: groupId.data, userId: actor.userId, role: 'MANAGER', status: 'ACTIVE' },
+      select: { id: true },
+    }),
+    db.prisma.workspaceMembership.findFirst({
+      where: {
+        workspaceId: groupScope.workspaceId,
+        userId: actor.userId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+      },
+      select: { id: true },
+    }),
+    db.prisma.platformAdmin.findFirst({
+      where: {
+        userId: actor.userId,
+        status: 'ACTIVE',
+        role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (!manager && !workspaceManager && !platformAdmin) notFound();
+  const elevated = Boolean(workspaceManager || platformAdmin);
 
   const group = await db.prisma.group.findFirst({
-    where: { id: groupId.data, workspaceId: manager.workspaceId, status: 'ACTIVE' },
+    where: { id: groupId.data, workspaceId: groupScope.workspaceId, status: 'ACTIVE' },
     select: {
       id: true,
       workspaceId: true,
       name: true,
       workspace: { select: { name: true } },
       memberships: {
-        where: { status: 'ACTIVE' },
         select: {
           id: true,
           role: true,
+          status: true,
           user: { select: { displayName: true, email: true } },
           featureAssignments: true,
         },
@@ -142,6 +199,14 @@ export default async function GroupMemberFeaturesPage({
         orderBy: { occurredAt: 'desc' },
         take: 30,
       },
+      membershipAudits: {
+        include: {
+          groupMembership: { select: { user: { select: { displayName: true } } } },
+          performedByUser: { select: { displayName: true } },
+        },
+        orderBy: { occurredAt: 'desc' },
+        take: 30,
+      },
     },
   });
   if (!group) notFound();
@@ -156,6 +221,10 @@ export default async function GroupMemberFeaturesPage({
     invalid: '入力内容を確認してください。変更理由は5文字以上必要です。',
     forbidden: 'グループに許可された範囲を超えているため保存できません。',
     failed: '設定を保存できませんでした。もう一度お試しください。',
+    'member-invalid': '役割・状態・変更理由を確認してください。変更理由は5文字以上必要です。',
+    'member-forbidden':
+      'この変更は許可されていません。最後の管理者は停止できず、管理者の任命はシステム管理者が行います。',
+    'member-failed': '参加者の状態を保存できませんでした。もう一度お試しください。',
   };
 
   return (
@@ -171,6 +240,11 @@ export default async function GroupMemberFeaturesPage({
       {query.saved === '1' ? (
         <p className="notice notice--success" role="status">
           参加者の機能設定を保存しました。
+        </p>
+      ) : null}
+      {query.memberSaved === '1' ? (
+        <p className="notice notice--success" role="status">
+          参加者の役割と状態を保存しました。
         </p>
       ) : null}
       {query.error ? (
@@ -200,9 +274,66 @@ export default async function GroupMemberFeaturesPage({
           </button>
         </form>
         {selectedMember ? (
-          <p>
-            選択中：{selectedMember.user.displayName} ／ {selectedMember.user.email ?? 'メールなし'}
-          </p>
+          <>
+            <p>
+              選択中：{selectedMember.user.displayName} ／{' '}
+              {selectedMember.user.email ?? 'メールなし'}
+            </p>
+            <form className="form-stack" action={saveMembership}>
+              <input type="hidden" name="workspaceId" value={group.workspaceId} />
+              <input type="hidden" name="groupId" value={group.id} />
+              <input type="hidden" name="groupMembershipId" value={selectedMember.id} />
+              <label className="field">
+                <span className="field__label">役割</span>
+                <select
+                  className="field__control"
+                  name="role"
+                  defaultValue={selectedMember.role}
+                  disabled={!elevated && selectedMember.role === 'MANAGER'}
+                >
+                  <option value="PARTICIPANT">参加者</option>
+                  <option value="MANAGER" disabled={!elevated}>
+                    グループ管理者
+                  </option>
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">現在の状態</span>
+                <select
+                  className="field__control"
+                  name="status"
+                  defaultValue={selectedMember.status}
+                  disabled={!elevated && selectedMember.role === 'MANAGER'}
+                >
+                  <option value="ACTIVE">利用中</option>
+                  <option value="SUSPENDED">一時停止</option>
+                  <option value="REVOKED">参加を終了</option>
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">変更理由</span>
+                <textarea
+                  className="field__control"
+                  name="reason"
+                  required
+                  minLength={5}
+                  maxLength={1000}
+                  placeholder="例：担当変更のため一時停止"
+                  disabled={!elevated && selectedMember.role === 'MANAGER'}
+                />
+              </label>
+              <button
+                className="button"
+                type="submit"
+                disabled={!elevated && selectedMember.role === 'MANAGER'}
+              >
+                役割と状態を保存
+              </button>
+              {!elevated && selectedMember.role === 'MANAGER' ? (
+                <p>管理者の変更は、システム管理者に依頼してください。</p>
+              ) : null}
+            </form>
+          </>
         ) : null}
       </section>
 
@@ -307,7 +438,22 @@ export default async function GroupMemberFeaturesPage({
         : null}
 
       <section className="settings-card">
-        <h2>最近の変更</h2>
+        <h2>参加者の最近の変更</h2>
+        {group.membershipAudits.length === 0 ? <p>変更履歴はまだありません。</p> : null}
+        <ul>
+          {group.membershipAudits.map((audit) => (
+            <li key={audit.id}>
+              <strong>{audit.groupMembership?.user.displayName ?? '退会済み参加者'}</strong>
+              <br />
+              {audit.reason} ／ 操作：{audit.performedByUser.displayName} ／{' '}
+              {audit.occurredAt.toLocaleString('ja-JP')}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="settings-card">
+        <h2>機能設定の最近の変更</h2>
         {group.featureAudits.length === 0 ? <p>変更履歴はまだありません。</p> : null}
         <ul>
           {group.featureAudits.map((audit) => (

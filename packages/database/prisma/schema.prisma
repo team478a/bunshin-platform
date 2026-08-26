@@ -56,7 +56,15 @@ enum GroupRole {
 enum GroupMembershipStatus {
   INVITED
   ACTIVE
+  SUSPENDED
   DECLINED
+  REVOKED
+}
+
+enum GroupMembershipAuditAction {
+  ROLE_CHANGED
+  SUSPENDED
+  REACTIVATED
   REVOKED
 }
 
@@ -714,6 +722,7 @@ model User {
   groupFeaturePoliciesSet           GroupFeaturePolicy[]                @relation("GroupFeaturePolicyActor")
   groupFeatureAssignmentsSet        GroupMemberFeatureAssignment[]      @relation("GroupMemberFeatureAssignmentActor")
   groupFeatureAuditsPerformed       GroupFeatureAuditLog[]              @relation("GroupFeatureAuditActor")
+  groupMembershipAuditsPerformed    GroupMembershipAuditLog[]           @relation("GroupMembershipAuditActor")
 
   @@index([status])
   @@map("users")
@@ -790,6 +799,7 @@ model Workspace {
   groupFeaturePolicies        GroupFeaturePolicy[]
   groupFeatureAssignments     GroupMemberFeatureAssignment[]
   groupFeatureAudits          GroupFeatureAuditLog[]
+  groupMembershipAudits       GroupMembershipAuditLog[]
 
   @@index([status])
   @@map("workspaces")
@@ -833,6 +843,7 @@ model Group {
   featurePolicies            GroupFeaturePolicy[]
   featureAssignments         GroupMemberFeatureAssignment[]
   featureAudits              GroupFeatureAuditLog[]
+  membershipAudits           GroupMembershipAuditLog[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -858,11 +869,33 @@ model GroupMembership {
   contentLinkUsages          ContentLinkUsage[]
   featureAssignments         GroupMemberFeatureAssignment[]
   featureAudits              GroupFeatureAuditLog[]
+  membershipAudits           GroupMembershipAuditLog[]
 
   @@unique([groupId, userId])
   @@index([workspaceId, userId, status])
   @@index([groupId, status])
   @@map("group_memberships")
+}
+
+model GroupMembershipAuditLog {
+  id                String                     @id @default(uuid()) @db.Uuid
+  workspaceId       String                     @map("workspace_id") @db.Uuid
+  groupId           String                     @map("group_id") @db.Uuid
+  groupMembershipId String?                    @map("group_membership_id") @db.Uuid
+  action            GroupMembershipAuditAction
+  beforeData        Json                       @map("before_data")
+  afterData         Json                       @map("after_data")
+  reason            String                     @db.VarChar(1000)
+  performedByUserId String                     @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime                   @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership   GroupMembership?           @relation(fields: [groupMembershipId], references: [id], onDelete: SetNull)
+  performedByUser   User                       @relation("GroupMembershipAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, occurredAt])
+  @@index([groupMembershipId, occurredAt])
+  @@map("group_membership_audit_logs")
 }
 
 model GroupInvitation {

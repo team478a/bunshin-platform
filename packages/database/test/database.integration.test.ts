@@ -109,6 +109,7 @@ integration('database ownership boundaries', () => {
     await client.productPackVersion.deleteMany();
     await client.productPack.deleteMany();
     await client.groupFeatureAuditLog.deleteMany();
+    await client.groupMembershipAuditLog.deleteMany();
     await client.groupMemberFeatureAssignment.deleteMany();
     await client.groupFeaturePolicy.deleteMany();
     await client.groupInvitation.deleteMany();

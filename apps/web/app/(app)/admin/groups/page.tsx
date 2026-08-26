@@ -82,7 +82,8 @@ export default async function GroupAdminPage({
                 {group._count.campaigns}件<br />
                 <Link href={`/admin/groups/${group.id}/features`}>
                   このグループで使える機能を設定
-                </Link>
+                </Link>{' '}
+                ／ <Link href={`/groups/${group.id}/members`}>参加者と管理者を設定</Link>
               </li>
             ))}
           </ul>
