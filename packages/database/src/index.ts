@@ -8223,6 +8223,98 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
     });
     return rows.map(groupMembershipRecord);
   }
+
+  async updateMembership(input: Parameters<GroupParticipationRepository['updateMembership']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const [workspaceManager, platformAdmin, groupManager] = await Promise.all([
+        tx.workspaceMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            role: { in: ['OWNER', 'ADMIN'] },
+          },
+          select: { id: true },
+        }),
+        tx.platformAdmin.findFirst({
+          where: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+          },
+          select: { id: true },
+        }),
+        tx.groupMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        }),
+      ]);
+      const elevated = workspaceManager !== null || platformAdmin !== null;
+      if (!elevated && groupManager === null) return null;
+
+      const target = await tx.groupMembership.findFirst({
+        where: {
+          id: input.groupMembershipId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          group: { status: 'ACTIVE' },
+        },
+      });
+      if (target === null) return null;
+
+      // A group manager can suspend/restart participants, but only an organization or
+      // system administrator can appoint managers or change another manager.
+      if (!elevated && (target.role === 'MANAGER' || input.role === 'MANAGER')) return null;
+
+      const removesActiveManager =
+        target.role === 'MANAGER' &&
+        target.status === 'ACTIVE' &&
+        (input.role !== 'MANAGER' || input.status !== 'ACTIVE');
+      if (removesActiveManager) {
+        const activeManagers = await tx.groupMembership.count({
+          where: { groupId: input.groupId, role: 'MANAGER', status: 'ACTIVE' },
+        });
+        if (activeManagers <= 1) return null;
+      }
+
+      const updated = await tx.groupMembership.update({
+        where: { id: target.id },
+        data: {
+          role: input.role,
+          status: input.status,
+          revokedAt: input.status === 'REVOKED' ? input.now : null,
+        },
+      });
+      const action =
+        input.status === 'SUSPENDED'
+          ? 'SUSPENDED'
+          : input.status === 'REVOKED'
+            ? 'REVOKED'
+            : target.status !== 'ACTIVE'
+              ? 'REACTIVATED'
+              : 'ROLE_CHANGED';
+      await tx.groupMembershipAuditLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: target.id,
+          action,
+          beforeData: { role: target.role, status: target.status },
+          afterData: { role: updated.role, status: updated.status },
+          reason: input.reason,
+          performedByUserId: input.actorUserId,
+          occurredAt: input.now,
+        },
+      });
+      return groupMembershipRecord(updated);
+    });
+  }
 }
 
 const featurePolicyRecord = (

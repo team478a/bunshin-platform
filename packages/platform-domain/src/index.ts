@@ -56,7 +56,13 @@ export type GroupStatus = (typeof GROUP_STATUSES)[number];
 export const GROUP_ROLES = ['MANAGER', 'PARTICIPANT'] as const;
 export type GroupRole = (typeof GROUP_ROLES)[number];
 
-export const GROUP_MEMBERSHIP_STATUSES = ['INVITED', 'ACTIVE', 'DECLINED', 'REVOKED'] as const;
+export const GROUP_MEMBERSHIP_STATUSES = [
+  'INVITED',
+  'ACTIVE',
+  'SUSPENDED',
+  'DECLINED',
+  'REVOKED',
+] as const;
 export type GroupMembershipStatus = (typeof GROUP_MEMBERSHIP_STATUSES)[number];
 
 export const GROUP_INVITATION_STATUSES = ['ACTIVE', 'EXHAUSTED', 'EXPIRED', 'REVOKED'] as const;
