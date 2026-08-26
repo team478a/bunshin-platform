@@ -180,9 +180,10 @@ export function AiProviderConfigurationEditor(props: {
       </section>
 
       <section className="settings-card">
-        <h2>新しい設定を準備する</h2>
-        <p>APIキーがまだなくても保存できます。新しい設定は必ず停止した状態になります。</p>
-        {message ? <p role="status">{message}</p> : null}
+        <h2>設定を登録する</h2>
+        <p>
+          入力後、フォームの一番下にある「設定を保存する」を押してください。保存した設定は、すぐ上の「現在の設定状況」と下の「保存した設定」に表示されます。
+        </p>
         <form onSubmit={(event) => void create(event)}>
           <label>
             使うサービス
@@ -210,8 +211,11 @@ export function AiProviderConfigurationEditor(props: {
             </label>
           ) : null}
           <label>
-            APIキー（まだない場合は空欄）
+            APIキー
             <input name="apiKey" type="password" autoComplete="new-password" minLength={8} />
+            <small>
+              APIキーを登録しない下書きも保存できますが、接続確認と使用開始はできません。
+            </small>
           </label>
           <label>
             1日に使ってよい金額（米ドル）
@@ -260,9 +264,20 @@ export function AiProviderConfigurationEditor(props: {
               placeholder="例：最初の予算を準備"
             />
           </label>
-          <button disabled={busy} type="submit">
-            停止中の下書きを保存
-          </button>
+          <div className="settings-save-action">
+            <p id="ai-settings-save-help">
+              保存だけではAIを使い始めません。保存後に接続確認を行い、確認済みの設定を使用中にします。
+            </p>
+            <button
+              aria-describedby="ai-settings-save-help"
+              className="button button--primary button--full"
+              disabled={busy}
+              type="submit"
+            >
+              {busy ? '保存しています…' : '設定を保存する'}
+            </button>
+            {message ? <p role="status">{message}</p> : null}
+          </div>
         </form>
       </section>
       <section className="settings-card">
