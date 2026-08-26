@@ -6,6 +6,7 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { GroupInvitationEditor } from '../../../../ui/group-invitation-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -177,6 +178,8 @@ export default async function GroupMemberFeaturesPage({
           {errors[query.error] ?? errors.failed}
         </p>
       ) : null}
+
+      <GroupInvitationEditor workspaceId={group.workspaceId} groupId={group.id} />
 
       <section className="settings-card">
         <h2>設定する参加者</h2>

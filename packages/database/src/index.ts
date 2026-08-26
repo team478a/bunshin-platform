@@ -8025,8 +8025,18 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
   }
 
   private async canManageGroup(workspaceId: string, groupId: string, actorUserId: string) {
-    const workspaceManager = await this.canManageWorkspace(workspaceId, actorUserId);
-    if (workspaceManager !== null) return true;
+    const [workspaceManager, platformAdmin] = await Promise.all([
+      this.canManageWorkspace(workspaceId, actorUserId),
+      this.client.platformAdmin.findFirst({
+        where: {
+          userId: actorUserId,
+          status: 'ACTIVE',
+          role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (workspaceManager !== null || platformAdmin !== null) return true;
     return Boolean(
       await this.client.groupMembership.findFirst({
         where: {
@@ -8152,28 +8162,35 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
   }
 
   async declineInvitation(input: Parameters<GroupParticipationRepository['declineInvitation']>[0]) {
-    const invitation = await this.client.groupInvitation.findFirst({
-      where: {
-        tokenHash: input.tokenHash,
-        workspaceId: input.workspaceId,
-        status: 'ACTIVE',
-        expiresAt: { gt: input.now },
-      },
+    return this.client.$transaction(async (tx) => {
+      const invitation = await tx.groupInvitation.findFirst({
+        where: {
+          tokenHash: input.tokenHash,
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          expiresAt: { gt: input.now },
+        },
+      });
+      if (invitation === null || invitation.usedCount >= invitation.maxUses) return null;
+      const consumed = await tx.groupInvitation.updateMany({
+        where: { id: invitation.id, status: 'ACTIVE', usedCount: invitation.usedCount },
+        data: { usedCount: { increment: 1 }, status: 'EXHAUSTED' },
+      });
+      if (consumed.count !== 1) return null;
+      const membership = await tx.groupMembership.upsert({
+        where: { groupId_userId: { groupId: invitation.groupId, userId: input.actorUserId } },
+        create: {
+          workspaceId: input.workspaceId,
+          groupId: invitation.groupId,
+          userId: input.actorUserId,
+          role: invitation.role,
+          status: 'DECLINED',
+          declinedAt: input.now,
+        },
+        update: { status: 'DECLINED', consentedAt: null, declinedAt: input.now },
+      });
+      return groupMembershipRecord(membership);
     });
-    if (invitation === null) return null;
-    const membership = await this.client.groupMembership.upsert({
-      where: { groupId_userId: { groupId: invitation.groupId, userId: input.actorUserId } },
-      create: {
-        workspaceId: input.workspaceId,
-        groupId: invitation.groupId,
-        userId: input.actorUserId,
-        role: invitation.role,
-        status: 'DECLINED',
-        declinedAt: input.now,
-      },
-      update: { status: 'DECLINED', consentedAt: null, declinedAt: input.now },
-    });
-    return groupMembershipRecord(membership);
   }
 
   async leaveGroup(input: Parameters<GroupParticipationRepository['leaveGroup']>[0]) {

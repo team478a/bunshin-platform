@@ -15,8 +15,10 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
 
   try {
     const url = new URL(value, 'https://bunshin.invalid');
-    if (url.origin !== 'https://bunshin.invalid' || url.pathname !== '/today' || url.hash)
-      return null;
+    if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
+    if (/^\/groups\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
+      return url.pathname;
+    if (url.pathname !== '/today') return null;
     if ([...url.searchParams.keys()].some((key) => key !== 'state')) return null;
     if (url.searchParams.getAll('state').length !== 1) return null;
     return missionReturnPath(url.searchParams.get('state') ?? '');

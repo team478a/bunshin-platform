@@ -6,6 +6,7 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
+import { GroupInvitationEditor } from '../../../../../ui/group-invitation-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -164,6 +165,10 @@ export default async function GroupFeaturePage({
           <p>現在は確認だけできます。変更は最高管理者または運用担当者が行います。</p>
         ) : null}
       </section>
+
+      {canChange ? (
+        <GroupInvitationEditor workspaceId={group.workspaceId} groupId={group.id} />
+      ) : null}
 
       {activeDefinitions.map((definition) => {
         const policy = policyByKey.get(definition.key);

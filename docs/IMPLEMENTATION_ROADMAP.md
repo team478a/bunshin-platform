@@ -281,6 +281,7 @@ SNS、ブログ、LINE、商品パックなど今後増える機能を、管理�
 - H1: 拡張可能な機能カタログ、Group利用方針、参加者割当、上限、期間、監査、Isolation — 完了
 - H2: システム管理者によるGroup機能設定UI — 完了
 - H3: Group Managerによる参加者機能設定UI — 完了
+- H3-A: システム管理者・Group Managerの招待発行、本人同意、参加導線 — 完了
 - H4: SOCIAL画像生成など既存機能の共通Gate接続
 - H5: BLOG追加時のカタログ登録とBLOG固有Gate接続
 

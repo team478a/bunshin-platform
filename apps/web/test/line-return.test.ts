@@ -11,6 +11,15 @@ describe('LINE authentication return path', () => {
     expect(missionReturnPath('a+b')).toBe('/today?state=a%2Bb');
   });
 
+  it('accepts only an exact one-time Group invitation path', () => {
+    const token = 'a'.repeat(43);
+    expect(safeLineAuthReturnPath(`/groups/invitations/${token}`)).toBe(
+      `/groups/invitations/${token}`,
+    );
+    expect(safeLineAuthReturnPath(`/groups/invitations/${token}?next=/admin`)).toBeNull();
+    expect(safeLineAuthReturnPath(`/groups/invitations/${token}/extra`)).toBeNull();
+  });
+
   it.each([
     'https://evil.example/today?state=x',
     '//evil.example/today?state=x',

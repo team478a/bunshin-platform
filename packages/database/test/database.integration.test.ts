@@ -3181,6 +3181,10 @@ integration('database ownership boundaries', () => {
     const owner = await accounts.execute({ displayName: 'Permission Owner' });
     const manager = await accounts.execute({ displayName: 'Permission Manager' });
     const participant = await accounts.execute({ displayName: 'Permission Participant' });
+    const systemAdmin = await accounts.execute({ displayName: 'Permission System Admin' });
+    await client.platformAdmin.create({
+      data: { userId: systemAdmin.user.id, role: 'SUPER_ADMIN' },
+    });
     const organization = await client.workspace.create({
       data: {
         type: 'ORGANIZATION',
@@ -3241,6 +3245,39 @@ integration('database ownership boundaries', () => {
         expiresAt: new Date(Date.now() + 60_000),
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.createInvitation({
+        workspaceId: organization.id,
+        actorUserId: systemAdmin.user.id,
+        groupId: managedGroup.id,
+        tokenHash: randomUUID().replaceAll('-', '').padEnd(64, 'f'),
+        role: 'MANAGER',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+    ).resolves.toMatchObject({ groupId: managedGroup.id, role: 'MANAGER' });
+
+    const declinedToken = randomUUID().replaceAll('-', '').padEnd(64, '1');
+    await service.createInvitation({
+      workspaceId: organization.id,
+      actorUserId: manager.user.id,
+      groupId: managedGroup.id,
+      tokenHash: declinedToken,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await expect(
+      service.declineInvitation({
+        workspaceId: organization.id,
+        actorUserId: participant.user.id,
+        tokenHash: declinedToken,
+      }),
+    ).resolves.toMatchObject({ status: 'DECLINED' });
+    await expect(
+      service.acceptInvitation({
+        workspaceId: organization.id,
+        actorUserId: systemAdmin.user.id,
+        tokenHash: declinedToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('enforces the Platform Admin to Group Manager to Participant feature ceiling', async () => {
