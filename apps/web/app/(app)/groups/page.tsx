@@ -9,7 +9,11 @@ const roleLabel = {
   PARTICIPANT: '参加者',
 } as const;
 
-export default async function GroupsPage() {
+export default async function GroupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ joined?: string; declined?: string; error?: string }>;
+}) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
   const db = await import('@bunshin/database');
@@ -33,6 +37,7 @@ export default async function GroupsPage() {
     },
     orderBy: { group: { name: 'asc' } },
   });
+  const query = await searchParams;
 
   return (
     <main className="app-page">
@@ -41,6 +46,22 @@ export default async function GroupsPage() {
         <h1>参加しているグループ</h1>
         <p>参加中のグループと、自分の役割を確認できます。</p>
       </header>
+
+      {query.joined === '1' ? (
+        <p className="notice notice--success" role="status">
+          グループに参加しました。
+        </p>
+      ) : null}
+      {query.declined === '1' ? (
+        <p className="notice" role="status">
+          今回は参加しませんでした。
+        </p>
+      ) : null}
+      {query.error === 'invitation' ? (
+        <p className="notice notice--danger" role="alert">
+          招待リンクを使用できませんでした。期限切れまたは使用済みの可能性があります。
+        </p>
+      ) : null}
 
       {memberships.length === 0 ? (
         <section className="settings-card">
