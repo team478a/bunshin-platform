@@ -40,36 +40,44 @@ export function AiProviderConfigurationEditor(props: {
   const [provider, setProvider] = useState<Provider>('OPENAI');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [actionConfigurationId, setActionConfigurationId] = useState<string | null>(null);
+  const [actionMessages, setActionMessages] = useState<Record<string, string>>({});
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setMessage('');
-    const form = new FormData(event.currentTarget);
-    const response = await fetch('/api/admin/ai-provider-configurations', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        provider,
-        reason: form.get('reason'),
-        model: provider === 'OPENAI' || provider === 'GROK' ? form.get('model') : null,
-        dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
-        monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
-        requestCostUsd: Number(form.get('requestCostUsd')),
-        apiKey: form.get('apiKey') || null,
-      }),
-    });
-    const result = (await response.json()) as {
-      data?: Configuration;
-      error?: { message?: string };
-    };
-    if (!response.ok || !result.data) setMessage(result.error?.message ?? '保存できませんでした。');
-    else {
-      setConfigurations((current) => [result.data!, ...current]);
-      setMessage('停止中の下書きを保存しました。まだ外部サービスには接続しません。');
-      event.currentTarget.reset();
+    try {
+      const form = new FormData(event.currentTarget);
+      const response = await fetch('/api/admin/ai-provider-configurations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          reason: form.get('reason'),
+          model: provider === 'OPENAI' || provider === 'GROK' ? form.get('model') : null,
+          dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
+          monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
+          requestCostUsd: Number(form.get('requestCostUsd')),
+          apiKey: form.get('apiKey') || null,
+        }),
+      });
+      const result = (await response.json()) as {
+        data?: Configuration;
+        error?: { message?: string };
+      };
+      if (!response.ok || !result.data)
+        setMessage(result.error?.message ?? '保存できませんでした。');
+      else {
+        setConfigurations((current) => [result.data!, ...current]);
+        setMessage('停止中の下書きを保存しました。まだ外部サービスには接続しません。');
+        event.currentTarget.reset();
+      }
+    } catch {
+      setMessage('通信に失敗しました。画面を再読み込みして、もう一度お試しください。');
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function action(id: string, name: 'test' | 'activate' | 'pause') {
@@ -81,40 +89,69 @@ export function AiProviderConfigurationEditor(props: {
       !window.confirm('本番で外部サービスを使い始めます。接続確認と予算を確認しましたか？')
     )
       return;
-    setBusy(true);
+    setActionConfigurationId(id);
     setMessage('');
-    const response = await fetch(`/api/admin/ai-provider-configurations/${id}/${name}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      ...(reason ? { body: JSON.stringify({ reason }) } : {}),
-    });
-    const result = (await response.json()) as {
-      data?: Configuration | { success: boolean; errorCategory: string | null };
-      error?: { message?: string };
-    };
-    if (!response.ok || !result.data) {
-      setMessage(result.error?.message ?? '操作できませんでした。');
-    } else if (name === 'test') {
-      const tested = result.data as { success: boolean; errorCategory: string | null };
-      setMessage(
-        tested.success
-          ? '接続できました。'
-          : `接続できませんでした：${connectionErrors[tested.errorCategory ?? ''] ?? '原因を確認できませんでした'}`,
-      );
-    } else {
-      const updated = result.data as Configuration;
-      setConfigurations((current) =>
-        current.map((item) =>
-          item.id === updated.id
-            ? updated
-            : name === 'activate' && item.provider === updated.provider && item.status === 'ACTIVE'
-              ? { ...item, status: 'DISABLED', globallyPaused: true }
+    setActionMessages((current) => ({
+      ...current,
+      [id]: name === 'test' ? '接続を確認しています。少しお待ちください…' : '変更しています…',
+    }));
+    try {
+      const response = await fetch(`/api/admin/ai-provider-configurations/${id}/${name}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+      });
+      const result = (await response.json()) as {
+        data?: Configuration | { success: boolean; errorCategory: string | null };
+        error?: { message?: string };
+      };
+      if (!response.ok || !result.data) {
+        setActionMessages((current) => ({
+          ...current,
+          [id]: result.error?.message ?? '操作できませんでした。',
+        }));
+      } else if (name === 'test') {
+        const tested = result.data as { success: boolean; errorCategory: string | null };
+        const testedAt = new Date().toISOString();
+        setConfigurations((current) =>
+          current.map((item) =>
+            item.id === id
+              ? { ...item, lastVerifiedAt: testedAt, lastErrorCategory: tested.errorCategory }
               : item,
-        ),
-      );
-      setMessage(name === 'activate' ? 'この設定を使い始めました。' : 'すぐに停止しました。');
+          ),
+        );
+        setActionMessages((current) => ({
+          ...current,
+          [id]: tested.success
+            ? '接続できました。次に「この設定を使い始める」を押してください。'
+            : `接続できませんでした：${connectionErrors[tested.errorCategory ?? ''] ?? '原因を確認できませんでした'}`,
+        }));
+      } else {
+        const updated = result.data as Configuration;
+        setConfigurations((current) =>
+          current.map((item) =>
+            item.id === updated.id
+              ? updated
+              : name === 'activate' &&
+                  item.provider === updated.provider &&
+                  item.status === 'ACTIVE'
+                ? { ...item, status: 'DISABLED', globallyPaused: true }
+                : item,
+          ),
+        );
+        setActionMessages((current) => ({
+          ...current,
+          [id]: name === 'activate' ? 'この設定を使い始めました。' : 'すぐに停止しました。',
+        }));
+      }
+    } catch {
+      setActionMessages((current) => ({
+        ...current,
+        [id]: '通信に失敗しました。画面を再読み込みして、もう一度お試しください。',
+      }));
+    } finally {
+      setActionConfigurationId(null);
     }
-    setBusy(false);
   }
 
   return (
@@ -313,19 +350,36 @@ export function AiProviderConfigurationEditor(props: {
                 </p>
                 <p>調査1回の原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
                 {item.apiKeyConfigured ? (
-                  <button disabled={busy} onClick={() => void action(item.id, 'test')}>
-                    接続できるか確認
+                  <button
+                    className="button button--primary"
+                    disabled={actionConfigurationId !== null}
+                    onClick={() => void action(item.id, 'test')}
+                  >
+                    {actionConfigurationId === item.id ? '確認しています…' : '接続できるか確認'}
                   </button>
                 ) : null}
                 {item.status !== 'ACTIVE' && item.lastVerifiedAt && !item.lastErrorCategory ? (
-                  <button disabled={busy} onClick={() => void action(item.id, 'activate')}>
+                  <button
+                    className="button button--primary"
+                    disabled={actionConfigurationId !== null}
+                    onClick={() => void action(item.id, 'activate')}
+                  >
                     この設定を使い始める
                   </button>
                 ) : null}
                 {item.status === 'ACTIVE' && !item.globallyPaused ? (
-                  <button disabled={busy} onClick={() => void action(item.id, 'pause')}>
+                  <button
+                    className="button button--danger"
+                    disabled={actionConfigurationId !== null}
+                    onClick={() => void action(item.id, 'pause')}
+                  >
                     緊急停止
                   </button>
+                ) : null}
+                {actionMessages[item.id] ? (
+                  <p className="settings-action-message" role="status">
+                    {actionMessages[item.id]}
+                  </p>
                 ) : null}
               </li>
             ))}
