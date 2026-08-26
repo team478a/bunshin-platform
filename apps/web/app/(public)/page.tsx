@@ -7,13 +7,13 @@ export default function HomePage() {
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__copy">
           <p className="eyebrow">あなたのための企画担当</p>
-          <h1 id="landing-title">毎日の発信を、あなたのBUNSHINと。</h1>
+          <h1 id="landing-title">毎日の発信を、あなたの分身と。</h1>
           <p>
             あなた専用のSNS戦略を考え、今日やることと投稿案を届けます。内容を選んでコピーし、投稿するだけです。
           </p>
           <div className="landing-actions">
             <Link className="button button--primary" href="/login">
-              BUNSHINをはじめる
+              ワタシワークスをはじめる
             </Link>
             <a className="button button--secondary" href="#how-it-works">
               使い方を見る

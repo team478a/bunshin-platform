@@ -1633,40 +1633,20 @@ a {
 .brand-mark {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
   min-height: 44px;
 }
 
-.brand-mark__symbol {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 32px;
+.brand-mark__image {
+  display: block;
+  width: clamp(172px, 19vw, 220px);
+  height: auto;
+  object-fit: contain;
 }
 
-.brand-mark__circle {
-  position: absolute;
-  top: 1px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-}
-
-.brand-mark__circle--front {
-  left: 1px;
-  z-index: 1;
-  background: #0b2a50;
-}
-
-.brand-mark__circle--back {
-  right: 1px;
-  background: #8c8ff1;
-}
-
-.brand-mark__word {
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+.brand-mark__image--compact {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
 }
 
 .auth-panel {
@@ -1986,8 +1966,8 @@ body:has(.app-shell) > .site-footer {
   backdrop-filter: blur(16px);
 }
 
-.app-header .brand-mark__word {
-  font-size: 1rem;
+.app-header .brand-mark__image {
+  width: clamp(156px, 17vw, 190px);
 }
 
 .app-header__account {

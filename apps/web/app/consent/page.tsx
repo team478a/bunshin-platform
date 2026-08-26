@@ -41,7 +41,7 @@ export default async function ConsentPage() {
           </div>
           <div className="sticky-action">
             <button className="button button--primary button--full" type="submit">
-              同意してBUNSHINを利用する
+              同意してワタシワークスを利用する
             </button>
           </div>
         </form>

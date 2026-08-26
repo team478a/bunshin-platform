@@ -86,7 +86,7 @@ export default async function LineConfigurationPage({
               <h3>LINEログイン</h3>
               <p>Supabase側のログイン設定と、この画面の配信用設定は別々に管理されます。</p>
               <p>
-                BUNSHINへの登録：{latestConfiguration ? '登録済み' : '未登録'} ／ 接続：
+                ワタシワークスへの登録：{latestConfiguration ? '登録済み' : '未登録'} ／ 接続：
                 {!latestConfiguration?.lastVerifiedAt
                   ? '未確認'
                   : latestConfiguration.lastErrorCategory

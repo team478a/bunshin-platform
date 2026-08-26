@@ -1143,3 +1143,12 @@
 - Time: 日次・月次の基準日は実行Use Caseが確定した利用者向け日付を保存し、後からサーバー地域設定で集計結果が変わらないようにする。
 - Visibility: Platform AdminとGroup Managerの画面には今日・今月の利用回数を表示し、Platform Admin画面では停止、開始前、期限切れ、上限到達を明示する。
 - Extension: BLOG、LINE、画像生成などの実処理はProviderや高コスト処理の直前で同じconsume Gateを呼び、機能固有の認可・上限実装を重複させない。
+
+## D-090: 外部サービス名を「ワタシワークス」とする
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Brand: ユーザーへ表示するサービス名、ロゴ、ブラウザアイコン、管理通知の送信名を「ワタシワークス」へ統一する。
+- Domain language: `Bunshin`はユーザーが作成するAI分身を表すDomain用語として維持する。サービス名とAI分身の名称を混同しない。
+- Compatibility: Repository名、DB table・column、API path、型名、環境変数、監査Event名などの技術識別子は変更しない。既存データと外部連携の互換性を守る。
+- Assets: 提供された横長ロゴを画面Headerへ、正方形アイコンをWeb metadataへ使用する。個人の分身画像や生成画像には流用しない。

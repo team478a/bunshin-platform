@@ -13,7 +13,7 @@ export default async function LoginPage({
       <section className="auth-panel" aria-labelledby="login-title">
         <div className="echo-motif" aria-hidden="true" />
         <div className="page-heading page-heading--center">
-          <h1 id="login-title">BUNSHINへログイン</h1>
+          <h1 id="login-title">ワタシワークスへログイン</h1>
           <p>LINEなら、すぐにはじめられます。</p>
         </div>
         {query.sent === '1' && (

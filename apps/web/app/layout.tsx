@@ -3,8 +3,13 @@ import Link from 'next/link';
 import './styles.css';
 
 export const metadata: Metadata = {
-  title: 'BUNSHIN Platform',
-  description: 'BUNSHIN Platform foundation status',
+  title: 'ワタシワークス',
+  applicationName: 'ワタシワークス',
+  description: 'あなた専用のAI分身と、毎日の発信を進める企画サービス',
+  icons: {
+    icon: '/watashiworks-icon.jpg',
+    apple: '/watashiworks-icon.jpg',
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
