@@ -75,6 +75,31 @@ async function saveGroupFeaturePolicy(formData: FormData) {
 
 const statusLabel = { ENABLED: '利用できる', DISABLED: '利用できない' } as const;
 
+function currentPolicyState(
+  policy:
+    | {
+        status: 'ENABLED' | 'DISABLED';
+        startsAt: Date | null;
+        endsAt: Date | null;
+        dailyLimit: number | null;
+        monthlyLimit: number | null;
+      }
+    | null
+    | undefined,
+  usage: { daily: number; monthly: number },
+  now: Date,
+): string {
+  if (!policy) return '未設定のため利用できません';
+  if (policy.status === 'DISABLED') return '停止中です';
+  if (policy.startsAt && policy.startsAt > now) return '開始日時前です';
+  if (policy.endsAt && policy.endsAt <= now) return '期限切れです';
+  if (policy.dailyLimit !== null && usage.daily >= policy.dailyLimit)
+    return '今日の上限に達しました';
+  if (policy.monthlyLimit !== null && usage.monthly >= policy.monthlyLimit)
+    return '今月の上限に達しました';
+  return '現在利用できます';
+}
+
 function localDateTime(value: Date | null): string {
   if (!value) return '';
   return value
@@ -95,6 +120,9 @@ export default async function GroupFeaturePage({
   const groupId = z.uuid().safeParse((await params).groupId);
   if (!groupId.success) notFound();
   const db = await import('@bunshin/database');
+  const localDate = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const now = new Date();
+  const localMonth = localDate.slice(0, 7);
   const admin = await new db.PrismaPlatformAdminRepository().findActivePlatformAdminByUserId(
     actor.userId,
   );
@@ -108,6 +136,10 @@ export default async function GroupFeaturePage({
       status: true,
       workspace: { select: { name: true } },
       featurePolicies: true,
+      featureUsageEvents: {
+        where: { localMonth },
+        select: { featureKey: true, localDate: true },
+      },
       featureAudits: {
         where: { action: 'GROUP_POLICY_SET' },
         include: { performedByUser: { select: { displayName: true } } },
@@ -123,6 +155,20 @@ export default async function GroupFeaturePage({
   const canChange = admin.role === 'SUPER_ADMIN' || admin.role === 'OPERATOR';
   const policyByKey = new Map(group.featurePolicies.map((item) => [item.featureKey, item]));
   const parentName = new Map(definitions.map((item) => [item.key, item.name]));
+  const usageByKey = new Map(
+    activeDefinitions.map((definition) => {
+      const events = group.featureUsageEvents.filter(
+        (event) => event.featureKey === definition.key,
+      );
+      return [
+        definition.key,
+        {
+          daily: events.filter((event) => event.localDate === localDate).length,
+          monthly: events.length,
+        },
+      ];
+    }),
+  );
   const errors: Record<string, string> = {
     invalid: '入力内容を確認してください。変更理由は5文字以上必要です。',
     forbidden: 'この設定を変更する権限がありません。',
@@ -172,6 +218,8 @@ export default async function GroupFeaturePage({
 
       {activeDefinitions.map((definition) => {
         const policy = policyByKey.get(definition.key);
+        const usage = usageByKey.get(definition.key) ?? { daily: 0, monthly: 0 };
+        const currentState = currentPolicyState(policy, usage, now);
         return (
           <section className="settings-card" key={definition.key}>
             <h2>{definition.name}</h2>
@@ -186,6 +234,12 @@ export default async function GroupFeaturePage({
               <strong>{policy ? statusLabel[policy.status] : '未設定（利用できない）'}</strong>
               {policy?.dailyLimit ? ` ／ 1日 ${policy.dailyLimit}回まで` : ''}
               {policy?.monthlyLimit ? ` ／ 1か月 ${policy.monthlyLimit}回まで` : ''}
+            </p>
+            <p>
+              利用回数：今日 {usage.daily}回 ／ 今月 {usage.monthly}回
+            </p>
+            <p>
+              実行時の判定：<strong>{currentState}</strong>
             </p>
             {canChange ? (
               <form className="form-stack" action={saveGroupFeaturePolicy}>

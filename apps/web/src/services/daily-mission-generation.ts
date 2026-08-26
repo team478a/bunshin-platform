@@ -23,6 +23,7 @@ import {
   CampaignSafetyValidationService,
   ExternalTrackingLinkService,
   ExternalLinkPlacementService,
+  GroupFeatureEntitlementService,
   applyExternalLinkPlacement,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
@@ -147,6 +148,26 @@ export class DailyMissionGenerationService {
             at: new Date(`${input.missionDate}T12:00:00.000Z`),
           })
         : null;
+      if (campaign) {
+        const entitlements = new GroupFeatureEntitlementService(
+          new db.PrismaGroupFeatureEntitlementRepository(),
+        );
+        for (const requiredFeature of ['SOCIAL', 'GROUP.CAMPAIGN', 'GROUP.PRODUCT_PACK']) {
+          const access = await entitlements.consumeAccess({
+            workspaceId: input.workspaceId,
+            groupId: campaign.productPack.groupId,
+            actorUserId: input.actorUserId,
+            featureKey: requiredFeature,
+            operationKey: `${input.generationIdempotencyKey}:${requiredFeature}`,
+            localDate: input.missionDate,
+          });
+          if (!access.allowed)
+            throw new ApplicationError('FORBIDDEN', 'group feature is not available', {
+              featureKey: requiredFeature,
+              reason: access.reason,
+            });
+        }
+      }
       const pillars = await new ListContentPillars(new db.PrismaContentPillarRepository()).execute(
         scope,
       );
@@ -353,6 +374,21 @@ export class DailyMissionGenerationService {
             'この商品に使用できる専用URLが設定されていません。管理者へお問い合わせください。',
           );
         if (trackingLink) {
+          const linkAccess = await new GroupFeatureEntitlementService(
+            new db.PrismaGroupFeatureEntitlementRepository(),
+          ).consumeAccess({
+            workspaceId: input.workspaceId,
+            groupId: campaign.productPack.groupId,
+            actorUserId: input.actorUserId,
+            featureKey: 'GROUP.EXTERNAL_TRACKING_LINK',
+            operationKey: `${input.generationIdempotencyKey}:GROUP.EXTERNAL_TRACKING_LINK`,
+            localDate: input.missionDate,
+          });
+          if (!linkAccess.allowed)
+            throw new ApplicationError('FORBIDDEN', 'group tracking link is not available', {
+              featureKey: 'GROUP.EXTERNAL_TRACKING_LINK',
+              reason: linkAccess.reason,
+            });
           const placement = await new ExternalLinkPlacementService(
             new db.PrismaExternalLinkPlacementRepository(),
           ).resolveForGeneration({

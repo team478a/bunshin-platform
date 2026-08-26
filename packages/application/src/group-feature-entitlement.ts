@@ -50,9 +50,14 @@ export interface EffectiveGroupFeatureAccess {
     | 'FEATURE_UNAVAILABLE'
     | 'GROUP_NOT_ALLOWED'
     | 'MEMBER_NOT_ALLOWED'
-    | 'OUTSIDE_VALIDITY_PERIOD';
+    | 'OUTSIDE_VALIDITY_PERIOD'
+    | 'DAILY_LIMIT_REACHED'
+    | 'MONTHLY_LIMIT_REACHED';
   dailyLimit: number | null;
   monthlyLimit: number | null;
+  dailyUsed?: number;
+  monthlyUsed?: number;
+  alreadyConsumed?: boolean;
 }
 
 type AccessInput = {
@@ -80,6 +85,15 @@ export interface GroupFeatureEntitlementRepository {
     groupId: string;
     actorUserId: string;
     featureKey: string;
+    now: Date;
+  }): Promise<EffectiveGroupFeatureAccess | null>;
+  consumeAccess(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    featureKey: string;
+    operationKey: string;
+    localDate: string;
     now: Date;
   }): Promise<EffectiveGroupFeatureAccess | null>;
 }
@@ -145,6 +159,30 @@ export class GroupFeatureEntitlementService {
     const value = await this.repository.resolveAccess({
       ...input,
       featureKey: featureKey(input.featureKey),
+      now: input.now ?? new Date(),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'group membership unavailable');
+    return value;
+  }
+
+  async consumeAccess(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    featureKey: string;
+    operationKey: string;
+    localDate: string;
+    now?: Date;
+  }) {
+    const operationKey = input.operationKey.trim();
+    if (operationKey.length < 8 || operationKey.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid operationKey');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.localDate))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid localDate');
+    const value = await this.repository.consumeAccess({
+      ...input,
+      featureKey: featureKey(input.featureKey),
+      operationKey,
       now: input.now ?? new Date(),
     });
     if (!value) throw new ApplicationError('NOT_FOUND', 'group membership unavailable');

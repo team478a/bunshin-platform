@@ -1132,3 +1132,14 @@
 - Limits: Group上限と参加者上限の小さい方を有効上限とし、日次・月次の利用量判定は各機能の実行Use Case側で共通Gateを通して行う。
 - Isolation: Workspace、Group、Membershipをサーバー側で照合し、他Groupや無効参加者への割当・参照を拒否する。変更理由と変更前後をAudit Logへ保存する。
 - Extension: BLOGや将来機能はFeature Definitionの追加で拡張し、認可ロジックや既存テーブルの列追加を不要にする。API、Job、LINE導線も同じ判定結果を使用する。
+
+## D-089: グループ機能の実行Gateと利用量を共通化する
+
+- 日付: 2026-08-26
+- 状態: Accepted
+- Enforcement: Group Campaignを使うDaily Mission生成では、参加者・Group・Workspaceを照合し、必要な親機能と子機能の設定、期間、日次・月次上限を生成開始時にサーバー側で検証する。
+- Accounting: 利用量はMembership・機能Key・操作Keyの組み合わせで一意に記録する。同じ操作の再試行は二重計上せず、異なる同時操作が上限を越えないよう直列化可能なDB transactionで判定と記録を行う。
+- Semantics: AIや外部Providerの失敗による無制限な再試行と原価超過を防ぐため、利用権を受理した実行試行を利用回数とする。成果物の成功・採用・投稿は既存のActivityや生成記録で別に扱う。
+- Time: 日次・月次の基準日は実行Use Caseが確定した利用者向け日付を保存し、後からサーバー地域設定で集計結果が変わらないようにする。
+- Visibility: Platform AdminとGroup Managerの画面には今日・今月の利用回数を表示し、Platform Admin画面では停止、開始前、期限切れ、上限到達を明示する。
+- Extension: BLOG、LINE、画像生成などの実処理はProviderや高コスト処理の直前で同じconsume Gateを呼び、機能固有の認可・上限実装を重複させない。

@@ -110,6 +110,7 @@ integration('database ownership boundaries', () => {
     await client.productPack.deleteMany();
     await client.groupFeatureAuditLog.deleteMany();
     await client.groupMembershipAuditLog.deleteMany();
+    await client.groupFeatureUsageEvent.deleteMany();
     await client.groupMemberFeatureAssignment.deleteMany();
     await client.groupFeaturePolicy.deleteMany();
     await client.groupInvitation.deleteMany();
@@ -3384,6 +3385,43 @@ integration('database ownership boundaries', () => {
       dailyLimit: 3,
       monthlyLimit: 50,
     });
+    for (const operationKey of ['image-use-1', 'image-use-2', 'image-use-3']) {
+      await expect(
+        service.consumeAccess({
+          workspaceId: organization.id,
+          groupId: group.id,
+          actorUserId: participant.user.id,
+          featureKey: 'SOCIAL.IMAGE_GENERATION',
+          operationKey,
+          localDate: '2026-08-26',
+        }),
+      ).resolves.toMatchObject({ allowed: true });
+    }
+    await expect(
+      service.consumeAccess({
+        workspaceId: organization.id,
+        groupId: group.id,
+        actorUserId: participant.user.id,
+        featureKey: 'SOCIAL.IMAGE_GENERATION',
+        operationKey: 'image-use-3',
+        localDate: '2026-08-26',
+      }),
+    ).resolves.toMatchObject({ allowed: true, alreadyConsumed: true, dailyUsed: 3 });
+    await expect(
+      service.consumeAccess({
+        workspaceId: organization.id,
+        groupId: group.id,
+        actorUserId: participant.user.id,
+        featureKey: 'SOCIAL.IMAGE_GENERATION',
+        operationKey: 'image-use-4',
+        localDate: '2026-08-26',
+      }),
+    ).resolves.toMatchObject({ allowed: false, reason: 'DAILY_LIMIT_REACHED', dailyUsed: 3 });
+    await expect(
+      client.groupFeatureUsageEvent.count({
+        where: { groupMembershipId: participantMembership.id },
+      }),
+    ).resolves.toBe(3);
     await service.setGroupPolicy({
       ...policy,
       featureKey: 'SOCIAL',

@@ -136,6 +136,8 @@ export default async function GroupMemberFeaturesPage({
   const groupId = z.uuid().safeParse((await params).groupId);
   if (!groupId.success) notFound();
   const db = await import('@bunshin/database');
+  const localDate = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const localMonth = localDate.slice(0, 7);
   const groupScope = await db.prisma.group.findFirst({
     where: { id: groupId.data, status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
     select: { workspaceId: true },
@@ -207,6 +209,10 @@ export default async function GroupMemberFeaturesPage({
         orderBy: { occurredAt: 'desc' },
         take: 30,
       },
+      featureUsageEvents: {
+        where: { localMonth },
+        select: { groupMembershipId: true, featureKey: true, localDate: true },
+      },
     },
   });
   if (!group) notFound();
@@ -217,6 +223,9 @@ export default async function GroupMemberFeaturesPage({
   const assignments = new Map(
     (selectedMember?.featureAssignments ?? []).map((item) => [item.featureKey, item]),
   );
+  const selectedUsage = selectedMember
+    ? group.featureUsageEvents.filter((event) => event.groupMembershipId === selectedMember.id)
+    : [];
   const errors: Record<string, string> = {
     invalid: '入力内容を確認してください。変更理由は5文字以上必要です。',
     forbidden: 'グループに許可された範囲を超えているため保存できません。',
@@ -347,6 +356,7 @@ export default async function GroupMemberFeaturesPage({
       {selectedMember
         ? group.featurePolicies.map((policy) => {
             const assignment = assignments.get(policy.featureKey);
+            const usage = selectedUsage.filter((event) => event.featureKey === policy.featureKey);
             return (
               <section className="settings-card" key={policy.id}>
                 <h2>{policy.feature.name}</h2>
@@ -354,6 +364,10 @@ export default async function GroupMemberFeaturesPage({
                 <p>
                   グループ上限：1日 {policy.dailyLimit ?? '上限なし'} ／ 1か月{' '}
                   {policy.monthlyLimit ?? '上限なし'}
+                </p>
+                <p>
+                  利用回数：今日 {usage.filter((event) => event.localDate === localDate).length}回
+                  ／ 今月 {usage.length}回
                 </p>
                 <p>
                   この参加者：

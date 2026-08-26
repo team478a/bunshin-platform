@@ -8538,7 +8538,14 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
   async resolveAccess(
     input: Parameters<GroupFeatureEntitlementRepository['resolveAccess']>[0],
   ): Promise<EffectiveGroupFeatureAccess | null> {
-    const membership = await this.client.groupMembership.findFirst({
+    return this.resolveAccessWith(this.client, input);
+  }
+
+  private async resolveAccessWith(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: Parameters<GroupFeatureEntitlementRepository['resolveAccess']>[0],
+  ): Promise<EffectiveGroupFeatureAccess | null> {
+    const membership = await client.groupMembership.findFirst({
       where: {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
@@ -8561,7 +8568,7 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
         key: string;
         parentKey: string | null;
         status: 'ACTIVE' | 'RETIRED';
-      } | null = await this.client.featureDefinition.findUnique({
+      } | null = await client.featureDefinition.findUnique({
         where: { key: currentKey },
         select: { key: true, parentKey: true, status: true },
       });
@@ -8570,10 +8577,10 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
       currentKey = definition.parentKey;
     }
     const [policies, assignments] = await Promise.all([
-      this.client.groupFeaturePolicy.findMany({
+      client.groupFeaturePolicy.findMany({
         where: { groupId: input.groupId, featureKey: { in: requiredKeys } },
       }),
-      this.client.groupMemberFeatureAssignment.findMany({
+      client.groupMemberFeatureAssignment.findMany({
         where: { groupMembershipId: membership.id, featureKey: { in: requiredKeys } },
       }),
     ]);
@@ -8608,6 +8615,92 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
         ...assignments.map(({ monthlyLimit }) => monthlyLimit),
       ]),
     };
+  }
+
+  async consumeAccess(
+    input: Parameters<GroupFeatureEntitlementRepository['consumeAccess']>[0],
+  ): Promise<EffectiveGroupFeatureAccess | null> {
+    return this.client.$transaction(
+      async (tx) => {
+        const membership = await tx.groupMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        });
+        if (!membership) return null;
+        const existing = await tx.groupFeatureUsageEvent.findUnique({
+          where: {
+            groupMembershipId_featureKey_operationKey: {
+              groupMembershipId: membership.id,
+              featureKey: input.featureKey,
+              operationKey: input.operationKey,
+            },
+          },
+        });
+        const access = await this.resolveAccessWith(tx, input);
+        if (!access || !access.allowed) return access;
+        const localMonth = input.localDate.slice(0, 7);
+        const [dailyUsed, monthlyUsed] = await Promise.all([
+          tx.groupFeatureUsageEvent.count({
+            where: {
+              groupMembershipId: membership.id,
+              featureKey: input.featureKey,
+              localDate: input.localDate,
+            },
+          }),
+          tx.groupFeatureUsageEvent.count({
+            where: {
+              groupMembershipId: membership.id,
+              featureKey: input.featureKey,
+              localMonth,
+            },
+          }),
+        ]);
+        if (existing)
+          return {
+            ...access,
+            dailyUsed,
+            monthlyUsed,
+            alreadyConsumed: true,
+          };
+        if (access.dailyLimit !== null && dailyUsed >= access.dailyLimit)
+          return {
+            ...this.denied('DAILY_LIMIT_REACHED'),
+            dailyUsed,
+            monthlyUsed,
+          };
+        if (access.monthlyLimit !== null && monthlyUsed >= access.monthlyLimit)
+          return {
+            ...this.denied('MONTHLY_LIMIT_REACHED'),
+            dailyUsed,
+            monthlyUsed,
+          };
+        await tx.groupFeatureUsageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: membership.id,
+            featureKey: input.featureKey,
+            actorUserId: input.actorUserId,
+            operationKey: input.operationKey,
+            localDate: input.localDate,
+            localMonth,
+            occurredAt: input.now,
+          },
+        });
+        return {
+          ...access,
+          dailyUsed: dailyUsed + 1,
+          monthlyUsed: monthlyUsed + 1,
+          alreadyConsumed: false,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   private denied(reason: EffectiveGroupFeatureAccess['reason']): EffectiveGroupFeatureAccess {
