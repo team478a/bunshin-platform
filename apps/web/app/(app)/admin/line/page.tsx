@@ -70,11 +70,71 @@ export default async function LineConfigurationPage({
       from: period.from,
       to: period.to,
     });
+    const latestConfiguration = configurations[0] ?? null;
     return (
-      <main>
-        <h1>LINE設定管理</h1>
-        <p>対象環境: {environment}</p>
-        <p>秘密の値は保存後に再表示されません。本番設定の変更には理由が必要です。</p>
+      <main className="app-page">
+        <header className="app-page__heading">
+          <p className="eyebrow">管理者専用</p>
+          <h1>LINE設定管理</h1>
+          <p>LINEログイン、毎日の通知、LINE下部メニューの状態を確認します。</p>
+        </header>
+        <section className="settings-card">
+          <h2>現在の設定状況</h2>
+          <p>対象環境：{environment}</p>
+          <div className="settings-status-list">
+            <article className="settings-status-item">
+              <h3>LINEログイン</h3>
+              <p>Supabase側のログイン設定と、この画面の配信用設定は別々に管理されます。</p>
+              <p>
+                BUNSHINへの登録：{latestConfiguration ? '登録済み' : '未登録'} ／ 接続：
+                {!latestConfiguration?.lastVerifiedAt
+                  ? '未確認'
+                  : latestConfiguration.lastErrorCategory
+                    ? 'エラー'
+                    : '確認済み'}
+              </p>
+            </article>
+            <article className="settings-status-item">
+              <h3>毎日のLINE通知</h3>
+              <p>
+                登録：{latestConfiguration ? 'Secret・Token登録済み' : '未登録'} ／ 使用：
+                {latestConfiguration?.status === 'ACTIVE' ? '使用中' : '停止中'}
+              </p>
+              <p>
+                次にすること：
+                {!latestConfiguration
+                  ? 'Messaging API情報を登録する'
+                  : !latestConfiguration.lastVerifiedAt || latestConfiguration.lastErrorCategory
+                    ? '接続テストを行う'
+                    : latestConfiguration.status !== 'ACTIVE'
+                      ? '確認済みの設定を使用中にする'
+                      : '設定済みです'}
+              </p>
+            </article>
+            <article className="settings-status-item">
+              <h3>LINEの下部メニュー</h3>
+              <p>保存：{richMenus.length > 0 ? `${richMenus.length}件` : '未作成'}</p>
+              <p>
+                公開：{richMenus.some((menu) => menu.status === 'ACTIVE') ? '公開中' : '未公開'}
+              </p>
+            </article>
+          </div>
+          <p>秘密の値は保存後に再表示されません。本番設定の変更には理由が必要です。</p>
+        </section>
+        <section className="settings-card">
+          <h2>初めて設定する手順</h2>
+          <ol>
+            <li>LINE Developersで、同じProvider配下にLINE LoginとMessaging APIを用意します。</li>
+            <li>この画面の「登録URL」をLINE Developersの各設定へ登録します。</li>
+            <li>Channel ID、Secret、Access Tokenを「新しい設定版」へ入力して保存します。</li>
+            <li>保存した設定の「接続テスト」を押します。</li>
+            <li>成功した設定だけを「この設定を使う」で使用中にします。</li>
+          </ol>
+          <p>
+            <a href="https://developers.line.biz/console/">LINE Developers Consoleを開く</a>
+          </p>
+          <p>LINEログインできても、Messaging API設定が未登録なら毎日の通知は送れません。</p>
+        </section>
         <section aria-labelledby="line-operations-heading">
           <h2 id="line-operations-heading">配信状況</h2>
           <p>
