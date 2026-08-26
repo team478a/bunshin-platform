@@ -19,6 +19,7 @@ const adminNavigation = [
   { href: '/admin/audits', label: '変更履歴' },
   { href: '/admin/support', label: '問い合わせ対応' },
   { href: '/admin/access', label: '管理者と権限' },
+  { href: '/admin/groups', label: 'グループ管理' },
   { href: '/admin/trends', label: 'トレンド企画' },
   { href: '/admin/line', label: 'LINE運用' },
   { href: '/admin/legal', label: '法務文書' },
