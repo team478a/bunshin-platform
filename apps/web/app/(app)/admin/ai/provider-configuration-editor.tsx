@@ -80,70 +80,112 @@ export function AiProviderConfigurationEditor(props: {
     }
   }
 
-  async function action(id: string, name: 'test' | 'activate' | 'pause') {
-    const reason = name === 'test' ? null : window.prompt('操作する理由を入力してください。');
-    if (name !== 'test' && !reason) return;
-    if (
-      name === 'activate' &&
-      props.environment === 'PRODUCTION' &&
-      !window.confirm('本番で外部サービスを使い始めます。接続確認と予算を確認しましたか？')
-    )
-      return;
+  async function startUsing(id: string) {
     setActionConfigurationId(id);
     setMessage('');
     setActionMessages((current) => ({
       ...current,
-      [id]: name === 'test' ? '接続を確認しています。少しお待ちください…' : '変更しています…',
+      [id]: '安全に接続できるか確認して、使用を始めています…',
     }));
     try {
-      const response = await fetch(`/api/admin/ai-provider-configurations/${id}/${name}`, {
+      const testResponse = await fetch(`/api/admin/ai-provider-configurations/${id}/test`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        ...(reason ? { body: JSON.stringify({ reason }) } : {}),
       });
-      const result = (await response.json()) as {
-        data?: Configuration | { success: boolean; errorCategory: string | null };
+      const testResult = (await testResponse.json()) as {
+        data?: { success: boolean; errorCategory: string | null };
         error?: { message?: string };
       };
-      if (!response.ok || !result.data) {
+      if (!testResponse.ok || !testResult.data) {
         setActionMessages((current) => ({
           ...current,
-          [id]: result.error?.message ?? '操作できませんでした。',
+          [id]: testResult.error?.message ?? '接続できませんでした。',
         }));
-      } else if (name === 'test') {
-        const tested = result.data as { success: boolean; errorCategory: string | null };
-        const testedAt = new Date().toISOString();
+        return;
+      }
+      if (!testResult.data.success) {
         setConfigurations((current) =>
           current.map((item) =>
             item.id === id
-              ? { ...item, lastVerifiedAt: testedAt, lastErrorCategory: tested.errorCategory }
+              ? {
+                  ...item,
+                  lastVerifiedAt: new Date().toISOString(),
+                  lastErrorCategory: testResult.data?.errorCategory ?? 'PROVIDER_UNAVAILABLE',
+                }
               : item,
           ),
         );
         setActionMessages((current) => ({
           ...current,
-          [id]: tested.success
-            ? '接続できました。次に「この設定を使い始める」を押してください。'
-            : `接続できませんでした：${connectionErrors[tested.errorCategory ?? ''] ?? '原因を確認できませんでした'}`,
+          [id]: `使用を開始できませんでした：${connectionErrors[testResult.data?.errorCategory ?? ''] ?? '原因を確認できませんでした'}`,
         }));
-      } else {
-        const updated = result.data as Configuration;
-        setConfigurations((current) =>
-          current.map((item) =>
-            item.id === updated.id
-              ? updated
-              : name === 'activate' &&
-                  item.provider === updated.provider &&
-                  item.status === 'ACTIVE'
-                ? { ...item, status: 'DISABLED', globallyPaused: true }
-                : item,
-          ),
-        );
+        return;
+      }
+
+      const activateResponse = await fetch(`/api/admin/ai-provider-configurations/${id}/activate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reason: '管理画面から接続確認後に使用開始' }),
+      });
+      const activateResult = (await activateResponse.json()) as {
+        data?: Configuration;
+        error?: { message?: string };
+      };
+      if (!activateResponse.ok || !activateResult.data) {
         setActionMessages((current) => ({
           ...current,
-          [id]: name === 'activate' ? 'この設定を使い始めました。' : 'すぐに停止しました。',
+          [id]: activateResult.error?.message ?? '使用を開始できませんでした。',
         }));
+        return;
       }
+      const updated = activateResult.data;
+      setConfigurations((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? updated
+            : item.provider === updated.provider && item.status === 'ACTIVE'
+              ? { ...item, status: 'DISABLED', globallyPaused: true }
+              : item,
+        ),
+      );
+      setActionMessages((current) => ({ ...current, [id]: '使用中になりました。' }));
+    } catch {
+      setActionMessages((current) => ({
+        ...current,
+        [id]: '通信に失敗しました。画面を再読み込みして、もう一度お試しください。',
+      }));
+    } finally {
+      setActionConfigurationId(null);
+    }
+  }
+
+  async function pause(id: string) {
+    const reason = window.prompt('停止する理由を入力してください。');
+    if (!reason) return;
+    setActionConfigurationId(id);
+    setActionMessages((current) => ({ ...current, [id]: '停止しています…' }));
+    try {
+      const response = await fetch(`/api/admin/ai-provider-configurations/${id}/pause`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const result = (await response.json()) as {
+        data?: Configuration;
+        error?: { message?: string };
+      };
+      if (!response.ok || !result.data) {
+        setActionMessages((current) => ({
+          ...current,
+          [id]: result.error?.message ?? '停止できませんでした。',
+        }));
+        return;
+      }
+      const updated = result.data;
+      setConfigurations((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setActionMessages((current) => ({ ...current, [id]: '停止しました。' }));
     } catch {
       setActionMessages((current) => ({
         ...current,
@@ -179,11 +221,9 @@ export function AiProviderConfigurationEditor(props: {
                   次にすること：
                   {!item?.apiKeyConfigured
                     ? 'APIキーを登録する'
-                    : !item.lastVerifiedAt || item.lastErrorCategory
-                      ? '接続できるか確認する'
-                      : item.status !== 'ACTIVE'
-                        ? 'この設定を使い始める'
-                        : '設定済みです'}
+                    : item.status !== 'ACTIVE'
+                      ? 'この設定を使い始める'
+                      : '設定済みです'}
                 </p>
               </article>
             );
@@ -196,8 +236,8 @@ export function AiProviderConfigurationEditor(props: {
         <ol>
           <li>利用するサービスの公式管理画面でAPIキーを作ります。</li>
           <li>APIキーを下のフォームへ一度だけ貼り付け、予算と変更理由を入力します。</li>
-          <li>保存した設定で「接続できるか確認」を押します。</li>
-          <li>成功したら「この設定を使い始める」を押します。</li>
+          <li>保存した設定で「この設定を使い始める」を押します。</li>
+          <li>接続確認は自動で行われ、成功した場合だけ使用中になります。</li>
         </ol>
         <ul>
           <li>
@@ -320,7 +360,7 @@ export function AiProviderConfigurationEditor(props: {
       <section className="settings-card">
         <h2>保存した設定</h2>
         <p>
-          「接続できるか確認」は外部サービスへ最小の確認リクエストを送り、検索サービスでは少量の利用枠を使う場合があります。
+          「この設定を使い始める」を押すと、安全に接続できるか自動確認します。検索サービスでは少量の利用枠を使う場合があります。
         </p>
         {configurations.length === 0 ? (
           <p>まだ設定はありません。</p>
@@ -349,29 +389,22 @@ export function AiProviderConfigurationEditor(props: {
                   {usd(item.monthlyBudgetUsdMicros)}
                 </p>
                 <p>調査1回の原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
-                {item.apiKeyConfigured ? (
+                {item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
                   <button
                     className="button button--primary"
                     disabled={actionConfigurationId !== null}
-                    onClick={() => void action(item.id, 'test')}
+                    onClick={() => void startUsing(item.id)}
                   >
-                    {actionConfigurationId === item.id ? '確認しています…' : '接続できるか確認'}
-                  </button>
-                ) : null}
-                {item.status !== 'ACTIVE' && item.lastVerifiedAt && !item.lastErrorCategory ? (
-                  <button
-                    className="button button--primary"
-                    disabled={actionConfigurationId !== null}
-                    onClick={() => void action(item.id, 'activate')}
-                  >
-                    この設定を使い始める
+                    {actionConfigurationId === item.id
+                      ? '使用を始めています…'
+                      : 'この設定を使い始める'}
                   </button>
                 ) : null}
                 {item.status === 'ACTIVE' && !item.globallyPaused ? (
                   <button
                     className="button button--danger"
                     disabled={actionConfigurationId !== null}
-                    onClick={() => void action(item.id, 'pause')}
+                    onClick={() => void pause(item.id)}
                   >
                     緊急停止
                   </button>
