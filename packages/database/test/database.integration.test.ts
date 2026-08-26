@@ -13,6 +13,7 @@ import {
   ProductPackService,
   AdvertisingSafetyService,
   CampaignService,
+  GroupFeatureEntitlementService,
 } from '@bunshin/application';
 import {
   ActivateSocialProfile,
@@ -84,6 +85,7 @@ import {
   PrismaProductPackRepository,
   PrismaAdvertisingSafetyRepository,
   PrismaCampaignRepository,
+  PrismaGroupFeatureEntitlementRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -106,6 +108,9 @@ integration('database ownership boundaries', () => {
     await client.productPackRule.deleteMany();
     await client.productPackVersion.deleteMany();
     await client.productPack.deleteMany();
+    await client.groupFeatureAuditLog.deleteMany();
+    await client.groupMemberFeatureAssignment.deleteMany();
+    await client.groupFeaturePolicy.deleteMany();
     await client.groupInvitation.deleteMany();
     await client.groupMembership.deleteMany();
     await client.group.deleteMany();
@@ -3236,6 +3241,128 @@ integration('database ownership boundaries', () => {
         expiresAt: new Date(Date.now() + 60_000),
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('enforces the Platform Admin to Group Manager to Participant feature ceiling', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const platformAdmin = await accounts.execute({ displayName: 'Feature Platform Admin' });
+    const readOnlyAdmin = await accounts.execute({ displayName: 'Feature Read Only' });
+    const owner = await accounts.execute({ displayName: 'Feature Group Manager' });
+    const participant = await accounts.execute({ displayName: 'Feature Participant' });
+    const outsider = await accounts.execute({ displayName: 'Feature Outsider' });
+    await client.platformAdmin.createMany({
+      data: [
+        { userId: platformAdmin.user.id, role: 'SUPER_ADMIN' },
+        { userId: readOnlyAdmin.user.id, role: 'READ_ONLY' },
+      ],
+    });
+    const organization = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: `Feature Organization ${randomUUID()}`,
+        memberships: { create: { userId: owner.user.id, role: 'OWNER' } },
+      },
+    });
+    const groups = new GroupParticipationService(new PrismaGroupParticipationRepository(client));
+    const group = await groups.createGroup({
+      workspaceId: organization.id,
+      actorUserId: owner.user.id,
+      name: `Feature Group ${randomUUID()}`,
+    });
+    const participantMembership = await client.groupMembership.create({
+      data: {
+        workspaceId: organization.id,
+        groupId: group.id,
+        userId: participant.user.id,
+        role: 'PARTICIPANT',
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    await client.workspaceMembership.create({
+      data: { workspaceId: organization.id, userId: participant.user.id, role: 'MEMBER' },
+    });
+    const service = new GroupFeatureEntitlementService(
+      new PrismaGroupFeatureEntitlementRepository(client),
+    );
+    const policy = {
+      workspaceId: organization.id,
+      groupId: group.id,
+      status: 'ENABLED' as const,
+      dailyLimit: 5,
+      monthlyLimit: 100,
+      reason: '画像生成テストを許可',
+      actorUserId: platformAdmin.user.id,
+    };
+    await service.setGroupPolicy({ ...policy, featureKey: 'SOCIAL' });
+    await service.setGroupPolicy({ ...policy, featureKey: 'SOCIAL.IMAGE_GENERATION' });
+    await expect(
+      service.setGroupPolicy({
+        ...policy,
+        actorUserId: readOnlyAdmin.user.id,
+        featureKey: 'BLOG',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    const assignment = {
+      workspaceId: organization.id,
+      groupId: group.id,
+      groupMembershipId: participantMembership.id,
+      status: 'ENABLED' as const,
+      dailyLimit: 3,
+      monthlyLimit: 50,
+      reason: 'テスト参加者へ割り当て',
+      actorUserId: owner.user.id,
+    };
+    await service.setMemberAssignment({ ...assignment, featureKey: 'SOCIAL' });
+    await service.setMemberAssignment({
+      ...assignment,
+      featureKey: 'SOCIAL.IMAGE_GENERATION',
+    });
+    await expect(
+      service.setMemberAssignment({
+        ...assignment,
+        actorUserId: participant.user.id,
+        featureKey: 'SOCIAL.IMAGE_GENERATION',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.setMemberAssignment({
+        ...assignment,
+        actorUserId: outsider.user.id,
+        featureKey: 'SOCIAL.IMAGE_GENERATION',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      service.resolveAccess({
+        workspaceId: organization.id,
+        groupId: group.id,
+        actorUserId: participant.user.id,
+        featureKey: 'SOCIAL.IMAGE_GENERATION',
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      reason: 'ALLOWED',
+      dailyLimit: 3,
+      monthlyLimit: 50,
+    });
+    await service.setGroupPolicy({
+      ...policy,
+      featureKey: 'SOCIAL',
+      status: 'DISABLED',
+      reason: '親機能を停止',
+    });
+    await expect(
+      service.resolveAccess({
+        workspaceId: organization.id,
+        groupId: group.id,
+        actorUserId: participant.user.id,
+        featureKey: 'SOCIAL.IMAGE_GENERATION',
+      }),
+    ).resolves.toMatchObject({ allowed: false, reason: 'GROUP_NOT_ALLOWED' });
+    await expect(client.groupFeatureAuditLog.count({ where: { groupId: group.id } })).resolves.toBe(
+      5,
+    );
   });
 
   it('keeps official product-pack management isolated by organization Workspace', async () => {

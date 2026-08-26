@@ -1120,3 +1120,15 @@
 - Environment: Stagingは新設せず、本番限定公開と対象commit別の追記型Production Gateで保護する。
 - General release: Phase 10の一般向け画像・動画Providerは前倒しせず、GroupパイロットのGo基準達成後も別途人間判断する。
 - Detail: `docs/GROUP_SNS_IMAGE_GENERATION_REBASELINE.md`
+
+## D-088: グループ役割と拡張可能な機能利用権限を分離する
+
+- 日付: 2026-08-26
+- 状態: Accepted
+- Separation: システム管理者・グループ管理者などの管理役割と、SNS・ブログなどを利用できる機能権限を別resourceとして管理する。既存Bunshin Capabilityは人格単位の第3 Gateとして維持する。
+- Catalog: 機能は固定Enumや機能ごとのDB列ではなく、`SOCIAL.IMAGE_GENERATION`や`BLOG.ARTICLE_GENERATION`のような安定した階層Keyで登録する。Provider名や画面名をKeyにしない。
+- Delegation: Platform AdminがGroupへ利用可能な機能と上限を設定し、Group Managerはその範囲内だけを自Groupの有効な参加者へ割り当てる。上位権限を超える再委譲を拒否する。
+- Default: 未登録・停止・期限外は拒否する。親機能を停止した場合は、その配下の全機能を停止する。階層は将来の多段追加に対応する。
+- Limits: Group上限と参加者上限の小さい方を有効上限とし、日次・月次の利用量判定は各機能の実行Use Case側で共通Gateを通して行う。
+- Isolation: Workspace、Group、Membershipをサーバー側で照合し、他Groupや無効参加者への割当・参照を拒否する。変更理由と変更前後をAudit Logへ保存する。
+- Extension: BLOGや将来機能はFeature Definitionの追加で拡張し、認可ロジックや既存テーブルの列追加を不要にする。API、Job、LINE導線も同じ判定結果を使用する。

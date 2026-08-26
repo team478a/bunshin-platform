@@ -67,6 +67,21 @@ enum GroupInvitationStatus {
   REVOKED
 }
 
+enum FeatureDefinitionStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum GroupFeatureAccessStatus {
+  ENABLED
+  DISABLED
+}
+
+enum GroupFeatureAuditAction {
+  GROUP_POLICY_SET
+  MEMBER_ASSIGNMENT_SET
+}
+
 enum ProductPackStatus {
   DRAFT
   ACTIVE
@@ -696,6 +711,9 @@ model User {
   externalLinkPlacementsCreated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementCreator")
   externalLinkPlacementsUpdated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementUpdater")
   contentLinkUsages                 ContentLinkUsage[]                  @relation("ContentLinkUsageUser")
+  groupFeaturePoliciesSet           GroupFeaturePolicy[]                @relation("GroupFeaturePolicyActor")
+  groupFeatureAssignmentsSet        GroupMemberFeatureAssignment[]      @relation("GroupMemberFeatureAssignmentActor")
+  groupFeatureAuditsPerformed       GroupFeatureAuditLog[]              @relation("GroupFeatureAuditActor")
 
   @@index([status])
   @@map("users")
@@ -769,6 +787,9 @@ model Workspace {
   externalTrackingAudits      ExternalTrackingAuditLog[]
   externalLinkPlacements      ExternalLinkPlacementTemplate[]
   contentLinkUsages           ContentLinkUsage[]
+  groupFeaturePolicies        GroupFeaturePolicy[]
+  groupFeatureAssignments     GroupMemberFeatureAssignment[]
+  groupFeatureAudits          GroupFeatureAuditLog[]
 
   @@index([status])
   @@map("workspaces")
@@ -809,6 +830,9 @@ model Group {
   externalTrackingAudits     ExternalTrackingAuditLog[]
   externalLinkPlacements     ExternalLinkPlacementTemplate[]
   contentLinkUsages          ContentLinkUsage[]
+  featurePolicies            GroupFeaturePolicy[]
+  featureAssignments         GroupMemberFeatureAssignment[]
+  featureAudits              GroupFeatureAuditLog[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -832,6 +856,8 @@ model GroupMembership {
   user                       User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalTrackingIdentities ExternalTrackingMemberIdentity[]
   contentLinkUsages          ContentLinkUsage[]
+  featureAssignments         GroupMemberFeatureAssignment[]
+  featureAudits              GroupFeatureAuditLog[]
 
   @@unique([groupId, userId])
   @@index([workspaceId, userId, status])
@@ -859,6 +885,98 @@ model GroupInvitation {
   @@index([workspaceId, groupId, status])
   @@index([expiresAt, status])
   @@map("group_invitations")
+}
+
+model FeatureDefinition {
+  key               String                         @id @db.VarChar(120)
+  parentKey         String?                        @map("parent_key") @db.VarChar(120)
+  name              String                         @db.VarChar(160)
+  description       String                         @db.VarChar(1000)
+  status            FeatureDefinitionStatus        @default(ACTIVE)
+  configSchema      Json                           @default("{}") @map("config_schema")
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  parent            FeatureDefinition?             @relation("FeatureHierarchy", fields: [parentKey], references: [key], onDelete: Restrict)
+  children          FeatureDefinition[]            @relation("FeatureHierarchy")
+  groupPolicies     GroupFeaturePolicy[]
+  memberAssignments GroupMemberFeatureAssignment[]
+  audits            GroupFeatureAuditLog[]
+
+  @@index([parentKey, status])
+  @@map("feature_definitions")
+}
+
+model GroupFeaturePolicy {
+  id           String                   @id @default(uuid()) @db.Uuid
+  workspaceId  String                   @map("workspace_id") @db.Uuid
+  groupId      String                   @map("group_id") @db.Uuid
+  featureKey   String                   @map("feature_key") @db.VarChar(120)
+  status       GroupFeatureAccessStatus @default(DISABLED)
+  dailyLimit   Int?                     @map("daily_limit")
+  monthlyLimit Int?                     @map("monthly_limit")
+  config       Json                     @default("{}")
+  startsAt     DateTime?                @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime?                @map("ends_at") @db.Timestamptz(6)
+  setByUserId  String                   @map("set_by_user_id") @db.Uuid
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace    Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group        Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  feature      FeatureDefinition        @relation(fields: [featureKey], references: [key], onDelete: Restrict)
+  setByUser    User                     @relation("GroupFeaturePolicyActor", fields: [setByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, featureKey])
+  @@index([workspaceId, groupId, status])
+  @@map("group_feature_policies")
+}
+
+model GroupMemberFeatureAssignment {
+  id                String                   @id @default(uuid()) @db.Uuid
+  workspaceId       String                   @map("workspace_id") @db.Uuid
+  groupId           String                   @map("group_id") @db.Uuid
+  groupMembershipId String                   @map("group_membership_id") @db.Uuid
+  featureKey        String                   @map("feature_key") @db.VarChar(120)
+  status            GroupFeatureAccessStatus @default(DISABLED)
+  dailyLimit        Int?                     @map("daily_limit")
+  monthlyLimit      Int?                     @map("monthly_limit")
+  config            Json                     @default("{}")
+  startsAt          DateTime?                @map("starts_at") @db.Timestamptz(6)
+  endsAt            DateTime?                @map("ends_at") @db.Timestamptz(6)
+  assignedByUserId  String                   @map("assigned_by_user_id") @db.Uuid
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership   GroupMembership          @relation(fields: [groupMembershipId], references: [id], onDelete: Cascade)
+  feature           FeatureDefinition        @relation(fields: [featureKey], references: [key], onDelete: Restrict)
+  assignedByUser    User                     @relation("GroupMemberFeatureAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([groupMembershipId, featureKey])
+  @@index([workspaceId, groupId, status])
+  @@map("group_member_feature_assignments")
+}
+
+model GroupFeatureAuditLog {
+  id                String                  @id @default(uuid()) @db.Uuid
+  workspaceId       String                  @map("workspace_id") @db.Uuid
+  groupId           String                  @map("group_id") @db.Uuid
+  groupMembershipId String?                 @map("group_membership_id") @db.Uuid
+  featureKey        String                  @map("feature_key") @db.VarChar(120)
+  action            GroupFeatureAuditAction
+  beforeData        Json?                   @map("before_data")
+  afterData         Json                    @map("after_data")
+  reason            String                  @db.VarChar(1000)
+  performedByUserId String                  @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime                @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership   GroupMembership?        @relation(fields: [groupMembershipId], references: [id], onDelete: SetNull)
+  feature           FeatureDefinition       @relation(fields: [featureKey], references: [key], onDelete: Restrict)
+  performedByUser   User                    @relation("GroupFeatureAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, occurredAt])
+  @@index([groupMembershipId, occurredAt])
+  @@map("group_feature_audit_logs")
 }
 
 model ProductPack {

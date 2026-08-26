@@ -2326,6 +2326,7 @@ export * from './generation-context';
 export * from './personality-version';
 export * from './memory-selector';
 export * from './group-participation';
+export * from './group-feature-entitlement';
 export * from './product-pack';
 export * from './advertising-safety';
 export * from './campaign-participation';
