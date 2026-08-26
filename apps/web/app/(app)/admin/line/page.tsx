@@ -121,20 +121,21 @@ export default async function LineConfigurationPage({
           </div>
           <p>秘密の値は保存後に再表示されません。本番設定の変更には理由が必要です。</p>
         </section>
-        <section className="settings-card">
-          <h2>初めて設定する手順</h2>
-          <ol>
-            <li>LINE Developersで、同じProvider配下にLINE LoginとMessaging APIを用意します。</li>
-            <li>この画面の「登録URL」をLINE Developersの各設定へ登録します。</li>
-            <li>Channel ID、Secret、Access Tokenを「新しい設定版」へ入力して保存します。</li>
-            <li>保存した設定の「接続テスト」を押します。</li>
-            <li>成功した設定だけを「この設定を使う」で使用中にします。</li>
-          </ol>
-          <p>
-            <a href="https://developers.line.biz/console/">LINE Developers Consoleを開く</a>
-          </p>
-          <p>LINEログインできても、Messaging API設定が未登録なら毎日の通知は送れません。</p>
-        </section>
+        {!latestConfiguration ? (
+          <section className="settings-card">
+            <h2>初めて設定する手順</h2>
+            <ol>
+              <li>LINEの管理画面で、ログイン用と通知用の設定を用意します。</li>
+              <li>この画面に表示される登録URLを、LINEの管理画面へ登録します。</li>
+              <li>LINEで発行された番号と秘密の値を、この画面へ入力して保存します。</li>
+              <li>保存した設定の接続を確認し、使用中にします。</li>
+            </ol>
+            <p>
+              <a href="https://developers.line.biz/console/">LINEの管理画面を開く</a>
+            </p>
+            <p>ログイン設定だけでは毎日の通知は送れません。通知用の設定も必要です。</p>
+          </section>
+        ) : null}
         <section aria-labelledby="line-operations-heading">
           <h2 id="line-operations-heading">配信状況</h2>
           <p>

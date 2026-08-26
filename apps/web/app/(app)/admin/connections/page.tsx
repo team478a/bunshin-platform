@@ -64,6 +64,18 @@ export default async function ConnectionsPage() {
   );
   const latestLine = line[0] ?? null;
   const latestEmail = email[0] ?? null;
+  const allConfiguredServicesReady =
+    latestAi.every(
+      (item) =>
+        item.apiKeyConfigured &&
+        item.status === 'ACTIVE' &&
+        item.lastVerifiedAt &&
+        !item.lastErrorCategory,
+    ) &&
+    latestAi.length > 0 &&
+    latestLine?.status === 'ACTIVE' &&
+    latestLine.lastVerifiedAt &&
+    !latestLine.lastErrorCategory;
 
   return (
     <main className="app-page">
@@ -148,15 +160,17 @@ export default async function ConnectionsPage() {
         </div>
       </section>
 
-      <section className="settings-card">
-        <h2>設定は3段階です</h2>
-        <ol>
-          <li>外部サービスでAPIキーやChannel情報を作ります。</li>
-          <li>この管理画面へ登録し、「接続できるか確認」を実行します。</li>
-          <li>確認に成功した設定だけを「使用中」にします。</li>
-        </ol>
-        <p>登録しただけでは使用されません。接続確認と使用開始まで行ってください。</p>
-      </section>
+      {!allConfiguredServicesReady ? (
+        <section className="settings-card">
+          <h2>まだ設定が終わっていないサービスがあります</h2>
+          <ol>
+            <li>使いたいサービスの秘密のキーを登録します。</li>
+            <li>接続を確認します。</li>
+            <li>確認に成功した設定を使用中にします。</li>
+          </ol>
+          <p>上の一覧に表示される「次にすること」を順番に行ってください。</p>
+        </section>
+      ) : null}
 
       <section className="settings-card">
         <h2>安全のため画面から変更しないもの</h2>

@@ -35,7 +35,7 @@ export default async function AdminAlertsPage() {
       <header className="app-page__heading">
         <p className="eyebrow">管理者専用</p>
         <h1>運用通知</h1>
-        <p>AI、LINE、定期処理、退会、問い合わせの異常や確認事項をまとめて表示します。</p>
+        <p>今、対応が必要なことだけを表示します。問題がない項目は表示しません。</p>
       </header>
       <section className="settings-card">
         <h2>現在の状態</h2>
@@ -64,17 +64,10 @@ export default async function AdminAlertsPage() {
           </h2>
           <p>{alert.guidance}</p>
           <Link className="button button--secondary" href={alert.href}>
-            対応画面を開く
+            設定を確認する
           </Link>
         </article>
       ))}
-      <section className="settings-card">
-        <h2>この画面で行わないこと</h2>
-        <p>
-          通知を消すためだけの「既読」操作はありません。原因を解消すると次回表示時に通知が消えます。
-        </p>
-        <p>APIキー、Token、投稿本文、ユーザーの秘密情報は表示しません。</p>
-      </section>
     </main>
   );
 }

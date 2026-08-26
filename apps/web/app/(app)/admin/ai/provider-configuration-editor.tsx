@@ -231,30 +231,32 @@ export function AiProviderConfigurationEditor(props: {
         </div>
       </section>
 
-      <section className="settings-card">
-        <h2>APIキーを準備する手順</h2>
-        <ol>
-          <li>利用するサービスの公式管理画面でAPIキーを作ります。</li>
-          <li>APIキーを下のフォームへ一度だけ貼り付け、予算と変更理由を入力します。</li>
-          <li>保存した設定で「この設定を使い始める」を押します。</li>
-          <li>接続確認は自動で行われ、成功した場合だけ使用中になります。</li>
-        </ol>
-        <ul>
-          <li>
-            OpenAI：<a href="https://platform.openai.com/api-keys">APIキー管理を開く</a>
-          </li>
-          <li>
-            Grok：<a href="https://console.x.ai/">xAI Consoleを開く</a>
-          </li>
-          <li>
-            Exa：<a href="https://dashboard.exa.ai/">Exa Dashboardを開く</a>
-          </li>
-          <li>
-            Firecrawl：<a href="https://www.firecrawl.dev/app/api-keys">APIキー管理を開く</a>
-          </li>
-        </ul>
-        <p>APIキーはチャット、変更理由、メモ欄へ書かないでください。</p>
-      </section>
+      {configurations.some((item) => item.apiKeyConfigured) ? null : (
+        <section className="settings-card">
+          <h2>初めてAIを設定する手順</h2>
+          <ol>
+            <li>利用するサービスの公式管理画面でAPIキーを作ります。</li>
+            <li>APIキーを下のフォームへ一度だけ貼り付け、予算と変更理由を入力します。</li>
+            <li>保存した設定で「この設定を使い始める」を押します。</li>
+            <li>接続確認は自動で行われ、成功した場合だけ使用中になります。</li>
+          </ol>
+          <ul>
+            <li>
+              OpenAI：<a href="https://platform.openai.com/api-keys">APIキー管理を開く</a>
+            </li>
+            <li>
+              Grok：<a href="https://console.x.ai/">xAI Consoleを開く</a>
+            </li>
+            <li>
+              Exa：<a href="https://dashboard.exa.ai/">Exa Dashboardを開く</a>
+            </li>
+            <li>
+              Firecrawl：<a href="https://www.firecrawl.dev/app/api-keys">APIキー管理を開く</a>
+            </li>
+          </ul>
+          <p>APIキーはチャット、変更理由、メモ欄へ書かないでください。</p>
+        </section>
+      )}
 
       <section className="settings-card">
         <h2>設定を登録する</h2>
