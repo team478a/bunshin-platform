@@ -144,6 +144,14 @@ export function productionGateChecklist(input: {
       href: '/admin/guide',
     },
     {
+      code: 'EXTERNAL_TRACKING_SMOKE',
+      title: '専用URLの本番確認',
+      status: manualStatus('EXTERNAL_TRACKING_SMOKE'),
+      guidance:
+        'テスト用の参加者・商品・専用URLで、選択、表示、コピー、履歴、停止後の拒否をスマートフォンから確認します。',
+      href: '/admin/guide',
+    },
+    {
       code: 'HUMAN_APPROVAL',
       title: '責任者の最終承認',
       status: manualStatus('FINAL_APPROVAL'),

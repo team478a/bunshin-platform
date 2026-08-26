@@ -9,6 +9,7 @@ const checks = [
   ['ACCOUNT_DELETION_DRY_RUN', '退会処理の予行練習'],
   ['LINE_GO_NO_GO', 'LINE配信を始めてよいかの確認'],
   ['TREND_RESEARCH_SMOKE', '話題調査が本番で正しく動くこと'],
+  ['EXTERNAL_TRACKING_SMOKE', '専用URLが正しく安全に入ること'],
   ['FINAL_APPROVAL', '責任者の最終承認'],
 ] as const;
 type CheckKey = (typeof checks)[number][0];

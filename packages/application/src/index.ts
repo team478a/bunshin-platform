@@ -1344,6 +1344,7 @@ export const PRODUCTION_GATE_CHECK_KEYS = [
   'ACCOUNT_DELETION_DRY_RUN',
   'LINE_GO_NO_GO',
   'TREND_RESEARCH_SMOKE',
+  'EXTERNAL_TRACKING_SMOKE',
   'FINAL_APPROVAL',
 ] as const;
 export type ProductionGateCheckKey = (typeof PRODUCTION_GATE_CHECK_KEYS)[number];

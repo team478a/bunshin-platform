@@ -39,6 +39,7 @@
 
 - [グループ発信](GROUP_BROADCAST_REBASELINE.md)
 - [外部成果計測URL連携](EXTERNAL_TRACKING_LINK_REBASELINE.md)
+- [外部成果計測URL連携 Production Gate](EXTERNAL_TRACKING_PRODUCTION_GATE.md)
 
 ## 文書の優先順位
 
