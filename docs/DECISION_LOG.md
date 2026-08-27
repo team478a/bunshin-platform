@@ -1314,3 +1314,15 @@
 - Verification: 最終状態と完成URLは環境別APIキーを使ってCreatomate status APIから取得し直す。完成物Host・形式・容量検査とPrivate Storage保存は既存経路を再利用する。
 - Resilience: Webhook再送は冪等に処理し、Webhook欠落時のためPolling Jobも残す。Provider応答本文、APIキー、完成URLをログ・DB・監査情報へ残さない。
 - Deferred: 管理者向けRender監視と手動再実行、成功本数の確定、LINE完成通知はV-5B3B/Cで実装する。
+
+## D-106: Renderの手動再実行は失敗発生単位で一度だけ許可する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Visibility: 管理画面には現在環境のRenderだけを表示し、台本本文、外部完成URL、APIキー、Provider応答を表示しない。
+- Authorization: 閲覧はシステム管理者、再実行は`SUPER_ADMIN`または`OPERATOR`に限定する。再実行時もWorkspace、Group、User、Membership、動画機能権限を再検証する。
+- Retry Policy: Rate Limit、Timeout、通信・Provider一時障害等の安全な分類だけを対象とし、理由入力を必須とする。設定不正や認証失敗は再実行せず、先に設定を直す。
+- Idempotency: `videoRenderId + failedAtSnapshot`をDBで一意にし、同じ失敗に対する二重要求を拒否する。再度失敗して失敗時刻が変わった場合だけ、新しい運用判断として再実行できる。
+- Provider Safety: 外部Job IDが存在するRenderは状態確認から再開し、新しい外部Renderを送信しない。外部Job IDがない場合だけ送信待ちへ戻す。
+- Audit: 要求者、環境、理由、Render、Job、日時を追記型履歴へ保存する。秘密値やProvider応答は保存しない。
+- Deferred: 完成本数の確定とLINE完成通知はV-5B3Cで実装する。
