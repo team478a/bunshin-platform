@@ -669,6 +669,36 @@ enum TrendSafetyStatus {
   REJECTED
 }
 
+enum VideoProjectType {
+  EXPLAINER
+  PRODUCT_INTRODUCTION
+  PHOTO_SLIDESHOW
+}
+
+enum VideoProjectStatus {
+  DRAFT
+  PLANNING
+  WAITING_APPROVAL
+  APPROVED
+  QUEUED
+  RENDERING
+  QUALITY_CHECK
+  READY_FOR_REVIEW
+  REVISING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum VideoSceneVisualType {
+  USER_ASSET
+  APPROVED_ASSET
+  STOCK_IMAGE
+  GENERATED_IMAGE
+  TEXT_MOTION
+  AI_VIDEO
+}
+
 model User {
   id                                String                              @id @default(uuid()) @db.Uuid
   status                            UserStatus                          @default(ACTIVE)
@@ -742,6 +772,7 @@ model User {
   activityMetricExclusionsAsActor   ActivityMetricExclusion[]           @relation("ActivityMetricExclusionActor")
   activityContinuityRulesCreated    ActivityContinuityRule[]            @relation("ActivityContinuityRuleCreator")
   activityContinuityRulesActivated  ActivityContinuityRule[]            @relation("ActivityContinuityRuleActivator")
+  videoProjects                     VideoProject[]                      @relation("VideoProjectOwner")
 
   @@index([status])
   @@map("users")
@@ -821,6 +852,7 @@ model Workspace {
   groupMembershipAudits       GroupMembershipAuditLog[]
   groupFeatureUsageEvents     GroupFeatureUsageEvent[]
   achievementBadges           AchievementBadge[]
+  videoProjects               VideoProject[]
 
   @@index([status])
   @@map("workspaces")
@@ -866,6 +898,7 @@ model Group {
   featureAudits              GroupFeatureAuditLog[]
   membershipAudits           GroupMembershipAuditLog[]
   featureUsageEvents         GroupFeatureUsageEvent[]
+  videoProjects              VideoProject[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -893,8 +926,10 @@ model GroupMembership {
   featureAudits              GroupFeatureAuditLog[]
   membershipAudits           GroupMembershipAuditLog[]
   featureUsageEvents         GroupFeatureUsageEvent[]
+  videoProjects              VideoProject[]
 
   @@unique([groupId, userId])
+  @@unique([workspaceId, groupId, id])
   @@index([workspaceId, userId, status])
   @@index([groupId, status])
   @@map("group_memberships")
@@ -1206,6 +1241,7 @@ model Campaign {
   similarityReviews              CampaignSimilarityReview[]
   externalTrackingLinks          ExternalTrackingLink[]
   contentLinkUsages              ContentLinkUsage[]
+  videoProjects                  VideoProject[]
 
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
@@ -1589,6 +1625,63 @@ model ActivityContinuityRule {
   @@unique([environment, version])
   @@index([environment, status, createdAt])
   @@map("activity_continuity_rules")
+}
+
+model VideoProject {
+  id                  String             @id @default(uuid()) @db.Uuid
+  workspaceId         String             @map("workspace_id") @db.Uuid
+  groupId             String             @map("group_id") @db.Uuid
+  groupMembershipId   String             @map("group_membership_id") @db.Uuid
+  ownerUserId         String             @map("owner_user_id") @db.Uuid
+  bunshinId           String             @map("bunshin_id") @db.Uuid
+  campaignId          String?            @map("campaign_id") @db.Uuid
+  title               String             @db.VarChar(160)
+  platform            SocialPlatform
+  type                VideoProjectType
+  durationSeconds     Int                @map("duration_seconds")
+  status              VideoProjectStatus @default(DRAFT)
+  revision            Int                @default(1)
+  aiProcessingTypes   Json               @default("[]") @map("ai_processing_types")
+  disclosureSnapshot  Json               @default("{}") @map("disclosure_snapshot")
+  standardComposition Boolean            @default(true) @map("standard_composition")
+  aiVideoSceneCount   Int                @default(0) @map("ai_video_scene_count")
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group               Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership     GroupMembership    @relation(fields: [workspaceId, groupId, groupMembershipId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  ownerUser           User               @relation("VideoProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  bunshin             Bunshin            @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+  campaign            Campaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  scenes              VideoScene[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, ownerUserId, status, updatedAt])
+  @@index([groupId, groupMembershipId, status])
+  @@index([campaignId])
+  @@map("video_projects")
+}
+
+model VideoScene {
+  id                String               @id @default(uuid()) @db.Uuid
+  videoProjectId    String               @map("video_project_id") @db.Uuid
+  sceneNo           Int                  @map("scene_no")
+  durationMs        Int                  @map("duration_ms")
+  narration         String               @db.Text
+  caption           String               @db.VarChar(240)
+  visualType        VideoSceneVisualType @map("visual_type")
+  visualPrompt      String?              @map("visual_prompt") @db.Text
+  keywords          Json                 @default("[]")
+  aiProcessingTypes Json                 @default("[]") @map("ai_processing_types")
+  locked            Boolean              @default(false)
+  revision          Int                  @default(1)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  videoProject      VideoProject         @relation(fields: [videoProjectId], references: [id], onDelete: Cascade)
+
+  @@unique([videoProjectId, sceneNo])
+  @@index([videoProjectId, locked])
+  @@map("video_scenes")
 }
 
 model SupportCase {
@@ -2077,6 +2170,7 @@ model Bunshin {
   campaignParticipations      CampaignParticipation[]
   campaignSimilarityReviews   CampaignSimilarityReview[]
   achievementBadges           AchievementBadge[]
+  videoProjects               VideoProject[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])

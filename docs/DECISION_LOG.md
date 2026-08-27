@@ -1212,3 +1212,14 @@
 - Activation: SUPER_ADMINだけが作成理由付きの下書きを作成し、別の使用開始理由を記録して有効化できる。過去の版は書き換えず`SUPERSEDED`とする。
 - Runtime: Webの進捗・復帰表示とLINE配信Jobは同じ使用中ルールを解決する。DBに有効版がない初回Migration直後は組み込み第1版へ安全にフォールバックする。
 - History: 取得済みバッジは付与時の`ruleVersion`、表示名、説明のSnapshotを保持し、新版で過去の実績を再解釈しない。
+
+## D-096: 動画機能はグループ限定のProvider非依存コアから実装する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Scope: 初期動画機能は一般利用者へ公開せず、System Adminが許可したGroupとGroup Managerが割り当てたMemberだけが使用できる。Phase V-1の利用者検証は外部チームが担当する。
+- Composition: 標準動画は静止画、字幕、音声、BGM、文字の動きを基本とし、AI動画そのものを標準へ含めない。AI動画は別機能・別原価として扱う。
+- Provider: Bunshin Coreから外部レンダリング会社を直接呼ばず、Render Provider Portと交換可能なAdapterを後続PRで実装する。初期段階で自前FFmpeg Workerは運用しない。
+- Identity: Video ProjectはWorkspace、Group、Group Membership、Owner User、Bunshinを保持し、作成・取得・更新のすべてで同一境界を再検証する。
+- Disclosure: 台本、音声、画像、動画、素材選択のどこにAIを使ったかをProject・Scene単位で記録し、利用者へ表示した説明をSnapshotで保持する。
+- Accounting: 将来の利用回数は外部Renderが成功した場合だけ計上する。Draft、失敗、再試行、取消を完成本数へ含めない。課金・決済は今回実装しない。
