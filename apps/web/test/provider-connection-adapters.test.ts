@@ -16,6 +16,22 @@ describe('外部サービス接続確認', () => {
     ).resolves.toEqual({ success: false, errorCategory: 'CREDENTIAL_INVALID' });
   });
 
+  it('Creatomateは動画を生成せずテンプレート一覧で接続確認する', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json([]));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'CREATOMATE',
+        apiKey: 'creatomate-secret',
+        model: null,
+      }),
+    ).resolves.toEqual({ success: true, errorCategory: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.creatomate.com/v2/templates',
+      expect.objectContaining({ headers: { authorization: 'Bearer creatomate-secret' } }),
+    );
+  });
+
   it('LINE Access TokenとMessaging Channel IDの不一致を拒否する', async () => {
     const fetchMock = vi
       .fn()

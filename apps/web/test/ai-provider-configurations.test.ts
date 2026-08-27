@@ -105,4 +105,22 @@ describe('AI provider configuration HTTP', () => {
       }),
     );
   });
+
+  it('accepts Creatomate without an AI model', async () => {
+    const response = await createAiProviderConfigurationResponse(
+      request({
+        provider: 'CREATOMATE',
+        reason: '動画サービスを準備',
+        model: null,
+        dailyBudgetUsd: 1,
+        monthlyBudgetUsd: 5,
+        requestCostUsd: 0,
+        apiKey: 'creatomate-secret-1234',
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(state.createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CREATOMATE', model: null }),
+    );
+  });
 });

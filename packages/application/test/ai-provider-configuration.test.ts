@@ -122,4 +122,22 @@ describe('CreateAiProviderConfigurationVersion', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
+
+  it('accepts a Creatomate draft without an AI model', async () => {
+    const createVersion = vi.fn(() =>
+      Promise.resolve({ ...value, provider: 'CREATOMATE' as const, model: null }),
+    );
+    await new CreateAiProviderConfigurationVersion(repository(createVersion), crypto).execute({
+      actorUserId: 'actor',
+      environment: 'PRODUCTION',
+      provider: 'CREATOMATE',
+      reason: '動画レンダリングを準備',
+      model: null,
+      dailyBudgetUsdMicros: 1_000_000,
+      monthlyBudgetUsdMicros: 5_000_000,
+    });
+    expect(createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'CREATOMATE', model: null }),
+    );
+  });
 });

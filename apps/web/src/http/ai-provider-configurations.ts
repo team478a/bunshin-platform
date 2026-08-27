@@ -20,7 +20,7 @@ import { requireSameOrigin } from '../auth/request-security';
 
 const createSchema = z
   .object({
-    provider: z.enum(['OPENAI', 'GROK', 'EXA', 'FIRECRAWL']),
+    provider: z.enum(['OPENAI', 'GROK', 'EXA', 'FIRECRAWL', 'CREATOMATE']),
     reason: z.string().min(3).max(500),
     model: z.string().max(120).nullable().optional(),
     dailyBudgetUsd: z.number().min(0).max(10_000),

@@ -17,9 +17,10 @@ const providerLabels = {
   GROK: 'Xの話題を調べるAI（Grok）',
   EXA: '話題を調べる検索（Exa）',
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
+  CREATOMATE: '動画を仕上げるサービス（Creatomate）',
 } as const;
 
-const providerOrder = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL'] as const;
+const providerOrder = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL', 'CREATOMATE'] as const;
 
 function verificationLabel(value: {
   lastVerifiedAt: Date | null;

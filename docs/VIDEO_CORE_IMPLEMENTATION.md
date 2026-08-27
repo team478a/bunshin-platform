@@ -104,6 +104,14 @@ Creatomateの一時URLは永続的な配信元にしない。Providerの公式�
 
 本段階ではAPIキーを用意せずに検証可能なRenderScript変換、HTTP Adapter、status/error分類と自動テストまでを実装した。Providerへの実送信、Webhook受付、完成物取得、利用回数確定はまだ行わない。
 
+## V-5B2A Render Provider設定管理
+
+Creatomateを既存の外部サービス設定管理へ追加した。管理者は本番・検証・開発の現在環境に限定してAPIキー、日次・月次予算、動画1本の見込み原価、変更理由を登録できる。APIキーは既存の環境別HKDFとAES-256-GCMで暗号化し、平文をDB、画面、API応答、ログへ返さない。設定は追記型で版管理し、接続確認済みの版だけを使用中へ切り替える。
+
+接続確認はCreatomateのテンプレート一覧を取得する読み取り専用リクエストとし、動画生成やCredit消費を発生させない。認証失敗、Quota・Rate Limit、設定不正、Provider停止を既存の安全な分類へ変換する。環境ごとのACTIVE一意制約と監査履歴は既存の外部サービス設定管理を再利用する。
+
+本段階でもRender Jobは未接続である。管理画面でCreatomateを使用中にしても、次のJob接続PRまでは外部へ動画を送信しない。
+
 ## 後続PR
 
 1. Render Provider設定の管理画面、安全な暗号化保存、接続確認
