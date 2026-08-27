@@ -3,6 +3,7 @@ import {
   GetAdminOperationsSnapshot,
   GetAdminUserDetail,
   SetAdminUserStatus,
+  SetAdminMetricExclusion,
   CreateAdminSupportCase,
   calculateAdminRetention,
   calculateFirstWeekThreePostKpi,
@@ -14,6 +15,7 @@ function repository(): AdminOperationsRepository {
     snapshot: vi.fn().mockResolvedValue(null),
     userDetail: vi.fn().mockResolvedValue(null),
     setUserStatus: vi.fn().mockResolvedValue(null),
+    setMetricExclusion: vi.fn().mockResolvedValue(null),
     createSupportCase: vi.fn().mockResolvedValue(null),
     updateSupportCase: vi.fn().mockResolvedValue(null),
     listSupportCases: vi.fn().mockResolvedValue(null),
@@ -87,6 +89,7 @@ describe('admin operations', () => {
       snapshot,
       userDetail: vi.fn().mockResolvedValue(null),
       setUserStatus: vi.fn().mockResolvedValue(null),
+      setMetricExclusion: vi.fn().mockResolvedValue(null),
       createSupportCase: vi.fn().mockResolvedValue(null),
       updateSupportCase: vi.fn().mockResolvedValue(null),
       listSupportCases: vi.fn().mockResolvedValue(null),
@@ -109,6 +112,7 @@ describe('admin operations', () => {
       snapshot: vi.fn().mockResolvedValue(null),
       userDetail,
       setUserStatus: vi.fn().mockResolvedValue(null),
+      setMetricExclusion: vi.fn().mockResolvedValue(null),
       createSupportCase: vi.fn().mockResolvedValue(null),
       updateSupportCase: vi.fn().mockResolvedValue(null),
       listSupportCases: vi.fn().mockResolvedValue(null),
@@ -135,6 +139,24 @@ describe('admin operations', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(setUserStatus).not.toHaveBeenCalled();
+  });
+
+  it('records metric exclusion only with an auditable reason', async () => {
+    const setMetricExclusion = vi
+      .fn<AdminOperationsRepository['setMetricExclusion']>()
+      .mockResolvedValue(true);
+    const repo = { ...repository(), setMetricExclusion };
+    const userId = crypto.randomUUID();
+    await new SetAdminMetricExclusion(repo).execute({
+      actorUserId: crypto.randomUUID(),
+      userId,
+      environment: 'PRODUCTION',
+      excluded: true,
+      reason: '社内の動作確認アカウント',
+    });
+    expect(setMetricExclusion).toHaveBeenCalledWith(
+      expect.objectContaining({ userId, environment: 'PRODUCTION', excluded: true }),
+    );
   });
 
   it('normalizes a support case before saving it', async () => {

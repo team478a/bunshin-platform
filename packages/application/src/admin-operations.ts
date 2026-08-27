@@ -29,6 +29,19 @@ export interface AdminUserSummary {
   lastActiveAt: Date | null;
   stage: AdminUserStage;
   attentionReason: string | null;
+  excludedFromMetrics: boolean;
+  periodConfirmations: number;
+  periodPosts: number;
+}
+
+export interface AdminGroupActivitySummary {
+  id: string;
+  name: string;
+  activeMembers: number;
+  eligibleMembers: number;
+  activeMembersInPeriod: number;
+  confirmations: number;
+  posts: number;
 }
 
 export interface AdminOperationsSnapshot {
@@ -48,6 +61,7 @@ export interface AdminOperationsSnapshot {
     lineFailed: number;
     supportCasesCreated: number;
     supportCasesResolved: number;
+    excludedUsers: number;
   };
   funnel: Record<AdminUserStage, number>;
   retention: {
@@ -62,6 +76,13 @@ export interface AdminOperationsSnapshot {
     firstWeekThreePostRate: number | null;
   };
   users: AdminUserSummary[];
+  groups: AdminGroupActivitySummary[];
+  monitoring: {
+    latestActivityAt: Date | null;
+    latestPostAt: Date | null;
+    usersInactiveForSevenDays: number;
+    cohortTruncated: boolean;
+  };
   truncated: boolean;
 }
 
@@ -135,6 +156,7 @@ export interface AdminUserDetail {
   bunshins: Array<{ id: string; name: string; status: string; createdAt: Date }>;
   timeline: AdminUserTimelineItem[];
   operationAudits: AdminUserOperationAudit[];
+  metricExclusionAudits: AdminMetricExclusionAudit[];
   supportCases: AdminSupportCase[];
 }
 
@@ -143,6 +165,15 @@ export interface AdminUserOperationAudit {
   action: 'SUSPENDED' | 'REACTIVATED';
   previousStatus: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   nextStatus: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  reason: string;
+  actorDisplayName: string;
+  occurredAt: Date;
+}
+
+export interface AdminMetricExclusionAudit {
+  id: string;
+  action: 'EXCLUDED' | 'INCLUDED';
+  environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
   reason: string;
   actorDisplayName: string;
   occurredAt: Date;
@@ -198,6 +229,13 @@ export interface AdminOperationsRepository {
     actorUserId: string;
     userId: string;
     status: 'ACTIVE' | 'SUSPENDED';
+    reason: string;
+  }): Promise<boolean | null>;
+  setMetricExclusion(input: {
+    actorUserId: string;
+    userId: string;
+    environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
+    excluded: boolean;
     reason: string;
   }): Promise<boolean | null>;
   createSupportCase(input: {
@@ -290,6 +328,26 @@ export class SetAdminUserStatus {
     });
     if (result === null) throw new ApplicationError('NOT_FOUND', 'user not found');
     if (!result) throw new ApplicationError('CONFLICT', 'user status cannot be changed');
+  }
+}
+
+export class SetAdminMetricExclusion {
+  constructor(private readonly repository: AdminOperationsRepository) {}
+  async execute(input: {
+    actorUserId: string;
+    userId: string;
+    environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
+    excluded: boolean;
+    reason: string;
+  }) {
+    if (!uuidPattern.test(input.userId))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid user id');
+    const result = await this.repository.setMetricExclusion({
+      ...input,
+      reason: validReason(input.reason),
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'user not found');
+    if (!result) throw new ApplicationError('CONFLICT', 'metric exclusion cannot be changed');
   }
 }
 

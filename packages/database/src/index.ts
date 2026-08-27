@@ -7325,6 +7325,14 @@ const adminUserSelect = {
   memberships: {
     select: { role: true, status: true, workspace: { select: { id: true, name: true } } },
   },
+  groupMemberships: {
+    where: { status: 'ACTIVE' },
+    select: { groupId: true, group: { select: { name: true } } },
+  },
+  activityMetricExclusionsAsTarget: {
+    orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+    select: { environment: true, action: true, occurredAt: true },
+  },
   bunshins: {
     select: {
       id: true,
@@ -7402,6 +7410,9 @@ function adminUserSummary(
   ];
   const lastActiveAt = new Date(Math.max(...activityDates.map((value) => value.getTime())));
   const deletionPending = row.accountDeletionRequests.length > 0;
+  const latestMetricAction = row.activityMetricExclusionsAsTarget.find(
+    (item) => item.environment === environment,
+  );
   let attentionReason: string | null = null;
   if (row.status !== 'ACTIVE') attentionReason = '利用停止・退会済み';
   else if (deletionPending) attentionReason = '退会処理待ち';
@@ -7429,6 +7440,9 @@ function adminUserSummary(
     lastActiveAt,
     stage,
     attentionReason,
+    excludedFromMetrics: latestMetricAction?.action === 'EXCLUDED',
+    periodConfirmations: 0,
+    periodPosts: 0,
   };
 }
 
@@ -7448,6 +7462,20 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
     input: Parameters<AdminOperationsRepository['snapshot']>[0],
   ): Promise<AdminOperationsSnapshot | null> {
     if (!(await this.authorized(input.actorUserId))) return null;
+    const exclusionHistory = await this.client.activityMetricExclusion.findMany({
+      where: { environment: input.environment },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      select: { targetUserId: true, action: true },
+    });
+    const latestExclusion = new Map<string, 'EXCLUDED' | 'INCLUDED'>();
+    for (const item of exclusionHistory) {
+      if (!latestExclusion.has(item.targetUserId))
+        latestExclusion.set(item.targetUserId, item.action);
+    }
+    const excludedUserIds = [...latestExclusion]
+      .filter(([, action]) => action === 'EXCLUDED')
+      .map(([userId]) => userId);
+    const eligibleUser = excludedUserIds.length ? { id: { notIn: excludedUserIds } } : {};
     const search = input.query
       ? {
           OR: [
@@ -7470,6 +7498,10 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
       lineFailed,
       supportCasesCreated,
       supportCasesResolved,
+      periodConfirmations,
+      groupRows,
+      latestActivity,
+      latestPost,
     ] = await Promise.all([
       this.client.user.findMany({
         where: search,
@@ -7478,7 +7510,7 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         take: input.limit + 1,
       }),
       this.client.user.findMany({
-        where: { createdAt: period },
+        where: { createdAt: period, ...eligibleUser },
         select: {
           ...adminUserSelect,
           missionActivities: {
@@ -7497,15 +7529,23 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         orderBy: { createdAt: 'asc' },
         take: 5001,
       }),
-      this.client.user.count(),
-      this.client.user.count({ where: { status: 'ACTIVE' } }),
-      this.client.postRecord.count({ where: { postedAt: period } }),
+      this.client.user.count({ where: eligibleUser }),
+      this.client.user.count({ where: { status: 'ACTIVE', ...eligibleUser } }),
+      this.client.postRecord.groupBy({
+        by: ['actorUserId'],
+        where: { postedAt: period, actorUserId: { notIn: excludedUserIds } },
+        _count: { _all: true },
+      }),
       this.client.aiUsageEvent.findMany({
-        where: { occurredAt: period },
+        where: { occurredAt: period, actorUserId: { notIn: excludedUserIds } },
         select: { status: true, estimatedCostUsdMicros: true },
       }),
       this.client.lineConnection.findMany({
-        where: { environment: input.environment, status: 'ACTIVE' },
+        where: {
+          environment: input.environment,
+          status: 'ACTIVE',
+          userId: { notIn: excludedUserIds },
+        },
         distinct: ['userId'],
         select: { userId: true },
       }),
@@ -7526,10 +7566,49 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
       }),
       this.client.supportCase.count({ where: { createdAt: period } }),
       this.client.supportCase.count({ where: { status: 'RESOLVED', resolvedAt: period } }),
+      this.client.missionActivity.groupBy({
+        by: ['actorUserId'],
+        where: {
+          occurredAt: period,
+          type: 'CONFIRMED',
+          actorUserId: { notIn: excludedUserIds },
+        },
+        _count: { _all: true },
+      }),
+      this.client.group.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          name: true,
+          memberships: {
+            where: { status: 'ACTIVE', userId: { notIn: excludedUserIds } },
+            select: { userId: true },
+          },
+        },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        take: 1_000,
+      }),
+      this.client.missionActivity.findFirst({
+        where: { actorUserId: { notIn: excludedUserIds } },
+        orderBy: { occurredAt: 'desc' },
+        select: { occurredAt: true },
+      }),
+      this.client.postRecord.findFirst({
+        where: { actorUserId: { notIn: excludedUserIds } },
+        orderBy: { postedAt: 'desc' },
+        select: { postedAt: true },
+      }),
     ]);
-    const visible = rows
-      .slice(0, input.limit)
-      .map((row) => adminUserSummary(row, input.environment));
+    const confirmationCount = new Map<string, number>();
+    const postCount = new Map<string, number>();
+    for (const item of periodConfirmations)
+      confirmationCount.set(item.actorUserId, item._count._all);
+    for (const item of periodPosts) postCount.set(item.actorUserId, item._count._all);
+    const visible = rows.slice(0, input.limit).map((row) => ({
+      ...adminUserSummary(row, input.environment),
+      periodConfirmations: confirmationCount.get(row.id) ?? 0,
+      periodPosts: postCount.get(row.id) ?? 0,
+    }));
     const cohort = cohortRows.slice(0, 5000).map((row) => adminUserSummary(row, input.environment));
     const cohortCreatedAt = new Map(
       cohortRows.slice(0, 5000).map((row) => [row.id, row.createdAt]),
@@ -7601,7 +7680,7 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         users,
         activeUsers,
         newUsers: cohortRows.length,
-        posts: periodPosts,
+        posts: [...postCount.values()].reduce((sum, count) => sum + count, 0),
         aiCalls: periodAi.length,
         aiFailedCalls: periodAi.filter(({ status }) => status === 'FAILED').length,
         estimatedAiCostUsdMicros:
@@ -7615,10 +7694,40 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         lineFailed,
         supportCasesCreated,
         supportCasesResolved,
+        excludedUsers: excludedUserIds.length,
       },
       funnel,
       retention: { ...retention, ...firstWeekPosting },
       users: visible,
+      groups: groupRows.map((group) => {
+        const memberIds = new Set(group.memberships.map(({ userId }) => userId));
+        const confirmations = periodConfirmations.filter((item) => memberIds.has(item.actorUserId));
+        const posts = periodPosts.filter((item) => memberIds.has(item.actorUserId));
+        return {
+          id: group.id,
+          name: group.name,
+          activeMembers: memberIds.size,
+          eligibleMembers: memberIds.size,
+          activeMembersInPeriod: new Set([
+            ...confirmations.map(({ actorUserId }) => actorUserId),
+            ...posts.map(({ actorUserId }) => actorUserId),
+          ]).size,
+          confirmations: confirmations.reduce((sum, item) => sum + item._count._all, 0),
+          posts: posts.reduce((sum, item) => sum + item._count._all, 0),
+        };
+      }),
+      monitoring: {
+        latestActivityAt: latestActivity?.occurredAt ?? null,
+        latestPostAt: latestPost?.postedAt ?? null,
+        usersInactiveForSevenDays: visible.filter(
+          (user) =>
+            !user.excludedFromMetrics &&
+            user.status === 'ACTIVE' &&
+            user.lastActiveAt !== null &&
+            input.to.getTime() - user.lastActiveAt.getTime() >= 7 * 86_400_000,
+        ).length,
+        cohortTruncated: cohortRows.length > 5000,
+      },
       truncated: rows.length > input.limit || cohortRows.length > 5000,
     };
   }
@@ -7627,7 +7736,7 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
     input: Parameters<AdminOperationsRepository['userDetail']>[0],
   ): Promise<AdminUserDetail | null> {
     if (!(await this.authorized(input.actorUserId))) return null;
-    const [row, operationAudits, supportCases] = await Promise.all([
+    const [row, operationAudits, metricExclusionAudits, supportCases] = await Promise.all([
       this.client.user.findUnique({
         where: { id: input.userId },
         select: adminUserSelect,
@@ -7636,6 +7745,12 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         where: { targetUserId: input.userId },
         include: { actor: { select: { displayName: true } } },
         orderBy: { occurredAt: 'desc' },
+        take: 50,
+      }),
+      this.client.activityMetricExclusion.findMany({
+        where: { targetUserId: input.userId },
+        include: { actor: { select: { displayName: true } } },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
         take: 50,
       }),
       this.client.supportCase.findMany({
@@ -7701,6 +7816,14 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         actorDisplayName: audit.actor.displayName,
         occurredAt: audit.occurredAt,
       })),
+      metricExclusionAudits: metricExclusionAudits.map((audit) => ({
+        id: audit.id,
+        action: audit.action,
+        environment: audit.environment,
+        reason: audit.reason,
+        actorDisplayName: audit.actor.displayName,
+        occurredAt: audit.occurredAt,
+      })),
       supportCases: supportCases.map((supportCase) => ({
         id: supportCase.id,
         subject: supportCase.subject,
@@ -7755,6 +7878,40 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
           action: input.status === 'SUSPENDED' ? 'SUSPENDED' : 'REACTIVATED',
           previousStatus: target.status,
           nextStatus: input.status,
+          reason: input.reason,
+        },
+      });
+      return true;
+    });
+  }
+
+  async setMetricExclusion(
+    input: Parameters<AdminOperationsRepository['setMetricExclusion']>[0],
+  ): Promise<boolean | null> {
+    return this.client.$transaction(async (tx) => {
+      const actor = await tx.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        select: { id: true },
+      });
+      if (!actor) return null;
+      const target = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true },
+      });
+      if (!target) return null;
+      const latest = await tx.activityMetricExclusion.findFirst({
+        where: { targetUserId: target.id, environment: input.environment },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        select: { action: true },
+      });
+      const nextAction = input.excluded ? 'EXCLUDED' : 'INCLUDED';
+      if ((latest?.action ?? 'INCLUDED') === nextAction) return false;
+      await tx.activityMetricExclusion.create({
+        data: {
+          targetUserId: target.id,
+          actorUserId: input.actorUserId,
+          environment: input.environment,
+          action: nextAction,
           reason: input.reason,
         },
       });

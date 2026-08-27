@@ -253,6 +253,11 @@ enum UserOperationAuditAction {
   REACTIVATED
 }
 
+enum ActivityMetricExclusionAction {
+  EXCLUDED
+  INCLUDED
+}
+
 enum SupportCaseStatus {
   OPEN
   IN_PROGRESS
@@ -727,6 +732,8 @@ model User {
   groupMembershipAuditsPerformed    GroupMembershipAuditLog[]           @relation("GroupMembershipAuditActor")
   groupFeatureUsageEvents           GroupFeatureUsageEvent[]            @relation("GroupFeatureUsageActor")
   achievementBadges                 AchievementBadge[]
+  activityMetricExclusionsAsTarget  ActivityMetricExclusion[]           @relation("ActivityMetricExclusionTarget")
+  activityMetricExclusionsAsActor   ActivityMetricExclusion[]           @relation("ActivityMetricExclusionActor")
 
   @@index([status])
   @@map("users")
@@ -1531,6 +1538,22 @@ model UserOperationAudit {
   @@index([targetUserId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("user_operation_audits")
+}
+
+model ActivityMetricExclusion {
+  id           String                        @id @default(uuid()) @db.Uuid
+  targetUserId String                        @map("target_user_id") @db.Uuid
+  actorUserId  String                        @map("actor_user_id") @db.Uuid
+  environment  LineConfigurationEnvironment
+  action       ActivityMetricExclusionAction
+  reason       String                        @db.VarChar(1000)
+  occurredAt   DateTime                      @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  target       User                          @relation("ActivityMetricExclusionTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  actor        User                          @relation("ActivityMetricExclusionActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, environment, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("activity_metric_exclusions")
 }
 
 model SupportCase {

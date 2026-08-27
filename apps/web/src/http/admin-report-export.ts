@@ -46,7 +46,7 @@ export async function adminReportExportResponse(request: Request) {
     const fromInput = url.searchParams.get('from');
     const toInput = url.searchParams.get('to');
     const type = url.searchParams.get('type');
-    if (type !== 'summary' && type !== 'users') {
+    if (type !== 'summary' && type !== 'users' && type !== 'groups') {
       throw new ApplicationError('VALIDATION_ERROR', '出力形式を確認してください');
     }
     const from = parseDate(fromInput, false);
@@ -86,6 +86,7 @@ export async function adminReportExportResponse(request: Request) {
             ['LINE送信失敗', snapshot.totals.lineFailed],
             ['問い合わせ開始', snapshot.totals.supportCasesCreated],
             ['問い合わせ解決', snapshot.totals.supportCasesResolved],
+            ['テスト利用者（集計対象外）', snapshot.totals.excludedUsers],
             ['翌日継続の対象者', snapshot.retention.d1EligibleUsers],
             ['翌日継続ユーザー', snapshot.retention.d1ActiveUsers],
             [
@@ -115,44 +116,62 @@ export async function adminReportExportResponse(request: Request) {
               snapshot.funnel[stage],
             ]),
           ]
-        : [
-            [
-              'ユーザーID',
-              '表示名',
-              'メール',
-              '状態',
-              '認証方法',
-              '登録日時',
-              '現在の段階',
-              'BUNSHIN数',
-              '投稿数',
-              'AI実行',
-              'AI失敗',
-              'LINE接続',
-              'LINE友だち状態',
-              '退会処理待ち',
-              '最終利用日時',
-              '確認事項',
-            ],
-            ...snapshot.users.map((user) => [
-              user.id,
-              user.displayName,
-              user.email,
-              user.status,
-              user.authProviders.join('・'),
-              user.createdAt.toISOString(),
-              stageLabels[user.stage],
-              user.bunshinCount,
-              user.postCount,
-              user.aiCalls,
-              user.aiFailedCalls,
-              user.lineConnected ? 'はい' : 'いいえ',
-              user.lineFollowing ? 'はい' : 'いいえ',
-              user.deletionPending ? 'はい' : 'いいえ',
-              user.lastActiveAt?.toISOString() ?? null,
-              user.attentionReason,
-            ]),
-          ];
+        : type === 'users'
+          ? [
+              [
+                'ユーザーID',
+                '表示名',
+                'メール',
+                '状態',
+                '認証方法',
+                '登録日時',
+                '現在の段階',
+                'BUNSHIN数',
+                '投稿数',
+                'AI実行',
+                'AI失敗',
+                'LINE接続',
+                'LINE友だち状態',
+                '退会処理待ち',
+                '最終利用日時',
+                '確認事項',
+                '集計対象',
+                '期間内の内容確認',
+                '期間内の投稿',
+              ],
+              ...snapshot.users.map((user) => [
+                user.id,
+                user.displayName,
+                user.email,
+                user.status,
+                user.authProviders.join('・'),
+                user.createdAt.toISOString(),
+                stageLabels[user.stage],
+                user.bunshinCount,
+                user.postCount,
+                user.aiCalls,
+                user.aiFailedCalls,
+                user.lineConnected ? 'はい' : 'いいえ',
+                user.lineFollowing ? 'はい' : 'いいえ',
+                user.deletionPending ? 'はい' : 'いいえ',
+                user.lastActiveAt?.toISOString() ?? null,
+                user.attentionReason,
+                user.excludedFromMetrics ? '対象外' : '対象',
+                user.periodConfirmations,
+                user.periodPosts,
+              ]),
+            ]
+          : [
+              ['グループID', 'グループ名', '参加中', '期間内に活動', '内容確認', '投稿完了'],
+              ...snapshot.groups.map((group) => [
+                group.id,
+                group.name,
+                group.activeMembers,
+                group.activeMembersInPeriod,
+                group.confirmations,
+                group.posts,
+              ]),
+            ];
     const filename = `bunshin-${type}-${fromInput}-${toInput}.csv`;
     return new Response(csv(rows), {
       headers: {
