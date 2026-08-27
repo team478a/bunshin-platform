@@ -102,6 +102,14 @@ export async function adminReportExportResponse(request: Request) {
                 ? null
                 : snapshot.retention.d7ActiveRate.toFixed(6),
             ],
+            ['初週3回投稿の対象者', snapshot.retention.firstWeekThreePostEligibleUsers],
+            ['初週3回投稿の達成者', snapshot.retention.firstWeekThreePostUsers],
+            [
+              '初週3回投稿率',
+              snapshot.retention.firstWeekThreePostRate === null
+                ? null
+                : snapshot.retention.firstWeekThreePostRate.toFixed(6),
+            ],
             ...ADMIN_USER_STAGES.map((stage) => [
               `利用段階：${stageLabels[stage]}`,
               snapshot.funnel[stage],
