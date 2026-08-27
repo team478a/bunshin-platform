@@ -70,14 +70,16 @@ AI動画は将来の追加機能として、グループ許可、参加者割当
 
 承認済み商品素材は既存`ProductPackAsset`と`CampaignAsset`を正本として再利用し、利用者アップロードと重複保存しない。動画企画では、利用者素材、Campaign承認素材、素材写真、生成画像の順で選択する。
 
-本段階はSchema、Migration、Application Port／Use Case、Repository、企画Context接続までとする。実Storage Adapter、アップロードAPI、画面、マルウェア検査は後続PRで接続する。
+Schema、Migration、Application Port／Use Case、Repository、企画Contextに加え、Supabase Private Storage Adapter、署名付きアップロードAPI、本人画面まで接続した。利用者端末からアプリサーバーを経由せずStorageへ直接送信し、Service Role Keyはサーバー外へ出さない。
+
+アップロード完了後、サーバーはファイル先頭（動画は必要に応じて末尾も）を読み、PNG／JPEG／WebPまたはMP4／QuickTimeの実シグネチャ、実容量、画像寸法、動画時間を検査する。DBと一覧APIには非公開Storage Keyや署名付き閲覧URLを公開しない。マルウェア検査とライフサイクル削除は後続PRで接続する。
 
 ## 後続PR
 
-1. 素材Storage Adapter、アップロードAPI、本人画面への接続
-2. 動画企画・台本生成APIと本人確認画面への接続
-3. Render Provider Portと外部Provider Adapter
-4. 非同期Render Job、成功時のみ利用回数を確定する仕組み
-5. グループ管理画面と本人確認画面
+1. 動画企画・台本生成APIと本人確認画面への接続
+2. Render Provider Portと外部Provider Adapter
+3. 非同期Render Job、成功時のみ利用回数を確定する仕組み
+4. グループ管理画面と本人確認画面
+5. 素材のマルウェア検査とライフサイクル削除
 
 本PRには外部レンダリング、FFmpeg Worker、課金、一般公開、SNS自動投稿、Provider APIキー管理を含めない。

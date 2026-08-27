@@ -26,11 +26,19 @@ export default async function GroupsPage({
     select: {
       id: true,
       role: true,
+      featureAssignments: {
+        where: { featureKey: 'VIDEO_GENERATION', status: 'ENABLED' },
+        select: { startsAt: true, endsAt: true },
+      },
       group: {
         select: {
           id: true,
           name: true,
           workspace: { select: { name: true } },
+          featurePolicies: {
+            where: { featureKey: 'VIDEO_GENERATION', status: 'ENABLED' },
+            select: { startsAt: true, endsAt: true },
+          },
           _count: { select: { memberships: { where: { status: 'ACTIVE' } } } },
         },
       },
@@ -70,23 +78,39 @@ export default async function GroupsPage({
         </section>
       ) : null}
 
-      {memberships.map((membership) => (
-        <section className="settings-card" key={membership.id}>
-          <h2>{membership.group.name}</h2>
-          <p>団体：{membership.group.workspace.name}</p>
-          <p>
-            あなたの役割：{roleLabel[membership.role]} ／ 参加者：
-            {membership.group._count.memberships}人
-          </p>
-          {membership.role === 'MANAGER' ? (
-            <Link className="button" href={`/groups/${membership.group.id}/members`}>
-              参加者が使える機能を設定
-            </Link>
-          ) : (
-            <p>使える機能はグループ管理者が設定します。</p>
-          )}
-        </section>
-      ))}
+      {memberships.map((membership) => {
+        const now = new Date();
+        const active = (value: { startsAt: Date | null; endsAt: Date | null }) =>
+          (!value.startsAt || value.startsAt <= now) && (!value.endsAt || value.endsAt > now);
+        const videoAvailable =
+          membership.group.featurePolicies.some(active) &&
+          membership.featureAssignments.some(active);
+        return (
+          <section className="settings-card" key={membership.id}>
+            <h2>{membership.group.name}</h2>
+            <p>団体：{membership.group.workspace.name}</p>
+            <p>
+              あなたの役割：{roleLabel[membership.role]} ／ 参加者：
+              {membership.group._count.memberships}人
+            </p>
+            {videoAvailable ? (
+              <Link
+                className="button button--secondary"
+                href={`/groups/${membership.group.id}/video-assets`}
+              >
+                動画に使う素材を管理
+              </Link>
+            ) : null}
+            {membership.role === 'MANAGER' ? (
+              <Link className="button" href={`/groups/${membership.group.id}/members`}>
+                参加者が使える機能を設定
+              </Link>
+            ) : (
+              <p>使える機能はグループ管理者が設定します。</p>
+            )}
+          </section>
+        );
+      })}
     </main>
   );
 }
