@@ -229,6 +229,14 @@ export default async function OperationsAdminPage() {
         </Link>
       </section>
 
+      <section className="settings-card" aria-labelledby="activity-rules-title">
+        <h2 id="activity-rules-title">続けやすさのルール</h2>
+        <p>週の目標回数、休眠と判断する日数、成長段階、バッジの条件を版として管理します。</p>
+        <Link href="/admin/activity-rules" className="button button--secondary">
+          継続ルールを開く
+        </Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="product-pack-title">
         <h2 id="product-pack-title">公式商品パック</h2>
         <p>グループへ提供する公式情報の下書き、公開、停止、利用状況を管理します。</p>

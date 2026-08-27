@@ -313,7 +313,7 @@ FREE一般ユーザーへは開放せず、Productionで明示許可したGroup�
 - J3-B: 既存の同意・Quiet Hours・Quota・全体停止を再利用するLINE復帰通知（実装済み）
 - J4-A: 最重要KPI「初めの7日間で3回投稿」の管理レポート・CSV — 実装済み
 - J4-B1: ユーザー・Group別進捗、環境別テスト利用者除外、追記型監査、集計監視、CSV — 実装済み
-- J4-B2: 週間目標・休眠日数・Step・BadgeのRule Version管理画面 — 未着手（別PR）
+- J4-B2: 週間目標・休眠日数・Step・BadgeのRule Version管理画面 — 実装済み
 
 `DailyMission`、`MissionContent`、`MissionDecision`、`MissionActivity`、`PostRecord`、`MissionFeedback`、`LineNotificationPreference`と既存LINE配信基盤を正本とする。`daily_contents`、汎用`activity_events`、`post_reports`、別系統の通知設定は作らない。週に3回の確認は優しい継続目標とし、最重要KPIは7日間に3回以上実際に投稿したユーザー率とする。
 

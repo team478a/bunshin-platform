@@ -21,6 +21,7 @@ const adminNavigation = [
   { href: '/admin/access', label: '管理者と権限' },
   { href: '/admin/groups', label: 'グループ管理' },
   { href: '/admin/trends', label: 'トレンド企画' },
+  { href: '/admin/activity-rules', label: '続けやすさのルール' },
   { href: '/admin/line', label: 'LINE運用' },
   { href: '/admin/legal', label: '法務文書' },
   { href: '/admin/deletions', label: '退会要求' },
