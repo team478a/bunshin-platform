@@ -713,6 +713,13 @@ enum VideoRenderStatus {
   CANCELLED
 }
 
+enum VideoCompletionNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
 enum VideoSceneVisualType {
   USER_ASSET
   APPROVED_ASSET
@@ -1693,29 +1700,35 @@ model VideoProject {
 }
 
 model VideoRender {
-  id                String                    @id @default(uuid()) @db.Uuid
-  workspaceId       String                    @map("workspace_id") @db.Uuid
-  groupId           String                    @map("group_id") @db.Uuid
-  groupMembershipId String                    @map("group_membership_id") @db.Uuid
-  ownerUserId       String                    @map("owner_user_id") @db.Uuid
-  videoProjectId    String                    @map("video_project_id") @db.Uuid
-  projectRevision   Int                       @map("project_revision")
-  provider          String                    @db.VarChar(80)
-  status            VideoRenderStatus         @default(QUEUED)
-  externalJobId     String?                   @map("external_job_id") @db.VarChar(255)
-  outputStorageKey  String?                   @map("output_storage_key") @db.VarChar(512)
-  errorCode         String?                   @map("error_code") @db.VarChar(80)
-  startedAt         DateTime?                 @map("started_at") @db.Timestamptz(6)
-  completedAt       DateTime?                 @map("completed_at") @db.Timestamptz(6)
-  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  project           VideoProject              @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
-  retryRequests     VideoRenderRetryRequest[]
+  id                       String                             @id @default(uuid()) @db.Uuid
+  workspaceId              String                             @map("workspace_id") @db.Uuid
+  groupId                  String                             @map("group_id") @db.Uuid
+  groupMembershipId        String                             @map("group_membership_id") @db.Uuid
+  ownerUserId              String                             @map("owner_user_id") @db.Uuid
+  videoProjectId           String                             @map("video_project_id") @db.Uuid
+  projectRevision          Int                                @map("project_revision")
+  provider                 String                             @db.VarChar(80)
+  status                   VideoRenderStatus                  @default(QUEUED)
+  externalJobId            String?                            @map("external_job_id") @db.VarChar(255)
+  outputStorageKey         String?                            @map("output_storage_key") @db.VarChar(512)
+  errorCode                String?                            @map("error_code") @db.VarChar(80)
+  startedAt                DateTime?                          @map("started_at") @db.Timestamptz(6)
+  completedAt              DateTime?                          @map("completed_at") @db.Timestamptz(6)
+  usageCountedAt           DateTime?                          @map("usage_counted_at") @db.Timestamptz(6)
+  notificationStatus       VideoCompletionNotificationStatus? @map("notification_status")
+  notificationAttemptCount Int                                @default(0) @map("notification_attempt_count")
+  notificationErrorCode    String?                            @map("notification_error_code") @db.VarChar(80)
+  notifiedAt               DateTime?                          @map("notified_at") @db.Timestamptz(6)
+  createdAt                DateTime                           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  project                  VideoProject                       @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
+  retryRequests            VideoRenderRetryRequest[]
 
   @@unique([videoProjectId, projectRevision])
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([groupId, groupMembershipId, status])
   @@index([provider, externalJobId])
+  @@index([notificationStatus, completedAt])
   @@map("video_renders")
 }
 

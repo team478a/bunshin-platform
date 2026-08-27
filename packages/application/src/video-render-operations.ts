@@ -1,5 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import type { JobEnvironment, VideoRenderStatus } from './index';
+import type { VideoCompletionNotificationStatus } from './video-render-completion';
 
 export const VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES = [
   'PROVIDER_TIMEOUT',
@@ -22,6 +23,9 @@ export interface VideoRenderOperationsItem {
   createdAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;
+  usageCountedAt: Date | null;
+  notificationStatus: VideoCompletionNotificationStatus | null;
+  notifiedAt: Date | null;
 }
 
 export interface VideoRenderOperationsSnapshot {

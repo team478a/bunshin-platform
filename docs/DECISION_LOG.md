@@ -1326,3 +1326,14 @@
 - Provider Safety: 外部Job IDが存在するRenderは状態確認から再開し、新しい外部Renderを送信しない。外部Job IDがない場合だけ送信待ちへ戻す。
 - Audit: 要求者、環境、理由、Render、Job、日時を追記型履歴へ保存する。秘密値やProvider応答は保存しない。
 - Deferred: 完成本数の確定とLINE完成通知はV-5B3Cで実装する。
+
+## D-107: 動画利用回数はPrivate Storage保存後に一度だけ確定する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Accounting: Renderが`SUCCEEDED`で非公開Storage Keyを持つ場合だけ、既存Group機能利用履歴へ完成1本を記録する。処理待ち、外部送信済み、作成中、失敗、取消は数えない。
+- Idempotency: `VIDEO_GENERATION + video-render-completed:{renderId}`を参加者単位で一意にし、Polling、Webhook、Job再試行による二重計上を防止する。
+- Notification: 動画完成通知はDaily Mission通知と責務を分け、VideoRenderに状態、試行回数、安全なエラー分類、送信日時を保持する。通知本文やLINE user IDは保存しない。
+- Consent: 本人のLINE接続と通知許可、現在環境の有効設定を再確認する。通知停止や未接続でも完成動画と利用回数は維持し、通知だけを中止する。
+- Retry: 一時的なLINE障害ではRenderを再生成せず通知だけを再試行し、送信済み通知を再送しない。
+- Boundary: 課金・決済、一般公開、SNS自動投稿は実装しない。

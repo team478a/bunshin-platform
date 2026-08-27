@@ -53,6 +53,21 @@ export default async function VideoRenderOperationsPage() {
                 <p>グループ：{item.groupName}</p>
                 <p>状態：{statusText[item.status] ?? item.status}</p>
                 <p>受付日時：{item.createdAt.toLocaleString('ja-JP')}</p>
+                {item.status === 'SUCCEEDED' ? (
+                  <>
+                    <p>利用回数：{item.usageCountedAt ? '確定済み' : '未確定'}</p>
+                    <p>
+                      完成のお知らせ：
+                      {item.notificationStatus === 'SENT'
+                        ? '送信済み'
+                        : item.notificationStatus === 'CANCELLED'
+                          ? '送信しない設定'
+                          : item.notificationStatus === 'FAILED'
+                            ? '送信に失敗'
+                            : '送信待ち'}
+                    </p>
+                  </>
+                ) : null}
                 {item.errorCode ? <p>停止理由：{item.errorCode}</p> : null}
                 {item.status === 'FAILED' && !item.retryable ? (
                   <p>自動的に直せない失敗です。台本や外部サービスの設定を確認してください。</p>
