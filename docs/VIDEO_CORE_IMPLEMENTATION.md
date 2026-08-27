@@ -159,4 +159,4 @@ Instagram、TikTok、YouTube Shortsごとに、AI利用の開示文、ハッシ�
 
 Policyは下書き作成と有効化を分離し、有効化理由と実行者を記録する。過去版は上書きせずSUPERSEDEDとして保持する。動画生成時に参照するのは現在環境・対象SNSのACTIVE版だけで、未設定時に別環境や別SNSの文面へフォールバックしない。
 
-本段階ではSchema、Migration、Application Use Case、Repositoryと自動テストまでを実装する。管理画面、動画作成時の`disclosureSnapshot`確定、本人確認画面の案内、完成MP4への実メタデータ埋め込みはV-5C2以降で接続する。
+管理画面、動画作成時の`disclosureSnapshot`確定、本人確認画面の案内、本番準備チェックまで実装済みとする。完成MP4への実メタデータ埋め込みは現行Phaseへ含めない。AI利用表示は、利用者が確認できる表示文、ハッシュタグ、投稿時案内を主要手段とする。
