@@ -4,6 +4,7 @@ import {
   CompleteJob,
   ExecuteMissionAutomationJob,
   ExecuteLineDeliveryJob,
+  ExecuteVideoRenderJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -37,11 +38,13 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createDailyMissionJobHandler },
     { createLineDeliveryJobHandler },
     { createTrendResearchJobHandler },
+    { createVideoRenderJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
     import('../jobs/line-delivery-job-handler'),
     import('../jobs/trend-research-job-handler'),
+    import('../jobs/video-render-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -58,11 +61,14 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     fail,
   );
   const lineExecutor = new ExecuteLineDeliveryJob(createLineDeliveryJobHandler(), complete, fail);
+  const videoExecutor = new ExecuteVideoRenderJob(createVideoRenderJobHandler(), complete, fail);
   return new RunJobWorkerBatch(new ClaimJob(jobs), {
     execute: (job, workerId) =>
       job.jobType === 'LINE_MISSION_DELIVER'
         ? lineExecutor.execute(job, workerId)
-        : missionExecutor.execute(job, workerId),
+        : job.jobType === 'VIDEO_RENDER_PROCESS'
+          ? videoExecutor.execute(job, workerId)
+          : missionExecutor.execute(job, workerId),
   });
 }
 

@@ -1297,3 +1297,11 @@
 - Verification: 接続確認はテンプレート一覧APIへの読み取り専用要求とし、RenderやCredit消費を発生させない。
 - Environment: 実行環境と設定環境の一致をサーバーで検証し、Production設定をPreviewやStagingから利用しない。
 - Boundary: 管理設定の有効化だけでは動画を送信しない。非同期Jobと完成物保存が完成するまでRender実行経路は閉じたままにする。
+
+## D-104: Renderは非同期Jobで実行し、完成物だけをPrivate Storageへ取り込む
+
+- Queue: 本人が承認済みRevisionを明示操作した場合だけRenderとJobを冪等に受付する。API request中に外部Renderの完了を待たない。
+- Polling: JobはProvider status APIを正として進捗を確認し、処理中は指数Backoffで再試行する。再試行上限到達時は内部RenderとProjectを失敗状態へ揃える。
+- Download: Provider URLはHTTPSかつCreatomate CDNだけを許可し、Redirect、URL認証情報、fragmentを拒否する。MP4 signatureと100MB上限を検査してから非公開Storageへ保存する。
+- Access: 完成URLをDBへ保存せずStorage Keyだけを保持する。本人sessionとWorkspace／Group／Project所有権を再確認した5分間の署名URLからだけ閲覧する。
+- Boundary: Webhook照合、利用回数確定、課金、SNS自動投稿、AI動画生成は後続とする。

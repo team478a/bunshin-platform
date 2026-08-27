@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { VideoPlanGenerator } from '../../../../../ui/video-plan-generator';
 import { VideoPlanApprover } from '../../../../../ui/video-plan-approver';
+import { VideoRenderRequester } from '../../../../../ui/video-render-requester';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,10 @@ export default async function VideoProjectPage({
   const db = await import('@bunshin/database');
   const row = await db.prisma.videoProject.findFirst({
     where: { id: videoProjectId.data, groupId: groupId.data, ownerUserId: actor.userId },
-    select: { workspaceId: true },
+    select: {
+      workspaceId: true,
+      renderAttempts: { orderBy: { createdAt: 'desc' }, take: 1 },
+    },
   });
   if (!row) notFound();
   let project;
@@ -126,8 +130,38 @@ export default async function VideoProjectPage({
           {project.status === 'APPROVED' ? (
             <section className="settings-card">
               <h2>台本を確認しました</h2>
-              <p>外部の動画作成サービスを接続すると、この内容から動画本体を作れます。</p>
-              <p>接続前なので、現在は外部サービスへ送信していません。</p>
+              <p>この内容から動画を作ります。受付後は画面を閉じても大丈夫です。</p>
+              <VideoRenderRequester
+                workspaceId={project.workspaceId}
+                groupId={project.groupId}
+                projectId={project.id}
+                revision={project.revision}
+              />
+            </section>
+          ) : null}
+          {['QUEUED', 'RENDERING'].includes(project.status) ? (
+            <section className="settings-card">
+              <h2>動画を作っています</h2>
+              <p>完成まで少しお待ちください。あとでこの画面を開き直すと確認できます。</p>
+            </section>
+          ) : null}
+          {project.status === 'READY_FOR_REVIEW' &&
+          row.renderAttempts[0]?.status === 'SUCCEEDED' ? (
+            <section className="settings-card">
+              <h2>動画ができました</h2>
+              <p>内容を確認してください。動画は一般公開されていません。</p>
+              <a
+                className="button button--primary"
+                href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/render/download`}
+              >
+                動画を確認する
+              </a>
+            </section>
+          ) : null}
+          {project.status === 'FAILED' ? (
+            <section className="settings-card">
+              <h2>動画を完成できませんでした</h2>
+              <p>設定または外部サービスの状態を管理者が確認します。</p>
             </section>
           ) : null}
         </>

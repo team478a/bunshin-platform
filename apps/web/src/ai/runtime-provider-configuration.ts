@@ -25,6 +25,11 @@ export interface TrendRuntimeConfiguration {
   requestCostUsdMicros: number;
 }
 
+export interface CreatomateRuntimeConfiguration {
+  apiKey: string;
+  requestCostUsdMicros: number;
+}
+
 interface Dependencies {
   repository: AiProviderConfigurationRepository;
   crypto: AiProviderSecretCryptoPort;
@@ -104,4 +109,23 @@ export async function resolveTrendRuntimeConfiguration(input?: {
     }
   }
   throw new ApplicationError('CONFIGURATION_ERROR', 'active trend provider configuration required');
+}
+
+export async function resolveCreatomateRuntimeConfiguration(input?: {
+  repository?: AiProviderConfigurationRepository;
+  crypto?: AiProviderSecretCryptoPort;
+}): Promise<CreatomateRuntimeConfiguration> {
+  let repository = input?.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
+    environment: currentAiProviderEnvironment(),
+    provider: 'CREATOMATE',
+  });
+  return {
+    apiKey: (input?.crypto ?? new AesGcmAiProviderSecretCrypto()).decrypt(resolved.encryptedApiKey),
+    requestCostUsdMicros: resolved.configuration.requestCostUsdMicros ?? 0,
+  };
 }

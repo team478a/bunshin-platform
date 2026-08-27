@@ -138,6 +138,29 @@ export interface VideoRenderRepository {
     expectedRevision: number;
     provider: string;
   }): Promise<VideoRenderRecord | null>;
+  findForExecution(input: {
+    workspaceId: string;
+    renderId: string;
+  }): Promise<{ render: VideoRenderRecord; project: VideoProjectRecord } | null>;
+  markSubmitted(input: {
+    workspaceId: string;
+    renderId: string;
+    externalJobId: string;
+  }): Promise<VideoRenderRecord | null>;
+  markRendering(input: {
+    workspaceId: string;
+    renderId: string;
+  }): Promise<VideoRenderRecord | null>;
+  markSucceeded(input: {
+    workspaceId: string;
+    renderId: string;
+    outputStorageKey: string;
+  }): Promise<VideoRenderRecord | null>;
+  markFailed(input: {
+    workspaceId: string;
+    renderId: string;
+    errorCode: string;
+  }): Promise<VideoRenderRecord | null>;
 }
 
 export interface VideoRenderProviderPort {
@@ -153,6 +176,21 @@ export interface VideoRenderProviderPort {
     | { status: 'FAILED'; errorCode: string }
   >;
 }
+
+export interface VideoRenderOutputStoragePort {
+  store(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    renderId: string;
+    sourceUrl: string;
+  }): Promise<{ storageKey: string }>;
+}
+
+export type VideoRenderExecutionResult =
+  | { status: 'PENDING'; render: VideoRenderRecord }
+  | { status: 'SUCCEEDED'; render: VideoRenderRecord }
+  | { status: 'FAILED'; render: VideoRenderRecord };
 
 export interface VideoPlanningContext {
   objective: string;
@@ -390,6 +428,74 @@ export class QueueVideoRender {
     });
     if (!value) throw new ApplicationError('CONFLICT', 'video render queue conflict');
     return value;
+  }
+}
+
+export class ExecuteVideoRenderStep {
+  constructor(
+    private readonly repository: VideoRenderRepository,
+    private readonly provider: VideoRenderProviderPort,
+    private readonly storage: VideoRenderOutputStoragePort,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    renderId: string;
+  }): Promise<VideoRenderExecutionResult> {
+    const scope = {
+      workspaceId: id(input.workspaceId, 'workspaceId'),
+      renderId: id(input.renderId, 'renderId'),
+    };
+    const value = await this.repository.findForExecution(scope);
+    if (!value) throw new ApplicationError('NOT_FOUND', 'video render not found');
+    if (value.render.provider !== 'CREATOMATE')
+      throw new ApplicationError('CONFIGURATION_ERROR', 'unsupported video render provider');
+    if (value.render.status === 'SUCCEEDED') return { status: 'SUCCEEDED', render: value.render };
+    if (value.render.status === 'FAILED' || value.render.status === 'CANCELLED')
+      return { status: 'FAILED', render: value.render };
+
+    let render = value.render;
+    if (render.status === 'QUEUED') {
+      const submitted = await this.provider.submit({ renderId: render.id, project: value.project });
+      const updated = await this.repository.markSubmitted({
+        ...scope,
+        externalJobId: text(submitted.externalJobId, 'externalJobId', 255),
+      });
+      if (!updated) throw new ApplicationError('CONFLICT', 'video render transition conflict');
+      return { status: 'PENDING', render: updated };
+    }
+    if (!render.externalJobId)
+      throw new ApplicationError('CONFLICT', 'video render external job is missing');
+    const inspected = await this.provider.inspect({ externalJobId: render.externalJobId });
+    if (inspected.status === 'SUBMITTED' || inspected.status === 'RENDERING') {
+      if (inspected.status === 'RENDERING') {
+        const updated = await this.repository.markRendering(scope);
+        if (updated) render = updated;
+      }
+      return { status: 'PENDING', render };
+    }
+    if (inspected.status === 'FAILED') {
+      const failed = await this.repository.markFailed({
+        ...scope,
+        errorCode: text(inspected.errorCode, 'errorCode', 80),
+      });
+      if (!failed) throw new ApplicationError('CONFLICT', 'video render transition conflict');
+      return { status: 'FAILED', render: failed };
+    }
+    if (inspected.status !== 'SUCCEEDED')
+      throw new ApplicationError('INTERNAL_ERROR', 'invalid video render status');
+    const stored = await this.storage.store({
+      ...scope,
+      groupId: value.render.groupId,
+      ownerUserId: value.render.ownerUserId,
+      sourceUrl: inspected.outputUrl,
+    });
+    const succeeded = await this.repository.markSucceeded({
+      ...scope,
+      outputStorageKey: text(stored.storageKey, 'outputStorageKey', 512),
+    });
+    if (!succeeded) throw new ApplicationError('CONFLICT', 'video render transition conflict');
+    return { status: 'SUCCEEDED', render: succeeded };
   }
 }
 

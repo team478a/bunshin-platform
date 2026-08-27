@@ -115,10 +115,14 @@ Creatomateを既存の外部サービス設定管理へ追加した。管理者�
 ## 後続PR
 
 1. Render Provider設定の管理画面、安全な暗号化保存、接続確認
-2. 非同期Render Job、Webhook照合、完成物のPrivate Storage保存
-3. 成功時のみ利用回数を確定する仕組み
-4. 台本修正と完成物取得画面
-5. グループ管理画面
-6. 素材のマルウェア検査とライフサイクル削除
+2. Webhook照合、Render運用監視、完成成功時だけの利用回数確定
+
+## V-5B2B 非同期Render Jobと完成物保存
+
+承認済み台本からのRender受付を、既存の環境別Job基盤へ接続した。受付APIは本人・Workspace・Group・Revision・機能権限を再検証し、有効なCreatomate設定がない場合は外部送信前に停止する。Jobは内部Render IDだけを参照し、送信、状態確認、再試行を冪等に進める。
+
+完成URLは配信元として保存せず、HTTPS、Creatomate CDN host、認証情報なし、MP4 signature、100MB上限を再検証して、Supabaseの非公開`video-renders` bucketへ保存する。DBへ保存するのは推測不能なStorage Keyだけで、本人確認済みsessionとWorkspace／Group／Project所有権を確認した短期署名URLからのみ閲覧できる。
+
+外部処理中は指数Backoffで再試行し、上限到達時はRenderとProjectを失敗状態へ揃える。課金、SNS自動投稿、AI動画生成、Webhookのみを信用した完了判定は実装していない。3. 成功時のみ利用回数を確定する仕組み4. 台本修正と完成物取得画面5. グループ管理画面6. 素材のマルウェア検査とライフサイクル削除
 
 本PRには外部レンダリング、FFmpeg Worker、課金、一般公開、SNS自動投稿、Provider APIキー管理を含めない。

@@ -23,6 +23,7 @@ import type {
 } from '@bunshin/platform-domain';
 import { isValidBunshinSlug, normalizeBunshinSlug } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
+export * from './video-render-job';
 
 export interface ValidationMetricsPeriod {
   from: Date;
