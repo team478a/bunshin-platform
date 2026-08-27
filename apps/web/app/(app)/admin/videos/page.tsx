@@ -1,9 +1,14 @@
-import { GetVideoRenderOperations } from '@bunshin/application';
+import {
+  GetVideoRenderOperations,
+  ListAiProviderConfigurations,
+  ListVideoDisclosurePolicies,
+} from '@bunshin/application';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { VideoRenderRetryForm } from './video-render-retry-form';
+import { buildVideoReadiness } from './readiness-view-model';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +31,17 @@ export default async function VideoRenderOperationsPage() {
     .execute({ actorUserId: user.userId, environment: currentLineEnvironment() })
     .catch(() => null);
   if (!snapshot) notFound();
+  const environment = currentLineEnvironment();
+  const [configurations, disclosurePolicies] = await Promise.all([
+    new ListAiProviderConfigurations(new db.PrismaAiProviderConfigurationRepository()).execute(
+      user.userId,
+      environment,
+    ),
+    new ListVideoDisclosurePolicies(new db.PrismaVideoDisclosurePolicyRepository()).execute(
+      environment,
+    ),
+  ]);
+  const readiness = buildVideoReadiness({ configurations, disclosurePolicies });
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -34,15 +50,29 @@ export default async function VideoRenderOperationsPage() {
         <p>動画が完成したか、止まっていないかを確認できます。</p>
       </header>
       <section className="settings-card">
-        <h2>動画のAI利用表示</h2>
-        <p>投稿時の説明文と確認案内をSNSごとに管理します。</p>
-        <Link className="button button--secondary" href="/admin/videos/disclosures">
-          表示ルールを設定する
-        </Link>
+        <h2>動画機能を使う準備</h2>
+        <p>
+          {readiness.ready
+            ? '必要な設定はそろっています。動画機能を利用できます。'
+            : `あと${readiness.blockerCount}件の設定が必要です。利用者が動画を作る前に対応してください。`}
+        </p>
+        <ul className="settings-status-list">
+          {readiness.items.map((item) => (
+            <li className="settings-status-item" key={item.key}>
+              <h3>
+                {item.ready ? '準備完了' : '設定が必要'}：{item.label}
+              </h3>
+              <p>{item.detail}</p>
+              <Link className="button button--secondary" href={item.href}>
+                {item.actionLabel}
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
       <section className="settings-card">
         <h2>現在の件数</h2>
-        <p>対象環境：{currentLineEnvironment()}</p>
+        <p>対象環境：{environment}</p>
         <p>
           待機 {snapshot.counts.QUEUED + snapshot.counts.SUBMITTED}件 ／ 作成中{' '}
           {snapshot.counts.RENDERING}件 ／ 完成 {snapshot.counts.SUCCEEDED}件 ／ 失敗{' '}
