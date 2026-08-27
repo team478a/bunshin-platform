@@ -1220,6 +1220,7 @@
 - Scope: 初期動画機能は一般利用者へ公開せず、System Adminが許可したGroupとGroup Managerが割り当てたMemberだけが使用できる。Phase V-1の利用者検証は外部チームが担当する。
 - Composition: 標準動画は静止画、字幕、音声、BGM、文字の動きを基本とし、AI動画そのものを標準へ含めない。AI動画は別機能・別原価として扱う。
 - Provider: Bunshin Coreから外部レンダリング会社を直接呼ばず、Render Provider Portと交換可能なAdapterを後続PRで実装する。初期段階で自前FFmpeg Workerは運用しない。
+
 - Identity: Video ProjectはWorkspace、Group、Group Membership、Owner User、Bunshinを保持し、作成・取得・更新のすべてで同一境界を再検証する。
 - Disclosure: 台本、音声、画像、動画、素材選択のどこにAIを使ったかをProject・Scene単位で記録し、利用者へ表示した説明をSnapshotで保持する。
 - Accounting: 将来の利用回数は外部Renderが成功した場合だけ計上する。Draft、失敗、再試行、取消を完成本数へ含めない。課金・決済は今回実装しない。
@@ -1280,3 +1281,11 @@
 - Output: 完成物は将来Private Storageへ取り込み、DBには非公開Storage Keyだけを保存する。Providerの一時URLを正本にしない。
 - Accounting: `QUEUED`、`SUBMITTED`、`RENDERING`、失敗、取消は完成本数へ含めない。`SUCCEEDED`の確定処理は非同期Job実装時に追加する。
 - Safety: Provider未選定のV-5Aでは承認までに留め、外部サービスへ自動送信しない。
+
+## D-102: 初期の標準動画Render AdapterはCreatomateを採用する
+
+- Decision: 初期ProviderはCreatomateとし、Application層の`VideoRenderProviderPort`をWeb側Adapterで実装する。承認済みSceneからRenderScriptを生成し、Provider上のテンプレートを事業データの正本にしない。
+- Boundary: 本Adapterは標準動画だけを対象とし、AI動画Sceneを拒否する。Provider固有status、error、URLはAdapter内で検証・正規化し、CoreへProvider SDK型を持ち込まない。
+- Privacy: Provider metadataには内部Render IDだけを送り、User、Workspace、Group、Bunshin、台本本文、APIキーを含めない。
+- Output: Creatomate上の完成物は最大30日の一時成果物として扱う。後続JobでHTTPSと許可hostを検証してPrivate Storageへ移し、永続履歴にはStorage Keyだけを保存する。
+- Operations: 実送信は環境別の暗号化設定、接続確認、Job、Webhook照合が完成するまで有効化しない。自前FFmpeg Worker、課金、SNS自動投稿は引き続き対象外とする。

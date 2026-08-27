@@ -94,10 +94,23 @@ Renderは`VideoRenderProviderPort`へ分離した。承認済みRevisionだけ�
 
 ## 後続PR
 
-1. 外部Render Provider比較とAdapter
-2. 非同期Render Job、成功時のみ利用回数を確定する仕組み
-3. 台本修正と完成物取得
-4. グループ管理画面
-5. 素材のマルウェア検査とライフサイクル削除
+## V-5B1 外部Render Provider比較とAdapter
+
+初期ProviderはCreatomateとする。RenderScriptをAPIへ直接送れるため、Provider上の固定テンプレートを正本にせず、ワタシワークスの承認済みSceneを正本として維持できる。30秒・60秒の縦型MP4、非同期状態取得、Webhook、完成物取得に対応し、初期の標準動画に必要な境界を満たす。
+
+AdapterはApplication層の`VideoRenderProviderPort`だけを実装し、Provider固有statusを内部statusへ変換する。標準動画からAI動画Sceneを拒否し、送信metadataは内部Render IDだけに限定する。APIキー、User ID、Workspace ID、台本のナレーションをmetadataへ含めない。完成URLはHTTPSかつCreatomate CDNであることを検証する。
+
+Creatomateの一時URLは永続的な配信元にしない。Providerの公式仕様では完成物の保持は最大30日であるため、後続Jobが取得・検査してPrivate Storageへ保存し、DBには非公開Storage Keyだけを保持する。Webhookは完了通知として利用できるが、署名だけに依存せずstatus APIで再確認する。
+
+本段階ではAPIキーを用意せずに検証可能なRenderScript変換、HTTP Adapter、status/error分類と自動テストまでを実装した。Providerへの実送信、Webhook受付、完成物取得、利用回数確定はまだ行わない。
+
+## 後続PR
+
+1. Render Provider設定の管理画面、安全な暗号化保存、接続確認
+2. 非同期Render Job、Webhook照合、完成物のPrivate Storage保存
+3. 成功時のみ利用回数を確定する仕組み
+4. 台本修正と完成物取得画面
+5. グループ管理画面
+6. 素材のマルウェア検査とライフサイクル削除
 
 本PRには外部レンダリング、FFmpeg Worker、課金、一般公開、SNS自動投稿、Provider APIキー管理を含めない。
