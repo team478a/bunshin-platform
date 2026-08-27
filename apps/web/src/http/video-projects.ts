@@ -5,6 +5,7 @@ import {
   EnqueueJob,
   GenerateVideoPlan,
   QueueVideoRender,
+  ResolveVideoDisclosurePolicy,
   VIDEO_RENDER_JOB_TYPE,
   type JobEnvironment,
 } from '@bunshin/application';
@@ -19,6 +20,7 @@ import {
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { currentLineEnvironment } from '../line/secure-configuration';
 import {
   OpenAIVideoPlanGenerator,
   VIDEO_PLAN_PROMPT_VERSION,
@@ -57,6 +59,7 @@ function publicProject<
     aiProcessingTypes: unknown;
     standardComposition: boolean;
     scenes: unknown;
+    disclosureSnapshot: unknown;
   },
 >(project: T) {
   return {
@@ -70,6 +73,7 @@ function publicProject<
     aiProcessingTypes: project.aiProcessingTypes,
     standardComposition: project.standardComposition,
     scenes: project.scenes,
+    disclosureSnapshot: project.disclosureSnapshot,
   };
 }
 
@@ -87,6 +91,9 @@ export async function createVideoProjectResponse(
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = createSchema.parse(await request.json());
     const db = await import('@bunshin/database');
+    const disclosure = await new ResolveVideoDisclosurePolicy(
+      new db.PrismaVideoDisclosurePolicyRepository(),
+    ).execute({ environment: currentLineEnvironment(), platform: input.platform });
     const project = await new CreateVideoProject(new db.PrismaVideoProjectRepository()).execute({
       workspaceId: uuid.parse(workspaceId),
       groupId: uuid.parse(groupId),
@@ -100,6 +107,17 @@ export async function createVideoProjectResponse(
       durationSeconds: input.durationSeconds,
       aiProcessingTypes: [],
       disclosureSnapshot: {
+        schemaVersion: 1,
+        source: 'ACTIVE_POLICY',
+        environment: currentLineEnvironment(),
+        policyId: disclosure.policyId,
+        policyVersion: disclosure.policyVersion,
+        platform: disclosure.platform,
+        disclosureText: disclosure.disclosureText,
+        hashtags: disclosure.hashtags,
+        guidance: disclosure.guidance,
+        outputMetadata: disclosure.outputMetadata,
+        resolvedAt: disclosure.resolvedAt.toISOString(),
         standardComposition: true,
         aiVideoGeneration: false,
         explanation: 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',

@@ -22,6 +22,7 @@ export interface VideoDisclosurePolicy {
 }
 
 export interface VideoDisclosurePolicyRepository {
+  list(input: { environment: LineConfigurationEnvironment }): Promise<VideoDisclosurePolicy[]>;
   createDraft(input: {
     environment: LineConfigurationEnvironment;
     platform: VideoPlatform;
@@ -35,6 +36,7 @@ export interface VideoDisclosurePolicyRepository {
   }): Promise<VideoDisclosurePolicy>;
   activate(input: {
     policyId: string;
+    environment: LineConfigurationEnvironment;
     actorUserId: string;
     activationReason: string;
     now: Date;
@@ -43,6 +45,14 @@ export interface VideoDisclosurePolicyRepository {
     environment: LineConfigurationEnvironment;
     platform: VideoPlatform;
   }): Promise<VideoDisclosurePolicy | null>;
+}
+
+export class ListVideoDisclosurePolicies {
+  constructor(private readonly repository: VideoDisclosurePolicyRepository) {}
+
+  execute(environment: LineConfigurationEnvironment) {
+    return this.repository.list({ environment });
+  }
 }
 
 const cleanText = (value: string, field: string, maximum: number) => {
@@ -107,7 +117,12 @@ export class CreateVideoDisclosurePolicyDraft {
 export class ActivateVideoDisclosurePolicy {
   constructor(private readonly repository: VideoDisclosurePolicyRepository) {}
 
-  execute(input: { policyId: string; actorUserId: string; activationReason: string }) {
+  execute(input: {
+    policyId: string;
+    environment: LineConfigurationEnvironment;
+    actorUserId: string;
+    activationReason: string;
+  }) {
     if (!/^[0-9a-f-]{36}$/i.test(input.policyId) || !/^[0-9a-f-]{36}$/i.test(input.actorUserId))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid identifier');
     return this.repository.activate({

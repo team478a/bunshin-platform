@@ -25,11 +25,12 @@ const policy: VideoDisclosurePolicy = {
 };
 
 const repository = () => {
+  const list = vi.fn().mockResolvedValue([policy]);
   const createDraft = vi.fn().mockResolvedValue({ ...policy, status: 'DRAFT' });
   const activate = vi.fn().mockResolvedValue(policy);
   const findActive = vi.fn().mockResolvedValue(policy);
-  const store: VideoDisclosurePolicyRepository = { createDraft, activate, findActive };
-  return { store, createDraft, activate, findActive };
+  const store: VideoDisclosurePolicyRepository = { list, createDraft, activate, findActive };
+  return { store, list, createDraft, activate, findActive };
 };
 
 describe('video disclosure policy', () => {
@@ -68,6 +69,7 @@ describe('video disclosure policy', () => {
     expect(() =>
       new ActivateVideoDisclosurePolicy(store).execute({
         policyId: policy.id,
+        environment: 'PRODUCTION',
         actorUserId: '22222222-2222-4222-8222-222222222222',
         activationReason: ' ',
       }),
