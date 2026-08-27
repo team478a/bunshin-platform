@@ -57,9 +57,38 @@ export interface AdminOperationsSnapshot {
     d7EligibleUsers: number;
     d7ActiveUsers: number;
     d7ActiveRate: number | null;
+    firstWeekThreePostEligibleUsers: number;
+    firstWeekThreePostUsers: number;
+    firstWeekThreePostRate: number | null;
   };
   users: AdminUserSummary[];
   truncated: boolean;
+}
+
+export function calculateFirstWeekThreePostKpi(input: {
+  cohort: Array<{ userId: string; createdAt: Date }>;
+  posts: Array<{ userId: string; postedAt: Date }>;
+  periodEnd: Date;
+}) {
+  const week = 7 * 86_400_000;
+  const eligible = input.cohort.filter(
+    ({ createdAt }) => createdAt.getTime() + week <= input.periodEnd.getTime(),
+  );
+  const createdAtByUser = new Map(eligible.map((item) => [item.userId, item.createdAt]));
+  const counts = new Map<string, number>();
+  for (const post of input.posts) {
+    const createdAt = createdAtByUser.get(post.userId);
+    if (!createdAt) continue;
+    const elapsed = post.postedAt.getTime() - createdAt.getTime();
+    if (elapsed < 0 || elapsed >= week) continue;
+    counts.set(post.userId, (counts.get(post.userId) ?? 0) + 1);
+  }
+  const achieved = eligible.filter(({ userId }) => (counts.get(userId) ?? 0) >= 3).length;
+  return {
+    firstWeekThreePostEligibleUsers: eligible.length,
+    firstWeekThreePostUsers: achieved,
+    firstWeekThreePostRate: eligible.length ? achieved / eligible.length : null,
+  };
 }
 
 export function calculateAdminRetention(input: {

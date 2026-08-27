@@ -5,6 +5,7 @@ import {
   SetAdminUserStatus,
   CreateAdminSupportCase,
   calculateAdminRetention,
+  calculateFirstWeekThreePostKpi,
   type AdminOperationsRepository,
 } from '../src';
 
@@ -20,6 +21,30 @@ function repository(): AdminOperationsRepository {
 }
 
 describe('admin operations', () => {
+  it('counts users who posted at least three times during their first seven days', () => {
+    const createdAt = new Date('2026-08-01T00:00:00Z');
+    expect(
+      calculateFirstWeekThreePostKpi({
+        cohort: [
+          { userId: 'user-1', createdAt },
+          { userId: 'user-2', createdAt },
+          { userId: 'too-new', createdAt: new Date('2026-08-08T00:00:00Z') },
+        ],
+        posts: [
+          { userId: 'user-1', postedAt: new Date('2026-08-01T01:00:00Z') },
+          { userId: 'user-1', postedAt: new Date('2026-08-03T01:00:00Z') },
+          { userId: 'user-1', postedAt: new Date('2026-08-07T23:00:00Z') },
+          { userId: 'user-2', postedAt: new Date('2026-08-02T01:00:00Z') },
+          { userId: 'user-2', postedAt: new Date('2026-08-08T01:00:00Z') },
+        ],
+        periodEnd: new Date('2026-08-09T00:00:00Z'),
+      }),
+    ).toEqual({
+      firstWeekThreePostEligibleUsers: 2,
+      firstWeekThreePostUsers: 1,
+      firstWeekThreePostRate: 0.5,
+    });
+  });
   it('counts D1 and D7 activity only in the matching registration windows', () => {
     const createdAt = new Date('2026-08-01T10:00:00Z');
     expect(

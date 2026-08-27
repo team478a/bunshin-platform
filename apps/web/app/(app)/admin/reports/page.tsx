@@ -88,6 +88,18 @@ export default async function AdminReportsPage({
         <p>ここは期間ではなく、現在残っている対応件数です。</p>
         <div className="validation-kpi-grid">
           <article>
+            <strong>
+              {percentage(
+                snapshot.retention.firstWeekThreePostUsers,
+                snapshot.retention.firstWeekThreePostEligibleUsers,
+              )}
+            </strong>
+            <span>
+              初めの7日間で3回投稿（{snapshot.retention.firstWeekThreePostUsers}/
+              {snapshot.retention.firstWeekThreePostEligibleUsers}人）
+            </span>
+          </article>
+          <article>
             <strong>{supportCases.filter((item) => item.status !== 'RESOLVED').length}</strong>
             <span>未解決の問い合わせ</span>
           </article>

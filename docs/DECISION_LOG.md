@@ -1188,3 +1188,10 @@
 - Recheck: Job予約時の判定だけを信用せず、LINE Provider呼出し直前に現在の同意、通知有効化、一時停止、曜日、Quiet Hours、Workspace・User・Bunshin状態を再検証する。不明・欠損時は送信しない。
 - Priority: `REMINDER`は低優先通知とし、月間使用率が停止基準へ達した場合はDaily Missionより先に停止する。全体停止と上限到達は既存配信Policyに従う。
 - Privacy: 復帰メッセージに活動履歴、Memory、Knowledge、投稿本文を含めず、短期署名付きMission Deep Linkだけを送る。
+
+## D-094: 活動継続の最重要KPIは登録後7日間のPostRecordで算出する
+
+- KPI: 登録後7日間の観測を完了した利用者を分母とし、その期間内に`PostRecord`を3件以上記録した利用者を達成者とする。
+- Boundary: `MissionActivity`の確認、採用、コピー、休みは行動支援指標として保持するが、実投稿KPIの分子へ混ぜない。
+- Time: 各利用者の登録日時から連続7日間を判定し、管理画面で選んだ集計期間の終了時点まで観測が完了した利用者だけを対象とする。
+- Export: 投稿本文、URL、Knowledge、Memoryを含めず、集計値だけを既存の管理CSVへ追加する。

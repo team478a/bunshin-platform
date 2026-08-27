@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import {
   calculateAdminRetention,
+  calculateFirstWeekThreePostKpi,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
@@ -7539,7 +7540,12 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
     const d7EligibleIds = [...cohortCreatedAt]
       .filter(([, createdAt]) => createdAt.getTime() + 8 * 86_400_000 <= input.to.getTime())
       .map(([id]) => id);
-    const retentionIds = [...new Set([...d1EligibleIds, ...d7EligibleIds])];
+    const firstWeekEligibleIds = [...cohortCreatedAt]
+      .filter(([, createdAt]) => createdAt.getTime() + 7 * 86_400_000 <= input.to.getTime())
+      .map(([id]) => id);
+    const retentionIds = [
+      ...new Set([...d1EligibleIds, ...d7EligibleIds, ...firstWeekEligibleIds]),
+    ];
     const [retentionActivities, retentionPosts] = retentionIds.length
       ? await Promise.all([
           this.client.missionActivity.findMany({
@@ -7561,6 +7567,14 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         })),
         ...retentionPosts.map((item) => ({ userId: item.actorUserId, occurredAt: item.postedAt })),
       ],
+      periodEnd: input.to,
+    });
+    const firstWeekPosting = calculateFirstWeekThreePostKpi({
+      cohort: [...cohortCreatedAt].map(([userId, createdAt]) => ({ userId, createdAt })),
+      posts: retentionPosts.map((item) => ({
+        userId: item.actorUserId,
+        postedAt: item.postedAt,
+      })),
       periodEnd: input.to,
     });
     const stageIndex = new Map<AdminUserStage, number>([
@@ -7603,7 +7617,7 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
         supportCasesResolved,
       },
       funnel,
-      retention,
+      retention: { ...retention, ...firstWeekPosting },
       users: visible,
       truncated: rows.length > input.limit || cohortRows.length > 5000,
     };
