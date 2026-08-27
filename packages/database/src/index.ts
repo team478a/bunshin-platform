@@ -10867,6 +10867,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           groupId: input.groupId,
           userId: input.actorUserId,
           status: 'ACTIVE',
+          consentedAt: { not: null },
           group: { status: 'ACTIVE' },
         },
         select: { id: true },

@@ -1,0 +1,190 @@
+import 'server-only';
+import { CreateVideoProject, GenerateVideoPlan } from '@bunshin/application';
+import { requestIdFromHeader } from '@bunshin/observability';
+import { ApplicationError, toApiError } from '@bunshin/shared';
+import { z } from 'zod';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { currentUserProvider } from '../auth/current-user';
+import { requireSameOrigin } from '../auth/request-security';
+import { recordAiUsageSafely } from '../observability/ai-usage';
+import {
+  OpenAIVideoPlanGenerator,
+  VIDEO_PLAN_PROMPT_VERSION,
+} from '../providers/openai-video-plan-generator';
+
+const uuid = z.string().uuid();
+const createSchema = z
+  .object({
+    groupMembershipId: z.uuid(),
+    bunshinId: z.uuid(),
+    campaignId: z.uuid().nullable().optional(),
+    title: z.string().trim().min(1).max(160),
+    platform: z.enum(['INSTAGRAM', 'TIKTOK', 'YOUTUBE_SHORTS']),
+    type: z.enum(['EXPLAINER', 'PRODUCT_INTRODUCTION', 'PHOTO_SLIDESHOW']),
+    durationSeconds: z.union([z.literal(30), z.literal(60)]),
+  })
+  .strict();
+const generateSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
+
+function publicProject<
+  T extends {
+    id: string;
+    title: string;
+    platform: string;
+    type: string;
+    durationSeconds: number;
+    status: string;
+    revision: number;
+    aiProcessingTypes: unknown;
+    standardComposition: boolean;
+    scenes: unknown;
+  },
+>(project: T) {
+  return {
+    id: project.id,
+    title: project.title,
+    platform: project.platform,
+    type: project.type,
+    durationSeconds: project.durationSeconds,
+    status: project.status,
+    revision: project.revision,
+    aiProcessingTypes: project.aiProcessingTypes,
+    standardComposition: project.standardComposition,
+    scenes: project.scenes,
+  };
+}
+
+export async function createVideoProjectResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const input = createSchema.parse(await request.json());
+    const db = await import('@bunshin/database');
+    const project = await new CreateVideoProject(new db.PrismaVideoProjectRepository()).execute({
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      groupMembershipId: input.groupMembershipId,
+      actorUserId: actor.userId,
+      bunshinId: input.bunshinId,
+      campaignId: input.campaignId ?? null,
+      title: input.title,
+      platform: input.platform,
+      type: input.type,
+      durationSeconds: input.durationSeconds,
+      aiProcessingTypes: [],
+      disclosureSnapshot: {
+        standardComposition: true,
+        aiVideoGeneration: false,
+        explanation: 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',
+      },
+    });
+    return Response.json(
+      { data: publicProject(project), requestId },
+      { status: 201, headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function generateVideoPlanResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  videoProjectId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  let actorUserId: string | null = null;
+  let bunshinId: string | null = null;
+  let model = 'unknown';
+  let providerAttempted = false;
+  const started = Date.now();
+  let expectedRevision = 0;
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    actorUserId = actor.userId;
+    expectedRevision = generateSchema.parse(await request.json()).expectedRevision;
+    const db = await import('@bunshin/database');
+    const projects = new db.PrismaVideoProjectRepository();
+    const scoped = await projects.findOwned({
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId,
+      videoProjectId: uuid.parse(videoProjectId),
+    });
+    if (!scoped) throw new ApplicationError('NOT_FOUND', 'video project not found');
+    if (scoped.revision !== expectedRevision)
+      throw new ApplicationError('CONFLICT', 'video project revision conflict');
+    bunshinId = scoped.bunshinId;
+    const runtime = await resolveOpenAiRuntimeConfiguration();
+    model = runtime.model;
+    providerAttempted = true;
+    const generated = await new GenerateVideoPlan(
+      projects,
+      new db.PrismaVideoPlanningContextRepository(),
+      new OpenAIVideoPlanGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
+    ).execute({
+      workspaceId,
+      groupId,
+      actorUserId,
+      videoProjectId,
+      expectedRevision,
+    });
+    await recordAiUsageSafely({
+      workspaceId,
+      bunshinId,
+      actorUserId,
+      taskType: 'VIDEO_PLAN_GENERATOR',
+      provider: 'openai',
+      model: generated.generation.model,
+      promptVersion: generated.generation.promptVersion,
+      status: 'SUCCESS',
+      inputTokens: generated.generation.inputTokens,
+      outputTokens: generated.generation.outputTokens,
+      latencyMs: generated.generation.latencyMs,
+      idempotencyKey: `video-plan:${videoProjectId}:revision:${expectedRevision}`,
+    });
+    return Response.json(
+      { data: publicProject(generated.project), requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    if (providerAttempted && actorUserId && bunshinId)
+      await recordAiUsageSafely({
+        workspaceId,
+        bunshinId,
+        actorUserId,
+        taskType: 'VIDEO_PLAN_GENERATOR',
+        provider: 'openai',
+        model,
+        promptVersion: VIDEO_PLAN_PROMPT_VERSION,
+        status: 'FAILED',
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: Date.now() - started,
+        errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+        idempotencyKey: `video-plan:${videoProjectId}:revision:${expectedRevision}:failed`,
+      });
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
