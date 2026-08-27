@@ -152,3 +152,11 @@ Private Storageへの保存まで成功し、Renderが`SUCCEEDED`になった動
 完成通知はDaily Mission通知とは混在させず、VideoRenderへ専用状態、試行回数、安全なエラー分類、送信日時を保存する。LINE通知を許可し、現在環境の有効なLINE設定と本人接続がある場合だけ「動画ができました」と本人確認画面へのURLを送る。通知停止、LINE未接続、配信全体停止では動画の完成を取り消さず、通知だけを安全に中止する。
 
 一時的なLINE障害では既存Render Jobを再試行する。再処理時は完成物を再生成せず、利用回数を増やさず、未送信の完成通知だけを再試行する。通知済みの場合は再送しない。
+
+## V-5C1 SNS別AI開示Policy Core
+
+Instagram、TikTok、YouTube Shortsごとに、AI利用の開示文、ハッシュタグ候補、利用者向け案内、出力メタデータ候補を環境別・版管理で保存する。開発・検証・本番のPolicyを混在させず、環境とSNSごとのACTIVEはDB一意制約で最大1件にする。
+
+Policyは下書き作成と有効化を分離し、有効化理由と実行者を記録する。過去版は上書きせずSUPERSEDEDとして保持する。動画生成時に参照するのは現在環境・対象SNSのACTIVE版だけで、未設定時に別環境や別SNSの文面へフォールバックしない。
+
+本段階ではSchema、Migration、Application Use Case、Repositoryと自動テストまでを実装する。管理画面、動画作成時の`disclosureSnapshot`確定、本人確認画面の案内、完成MP4への実メタデータ埋め込みはV-5C2以降で接続する。
