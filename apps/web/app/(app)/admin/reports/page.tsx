@@ -78,6 +78,12 @@ export default async function AdminReportsPage({
           href={`/api/admin/reports/export?type=users&${query}`}
         >
           ユーザー一覧を保存
+        </a>{' '}
+        <a
+          className="button button--secondary"
+          href={`/api/admin/reports/export?type=groups&${query}`}
+        >
+          グループ別集計を保存
         </a>
         <p>
           <small>ユーザー一覧は最大5,000件です。件数を超える場合は期間を分けてください。</small>
@@ -115,7 +121,71 @@ export default async function AdminReportsPage({
             <strong>{lineMetrics.jobs.dead}</strong>
             <span>自動再試行終了</span>
           </article>
+          <article>
+            <strong>{snapshot.monitoring.usersInactiveForSevenDays}</strong>
+            <span>7日以上利用なし</span>
+          </article>
+          <article>
+            <strong>{snapshot.totals.excludedUsers}</strong>
+            <span>テスト利用者（集計対象外）</span>
+          </article>
         </div>
+      </section>
+      <section aria-labelledby="group-progress-report">
+        <h2 id="group-progress-report">グループ別の活動</h2>
+        <p>テスト利用者は人数・確認・投稿のすべてから除外しています。</p>
+        <div className="validation-table-wrap">
+          <table className="validation-table">
+            <thead>
+              <tr>
+                <th>グループ</th>
+                <th>参加中</th>
+                <th>期間内に活動</th>
+                <th>内容確認</th>
+                <th>投稿完了</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.groups.map((group) => (
+                <tr key={group.id}>
+                  <th>{group.name}</th>
+                  <td>{group.activeMembers}人</td>
+                  <td>{group.activeMembersInPeriod}人</td>
+                  <td>{group.confirmations}回</td>
+                  <td>{group.posts}回</td>
+                </tr>
+              ))}
+              {snapshot.groups.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>対象グループはありません。</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section aria-labelledby="activity-monitoring">
+        <h2 id="activity-monitoring">集計の確認</h2>
+        <dl>
+          <div>
+            <dt>最後の内容確認</dt>
+            <dd>
+              {snapshot.monitoring.latestActivityAt?.toLocaleString('ja-JP') ?? 'まだありません'}
+            </dd>
+          </div>
+          <div>
+            <dt>最後の投稿完了</dt>
+            <dd>{snapshot.monitoring.latestPostAt?.toLocaleString('ja-JP') ?? 'まだありません'}</dd>
+          </div>
+          <div>
+            <dt>集計上限</dt>
+            <dd>
+              {snapshot.monitoring.cohortTruncated
+                ? '対象が5,000人を超えています。期間を短くしてください。'
+                : '問題ありません'}
+            </dd>
+          </div>
+        </dl>
       </section>
       <section aria-labelledby="report-summary">
         <h2 id="report-summary">期間内のまとめ</h2>

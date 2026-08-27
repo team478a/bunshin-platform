@@ -1,6 +1,7 @@
 import {
   CreateAdminSupportCase,
   GetAdminUserDetail,
+  SetAdminMetricExclusion,
   SetAdminUserStatus,
   UpdateAdminSupportCase,
 } from '@bunshin/application';
@@ -18,6 +19,11 @@ export const dynamic = 'force-dynamic';
 const statusSchema = z.object({
   userId: z.uuid(),
   status: z.enum(['ACTIVE', 'SUSPENDED']),
+  reason: z.string().trim().min(5).max(1000),
+});
+const metricExclusionSchema = z.object({
+  userId: z.uuid(),
+  excluded: z.enum(['true', 'false']).transform((value) => value === 'true'),
   reason: z.string().trim().min(5).max(1000),
 });
 const createCaseSchema = z.object({
@@ -61,6 +67,27 @@ async function setUserStatus(formData: FormData) {
     operationError(error, input.data.userId);
   }
   revalidatePath(`/admin/users/${input.data.userId}`);
+  redirect(`/admin/users/${input.data.userId}?saved=1`);
+}
+
+async function setMetricExclusion(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const input = metricExclusionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/users?error=invalid');
+  try {
+    const db = await import('@bunshin/database');
+    await new SetAdminMetricExclusion(new db.PrismaAdminOperationsRepository()).execute({
+      actorUserId: actor.userId,
+      environment: currentLineEnvironment(),
+      ...input.data,
+    });
+  } catch (error) {
+    operationError(error, input.data.userId);
+  }
+  revalidatePath(`/admin/users/${input.data.userId}`);
+  revalidatePath('/admin/reports');
   redirect(`/admin/users/${input.data.userId}?saved=1`);
 }
 
@@ -203,6 +230,51 @@ export default async function AdminUserDetailPage({
             <dd>{user.attentionReason ?? 'なし'}</dd>
           </div>
         </dl>
+      </section>
+      <section className="settings-card">
+        <h2>運用集計への反映</h2>
+        <p>
+          現在は<strong>{user.excludedFromMetrics ? '集計対象外' : '集計対象'}</strong>です。
+          社内確認や動作確認だけに使う利用者は、実利用者の数字へ混ざらないよう対象外にします。
+        </p>
+        <form action={setMetricExclusion} className="form-stack">
+          <input type="hidden" name="userId" value={user.id} />
+          <input
+            type="hidden"
+            name="excluded"
+            value={user.excludedFromMetrics ? 'false' : 'true'}
+          />
+          <label className="field">
+            <span className="field__label">変更理由（必須）</span>
+            <textarea
+              className="field__control"
+              name="reason"
+              required
+              minLength={5}
+              maxLength={1000}
+            />
+          </label>
+          <button className="button button--secondary" type="submit">
+            {user.excludedFromMetrics ? '運用集計へ戻す' : 'テスト利用者として集計から外す'}
+          </button>
+        </form>
+        <h3>集計対象の変更履歴</h3>
+        {detail.metricExclusionAudits.length ? (
+          <ul>
+            {detail.metricExclusionAudits.map((audit) => (
+              <li key={audit.id}>
+                <strong>{audit.action === 'EXCLUDED' ? '集計から除外' : '集計へ復帰'}</strong>：
+                {audit.reason}
+                <br />
+                <small>
+                  {audit.environment} ／ {audit.actorDisplayName} ／ {dateTime(audit.occurredAt)}
+                </small>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>変更履歴はありません。</p>
+        )}
       </section>
       <section className="settings-card">
         <h2>利用を停止・再開</h2>

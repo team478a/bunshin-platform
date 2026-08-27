@@ -144,7 +144,8 @@ export default async function AdminUsersPage({
                 <th>ユーザー</th>
                 <th>現在の段階</th>
                 <th>最終利用</th>
-                <th>投稿</th>
+                <th>期間内の活動</th>
+                <th>集計</th>
                 <th>確認事項</th>
               </tr>
             </thead>
@@ -163,7 +164,10 @@ export default async function AdminUsersPage({
                   </td>
                   <td>{stageLabels[user.stage]}</td>
                   <td>{dateTime(user.lastActiveAt)}</td>
-                  <td>{user.postCount}回</td>
+                  <td>
+                    内容確認 {user.periodConfirmations}回 ／ 投稿 {user.periodPosts}回
+                  </td>
+                  <td>{user.excludedFromMetrics ? 'テスト利用者（対象外）' : '対象'}</td>
                   <td>{user.attentionReason ?? 'なし'}</td>
                 </tr>
               ))}

@@ -1176,6 +1176,14 @@
 - Step: 発信ステップは累積活動日から都度計算し、保存値にはしない。休止しても過去実績とステップを下げない。
 - Badge: 条件を満たしたバッジは`Workspace + User + Bunshin + Feature Key + Badge Key + Rule Version`で一度だけ保存する。表示名と説明は付与時Snapshotを保持し、ルール変更で過去表示を書き換えない。
 - Rules: 初版はコード管理のRule Version 1とし、J4の管理設定を先回りしない。Feature Keyは将来のBLOG等へ拡張可能な文字列境界とする。
+
+## 2026-08-27 — Activity Continuity運用集計の除外と監査
+
+- 本番KPIから社内確認・自動テスト利用者を除外できるようにする。ただしUserへ上書き可能な真偽値を置かず、環境ごとの`EXCLUDED` / `INCLUDED`操作を追記型履歴として保存する。
+- 除外・復帰はSUPER_ADMINのみが行い、5文字以上の理由を必須とする。Productionの除外はDevelopment / Stagingへ波及させない。
+- 除外中の利用者は全体KPI、継続率、期間内投稿、AI利用、LINE接続数、Group別活動から除く。管理対象から消えないようユーザー一覧・詳細には表示する。
+- Group別集計は参加中のMember数、期間内に活動した人数、確認回数、投稿回数だけを表示し、投稿本文・Memory・個人のMission内容は管理者へ開示しない。
+- Rule Version 1の固定値を運用画面から変更する機能は、既存実績の再解釈を防ぐ版管理・有効化設計とともにJ4-B2の別PRで実装する。
 - Dormancy: 休眠はMission Activityから派生した最終活動日と基準日との差で判定する。初版は7日で、独立した休眠状態テーブルや減点を作らない。
 - Delivery: Webの復帰表示までをJ3-Aとする。LINE復帰通知は同意、Quiet Hours、Quota、全体停止、重複送信防止を既存配信基盤へ接続するJ3-Bとして分離する。
 
