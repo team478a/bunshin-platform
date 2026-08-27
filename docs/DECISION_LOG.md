@@ -1359,3 +1359,12 @@
 - 動画運用画面で、外部動画生成サービスの使用中・接続確認・全体停止状態と、3つのSNSのAI利用表示ルールを一括確認する。
 - 不足項目は件数と対応先を表示し、正常項目も「準備完了」と明示する。APIキーや投稿本文は表示しない。
 - Creatomateの`metadata`はRender追跡用であり、完成MP4内部への埋め込みとは扱わない。出力ファイルへの実埋め込みはProvider対応または安全な後処理方式を確認するまで保留する。
+
+## 2026-08-28: 完成MP4へのMetadata埋め込みを現行動画Phaseから除外する
+
+- 判断: V-5C3の完成MP4へのMetadata埋め込みは、現行のGroup Video Generationへ実装しない。Phase VはV-5C2Bまでをもってコード実装完了とする。
+- 理由: SNSへのUpload後にMetadataが保持される保証がなく、AI利用表示の主要手段として信頼できない。後処理Worker、互換性検証、再保存、障害監視を追加する費用に対し、現在のGroup限定検証で得られる効果が小さい。
+- 代替: SNS別のAI開示Policy、動画作成時のSnapshot、本人確認画面の表示文・ハッシュタグ・投稿時案内を正本として維持する。内部では生成履歴、Provider、Policy版、完成物のPrivate Storage Key、利用回数を既存DBへ保存する。
+- Safety: Metadataがないことを理由にAI利用表示を省略しない。利用者が確認できる画面と投稿時の案内を優先し、秘密情報、個人情報、Prompt本文を完成ファイルへ入れない。
+- Revisit: 法令、SNS仕様、取引先要件、C2PA等の標準対応により必要性が生じた場合だけ、既存Render Provider Portと分離した後処理として別Phaseで再設計する。
+- Operations: Phase V-1の利用者検証は外部チームが担当する。現在の実装範囲ではCreatomate接続、SNS別AI表示Policy、Webhook、Private Storage、完成通知、管理監視の準備状況を管理画面から確認する。
