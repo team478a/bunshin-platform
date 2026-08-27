@@ -361,8 +361,8 @@ FREE継続率を確認する前に作り込まない。
 - V-1: Video Project / Scene Core、Group権限、Isolation、AI利用種別 — 完了
 - V-2: 動画企画・台本生成Port／Use Case、許可済みContext、OpenAI構造化出力 — 完了
 - V-3: 素材管理Core、利用者素材、承認済み素材の再利用、Private Storage、署名Upload API／本人画面 — 完了
-- V-4: Render Provider Port、外部Adapter、非同期Job
-- V-5: グループ管理画面、本人確認、修正、完成物取得
+- V-4: 動画Project作成、企画・台本生成API、AI利用記録、本人確認画面 — 完了
+- V-5: Render Provider Port、外部Adapter、非同期Job、台本承認・修正、完成物取得
 
 標準動画は静止画・字幕・音声・BGM・文字の動きで構成し、AI動画生成を含めない。外部レンダリングから開始し、完成したRenderだけを将来の利用回数対象とする。課金・決済は本Phaseへ含めない。
 

@@ -94,12 +94,17 @@ export default async function GroupsPage({
               {membership.group._count.memberships}人
             </p>
             {videoAvailable ? (
-              <Link
-                className="button button--secondary"
-                href={`/groups/${membership.group.id}/video-assets`}
-              >
-                動画に使う素材を管理
-              </Link>
+              <>
+                <Link className="button" href={`/groups/${membership.group.id}/videos`}>
+                  動画を作る
+                </Link>
+                <Link
+                  className="button button--secondary"
+                  href={`/groups/${membership.group.id}/video-assets`}
+                >
+                  動画に使う素材を管理
+                </Link>
+              </>
             ) : null}
             {membership.role === 'MANAGER' ? (
               <Link className="button" href={`/groups/${membership.group.id}/members`}>

@@ -74,12 +74,22 @@ Schema、Migration、Application Port／Use Case、Repository、企画Contextに
 
 アップロード完了後、サーバーはファイル先頭（動画は必要に応じて末尾も）を読み、PNG／JPEG／WebPまたはMP4／QuickTimeの実シグネチャ、実容量、画像寸法、動画時間を検査する。DBと一覧APIには非公開Storage Keyや署名付き閲覧URLを公開しない。マルウェア検査とライフサイクル削除は後続PRで接続する。
 
+## V-4 企画・台本生成APIと本人確認画面
+
+本人が参加中のグループから動画プロジェクトを作成し、既存の動画企画Portを実行できるAPIと画面を接続した。生成前にWorkspace、Group、Membership、User、Bunshin、動画機能の許可をサーバー側で再確認する。
+
+OpenAI設定は既存の管理画面で有効化された環境別設定を実行時に解決する。成功・失敗はPrompt Version、Model、Token、LatencyとともにAI利用履歴へ記録するが、台本本文、個人情報、APIキーは記録しない。Revisionが一致しない要求はProvider呼出し前に拒否する。
+
+本人画面では動画名、分身、投稿先、内容、長さ、参加済み企画を選べる。生成後は場面ごとの秒数、話す言葉、画面の文字、素材種別、画像指示を日本語で確認できる。標準動画でAI動画本体を生成しないことも明示する。
+
+外部Render、完成物、利用回数確定、課金、自動投稿は引き続き含めない。
+
 ## 後続PR
 
-1. 動画企画・台本生成APIと本人確認画面への接続
-2. Render Provider Portと外部Provider Adapter
-3. 非同期Render Job、成功時のみ利用回数を確定する仕組み
-4. グループ管理画面と本人確認画面
+1. Render Provider Portと外部Provider Adapter
+2. 非同期Render Job、成功時のみ利用回数を確定する仕組み
+3. 台本承認・修正と完成物取得
+4. グループ管理画面
 5. 素材のマルウェア検査とライフサイクル削除
 
 本PRには外部レンダリング、FFmpeg Worker、課金、一般公開、SNS自動投稿、Provider APIキー管理を含めない。

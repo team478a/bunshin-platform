@@ -1258,3 +1258,14 @@
 - Exposure: DBにはStorage Keyだけを保持するが、一覧APIと本人画面へStorage Keyや署名付き閲覧URLを返さない。
 - UX: 権利確認、容量・時間上限、送信・検査・保存結果を専門用語を避けた日本語で表示する。
 - Deferred: マルウェア検査、孤児オブジェクト削除、素材の削除UIは後続PRで実装する。
+
+## D-100: 動画企画のAI実行は本人確認後のRenderと分離する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Entry: 動画作成入口は`VIDEO_GENERATION`がGroupとMemberの両方で有効な参加者だけに表示し、APIでも同じ権限、参加同意、所有境界を再検証する。
+- Context: AI企画は本人所有Bunshin、本人素材、参加承諾済みCampaignと割当済み商品だけを使う。別Group・別Userの情報を渡さない。
+- Runtime: OpenAIは既存の環境別管理設定から解決し、成功・失敗のPrompt Version、Model、Token、LatencyをAI利用履歴へ保存する。本文と秘密値は保存しない。
+- Concurrency: Revision不一致はProvider呼出し前に拒否し、古い画面からの重複生成でAI原価を発生させない。
+- UX: 本人は生成された場面、秒数、話す言葉、画面文字、素材種別を確認する。標準動画ではAI動画本体を生成しないことを明示する。
+- Boundary: 企画・台本生成とRenderを分離する。外部Render、完成本数計上、課金、自動投稿は後続Phaseとする。
