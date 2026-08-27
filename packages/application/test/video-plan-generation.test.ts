@@ -93,6 +93,7 @@ const projectRepository = (): VideoProjectRepository => ({
     status: 'WAITING_APPROVAL',
     revision: 2,
   }),
+  approvePlan: vi.fn(),
 });
 
 describe('GenerateVideoPlan', () => {

@@ -4,6 +4,7 @@ import { GetVideoProject } from '@bunshin/application';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { VideoPlanGenerator } from '../../../../../ui/video-plan-generator';
+import { VideoPlanApprover } from '../../../../../ui/video-plan-approver';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,15 +100,34 @@ export default async function VideoProjectPage({
             </section>
           ))}
           {project.status === 'WAITING_APPROVAL' ? (
+            <>
+              <section className="settings-card">
+                <h2>この内容でよいですか？</h2>
+                <p>よければ台本を確認済みにします。確認後は内容を固定します。</p>
+                <VideoPlanApprover
+                  workspaceId={project.workspaceId}
+                  groupId={project.groupId}
+                  projectId={project.id}
+                  revision={project.revision}
+                />
+              </section>
+              <section className="settings-card">
+                <h2>作り直す場合</h2>
+                <p>今の台本を置き換えて、もう一度提案できます。</p>
+                <VideoPlanGenerator
+                  workspaceId={project.workspaceId}
+                  groupId={project.groupId}
+                  projectId={project.id}
+                  revision={project.revision}
+                />
+              </section>
+            </>
+          ) : null}
+          {project.status === 'APPROVED' ? (
             <section className="settings-card">
-              <h2>作り直す場合</h2>
-              <p>今の台本を置き換えて、もう一度提案できます。</p>
-              <VideoPlanGenerator
-                workspaceId={project.workspaceId}
-                groupId={project.groupId}
-                projectId={project.id}
-                revision={project.revision}
-              />
+              <h2>台本を確認しました</h2>
+              <p>外部の動画作成サービスを接続すると、この内容から動画本体を作れます。</p>
+              <p>接続前なので、現在は外部サービスへ送信していません。</p>
             </section>
           ) : null}
         </>

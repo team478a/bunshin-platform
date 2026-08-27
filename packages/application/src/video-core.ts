@@ -98,6 +98,60 @@ export interface VideoProjectRepository {
     standardComposition: boolean;
     aiVideoSceneCount: number;
   }): Promise<VideoProjectRecord | null>;
+  approvePlan(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    videoProjectId: string;
+    expectedRevision: number;
+  }): Promise<VideoProjectRecord | null>;
+}
+
+export type VideoRenderStatus =
+  'QUEUED' | 'SUBMITTED' | 'RENDERING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+
+export interface VideoRenderRecord {
+  id: string;
+  workspaceId: string;
+  groupId: string;
+  groupMembershipId: string;
+  ownerUserId: string;
+  videoProjectId: string;
+  projectRevision: number;
+  provider: string;
+  status: VideoRenderStatus;
+  externalJobId: string | null;
+  outputStorageKey: string | null;
+  errorCode: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  updatedAt: Date;
+}
+
+export interface VideoRenderRepository {
+  enqueueApproved(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    videoProjectId: string;
+    expectedRevision: number;
+    provider: string;
+  }): Promise<VideoRenderRecord | null>;
+}
+
+export interface VideoRenderProviderPort {
+  submit(input: {
+    renderId: string;
+    project: VideoProjectRecord;
+  }): Promise<{ externalJobId: string }>;
+  inspect(input: {
+    externalJobId: string;
+  }): Promise<
+    | { status: 'SUBMITTED' | 'RENDERING' }
+    | { status: 'SUCCEEDED'; outputUrl: string }
+    | { status: 'FAILED'; errorCode: string }
+  >;
 }
 
 export interface VideoPlanningContext {
@@ -299,6 +353,42 @@ export class ReplaceVideoPlan {
       aiVideoSceneCount,
     });
     if (!value) throw new ApplicationError('CONFLICT', 'video project revision conflict');
+    return value;
+  }
+}
+
+export class ApproveVideoPlan {
+  constructor(private readonly repository: VideoProjectRepository) {}
+  async execute(input: Parameters<VideoProjectRepository['approvePlan']>[0]) {
+    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
+    const value = await this.repository.approvePlan({
+      workspaceId: id(input.workspaceId, 'workspaceId'),
+      groupId: id(input.groupId, 'groupId'),
+      actorUserId: id(input.actorUserId, 'actorUserId'),
+      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      expectedRevision: input.expectedRevision,
+    });
+    if (!value) throw new ApplicationError('CONFLICT', 'video project approval conflict');
+    return value;
+  }
+}
+
+export class QueueVideoRender {
+  constructor(private readonly repository: VideoRenderRepository) {}
+  async execute(input: Parameters<VideoRenderRepository['enqueueApproved']>[0]) {
+    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
+    const provider = text(input.provider, 'provider', 80);
+    const value = await this.repository.enqueueApproved({
+      workspaceId: id(input.workspaceId, 'workspaceId'),
+      groupId: id(input.groupId, 'groupId'),
+      actorUserId: id(input.actorUserId, 'actorUserId'),
+      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      expectedRevision: input.expectedRevision,
+      provider,
+    });
+    if (!value) throw new ApplicationError('CONFLICT', 'video render queue conflict');
     return value;
   }
 }

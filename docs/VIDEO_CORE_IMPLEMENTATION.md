@@ -84,11 +84,19 @@ OpenAI設定は既存の管理画面で有効化された環境別設定を実�
 
 外部Render、完成物、利用回数確定、課金、自動投稿は引き続き含めない。
 
+## V-5A 台本承認とRender受付コア
+
+本人確認画面に「この台本で進める」を追加し、`WAITING_APPROVAL`かつ画面で確認したRevisionと一致する場合だけ`APPROVED`へ進める。承認時もWorkspace、Group、User、Membership、参加同意、GroupとMember双方の動画機能許可を再検証する。
+
+Renderは`VideoRenderProviderPort`へ分離した。承認済みRevisionだけを受付可能とし、`videoProjectId + projectRevision`のDB一意制約で二重受付を防止する。受付履歴にはProvider名、外部Job ID、状態、完成物の非公開Storage Key、安全なエラー分類を保持できる。外部URL、APIキー、動画内容は履歴へ保存しない。
+
+本段階では実際の外部Provider呼出し、非同期Job、完成物取得、完成本数計上を行わない。Providerが未選定の状態で本人が承認しても、外部サービスへ送信されない。
+
 ## 後続PR
 
-1. Render Provider Portと外部Provider Adapter
+1. 外部Render Provider比較とAdapter
 2. 非同期Render Job、成功時のみ利用回数を確定する仕組み
-3. 台本承認・修正と完成物取得
+3. 台本修正と完成物取得
 4. グループ管理画面
 5. 素材のマルウェア検査とライフサイクル削除
 

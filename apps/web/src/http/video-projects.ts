@@ -1,5 +1,5 @@
 import 'server-only';
-import { CreateVideoProject, GenerateVideoPlan } from '@bunshin/application';
+import { ApproveVideoPlan, CreateVideoProject, GenerateVideoPlan } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -25,6 +25,7 @@ const createSchema = z
   })
   .strict();
 const generateSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
+const approveSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
 
 function publicProject<
   T extends {
@@ -181,6 +182,41 @@ export async function generateVideoPlanResponse(
         errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         idempotencyKey: `video-plan:${videoProjectId}:revision:${expectedRevision}:failed`,
       });
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function approveVideoPlanResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  videoProjectId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const input = approveSchema.parse(await request.json());
+    const db = await import('@bunshin/database');
+    const project = await new ApproveVideoPlan(new db.PrismaVideoProjectRepository()).execute({
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: actor.userId,
+      videoProjectId: uuid.parse(videoProjectId),
+      expectedRevision: input.expectedRevision,
+    });
+    return Response.json(
+      { data: publicProject(project), requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, {
       status: mapped.status,

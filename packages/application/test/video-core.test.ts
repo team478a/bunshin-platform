@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CreateVideoProject,
+  ApproveVideoPlan,
   GetVideoProject,
+  QueueVideoRender,
   ReplaceVideoPlan,
   type VideoProjectRecord,
   type VideoProjectRepository,
+  type VideoRenderRepository,
 } from '../src';
 
 const ids = {
@@ -44,6 +47,7 @@ const repository = (overrides: Partial<VideoProjectRepository> = {}): VideoProje
   create: vi.fn().mockResolvedValue(project()),
   findOwned: vi.fn().mockResolvedValue(project()),
   replacePlan: vi.fn().mockResolvedValue({ ...project(), status: 'WAITING_APPROVAL', revision: 2 }),
+  approvePlan: vi.fn().mockResolvedValue({ ...project(), status: 'APPROVED', revision: 3 }),
   ...overrides,
 });
 
@@ -131,5 +135,70 @@ describe('Video Core', () => {
     await expect(new ReplaceVideoPlan(repository()).execute(missingNumber)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
+  });
+
+  it('approves only the expected reviewed revision', async () => {
+    const approvePlan = vi
+      .fn<VideoProjectRepository['approvePlan']>()
+      .mockResolvedValue({ ...project(), status: 'APPROVED', revision: 3 });
+    const value = repository({ approvePlan });
+    await expect(
+      new ApproveVideoPlan(value).execute({
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        actorUserId: ids.actorUserId,
+        videoProjectId: ids.videoProjectId,
+        expectedRevision: 2,
+      }),
+    ).resolves.toMatchObject({ status: 'APPROVED', revision: 3 });
+    expect(approvePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ videoProjectId: ids.videoProjectId, expectedRevision: 2 }),
+    );
+  });
+
+  it('fails closed when approval scope or revision no longer matches', async () => {
+    const value = repository({ approvePlan: vi.fn().mockResolvedValue(null) });
+    await expect(
+      new ApproveVideoPlan(value).execute({
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        actorUserId: ids.actorUserId,
+        videoProjectId: ids.videoProjectId,
+        expectedRevision: 2,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('queues an approved revision through a provider-neutral repository', async () => {
+    const render: VideoRenderRepository = {
+      enqueueApproved: vi.fn().mockResolvedValue({
+        id: '77777777-7777-4777-8777-777777777777',
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        groupMembershipId: ids.groupMembershipId,
+        ownerUserId: ids.actorUserId,
+        videoProjectId: ids.videoProjectId,
+        projectRevision: 3,
+        provider: 'provider-a',
+        status: 'QUEUED',
+        externalJobId: null,
+        outputStorageKey: null,
+        errorCode: null,
+        createdAt: now,
+        startedAt: null,
+        completedAt: null,
+        updatedAt: now,
+      }),
+    };
+    await expect(
+      new QueueVideoRender(render).execute({
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        actorUserId: ids.actorUserId,
+        videoProjectId: ids.videoProjectId,
+        expectedRevision: 3,
+        provider: ' provider-a ',
+      }),
+    ).resolves.toMatchObject({ status: 'QUEUED', provider: 'provider-a' });
   });
 });
