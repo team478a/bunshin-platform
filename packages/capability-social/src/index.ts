@@ -2205,6 +2205,7 @@ export interface MissionProgress {
     postedDays: number;
     restedDays: number;
     activeDays: number;
+    lastActiveDate: string | null;
   };
 }
 export interface MissionEngagementRepository {
@@ -2434,6 +2435,9 @@ export class GetMissionProgress {
     const cumulativeDays = cumulativeSource.map(progressDay);
     const weekly = progressCounts(weeklyDays);
     const cumulative = progressCounts(cumulativeDays);
+    const activeDates = cumulativeDays
+      .filter((value) => value.status !== 'UNSEEN')
+      .map((value) => value.missionDate);
     return {
       weekStart,
       weekEnd,
@@ -2443,7 +2447,143 @@ export class GetMissionProgress {
       cumulative: {
         ...cumulative,
         activeDays: cumulativeDays.filter((value) => value.status !== 'UNSEEN').length,
+        lastActiveDate: activeDates.at(-1) ?? null,
       },
+    };
+  }
+}
+
+export const ACTIVITY_MOTIVATION_RULE = {
+  featureKey: 'SOCIAL',
+  ruleVersion: 1,
+  dormancyDays: 7,
+  badges: [
+    {
+      badgeKey: 'FIRST_CONFIRMATION',
+      label: 'はじめて確認',
+      description: '投稿案をはじめて確認しました',
+      metric: 'confirmedDays',
+      threshold: 1,
+    },
+    {
+      badgeKey: 'FIRST_PREPARATION',
+      label: 'はじめて準備',
+      description: '投稿の準備をはじめて行いました',
+      metric: 'preparedDays',
+      threshold: 1,
+    },
+    {
+      badgeKey: 'FIRST_POST',
+      label: 'はじめて投稿',
+      description: '投稿完了をはじめて記録しました',
+      metric: 'postedDays',
+      threshold: 1,
+    },
+    {
+      badgeKey: 'THREE_ACTIVE_DAYS',
+      label: '3日活動',
+      description: '3日間、発信に向けて活動しました',
+      metric: 'activeDays',
+      threshold: 3,
+    },
+  ],
+} as const;
+export interface AchievementBadge {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  bunshinId: string;
+  featureKey: string;
+  badgeKey: string;
+  ruleVersion: number;
+  labelSnapshot: string;
+  descriptionSnapshot: string;
+  awardedAt: Date;
+}
+export interface AchievementBadgeRepository {
+  list(input: {
+    workspaceId: string;
+    userId: string;
+    bunshinId: string;
+    featureKey: string;
+  }): Promise<AchievementBadge[] | null>;
+  award(input: Omit<AchievementBadge, 'id' | 'awardedAt'>): Promise<AchievementBadge | null>;
+}
+export type ActivityStep = 'STARTING' | 'BUILDING' | 'CONTINUING' | 'ESTABLISHED';
+export interface ActivityMotivation {
+  step: ActivityStep;
+  stepLabel: string;
+  dormant: boolean;
+  dormantSinceDays: number | null;
+  returnMessage: string | null;
+  badges: AchievementBadge[];
+}
+function activityStep(activeDays: number): { step: ActivityStep; stepLabel: string } {
+  if (activeDays >= 15) return { step: 'ESTABLISHED', stepLabel: '発信が習慣になっています' };
+  if (activeDays >= 7) return { step: 'CONTINUING', stepLabel: '発信を続けています' };
+  if (activeDays >= 3) return { step: 'BUILDING', stepLabel: '発信の準備が整ってきました' };
+  return { step: 'STARTING', stepLabel: 'はじめの一歩' };
+}
+export class EvaluateActivityMotivation {
+  constructor(private readonly badges: AchievementBadgeRepository) {}
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    progress: MissionProgress;
+    localDate: string;
+  }): Promise<ActivityMotivation> {
+    const existing = await this.badges.list({
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      bunshinId: input.bunshinId,
+      featureKey: ACTIVITY_MOTIVATION_RULE.featureKey,
+    });
+    if (existing === null) throw new ApplicationError('NOT_FOUND', 'activity badges not found');
+    const metrics = input.progress.cumulative;
+    const eligible = ACTIVITY_MOTIVATION_RULE.badges.filter(
+      (rule) => metrics[rule.metric] >= rule.threshold,
+    );
+    const awarded = await Promise.all(
+      eligible.map((rule) =>
+        this.badges.award({
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          bunshinId: input.bunshinId,
+          featureKey: ACTIVITY_MOTIVATION_RULE.featureKey,
+          badgeKey: rule.badgeKey,
+          ruleVersion: ACTIVITY_MOTIVATION_RULE.ruleVersion,
+          labelSnapshot: rule.label,
+          descriptionSnapshot: rule.description,
+        }),
+      ),
+    );
+    if (awarded.some((value) => value === null))
+      throw new ApplicationError('NOT_FOUND', 'activity badge scope not found');
+    const merged = new Map(
+      [...existing, ...(awarded as AchievementBadge[])].map((value) => [
+        `${value.badgeKey}:${value.ruleVersion}`,
+        value,
+      ]),
+    );
+    const lastActiveDate = metrics.lastActiveDate;
+    const dormantSinceDays = lastActiveDate
+      ? Math.floor(
+          (new Date(`${input.localDate}T00:00:00.000Z`).valueOf() -
+            new Date(`${lastActiveDate}T00:00:00.000Z`).valueOf()) /
+            86400000,
+        )
+      : null;
+    const dormant =
+      dormantSinceDays !== null && dormantSinceDays >= ACTIVITY_MOTIVATION_RULE.dormancyDays;
+    return {
+      ...activityStep(metrics.activeDays),
+      dormant,
+      dormantSinceDays,
+      returnMessage: dormant ? 'おかえりなさい。今日は内容を見るだけでも大丈夫です。' : null,
+      badges: [...merged.values()].sort(
+        (left, right) => left.awardedAt.valueOf() - right.awardedAt.valueOf(),
+      ),
     };
   }
 }

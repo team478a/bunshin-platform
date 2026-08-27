@@ -5,6 +5,7 @@ import {
   progressStatusLabel,
   weeklyCalendar,
   type MissionProgressView,
+  type ActivityMotivationView,
 } from '../../../../src/activity-progress';
 
 export type DailyMissionView = {
@@ -335,6 +336,7 @@ export function DailyMissionSection({
   profiles,
   missions,
   progress,
+  motivation,
   localDate,
 }: {
   workspaceId: string;
@@ -347,6 +349,7 @@ export function DailyMissionSection({
   }>;
   missions: DailyMissionView[];
   progress: MissionProgressView;
+  motivation: ActivityMotivationView;
   localDate: string;
 }) {
   const router = useRouter();
@@ -549,6 +552,9 @@ export function DailyMissionSection({
         <p>投稿案を確認して、使いたいものを選びましょう。</p>
       </header>
       <section className="activity-progress" aria-labelledby="activity-progress-title">
+        {motivation.dormant && motivation.returnMessage && (
+          <p className="notice success">{motivation.returnMessage}</p>
+        )}
         <div className="activity-progress__summary">
           <div>
             <p className="eyebrow">今週の活動</p>
@@ -561,6 +567,19 @@ export function DailyMissionSection({
           <strong>
             {progress.weekly.confirmedDays} / {progress.weeklyGoal}回
           </strong>
+        </div>
+        <div className="activity-motivation">
+          <p className="eyebrow">いまの発信ステップ</p>
+          <h3>{motivation.stepLabel}</h3>
+          {motivation.badges.length > 0 && (
+            <ul aria-label="できるようになったこと">
+              {motivation.badges.map((badge) => (
+                <li key={`${badge.badgeKey}:${badge.ruleVersion}`}>
+                  <strong>{badge.labelSnapshot}</strong> — {badge.descriptionSnapshot}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="activity-calendar" aria-label="今週の活動カレンダー">
           {calendar.map((day) => (

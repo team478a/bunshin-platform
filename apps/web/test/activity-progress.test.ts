@@ -44,6 +44,7 @@ describe('activity progress presentation', () => {
         postedDays: 0,
         restedDays: 0,
         activeDays: 1,
+        lastActiveDate: '2026-08-27',
       },
     });
     expect(days).toHaveLength(7);

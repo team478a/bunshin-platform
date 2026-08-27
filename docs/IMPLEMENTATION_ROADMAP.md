@@ -309,7 +309,8 @@ FREE一般ユーザーへは開放せず、Productionで明示許可したGroup�
 - J0: 現行監査、正本、行動定義、KPI、実装境界の再基準化 — 文書完了
 - J1: `MissionActivity`の確認・休み行動、週間・累積Progress Read Model、冪等性、Isolation — 完了
 - J2: 今日の確認、今日は休む、活動カレンダー、今週あと何回のmobile-first UX — 完了
-- J3: 発信ステップ、版管理された達成バッジ、休眠・復帰、必要最小限のLINE連携
+- J3-A: 発信ステップ、版管理された達成バッジ、7日休眠判定、Web復帰表示（実装済み）
+- J3-B: 既存の同意・Quiet Hours・Quota・全体停止を再利用するLINE復帰通知（未着手）
 - J4: 運用ルール、進捗・KPI、テスト除外、監査、監視、CSV出力
 
 `DailyMission`、`MissionContent`、`MissionDecision`、`MissionActivity`、`PostRecord`、`MissionFeedback`、`LineNotificationPreference`と既存LINE配信基盤を正本とする。`daily_contents`、汎用`activity_events`、`post_reports`、別系統の通知設定は作らない。週に3回の確認は優しい継続目標とし、最重要KPIは7日間に3回以上実際に投稿したユーザー率とする。
