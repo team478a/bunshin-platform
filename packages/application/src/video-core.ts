@@ -100,6 +100,75 @@ export interface VideoProjectRepository {
   }): Promise<VideoProjectRecord | null>;
 }
 
+export interface VideoPlanningContext {
+  objective: string;
+  audience: string;
+  personality: {
+    tone: string;
+    preferredExpressions: string[];
+    prohibitedExpressions: string[];
+  };
+  product: null | {
+    name: string;
+    facts: string[];
+    requiredDisclosures: string[];
+    prohibitedExpressions: string[];
+  };
+  approvedAssets: Array<{
+    assetId: string;
+    description: string;
+  }>;
+}
+
+export interface VideoPlanningContextRepository {
+  findAuthorized(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    videoProjectId: string;
+    bunshinId: string;
+    campaignId: string | null;
+  }): Promise<VideoPlanningContext | null>;
+}
+
+export interface VideoPlanGeneratorInput {
+  project: {
+    title: string;
+    platform: VideoPlatform;
+    type: VideoProjectType;
+    durationSeconds: 30 | 60;
+    standardComposition: boolean;
+  };
+  context: VideoPlanningContext;
+}
+
+export interface VideoPlanGeneratorOutput {
+  scenes: Array<{
+    sceneNo: number;
+    durationMs: number;
+    narration: string;
+    caption: string;
+    visualType: VideoSceneVisualType;
+    visualPrompt: string | null;
+    keywords: string[];
+    aiProcessingTypes: VideoAiProcessingType[];
+  }>;
+  projectAiProcessingTypes: VideoAiProcessingType[];
+}
+
+export interface VideoPlanGeneratorResult {
+  output: VideoPlanGeneratorOutput;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+
+export interface VideoPlanGeneratorPort {
+  generate(input: VideoPlanGeneratorInput): Promise<VideoPlanGeneratorResult>;
+}
+
 const validAiTypes = new Set<VideoAiProcessingType>([
   'SCRIPT_GENERATION',
   'VOICE_SYNTHESIS',
@@ -226,5 +295,58 @@ export class ReplaceVideoPlan {
     });
     if (!value) throw new ApplicationError('CONFLICT', 'video project revision conflict');
     return value;
+  }
+}
+
+export class GenerateVideoPlan {
+  constructor(
+    private readonly projects: VideoProjectRepository,
+    private readonly contexts: VideoPlanningContextRepository,
+    private readonly generator: VideoPlanGeneratorPort,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    videoProjectId: string;
+    expectedRevision: number;
+  }) {
+    const scope = {
+      workspaceId: id(input.workspaceId, 'workspaceId'),
+      groupId: id(input.groupId, 'groupId'),
+      actorUserId: id(input.actorUserId, 'actorUserId'),
+      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+    };
+    const project = await this.projects.findOwned(scope);
+    if (!project) throw new ApplicationError('NOT_FOUND', 'video project not found');
+    if (project.revision !== input.expectedRevision)
+      throw new ApplicationError('CONFLICT', 'video project revision conflict');
+    const context = await this.contexts.findAuthorized({
+      ...scope,
+      bunshinId: project.bunshinId,
+      campaignId: project.campaignId,
+    });
+    if (!context) throw new ApplicationError('FORBIDDEN', 'video planning context unavailable');
+    const generated = await this.generator.generate({
+      project: {
+        title: project.title,
+        platform: project.platform,
+        type: project.type,
+        durationSeconds: project.durationSeconds,
+        standardComposition: project.standardComposition,
+      },
+      context,
+    });
+    const saved = await new ReplaceVideoPlan(this.projects).execute({
+      ...scope,
+      expectedRevision: input.expectedRevision,
+      scenes: generated.output.scenes.map((scene) => ({ ...scene, locked: false })),
+      projectAiProcessingTypes: generated.output.projectAiProcessingTypes,
+      standardComposition: project.standardComposition,
+      aiVideoSceneCount: generated.output.scenes.filter((scene) => scene.visualType === 'AI_VIDEO')
+        .length,
+    });
+    return { project: saved, generation: generated };
   }
 }

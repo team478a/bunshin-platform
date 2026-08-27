@@ -358,8 +358,8 @@ FREE継続率を確認する前に作り込まない。
 グループ限定の検証機能として実装する。Phase V-1の利用者検証は外部チームが担当し、本リポジトリでは実装と自動テストを担当する。
 
 - V-0: 動画仕様の責任境界、標準動画とAI動画の分離 — 完了
-- V-1: Video Project / Scene Core、Group権限、Isolation、AI利用種別 — 実装中
-- V-2: 動画企画・台本生成と構造化出力
+- V-1: Video Project / Scene Core、Group権限、Isolation、AI利用種別 — 完了
+- V-2: 動画企画・台本生成Port／Use Case、許可済みContext、OpenAI構造化出力 — 完了
 - V-3: 素材管理、利用者素材、承認済み素材
 - V-4: Render Provider Port、外部Adapter、非同期Job
 - V-5: グループ管理画面、本人確認、修正、完成物取得
