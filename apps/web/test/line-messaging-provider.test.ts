@@ -34,6 +34,7 @@ describe('LINE Messaging API adapter', () => {
           researched: true,
           externalLinkIncluded: true,
         },
+        kind: 'DAILY_MISSION',
       }),
     ).resolves.toEqual({ ok: true });
     const init = request.mock.calls[0]?.[1];
@@ -71,6 +72,7 @@ describe('LINE Messaging API adapter', () => {
         topic: `${'安全なテーマ'.repeat(20)}\n投稿本文：送ってはいけない`,
         researched: false,
       },
+      kind: 'DAILY_MISSION',
     });
     const body = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
       messages: Array<{ text: string }>;
@@ -78,6 +80,27 @@ describe('LINE Messaging API adapter', () => {
     expect(body.messages[0]?.text).not.toContain('\n投稿本文');
     expect(body.messages[0]?.text).not.toContain('送ってはいけない');
     expect(body.messages[0]?.text).toContain('SNS：X');
+  });
+
+  it('uses a gentle return message for a low-priority reminder', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    await new LineMessagingApiAdapter(request).pushMissionNotification({
+      accessToken: 'access-token',
+      recipientId: 'provider-user-a',
+      deepLinkUrl: 'https://app.example.com/today?state=opaque',
+      summary: {
+        platform: 'X',
+        format: 'TEXT',
+        estimatedMinutes: 3,
+        topic: '短いテーマ',
+        researched: false,
+      },
+      kind: 'REMINDER',
+    });
+    const body = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
+      messages: Array<{ text: string }>;
+    };
+    expect(body.messages[0]?.text).toContain('今日は内容を見るだけでも大丈夫です');
   });
 
   it.each([
@@ -103,6 +126,7 @@ describe('LINE Messaging API adapter', () => {
             topic: '短いテーマ',
             researched: false,
           },
+          kind: 'DAILY_MISSION',
         }),
       ).resolves.toEqual({ ok: false, category, retryable });
     },

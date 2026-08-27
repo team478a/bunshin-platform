@@ -82,7 +82,8 @@ function dependencies(input?: {
       .fn()
       .mockResolvedValue(input?.pushFailure ? { ok: false, ...input.pushFailure } : { ok: true }),
   } satisfies LineMessagingProviderPort;
-  return { repository, configuration, recipient, summary, provider };
+  const preference = { isAllowed: vi.fn().mockResolvedValue(true) };
+  return { repository, configuration, recipient, summary, preference, provider };
 }
 
 async function execute(
@@ -94,6 +95,7 @@ async function execute(
     values.configuration,
     values.recipient,
     values.summary,
+    values.preference,
     values.provider,
     () => now,
   ).execute({
@@ -120,6 +122,7 @@ describe('LINE delivery execution', () => {
         topic: '朝の時間を上手に使うコツ',
         researched: false,
       },
+      kind: 'DAILY_MISSION',
     });
     expect(values.repository.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -203,6 +206,18 @@ describe('LINE delivery execution', () => {
       retryable: false,
     });
     expect(values.provider.pushMissionNotification).not.toHaveBeenCalled();
+  });
+
+  it('rechecks consent and quiet hours immediately before sending', async () => {
+    const values = dependencies();
+    values.preference.isAllowed.mockResolvedValue(false);
+    await expect(execute(values)).resolves.toEqual({
+      status: 'CANCELLED',
+      category: 'NOTIFICATION_SUPPRESSED',
+      retryable: false,
+    });
+    expect(values.recipient.resolve).not.toHaveBeenCalled();
+    expect(values.provider.getQuota).not.toHaveBeenCalled();
   });
 
   it('records classified retryable provider failures without exposing provider data', async () => {

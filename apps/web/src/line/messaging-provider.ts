@@ -2,6 +2,7 @@ import 'server-only';
 import {
   normalizeLineMissionNotificationSummary,
   type LineMessagingProviderPort,
+  type LineMessageKind,
   type LineMissionNotificationSummary,
   type LineProviderFailure,
 } from '@bunshin/application';
@@ -66,6 +67,7 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     recipientId: string;
     deepLinkUrl: string;
     summary: LineMissionNotificationSummary;
+    kind: LineMessageKind;
   }) {
     if (!input.accessToken.trim()) return httpFailure(401);
     if (!input.recipientId.trim()) return httpFailure(400);
@@ -98,7 +100,9 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
             {
               type: 'text',
               text: [
-                '今日やることができました。',
+                input.kind === 'REMINDER'
+                  ? 'おかえりなさい。今日は内容を見るだけでも大丈夫です。'
+                  : '今日やることができました。',
                 `SNS：${platform}`,
                 `作るもの：${format}`,
                 `目安：${summary.estimatedMinutes}分`,

@@ -5,6 +5,7 @@ import {
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
+  isLineNotificationSuppressed,
 } from '@bunshin/application';
 import type {
   AccountTransaction,
@@ -58,6 +59,8 @@ import type {
   TrendResearchGenerationContextRepository,
   LineMessageDelivery,
   LineMessageDeliveryRepository,
+  LineDeliveryPreferencePort,
+  LineReturnReminderRepository,
   LineMissionNotificationSummaryRepository,
   LineAdminMetricsRepository,
   LineDeliveryRetryRepository,
@@ -1599,6 +1602,83 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
       },
     });
     return result.count === 1;
+  }
+}
+
+export class PrismaLineDeliveryPreferenceRepository implements LineDeliveryPreferencePort {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  async isAllowed(input: Parameters<LineDeliveryPreferencePort['isAllowed']>[0]) {
+    const preference = await this.client.lineNotificationPreference.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        userId: input.userId,
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.userId, status: 'ACTIVE' } },
+        },
+        bunshin: { status: { not: 'ARCHIVED' } },
+        user: { status: 'ACTIVE' },
+      },
+    });
+    return preference
+      ? !isLineNotificationSuppressed(lineNotificationPreference(preference), input.at)
+      : false;
+  }
+}
+
+export class PrismaLineReturnReminderRepository implements LineReturnReminderRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  async shouldUse(input: Parameters<LineReturnReminderRepository['shouldUse']>[0]) {
+    const localDate = new Date(`${input.localDate}T00:00:00.000Z`);
+    if (Number.isNaN(localDate.valueOf())) return false;
+    const dormantBefore = new Date(localDate);
+    dormantBefore.setUTCDate(dormantBefore.getUTCDate() - input.dormancyDays);
+    const cooldownFrom = new Date(localDate);
+    cooldownFrom.setUTCDate(cooldownFrom.getUTCDate() - input.cooldownDays);
+    const preference = await this.client.lineNotificationPreference.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        userId: input.actorUserId,
+        enabled: true,
+        reminderEnabled: true,
+        notificationConsentAt: { not: null },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+        bunshin: { status: { not: 'ARCHIVED' } },
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    if (!preference) return false;
+    const [lastActivity, recentReminder] = await Promise.all([
+      this.client.missionActivity.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+        },
+        select: { dailyMission: { select: { missionDate: true } } },
+        orderBy: [{ dailyMission: { missionDate: 'desc' } }, { occurredAt: 'desc' }],
+      }),
+      this.client.lineMessageDelivery.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          userId: input.actorUserId,
+          kind: 'REMINDER',
+          createdAt: { gte: cooldownFrom },
+          status: { in: ['PENDING', 'PROCESSING', 'SENT'] },
+        },
+        select: { id: true },
+      }),
+    ]);
+    return Boolean(
+      lastActivity && lastActivity.dailyMission.missionDate <= dormantBefore && !recentReminder,
+    );
   }
 }
 

@@ -20,6 +20,14 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         existingPolicy: 'RETURN',
       });
       const db = await import('@bunshin/database');
+      const returnReminder = await new db.PrismaLineReturnReminderRepository().shouldUse({
+        workspaceId: job.workspaceId,
+        bunshinId: job.bunshinId,
+        actorUserId: job.requestedBy,
+        localDate,
+        dormancyDays: 7,
+        cooldownDays: 7,
+      });
       const delivery = await new PrepareLineMissionDelivery(
         new db.PrismaLineMessageDeliveryRepository(),
       ).execute({
@@ -28,7 +36,7 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         bunshinId: job.bunshinId,
         actorUserId: job.requestedBy,
         dailyMissionId: mission.id,
-        kind: 'DAILY_MISSION',
+        kind: returnReminder ? 'REMINDER' : 'DAILY_MISSION',
         idempotencyKey: `daily-mission:${job.environment}:${job.requestedBy}:${mission.id}`,
         scheduledAt: new Date(),
       });
