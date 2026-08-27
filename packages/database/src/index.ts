@@ -107,6 +107,11 @@ import type {
   ActivityContinuityRule,
   ActivityContinuityRuleRepository,
   ActivityBadgeRule,
+  VideoProjectRecord,
+  VideoProjectRepository,
+  VideoSceneRecord,
+  VideoAiProcessingType,
+  VideoPlatform,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -10825,6 +10830,211 @@ export class PrismaCampaignSafetyRepository implements CampaignSafetyRepository 
         maxSimilarityBasisPoints: input.maxSimilarityBasisPoints,
         verdict: input.verdict,
       },
+    });
+  }
+}
+
+const videoSceneRecord = (row: Prisma.VideoSceneGetPayload<object>): VideoSceneRecord => ({
+  ...row,
+  keywords: row.keywords as unknown as string[],
+  aiProcessingTypes: row.aiProcessingTypes as unknown as VideoAiProcessingType[],
+});
+
+const videoProjectRecord = (
+  row: Prisma.VideoProjectGetPayload<{ include: { scenes: true } }>,
+): VideoProjectRecord => ({
+  ...row,
+  platform: row.platform as VideoPlatform,
+  durationSeconds: row.durationSeconds as 30 | 60,
+  aiProcessingTypes: row.aiProcessingTypes as unknown as VideoAiProcessingType[],
+  disclosureSnapshot: row.disclosureSnapshot as Record<string, unknown>,
+  scenes: row.scenes.map(videoSceneRecord),
+});
+
+export class PrismaVideoProjectRepository implements VideoProjectRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async create(input: Parameters<VideoProjectRepository['create']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const now = new Date();
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          id: input.groupMembershipId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          group: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      });
+      if (!membership) return null;
+      const groupPolicy = await tx.groupFeaturePolicy.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          featureKey: 'VIDEO_GENERATION',
+          status: 'ENABLED',
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+        select: { id: true },
+      });
+      const memberAssignment = await tx.groupMemberFeatureAssignment.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: membership.id,
+          featureKey: 'VIDEO_GENERATION',
+          status: 'ENABLED',
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+        select: { id: true },
+      });
+      if (!groupPolicy || !memberAssignment) return null;
+      const bunshin = await tx.bunshin.findFirst({
+        where: {
+          id: input.bunshinId,
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          status: { not: 'ARCHIVED' },
+        },
+        select: { id: true },
+      });
+      if (!bunshin) return null;
+      if (input.campaignId) {
+        const campaign = await tx.campaign.findFirst({
+          where: { id: input.campaignId, workspaceId: input.workspaceId, groupId: input.groupId },
+          select: { id: true },
+        });
+        if (!campaign) return null;
+      }
+      const row = await tx.videoProject.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          ownerUserId: input.actorUserId,
+          bunshinId: input.bunshinId,
+          campaignId: input.campaignId,
+          title: input.title,
+          platform: input.platform,
+          type: input.type,
+          durationSeconds: input.durationSeconds,
+          aiProcessingTypes: input.aiProcessingTypes,
+          disclosureSnapshot: input.disclosureSnapshot as Prisma.InputJsonValue,
+        },
+        include: { scenes: { orderBy: { sceneNo: 'asc' } } },
+      });
+      return videoProjectRecord(row);
+    });
+  }
+
+  async findOwned(input: Parameters<VideoProjectRepository['findOwned']>[0]) {
+    const now = new Date();
+    const row = await this.client.videoProject.findFirst({
+      where: {
+        id: input.videoProjectId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        ownerUserId: input.actorUserId,
+        group: {
+          status: 'ACTIVE',
+          featurePolicies: {
+            some: {
+              featureKey: 'VIDEO_GENERATION',
+              status: 'ENABLED',
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            },
+          },
+        },
+        groupMembership: {
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          featureAssignments: {
+            some: {
+              featureKey: 'VIDEO_GENERATION',
+              status: 'ENABLED',
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            },
+          },
+        },
+      },
+      include: { scenes: { orderBy: { sceneNo: 'asc' } } },
+    });
+    return row ? videoProjectRecord(row) : null;
+  }
+
+  async replacePlan(input: Parameters<VideoProjectRepository['replacePlan']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const now = new Date();
+      const project = await tx.videoProject.findFirst({
+        where: {
+          id: input.videoProjectId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          revision: input.expectedRevision,
+          status: { in: ['DRAFT', 'PLANNING', 'WAITING_APPROVAL'] },
+          group: {
+            status: 'ACTIVE',
+            featurePolicies: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+          groupMembership: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            featureAssignments: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+        },
+        select: { id: true, durationSeconds: true },
+      });
+      if (!project) return null;
+      const totalMs = input.scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
+      if (totalMs !== project.durationSeconds * 1_000) return null;
+      await tx.videoScene.deleteMany({ where: { videoProjectId: project.id } });
+      await tx.videoScene.createMany({
+        data: input.scenes.map((scene) => ({
+          videoProjectId: project.id,
+          sceneNo: scene.sceneNo,
+          durationMs: scene.durationMs,
+          narration: scene.narration,
+          caption: scene.caption,
+          visualType: scene.visualType,
+          visualPrompt: scene.visualPrompt,
+          keywords: scene.keywords,
+          aiProcessingTypes: scene.aiProcessingTypes,
+          locked: scene.locked,
+        })),
+      });
+      const row = await tx.videoProject.update({
+        where: { id: project.id },
+        data: {
+          status: 'WAITING_APPROVAL',
+          revision: { increment: 1 },
+          aiProcessingTypes: input.projectAiProcessingTypes,
+          standardComposition: input.standardComposition,
+          aiVideoSceneCount: input.aiVideoSceneCount,
+        },
+        include: { scenes: { orderBy: { sceneNo: 'asc' } } },
+      });
+      return videoProjectRecord(row);
     });
   }
 }

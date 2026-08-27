@@ -2332,3 +2332,4 @@ export * from './product-pack';
 export * from './advertising-safety';
 export * from './campaign-participation';
 export * from './campaign-safety-validation';
+export * from './video-core';

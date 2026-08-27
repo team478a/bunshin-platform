@@ -353,7 +353,20 @@ FREE継続率を確認してから着手する。
 
 FREE継続率を確認する前に作り込まない。
 
-## Phase 10: Publishing / Video Provider
+## Phase V: Group Video Generation
+
+グループ限定の検証機能として実装する。Phase V-1の利用者検証は外部チームが担当し、本リポジトリでは実装と自動テストを担当する。
+
+- V-0: 動画仕様の責任境界、標準動画とAI動画の分離 — 完了
+- V-1: Video Project / Scene Core、Group権限、Isolation、AI利用種別 — 実装中
+- V-2: 動画企画・台本生成と構造化出力
+- V-3: 素材管理、利用者素材、承認済み素材
+- V-4: Render Provider Port、外部Adapter、非同期Job
+- V-5: グループ管理画面、本人確認、修正、完成物取得
+
+標準動画は静止画・字幕・音声・BGM・文字の動きで構成し、AI動画生成を含めない。外部レンダリングから開始し、完成したRenderだけを将来の利用回数対象とする。課金・決済は本Phaseへ含めない。
+
+## Phase 10: Publishing Provider
 
 100人検証後に再評価する。
 
@@ -361,7 +374,7 @@ FREE継続率を確認する前に作り込まない。
 - PostMesh / Ayrshare / Late等のPublishing Adapter
 - 承認型自動投稿
 - metrics自動取得
-- Template / Generative Video Adapter
+- Video完成物の承認後Publishing連携
 
 ## Phase 11: BLOG Capability Migration
 
