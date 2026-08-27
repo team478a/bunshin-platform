@@ -1234,3 +1234,15 @@
 - Validation: Providerの構造化出力を信用せず、保存前にVideo Coreが場面数、連番、合計時間、素材種別、AI利用種別を決定的に検証する。標準動画ではAI動画を拒否する。
 - Atomicity: Provider失敗または検証失敗ではSceneを保存しない。Revision競合も既存の楽観的更新で拒否する。
 - Deferred: 実行APIへ接続するPRでPrompt Version、Model、Token、Latency、費用を本文や秘密情報なしでAI利用記録へ保存する。Render利用回数とは分離する。
+
+## D-098: 動画素材は権利確認済みの非公開Storage Keyで管理する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Ownership: 利用者素材は`Workspace + Group + Group Membership + Owner User`で分離し、任意で本人所有Video Projectへ限定する。参加同意、Group動画機能、Member割当が無効なら登録しない。
+- Storage: DBへ公開URLや署名URLを保存せず、推測不能な`storageKey`だけを保存する。短時間Upload URLの発行と実体検査は交換可能なStorage Portへ分離する。
+- Verification: ファイル名・拡張子・申告MIMEを信用しない。完了時にProvider AdapterがMIME、マジックバイト相当の署名、容量、寸法、再生時間を調査し、Core制限を通過した場合だけ`READY`へ変更する。
+- Rights: 本人の利用権確認をUpload開始条件とし、確認日時と任意の利用条件を保存する。確認のない素材、未完了、検査失敗、停止・期限切れ素材を動画企画へ渡さない。
+- Reuse: 本部承認素材は既存`ProductPackAsset`と`CampaignAsset`を正本とし、Video Assetへ複製しない。企画時は本人素材を最優先し、次にCampaign承認素材を利用する。
+- Failure: 署名Upload発行失敗と実体検査失敗は`REJECTED`と安全な理由コードを記録する。APIキー、署名URL、ファイル内容をログや監査metadataへ保存しない。
+- Deferred: Supabase等のStorage Adapter、Upload API/UI、マルウェア検査、ライフサイクル削除は後続PRで実装する。

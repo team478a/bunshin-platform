@@ -55,6 +55,7 @@ const contextRepository = (): VideoPlanningContextRepository => ({
       prohibitedExpressions: ['必ず成功'],
     },
     approvedAssets: [{ assetId: 'asset-1', description: '商品正面写真' }],
+    userAssets: [{ assetId: 'user-asset-1', kind: 'IMAGE', description: '本人の商品写真' }],
   }),
 });
 
