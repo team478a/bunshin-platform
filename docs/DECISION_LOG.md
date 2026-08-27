@@ -1289,3 +1289,11 @@
 - Privacy: Provider metadataには内部Render IDだけを送り、User、Workspace、Group、Bunshin、台本本文、APIキーを含めない。
 - Output: Creatomate上の完成物は最大30日の一時成果物として扱う。後続JobでHTTPSと許可hostを検証してPrivate Storageへ移し、永続履歴にはStorage Keyだけを保存する。
 - Operations: 実送信は環境別の暗号化設定、接続確認、Job、Webhook照合が完成するまで有効化しない。自前FFmpeg Worker、課金、SNS自動投稿は引き続き対象外とする。
+
+## D-103: Render Providerの秘密情報は既存の環境別外部サービス設定で管理する
+
+- Storage: Creatomate APIキーは管理画面から登録し、環境別HKDFで用途分離したAES-256-GCM暗号文だけをDBへ保存する。平文は画面、API応答、監査ログへ返さない。
+- Lifecycle: 設定は追記型の版として保存し、接続確認済みの版だけを使用中へ切り替える。同じ環境・ProviderのACTIVEはDB制約で最大1件にする。
+- Verification: 接続確認はテンプレート一覧APIへの読み取り専用要求とし、RenderやCredit消費を発生させない。
+- Environment: 実行環境と設定環境の一致をサーバーで検証し、Production設定をPreviewやStagingから利用しない。
+- Boundary: 管理設定の有効化だけでは動画を送信しない。非同期Jobと完成物保存が完成するまでRender実行経路は閉じたままにする。

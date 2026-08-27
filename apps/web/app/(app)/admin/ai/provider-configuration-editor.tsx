@@ -1,7 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 
-type Provider = 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL';
+type Provider = 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE';
 type Configuration = {
   id: string;
   provider: Provider;
@@ -22,6 +22,7 @@ const labels: Record<Provider, string> = {
   GROK: 'Xの話題を調べるAI（Grok）',
   EXA: '話題を調べる検索（Exa）',
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
+  CREATOMATE: '動画を仕上げるサービス（Creatomate）',
 };
 const usd = (micros: number) => (micros / 1_000_000).toFixed(2);
 const connectionErrors: Record<string, string> = {
@@ -253,6 +254,9 @@ export function AiProviderConfigurationEditor(props: {
             <li>
               Firecrawl：<a href="https://www.firecrawl.dev/app/api-keys">APIキー管理を開く</a>
             </li>
+            <li>
+              Creatomate：<a href="https://creatomate.com/dashboard">管理画面を開く</a>
+            </li>
           </ul>
           <p>APIキーはチャット、変更理由、メモ欄へ書かないでください。</p>
         </section>
@@ -321,7 +325,7 @@ export function AiProviderConfigurationEditor(props: {
             />
           </label>
           <label>
-            1回の調査にかかる金額（米ドル）
+            1回の利用にかかる金額（米ドル）
             <input
               name="requestCostUsd"
               type="number"
@@ -331,7 +335,7 @@ export function AiProviderConfigurationEditor(props: {
               step="0.000001"
               required
             />
-            <small>サービスの料金表にある1回分の金額です。不明なら0のまま保存できます。</small>
+            <small>調査または動画1本にかかる見込み金額です。不明なら0のまま保存できます。</small>
           </label>
           <label>
             変更した理由
@@ -362,7 +366,7 @@ export function AiProviderConfigurationEditor(props: {
       <section className="settings-card">
         <h2>保存した設定</h2>
         <p>
-          「この設定を使い始める」を押すと、安全に接続できるか自動確認します。検索サービスでは少量の利用枠を使う場合があります。
+          「この設定を使い始める」を押すと、安全に接続できるか自動確認します。検索サービスでは少量の利用枠を使う場合があります。Creatomateは動画を作らず接続だけ確認します。
         </p>
         {configurations.length === 0 ? (
           <p>まだ設定はありません。</p>
@@ -390,7 +394,7 @@ export function AiProviderConfigurationEditor(props: {
                   上限：1日 ${usd(item.dailyBudgetUsdMicros)}／1か月 $
                   {usd(item.monthlyBudgetUsdMicros)}
                 </p>
-                <p>調査1回の原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
+                <p>利用1回の見込み原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
                 {item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
                   <button
                     className="button button--primary"

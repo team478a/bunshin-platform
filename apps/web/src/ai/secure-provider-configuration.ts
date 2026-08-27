@@ -88,7 +88,7 @@ export class AesGcmAiProviderSecretCrypto implements AiProviderSecretCryptoPort 
 
 export class AiProviderConnectionTestAdapter {
   async validate(input: {
-    provider: 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL';
+    provider: 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE';
     apiKey: string;
     model: string | null;
   }) {
@@ -108,19 +108,24 @@ export class AiProviderConnectionTestAdapter {
               body: JSON.stringify({ query: 'BUNSHIN connection test', numResults: 1 }),
               signal: AbortSignal.timeout(10_000),
             })
-          : fetch('https://api.firecrawl.dev/v2/scrape', {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/json',
-                authorization: `Bearer ${input.apiKey}`,
-              },
-              body: JSON.stringify({
-                url: 'https://example.com',
-                formats: ['markdown'],
-                maxAge: 604800000,
-              }),
-              signal: AbortSignal.timeout(15_000),
-            });
+          : input.provider === 'FIRECRAWL'
+            ? fetch('https://api.firecrawl.dev/v2/scrape', {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  authorization: `Bearer ${input.apiKey}`,
+                },
+                body: JSON.stringify({
+                  url: 'https://example.com',
+                  formats: ['markdown'],
+                  maxAge: 604800000,
+                }),
+                signal: AbortSignal.timeout(15_000),
+              })
+            : fetch('https://api.creatomate.com/v2/templates', {
+                headers: { authorization: `Bearer ${input.apiKey}` },
+                signal: AbortSignal.timeout(10_000),
+              });
     const response = await request;
     if (response.ok) return { success: true, errorCategory: null };
     if (response.status === 401 || response.status === 403)

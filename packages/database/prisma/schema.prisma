@@ -323,6 +323,7 @@ enum AiProviderKey {
   GROK
   EXA
   FIRECRAWL
+  CREATOMATE
 }
 
 enum AiProviderConfigurationStatus {

@@ -254,7 +254,7 @@ export interface PlatformAdminRepository {
   findActivePlatformAdminByUserId(userId: string): Promise<PlatformAdmin | null>;
 }
 
-export const AI_PROVIDER_KEYS = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL'] as const;
+export const AI_PROVIDER_KEYS = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL', 'CREATOMATE'] as const;
 export type AiProviderKey = (typeof AI_PROVIDER_KEYS)[number];
 export type AiProviderConfigurationStatus = 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ERROR';
 export interface AiProviderConfiguration {
