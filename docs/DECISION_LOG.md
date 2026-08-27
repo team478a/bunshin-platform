@@ -1203,3 +1203,12 @@
 - Boundary: `MissionActivity`の確認、採用、コピー、休みは行動支援指標として保持するが、実投稿KPIの分子へ混ぜない。
 - Time: 各利用者の登録日時から連続7日間を判定し、管理画面で選んだ集計期間の終了時点まで観測が完了した利用者だけを対象とする。
 - Export: 投稿本文、URL、Knowledge、Memoryを含めず、集計値だけを既存の管理CSVへ追加する。
+
+## D-095: 活動継続ルールは環境別の不変版として有効化する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Version: 週間目標、休眠日数、Step境界、Badge条件は`DEVELOPMENT` / `STAGING` / `PRODUCTION`ごとに追記型の版として保存する。使用中の版は環境ごと1件にDB制約で限定する。
+- Activation: SUPER_ADMINだけが作成理由付きの下書きを作成し、別の使用開始理由を記録して有効化できる。過去の版は書き換えず`SUPERSEDED`とする。
+- Runtime: Webの進捗・復帰表示とLINE配信Jobは同じ使用中ルールを解決する。DBに有効版がない初回Migration直後は組み込み第1版へ安全にフォールバックする。
+- History: 取得済みバッジは付与時の`ruleVersion`、表示名、説明のSnapshotを保持し、新版で過去の実績を再解釈しない。

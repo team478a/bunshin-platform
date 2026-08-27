@@ -258,6 +258,12 @@ enum ActivityMetricExclusionAction {
   INCLUDED
 }
 
+enum ActivityContinuityRuleStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+}
+
 enum SupportCaseStatus {
   OPEN
   IN_PROGRESS
@@ -734,6 +740,8 @@ model User {
   achievementBadges                 AchievementBadge[]
   activityMetricExclusionsAsTarget  ActivityMetricExclusion[]           @relation("ActivityMetricExclusionTarget")
   activityMetricExclusionsAsActor   ActivityMetricExclusion[]           @relation("ActivityMetricExclusionActor")
+  activityContinuityRulesCreated    ActivityContinuityRule[]            @relation("ActivityContinuityRuleCreator")
+  activityContinuityRulesActivated  ActivityContinuityRule[]            @relation("ActivityContinuityRuleActivator")
 
   @@index([status])
   @@map("users")
@@ -1554,6 +1562,33 @@ model ActivityMetricExclusion {
   @@index([targetUserId, environment, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("activity_metric_exclusions")
+}
+
+model ActivityContinuityRule {
+  id                  String                       @id @default(uuid()) @db.Uuid
+  environment         LineConfigurationEnvironment
+  version             Int
+  status              ActivityContinuityRuleStatus @default(DRAFT)
+  weeklyGoal          Int                          @map("weekly_goal")
+  dormancyDays        Int                          @map("dormancy_days")
+  stepBuildingDays    Int                          @map("step_building_days")
+  stepContinuingDays  Int                          @map("step_continuing_days")
+  stepEstablishedDays Int                          @map("step_established_days")
+  badgeRules          Json                         @map("badge_rules")
+  changeReason        String                       @map("change_reason") @db.VarChar(1000)
+  activationReason    String?                      @map("activation_reason") @db.VarChar(1000)
+  createdByUserId     String                       @map("created_by_user_id") @db.Uuid
+  activatedByUserId   String?                      @map("activated_by_user_id") @db.Uuid
+  activatedAt         DateTime?                    @map("activated_at") @db.Timestamptz(6)
+  supersededAt        DateTime?                    @map("superseded_at") @db.Timestamptz(6)
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  creator             User                         @relation("ActivityContinuityRuleCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  activator           User?                        @relation("ActivityContinuityRuleActivator", fields: [activatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([environment, version])
+  @@index([environment, status, createdAt])
+  @@map("activity_continuity_rules")
 }
 
 model SupportCase {

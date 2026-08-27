@@ -9,6 +9,9 @@ const { execute, prepare, enqueue, shouldUse } = vi.hoisted(() => ({
 vi.mock('../src/services/daily-mission-generation', () => ({
   createDailyMissionGenerationService: () => ({ execute }),
 }));
+vi.mock('../src/activity-continuity-rule', () => ({
+  currentActivityContinuityRule: () => Promise.resolve({ dormancyDays: 7 }),
+}));
 vi.mock('@bunshin/database', () => ({
   PrismaLineMessageDeliveryRepository: class {
     prepare = prepare;

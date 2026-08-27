@@ -5,6 +5,7 @@ import {
   type MissionAutomationHandler,
 } from '@bunshin/application';
 import { createDailyMissionGenerationService } from '../services/daily-mission-generation';
+import { currentActivityContinuityRule } from '../activity-continuity-rule';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
@@ -20,12 +21,13 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         existingPolicy: 'RETURN',
       });
       const db = await import('@bunshin/database');
+      const activityRule = await currentActivityContinuityRule();
       const returnReminder = await new db.PrismaLineReturnReminderRepository().shouldUse({
         workspaceId: job.workspaceId,
         bunshinId: job.bunshinId,
         actorUserId: job.requestedBy,
         localDate,
-        dormancyDays: 7,
+        dormancyDays: activityRule.dormancyDays,
         cooldownDays: 7,
       });
       const delivery = await new PrepareLineMissionDelivery(

@@ -5,6 +5,7 @@ import {
   type AchievementBadgeRepository,
   type MissionProgress,
 } from '../src';
+import { DEFAULT_ACTIVITY_CONTINUITY_RULE } from '@bunshin/application';
 
 class Badges implements AchievementBadgeRepository {
   values: AchievementBadge[] = [];
@@ -87,5 +88,34 @@ describe('EvaluateActivityMotivation', () => {
     expect(result.step).toBe('CONTINUING');
     expect(result.dormant).toBe(true);
     expect(result.returnMessage).toContain('見るだけでも大丈夫');
+  });
+
+  it('使用中の版の段階・休眠・バッジ条件を使う', async () => {
+    const badges = new Badges();
+    const rule = {
+      ...DEFAULT_ACTIVITY_CONTINUITY_RULE,
+      version: 2,
+      dormancyDays: 10,
+      stepBuildingDays: 5,
+      stepContinuingDays: 10,
+      stepEstablishedDays: 20,
+      badges: DEFAULT_ACTIVITY_CONTINUITY_RULE.badges.map((badge) => ({
+        ...badge,
+        threshold: badge.badgeKey === 'THREE_ACTIVE_DAYS' ? 5 : badge.threshold,
+      })),
+    };
+    const result = await new EvaluateActivityMotivation(badges).execute({
+      workspaceId: 'workspace-1',
+      actorUserId: 'user-1',
+      bunshinId: 'bunshin-1',
+      localDate: '2026-08-29',
+      progress: progress({ activeDays: 5, lastActiveDate: '2026-08-20' }),
+      rule,
+    });
+    expect(result.step).toBe('BUILDING');
+    expect(result.dormant).toBe(false);
+    expect(result.badges.find((badge) => badge.badgeKey === 'THREE_ACTIVE_DAYS')?.ruleVersion).toBe(
+      2,
+    );
   });
 });

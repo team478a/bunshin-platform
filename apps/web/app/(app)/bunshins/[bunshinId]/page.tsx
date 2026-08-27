@@ -19,6 +19,7 @@ import {
 } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { localDateInTimezone, weekRange } from '../../../../src/activity-progress';
+import { currentActivityContinuityRule } from '../../../../src/activity-continuity-rule';
 import { BunshinEditor } from './editor';
 
 export const dynamic = 'force-dynamic';
@@ -130,6 +131,7 @@ export default async function BunshinPage({
     });
     const engagementRepository = new PrismaMissionEngagementRepository();
     const localDate = localDateInTimezone(new Date(), 'Asia/Tokyo');
+    const activityRule = await currentActivityContinuityRule();
     const currentWeek = weekRange(localDate);
     const progress =
       socialCapabilityStatus === 'ACTIVE'
@@ -141,10 +143,11 @@ export default async function BunshinPage({
             actorUserId: currentUser.userId,
             bunshinId: bunshin.id,
             ...currentWeek,
+            weeklyGoal: activityRule.weeklyGoal,
           })
         : {
             ...currentWeek,
-            weeklyGoal: 3,
+            weeklyGoal: activityRule.weeklyGoal,
             remainingConfirmations: 3,
             weekly: {
               confirmedDays: 0,
@@ -170,6 +173,7 @@ export default async function BunshinPage({
       bunshinId: bunshin.id,
       localDate,
       progress,
+      rule: activityRule,
     });
     const missionDecisions = await Promise.all(
       dailyMissions.map((mission) =>
