@@ -2137,6 +2137,8 @@ export const MISSION_REJECTION_REASONS = [
 export type MissionRejectionReason = (typeof MISSION_REJECTION_REASONS)[number];
 export const MISSION_ACTIVITY_TYPES = [
   'VIEWED',
+  'CONFIRMED',
+  'RESTED',
   'ACCEPTED',
   'REJECTED',
   'COPIED_TEXT',
@@ -2174,6 +2176,37 @@ export interface MissionActivity {
   metadata: Record<string, unknown> | null;
   createdAt: Date;
 }
+export interface MissionProgressDaySource {
+  dailyMissionId: string;
+  missionDate: string;
+  activities: MissionActivity[];
+}
+export type MissionProgressDayStatus = 'UNSEEN' | 'CONFIRMED' | 'PREPARED' | 'POSTED' | 'RESTED';
+export interface MissionProgressDay {
+  dailyMissionId: string;
+  missionDate: string;
+  status: MissionProgressDayStatus;
+}
+export interface MissionProgress {
+  weekStart: string;
+  weekEnd: string;
+  weeklyGoal: number;
+  remainingConfirmations: number;
+  weekly: {
+    confirmedDays: number;
+    preparedDays: number;
+    postedDays: number;
+    restedDays: number;
+    days: MissionProgressDay[];
+  };
+  cumulative: {
+    confirmedDays: number;
+    preparedDays: number;
+    postedDays: number;
+    restedDays: number;
+    activeDays: number;
+  };
+}
 export interface MissionEngagementRepository {
   getDecision(
     input: DailyMissionScope & { dailyMissionId: string },
@@ -2198,6 +2231,8 @@ export interface MissionEngagementRepository {
     dailyMissionId: string;
     type:
       | 'VIEWED'
+      | 'CONFIRMED'
+      | 'RESTED'
       | 'COPIED_TEXT'
       | 'COPIED_SLIDE'
       | 'COPIED_IMAGE_INSTRUCTION'
@@ -2206,6 +2241,13 @@ export interface MissionEngagementRepository {
     idempotencyKey: string;
     metadata: Record<string, unknown> | null;
   }): Promise<MissionActivity | null>;
+  listProgressDays(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    from: string | null;
+    to: string;
+  }): Promise<MissionProgressDaySource[] | null>;
 }
 
 function idempotencyKey(value: string) {
@@ -2297,6 +2339,8 @@ export class RecordMissionActivity extends DailyMissionMutation {
     dailyMissionId: string;
     type:
       | 'VIEWED'
+      | 'CONFIRMED'
+      | 'RESTED'
       | 'COPIED_TEXT'
       | 'COPIED_SLIDE'
       | 'COPIED_IMAGE_INSTRUCTION'
@@ -2313,6 +2357,94 @@ export class RecordMissionActivity extends DailyMissionMutation {
     });
     if (!value) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return value;
+  }
+}
+
+const COPY_ACTIVITY_TYPES = new Set<MissionActivityType>([
+  'COPIED_TEXT',
+  'COPIED_SLIDE',
+  'COPIED_IMAGE_INSTRUCTION',
+  'COPIED_VIDEO_PROMPT',
+  'COPIED_SCRIPT',
+]);
+
+function progressDay(source: MissionProgressDaySource): MissionProgressDay {
+  const types = new Set(source.activities.map((value) => value.type));
+  const status: MissionProgressDayStatus = types.has('POSTED')
+    ? 'POSTED'
+    : source.activities.some((value) => COPY_ACTIVITY_TYPES.has(value.type))
+      ? 'PREPARED'
+      : types.has('CONFIRMED')
+        ? 'CONFIRMED'
+        : types.has('RESTED')
+          ? 'RESTED'
+          : 'UNSEEN';
+  return { dailyMissionId: source.dailyMissionId, missionDate: source.missionDate, status };
+}
+
+function progressCounts(days: MissionProgressDay[]) {
+  return {
+    confirmedDays: days.filter((value) =>
+      ['CONFIRMED', 'PREPARED', 'POSTED'].includes(value.status),
+    ).length,
+    preparedDays: days.filter((value) => ['PREPARED', 'POSTED'].includes(value.status)).length,
+    postedDays: days.filter((value) => value.status === 'POSTED').length,
+    restedDays: days.filter((value) => value.status === 'RESTED').length,
+  };
+}
+
+export class GetMissionProgress {
+  constructor(
+    private readonly assignments: BunshinCapabilityAssignmentRepository,
+    private readonly engagement: MissionEngagementRepository,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+    weekStart: string;
+    weekEnd: string;
+    weeklyGoal?: number;
+  }): Promise<MissionProgress> {
+    await new RequireActiveBunshinCapability(this.assignments).execute({
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      bunshinId: input.bunshinId,
+      capabilityType: 'SOCIAL',
+    });
+    const weekStart = localDate(input.weekStart);
+    const weekEnd = localDate(input.weekEnd);
+    const duration = (new Date(weekEnd).valueOf() - new Date(weekStart).valueOf()) / 86400000;
+    if (duration < 0 || duration > 6)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid progress week');
+    const weeklyGoal = missionInteger(input.weeklyGoal ?? 3, 1, 7, 'weekly goal');
+    const scope = {
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId,
+      bunshinId: input.bunshinId,
+    };
+    const [weeklySource, cumulativeSource] = await Promise.all([
+      this.engagement.listProgressDays({ ...scope, from: weekStart, to: weekEnd }),
+      this.engagement.listProgressDays({ ...scope, from: null, to: weekEnd }),
+    ]);
+    if (!weeklySource || !cumulativeSource)
+      throw new ApplicationError('NOT_FOUND', 'mission progress not found');
+    const weeklyDays = weeklySource.map(progressDay);
+    const cumulativeDays = cumulativeSource.map(progressDay);
+    const weekly = progressCounts(weeklyDays);
+    const cumulative = progressCounts(cumulativeDays);
+    return {
+      weekStart,
+      weekEnd,
+      weeklyGoal,
+      remainingConfirmations: Math.max(0, weeklyGoal - weekly.confirmedDays),
+      weekly: { ...weekly, days: weeklyDays },
+      cumulative: {
+        ...cumulative,
+        activeDays: cumulativeDays.filter((value) => value.status !== 'UNSEEN').length,
+      },
+    };
   }
 }
 

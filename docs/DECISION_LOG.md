@@ -1156,7 +1156,7 @@
 ## D-091: 活動継続機能は既存Mission Activityを正本とし行動段階を分離する
 
 - 日付: 2026-08-27
-- 状態: Proposed
+- 状態: Accepted
 - Brand: 添付仕様の「ワタシ企画室」はユーザー向け表示で「ワタシワークス」へ読み替える。技術識別子はD-090に従い変更しない。
 - Reuse: `DailyMission`、`MissionContent`、`MissionDecision`、`MissionActivity`、`PostRecord`、`MissionFeedback`、`LineNotificationPreference`と既存LINE配信基盤を正本とする。同義の`daily_contents`、汎用`activity_events`、`post_reports`、別の通知設定テーブルを作らない。
 - Semantics: 通知から正常表示したVIEWED、本人が押した確認、採用判断、Clipboard成功、PostRecord作成、投稿後Feedback、今日は休むを別の行動として記録する。

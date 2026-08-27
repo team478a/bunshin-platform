@@ -582,6 +582,8 @@ enum MissionRejectionReason {
 
 enum MissionActivityType {
   VIEWED
+  CONFIRMED
+  RESTED
   ACCEPTED
   REJECTED
   COPIED_TEXT
