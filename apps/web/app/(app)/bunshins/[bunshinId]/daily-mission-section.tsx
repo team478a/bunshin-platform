@@ -1,6 +1,11 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import {
+  progressStatusLabel,
+  weeklyCalendar,
+  type MissionProgressView,
+} from '../../../../src/activity-progress';
 
 export type DailyMissionView = {
   id: string;
@@ -329,6 +334,8 @@ export function DailyMissionSection({
   capabilityStatus,
   profiles,
   missions,
+  progress,
+  localDate,
 }: {
   workspaceId: string;
   bunshinId: string;
@@ -339,6 +346,8 @@ export function DailyMissionSection({
     status: 'ACTIVE' | 'INACTIVE';
   }>;
   missions: DailyMissionView[];
+  progress: MissionProgressView;
+  localDate: string;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -355,6 +364,7 @@ export function DailyMissionSection({
   const [socialProfileId, setSocialProfileId] = useState(activeProfiles[0]?.id ?? '');
   const active = capabilityStatus === 'ACTIVE';
   const busy = generating || pendingAction !== null;
+  const calendar = weeklyCalendar(progress);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/daily-missions`;
 
   async function generate() {
@@ -457,6 +467,10 @@ export function DailyMissionSection({
       ...(metadata ? { metadata } : {}),
     });
   }
+  async function continuity(id: string, type: 'CONFIRMED' | 'RESTED') {
+    const ok = await activity(id, type);
+    if (ok) router.refresh();
+  }
   async function decide(id: string, decision: 'ACCEPTED' | 'REJECTED', rejectionReason?: string) {
     setError(null);
     const ok = await engagementPost(id, 'decision', {
@@ -534,6 +548,37 @@ export function DailyMissionSection({
         <h2>今日やること</h2>
         <p>投稿案を確認して、使いたいものを選びましょう。</p>
       </header>
+      <section className="activity-progress" aria-labelledby="activity-progress-title">
+        <div className="activity-progress__summary">
+          <div>
+            <p className="eyebrow">今週の活動</p>
+            <h3 id="activity-progress-title">
+              {progress.remainingConfirmations === 0
+                ? '今週の目標を達成しました'
+                : `あと${progress.remainingConfirmations}回、内容を確認しましょう`}
+            </h3>
+          </div>
+          <strong>
+            {progress.weekly.confirmedDays} / {progress.weeklyGoal}回
+          </strong>
+        </div>
+        <div className="activity-calendar" aria-label="今週の活動カレンダー">
+          {calendar.map((day) => (
+            <div
+              className={`activity-calendar__day activity-calendar__day--${day.status.toLowerCase()}`}
+              key={day.missionDate}
+            >
+              <time dateTime={day.missionDate}>
+                {new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(
+                  new Date(`${day.missionDate}T00:00:00.000Z`),
+                )}
+              </time>
+              <span>{progressStatusLabel[day.status]}</span>
+            </div>
+          ))}
+        </div>
+        <p>これまでに活動した日：{progress.cumulative.activeDays}日</p>
+      </section>
       {active && (
         <div className="mission-generator">
           <h3>今日の案を準備する</h3>
@@ -618,6 +663,38 @@ export function DailyMissionSection({
                 )}
               </div>
               <p className="mission-reason">{mission.reason}</p>
+              {active &&
+                mission.missionDate === localDate &&
+                !progress.weekly.days.some(
+                  (day) => day.dailyMissionId === mission.id && day.status !== 'UNSEEN',
+                ) && (
+                  <div className="mission-continuity-actions">
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void continuity(mission.id, 'CONFIRMED')}
+                    >
+                      確認しました
+                    </button>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void continuity(mission.id, 'RESTED')}
+                    >
+                      今日は休む
+                    </button>
+                  </div>
+                )}
+              {mission.missionDate === localDate &&
+                progress.weekly.days.some(
+                  (day) => day.dailyMissionId === mission.id && day.status !== 'UNSEEN',
+                ) && (
+                  <p className="mission-continuity-saved" role="status">
+                    今日の活動を保存しました
+                  </p>
+                )}
               <button type="button" disabled={busy} onClick={() => void view(mission)}>
                 {expanded === mission.id ? '閉じる' : '内容を見る'}
               </button>{' '}
