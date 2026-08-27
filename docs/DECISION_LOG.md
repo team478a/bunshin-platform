@@ -1246,3 +1246,15 @@
 - Reuse: 本部承認素材は既存`ProductPackAsset`と`CampaignAsset`を正本とし、Video Assetへ複製しない。企画時は本人素材を最優先し、次にCampaign承認素材を利用する。
 - Failure: 署名Upload発行失敗と実体検査失敗は`REJECTED`と安全な理由コードを記録する。APIキー、署名URL、ファイル内容をログや監査metadataへ保存しない。
 - Deferred: Supabase等のStorage Adapter、Upload API/UI、マルウェア検査、ライフサイクル削除は後続PRで実装する。
+
+## D-099: 動画素材はPrivate Storageへ直接アップロードし、完了後にサーバー検査する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Upload: 大容量動画をアプリサーバー経由で転送せず、2時間以内の署名付きURLで利用者端末からSupabase Private Storageへ直接送信する。
+- Secret: Service Role Keyはサーバー内だけで利用し、ブラウザへ返さない。DB、API応答、ログにも保存しない。
+- Inspection: 完了要求時に実バイトのシグネチャ、容量、画像寸法、動画時間を検査し、合格した素材だけを`READY`にする。
+- Isolation: `VIDEO_GENERATION`のGroup PolicyとMember Assignmentが両方有効な本人だけが、本人の素材を登録・一覧表示できる。
+- Exposure: DBにはStorage Keyだけを保持するが、一覧APIと本人画面へStorage Keyや署名付き閲覧URLを返さない。
+- UX: 権利確認、容量・時間上限、送信・検査・保存結果を専門用語を避けた日本語で表示する。
+- Deferred: マルウェア検査、孤児オブジェクト削除、素材の削除UIは後続PRで実装する。

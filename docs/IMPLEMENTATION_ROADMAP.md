@@ -360,7 +360,7 @@ FREE継続率を確認する前に作り込まない。
 - V-0: 動画仕様の責任境界、標準動画とAI動画の分離 — 完了
 - V-1: Video Project / Scene Core、Group権限、Isolation、AI利用種別 — 完了
 - V-2: 動画企画・台本生成Port／Use Case、許可済みContext、OpenAI構造化出力 — 完了
-- V-3: 素材管理Core、利用者素材、承認済み素材の再利用、署名Upload境界 — 完了
+- V-3: 素材管理Core、利用者素材、承認済み素材の再利用、Private Storage、署名Upload API／本人画面 — 完了
 - V-4: Render Provider Port、外部Adapter、非同期Job
 - V-5: グループ管理画面、本人確認、修正、完成物取得
 
