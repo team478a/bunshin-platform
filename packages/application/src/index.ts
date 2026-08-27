@@ -24,6 +24,7 @@ import type {
 import { isValidBunshinSlug, normalizeBunshinSlug } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 export * from './video-render-job';
+export * from './video-render-completion';
 
 export interface ValidationMetricsPeriod {
   from: Date;
