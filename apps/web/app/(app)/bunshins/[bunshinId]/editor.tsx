@@ -13,6 +13,7 @@ import { ContentPillarSection, type ContentPillarView } from './content-pillar-s
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
 import { AccountStrategySection, type StrategyView } from './account-strategy-section';
 import { DailyMissionSection, type DailyMissionView } from './daily-mission-section';
+import type { MissionProgressView } from '../../../../src/activity-progress';
 import {
   LineNotificationPreferenceSection,
   type LineNotificationPreferenceView,
@@ -30,6 +31,8 @@ export function BunshinEditor({
   contentPillars,
   weeklyPlans,
   dailyMissions,
+  progress,
+  localDate,
   lineNotificationPreference,
 }: {
   workspaceId: string;
@@ -43,6 +46,8 @@ export function BunshinEditor({
   contentPillars: ContentPillarView[];
   weeklyPlans: WeeklyPlanView[];
   dailyMissions: DailyMissionView[];
+  progress: MissionProgressView;
+  localDate: string;
   lineNotificationPreference: LineNotificationPreferenceView;
 }) {
   const router = useRouter();
@@ -90,6 +95,8 @@ export function BunshinEditor({
           capabilityStatus={socialCapabilityStatus}
           profiles={socialProfiles.map(({ id, platform, status }) => ({ id, platform, status }))}
           missions={dailyMissions}
+          progress={progress}
+          localDate={localDate}
         />
       </section>
       <nav className="bunshin-section-nav" aria-label="BUNSHIN設定">

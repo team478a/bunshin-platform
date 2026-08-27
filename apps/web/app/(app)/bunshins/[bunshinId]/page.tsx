@@ -14,8 +14,10 @@ import {
   ListWeeklyPlans,
   ListDailyMissions,
   GetMissionDecision,
+  GetMissionProgress,
 } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { localDateInTimezone, weekRange } from '../../../../src/activity-progress';
 import { BunshinEditor } from './editor';
 
 export const dynamic = 'force-dynamic';
@@ -82,6 +84,8 @@ export default async function BunshinPage({
       actorUserId: currentUser.userId,
       bunshinId: bunshin.id,
     });
+    const socialCapabilityStatus =
+      capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null;
     const lineNotificationPreference = await new GetLineNotificationPreference(
       new PrismaLineNotificationPreferenceRepository(),
     ).execute({
@@ -123,6 +127,38 @@ export default async function BunshinPage({
       bunshinId: bunshin.id,
     });
     const engagementRepository = new PrismaMissionEngagementRepository();
+    const localDate = localDateInTimezone(new Date(), 'Asia/Tokyo');
+    const currentWeek = weekRange(localDate);
+    const progress =
+      socialCapabilityStatus === 'ACTIVE'
+        ? await new GetMissionProgress(
+            new PrismaBunshinCapabilityAssignmentRepository(),
+            engagementRepository,
+          ).execute({
+            workspaceId,
+            actorUserId: currentUser.userId,
+            bunshinId: bunshin.id,
+            ...currentWeek,
+          })
+        : {
+            ...currentWeek,
+            weeklyGoal: 3,
+            remainingConfirmations: 3,
+            weekly: {
+              confirmedDays: 0,
+              preparedDays: 0,
+              postedDays: 0,
+              restedDays: 0,
+              days: [],
+            },
+            cumulative: {
+              confirmedDays: 0,
+              preparedDays: 0,
+              postedDays: 0,
+              restedDays: 0,
+              activeDays: 0,
+            },
+          };
     const missionDecisions = await Promise.all(
       dailyMissions.map((mission) =>
         new GetMissionDecision(engagementRepository).execute({
@@ -216,9 +252,7 @@ export default async function BunshinPage({
               active,
             }),
           )}
-          socialCapabilityStatus={
-            capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
-          }
+          socialCapabilityStatus={socialCapabilityStatus}
           socialProfiles={socialProfiles.map(
             ({
               id,
@@ -366,6 +400,8 @@ export default async function BunshinPage({
                 : null,
             }),
           )}
+          progress={progress}
+          localDate={localDate}
           lineNotificationPreference={{
             enabled: lineNotificationPreference.enabled,
             consentGranted: lineNotificationPreference.notificationConsentAt !== null,
