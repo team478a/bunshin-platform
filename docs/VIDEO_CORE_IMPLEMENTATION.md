@@ -125,4 +125,12 @@ Creatomateを既存の外部サービス設定管理へ追加した。管理者�
 
 外部処理中は指数Backoffで再試行し、上限到達時はRenderとProjectを失敗状態へ揃える。課金、SNS自動投稿、AI動画生成、Webhookのみを信用した完了判定は実装していない。3. 成功時のみ利用回数を確定する仕組み4. 台本修正と完成物取得画面5. グループ管理画面6. 素材のマルウェア検査とライフサイクル削除
 
+## V-5B3A 署名付きWebhookとProvider再照合
+
+Render受付時に、環境・Workspace・Render・有効期限・鍵Versionを含む署名付きWebhook URLを個別発行する。署名鍵は`ENCRYPTION_KEY`からHKDFで`video-render-webhook`用途へ分離して導出し、`VIDEO_RENDER_WEBHOOK_KEY_VERSION`の現行版と直前版だけを受け付ける。
+
+Webhook本文の状態や完成URLは正として使わない。署名、内部Render ID、Provider metadata、DBへ保存済みのCreatomate Render IDを照合した後、認証済みstatus APIで最終状態を取得し直す。外部IDの保存前に通知が届いた場合は`202`で終了し、同じ動画を二重送信しない。完了済み・失敗済みへの再送も副作用なく終了する。
+
+Polling JobはWebhook欠落時の復旧経路として残す。Webhook本文、Provider応答、完成URL、APIキーはログや永続履歴へ保存しない。管理者向け監視と安全な再実行、成功本数の確定、完成通知は後続V-5B3B/Cで扱う。
+
 本PRには外部レンダリング、FFmpeg Worker、課金、一般公開、SNS自動投稿、Provider APIキー管理を含めない。

@@ -366,7 +366,9 @@ FREE継続率を確認する前に作り込まない。
 - V-5B1: 外部Render Provider比較、Creatomate Adapter、RenderScript変換 — 完了
 - V-5B2A: Creatomate環境別設定、暗号化保存、接続確認、管理画面 — 完了
 - V-5B2B: 非同期Job、進捗確認、完成物のPrivate Storage取得、本人確認導線 — 完了
-- V-5B3: Webhook照合、運用監視、完成時のみ利用回数を確定
+- V-5B3A: 署名付きWebhook、Provider ID照合、status API再確認 — 完了
+- V-5B3B: 管理者向け運用監視、安全な手動再実行
+- V-5B3C: 完成時のみ利用回数を確定、完成通知
 
 標準動画は静止画・字幕・音声・BGM・文字の動きで構成し、AI動画生成を含めない。外部レンダリングから開始し、完成したRenderだけを将来の利用回数対象とする。課金・決済は本Phaseへ含めない。
 

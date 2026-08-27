@@ -167,6 +167,7 @@ export interface VideoRenderProviderPort {
   submit(input: {
     renderId: string;
     project: VideoProjectRecord;
+    webhookUrl: string;
   }): Promise<{ externalJobId: string }>;
   inspect(input: {
     externalJobId: string;
@@ -175,6 +176,10 @@ export interface VideoRenderProviderPort {
     | { status: 'SUCCEEDED'; outputUrl: string }
     | { status: 'FAILED'; errorCode: string }
   >;
+}
+
+export interface VideoRenderWebhookPort {
+  createUrl(input: { workspaceId: string; renderId: string }): Promise<string>;
 }
 
 export interface VideoRenderOutputStoragePort {
@@ -436,6 +441,7 @@ export class ExecuteVideoRenderStep {
     private readonly repository: VideoRenderRepository,
     private readonly provider: VideoRenderProviderPort,
     private readonly storage: VideoRenderOutputStoragePort,
+    private readonly webhook: VideoRenderWebhookPort,
   ) {}
 
   async execute(input: {
@@ -456,7 +462,12 @@ export class ExecuteVideoRenderStep {
 
     let render = value.render;
     if (render.status === 'QUEUED') {
-      const submitted = await this.provider.submit({ renderId: render.id, project: value.project });
+      const webhookUrl = await this.webhook.createUrl(scope);
+      const submitted = await this.provider.submit({
+        renderId: render.id,
+        project: value.project,
+        webhookUrl,
+      });
       const updated = await this.repository.markSubmitted({
         ...scope,
         externalJobId: text(submitted.externalJobId, 'externalJobId', 255),

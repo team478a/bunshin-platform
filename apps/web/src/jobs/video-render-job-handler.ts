@@ -11,6 +11,7 @@ import {
   VideoRenderProviderError,
 } from '../providers/creatomate-video-render';
 import { SupabaseVideoRenderOutputStorage } from '../video/video-render-output-storage';
+import { HkdfVideoRenderWebhookSigner } from '../video/video-render-webhook-signer';
 
 export function createVideoRenderJobHandler(): VideoRenderJobHandler {
   return {
@@ -22,6 +23,7 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
           new db.PrismaVideoRenderRepository(),
           new CreatomateVideoRenderAdapter(configuration.apiKey),
           new SupabaseVideoRenderOutputStorage(),
+          new HkdfVideoRenderWebhookSigner(),
         ).execute(input);
       } catch (error) {
         if (error instanceof VideoRenderProviderError)
