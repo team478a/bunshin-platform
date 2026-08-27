@@ -44,9 +44,25 @@ AI動画は将来の追加機能として、グループ許可、参加者割当
 
 利用者へ表示した説明はプロジェクトのSnapshotとして保持する。秘密鍵、APIキー、Providerの認証情報、個人Memoryは保存しない。
 
+## V-2 動画企画・台本生成
+
+動画企画は、先に本人所有の動画プロジェクトを確認してから生成する。AIへ渡せる情報は`VideoPlanningContextRepository`が許可した次の範囲に限定する。
+
+- 本人所有のBunshinの目的、対象者、話し方
+- 同じGroupで本人が参加を承諾した公開中Campaign
+- 本人のBunshinへ割り当て済みの公開商品パック
+- 商品の事実、必須表記、禁止表現
+- 有効期限内の承認済み素材の識別子と説明
+
+別Workspace、別Group、別User、別Bunshin、未承諾Campaign、未割当商品は取得しない。ProviderはApplication層のPortを通して呼び、OpenAI固有処理はWeb側Adapterへ閉じ込める。既存の管理画面で保存・有効化されたOpenAI設定を実行時に解決し、APIキーをコード、生成入力、生成結果、ログへ含めない。
+
+生成結果は厳格な構造化出力とし、保存前に既存Video Coreで場面数、連番、合計時間、素材種別、AI利用種別を再検証する。標準動画では`AI_VIDEO`と`VIDEO_GENERATION`を許可しない。Provider失敗や不正な出力では場面を一件も保存しない。
+
+本段階ではPort、Use Case、OpenAI Adapter、Isolationテストまでを実装する。実行API、管理画面、利用者画面、AI利用原価記録、Render処理は後続PRへ分離する。
+
 ## 後続PR
 
-1. 動画企画・台本生成Use Caseと構造化出力
+1. 動画企画・台本生成APIと本人確認画面への接続
 2. 素材管理とアップロード境界
 3. Render Provider Portと外部Provider Adapter
 4. 非同期Render Job、成功時のみ利用回数を確定する仕組み

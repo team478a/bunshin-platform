@@ -1223,3 +1223,14 @@
 - Identity: Video ProjectはWorkspace、Group、Group Membership、Owner User、Bunshinを保持し、作成・取得・更新のすべてで同一境界を再検証する。
 - Disclosure: 台本、音声、画像、動画、素材選択のどこにAIを使ったかをProject・Scene単位で記録し、利用者へ表示した説明をSnapshotで保持する。
 - Accounting: 将来の利用回数は外部Renderが成功した場合だけ計上する。Draft、失敗、再試行、取消を完成本数へ含めない。課金・決済は今回実装しない。
+
+## D-097: 動画企画AIへ渡す情報を許可済みContextへ限定する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Ownership: Providerを呼ぶ前に`Workspace + Group + Owner User + Bunshin + Video Project`を照合し、範囲外のProjectは存在を明かさず拒否する。
+- Context: AIへ渡す情報は`VideoPlanningContextRepository`が返した本人の目的・対象者・話し方、参加承諾済みCampaign、割当済み公開商品、必須表記・禁止表現、有効な承認済み素材だけとする。個人Memory、未許可Knowledge、別参加者の情報は渡さない。
+- Provider: Application層は`VideoPlanGeneratorPort`だけに依存し、OpenAI固有のResponses APIとJSON SchemaはWeb側Adapterへ置く。APIキーは既存の環境別管理設定から実行時に解決し、生成Contextや永続データへ混ぜない。
+- Validation: Providerの構造化出力を信用せず、保存前にVideo Coreが場面数、連番、合計時間、素材種別、AI利用種別を決定的に検証する。標準動画ではAI動画を拒否する。
+- Atomicity: Provider失敗または検証失敗ではSceneを保存しない。Revision競合も既存の楽観的更新で拒否する。
+- Deferred: 実行APIへ接続するPRでPrompt Version、Model、Token、Latency、費用を本文や秘密情報なしでAI利用記録へ保存する。Render利用回数とは分離する。
