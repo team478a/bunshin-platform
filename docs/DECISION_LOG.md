@@ -1269,3 +1269,14 @@
 - Concurrency: Revision不一致はProvider呼出し前に拒否し、古い画面からの重複生成でAI原価を発生させない。
 - UX: 本人は生成された場面、秒数、話す言葉、画面文字、素材種別を確認する。標準動画ではAI動画本体を生成しないことを明示する。
 - Boundary: 企画・台本生成とRenderを分離する。外部Render、完成本数計上、課金、自動投稿は後続Phaseとする。
+
+## D-101: Render受付は本人が承認したRevisionごとに一度だけ行う
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Approval: `WAITING_APPROVAL`で場面が存在し、本人が確認したRevisionと一致する台本だけを`APPROVED`へ進める。Group、Member、参加同意、所有境界は承認時にも再検証する。
+- Idempotency: Render受付は`videoProjectId + projectRevision`をDBで一意にし、同じ承認版の二重受付と二重原価を防ぐ。
+- Provider: Application層は`VideoRenderProviderPort`だけに依存する。外部Job IDとProvider名は保持できるが、APIキーやProvider応答本文を保存しない。
+- Output: 完成物は将来Private Storageへ取り込み、DBには非公開Storage Keyだけを保存する。Providerの一時URLを正本にしない。
+- Accounting: `QUEUED`、`SUBMITTED`、`RENDERING`、失敗、取消は完成本数へ含めない。`SUCCEEDED`の確定処理は非同期Job実装時に追加する。
+- Safety: Provider未選定のV-5Aでは承認までに留め、外部サービスへ自動送信しない。

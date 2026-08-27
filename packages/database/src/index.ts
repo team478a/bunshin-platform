@@ -113,6 +113,8 @@ import type {
   VideoAiProcessingType,
   VideoPlatform,
   VideoPlanningContextRepository,
+  VideoRenderRecord,
+  VideoRenderRepository,
   VideoAssetRecord,
   VideoAssetRepository,
 } from '@bunshin/application';
@@ -11039,6 +11041,129 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       return videoProjectRecord(row);
+    });
+  }
+
+  async approvePlan(input: Parameters<VideoProjectRepository['approvePlan']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const now = new Date();
+      const changed = await tx.videoProject.updateMany({
+        where: {
+          id: input.videoProjectId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          revision: input.expectedRevision,
+          status: 'WAITING_APPROVAL',
+          scenes: { some: {} },
+          group: {
+            status: 'ACTIVE',
+            featurePolicies: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+          groupMembership: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+            featureAssignments: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+        },
+        data: { status: 'APPROVED', revision: { increment: 1 } },
+      });
+      if (changed.count !== 1) return null;
+      const row = await tx.videoProject.findUniqueOrThrow({
+        where: { id: input.videoProjectId },
+        include: { scenes: { orderBy: { sceneNo: 'asc' } } },
+      });
+      return videoProjectRecord(row);
+    });
+  }
+}
+
+const videoRenderRecord = (row: Prisma.VideoRenderGetPayload<object>): VideoRenderRecord => row;
+
+export class PrismaVideoRenderRepository implements VideoRenderRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async enqueueApproved(input: Parameters<VideoRenderRepository['enqueueApproved']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const now = new Date();
+      const project = await tx.videoProject.findFirst({
+        where: {
+          id: input.videoProjectId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          revision: input.expectedRevision,
+          status: { in: ['APPROVED', 'QUEUED'] },
+          group: {
+            status: 'ACTIVE',
+            featurePolicies: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+          groupMembership: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+            featureAssignments: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+        },
+        select: { id: true, status: true, groupMembershipId: true },
+      });
+      if (!project) return null;
+      const existing = await tx.videoRender.findUnique({
+        where: {
+          videoProjectId_projectRevision: {
+            videoProjectId: project.id,
+            projectRevision: input.expectedRevision,
+          },
+        },
+      });
+      if (existing) return videoRenderRecord(existing);
+      if (project.status !== 'APPROVED') return null;
+      const changed = await tx.videoProject.updateMany({
+        where: { id: project.id, revision: input.expectedRevision, status: 'APPROVED' },
+        data: { status: 'QUEUED' },
+      });
+      if (changed.count !== 1) return null;
+      const row = await tx.videoRender.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: project.groupMembershipId,
+          ownerUserId: input.actorUserId,
+          videoProjectId: project.id,
+          projectRevision: input.expectedRevision,
+          provider: input.provider,
+        },
+      });
+      return videoRenderRecord(row);
     });
   }
 }
