@@ -720,6 +720,18 @@ enum VideoCompletionNotificationStatus {
   CANCELLED
 }
 
+enum VideoDisclosurePolicyStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+}
+
+enum VideoDisclosurePlatform {
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE_SHORTS
+}
+
 enum VideoSceneVisualType {
   USER_ASSET
   APPROVED_ASSET
@@ -766,6 +778,8 @@ model User {
   missionDeepLinkStates             MissionDeepLinkState[]
   lineDeliveryRetryRequests         LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
   videoRenderRetryRequests          VideoRenderRetryRequest[]           @relation("VideoRenderRetryActor")
+  videoDisclosurePoliciesCreated    VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyCreator")
+  videoDisclosurePoliciesActivated  VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyActivator")
   trendBenchmarkCases               TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations        TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
   productionGateEvidence            ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
@@ -1697,6 +1711,32 @@ model VideoProject {
   @@index([groupId, groupMembershipId, status])
   @@index([campaignId])
   @@map("video_projects")
+}
+
+model VideoDisclosurePolicy {
+  id                String                       @id @default(uuid()) @db.Uuid
+  environment       LineConfigurationEnvironment
+  platform          VideoDisclosurePlatform
+  version           Int
+  status            VideoDisclosurePolicyStatus  @default(DRAFT)
+  disclosureText    String                       @map("disclosure_text") @db.VarChar(500)
+  hashtags          Json                         @default("[]")
+  guidance          String                       @db.VarChar(1000)
+  outputMetadata    Json                         @default("{}") @map("output_metadata")
+  changeReason      String                       @map("change_reason") @db.VarChar(1000)
+  activationReason  String?                      @map("activation_reason") @db.VarChar(1000)
+  createdByUserId   String                       @map("created_by_user_id") @db.Uuid
+  activatedByUserId String?                      @map("activated_by_user_id") @db.Uuid
+  activatedAt       DateTime?                    @map("activated_at") @db.Timestamptz(6)
+  supersededAt      DateTime?                    @map("superseded_at") @db.Timestamptz(6)
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  creator           User                         @relation("VideoDisclosurePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  activator         User?                        @relation("VideoDisclosurePolicyActivator", fields: [activatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([environment, platform, version])
+  @@index([environment, platform, status, createdAt])
+  @@map("video_disclosure_policies")
 }
 
 model VideoRender {

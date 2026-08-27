@@ -2337,3 +2337,4 @@ export * from './campaign-safety-validation';
 export * from './video-core';
 export * from './video-assets';
 export * from './video-render-operations';
+export * from './video-disclosure-policy';
