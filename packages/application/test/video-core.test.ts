@@ -189,6 +189,11 @@ describe('Video Core', () => {
         completedAt: null,
         updatedAt: now,
       }),
+      findForExecution: vi.fn(),
+      markSubmitted: vi.fn(),
+      markRendering: vi.fn(),
+      markSucceeded: vi.fn(),
+      markFailed: vi.fn(),
     };
     await expect(
       new QueueVideoRender(render).execute({

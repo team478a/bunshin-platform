@@ -11166,6 +11166,105 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       return videoRenderRecord(row);
     });
   }
+
+  async findForExecution(input: Parameters<VideoRenderRepository['findForExecution']>[0]) {
+    const row = await this.client.videoRender.findFirst({
+      where: { id: input.renderId, workspaceId: input.workspaceId },
+      include: { project: { include: { scenes: { orderBy: { sceneNo: 'asc' } } } } },
+    });
+    return row
+      ? { render: videoRenderRecord(row), project: videoProjectRecord(row.project) }
+      : null;
+  }
+
+  async markSubmitted(input: Parameters<VideoRenderRepository['markSubmitted']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const changed = await tx.videoRender.updateMany({
+        where: { id: input.renderId, workspaceId: input.workspaceId, status: 'QUEUED' },
+        data: {
+          status: 'SUBMITTED',
+          externalJobId: input.externalJobId,
+          startedAt: new Date(),
+          errorCode: null,
+        },
+      });
+      if (changed.count !== 1) return null;
+      const render = await tx.videoRender.findUniqueOrThrow({ where: { id: input.renderId } });
+      await tx.videoProject.updateMany({
+        where: {
+          id: render.videoProjectId,
+          workspaceId: input.workspaceId,
+          status: 'QUEUED',
+        },
+        data: { status: 'RENDERING' },
+      });
+      return videoRenderRecord(render);
+    });
+  }
+
+  async markRendering(input: Parameters<VideoRenderRepository['markRendering']>[0]) {
+    const changed = await this.client.videoRender.updateMany({
+      where: {
+        id: input.renderId,
+        workspaceId: input.workspaceId,
+        status: { in: ['SUBMITTED', 'RENDERING'] },
+      },
+      data: { status: 'RENDERING' },
+    });
+    if (changed.count !== 1) return null;
+    return videoRenderRecord(
+      await this.client.videoRender.findUniqueOrThrow({ where: { id: input.renderId } }),
+    );
+  }
+
+  async markSucceeded(input: Parameters<VideoRenderRepository['markSucceeded']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const changed = await tx.videoRender.updateMany({
+        where: {
+          id: input.renderId,
+          workspaceId: input.workspaceId,
+          status: { in: ['SUBMITTED', 'RENDERING'] },
+        },
+        data: {
+          status: 'SUCCEEDED',
+          outputStorageKey: input.outputStorageKey,
+          completedAt: new Date(),
+          errorCode: null,
+        },
+      });
+      if (changed.count !== 1) return null;
+      const render = await tx.videoRender.findUniqueOrThrow({ where: { id: input.renderId } });
+      await tx.videoProject.updateMany({
+        where: { id: render.videoProjectId, workspaceId: input.workspaceId, status: 'RENDERING' },
+        data: { status: 'READY_FOR_REVIEW' },
+      });
+      return videoRenderRecord(render);
+    });
+  }
+
+  async markFailed(input: Parameters<VideoRenderRepository['markFailed']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const changed = await tx.videoRender.updateMany({
+        where: {
+          id: input.renderId,
+          workspaceId: input.workspaceId,
+          status: { in: ['QUEUED', 'SUBMITTED', 'RENDERING'] },
+        },
+        data: { status: 'FAILED', errorCode: input.errorCode, completedAt: new Date() },
+      });
+      if (changed.count !== 1) return null;
+      const render = await tx.videoRender.findUniqueOrThrow({ where: { id: input.renderId } });
+      await tx.videoProject.updateMany({
+        where: {
+          id: render.videoProjectId,
+          workspaceId: input.workspaceId,
+          status: { in: ['QUEUED', 'RENDERING'] },
+        },
+        data: { status: 'FAILED' },
+      });
+      return videoRenderRecord(render);
+    });
+  }
 }
 
 export class PrismaVideoPlanningContextRepository implements VideoPlanningContextRepository {
