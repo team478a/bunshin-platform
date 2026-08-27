@@ -1369,7 +1369,6 @@ export class PrismaLineDeliveryRetryRepository implements LineDeliveryRetryRepos
   async request(input: Parameters<LineDeliveryRetryRepository['request']>[0]) {
     try {
       return await this.client.$transaction(async (tx) => {
-        const now = new Date();
         const admin = await tx.platformAdmin.findFirst({
           where: {
             userId: input.actorUserId,
