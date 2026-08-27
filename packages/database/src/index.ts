@@ -5,6 +5,7 @@ import {
   calculateFirstWeekThreePostKpi,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
+  VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
   isLineNotificationSuppressed,
 } from '@bunshin/application';
@@ -115,6 +116,7 @@ import type {
   VideoPlanningContextRepository,
   VideoRenderRecord,
   VideoRenderRepository,
+  VideoRenderOperationsRepository,
   VideoAssetRecord,
   VideoAssetRepository,
 } from '@bunshin/application';
@@ -11264,6 +11266,177 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       });
       return videoRenderRecord(render);
     });
+  }
+}
+
+const emptyVideoRenderCounts = () => ({
+  QUEUED: 0,
+  SUBMITTED: 0,
+  RENDERING: 0,
+  SUCCEEDED: 0,
+  FAILED: 0,
+  CANCELLED: 0,
+});
+
+export class PrismaVideoRenderOperationsRepository implements VideoRenderOperationsRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async getSnapshot(input: Parameters<VideoRenderOperationsRepository['getSnapshot']>[0]) {
+    const admin = await this.client.platformAdmin.findFirst({
+      where: { userId: input.actorUserId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!admin) return null;
+    const jobs = await this.client.job.findMany({
+      where: { environment: input.environment, jobType: 'VIDEO_RENDER_PROCESS' },
+      select: { payloadReference: true },
+    });
+    const renderIds = [
+      ...new Set(
+        jobs
+          .map(
+            ({ payloadReference }) => /^video-render:([0-9a-f-]{36})$/i.exec(payloadReference)?.[1],
+          )
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const rows = await this.client.videoRender.findMany({
+      where: { id: { in: renderIds } },
+      include: { project: { select: { title: true, group: { select: { name: true } } } } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    const counts = emptyVideoRenderCounts();
+    const groupedCounts = await this.client.videoRender.groupBy({
+      by: ['status'],
+      where: { id: { in: renderIds } },
+      _count: { _all: true },
+    });
+    for (const row of groupedCounts) counts[row.status] = row._count._all;
+    return {
+      counts,
+      items: rows.map((row) => ({
+        id: row.id,
+        projectTitle: row.project.title,
+        groupName: row.project.group.name,
+        provider: row.provider,
+        status: row.status,
+        errorCode: row.errorCode,
+        externalJobRegistered: Boolean(row.externalJobId),
+        retryable:
+          row.status === 'FAILED' &&
+          VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES.includes(
+            row.errorCode as (typeof VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES)[number],
+          ),
+        createdAt: row.createdAt,
+        startedAt: row.startedAt,
+        completedAt: row.completedAt,
+      })),
+    };
+  }
+
+  async requestRetry(input: Parameters<VideoRenderOperationsRepository['requestRetry']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        const now = new Date();
+        const admin = await tx.platformAdmin.findFirst({
+          where: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+          },
+          select: { id: true },
+        });
+        if (!admin) return null;
+        const render = await tx.videoRender.findFirst({
+          where: {
+            id: input.renderId,
+            status: 'FAILED',
+            errorCode: { in: [...VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES] },
+            completedAt: { not: null },
+            project: {
+              status: 'FAILED',
+              group: {
+                status: 'ACTIVE',
+                featurePolicies: {
+                  some: {
+                    featureKey: 'VIDEO_GENERATION',
+                    status: 'ENABLED',
+                    OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+                  },
+                },
+              },
+              groupMembership: {
+                status: 'ACTIVE',
+                consentedAt: { not: null },
+                featureAssignments: {
+                  some: {
+                    featureKey: 'VIDEO_GENERATION',
+                    status: 'ENABLED',
+                    OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+                  },
+                },
+              },
+              ownerUser: { status: 'ACTIVE' },
+              workspace: { status: 'ACTIVE' },
+            },
+          },
+          include: { project: { select: { bunshinId: true } } },
+        });
+        if (!render?.completedAt) return null;
+        const originalJob = await tx.job.findFirst({
+          where: {
+            environment: input.environment,
+            jobType: 'VIDEO_RENDER_PROCESS',
+            payloadReference: `video-render:${render.id}`,
+          },
+          select: { id: true },
+        });
+        if (!originalJob) return null;
+        const nextStatus = render.externalJobId ? 'SUBMITTED' : 'QUEUED';
+        const changed = await tx.videoRender.updateMany({
+          where: { id: render.id, status: 'FAILED', completedAt: render.completedAt },
+          data: { status: nextStatus, errorCode: null, completedAt: null },
+        });
+        if (changed.count !== 1) return null;
+        await tx.videoProject.update({
+          where: { id: render.videoProjectId },
+          data: { status: render.externalJobId ? 'RENDERING' : 'QUEUED' },
+        });
+        const job = await tx.job.create({
+          data: {
+            environment: input.environment,
+            workspaceId: render.workspaceId,
+            bunshinId: render.project.bunshinId,
+            jobType: 'VIDEO_RENDER_PROCESS',
+            payloadReference: `video-render:${render.id}`,
+            idempotencyKey: `video-render-admin-retry:${render.id}:${render.completedAt.toISOString()}`,
+            correlationId: input.requestId,
+            requestedBy: render.ownerUserId,
+            priority: 40,
+            maxAttempts: 12,
+          },
+        });
+        return tx.videoRenderRetryRequest.create({
+          data: {
+            id: input.requestId,
+            environment: input.environment,
+            videoRenderId: render.id,
+            failedAtSnapshot: render.completedAt,
+            actorUserId: input.actorUserId,
+            reason: input.reason,
+            jobId: job.id,
+          },
+          select: { id: true, jobId: true, createdAt: true },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError('CONFLICT', 'this video render failure already has a retry job');
+      throw error;
+    }
   }
 }
 

@@ -758,6 +758,7 @@ model User {
   lineMessageDeliveries             LineMessageDelivery[]
   missionDeepLinkStates             MissionDeepLinkState[]
   lineDeliveryRetryRequests         LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
+  videoRenderRetryRequests          VideoRenderRetryRequest[]           @relation("VideoRenderRetryActor")
   trendBenchmarkCases               TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations        TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
   productionGateEvidence            ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
@@ -1692,29 +1693,49 @@ model VideoProject {
 }
 
 model VideoRender {
-  id                String            @id @default(uuid()) @db.Uuid
-  workspaceId       String            @map("workspace_id") @db.Uuid
-  groupId           String            @map("group_id") @db.Uuid
-  groupMembershipId String            @map("group_membership_id") @db.Uuid
-  ownerUserId       String            @map("owner_user_id") @db.Uuid
-  videoProjectId    String            @map("video_project_id") @db.Uuid
-  projectRevision   Int               @map("project_revision")
-  provider          String            @db.VarChar(80)
-  status            VideoRenderStatus @default(QUEUED)
-  externalJobId     String?           @map("external_job_id") @db.VarChar(255)
-  outputStorageKey  String?           @map("output_storage_key") @db.VarChar(512)
-  errorCode         String?           @map("error_code") @db.VarChar(80)
-  startedAt         DateTime?         @map("started_at") @db.Timestamptz(6)
-  completedAt       DateTime?         @map("completed_at") @db.Timestamptz(6)
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  project           VideoProject      @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
+  id                String                    @id @default(uuid()) @db.Uuid
+  workspaceId       String                    @map("workspace_id") @db.Uuid
+  groupId           String                    @map("group_id") @db.Uuid
+  groupMembershipId String                    @map("group_membership_id") @db.Uuid
+  ownerUserId       String                    @map("owner_user_id") @db.Uuid
+  videoProjectId    String                    @map("video_project_id") @db.Uuid
+  projectRevision   Int                       @map("project_revision")
+  provider          String                    @db.VarChar(80)
+  status            VideoRenderStatus         @default(QUEUED)
+  externalJobId     String?                   @map("external_job_id") @db.VarChar(255)
+  outputStorageKey  String?                   @map("output_storage_key") @db.VarChar(512)
+  errorCode         String?                   @map("error_code") @db.VarChar(80)
+  startedAt         DateTime?                 @map("started_at") @db.Timestamptz(6)
+  completedAt       DateTime?                 @map("completed_at") @db.Timestamptz(6)
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  project           VideoProject              @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
+  retryRequests     VideoRenderRetryRequest[]
 
   @@unique([videoProjectId, projectRevision])
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([groupId, groupMembershipId, status])
   @@index([provider, externalJobId])
   @@map("video_renders")
+}
+
+model VideoRenderRetryRequest {
+  id               String                       @id @db.Uuid
+  environment      LineConfigurationEnvironment
+  videoRenderId    String                       @map("video_render_id") @db.Uuid
+  failedAtSnapshot DateTime                     @map("failed_at_snapshot") @db.Timestamptz(6)
+  actorUserId      String                       @map("actor_user_id") @db.Uuid
+  reason           String                       @db.VarChar(500)
+  jobId            String                       @unique @map("job_id") @db.Uuid
+  createdAt        DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  videoRender      VideoRender                  @relation(fields: [videoRenderId], references: [id], onDelete: Restrict)
+  actorUser        User                         @relation("VideoRenderRetryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  job              Job                          @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([videoRenderId, failedAtSnapshot])
+  @@index([environment, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("video_render_retry_requests")
 }
 
 model VideoAsset {
@@ -2328,6 +2349,7 @@ model Job {
   bunshin                  Bunshin?                     @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   requester                User                         @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
   lineDeliveryRetryRequest LineDeliveryRetryRequest?
+  videoRenderRetryRequest  VideoRenderRetryRequest?
 
   @@unique([environment, idempotencyKey])
   @@index([environment, status, scheduledAt, priority])
