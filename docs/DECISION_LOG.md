@@ -1178,3 +1178,13 @@
 - Rules: 初版はコード管理のRule Version 1とし、J4の管理設定を先回りしない。Feature Keyは将来のBLOG等へ拡張可能な文字列境界とする。
 - Dormancy: 休眠はMission Activityから派生した最終活動日と基準日との差で判定する。初版は7日で、独立した休眠状態テーブルや減点を作らない。
 - Delivery: Webの復帰表示までをJ3-Aとする。LINE復帰通知は同意、Quiet Hours、Quota、全体停止、重複送信防止を既存配信基盤へ接続するJ3-Bとして分離する。
+
+## D-093: LINE復帰通知は既存Daily Mission配信の低優先種別として扱う
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Reuse: 新しい通知テーブルや別Workerを作らず、既存`LineMessageDelivery`の`REMINDER`種別、Mission Deep Link、配信Job、試行履歴を再利用する。
+- Eligibility: 7日以上活動がなく、本人が通知とリマインダーへ同意し、直近7日に復帰通知がない場合だけ`REMINDER`へ切り替える。通常のDaily Mission生成・Web利用は止めない。
+- Recheck: Job予約時の判定だけを信用せず、LINE Provider呼出し直前に現在の同意、通知有効化、一時停止、曜日、Quiet Hours、Workspace・User・Bunshin状態を再検証する。不明・欠損時は送信しない。
+- Priority: `REMINDER`は低優先通知とし、月間使用率が停止基準へ達した場合はDaily Missionより先に停止する。全体停止と上限到達は既存配信Policyに従う。
+- Privacy: 復帰メッセージに活動履歴、Memory、Knowledge、投稿本文を含めず、短期署名付きMission Deep Linkだけを送る。

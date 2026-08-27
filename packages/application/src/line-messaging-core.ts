@@ -8,6 +8,7 @@ export type LineMessagingErrorCategory =
   | 'CONFIGURATION_UNAVAILABLE'
   | 'ENVIRONMENT_MISMATCH'
   | 'GLOBALLY_PAUSED'
+  | 'NOTIFICATION_SUPPRESSED'
   | 'QUOTA_LOW_PRIORITY_STOP'
   | 'QUOTA_EXHAUSTED'
   | 'RECIPIENT_UNAVAILABLE'
@@ -131,6 +132,26 @@ export interface LineRecipientResolverPort {
   }): Promise<string | null>;
 }
 
+export interface LineDeliveryPreferencePort {
+  isAllowed(input: {
+    workspaceId: string;
+    bunshinId: string;
+    userId: string;
+    at: Date;
+  }): Promise<boolean>;
+}
+
+export interface LineReturnReminderRepository {
+  shouldUse(input: {
+    workspaceId: string;
+    bunshinId: string;
+    actorUserId: string;
+    localDate: string;
+    dormancyDays: number;
+    cooldownDays: number;
+  }): Promise<boolean>;
+}
+
 export const LINE_MISSION_PLATFORMS = [
   'INSTAGRAM',
   'TIKTOK',
@@ -219,6 +240,7 @@ export type LineProviderFailure = {
     | 'CONFIGURATION_UNAVAILABLE'
     | 'ENVIRONMENT_MISMATCH'
     | 'GLOBALLY_PAUSED'
+    | 'NOTIFICATION_SUPPRESSED'
     | 'QUOTA_LOW_PRIORITY_STOP'
     | 'QUOTA_EXHAUSTED'
     | 'RECIPIENT_UNAVAILABLE'
@@ -236,6 +258,7 @@ export interface LineMessagingProviderPort {
     recipientId: string;
     deepLinkUrl: string;
     summary: LineMissionNotificationSummary;
+    kind: LineMessageKind;
   }): Promise<{ ok: true } | LineProviderFailure>;
 }
 
@@ -277,6 +300,7 @@ export class ExecuteLineMissionDelivery {
     private readonly configuration: LineDeliveryConfigurationPort,
     private readonly recipientResolver: LineRecipientResolverPort,
     private readonly summaryRepository: LineMissionNotificationSummaryRepository,
+    private readonly preference: LineDeliveryPreferencePort,
     private readonly provider: LineMessagingProviderPort,
     private readonly now = () => new Date(),
     private readonly leaseMilliseconds = 30_000,
@@ -331,6 +355,15 @@ export class ExecuteLineMissionDelivery {
       return failWithoutProvider('FAILED', 'ENVIRONMENT_MISMATCH', false);
     if (configuration.globallyPaused)
       return failWithoutProvider('CANCELLED', 'GLOBALLY_PAUSED', false);
+    if (
+      !(await this.preference.isAllowed({
+        workspaceId: claim.delivery.workspaceId,
+        bunshinId: claim.delivery.bunshinId,
+        userId: input.actorUserId,
+        at: now,
+      }))
+    )
+      return failWithoutProvider('CANCELLED', 'NOTIFICATION_SUPPRESSED', false);
 
     const recipientId = await this.recipientResolver.resolve({
       environment: input.environment,
@@ -377,6 +410,7 @@ export class ExecuteLineMissionDelivery {
         recipientId,
         deepLinkUrl,
         summary,
+        kind: claim.delivery.kind,
       }),
     );
     if (!result.ok) return this.recordProviderFailure(claim, input, result, now);
