@@ -302,6 +302,18 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 
 FREE一般ユーザーへは開放せず、Productionで明示許可したGroupと同意済みACTIVE Membershipだけを対象とする。Phase 10の一般向け画像・動画Providerを前倒ししない。越境、秘密漏えい、二重課金、重大な広告安全違反が1件でもあれば全体停止する。
 
+### Phase 7-J: 活動継続機能
+
+状態: J0文書完了。人間レビュー前にJ1以降へ進まない。詳細は`docs/ACTIVITY_CONTINUITY_REBASELINE.md`を正本候補とする。
+
+- J0: 現行監査、正本、行動定義、KPI、実装境界の再基準化 — 文書完了
+- J1: `MissionActivity`の確認・休み行動、週間・累積Progress Read Model、冪等性、Isolation
+- J2: 今日の確認、今日は休む、活動カレンダー、今週あと何回のmobile-first UX
+- J3: 発信ステップ、版管理された達成バッジ、休眠・復帰、必要最小限のLINE連携
+- J4: 運用ルール、進捗・KPI、テスト除外、監査、監視、CSV出力
+
+`DailyMission`、`MissionContent`、`MissionDecision`、`MissionActivity`、`PostRecord`、`MissionFeedback`、`LineNotificationPreference`と既存LINE配信基盤を正本とする。`daily_contents`、汎用`activity_events`、`post_reports`、別系統の通知設定は作らない。週に3回の確認は優しい継続目標とし、最重要KPIは7日間に3回以上実際に投稿したユーザー率とする。
+
 ### Phase 7-L: 外部成果計測URL連携
 
 状態: L7のIsolation自動テスト、スマートフォンE2E手順、Production Gate接続まで完了。本番実査と確認記録は運用時に行う。

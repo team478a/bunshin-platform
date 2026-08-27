@@ -1152,3 +1152,19 @@
 - Domain language: `Bunshin`はユーザーが作成するAI分身を表すDomain用語として維持する。サービス名とAI分身の名称を混同しない。
 - Compatibility: Repository名、DB table・column、API path、型名、環境変数、監査Event名などの技術識別子は変更しない。既存データと外部連携の互換性を守る。
 - Assets: 提供された横長ロゴを画面Headerへ、正方形アイコンをWeb metadataへ使用する。個人の分身画像や生成画像には流用しない。
+
+## D-091: 活動継続機能は既存Mission Activityを正本とし行動段階を分離する
+
+- 日付: 2026-08-27
+- 状態: Proposed
+- Brand: 添付仕様の「ワタシ企画室」はユーザー向け表示で「ワタシワークス」へ読み替える。技術識別子はD-090に従い変更しない。
+- Reuse: `DailyMission`、`MissionContent`、`MissionDecision`、`MissionActivity`、`PostRecord`、`MissionFeedback`、`LineNotificationPreference`と既存LINE配信基盤を正本とする。同義の`daily_contents`、汎用`activity_events`、`post_reports`、別の通知設定テーブルを作らない。
+- Semantics: 通知から正常表示したVIEWED、本人が押した確認、採用判断、Clipboard成功、PostRecord作成、投稿後Feedback、今日は休むを別の行動として記録する。
+- Progress: 週間・累積進捗はappend-only Raw ActivityとPostRecordから再構築できるRead Modelとし、集計値だけを唯一の正本にしない。
+- Identity: 日次判定で`workspaceId`、`userId`、`bunshinId`、`dailyMissionId`を再検証し、Group Campaignでは`groupId`と`membershipId`も照合する。`userId + localDate`だけの一意制約にしない。
+- Time: UTC保存とし、判定に使ったlocal date、timezone、週開始日を固定する。初期値は`Asia/Tokyo`と月曜日開始の候補とする。
+- Motivation: 「今日は休む」で減点せず、過去実績、ステップ、バッジを失わせない。順位、他者比較、換金可能ポイントをMVPに入れない。
+- KPI: 週に3回の確認は利用継続指標とし、最重要KPIは「7日間に3回以上実際に投稿したユーザー率」とする。
+- Extension: 発信ステップとバッジはSOCIAL専用列に固定せず、BLOG、Group Campaign、画像生成等の安定した機能Keyを将来関連付けられる境界にする。
+- Privacy: Activity metadataへ投稿本文、画像指示文、Memory、Knowledge、LINE user ID、Tokenを保存しない。Group Managerには許可された集計だけを返す。
+- Gate: `docs/ACTIVITY_CONTINUITY_REBASELINE.md`の人間レビュー完了前にActivity Enum、Progress、Badge、休眠Job、UI、Prisma Schema、Migrationを実装しない。
