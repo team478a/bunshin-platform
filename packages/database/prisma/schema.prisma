@@ -116,6 +116,19 @@ enum ProductPackAssetType {
   LINK
 }
 
+enum VideoAssetKind {
+  IMAGE
+  VIDEO
+  LOGO
+}
+
+enum VideoAssetStatus {
+  PENDING_UPLOAD
+  READY
+  REJECTED
+  DELETED
+}
+
 enum ProductPackAssignmentStatus {
   ACTIVE
   REVOKED
@@ -773,6 +786,7 @@ model User {
   activityContinuityRulesCreated    ActivityContinuityRule[]            @relation("ActivityContinuityRuleCreator")
   activityContinuityRulesActivated  ActivityContinuityRule[]            @relation("ActivityContinuityRuleActivator")
   videoProjects                     VideoProject[]                      @relation("VideoProjectOwner")
+  videoAssets                       VideoAsset[]                        @relation("VideoAssetOwner")
 
   @@index([status])
   @@map("users")
@@ -853,6 +867,7 @@ model Workspace {
   groupFeatureUsageEvents     GroupFeatureUsageEvent[]
   achievementBadges           AchievementBadge[]
   videoProjects               VideoProject[]
+  videoAssets                 VideoAsset[]
 
   @@index([status])
   @@map("workspaces")
@@ -899,6 +914,7 @@ model Group {
   membershipAudits           GroupMembershipAuditLog[]
   featureUsageEvents         GroupFeatureUsageEvent[]
   videoProjects              VideoProject[]
+  videoAssets                VideoAsset[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -927,6 +943,7 @@ model GroupMembership {
   membershipAudits           GroupMembershipAuditLog[]
   featureUsageEvents         GroupFeatureUsageEvent[]
   videoProjects              VideoProject[]
+  videoAssets                VideoAsset[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -1654,12 +1671,50 @@ model VideoProject {
   bunshin             Bunshin            @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
   campaign            Campaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   scenes              VideoScene[]
+  assets              VideoAsset[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, ownerUserId, status, updatedAt])
   @@index([groupId, groupMembershipId, status])
   @@index([campaignId])
   @@map("video_projects")
+}
+
+model VideoAsset {
+  id                String           @id @default(uuid()) @db.Uuid
+  workspaceId       String           @map("workspace_id") @db.Uuid
+  groupId           String           @map("group_id") @db.Uuid
+  groupMembershipId String           @map("group_membership_id") @db.Uuid
+  ownerUserId       String           @map("owner_user_id") @db.Uuid
+  videoProjectId    String?          @map("video_project_id") @db.Uuid
+  kind              VideoAssetKind
+  status            VideoAssetStatus @default(PENDING_UPLOAD)
+  storageKey        String           @unique @map("storage_key") @db.VarChar(512)
+  originalFilename  String           @map("original_filename") @db.VarChar(255)
+  declaredMimeType  String           @map("declared_mime_type") @db.VarChar(100)
+  verifiedMimeType  String?          @map("verified_mime_type") @db.VarChar(100)
+  declaredSizeBytes Int              @map("declared_size_bytes")
+  verifiedSizeBytes Int?             @map("verified_size_bytes")
+  width             Int?
+  height            Int?
+  durationMs        Int?             @map("duration_ms")
+  rightsConfirmedAt DateTime         @map("rights_confirmed_at") @db.Timestamptz(6)
+  usageTerms        String?          @map("usage_terms") @db.VarChar(1000)
+  failureCode       String?          @map("failure_code") @db.VarChar(80)
+  expiresAt         DateTime?        @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership   GroupMembership  @relation(fields: [workspaceId, groupId, groupMembershipId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  ownerUser         User             @relation("VideoAssetOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  videoProject      VideoProject?    @relation(fields: [videoProjectId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, ownerUserId, status, createdAt])
+  @@index([groupId, groupMembershipId, status])
+  @@index([videoProjectId, status])
+  @@map("video_assets")
 }
 
 model VideoScene {

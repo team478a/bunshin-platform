@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { VideoPlanGeneratorInput } from '@bunshin/application';
 import { OpenAIVideoPlanGenerator } from '../src/providers/openai-video-plan-generator';
 
-const input = {
+const input: VideoPlanGeneratorInput = {
   project: {
     title: '30秒の商品紹介',
     platform: 'INSTAGRAM' as const,
@@ -24,6 +25,7 @@ const input = {
       prohibitedExpressions: ['必ず成功'],
     },
     approvedAssets: [{ assetId: 'asset-1', description: '商品正面写真' }],
+    userAssets: [{ assetId: 'user-asset-1', kind: 'IMAGE', description: '本人の商品写真' }],
   },
 };
 

@@ -23,7 +23,11 @@ const bunshin = {
 describe('PrismaVideoPlanningContextRepository', () => {
   it('builds an organic context only from the owned scoped project', async () => {
     const findFirst = vi.fn().mockResolvedValue(bunshin);
-    const client = { bunshin: { findFirst }, campaign: { findFirst: vi.fn() } };
+    const client = {
+      bunshin: { findFirst },
+      campaign: { findFirst: vi.fn() },
+      videoAsset: { findMany: vi.fn().mockResolvedValue([]) },
+    };
     const result = await new PrismaVideoPlanningContextRepository(client as never).findAuthorized({
       ...scope,
       campaignId: null,
@@ -32,6 +36,7 @@ describe('PrismaVideoPlanningContextRepository', () => {
       objective: '商品の特徴を伝える',
       product: null,
       approvedAssets: [],
+      userAssets: [],
     });
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -52,6 +57,7 @@ describe('PrismaVideoPlanningContextRepository', () => {
     const client = {
       bunshin: { findFirst: vi.fn().mockResolvedValue(bunshin) },
       campaign: { findFirst: campaignFindFirst },
+      videoAsset: { findMany: vi.fn().mockResolvedValue([]) },
     };
     await expect(
       new PrismaVideoPlanningContextRepository(client as never).findAuthorized({

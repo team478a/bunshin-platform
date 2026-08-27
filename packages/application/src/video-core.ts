@@ -118,6 +118,11 @@ export interface VideoPlanningContext {
     assetId: string;
     description: string;
   }>;
+  userAssets: Array<{
+    assetId: string;
+    kind: 'IMAGE' | 'VIDEO' | 'LOGO';
+    description: string;
+  }>;
 }
 
 export interface VideoPlanningContextRepository {

@@ -60,10 +60,22 @@ AI動画は将来の追加機能として、グループ許可、参加者割当
 
 本段階ではPort、Use Case、OpenAI Adapter、Isolationテストまでを実装する。実行API、管理画面、利用者画面、AI利用原価記録、Render処理は後続PRへ分離する。
 
+## V-3 素材管理コア
+
+利用者素材は公開URLではなく、Storage内の推測不能な`storageKey`で管理する。画像、動画、ロゴを対象とし、アップロード前に本人が利用権を確認した日時を保存する。
+
+アップロードはStorage Providerへ直接依存せず、短時間の署名付きアップロードを発行するPortと、保存後の実体を検査するPortへ分ける。完了時は申告値を信用せず、MIME、マジックバイト相当の署名検査、容量、画像寸法、動画時間を検査してから`READY`へ変更する。失敗は`REJECTED`と理由コードを保存し、不正・未完了素材を動画企画へ渡さない。
+
+利用者素材は`Workspace + Group + Group Membership + Owner User`で分離し、任意で本人所有のVideo Projectへ限定できる。GroupとMember双方の動画機能が有効で、参加同意済みの場合だけ登録できる。他利用者、他Group、停止・期限切れ素材は一覧と企画Contextから除外する。
+
+承認済み商品素材は既存`ProductPackAsset`と`CampaignAsset`を正本として再利用し、利用者アップロードと重複保存しない。動画企画では、利用者素材、Campaign承認素材、素材写真、生成画像の順で選択する。
+
+本段階はSchema、Migration、Application Port／Use Case、Repository、企画Context接続までとする。実Storage Adapter、アップロードAPI、画面、マルウェア検査は後続PRで接続する。
+
 ## 後続PR
 
-1. 動画企画・台本生成APIと本人確認画面への接続
-2. 素材管理とアップロード境界
+1. 素材Storage Adapter、アップロードAPI、本人画面への接続
+2. 動画企画・台本生成APIと本人確認画面への接続
 3. Render Provider Portと外部Provider Adapter
 4. 非同期Render Job、成功時のみ利用回数を確定する仕組み
 5. グループ管理画面と本人確認画面
