@@ -78,13 +78,18 @@ describe('Creatomate video render adapter', () => {
       );
     const adapter = new CreatomateVideoRenderAdapter('secret', request);
     await expect(
-      adapter.submit({ renderId: '30000000-0000-4000-8000-000000000001', project: project() }),
+      adapter.submit({
+        renderId: '30000000-0000-4000-8000-000000000001',
+        project: project(),
+        webhookUrl: 'https://app.example/api/video-renders/webhook?state=opaque',
+      }),
     ).resolves.toEqual({ externalJobId: 'render-123' });
     const init = request.mock.calls[0]?.[1] as RequestInit;
     expect(typeof init.body).toBe('string');
     const serialized = typeof init.body === 'string' ? init.body : '';
     const body = JSON.parse(serialized) as Record<string, unknown>;
     expect(body.metadata).toBe('30000000-0000-4000-8000-000000000001');
+    expect(body.webhook_url).toBe('https://app.example/api/video-renders/webhook?state=opaque');
     expect(serialized).not.toContain('10000000-0000-4000-8000-000000000005');
   });
 

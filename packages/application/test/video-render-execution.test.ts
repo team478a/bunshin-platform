@@ -74,9 +74,18 @@ describe('video render execution', () => {
       inspect: vi.fn(),
     };
     const storage = { store: vi.fn() };
+    const webhook = { createUrl: vi.fn().mockResolvedValue('https://app.example/webhook') };
     await expect(
-      new ExecuteVideoRenderStep(values, provider, storage).execute({ workspaceId, renderId }),
+      new ExecuteVideoRenderStep(values, provider, storage, webhook).execute({
+        workspaceId,
+        renderId,
+      }),
     ).resolves.toMatchObject({ status: 'PENDING' });
+    expect(provider.submit).toHaveBeenCalledWith({
+      renderId,
+      project: expect.objectContaining({ id: render().videoProjectId }),
+      webhookUrl: 'https://app.example/webhook',
+    });
     expect(values.markSubmitted).toHaveBeenCalledWith({
       workspaceId,
       renderId,
@@ -95,7 +104,10 @@ describe('video render execution', () => {
     };
     const storage = { store: vi.fn().mockResolvedValue({ storageKey: 'safe/output.mp4' }) };
     await expect(
-      new ExecuteVideoRenderStep(values, provider, storage).execute({ workspaceId, renderId }),
+      new ExecuteVideoRenderStep(values, provider, storage, { createUrl: vi.fn() }).execute({
+        workspaceId,
+        renderId,
+      }),
     ).resolves.toMatchObject({ status: 'SUCCEEDED' });
     expect(storage.store).toHaveBeenCalledWith(
       expect.objectContaining({

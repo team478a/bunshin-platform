@@ -1305,3 +1305,12 @@
 - Download: Provider URLはHTTPSかつCreatomate CDNだけを許可し、Redirect、URL認証情報、fragmentを拒否する。MP4 signatureと100MB上限を検査してから非公開Storageへ保存する。
 - Access: 完成URLをDBへ保存せずStorage Keyだけを保持する。本人sessionとWorkspace／Group／Project所有権を再確認した5分間の署名URLからだけ閲覧する。
 - Boundary: Webhook照合、利用回数確定、課金、SNS自動投稿、AI動画生成は後続とする。
+
+## D-105: Render Webhookは署名付きの起動合図として扱い、Provider APIで再照合する
+
+- Signal: CreatomateのWebhook本文に含まれる状態やURLを直接保存・利用しない。Webhookは再照合処理を起動する合図だけに使う。
+- Authentication: `ENCRYPTION_KEY`から環境・用途・Versionを分離したHKDF鍵でWorkspace、Render、有効期限を署名する。鍵Versionは現行と直前だけを許可する。
+- Correlation: 署名内のRender ID、Provider metadata、DBへ保存済みの外部Render IDがすべて一致した場合だけ処理する。外部ID保存前の通知からProviderへ再送信しない。
+- Verification: 最終状態と完成URLは環境別APIキーを使ってCreatomate status APIから取得し直す。完成物Host・形式・容量検査とPrivate Storage保存は既存経路を再利用する。
+- Resilience: Webhook再送は冪等に処理し、Webhook欠落時のためPolling Jobも残す。Provider応答本文、APIキー、完成URLをログ・DB・監査情報へ残さない。
+- Deferred: 管理者向けRender監視と手動再実行、成功本数の確定、LINE完成通知はV-5B3B/Cで実装する。

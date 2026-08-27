@@ -152,6 +152,7 @@ export class CreatomateVideoRenderAdapter implements VideoRenderProviderPort {
       body: JSON.stringify({
         ...buildCreatomateRenderScript(input.project),
         metadata: input.renderId,
+        webhook_url: input.webhookUrl,
       }),
     });
     if (typeof body.id !== 'string' || !body.id)
