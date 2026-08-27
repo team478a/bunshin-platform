@@ -13,7 +13,10 @@ import { ContentPillarSection, type ContentPillarView } from './content-pillar-s
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
 import { AccountStrategySection, type StrategyView } from './account-strategy-section';
 import { DailyMissionSection, type DailyMissionView } from './daily-mission-section';
-import type { MissionProgressView } from '../../../../src/activity-progress';
+import type {
+  ActivityMotivationView,
+  MissionProgressView,
+} from '../../../../src/activity-progress';
 import {
   LineNotificationPreferenceSection,
   type LineNotificationPreferenceView,
@@ -32,6 +35,7 @@ export function BunshinEditor({
   weeklyPlans,
   dailyMissions,
   progress,
+  motivation,
   localDate,
   lineNotificationPreference,
 }: {
@@ -47,6 +51,7 @@ export function BunshinEditor({
   weeklyPlans: WeeklyPlanView[];
   dailyMissions: DailyMissionView[];
   progress: MissionProgressView;
+  motivation: ActivityMotivationView;
   localDate: string;
   lineNotificationPreference: LineNotificationPreferenceView;
 }) {
@@ -96,6 +101,7 @@ export function BunshinEditor({
           profiles={socialProfiles.map(({ id, platform, status }) => ({ id, platform, status }))}
           missions={dailyMissions}
           progress={progress}
+          motivation={motivation}
           localDate={localDate}
         />
       </section>

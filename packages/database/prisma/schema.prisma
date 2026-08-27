@@ -726,6 +726,7 @@ model User {
   groupFeatureAuditsPerformed       GroupFeatureAuditLog[]              @relation("GroupFeatureAuditActor")
   groupMembershipAuditsPerformed    GroupMembershipAuditLog[]           @relation("GroupMembershipAuditActor")
   groupFeatureUsageEvents           GroupFeatureUsageEvent[]            @relation("GroupFeatureUsageActor")
+  achievementBadges                 AchievementBadge[]
 
   @@index([status])
   @@map("users")
@@ -804,6 +805,7 @@ model Workspace {
   groupFeatureAudits          GroupFeatureAuditLog[]
   groupMembershipAudits       GroupMembershipAuditLog[]
   groupFeatureUsageEvents     GroupFeatureUsageEvent[]
+  achievementBadges           AchievementBadge[]
 
   @@index([status])
   @@map("workspaces")
@@ -2016,6 +2018,7 @@ model Bunshin {
   contentLinkUsages           ContentLinkUsage[]
   campaignParticipations      CampaignParticipation[]
   campaignSimilarityReviews   CampaignSimilarityReview[]
+  achievementBadges           AchievementBadge[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -2605,6 +2608,26 @@ model MissionActivity {
   @@index([workspaceId, bunshinId, dailyMissionId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("mission_activities")
+}
+
+model AchievementBadge {
+  id                  String    @id @default(uuid()) @db.Uuid
+  workspaceId         String    @map("workspace_id") @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  bunshinId           String    @map("bunshin_id") @db.Uuid
+  featureKey          String    @map("feature_key") @db.VarChar(80)
+  badgeKey            String    @map("badge_key") @db.VarChar(80)
+  ruleVersion         Int       @map("rule_version")
+  labelSnapshot       String    @map("label_snapshot") @db.VarChar(120)
+  descriptionSnapshot String    @map("description_snapshot") @db.VarChar(500)
+  awardedAt           DateTime  @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bunshin             Bunshin   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, bunshinId, featureKey, badgeKey, ruleVersion])
+  @@index([workspaceId, userId, bunshinId, featureKey, awardedAt])
+  @@map("achievement_badges")
 }
 
 model PostRecord {

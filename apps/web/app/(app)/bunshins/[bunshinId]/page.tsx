@@ -15,6 +15,7 @@ import {
   ListDailyMissions,
   GetMissionDecision,
   GetMissionProgress,
+  EvaluateActivityMotivation,
 } from '@bunshin/capability-social';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { localDateInTimezone, weekRange } from '../../../../src/activity-progress';
@@ -46,6 +47,7 @@ export default async function BunshinPage({
       PrismaWeeklyPlanRepository,
       PrismaDailyMissionRepository,
       PrismaMissionEngagementRepository,
+      PrismaAchievementBadgeRepository,
       PrismaMissionOutcomeRepository,
       PrismaLineNotificationPreferenceRepository,
       PrismaPersonalityVersionRepository,
@@ -157,8 +159,18 @@ export default async function BunshinPage({
               postedDays: 0,
               restedDays: 0,
               activeDays: 0,
+              lastActiveDate: null,
             },
           };
+    const motivation = await new EvaluateActivityMotivation(
+      new PrismaAchievementBadgeRepository(),
+    ).execute({
+      workspaceId,
+      actorUserId: currentUser.userId,
+      bunshinId: bunshin.id,
+      localDate,
+      progress,
+    });
     const missionDecisions = await Promise.all(
       dailyMissions.map((mission) =>
         new GetMissionDecision(engagementRepository).execute({
@@ -401,6 +413,7 @@ export default async function BunshinPage({
             }),
           )}
           progress={progress}
+          motivation={motivation}
           localDate={localDate}
           lineNotificationPreference={{
             enabled: lineNotificationPreference.enabled,

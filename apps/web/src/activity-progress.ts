@@ -1,8 +1,13 @@
-import type { MissionProgress, MissionProgressDayStatus } from '@bunshin/capability-social';
+import type {
+  ActivityMotivation,
+  MissionProgress,
+  MissionProgressDayStatus,
+} from '@bunshin/capability-social';
 
 const DAY_MS = 86_400_000;
 
 export type MissionProgressView = MissionProgress;
+export type ActivityMotivationView = ActivityMotivation;
 
 export function localDateInTimezone(now: Date, timezone: string) {
   return new Intl.DateTimeFormat('sv-SE', {

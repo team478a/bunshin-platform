@@ -1168,3 +1168,13 @@
 - Extension: 発信ステップとバッジはSOCIAL専用列に固定せず、BLOG、Group Campaign、画像生成等の安定した機能Keyを将来関連付けられる境界にする。
 - Privacy: Activity metadataへ投稿本文、画像指示文、Memory、Knowledge、LINE user ID、Tokenを保存しない。Group Managerには許可された集計だけを返す。
 - Gate: `docs/ACTIVITY_CONTINUITY_REBASELINE.md`の人間レビュー完了前にActivity Enum、Progress、Badge、休眠Job、UI、Prisma Schema、Migrationを実装しない。
+
+## D-092: 発信ステップは派生値、達成バッジだけを版付きSnapshotとして保存する
+
+- 日付: 2026-08-27
+- 状態: Accepted
+- Step: 発信ステップは累積活動日から都度計算し、保存値にはしない。休止しても過去実績とステップを下げない。
+- Badge: 条件を満たしたバッジは`Workspace + User + Bunshin + Feature Key + Badge Key + Rule Version`で一度だけ保存する。表示名と説明は付与時Snapshotを保持し、ルール変更で過去表示を書き換えない。
+- Rules: 初版はコード管理のRule Version 1とし、J4の管理設定を先回りしない。Feature Keyは将来のBLOG等へ拡張可能な文字列境界とする。
+- Dormancy: 休眠はMission Activityから派生した最終活動日と基準日との差で判定する。初版は7日で、独立した休眠状態テーブルや減点を作らない。
+- Delivery: Webの復帰表示までをJ3-Aとする。LINE復帰通知は同意、Quiet Hours、Quota、全体停止、重複送信防止を既存配信基盤へ接続するJ3-Bとして分離する。
