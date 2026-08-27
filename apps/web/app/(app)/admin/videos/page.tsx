@@ -1,4 +1,5 @@
 import { GetVideoRenderOperations } from '@bunshin/application';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
@@ -32,6 +33,13 @@ export default async function VideoRenderOperationsPage() {
         <h1>動画生成の状況</h1>
         <p>動画が完成したか、止まっていないかを確認できます。</p>
       </header>
+      <section className="settings-card">
+        <h2>動画のAI利用表示</h2>
+        <p>投稿時の説明文と確認案内をSNSごとに管理します。</p>
+        <Link className="button button--secondary" href="/admin/videos/disclosures">
+          表示ルールを設定する
+        </Link>
+      </section>
       <section className="settings-card">
         <h2>現在の件数</h2>
         <p>対象環境：{currentLineEnvironment()}</p>

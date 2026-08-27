@@ -18,6 +18,16 @@ const visualLabel: Record<string, string> = {
   AI_VIDEO: 'AIで作る動画',
 };
 
+function disclosureGuide(value: Record<string, unknown>) {
+  return {
+    text: typeof value.disclosureText === 'string' ? value.disclosureText : null,
+    hashtags: Array.isArray(value.hashtags)
+      ? value.hashtags.filter((item): item is string => typeof item === 'string')
+      : [],
+    guidance: typeof value.guidance === 'string' ? value.guidance : null,
+  };
+}
+
 export default async function VideoProjectPage({
   params,
 }: {
@@ -49,6 +59,7 @@ export default async function VideoProjectPage({
   } catch {
     notFound();
   }
+  const disclosure = disclosureGuide(project.disclosureSnapshot);
 
   return (
     <main className="app-page">
@@ -58,6 +69,24 @@ export default async function VideoProjectPage({
         <p>{project.durationSeconds}秒の動画です。</p>
         <Link href={`/groups/${project.groupId}/videos`}>← 動画一覧へ戻る</Link>
       </header>
+
+      <section className="settings-card">
+        <h2>投稿するときの大切な確認</h2>
+        {disclosure.text ? (
+          <p>
+            <strong>AIを使ったことの説明：</strong>
+            {disclosure.text}
+          </p>
+        ) : null}
+        {disclosure.hashtags.length > 0 ? (
+          <p>
+            <strong>おすすめの表示：</strong>
+            {disclosure.hashtags.join(' ')}
+          </p>
+        ) : null}
+        {disclosure.guidance ? <p>{disclosure.guidance}</p> : null}
+        <p>動画は自動では投稿されません。完成後に内容を確認し、ご自身で投稿してください。</p>
+      </section>
 
       {project.scenes.length === 0 ? (
         <section className="settings-card">

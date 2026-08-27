@@ -11673,6 +11673,14 @@ const videoDisclosurePolicyRecord = (
 export class PrismaVideoDisclosurePolicyRepository implements VideoDisclosurePolicyRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async list(input: Parameters<VideoDisclosurePolicyRepository['list']>[0]) {
+    const rows = await this.client.videoDisclosurePolicy.findMany({
+      where: { environment: input.environment },
+      orderBy: [{ platform: 'asc' }, { version: 'desc' }],
+    });
+    return rows.map(videoDisclosurePolicyRecord);
+  }
+
   async createDraft(input: Parameters<VideoDisclosurePolicyRepository['createDraft']>[0]) {
     return this.client.$transaction(
       async (tx) => {
@@ -11704,7 +11712,8 @@ export class PrismaVideoDisclosurePolicyRepository implements VideoDisclosurePol
     return this.client.$transaction(
       async (tx) => {
         const target = await tx.videoDisclosurePolicy.findUnique({ where: { id: input.policyId } });
-        if (!target || target.status !== 'DRAFT') return null;
+        if (!target || target.environment !== input.environment || target.status !== 'DRAFT')
+          return null;
         await tx.videoDisclosurePolicy.updateMany({
           where: {
             environment: target.environment,
