@@ -1,0 +1,2 @@
+ALTER TYPE "MissionActivityType" ADD VALUE 'CONFIRMED';
+ALTER TYPE "MissionActivityType" ADD VALUE 'RESTED';

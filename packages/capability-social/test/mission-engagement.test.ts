@@ -5,6 +5,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import {
   DecideMission,
+  GetMissionProgress,
   RecordMissionActivity,
   normalizeMissionActivityMetadata,
   type DailyMissionRepository,
@@ -89,6 +90,37 @@ class Engagement implements MissionEngagementRepository {
     this.lastActivity = input;
     return Promise.resolve({ ...activity, type: input.type, metadata: input.metadata });
   }
+  listProgressDays(input: Parameters<MissionEngagementRepository['listProgressDays']>[0]) {
+    const days = [
+      {
+        dailyMissionId: 'mission-1',
+        missionDate: '2026-08-17',
+        activities: [{ ...activity, type: 'CONFIRMED' as const }],
+      },
+      {
+        dailyMissionId: 'mission-2',
+        missionDate: '2026-08-18',
+        activities: [{ ...activity, dailyMissionId: 'mission-2', type: 'COPIED_TEXT' as const }],
+      },
+      {
+        dailyMissionId: 'mission-3',
+        missionDate: '2026-08-19',
+        activities: [{ ...activity, dailyMissionId: 'mission-3', type: 'POSTED' as const }],
+      },
+      {
+        dailyMissionId: 'mission-4',
+        missionDate: '2026-08-20',
+        activities: [{ ...activity, dailyMissionId: 'mission-4', type: 'RESTED' as const }],
+      },
+      { dailyMissionId: 'mission-5', missionDate: '2026-08-21', activities: [] },
+    ];
+    return Promise.resolve(
+      days.filter(
+        (value) =>
+          (input.from === null || value.missionDate >= input.from) && value.missionDate <= input.to,
+      ),
+    );
+  }
 }
 const scope = {
   workspaceId: 'workspace-1',
@@ -147,6 +179,8 @@ describe('Mission Decision and Activity core', () => {
     ).toThrow();
     expect(() => normalizeMissionActivityMetadata('COPIED_TEXT', { body: 'full post' })).toThrow();
     expect(normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', null)).toBeNull();
+    expect(normalizeMissionActivityMetadata('CONFIRMED', null)).toBeNull();
+    expect(normalizeMissionActivityMetadata('RESTED', null)).toBeNull();
     expect(() =>
       normalizeMissionActivityMetadata('COPIED_IMAGE_INSTRUCTION', { prompt: 'secret' }),
     ).toThrow();
@@ -155,6 +189,52 @@ describe('Mission Decision and Activity core', () => {
         ...scope,
         type: 'VIEWED',
         idempotencyKey: ' ',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('derives weekly and cumulative progress without treating a rest day as failure', async () => {
+    const result = await new GetMissionProgress(new Assignments(), new Engagement()).execute({
+      workspaceId: 'workspace-1',
+      actorUserId: 'user-1',
+      bunshinId: 'bunshin-1',
+      weekStart: '2026-08-17',
+      weekEnd: '2026-08-23',
+    });
+    expect(result.weekly).toMatchObject({
+      confirmedDays: 3,
+      preparedDays: 2,
+      postedDays: 1,
+      restedDays: 1,
+    });
+    expect(result.remainingConfirmations).toBe(0);
+    expect(result.cumulative.activeDays).toBe(4);
+    expect(result.weekly.days.map((value) => value.status)).toEqual([
+      'CONFIRMED',
+      'PREPARED',
+      'POSTED',
+      'RESTED',
+      'UNSEEN',
+    ]);
+  });
+
+  it('rejects invalid progress weeks and suspended SOCIAL assignments', async () => {
+    await expect(
+      new GetMissionProgress(new Assignments(), new Engagement()).execute({
+        workspaceId: 'workspace-1',
+        actorUserId: 'user-1',
+        bunshinId: 'bunshin-1',
+        weekStart: '2026-08-17',
+        weekEnd: '2026-08-24',
+      }),
+    ).rejects.toThrow();
+    await expect(
+      new GetMissionProgress(new Assignments('SUSPENDED'), new Engagement()).execute({
+        workspaceId: 'workspace-1',
+        actorUserId: 'user-1',
+        bunshinId: 'bunshin-1',
+        weekStart: '2026-08-17',
+        weekEnd: '2026-08-23',
       }),
     ).rejects.toThrow();
   });

@@ -4048,6 +4048,55 @@ export class PrismaMissionEngagementRepository implements MissionEngagementRepos
       return this.assertSameEvent(existing, input);
     }
   }
+  async listProgressDays(input: Parameters<MissionEngagementRepository['listProgressDays']>[0]) {
+    if (!(await this.authorized(this.client, input, false))) return null;
+    return (
+      await this.client.dailyMission.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          missionDate: {
+            ...(input.from === null ? {} : { gte: new Date(`${input.from}T00:00:00.000Z`) }),
+            lte: new Date(`${input.to}T00:00:00.000Z`),
+          },
+          OR: [
+            { campaignId: null },
+            {
+              campaign: {
+                group: {
+                  status: 'ACTIVE',
+                  memberships: {
+                    some: { userId: input.actorUserId, status: 'ACTIVE' },
+                  },
+                },
+                participations: {
+                  some: {
+                    participantWorkspaceId: input.workspaceId,
+                    userId: input.actorUserId,
+                    bunshinId: input.bunshinId,
+                    status: 'ACCEPTED',
+                  },
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          missionDate: true,
+          activities: {
+            where: { actorUserId: input.actorUserId },
+            orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+          },
+        },
+        orderBy: [{ missionDate: 'asc' }, { id: 'asc' }],
+      })
+    ).map((value) => ({
+      dailyMissionId: value.id,
+      missionDate: value.missionDate.toISOString().slice(0, 10),
+      activities: value.activities.map(missionActivity),
+    }));
+  }
 }
 
 function postRecord(row: Prisma.PostRecordGetPayload<object>): PostRecord {
