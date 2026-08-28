@@ -43,7 +43,11 @@ export interface SocialImageGenerationExecutionRepository {
     thumbnailStorageKey: string;
     contentHash: string;
   }): Promise<boolean>;
-  markFailed(input: { workspaceId: string; requestId: string; errorCode: string }): Promise<void>;
+  markFailed(input: {
+    workspaceId: string;
+    requestId: string;
+    errorCode: string;
+  }): Promise<{ ownerUserId: string } | null>;
 }
 
 export class ClaimSocialImageGenerationExecution {

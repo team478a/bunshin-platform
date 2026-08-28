@@ -1,7 +1,9 @@
 import 'server-only';
 import {
   ClaimSocialImageGenerationExecution,
+  GetPointRedemptionByResource,
   GroupFeatureEntitlementService,
+  RefundPointRedemption,
   SocialImageGenerationJobHandlerError,
   type SocialImageGenerationJobHandler,
 } from '@bunshin/application';
@@ -38,6 +40,21 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
       const db = await import('@bunshin/database');
       const repository = new db.PrismaSocialImageGenerationExecutionRepository();
       const context = await new ClaimSocialImageGenerationExecution(repository).execute(input);
+      const redemption = await new GetPointRedemptionByResource(
+        new db.PrismaPointRedemptionRepository(),
+      )
+        .execute({
+          workspaceId: context.workspaceId,
+          actorUserId: context.ownerUserId,
+          resourceType: 'SOCIAL_IMAGE_REQUEST',
+          resourceId: context.requestId,
+        })
+        .catch(() => null);
+      if (redemption?.status !== 'CONFIRMED')
+        throw new SocialImageGenerationJobHandlerError(
+          'SOCIAL_IMAGE_POINT_REDEMPTION_UNAVAILABLE',
+          false,
+        );
       const now = new Date();
       const access = await new GroupFeatureEntitlementService(
         new db.PrismaGroupFeatureEntitlementRepository(),
@@ -138,7 +155,24 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
     },
     async markFailed(input) {
       const db = await import('@bunshin/database');
-      await new db.PrismaSocialImageGenerationExecutionRepository().markFailed(input);
+      const failed = await new db.PrismaSocialImageGenerationExecutionRepository().markFailed(
+        input,
+      );
+      if (!failed) return;
+      const redemptions = new db.PrismaPointRedemptionRepository();
+      const redemption = await redemptions.findOwnedByResource({
+        workspaceId: input.workspaceId,
+        actorUserId: failed.ownerUserId,
+        resourceType: 'SOCIAL_IMAGE_REQUEST',
+        resourceId: input.requestId,
+      });
+      if (redemption?.status === 'CONFIRMED')
+        await new RefundPointRedemption(redemptions).execute({
+          workspaceId: input.workspaceId,
+          actorUserId: failed.ownerUserId,
+          redemptionId: redemption.id,
+          reason: input.errorCode,
+        });
     },
   };
 }

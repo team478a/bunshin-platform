@@ -1539,6 +1539,7 @@ model PointRedemption {
   consumptionTransaction   PointTransaction       @relation("RedemptionConsumption", fields: [consumptionTransactionId], references: [id], onDelete: Restrict)
 
   @@unique([accountId, idempotencyKey])
+  @@unique([workspaceId, userId, resourceType, resourceId])
   @@index([workspaceId, userId, status, createdAt])
   @@index([status, reservationExpiresAt])
   @@map("point_redemptions")

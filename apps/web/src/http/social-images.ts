@@ -5,6 +5,11 @@ import {
   DecideSocialImageMedia,
   EnqueueJob,
   GetSocialImageGenerationRequest,
+  ListPointRewardCatalog,
+  ReservePointReward,
+  ConfirmPointRedemption,
+  RefundPointRedemption,
+  ReleasePointRedemption,
   SOCIAL_IMAGE_GENERATION_JOB_TYPE,
   TransitionSocialImageGenerationRequest,
   type JobEnvironment,
@@ -93,6 +98,7 @@ export async function createSocialImageResponse(
     const runtime = getServerEnvironment();
     const db = await import('@bunshin/database');
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
+    const redemptions = new db.PrismaPointRedemptionRepository();
     let created = await new CreateSocialImageGenerationRequest(
       new db.PrismaSocialImageGenerationAuthorizationRepository(),
       requests,
@@ -109,32 +115,76 @@ export async function createSocialImageResponse(
       layout: parsed.layout,
       idempotencyKey: parsed.idempotencyKey,
     });
-    if (created.status === 'DRAFT')
-      created = await new TransitionSocialImageGenerationRequest(requests).execute({
-        workspaceId,
-        groupId,
-        actorUserId: actor,
-        requestId: created.id,
-        expectedRevision: created.revision,
-        fromStatus: 'DRAFT',
-        toStatus: 'QUEUED',
-        errorCode: null,
-      });
-    if (created.status !== 'QUEUED')
-      throw new ApplicationError('CONFLICT', 'social image request cannot be queued');
-    await new EnqueueJob(new db.PrismaJobRepository()).enqueue({
+    const catalog = await new ListPointRewardCatalog(redemptions).execute({
       workspaceId,
-      bunshinId,
-      capabilityType: 'SOCIAL',
-      correlationId: requestId,
-      requestedBy: actor,
-      environment: environment[runtime.APP_ENV],
-      jobType: SOCIAL_IMAGE_GENERATION_JOB_TYPE,
-      payloadReference: `social-image:${created.id}`,
-      idempotencyKey: `social-image:${created.id}`,
-      priority: 40,
-      maxAttempts: 5,
+      actorUserId: actor,
     });
+    const imageReward = catalog.find((item) => item.rewardType === 'SOCIAL_IMAGE_GENERATION');
+    if (!imageReward)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'image point reward is unavailable');
+    let reservation = await new ReservePointReward(redemptions).execute({
+      workspaceId,
+      actorUserId: actor,
+      catalogItemId: imageReward.id,
+      idempotencyKey: `social-image:${created.id}`,
+      resourceType: 'SOCIAL_IMAGE_REQUEST',
+      resourceId: created.id,
+    });
+    try {
+      if (created.status === 'DRAFT')
+        created = await new TransitionSocialImageGenerationRequest(requests).execute({
+          workspaceId,
+          groupId,
+          actorUserId: actor,
+          requestId: created.id,
+          expectedRevision: created.revision,
+          fromStatus: 'DRAFT',
+          toStatus: 'QUEUED',
+          errorCode: null,
+        });
+      if (created.status !== 'QUEUED')
+        throw new ApplicationError('CONFLICT', 'social image request cannot be queued');
+      if (reservation.status === 'RESERVED')
+        reservation = await new ConfirmPointRedemption(redemptions).execute({
+          workspaceId,
+          actorUserId: actor,
+          redemptionId: reservation.id,
+        });
+      await new EnqueueJob(new db.PrismaJobRepository()).enqueue({
+        workspaceId,
+        bunshinId,
+        capabilityType: 'SOCIAL',
+        correlationId: requestId,
+        requestedBy: actor,
+        environment: environment[runtime.APP_ENV],
+        jobType: SOCIAL_IMAGE_GENERATION_JOB_TYPE,
+        payloadReference: `social-image:${created.id}`,
+        idempotencyKey: `social-image:${created.id}`,
+        priority: 40,
+        maxAttempts: 5,
+      });
+    } catch (error) {
+      if (reservation.status === 'RESERVED') {
+        await new ReleasePointRedemption(redemptions)
+          .execute({
+            workspaceId,
+            actorUserId: actor,
+            redemptionId: reservation.id,
+            reason: 'IMAGE_REQUEST_NOT_ACCEPTED',
+          })
+          .catch(() => undefined);
+      } else if (reservation.status === 'CONFIRMED') {
+        await new RefundPointRedemption(redemptions)
+          .execute({
+            workspaceId,
+            actorUserId: actor,
+            redemptionId: reservation.id,
+            reason: 'IMAGE_REQUEST_NOT_ENQUEUED',
+          })
+          .catch(() => undefined);
+      }
+      throw error;
+    }
     return Response.json(
       { data: dto(created), requestId },
       { status: 202, headers: { 'cache-control': 'private, no-store' } },
