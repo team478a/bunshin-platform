@@ -1456,3 +1456,26 @@
 - No side effect: LINE通知の送信、受信、リンク表示、確認画面への移動では画像生成Requestを作らない。本人がWeb画面の「画像を作る」を押した場合だけ生成を開始する。
 - Fallback: 対象グループまたはPilot利用資格が確認できない場合は、従来どおり本人の「今日やること」へ移動する。
 - Privacy: 遷移後URLへ署名付きstateを引き継がず、Mission IDだけを初期選択用に使用する。画像画面でも所有権を改めて検証する。
+
+## 2026-08-28: 販売プラン対応を独立したPhase 7-Kとして再基準化する
+
+- 状態: K0文書完了、人間レビュー待ち
+- Scope: 初期販売モデルは個人、パートナー、Group Bundleとする。Group専用LINE、Reseller、Private OEMはP0の実運用後に個別判断する。
+- Separation: 販売プラン名だけで分岐せず、Tenant、Group、Contract Version、Seat、Entitlement Source、Credit Pool、Incentive Ledger、Product、Price、Order、Paymentを分離する。`lineMode`、`billingMode`、`paymentOwner`、`priceOwner`、`apiCostOwner`も独立して保持する。
+- Accounting: 座席、Credit、インセンティブ、決済はTransaction、冪等Key、一意制約、追記型Ledgerで保護し、残高や確定状態を直接上書きしない。
+- LINE: P0はワタシワークス共通LINEを使用する。専用LINEが不正な場合に共通LINEへ黙ってfallbackしない。専用LINEはTenant・環境単位で分離する後続Phaseとする。
+- Isolation: Workspace、Tenant、Group、Membership、Userの全境界をサーバー側で検証し、Group退会時はGroup由来の権利だけを失効させる。個人購入資産と個人データをGroup管理者へ開示しない。
+- Scope Change: 現行ロードマップではFREE検証前の課金、決済、高度な紹介報酬を対象外としているため、本対応は既存Phaseの残作業ではなく新しいスコープである。K0承認前にSchema、Migration、決済Providerを実装しない。
+- Pending: FREE範囲、Partner価格・座席、インセンティブ条件、契約成立時点、Bundle価格・Credit、技術的失敗、Group／Reseller境界、専用LINE価格、Reseller卸条件、複数Group所属規則をD-01〜D-10として確定する。
+- Source: `docs/SALES_PLAN_REBASELINE.md`
+
+## 2026-08-28: テストグループだけ専用公式LINEを先行利用する
+
+- 状態: 採用、Core Persistence実装中
+- Scope: 一般提供やOEMを開始せず、システム管理者が明示許可したテストグループだけを対象にする。
+- Routing: Group・Environmentごとに`SHARED | DEDICATED | DISABLED`を明示する。`DEDICATED`はpilot許可を必須とする。
+- Fail Closed: `DEDICATED`設定の不足、停止、接続未確認、環境不一致、Membership失効時は送信しない。ワタシワークス共通LINEへ黙ってfallbackしない。
+- Configuration: Group専用Channelは追記型version、環境・GroupごとのACTIVE最大1件、暗号化Secret、接続確認、全体停止、Quota、key version、Auditを持つ。URLは保存せず配備URLから生成する。
+- Identity: LINE user IDをChannel間で同一と仮定しない。WebhookとLoginは対象Configurationを安全に識別した後も署名、User、Workspace、Group、Membership、Environmentを再検証する。
+- Authorization: pilot許可、方式変更、使用開始、全体停止はSUPER_ADMIN。OPERATORは下書き登録と接続確認まで。Group Managerは状態確認のみとする。
+- Source: `docs/GROUP_DEDICATED_LINE_PILOT.md`
