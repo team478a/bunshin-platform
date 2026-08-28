@@ -152,6 +152,43 @@ export interface SocialImageAssetGenerationProviderPort {
   >;
 }
 
+export type SocialImageStorageObjectKind = 'SOURCE' | 'COMPLETED' | 'THUMBNAIL';
+
+export interface SocialImageStoragePort {
+  store(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    requestId: string;
+    mediaId: string;
+    source: { bytes: Uint8Array; mimeType: 'image/png' | 'image/jpeg' | 'image/webp' } | null;
+    completed: Uint8Array;
+    thumbnail: Uint8Array;
+  }): Promise<{
+    sourceStorageKey: string | null;
+    completedStorageKey: string;
+    thumbnailStorageKey: string;
+    contentHash: string;
+  }>;
+  createReadUrl(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    requestId: string;
+    mediaId: string;
+    kind: SocialImageStorageObjectKind;
+    sourceMimeType?: 'image/png' | 'image/jpeg' | 'image/webp';
+  }): Promise<{ url: string; expiresAt: Date }>;
+  remove(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    requestId: string;
+    mediaId: string;
+    sourceMimeType?: 'image/png' | 'image/jpeg' | 'image/webp';
+  }): Promise<void>;
+}
+
 const transitions: Record<SocialImageGenerationStatus, ReadonlySet<SocialImageGenerationStatus>> = {
   DRAFT: new Set(['QUEUED', 'CANCELLED']),
   QUEUED: new Set(['GENERATING_ASSET', 'FAILED', 'CANCELLED']),
@@ -258,6 +295,119 @@ export class GetSocialImageGenerationRequest {
     if (!value)
       throw new ApplicationError('NOT_FOUND', 'social image generation request not found');
     return value;
+  }
+}
+
+const storageScope = (input: {
+  workspaceId: string;
+  groupId: string;
+  actorUserId: string;
+  requestId: string;
+  mediaId: string;
+}) => ({
+  workspaceId: uuid(input.workspaceId, 'workspaceId'),
+  groupId: uuid(input.groupId, 'groupId'),
+  ownerUserId: uuid(input.actorUserId, 'actorUserId'),
+  requestId: uuid(input.requestId, 'requestId'),
+  mediaId: uuid(input.mediaId, 'mediaId'),
+});
+
+export class StoreSocialImageMediaFiles {
+  constructor(
+    private readonly requests: SocialImageGenerationRequestRepository,
+    private readonly storage: SocialImageStoragePort,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+    mediaId: string;
+    source: { bytes: Uint8Array; mimeType: 'image/png' | 'image/jpeg' | 'image/webp' } | null;
+    completed: Uint8Array;
+    thumbnail: Uint8Array;
+  }) {
+    const scope = storageScope(input);
+    const request = await this.requests.findOwned({
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      actorUserId: scope.ownerUserId,
+      requestId: scope.requestId,
+    });
+    if (!request)
+      throw new ApplicationError('NOT_FOUND', 'social image generation request not found');
+    if (request.status !== 'COMPOSING')
+      throw new ApplicationError('CONFLICT', 'social image generation request is not composing');
+    return this.storage.store({
+      ...scope,
+      source: input.source,
+      completed: input.completed,
+      thumbnail: input.thumbnail,
+    });
+  }
+}
+
+export class CreateSocialImageMediaReadUrl {
+  constructor(
+    private readonly requests: SocialImageGenerationRequestRepository,
+    private readonly storage: SocialImageStoragePort,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+    mediaId: string;
+    kind: SocialImageStorageObjectKind;
+    sourceMimeType?: 'image/png' | 'image/jpeg' | 'image/webp';
+  }) {
+    const scope = storageScope(input);
+    const request = await this.requests.findOwned({
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      actorUserId: scope.ownerUserId,
+      requestId: scope.requestId,
+    });
+    if (!request)
+      throw new ApplicationError('NOT_FOUND', 'social image generation request not found');
+    const storageInput = {
+      ...scope,
+      kind: input.kind,
+      ...(input.sourceMimeType ? { sourceMimeType: input.sourceMimeType } : {}),
+    };
+    return this.storage.createReadUrl(storageInput);
+  }
+}
+
+export class RemoveSocialImageMediaFiles {
+  constructor(
+    private readonly requests: SocialImageGenerationRequestRepository,
+    private readonly storage: SocialImageStoragePort,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+    mediaId: string;
+    sourceMimeType?: 'image/png' | 'image/jpeg' | 'image/webp';
+  }) {
+    const scope = storageScope(input);
+    const request = await this.requests.findOwned({
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      actorUserId: scope.ownerUserId,
+      requestId: scope.requestId,
+    });
+    if (!request)
+      throw new ApplicationError('NOT_FOUND', 'social image generation request not found');
+    await this.storage.remove({
+      ...scope,
+      ...(input.sourceMimeType ? { sourceMimeType: input.sourceMimeType } : {}),
+    });
   }
 }
 
