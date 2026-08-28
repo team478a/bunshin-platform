@@ -1387,3 +1387,12 @@
 - Media: 元素材、完成画像、サムネイルは公開URLではなくStorage Keyだけを保持する。同一Missionで`ADOPTED`は部分一意indexにより最大1件とする。
 - Privacy: API Key、Provider raw response、Prompt全文、署名URL、Base64画像を本テーブルへ保存しない。画像内容と個人MemoryをGroup管理集計へ公開しない。
 - Rollback: 本番適用前にbackupを取得する。障害時は先にGroup機能権限とPilot緊急停止で新規作成を止め、code rollbackする。テーブル削除が必要な場合だけデータ退避後に別のforward-fix migrationを作成し、適用済みmigrationは編集しない。
+
+## 2026-08-28: SNS画像は5種類の管理テンプレートだけで構成する
+
+- Layout: `1080 × 1350px`のCanvas、72px以上のセーフエリア、画像・見出し・本文・CTA領域をテンプレートVersion 1として固定する。
+- Templates: `PERSON_HEADLINE`、`PROBLEM_CHECKLIST`、`THREE_POINTS`、`EMPATHY_QUOTE`、`CTA`の5種類だけを初期対象にする。
+- Validation: テンプレートごとに行数、1行の最大文字数、通常・最小フォントサイズを固定する。改行、制御文字、双方向テキスト上書き文字、規定を超える文章は拒否し、極端な文字縮小で通さない。
+- Boundary: AIや利用者から任意HTML、CSS、SVG、座標を受け取らない。Application層が作るComposition Planだけを後続レンダラーへ渡す。
+- Font: 日本語標準フォント候補をOFL-1.1のNoto Sans JPとする。描画PRで必要weightとライセンス本文を同梱し、OSフォントや実行時の外部配信へ依存しない。
+- Delivery: 本変更はSchema、検証、仕様、テストまでとする。Satori / resvg / Sharp描画、外部AI、Storage、API/UI、LINE導線は後続PRへ分離する。
