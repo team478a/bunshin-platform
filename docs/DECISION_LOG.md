@@ -1514,3 +1514,14 @@
 - Refund: 元の消費TransactionをWorkspace・本人範囲で再検証し、過剰返却と二重返却を拒否する。
 - Boundary: P-1では既存Activity Processor、API/UI、交換、失効Job、Group Rule管理を実装しない。
 - Source: `docs/POINT_CORE_PERSISTENCE_REPORT.md`
+
+## 2026-08-29: ポイント行動連携は既存VIEWEDとPostRecordを非同期処理する
+
+- Source: 企画確認は`MissionActivity.VIEWED`、投稿完了と週3回達成は`PostRecord`を正本とし、ポイント専用の行動記録を作らない。
+- Initial Rules: 企画初回確認1WP／日、投稿完了5WP／日、週3回達成10WP／週だけを固定Version 1で開始する。ログイン付与は追加しない。
+- Idempotency: 元イベントは`workspaceId + eventType + sourceEventId`、付与は`ruleId + day/week`で重複を防ぐ。
+- Time: 日・週境界は明示Timezone（初期`Asia/Tokyo`）で算出し、付与期限は行動から180日後が属する月末とする。
+- Isolation: ACTIVE User／Workspace Membershipを再確認し、Campaign由来のGroup帰属を同じWorkspace内で解決する。
+- Retry: 完了イベントは再処理せず、失敗イベントは安全な分類だけを記録して次Batchで再試行可能にする。本文や秘密情報を失敗記録へ残さない。
+- Scope: API/UI、交換、失効Job、Rule管理画面は含めない。
+- Source: `docs/POINT_ACTIVITY_PROCESSOR_REPORT.md`

@@ -2344,3 +2344,4 @@ export * from './social-image-templates';
 export * from './group-line-configuration';
 export * from './group-line-webhook';
 export * from './point-core';
+export * from './point-activity-processor';
