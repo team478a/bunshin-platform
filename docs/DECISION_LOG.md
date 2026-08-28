@@ -1441,3 +1441,11 @@
 - Status: 進捗APIは本人所有のRequestについて、安全な状態、管理済みLayout、版、一般化した失敗code、完成Mediaの有無だけを返す。Provider Prompt、APIキー、Storage key、署名URL、原価を返さない。
 - Download: 完成画像取得はWorkspace・Group・Owner・Request・Mediaを再確認した後、Private Storageの短期署名URLへ一時転送する。永続公開URLを作らない。
 - Boundary: 採否、再生成、スマートフォン画面、LINE導線はI5-Bへ分離する。
+
+## 2026-08-28 — グループ画像の本人確認UIと採否をI5-B1として実装
+
+- Decision: 画像生成はグループ参加者本人がWeb画面の「画像を作る」を押した場合だけ開始する。
+- UX: 画像・スライド形式の投稿案を選び、生成中は自動更新し、完成後に「この画像を使う」「今回は使わない」「別の画像を作る」「画像を保存する」を表示する。
+- Persistence: 既存の `SocialImageGeneratedMedia.status` を利用し、同じMissionで採用中の画像は最大1件に保つ。Missionの採否とは混同しない。
+- Isolation: Workspace、Group、参加者、User、Request、Mediaの所有範囲をサーバー側で再検証する。画面上のIDだけを信用しない。
+- LINE boundary: LINE通知は後続I5-B2で確認画面へのリンクだけを提供し、通知の受信やリンク表示だけでは画像生成を開始しない。

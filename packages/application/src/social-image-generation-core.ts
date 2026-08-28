@@ -138,6 +138,14 @@ export interface SocialImageGenerationRequestRepository {
     actorUserId: string;
     requestId: string;
   }): Promise<SocialImageGeneratedMediaRecord | null>;
+  setMediaStatus(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+    mediaId: string;
+    status: 'ADOPTED' | 'REJECTED';
+  }): Promise<SocialImageGeneratedMediaRecord | null>;
 }
 
 export interface SocialImageAssetGenerationProviderPort {
@@ -302,6 +310,39 @@ export class GetSocialImageGenerationRequest {
     });
     if (!value)
       throw new ApplicationError('NOT_FOUND', 'social image generation request not found');
+    return value;
+  }
+}
+
+export class DecideSocialImageMedia {
+  constructor(private readonly requests: SocialImageGenerationRequestRepository) {}
+
+  async execute(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+    mediaId: string;
+    decision: 'ADOPTED' | 'REJECTED';
+  }) {
+    const scope = storageScope(input);
+    const request = await this.requests.findOwned({
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      actorUserId: scope.ownerUserId,
+      requestId: scope.requestId,
+    });
+    if (!request || request.status !== 'READY_FOR_REVIEW')
+      throw new ApplicationError('NOT_FOUND', 'social image generation request not found');
+    const value = await this.requests.setMediaStatus({
+      workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
+      actorUserId: scope.ownerUserId,
+      requestId: scope.requestId,
+      mediaId: scope.mediaId,
+      status: input.decision,
+    });
+    if (!value) throw new ApplicationError('CONFLICT', 'social image decision failed');
     return value;
   }
 }

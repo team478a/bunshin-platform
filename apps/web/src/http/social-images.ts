@@ -2,6 +2,7 @@ import 'server-only';
 import {
   CreateSocialImageGenerationRequest,
   CreateSocialImageMediaReadUrl,
+  DecideSocialImageMedia,
   EnqueueJob,
   GetSocialImageGenerationRequest,
   SOCIAL_IMAGE_GENERATION_JOB_TYPE,
@@ -40,6 +41,9 @@ const createSchema = z
       })
       .strict(),
   })
+  .strict();
+const decisionSchema = z
+  .object({ mediaId: uuid, decision: z.enum(['ADOPTED', 'REJECTED']) })
   .strict();
 const environment = {
   development: 'DEVELOPMENT',
@@ -174,6 +178,7 @@ export async function getSocialImageResponse(
           media: media
             ? {
                 id: media.id,
+                status: media.status,
                 width: media.width,
                 height: media.height,
                 downloadPath: `${new URL(request.url).pathname}/download`,
@@ -182,6 +187,41 @@ export async function getSocialImageResponse(
         },
         requestId,
       },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function decideSocialImageResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  requestResourceId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const actor = await actorUserId();
+    const parsed = decisionSchema.parse(await body(request));
+    const db = await import('@bunshin/database');
+    const value = await new DecideSocialImageMedia(
+      new db.PrismaSocialImageGenerationRequestRepository(),
+    ).execute({
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: actor,
+      requestId: uuid.parse(requestResourceId),
+      mediaId: parsed.mediaId,
+      decision: parsed.decision,
+    });
+    return Response.json(
+      { data: { id: value.id, status: value.status }, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {
