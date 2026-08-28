@@ -1405,3 +1405,12 @@
 - Asset Safety: JPEG、PNG、WebPだけを許可し、15MB、1辺8192pxを上限とする。画像不要テンプレートへの素材混入と、画像必須テンプレートの素材欠落を拒否する。
 - Determinism: 同じLayout、素材、フォント、依存Versionでは同一byte列を生成する。完成PNGのSHA-256を内容Hashとし、元画像のMetadataは完成物へ引き継がない。
 - Delivery: 本PRは描画Adapterとテストまでとする。外部画像Provider、Job、利用量記録、非公開Storage、API/UI、LINE導線は含めない。
+
+## 2026-08-28: SNS画像は所有範囲から導出したPrivate Storage Keyだけで保存する
+
+- Bucket: 元素材、完成画像、サムネイルは`social-image-media`非公開bucketへ保存し、公開URLを発行・永続化しない。
+- Object Key: Workspace、Group、Owner、Request、Mediaのサーバー生成UUIDから階層を構成する。利用者入力のpathやfilenameを受け取らず、越境とpath traversalを拒否する。
+- Validation: 元素材はPNG／JPEG／WebPかつ20MB以下、完成物とサムネイルはPNGかつ15MB以下とし、magic byteとSharpによる実体検査を行う。完成物は1080×1350px以外を拒否する。
+- Access: Application層で現在のRequest所有権とGroup利用権限を再確認した後だけ、対象Keyから5分間の署名URLを発行する。署名URLとbinaryはDB、通常log、監査logへ保存しない。
+- Failure: 連続保存の途中で失敗した場合は、その試行で保存済みのobjectを直ちに削除する。明示削除も同じ所有権境界を通し、保持期限に基づく非同期削除JobはI4以降へ分離する。
+- Delivery: I3-CはStorage Port、Supabase Adapter、所有権Use Case、MIME／寸法／分離テストまでとする。Provider、Job、Usage、API/UI、LINEは含めない。
