@@ -402,6 +402,21 @@ FREE継続率を確認する前に作り込まない。
 
 初期対象は個人、パートナー、Group Bundleとし、販売プラン名だけで機能分岐しない。`lineMode`、`billingMode`、`paymentOwner`、`priceOwner`、`apiCostOwner`、`entitlementSource`を分離する。K0の人間レビューと必要な事業判断が終わるまでSchema、Migration、決済接続を実装しない。
 
+## Phase P: ワタシポイント
+
+状態: P-0文書作成済み・人間レビュー待ち。詳細は`docs/POINT_FEATURE_IMPLEMENTATION_PLAN.md`を正本候補とする。
+
+- P-0: Activity対応、Credit分離、Group／Workspace境界、台帳、消費順、回収、停止条件 — 文書作成済み
+- P-1: Point Account / Rule Version / Transaction / Consumption Link / Processing Event Core
+- P-2: 既存Mission Activity／PostRecordからの冪等な行動連携
+- P-3: 利用者向け残高、履歴、失効予定、獲得方法、週間進捗
+- P-4: 画像生成・追加企画生成との予約／確定／解放／返却
+- P-5: Group利用可否、承認済み追加付与、企業独自特典
+- P-6: 管理、監査、CSV、予算、照合、失効、緊急停止
+- P-7: Feature Flagによる30人・4週間の限定検証
+
+WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし、販売プランの原価・利用権を管理するCreditとは別台帳にする。既存の企画閲覧、コピー、投稿完了をポイント処理へ同期依存させない。P-0の人間レビュー前にSchema、Migration、API、Job、画面へ進まない。
+
 ## Phase 10: Publishing Provider
 
 100人検証後に再評価する。
