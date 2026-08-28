@@ -332,6 +332,12 @@ enum LineConfigurationStatus {
   ERROR
 }
 
+enum GroupLineMode {
+  SHARED
+  DEDICATED
+  DISABLED
+}
+
 enum LineRichMenuStatus {
   DRAFT
   VERIFIED
@@ -797,6 +803,9 @@ model User {
   accountDeletionRequests           AccountDeletionRequest[]
   accountDeletionAudits             AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
   lineConfigurationAudits           LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
+  groupLineRoutingPoliciesEdited    GroupLineRoutingPolicy[]            @relation("GroupLineRoutingPolicyEditor")
+  groupLineConfigurationsCreated    GroupLineChannelConfiguration[]     @relation("GroupLineConfigurationCreator")
+  groupLineConfigurationAudits      GroupLineConfigurationAudit[]       @relation("GroupLineConfigurationAuditActor")
   lineRichMenuAudits                LineRichMenuAudit[]                 @relation("LineRichMenuAuditActor")
   aiProviderConfigurationAudits     AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
   adminEmailConfigurationAudits     AdminEmailConfigurationAudit[]      @relation("AdminEmailConfigurationAuditActor")
@@ -868,67 +877,70 @@ model AuthIdentity {
 }
 
 model Workspace {
-  id                          String                           @id @default(uuid()) @db.Uuid
-  type                        WorkspaceType
-  name                        String                           @db.VarChar(120)
-  status                      WorkspaceStatus                  @default(ACTIVE)
-  createdAt                   DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  memberships                 WorkspaceMembership[]
-  groups                      Group[]
-  groupMemberships            GroupMembership[]
-  groupInvitations            GroupInvitation[]
-  productPacks                ProductPack[]
-  productPackAssignments      ProductPackAssignment[]
-  bunshins                    Bunshin[]
-  ownerKnowledge              OwnerKnowledge[]
-  knowledgeGrants             BunshinKnowledgeGrant[]
-  memories                    BunshinMemory[]
-  capabilityAssignments       BunshinCapabilityAssignment[]
-  socialProfiles              SocialProfile[]
-  socialAccountStrategies     SocialAccountStrategy[]
-  contentPillars              ContentPillar[]
-  weeklyPlans                 WeeklyPlan[]
-  weeklyPlanItems             WeeklyPlanItem[]
-  dailyMissions               DailyMission[]
-  missionContents             MissionContent[]
-  missionDecisions            MissionDecision[]
-  missionActivities           MissionActivity[]
-  postRecords                 PostRecord[]
-  missionFeedback             MissionFeedback[]
-  aiUsageEvents               AiUsageEvent[]
-  lineNotificationPreferences LineNotificationPreference[]
-  lineConnections             LineConnection[]
-  lineWebhookEvents           LineWebhookEvent[]
-  jobs                        Job[]
-  lineMessageDeliveries       LineMessageDelivery[]
-  missionDeepLinkStates       MissionDeepLinkState[]
-  trendResearchRuns           TrendResearchRun[]
-  trendEvidence               TrendEvidence[]
-  trendIdeaCandidates         TrendIdeaCandidate[]
-  missionTrendContexts        MissionTrendContext[]
-  generationContextSnapshots  GenerationContextSnapshot[]
-  personalityVersions         BunshinPersonalityVersion[]
-  userEvidence                UserEvidence[]
-  advertisingSafetyReviews    AdvertisingSafetyReview[]
-  campaignsOwned              Campaign[]                       @relation("CampaignOwnerWorkspace")
-  campaignParticipations      CampaignParticipation[]          @relation("CampaignParticipantWorkspace")
-  campaignSimilarityReviews   CampaignSimilarityReview[]
-  externalTrackingSystems     ExternalTrackingSystem[]
-  externalTrackingDomains     ExternalTrackingAllowedDomain[]
-  externalTrackingIdentities  ExternalTrackingMemberIdentity[]
-  externalTrackingLinks       ExternalTrackingLink[]
-  externalTrackingAudits      ExternalTrackingAuditLog[]
-  externalLinkPlacements      ExternalLinkPlacementTemplate[]
-  contentLinkUsages           ContentLinkUsage[]
-  groupFeaturePolicies        GroupFeaturePolicy[]
-  groupFeatureAssignments     GroupMemberFeatureAssignment[]
-  groupFeatureAudits          GroupFeatureAuditLog[]
-  groupMembershipAudits       GroupMembershipAuditLog[]
-  groupFeatureUsageEvents     GroupFeatureUsageEvent[]
-  achievementBadges           AchievementBadge[]
-  videoProjects               VideoProject[]
-  videoAssets                 VideoAsset[]
+  id                           String                           @id @default(uuid()) @db.Uuid
+  type                         WorkspaceType
+  name                         String                           @db.VarChar(120)
+  status                       WorkspaceStatus                  @default(ACTIVE)
+  createdAt                    DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships                  WorkspaceMembership[]
+  groups                       Group[]
+  groupMemberships             GroupMembership[]
+  groupInvitations             GroupInvitation[]
+  productPacks                 ProductPack[]
+  productPackAssignments       ProductPackAssignment[]
+  bunshins                     Bunshin[]
+  ownerKnowledge               OwnerKnowledge[]
+  knowledgeGrants              BunshinKnowledgeGrant[]
+  memories                     BunshinMemory[]
+  capabilityAssignments        BunshinCapabilityAssignment[]
+  socialProfiles               SocialProfile[]
+  socialAccountStrategies      SocialAccountStrategy[]
+  contentPillars               ContentPillar[]
+  weeklyPlans                  WeeklyPlan[]
+  weeklyPlanItems              WeeklyPlanItem[]
+  dailyMissions                DailyMission[]
+  missionContents              MissionContent[]
+  missionDecisions             MissionDecision[]
+  missionActivities            MissionActivity[]
+  postRecords                  PostRecord[]
+  missionFeedback              MissionFeedback[]
+  aiUsageEvents                AiUsageEvent[]
+  lineNotificationPreferences  LineNotificationPreference[]
+  lineConnections              LineConnection[]
+  lineWebhookEvents            LineWebhookEvent[]
+  jobs                         Job[]
+  lineMessageDeliveries        LineMessageDelivery[]
+  groupLineRoutingPolicies     GroupLineRoutingPolicy[]
+  groupLineConfigurations      GroupLineChannelConfiguration[]
+  groupLineConfigurationAudits GroupLineConfigurationAudit[]
+  missionDeepLinkStates        MissionDeepLinkState[]
+  trendResearchRuns            TrendResearchRun[]
+  trendEvidence                TrendEvidence[]
+  trendIdeaCandidates          TrendIdeaCandidate[]
+  missionTrendContexts         MissionTrendContext[]
+  generationContextSnapshots   GenerationContextSnapshot[]
+  personalityVersions          BunshinPersonalityVersion[]
+  userEvidence                 UserEvidence[]
+  advertisingSafetyReviews     AdvertisingSafetyReview[]
+  campaignsOwned               Campaign[]                       @relation("CampaignOwnerWorkspace")
+  campaignParticipations       CampaignParticipation[]          @relation("CampaignParticipantWorkspace")
+  campaignSimilarityReviews    CampaignSimilarityReview[]
+  externalTrackingSystems      ExternalTrackingSystem[]
+  externalTrackingDomains      ExternalTrackingAllowedDomain[]
+  externalTrackingIdentities   ExternalTrackingMemberIdentity[]
+  externalTrackingLinks        ExternalTrackingLink[]
+  externalTrackingAudits       ExternalTrackingAuditLog[]
+  externalLinkPlacements       ExternalLinkPlacementTemplate[]
+  contentLinkUsages            ContentLinkUsage[]
+  groupFeaturePolicies         GroupFeaturePolicy[]
+  groupFeatureAssignments      GroupMemberFeatureAssignment[]
+  groupFeatureAudits           GroupFeatureAuditLog[]
+  groupMembershipAudits        GroupMembershipAuditLog[]
+  groupFeatureUsageEvents      GroupFeatureUsageEvent[]
+  achievementBadges            AchievementBadge[]
+  videoProjects                VideoProject[]
+  videoAssets                  VideoAsset[]
 
   @@index([status])
   @@map("workspaces")
@@ -976,6 +988,9 @@ model Group {
   featureUsageEvents         GroupFeatureUsageEvent[]
   videoProjects              VideoProject[]
   videoAssets                VideoAsset[]
+  lineRoutingPolicies        GroupLineRoutingPolicy[]
+  lineChannelConfigurations  GroupLineChannelConfiguration[]
+  lineConfigurationAudits    GroupLineConfigurationAudit[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -2131,6 +2146,87 @@ model LineConfigurationAudit {
   @@index([environment, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("line_configuration_audits")
+}
+
+model GroupLineRoutingPolicy {
+  id              String                       @id @default(uuid()) @db.Uuid
+  workspaceId     String                       @map("workspace_id") @db.Uuid
+  groupId         String                       @map("group_id") @db.Uuid
+  environment     LineConfigurationEnvironment
+  mode            GroupLineMode                @default(SHARED)
+  pilotEnabled    Boolean                      @default(false) @map("pilot_enabled")
+  reason          String                       @db.VarChar(500)
+  updatedByUserId String                       @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group                        @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  updatedBy       User                         @relation("GroupLineRoutingPolicyEditor", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId, environment])
+  @@index([environment, mode, pilotEnabled])
+  @@index([updatedByUserId, updatedAt])
+  @@map("group_line_routing_policies")
+}
+
+model GroupLineChannelConfiguration {
+  id                       String                        @id @default(uuid()) @db.Uuid
+  workspaceId              String                        @map("workspace_id") @db.Uuid
+  groupId                  String                        @map("group_id") @db.Uuid
+  environment              LineConfigurationEnvironment
+  version                  Int
+  status                   LineConfigurationStatus       @default(DRAFT)
+  webhookRoutingKey        String                        @unique @default(uuid()) @map("webhook_routing_key") @db.Uuid
+  loginChannelId           String                        @map("login_channel_id") @db.VarChar(64)
+  encryptedLoginSecret     String                        @map("encrypted_login_secret") @db.Text
+  loginSecretMask          String                        @map("login_secret_mask") @db.VarChar(16)
+  messagingChannelId       String                        @map("messaging_channel_id") @db.VarChar(64)
+  encryptedMessagingSecret String                        @map("encrypted_messaging_secret") @db.Text
+  messagingSecretMask      String                        @map("messaging_secret_mask") @db.VarChar(16)
+  encryptedAccessToken     String                        @map("encrypted_access_token") @db.Text
+  accessTokenMask          String                        @map("access_token_mask") @db.VarChar(16)
+  liffId                   String?                       @map("liff_id") @db.VarChar(128)
+  globallyPaused           Boolean                       @default(true) @map("globally_paused")
+  quotaWarningPercent      Int                           @default(80) @map("quota_warning_percent")
+  quotaLowPriorityStop     Int                           @default(90) @map("quota_low_priority_stop")
+  keyVersion               Int                           @default(1) @map("key_version")
+  lastVerifiedAt           DateTime?                     @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory        String?                       @map("last_error_category") @db.VarChar(80)
+  createdByUserId          String                        @map("created_by_user_id") @db.Uuid
+  createdAt                DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                    Group                         @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy                User                          @relation("GroupLineConfigurationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  audits                   GroupLineConfigurationAudit[]
+
+  @@unique([workspaceId, groupId, environment, version])
+  @@index([workspaceId, groupId, environment, status])
+  @@index([createdByUserId, createdAt])
+  @@map("group_line_channel_configurations")
+}
+
+model GroupLineConfigurationAudit {
+  id              String                         @id @default(uuid()) @db.Uuid
+  workspaceId     String                         @map("workspace_id") @db.Uuid
+  groupId         String                         @map("group_id") @db.Uuid
+  configurationId String?                        @map("configuration_id") @db.Uuid
+  environment     LineConfigurationEnvironment
+  actorUserId     String                         @map("actor_user_id") @db.Uuid
+  action          String                         @db.VarChar(40)
+  reason          String                         @db.VarChar(500)
+  beforeData      Json?                          @map("before_data")
+  afterData       Json?                          @map("after_data")
+  occurredAt      DateTime                       @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace       Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group                          @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration   GroupLineChannelConfiguration? @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  actor           User                           @relation("GroupLineConfigurationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, environment, occurredAt])
+  @@index([configurationId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("group_line_configuration_audits")
 }
 
 model LineRichMenu {
