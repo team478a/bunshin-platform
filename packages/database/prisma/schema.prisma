@@ -90,6 +90,28 @@ enum GroupFeatureAuditAction {
   MEMBER_ASSIGNMENT_SET
 }
 
+enum PointRuleStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+  SUSPENDED
+}
+
+enum PointTransactionType {
+  GRANT
+  CONSUME
+  REVERSAL
+  REFUND
+  EXPIRE
+  RECOVERY
+}
+
+enum PointProcessingStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum ProductPackStatus {
   DRAFT
   ACTIVE
@@ -858,6 +880,9 @@ model User {
   activityContinuityRulesActivated  ActivityContinuityRule[]            @relation("ActivityContinuityRuleActivator")
   videoProjects                     VideoProject[]                      @relation("VideoProjectOwner")
   videoAssets                       VideoAsset[]                        @relation("VideoAssetOwner")
+  pointAccounts                     PointAccount[]
+  pointTransactions                 PointTransaction[]
+  pointProcessingEvents             PointProcessingEvent[]
 
   @@index([status])
   @@map("users")
@@ -944,6 +969,10 @@ model Workspace {
   achievementBadges            AchievementBadge[]
   videoProjects                VideoProject[]
   videoAssets                  VideoAsset[]
+  pointAccounts                PointAccount[]
+  pointRuleVersions            PointRuleVersion[]
+  pointTransactions            PointTransaction[]
+  pointProcessingEvents        PointProcessingEvent[]
 
   @@index([status])
   @@map("workspaces")
@@ -996,6 +1025,8 @@ model Group {
   lineConfigurationAudits    GroupLineConfigurationAudit[]
   lineConnections            GroupLineConnection[]
   lineWebhookEvents          GroupLineWebhookEvent[]
+  pointRuleVersions          PointRuleVersion[]
+  pointTransactions          PointTransaction[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -1343,11 +1374,133 @@ model Campaign {
   externalTrackingLinks          ExternalTrackingLink[]
   contentLinkUsages              ContentLinkUsage[]
   videoProjects                  VideoProject[]
+  pointRuleVersions              PointRuleVersion[]
+  pointTransactions              PointTransaction[]
 
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
   @@map("campaigns")
+}
+
+model PointAccount {
+  id              String             @id @default(uuid()) @db.Uuid
+  workspaceId     String             @map("workspace_id") @db.Uuid
+  userId          String             @map("user_id") @db.Uuid
+  availablePoints Int                @default(0) @map("available_points")
+  recoveryDue     Int                @default(0) @map("recovery_due")
+  revision        Int                @default(0)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions    PointTransaction[]
+
+  @@unique([workspaceId, userId])
+  @@unique([workspaceId, id, userId])
+  @@index([userId])
+  @@map("point_accounts")
+}
+
+model PointRuleVersion {
+  id           String             @id @default(uuid()) @db.Uuid
+  workspaceId  String?            @map("workspace_id") @db.Uuid
+  groupId      String?            @map("group_id") @db.Uuid
+  campaignId   String?            @map("campaign_id") @db.Uuid
+  ruleKey      String             @map("rule_key") @db.VarChar(100)
+  version      Int
+  status       PointRuleStatus    @default(DRAFT)
+  grantAmount  Int                @map("grant_amount")
+  dailyLimit   Int?               @map("daily_limit")
+  weeklyLimit  Int?               @map("weekly_limit")
+  startsAt     DateTime?          @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime?          @map("ends_at") @db.Timestamptz(6)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace    Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group        Group?             @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  campaign     Campaign?          @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  transactions PointTransaction[]
+  budget       PointRuleBudget?
+
+  @@index([ruleKey, status, startsAt, endsAt])
+  @@index([workspaceId, groupId, campaignId, status])
+  @@map("point_rule_versions")
+}
+
+model PointRuleBudget {
+  id            String           @id @default(uuid()) @db.Uuid
+  ruleVersionId String           @unique @map("rule_version_id") @db.Uuid
+  maximumPoints Int              @map("maximum_points")
+  grantedPoints Int              @default(0) @map("granted_points")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ruleVersion   PointRuleVersion @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+
+  @@map("point_rule_budgets")
+}
+
+model PointTransaction {
+  id             String                 @id @default(uuid()) @db.Uuid
+  accountId      String                 @map("account_id") @db.Uuid
+  workspaceId    String                 @map("workspace_id") @db.Uuid
+  userId         String                 @map("user_id") @db.Uuid
+  groupId        String?                @map("group_id") @db.Uuid
+  campaignId     String?                @map("campaign_id") @db.Uuid
+  ruleVersionId  String?                @map("rule_version_id") @db.Uuid
+  type           PointTransactionType
+  amount         Int
+  idempotencyKey String                 @map("idempotency_key") @db.VarChar(200)
+  sourceType     String                 @map("source_type") @db.VarChar(100)
+  sourceId       String?                @map("source_id") @db.VarChar(200)
+  expiresAt      DateTime?              @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  account        PointAccount           @relation(fields: [workspaceId, accountId, userId], references: [workspaceId, id, userId], onDelete: Restrict)
+  workspace      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  group          Group?                 @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  campaign       Campaign?              @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  ruleVersion    PointRuleVersion?      @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
+  consumptions   PointConsumptionLink[] @relation("ConsumedGrant")
+  consumptionFor PointConsumptionLink[] @relation("ConsumptionTransaction")
+
+  @@unique([accountId, idempotencyKey])
+  @@index([workspaceId, userId, createdAt])
+  @@index([groupId, campaignId, createdAt])
+  @@index([expiresAt])
+  @@map("point_transactions")
+}
+
+model PointConsumptionLink {
+  id                       String           @id @default(uuid()) @db.Uuid
+  consumptionTransactionId String           @map("consumption_transaction_id") @db.Uuid
+  grantTransactionId       String           @map("grant_transaction_id") @db.Uuid
+  amount                   Int
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumptionTransaction   PointTransaction @relation("ConsumptionTransaction", fields: [consumptionTransactionId], references: [id], onDelete: Restrict)
+  grantTransaction         PointTransaction @relation("ConsumedGrant", fields: [grantTransactionId], references: [id], onDelete: Restrict)
+
+  @@unique([consumptionTransactionId, grantTransactionId])
+  @@index([grantTransactionId])
+  @@map("point_consumption_links")
+}
+
+model PointProcessingEvent {
+  id            String                @id @default(uuid()) @db.Uuid
+  workspaceId   String                @map("workspace_id") @db.Uuid
+  userId        String                @map("user_id") @db.Uuid
+  eventType     String                @map("event_type") @db.VarChar(100)
+  sourceEventId String                @map("source_event_id") @db.VarChar(200)
+  status        PointProcessingStatus @default(PROCESSING)
+  failureCode   String?               @map("failure_code") @db.VarChar(100)
+  processedAt   DateTime?             @map("processed_at") @db.Timestamptz(6)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace     Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, eventType, sourceEventId])
+  @@index([workspaceId, userId, status, createdAt])
+  @@map("point_processing_events")
 }
 
 model ExternalTrackingSystem {
