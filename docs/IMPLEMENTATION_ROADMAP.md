@@ -410,7 +410,8 @@ FREE継続率を確認する前に作り込まない。
 - P-1: Point Account / Rule Version / Transaction / Consumption Link / Processing Event Core — 完了
 - P-2: 既存Mission Activity／PostRecordからの冪等な行動連携 — 完了
 - P-3: 利用者向け残高、履歴、失効予定、獲得方法、週間進捗 — 実装完了、レビュー待ち
-- P-4: 画像生成・追加企画生成との予約／確定／解放／返却
+- P-4A: 共通交換カタログ、予約／確定／解放／返却Core — 実装完了、レビュー待ち
+- P-4B: 画像生成・追加企画生成のProvider受付境界へ交換Coreを接続
 - P-5: Group利用可否、承認済み追加付与、企業独自特典
 - P-6: 管理、監査、CSV、予算、照合、失効、緊急停止
 - P-7: Feature Flagによる30人・4週間の限定検証
