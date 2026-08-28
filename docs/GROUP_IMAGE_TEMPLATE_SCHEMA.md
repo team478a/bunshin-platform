@@ -4,7 +4,7 @@
 
 グループ限定SNS画像生成で使用する、管理されたレイアウトの正本を定める。出力は縦長`1080 × 1350px`、テンプレート版は`1`とする。
 
-本仕様はレイアウトSchema、入力検証、文字・画像領域、セーフエリアまでを対象とする。Satori / resvg / Sharpによる描画、外部AIによる素材生成、非公開Storage、利用者UIは後続PRで実装する。
+本仕様はレイアウトSchema、入力検証、文字・画像領域、セーフエリア、Satori / resvg / Sharpによる決定的描画までを対象とする。外部AIによる素材生成、非公開Storage、利用者UIは後続PRで実装する。
 
 ## 2. 共通ルール
 
@@ -41,13 +41,18 @@
 
 ## 5. レンダラーへの引き渡し
 
-後続レンダラーは`buildSocialImageCompositionPlan`の結果だけを受け取る。Composition Planには正規化済みLayout、テンプレートKey、テンプレートVersion、固定領域と文字規則が含まれる。
+レンダラーは`buildSocialImageCompositionPlan`の結果だけを受け取る。Composition Planには正規化済みLayout、テンプレートKey、テンプレートVersion、固定領域と文字規則が含まれる。
 
 レンダラーは次を守る。
 
-- OSに入っているフォントへ依存しない。
+- 同梱したNoto Sans CJK JP Regular / Boldだけを使用し、OSフォントを読み込まない。
 - 外部入力をHTMLとして解釈しない。
-- 元素材、完成画像、サムネイルを分離する。
+- 素材はBufferだけを受け取り、外部URLを取得しない。
+- JPEG、PNG、WebPだけを許可し、15MB、1辺8192pxを上限とする。
+- SatoriでSVGを構成し、resvgでPNG化し、Sharpでメタデータを引き継がず再出力する。
+- 完成画像は1080×1350px、サムネイルは324×405pxとする。
+- 同じ入力と同じ依存Versionから同一byte列を生成し、SHA-256を内容Hashとする。
+- 元素材、完成画像、サムネイルを分離する。保存はI3-Cで実装する。
 - 完成物を公開URLとして保存しない。
 - 文字あふれを検出した場合、最小サイズより縮めず安全な失敗にする。
 

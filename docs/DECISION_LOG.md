@@ -1396,3 +1396,12 @@
 - Boundary: AIや利用者から任意HTML、CSS、SVG、座標を受け取らない。Application層が作るComposition Planだけを後続レンダラーへ渡す。
 - Font: 日本語標準フォント候補をOFL-1.1のNoto Sans JPとする。描画PRで必要weightとライセンス本文を同梱し、OSフォントや実行時の外部配信へ依存しない。
 - Delivery: 本変更はSchema、検証、仕様、テストまでとする。Satori / resvg / Sharp描画、外部AI、Storage、API/UI、LINE導線は後続PRへ分離する。
+
+## 2026-08-28: SNS画像描画は固定フォントとBuffer入力だけで決定的に行う
+
+- Boundary: 描画Adapterは検証済み`SocialImageLayout`と画像Bufferだけを受け取る。任意HTML、CSS、SVG、外部URLを受け取らず、ネットワーク取得も行わない。
+- Pipeline: Satoriで管理React treeをSVG化し、resvgで1080×1350pxのPNGへ変換し、Sharpで再出力と324×405pxのサムネイル生成を行う。
+- Font: Noto Sans CJK JPの静的Regular / Bold OTFをOFL-1.1本文とともに固定同梱する。OSフォントと実行時配信へ依存せず、resvgのsystem font読込を停止する。
+- Asset Safety: JPEG、PNG、WebPだけを許可し、15MB、1辺8192pxを上限とする。画像不要テンプレートへの素材混入と、画像必須テンプレートの素材欠落を拒否する。
+- Determinism: 同じLayout、素材、フォント、依存Versionでは同一byte列を生成する。完成PNGのSHA-256を内容Hashとし、元画像のMetadataは完成物へ引き継がない。
+- Delivery: 本PRは描画Adapterとテストまでとする。外部画像Provider、Job、利用量記録、非公開Storage、API/UI、LINE導線は含めない。
