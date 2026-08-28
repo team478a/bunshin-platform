@@ -303,7 +303,7 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 - I4-B: 非同期Job、Usage、上限、緊急停止 — 完了
 - I5-A: 利用者向け生成開始・進捗確認・Private download API — 完了
 - I5-B1: mobile-first UI、画像の採用・不採用・再生成・保存 — 完了
-- I5-B2: LINE通知から画像確認画面への安全な導線（LINEから生成は開始しない）
+- I5-B2: LINE通知から画像確認画面への安全な導線（LINEから生成は開始しない）— 完了
 - I6: Group / Platform管理、50テーマ比較、Security、Production Gate
 
 FREE一般ユーザーへは開放せず、Productionで明示許可したGroupと同意済みACTIVE Membershipだけを対象とする。Phase 10の一般向け画像・動画Providerを前倒ししない。越境、秘密漏えい、二重課金、重大な広告安全違反が1件でもあれば全体停止する。

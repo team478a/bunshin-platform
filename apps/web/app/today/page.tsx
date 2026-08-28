@@ -38,6 +38,74 @@ export default async function TodayPage({
       idempotencyKey: `line-deep-link:${state.id}`,
       metadata: null,
     });
+    const mission = await db.prisma.dailyMission.findFirst({
+      where: {
+        id: state.dailyMissionId,
+        workspaceId: state.workspaceId,
+        bunshinId: state.bunshinId,
+        bunshin: { ownerUserId: user.userId, status: { not: 'ARCHIVED' } },
+      },
+      select: {
+        format: true,
+        campaign: { select: { groupId: true } },
+        contentLinkUsage: { select: { groupId: true } },
+      },
+    });
+    if (mission && ['IMAGE', 'SLIDE'].includes(mission.format)) {
+      const now = new Date();
+      const preferredGroupId = mission.contentLinkUsage?.groupId ?? mission.campaign?.groupId;
+      const memberships = await db.prisma.groupMembership.findMany({
+        where: {
+          workspaceId: state.workspaceId,
+          userId: user.userId,
+          status: 'ACTIVE',
+          consentedAt: { not: null },
+          ...(preferredGroupId ? { groupId: preferredGroupId } : {}),
+          group: {
+            status: 'ACTIVE',
+            featurePolicies: {
+              some: {
+                featureKey: 'SOCIAL.IMAGE_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+          featureAssignments: {
+            some: {
+              featureKey: 'SOCIAL.IMAGE_GENERATION',
+              status: 'ENABLED',
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            },
+          },
+        },
+        select: { id: true },
+      });
+      const enrollment = memberships.length
+        ? await db.prisma.socialImagePilotEnrollment.findFirst({
+            where: {
+              workspaceId: state.workspaceId,
+              groupMembershipId: { in: memberships.map(({ id }) => id) },
+              status: 'ACTIVE',
+              revokedAt: null,
+              pilot: {
+                status: 'ACTIVE',
+                emergencyStop: false,
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+            select: { groupId: true },
+            orderBy: { createdAt: 'asc' },
+          })
+        : null;
+      if (enrollment)
+        redirect(
+          `/groups/${enrollment.groupId}/images?mission=${encodeURIComponent(state.dailyMissionId)}`,
+        );
+    }
     redirect(`/bunshins/${state.bunshinId}#daily-mission`);
   } catch (error) {
     if (error instanceof ApplicationError) notFound();
