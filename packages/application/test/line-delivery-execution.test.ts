@@ -17,6 +17,7 @@ function delivery(overrides: Partial<LineMessageDelivery> = {}): LineMessageDeli
     id: 'delivery-a',
     environment: 'PRODUCTION',
     workspaceId: 'workspace-a',
+    groupId: null,
     bunshinId: 'bunshin-a',
     userId: 'user-a',
     dailyMissionId: 'mission-a',
@@ -133,6 +134,35 @@ describe('LINE delivery execution', () => {
         errorCategory: null,
       }),
     );
+    expect(values.recipient.resolve).toHaveBeenCalledWith({
+      environment: 'PRODUCTION',
+      workspaceId: 'workspace-a',
+      groupId: null,
+      bunshinId: 'bunshin-a',
+      userId: 'user-a',
+    });
+  });
+
+  it('uses the snapshotted group when resolving a dedicated LINE recipient', async () => {
+    const values = dependencies();
+    values.repository.claim.mockResolvedValue({
+      delivery: delivery({ groupId: 'group-a' }),
+      attemptNumber: 1,
+    });
+
+    await expect(execute(values)).resolves.toMatchObject({ status: 'SENT' });
+    expect(values.configuration.getActive).toHaveBeenCalledWith('PRODUCTION', {
+      workspaceId: 'workspace-a',
+      groupId: 'group-a',
+      userId: 'user-a',
+    });
+    expect(values.recipient.resolve).toHaveBeenCalledWith({
+      environment: 'PRODUCTION',
+      workspaceId: 'workspace-a',
+      groupId: 'group-a',
+      bunshinId: 'bunshin-a',
+      userId: 'user-a',
+    });
   });
 
   it('does not call LINE when another worker holds the delivery', async () => {

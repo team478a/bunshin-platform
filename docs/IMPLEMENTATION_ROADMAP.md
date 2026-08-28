@@ -386,10 +386,10 @@ FREE継続率を確認する前に作り込まない。
 
 ## Phase 7-K: 販売プラン・契約・利用権基盤
 
-状態: K0文書完了。人間レビュー前にK1以降へ進まない。詳細は`docs/SALES_PLAN_REBASELINE.md`を正本候補とする。
+状態: K0文書完了。テストグループ専用LINEの先行実装は完了し、CI・Migrationレビュー待ち。人間レビュー前にK1以降へ進まない。詳細は`docs/SALES_PLAN_REBASELINE.md`を正本候補とする。
 
 - K0: 現行監査、販売モデル、Tenant／Group境界、契約、座席、利用権、Credit、インセンティブ、決済、LINE、停止条件 — 文書完了
-- K0-LP1: テストグループ専用公式LINEのRouting Policy、版管理Configuration、環境分離、ACTIVE一意制約、Audit — Core Persistence実装中
+- K0-LP1: テストグループ専用公式LINEのRouting Policy、版管理Configuration、環境分離、ACTIVE一意制約、Audit、管理画面、配信時Gate、専用Webhook／Connection — 実装完了、CI・Migrationレビュー待ち
 - K1: Tenant Contract / Contract Version / Seat / Entitlement Source Core
 - K2: Credit Pool / Reserve・Consume・Release・Refund Ledger
 - K3: Partner Attribution / Incentive Ledger。現金支払いは含めない

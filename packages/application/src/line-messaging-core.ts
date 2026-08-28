@@ -24,6 +24,7 @@ export interface LineMessageDelivery {
   id: string;
   environment: LineConfigurationEnvironment;
   workspaceId: string;
+  groupId: string | null;
   bunshinId: string;
   userId: string;
   dailyMissionId: string;
@@ -120,13 +121,17 @@ export interface LineDeliveryConfiguration {
 }
 
 export interface LineDeliveryConfigurationPort {
-  getActive(environment: LineConfigurationEnvironment): Promise<LineDeliveryConfiguration | null>;
+  getActive(
+    environment: LineConfigurationEnvironment,
+    scope?: { workspaceId: string; groupId: string | null; userId: string },
+  ): Promise<LineDeliveryConfiguration | null>;
 }
 
 export interface LineRecipientResolverPort {
   resolve(input: {
     environment: LineConfigurationEnvironment;
     workspaceId: string;
+    groupId?: string | null;
     bunshinId: string;
     userId: string;
   }): Promise<string | null>;
@@ -349,7 +354,11 @@ export class ExecuteLineMissionDelivery {
       return { status, category, retryable };
     };
 
-    const configuration = await this.configuration.getActive(input.environment);
+    const configuration = await this.configuration.getActive(input.environment, {
+      workspaceId: claim.delivery.workspaceId,
+      groupId: claim.delivery.groupId,
+      userId: claim.delivery.userId,
+    });
     if (!configuration) return failWithoutProvider('FAILED', 'CONFIGURATION_UNAVAILABLE', true);
     if (configuration.environment !== input.environment)
       return failWithoutProvider('FAILED', 'ENVIRONMENT_MISMATCH', false);
@@ -368,6 +377,7 @@ export class ExecuteLineMissionDelivery {
     const recipientId = await this.recipientResolver.resolve({
       environment: input.environment,
       workspaceId: claim.delivery.workspaceId,
+      groupId: claim.delivery.groupId,
       bunshinId: claim.delivery.bunshinId,
       userId: input.actorUserId,
     });

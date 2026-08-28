@@ -1,6 +1,10 @@
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { PrismaLineMessageDeliveryRepository, PrismaMissionDeepLinkStateRepository } from '../src';
+import {
+  PrismaLineConnectionRepository,
+  PrismaLineMessageDeliveryRepository,
+  PrismaMissionDeepLinkStateRepository,
+} from '../src';
 
 const scope = {
   environment: 'PRODUCTION' as const,
@@ -11,6 +15,54 @@ const scope = {
 };
 
 describe('LINE messaging persistence isolation', () => {
+  it('resolves a group delivery only through its dedicated LINE connection', async () => {
+    const dedicatedFind = vi.fn().mockResolvedValue({ providerUserId: 'U-dedicated' });
+    const sharedFind = vi.fn();
+    const client = {
+      groupLineConnection: { findFirst: dedicatedFind },
+      lineConnection: { findFirst: sharedFind },
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaLineConnectionRepository(client).resolve({
+        environment: 'PRODUCTION',
+        workspaceId: 'workspace-a',
+        groupId: 'group-a',
+        bunshinId: 'bunshin-a',
+        userId: 'user-a',
+      }),
+    ).resolves.toBe('U-dedicated');
+    expect(dedicatedFind).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        workspaceId: 'workspace-a',
+        groupId: 'group-a',
+        userId: 'user-a',
+        configuration: expect.objectContaining({ environment: 'PRODUCTION', status: 'ACTIVE' }),
+      }),
+      select: { providerUserId: true },
+    });
+    expect(sharedFind).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to the shared LINE identity for a group delivery', async () => {
+    const sharedFind = vi.fn().mockResolvedValue({ providerUserId: 'U-shared' });
+    const client = {
+      groupLineConnection: { findFirst: vi.fn().mockResolvedValue(null) },
+      lineConnection: { findFirst: sharedFind },
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaLineConnectionRepository(client).resolve({
+        environment: 'PRODUCTION',
+        workspaceId: 'workspace-a',
+        groupId: 'group-a',
+        bunshinId: 'bunshin-a',
+        userId: 'user-a',
+      }),
+    ).resolves.toBeNull();
+    expect(sharedFind).not.toHaveBeenCalled();
+  });
+
   it('loads a delivery only through the full environment and ownership scope', async () => {
     const findFirst = vi.fn().mockResolvedValue(null);
     const client = { lineMessageDelivery: { findFirst } } as unknown as PrismaClient;
@@ -163,6 +215,81 @@ describe('LINE messaging persistence isolation', () => {
         kind: 'DAILY_MISSION',
         idempotencyKey: 'mission-a:daily',
         scheduledAt: new Date('2026-08-22T04:00:00Z'),
+      }),
+    ).resolves.toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('snapshots the server-derived campaign group after active membership verification', async () => {
+    const scheduledAt = new Date('2026-08-22T04:00:00Z');
+    const create = vi.fn().mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: 'delivery-group',
+        status: 'PENDING',
+        sentAt: null,
+        cancelledAt: null,
+        lastErrorCategory: null,
+        attemptCount: 0,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        createdAt: scheduledAt,
+        updatedAt: scheduledAt,
+        ...data,
+      }),
+    );
+    const membership = vi.fn().mockResolvedValue({ id: 'member-a' });
+    const client = {
+      bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
+      dailyMission: {
+        findFirst: vi.fn().mockResolvedValue({
+          campaign: { groupId: 'group-a' },
+          contentLinkUsage: null,
+        }),
+      },
+      groupMembership: { findFirst: membership },
+      lineMessageDelivery: { create },
+    } as unknown as PrismaClient;
+    await expect(
+      new PrismaLineMessageDeliveryRepository(client).prepare({
+        ...scope,
+        kind: 'DAILY_MISSION',
+        idempotencyKey: 'mission-group:daily',
+        scheduledAt,
+      }),
+    ).resolves.toMatchObject({ groupId: 'group-a' });
+    expect(membership).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        workspaceId: scope.workspaceId,
+        groupId: 'group-a',
+        userId: scope.actorUserId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+        group: { status: 'ACTIVE' },
+      }),
+      select: { id: true },
+    });
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ groupId: 'group-a' }) });
+  });
+
+  it('does not prepare a group delivery after membership becomes inactive', async () => {
+    const create = vi.fn();
+    const client = {
+      bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
+      dailyMission: {
+        findFirst: vi.fn().mockResolvedValue({
+          campaign: { groupId: 'group-a' },
+          contentLinkUsage: null,
+        }),
+      },
+      groupMembership: { findFirst: vi.fn().mockResolvedValue(null) },
+      lineMessageDelivery: { create },
+    } as unknown as PrismaClient;
+    await expect(
+      new PrismaLineMessageDeliveryRepository(client).prepare({
+        ...scope,
+        kind: 'DAILY_MISSION',
+        idempotencyKey: 'mission-group:inactive',
+        scheduledAt: new Date(),
       }),
     ).resolves.toBeNull();
     expect(create).not.toHaveBeenCalled();

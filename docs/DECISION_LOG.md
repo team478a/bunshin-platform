@@ -1479,3 +1479,14 @@
 - Identity: LINE user IDをChannel間で同一と仮定しない。WebhookとLoginは対象Configurationを安全に識別した後も署名、User、Workspace、Group、Membership、Environmentを再検証する。
 - Authorization: pilot許可、方式変更、使用開始、全体停止はSUPER_ADMIN。OPERATORは下書き登録と接続確認まで。Group Managerは状態確認のみとする。
 - Source: `docs/GROUP_DEDICATED_LINE_PILOT.md`
+
+## 2026-08-28: Group専用LINEは設定VersionとIdentityをGroup単位で固定する
+
+- Delivery: `DEDICATED`配信はGroup、Environment、ACTIVE Configuration、接続確認、全体停止、Membership、同意を実行直前に再検証する。作成時の`groupId`とConfiguration Versionを配信へSnapshotし、途中で別Channelへ切り替えない。
+- No Fallback: 専用設定の不足、停止、失効、接続エラー時は送信を停止する。共通LINEへ黙ってFallbackしない。
+- Webhook: Groupごとのサーバー生成Routing Keyで設定を解決し、対象ConfigurationのMessaging Secretで署名検証する。Environment不一致、非ACTIVE、未確認設定は利用しない。
+- Identity: Provider user IDはGroup専用Configuration単位のConnectionへ保存する。共通LINE、別Group、別ConfigurationのIDを同一と仮定しない。
+- Privacy: Secret、Token、署名値、Provider生レスポンス、LINE user IDを通常logやAuditへ保存しない。管理画面ではSecretの登録有無と末尾Maskだけを表示する。
+- Authorization: Routing変更、設定Version登録、有効化はSUPER_ADMIN、接続確認はSUPER_ADMIN／OPERATOR、Group管理者は状態確認だけとする。
+- Scope: 一般提供、OEM、課金、Group管理者によるSecret登録は含めず、明示許可されたテストGroupだけに限定する。
+- Source: `docs/GROUP_DEDICATED_LINE_ADMIN_REPORT.md`
