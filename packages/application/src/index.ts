@@ -25,6 +25,7 @@ import { isValidBunshinSlug, normalizeBunshinSlug } from '@bunshin/platform-doma
 import { ApplicationError } from '@bunshin/shared';
 export * from './video-render-job';
 export * from './video-render-completion';
+export * from './social-image-generation-job';
 
 export interface ValidationMetricsPeriod {
   from: Date;

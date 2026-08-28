@@ -13,6 +13,7 @@ import {
 export interface OpenAiRuntimeConfiguration {
   apiKey: string;
   model: string;
+  requestCostUsdMicros: number;
   source: 'ADMIN_CONFIGURATION' | 'LEGACY_ENVIRONMENT';
 }
 
@@ -65,6 +66,7 @@ export async function resolveOpenAiRuntimeConfiguration(
     return {
       apiKey: crypto.decrypt(resolved.encryptedApiKey),
       model: resolved.configuration.model,
+      requestCostUsdMicros: resolved.configuration.requestCostUsdMicros ?? 0,
       source: 'ADMIN_CONFIGURATION',
     };
   } catch (error) {
@@ -73,6 +75,7 @@ export async function resolveOpenAiRuntimeConfiguration(
     return {
       apiKey: legacyApiKey,
       model: dependencies?.legacyModel ?? process.env['OPENAI_MODEL'] ?? 'gpt-5.2',
+      requestCostUsdMicros: 0,
       source: 'LEGACY_ENVIRONMENT',
     };
   }

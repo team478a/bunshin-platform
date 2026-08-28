@@ -64,6 +64,7 @@ describe('OpenAI runtime configuration', () => {
     ).resolves.toEqual({
       apiKey: 'plain-key',
       model: 'gpt-5-mini',
+      requestCostUsdMicros: 0,
       source: 'ADMIN_CONFIGURATION',
     });
   });
@@ -79,6 +80,7 @@ describe('OpenAI runtime configuration', () => {
     ).resolves.toEqual({
       apiKey: 'legacy-key',
       model: 'legacy-model',
+      requestCostUsdMicros: 0,
       source: 'LEGACY_ENVIRONMENT',
     });
   });

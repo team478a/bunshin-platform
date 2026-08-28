@@ -11,7 +11,7 @@ const securityHeaders = [
 const config: NextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
-  serverExternalPackages: ['@prisma/client'],
+  serverExternalPackages: ['@prisma/client', '@resvg/resvg-js'],
   transpilePackages: [
     '@bunshin/application',
     '@bunshin/config',
