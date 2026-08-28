@@ -36,11 +36,34 @@ export interface PointTransactionRecord {
   createdAt: Date;
 }
 
+export interface PointEarningMethod {
+  ruleKey: string;
+  grantAmount: number;
+  dailyLimit: number | null;
+  weeklyLimit: number | null;
+}
+
+export interface PointUserDashboard {
+  account: PointAccountSnapshot;
+  recentTransactions: PointTransactionRecord[];
+  expiringWithin30Days: number;
+  nextExpiryAt: Date | null;
+  earningMethods: PointEarningMethod[];
+  weeklyPosts: number;
+  weeklyPostGoal: number;
+}
+
 export interface PointLedgerRepository {
   getAccount(input: {
     workspaceId: string;
     actorUserId: string;
   }): Promise<PointAccountSnapshot | null>;
+  getUserDashboard(input: {
+    workspaceId: string;
+    actorUserId: string;
+    now: Date;
+    timezone: string;
+  }): Promise<PointUserDashboard | null>;
   grant(input: {
     workspaceId: string;
     actorUserId: string;
@@ -70,6 +93,25 @@ export interface PointLedgerRepository {
     idempotencyKey: string;
     reason: string;
   }): Promise<{ account: PointAccountSnapshot; transaction: PointTransactionRecord } | null>;
+}
+
+export class GetPointUserDashboard {
+  constructor(private readonly repository: PointLedgerRepository) {}
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    now?: Date;
+    timezone?: string;
+  }) {
+    const result = await this.repository.getUserDashboard({
+      workspaceId: required(input.workspaceId, 'workspace id'),
+      actorUserId: required(input.actorUserId, 'actor user id'),
+      now: input.now ?? new Date(),
+      timezone: required(input.timezone ?? 'Asia/Tokyo', 'timezone', 100),
+    });
+    if (!result) throw new ApplicationError('FORBIDDEN', 'point dashboard is not available');
+    return result;
+  }
 }
 
 const positiveInteger = (value: number) => {

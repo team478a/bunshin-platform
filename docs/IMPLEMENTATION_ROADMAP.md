@@ -407,9 +407,9 @@ FREE継続率を確認する前に作り込まない。
 状態: P-0文書作成済み・人間レビュー待ち。詳細は`docs/POINT_FEATURE_IMPLEMENTATION_PLAN.md`を正本候補とする。
 
 - P-0: Activity対応、Credit分離、Group／Workspace境界、台帳、消費順、回収、停止条件 — 文書作成済み
-- P-1: Point Account / Rule Version / Transaction / Consumption Link / Processing Event Core — 実装完了、レビュー待ち
-- P-2: 既存Mission Activity／PostRecordからの冪等な行動連携 — 実装完了、レビュー待ち
-- P-3: 利用者向け残高、履歴、失効予定、獲得方法、週間進捗
+- P-1: Point Account / Rule Version / Transaction / Consumption Link / Processing Event Core — 完了
+- P-2: 既存Mission Activity／PostRecordからの冪等な行動連携 — 完了
+- P-3: 利用者向け残高、履歴、失効予定、獲得方法、週間進捗 — 実装完了、レビュー待ち
 - P-4: 画像生成・追加企画生成との予約／確定／解放／返却
 - P-5: Group利用可否、承認済み追加付与、企業独自特典
 - P-6: 管理、監査、CSV、予算、照合、失効、緊急停止
