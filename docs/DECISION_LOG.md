@@ -1423,3 +1423,13 @@
 - Safety: `moderation=auto`を明示し、認証・利用制限・安全拒否・不正要求・Provider障害・不正応答を安全な分類へ変換する。安全拒否と不正要求は自動再試行せず、429と5xx／通信障害だけを再試行候補にする。
 - Response: PNG magic byte、Base64長、復号後容量を検査する。Providerの申告MIMEや拡張子を信用しない。
 - Delivery: I4-AはProvider Port、OpenAI Adapter、契約テストまでとする。Job、Usage、Pilot上限、緊急停止、API/UI、LINEはI4-B以降へ分離する。
+
+## 2026-08-28: SNS画像生成は共通Jobと二重の実行直前Gateで保護する
+
+- Async: Provider呼出しは`SOCIAL_IMAGE_GENERATE` Jobだけが行い、通常のHTTP応答中には実行しない。Job参照には内部Request IDだけを置き、Prompt、画像、APIキーを含めない。
+- Recheck: Jobが課金処理へ進む直前に、Group・同意済みMembership・Group機能権限・参加者機能権限・Bunshin SOCIAL Capability・Campaign・Pilot期間・緊急停止を再確認する。開始後に権限が失効した場合はfail-closedとする。
+- Limits: 共通`GroupFeatureEntitlementService.consumeAccess`を冪等なRequest IDで消費し、Pilotの日次・月次・参加者別月間上限も成功済みRequestから再計算する。OpenAI管理設定の日次・月次予算判定もProvider解決時に適用する。
+- Usage: Provider呼出しの試行ごとに`AiUsageEvent`を記録し、文章生成と区別できる`SOCIAL_IMAGE_GENERATION`を使用する。Provider生レスポンス、Prompt、画像、APIキーはUsageやJobへ保存しない。
+- Failure: 一時的な利用制限とProvider障害だけを再試行し、認証・安全性拒否・設定・権限・上限・緊急停止は自動再試行しない。最終失敗時だけRequestを`FAILED`へ移す。
+- Completion: 元素材、文字合成済み画像、サムネイルをPrivate Storageへ保存し、DBのMedia作成と`READY_FOR_REVIEW`化が失敗した場合は保存objectを削除する。
+- Boundary: Requestを作成してJobへ積む利用者API、進行表示、採否、再生成、download、LINE導線はI5で実装する。

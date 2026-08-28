@@ -5,6 +5,7 @@ import {
   ExecuteMissionAutomationJob,
   ExecuteLineDeliveryJob,
   ExecuteVideoRenderJob,
+  ExecuteSocialImageGenerationJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -39,12 +40,14 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createLineDeliveryJobHandler },
     { createTrendResearchJobHandler },
     { createVideoRenderJobHandler },
+    { createSocialImageGenerationJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
     import('../jobs/line-delivery-job-handler'),
     import('../jobs/trend-research-job-handler'),
     import('../jobs/video-render-job-handler'),
+    import('../jobs/social-image-generation-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -62,13 +65,20 @@ async function configuredWorker(): Promise<JobWorkerPort> {
   );
   const lineExecutor = new ExecuteLineDeliveryJob(createLineDeliveryJobHandler(), complete, fail);
   const videoExecutor = new ExecuteVideoRenderJob(createVideoRenderJobHandler(), complete, fail);
+  const socialImageExecutor = new ExecuteSocialImageGenerationJob(
+    createSocialImageGenerationJobHandler(),
+    complete,
+    fail,
+  );
   return new RunJobWorkerBatch(new ClaimJob(jobs), {
     execute: (job, workerId) =>
       job.jobType === 'LINE_MISSION_DELIVER'
         ? lineExecutor.execute(job, workerId)
         : job.jobType === 'VIDEO_RENDER_PROCESS'
           ? videoExecutor.execute(job, workerId)
-          : missionExecutor.execute(job, workerId),
+          : job.jobType === 'SOCIAL_IMAGE_GENERATE'
+            ? socialImageExecutor.execute(job, workerId)
+            : missionExecutor.execute(job, workerId),
   });
 }
 

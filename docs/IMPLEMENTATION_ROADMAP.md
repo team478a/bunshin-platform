@@ -300,7 +300,7 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 - I3-B: Satori / resvg / Sharpによる決定的描画 — 完了
 - I3-C: 元素材・完成画像・サムネイルの非公開Storage — 完了
 - I4-A: OpenAI Image Adapter、応答検査、安全な失敗分類 — 完了
-- I4-B: 非同期Job、Usage、上限、緊急停止
+- I4-B: 非同期Job、Usage、上限、緊急停止 — 完了
 - I5: 利用者API/UI、採否、再生成、download、LINE導線
 - I6: Group / Platform管理、50テーマ比較、Security、Production Gate
 
