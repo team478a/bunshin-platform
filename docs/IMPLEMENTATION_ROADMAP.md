@@ -297,7 +297,7 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 - I2-A: Domain、状態遷移、Provider Port、Isolation Policy — 完了
 - I2-B: Prisma Schema、Migration、Repository、DB一意制約、rollback手順 — 完了
 - I3-A: 管理レイアウトSchema、文字・画像領域、5テンプレート、フォントライセンス方針 — 完了
-- I3-B: Satori / resvg / Sharpによる決定的描画
+- I3-B: Satori / resvg / Sharpによる決定的描画 — 完了
 - I3-C: 元素材・完成画像・サムネイルの非公開Storage
 - I4: OpenAI Image Adapter、Job、Usage、上限、緊急停止
 - I5: 利用者API/UI、採否、再生成、download、LINE導線
