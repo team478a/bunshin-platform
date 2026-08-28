@@ -22,6 +22,7 @@ const adminNavigation = [
   { href: '/admin/groups', label: 'グループ管理' },
   { href: '/admin/trends', label: 'トレンド企画' },
   { href: '/admin/videos', label: '動画生成の状況' },
+  { href: '/admin/images', label: '画像生成の試験運用' },
   { href: '/admin/activity-rules', label: '続けやすさのルール' },
   { href: '/admin/line', label: 'LINE運用' },
   { href: '/admin/legal', label: '法務文書' },
