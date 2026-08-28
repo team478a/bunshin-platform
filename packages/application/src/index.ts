@@ -2339,3 +2339,4 @@ export * from './video-assets';
 export * from './video-render-operations';
 export * from './video-disclosure-policy';
 export * from './social-image-generation-core';
+export * from './social-image-templates';

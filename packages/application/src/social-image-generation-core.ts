@@ -1,11 +1,21 @@
 import { ApplicationError } from '@bunshin/shared';
+import { normalizeSocialImageLayout } from './social-image-templates';
+import type {
+  SOCIAL_IMAGE_HEIGHT,
+  SOCIAL_IMAGE_WIDTH,
+  SocialImageLayout,
+  SocialImageTemplateKey,
+} from './social-image-templates';
+
+export {
+  SOCIAL_IMAGE_HEIGHT,
+  SOCIAL_IMAGE_WIDTH,
+  normalizeSocialImageLayout,
+  type SocialImageLayout,
+  type SocialImageTemplateKey,
+} from './social-image-templates';
 
 export const SOCIAL_IMAGE_GENERATION_FEATURE_KEY = 'SOCIAL.IMAGE_GENERATION' as const;
-export const SOCIAL_IMAGE_WIDTH = 1080 as const;
-export const SOCIAL_IMAGE_HEIGHT = 1350 as const;
-
-export type SocialImageTemplateKey =
-  'PERSON_HEADLINE' | 'PROBLEM_CHECKLIST' | 'THREE_POINTS' | 'EMPATHY_QUOTE' | 'CTA';
 
 export type SocialImageGenerationStatus =
   | 'DRAFT'
@@ -32,14 +42,6 @@ export type SocialImageGenerationBlockReason =
   | 'PRODUCT_UNAVAILABLE'
   | 'SAFETY_BLOCKED'
   | 'LIMIT_REACHED';
-
-export interface SocialImageLayout {
-  templateKey: SocialImageTemplateKey;
-  headline: string;
-  bodyLines: string[];
-  cta: string | null;
-  accentColor: string;
-}
 
 export interface SocialImageGenerationRequestRecord {
   id: string;
@@ -159,13 +161,6 @@ const transitions: Record<SocialImageGenerationStatus, ReadonlySet<SocialImageGe
   FAILED: new Set(),
   CANCELLED: new Set(),
 };
-const templateKeys = new Set<SocialImageTemplateKey>([
-  'PERSON_HEADLINE',
-  'PROBLEM_CHECKLIST',
-  'THREE_POINTS',
-  'EMPATHY_QUOTE',
-  'CTA',
-]);
 
 const uuid = (value: string, field: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
@@ -181,24 +176,6 @@ const text = (value: string, field: string, max: number) => {
 };
 
 const optionalUuid = (value: string | null, field: string) => (value ? uuid(value, field) : null);
-
-export const normalizeSocialImageLayout = (input: SocialImageLayout): SocialImageLayout => {
-  if (!templateKeys.has(input.templateKey))
-    throw new ApplicationError('VALIDATION_ERROR', 'invalid templateKey');
-  if (input.bodyLines.length < 1 || input.bodyLines.length > 8)
-    throw new ApplicationError('VALIDATION_ERROR', 'invalid bodyLines');
-  const bodyLines = input.bodyLines.map((line) => text(line, 'bodyLine', 120));
-  const accentColor = input.accentColor.trim().toUpperCase();
-  if (!/^#[0-9A-F]{6}$/.test(accentColor))
-    throw new ApplicationError('VALIDATION_ERROR', 'invalid accentColor');
-  return {
-    templateKey: input.templateKey,
-    headline: text(input.headline, 'headline', 80),
-    bodyLines,
-    cta: input.cta ? text(input.cta, 'cta', 80) : null,
-    accentColor,
-  };
-};
 
 export const assertSocialImageGenerationTransition = (
   fromStatus: SocialImageGenerationStatus,
