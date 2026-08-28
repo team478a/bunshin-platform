@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   ProcessLineWebhookEvents,
+  ProcessGroupLineWebhookEvents,
   type LineConfigurationEnvironment,
   type LineWebhookEventType,
 } from '@bunshin/application';
@@ -116,5 +117,85 @@ export async function handleLineWebhook(
       new (await import('@bunshin/database')).PrismaLineConnectionRepository(),
     );
   await processor.execute({ environment, events });
+  return Response.json({ accepted: true });
+}
+
+export interface ActiveGroupLineWebhookConfigurationPort {
+  get(
+    routingKey: string,
+    environment: LineConfigurationEnvironment,
+  ): Promise<{
+    workspaceId: string;
+    groupId: string;
+    configurationId: string;
+    secret: string;
+  } | null>;
+}
+
+export class PrismaActiveGroupLineWebhookConfiguration implements ActiveGroupLineWebhookConfigurationPort {
+  constructor(private readonly crypto = new AesGcmLineSecretCrypto()) {}
+  async get(routingKey: string, environment: LineConfigurationEnvironment) {
+    if (environment !== currentLineEnvironment()) return null;
+    const { prisma } = await import('@bunshin/database');
+    const configuration = await prisma.groupLineChannelConfiguration.findFirst({
+      where: {
+        webhookRoutingKey: routingKey,
+        environment,
+        status: 'ACTIVE',
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+        group: {
+          status: 'ACTIVE',
+          lineRoutingPolicies: { some: { environment, mode: 'DEDICATED', pilotEnabled: true } },
+        },
+      },
+      select: { id: true, workspaceId: true, groupId: true, encryptedMessagingSecret: true },
+    });
+    return configuration
+      ? {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          configurationId: configuration.id,
+          secret: this.crypto.decrypt(configuration.encryptedMessagingSecret),
+        }
+      : null;
+  }
+}
+
+export async function handleGroupLineWebhook(
+  request: Request,
+  routingKey: string,
+  dependencies: {
+    environment?: LineConfigurationEnvironment;
+    configurations?: ActiveGroupLineWebhookConfigurationPort;
+    processor?: ProcessGroupLineWebhookEvents;
+  } = {},
+) {
+  if (!z.string().uuid().safeParse(routingKey).success)
+    return Response.json({ error: 'not found' }, { status: 404 });
+  const environment = dependencies.environment ?? currentLineEnvironment();
+  const rawBody = await request.text();
+  if (Buffer.byteLength(rawBody, 'utf8') > 1_000_000)
+    return Response.json({ error: 'payload too large' }, { status: 413 });
+  const scoped = await (
+    dependencies.configurations ?? new PrismaActiveGroupLineWebhookConfiguration()
+  ).get(routingKey, environment);
+  const signature = request.headers.get('x-line-signature') ?? '';
+  if (!scoped || !verifyLineWebhookSignature(rawBody, signature, scoped.secret))
+    return Response.json({ error: 'invalid signature' }, { status: 401 });
+  const events = parseLineWebhookEvents(rawBody);
+  if (!events) return Response.json({ accepted: true });
+  const processor =
+    dependencies.processor ??
+    new ProcessGroupLineWebhookEvents(
+      new (await import('@bunshin/database')).PrismaGroupLineConnectionRepository(),
+    );
+  await processor.execute({
+    environment,
+    workspaceId: scoped.workspaceId,
+    groupId: scoped.groupId,
+    configurationId: scoped.configurationId,
+    events,
+  });
   return Response.json({ accepted: true });
 }

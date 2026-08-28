@@ -806,6 +806,7 @@ model User {
   groupLineRoutingPoliciesEdited    GroupLineRoutingPolicy[]            @relation("GroupLineRoutingPolicyEditor")
   groupLineConfigurationsCreated    GroupLineChannelConfiguration[]     @relation("GroupLineConfigurationCreator")
   groupLineConfigurationAudits      GroupLineConfigurationAudit[]       @relation("GroupLineConfigurationAuditActor")
+  groupLineConnections              GroupLineConnection[]               @relation("GroupLineConnectionUser")
   lineRichMenuAudits                LineRichMenuAudit[]                 @relation("LineRichMenuAuditActor")
   aiProviderConfigurationAudits     AiProviderConfigurationAudit[]      @relation("AiProviderConfigurationAuditActor")
   adminEmailConfigurationAudits     AdminEmailConfigurationAudit[]      @relation("AdminEmailConfigurationAuditActor")
@@ -914,6 +915,8 @@ model Workspace {
   groupLineRoutingPolicies     GroupLineRoutingPolicy[]
   groupLineConfigurations      GroupLineChannelConfiguration[]
   groupLineConfigurationAudits GroupLineConfigurationAudit[]
+  groupLineConnections         GroupLineConnection[]
+  groupLineWebhookEvents       GroupLineWebhookEvent[]
   missionDeepLinkStates        MissionDeepLinkState[]
   trendResearchRuns            TrendResearchRun[]
   trendEvidence                TrendEvidence[]
@@ -991,6 +994,8 @@ model Group {
   lineRoutingPolicies        GroupLineRoutingPolicy[]
   lineChannelConfigurations  GroupLineChannelConfiguration[]
   lineConfigurationAudits    GroupLineConfigurationAudit[]
+  lineConnections            GroupLineConnection[]
+  lineWebhookEvents          GroupLineWebhookEvent[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -1021,6 +1026,7 @@ model GroupMembership {
   featureUsageEvents         GroupFeatureUsageEvent[]
   videoProjects              VideoProject[]
   videoAssets                VideoAsset[]
+  lineConnections            GroupLineConnection[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -2199,8 +2205,11 @@ model GroupLineChannelConfiguration {
   group                    Group                         @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
   createdBy                User                          @relation("GroupLineConfigurationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   audits                   GroupLineConfigurationAudit[]
+  connections              GroupLineConnection[]
+  webhookEvents            GroupLineWebhookEvent[]
 
   @@unique([workspaceId, groupId, environment, version])
+  @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, environment, status])
   @@index([createdByUserId, createdAt])
   @@map("group_line_channel_configurations")
@@ -2227,6 +2236,55 @@ model GroupLineConfigurationAudit {
   @@index([configurationId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("group_line_configuration_audits")
+}
+
+model GroupLineConnection {
+  id                    String                        @id @default(uuid()) @db.Uuid
+  workspaceId           String                        @map("workspace_id") @db.Uuid
+  groupId               String                        @map("group_id") @db.Uuid
+  groupMembershipId     String                        @map("group_membership_id") @db.Uuid
+  userId                String                        @map("user_id") @db.Uuid
+  configurationId       String                        @map("configuration_id") @db.Uuid
+  providerUserId        String                        @map("provider_user_id") @db.VarChar(255)
+  status                LineConnectionStatus          @default(ACTIVE)
+  friendshipStatus      LineFriendshipStatus          @default(UNKNOWN) @map("friendship_status")
+  notificationConsentAt DateTime?                     @map("notification_consent_at") @db.Timestamptz(6)
+  followedAt            DateTime?                     @map("followed_at") @db.Timestamptz(6)
+  unfollowedAt          DateTime?                     @map("unfollowed_at") @db.Timestamptz(6)
+  lastWebhookAt         DateTime?                     @map("last_webhook_at") @db.Timestamptz(6)
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group                 Group                         @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  groupMembership       GroupMembership               @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  user                  User                          @relation("GroupLineConnectionUser", fields: [userId], references: [id], onDelete: Restrict)
+  configuration         GroupLineChannelConfiguration @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Restrict)
+
+  @@unique([configurationId, userId])
+  @@unique([configurationId, providerUserId])
+  @@index([workspaceId, groupId, userId, status])
+  @@index([configurationId, providerUserId, status, friendshipStatus])
+  @@map("group_line_connections")
+}
+
+model GroupLineWebhookEvent {
+  id              String                        @id @default(uuid()) @db.Uuid
+  workspaceId     String                        @map("workspace_id") @db.Uuid
+  groupId         String                        @map("group_id") @db.Uuid
+  configurationId String                        @map("configuration_id") @db.Uuid
+  providerEventId String                        @map("provider_event_id") @db.VarChar(255)
+  type            LineWebhookEventType
+  outcome         LineWebhookEventOutcome
+  occurredAt      DateTime                      @map("occurred_at") @db.Timestamptz(6)
+  processedAt     DateTime                      @default(now()) @map("processed_at") @db.Timestamptz(6)
+  workspace       Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group           Group                         @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  configuration   GroupLineChannelConfiguration @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Restrict)
+
+  @@unique([configurationId, providerEventId])
+  @@index([workspaceId, groupId, processedAt])
+  @@index([configurationId, processedAt])
+  @@map("group_line_webhook_events")
 }
 
 model LineRichMenu {
@@ -3326,6 +3384,7 @@ model LineMessageDelivery {
   id                String                       @id @default(uuid()) @db.Uuid
   environment       LineConfigurationEnvironment
   workspaceId       String                       @map("workspace_id") @db.Uuid
+  groupId           String?                      @map("group_id") @db.Uuid
   bunshinId         String                       @map("bunshin_id") @db.Uuid
   userId            String                       @map("user_id") @db.Uuid
   dailyMissionId    String                       @map("daily_mission_id") @db.Uuid
@@ -3353,6 +3412,7 @@ model LineMessageDelivery {
   @@index([environment, status, scheduledAt])
   @@index([environment, status, leaseExpiresAt])
   @@index([workspaceId, bunshinId, createdAt])
+  @@index([workspaceId, groupId, environment, status])
   @@map("line_message_deliveries")
 }
 

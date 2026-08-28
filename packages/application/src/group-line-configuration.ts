@@ -86,6 +86,15 @@ export interface GroupLineConfigurationRepository {
     environment: LineConfigurationEnvironment;
     reason: string;
   }): Promise<GroupLineChannelConfiguration | null>;
+  setPolicy(input: {
+    actorUserId: string;
+    workspaceId: string;
+    groupId: string;
+    environment: LineConfigurationEnvironment;
+    mode: GroupLineMode;
+    pilotEnabled: boolean;
+    reason: string;
+  }): Promise<{ mode: GroupLineMode; pilotEnabled: boolean } | null>;
 }
 
 export class ListGroupLineConfigurations {
@@ -196,6 +205,20 @@ export class ActivateGroupLineConfiguration {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
     const value = await this.repository.activate({ ...input, reason });
     if (!value) throw new ApplicationError('NOT_FOUND', 'configuration not found');
+    return value;
+  }
+}
+
+export class SetGroupLineRoutingPolicy {
+  constructor(private readonly repository: GroupLineConfigurationRepository) {}
+  async execute(input: Parameters<GroupLineConfigurationRepository['setPolicy']>[0]) {
+    const reason = input.reason.trim();
+    if (reason.length < 3 || reason.length > 500)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+    if ((input.mode === 'DEDICATED') !== input.pilotEnabled)
+      throw new ApplicationError('VALIDATION_ERROR', 'dedicated mode requires pilot permission');
+    const value = await this.repository.setPolicy({ ...input, reason });
+    if (!value) throw new ApplicationError('FORBIDDEN', 'super admin required');
     return value;
   }
 }

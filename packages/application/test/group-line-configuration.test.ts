@@ -39,20 +39,19 @@ const repository = (
   getForTest: vi.fn(),
   recordTest: vi.fn(),
   activate: vi.fn().mockResolvedValue({ ...configuration, status: 'ACTIVE' }),
+  setPolicy: vi.fn().mockResolvedValue({ mode: 'DEDICATED', pilotEnabled: true }),
   ...overrides,
 });
 const crypto: LineSecretCryptoPort = {
-  encryptSecrets: vi
-    .fn()
-    .mockReturnValue({
-      loginSecret: 'encrypted-login',
-      messagingSecret: 'encrypted-message',
-      accessToken: 'encrypted-token',
-      loginSecretMask: '••••1234',
-      messagingSecretMask: '••••5678',
-      accessTokenMask: '••••9012',
-      keyVersion: 1,
-    }),
+  encryptSecrets: vi.fn().mockReturnValue({
+    loginSecret: 'encrypted-login',
+    messagingSecret: 'encrypted-message',
+    accessToken: 'encrypted-token',
+    loginSecretMask: '••••1234',
+    messagingSecretMask: '••••5678',
+    accessTokenMask: '••••9012',
+    keyVersion: 1,
+  }),
   decrypt: vi.fn((value: string) => `plain:${value}`),
 };
 
@@ -73,7 +72,9 @@ describe('group dedicated LINE configuration', () => {
       quotaWarningPercent: 80,
       quotaLowPriorityStop: 90,
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(crypto.encryptSecrets).toHaveBeenCalledOnce();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(repo.createVersion).toHaveBeenCalledWith(
       expect.objectContaining({
         secrets: expect.objectContaining({ accessToken: 'encrypted-token' }),
@@ -84,14 +85,12 @@ describe('group dedicated LINE configuration', () => {
   it('records a safe provider failure without throwing secret values', async () => {
     const recordTest = vi.fn();
     const repo = repository({
-      getForTest: vi
-        .fn()
-        .mockResolvedValue({
-          configuration,
-          loginSecret: 'encrypted-login',
-          messagingSecret: 'encrypted-message',
-          accessToken: 'encrypted-token',
-        }),
+      getForTest: vi.fn().mockResolvedValue({
+        configuration,
+        loginSecret: 'encrypted-login',
+        messagingSecret: 'encrypted-message',
+        accessToken: 'encrypted-token',
+      }),
       recordTest,
     });
     const result = await new TestGroupLineConfigurationConnection(repo, crypto, {
@@ -126,6 +125,7 @@ describe('group dedicated LINE configuration', () => {
         reason: 'x',
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(repo.activate).not.toHaveBeenCalled();
   });
 });

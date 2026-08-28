@@ -2342,3 +2342,4 @@ export * from './video-disclosure-policy';
 export * from './social-image-generation-core';
 export * from './social-image-templates';
 export * from './group-line-configuration';
+export * from './group-line-webhook';

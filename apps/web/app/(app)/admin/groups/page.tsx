@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { GroupAdminEditor } from './group-admin-editor';
 
@@ -83,7 +84,8 @@ export default async function GroupAdminPage({
                 <Link href={`/admin/groups/${group.id}/features`}>
                   このグループで使える機能を設定
                 </Link>{' '}
-                ／ <Link href={`/groups/${group.id}/members`}>参加者と管理者を設定</Link>
+                ／ <Link href={`/admin/groups/${group.id}/line` as Route}>専用LINEを設定</Link> ／{' '}
+                <Link href={`/groups/${group.id}/members`}>参加者と管理者を設定</Link>
               </li>
             ))}
           </ul>

@@ -110,7 +110,11 @@ export class SendVideoCompletionNotification {
         errorCode,
         attemptedAt: this.now(),
       });
-    const configuration = await this.configuration.getActive(input.environment);
+    const configuration = await this.configuration.getActive(input.environment, {
+      workspaceId: input.context.workspaceId,
+      groupId: input.context.groupId,
+      userId: input.context.ownerUserId,
+    });
     if (!configuration || configuration.environment !== input.environment) {
       await record('FAILED', 'CONFIGURATION_UNAVAILABLE');
       return { sent: false, retryable: true, errorCode: 'CONFIGURATION_UNAVAILABLE' };
@@ -133,6 +137,7 @@ export class SendVideoCompletionNotification {
     const recipientId = await this.recipient.resolve({
       environment: input.environment,
       workspaceId: input.context.workspaceId,
+      groupId: input.context.groupId,
       bunshinId: input.context.bunshinId,
       userId: input.context.ownerUserId,
     });
