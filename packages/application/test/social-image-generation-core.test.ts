@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CreateSocialImageGenerationRequest,
+  DecideSocialImageMedia,
   GetSocialImageGenerationRequest,
   SOCIAL_IMAGE_GENERATION_FEATURE_KEY,
   TransitionSocialImageGenerationRequest,
@@ -62,6 +63,7 @@ const repository = (
   create: vi.fn().mockResolvedValue(record()),
   findOwned: vi.fn().mockResolvedValue(record()),
   findMediaOwned: vi.fn().mockResolvedValue(null),
+  setMediaStatus: vi.fn().mockResolvedValue(null),
   transition: vi.fn().mockResolvedValue({ ...record('QUEUED'), revision: 2 }),
   ...overrides,
 });
@@ -191,5 +193,39 @@ describe('Social image generation core', () => {
         errorCode: null,
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('records an owned image decision only after the image is ready', async () => {
+    const media = {
+      id: '99999999-9999-4999-8999-999999999999',
+      workspaceId: ids.workspaceId,
+      groupId: ids.groupId,
+      ownerUserId: ids.actorUserId,
+      dailyMissionId: ids.dailyMissionId,
+      requestId: ids.requestId,
+      status: 'ADOPTED' as const,
+      sourceStorageKey: null,
+      completedStorageKey: 'completed.png',
+      thumbnailStorageKey: 'thumbnail.png',
+      width: 1080 as const,
+      height: 1350 as const,
+      contentHash: 'a'.repeat(64),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const requests = repository({
+      findOwned: vi.fn().mockResolvedValue(record('READY_FOR_REVIEW')),
+      setMediaStatus: vi.fn().mockResolvedValue(media),
+    });
+    await expect(
+      new DecideSocialImageMedia(requests).execute({
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        actorUserId: ids.actorUserId,
+        requestId: ids.requestId,
+        mediaId: media.id,
+        decision: 'ADOPTED',
+      }),
+    ).resolves.toMatchObject({ status: 'ADOPTED' });
   });
 });

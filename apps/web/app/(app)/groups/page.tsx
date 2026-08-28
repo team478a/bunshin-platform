@@ -27,8 +27,11 @@ export default async function GroupsPage({
       id: true,
       role: true,
       featureAssignments: {
-        where: { featureKey: 'VIDEO_GENERATION', status: 'ENABLED' },
-        select: { startsAt: true, endsAt: true },
+        where: {
+          featureKey: { in: ['VIDEO_GENERATION', 'SOCIAL.IMAGE_GENERATION'] },
+          status: 'ENABLED',
+        },
+        select: { featureKey: true, startsAt: true, endsAt: true },
       },
       group: {
         select: {
@@ -36,8 +39,11 @@ export default async function GroupsPage({
           name: true,
           workspace: { select: { name: true } },
           featurePolicies: {
-            where: { featureKey: 'VIDEO_GENERATION', status: 'ENABLED' },
-            select: { startsAt: true, endsAt: true },
+            where: {
+              featureKey: { in: ['VIDEO_GENERATION', 'SOCIAL.IMAGE_GENERATION'] },
+              status: 'ENABLED',
+            },
+            select: { featureKey: true, startsAt: true, endsAt: true },
           },
           _count: { select: { memberships: { where: { status: 'ACTIVE' } } } },
         },
@@ -83,8 +89,19 @@ export default async function GroupsPage({
         const active = (value: { startsAt: Date | null; endsAt: Date | null }) =>
           (!value.startsAt || value.startsAt <= now) && (!value.endsAt || value.endsAt > now);
         const videoAvailable =
-          membership.group.featurePolicies.some(active) &&
-          membership.featureAssignments.some(active);
+          membership.group.featurePolicies.some(
+            (item) => item.featureKey === 'VIDEO_GENERATION' && active(item),
+          ) &&
+          membership.featureAssignments.some(
+            (item) => item.featureKey === 'VIDEO_GENERATION' && active(item),
+          );
+        const imageAvailable =
+          membership.group.featurePolicies.some(
+            (item) => item.featureKey === 'SOCIAL.IMAGE_GENERATION' && active(item),
+          ) &&
+          membership.featureAssignments.some(
+            (item) => item.featureKey === 'SOCIAL.IMAGE_GENERATION' && active(item),
+          );
         return (
           <section className="settings-card" key={membership.id}>
             <h2>{membership.group.name}</h2>
@@ -105,6 +122,11 @@ export default async function GroupsPage({
                   動画に使う素材を管理
                 </Link>
               </>
+            ) : null}
+            {imageAvailable ? (
+              <Link className="button" href={`/groups/${membership.group.id}/images`}>
+                投稿に使う画像を作る
+              </Link>
             ) : null}
             {membership.role === 'MANAGER' ? (
               <Link className="button" href={`/groups/${membership.group.id}/members`}>

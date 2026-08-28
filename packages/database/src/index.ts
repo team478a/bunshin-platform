@@ -12011,6 +12011,60 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
     });
     return media ? { ...media, width: 1080 as const, height: 1350 as const } : null;
   }
+
+  async setMediaStatus(
+    input: Parameters<SocialImageGenerationRequestRepository['setMediaStatus']>[0],
+  ) {
+    return this.client.$transaction(async (tx) => {
+      const request = await tx.socialImageGenerationRequest.findFirst({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          status: 'READY_FOR_REVIEW',
+        },
+      });
+      if (!request) return null;
+      if (
+        !(await this.activeScope(tx, {
+          workspaceId: request.workspaceId,
+          groupId: request.groupId,
+          groupMembershipId: request.groupMembershipId,
+          actorUserId: request.ownerUserId,
+          pilotEnrollmentId: request.pilotEnrollmentId,
+        }))
+      )
+        return null;
+      const target = await tx.socialImageGeneratedMedia.findFirst({
+        where: {
+          id: input.mediaId,
+          requestId: request.id,
+          workspaceId: request.workspaceId,
+          groupId: request.groupId,
+          ownerUserId: request.ownerUserId,
+          status: { in: ['READY', 'ADOPTED'] },
+        },
+      });
+      if (!target) return null;
+      if (input.status === 'ADOPTED') {
+        await tx.socialImageGeneratedMedia.updateMany({
+          where: {
+            workspaceId: request.workspaceId,
+            dailyMissionId: request.dailyMissionId,
+            status: 'ADOPTED',
+            id: { not: target.id },
+          },
+          data: { status: 'READY' },
+        });
+      }
+      const media = await tx.socialImageGeneratedMedia.update({
+        where: { id: target.id },
+        data: { status: input.status },
+      });
+      return { ...media, width: 1080 as const, height: 1350 as const };
+    });
+  }
 }
 
 export class PrismaSocialImageGenerationAuthorizationRepository implements SocialImageGenerationAuthorizationPort {

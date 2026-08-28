@@ -4,6 +4,8 @@ const fakes = vi.hoisted(() => ({
   authorize: vi.fn(),
   create: vi.fn(),
   transition: vi.fn(),
+  findOwned: vi.fn(),
+  setMediaStatus: vi.fn(),
   enqueue: vi.fn(),
 }));
 
@@ -26,13 +28,15 @@ vi.mock('@bunshin/database', () => ({
   PrismaSocialImageGenerationRequestRepository: class {
     create = fakes.create;
     transition = fakes.transition;
+    findOwned = fakes.findOwned;
+    setMediaStatus = fakes.setMediaStatus;
   },
   PrismaJobRepository: class {
     enqueue = fakes.enqueue;
   },
 }));
 
-import { createSocialImageResponse } from '../src/http/social-images';
+import { createSocialImageResponse, decideSocialImageResponse } from '../src/http/social-images';
 
 const ids = {
   workspaceId: '00000000-0000-4000-8000-000000000001',
@@ -90,6 +94,7 @@ beforeEach(() => {
   fakes.create.mockResolvedValue(row('DRAFT', 1));
   fakes.transition.mockResolvedValue(row('QUEUED', 2));
   fakes.enqueue.mockResolvedValue({ id: 'job-1' });
+  fakes.findOwned.mockResolvedValue(row('QUEUED', 2));
 });
 
 describe('social image HTTP', () => {
@@ -120,5 +125,28 @@ describe('social image HTTP', () => {
         idempotencyKey: `social-image:${ids.requestId}`,
       }),
     );
+  });
+
+  it('records an image adoption without returning storage keys', async () => {
+    fakes.findOwned.mockResolvedValue({ ...row('QUEUED', 2), status: 'READY_FOR_REVIEW' });
+    fakes.setMediaStatus.mockResolvedValue({
+      id: '00000000-0000-4000-8000-000000000009',
+      status: 'ADOPTED',
+    });
+    const response = await decideSocialImageResponse(
+      new Request('https://example.com/api/images/request', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mediaId: '00000000-0000-4000-8000-000000000009',
+          decision: 'ADOPTED',
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.requestId,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { status: 'ADOPTED' } });
   });
 });
