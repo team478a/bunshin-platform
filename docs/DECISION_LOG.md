@@ -1518,6 +1518,13 @@
 ## 2026-08-29: ポイント行動連携は既存VIEWEDとPostRecordを非同期処理する
 
 - Source: 企画確認は`MissionActivity.VIEWED`、投稿完了と週3回達成は`PostRecord`を正本とし、ポイント専用の行動記録を作らない。
+- Initial Rules: 企画初回確認1WP／日、投稿完了5WP／日、週3回達成10WP／週だけを固定Version 1で開始する。ログイン付与は追加しない。
+- Idempotency: 元イベントは`workspaceId + eventType + sourceEventId`、付与は`ruleId + day/week`で重複を防ぐ。
+- Time: 日・週境界は明示Timezone（初期`Asia/Tokyo`）で算出し、付与期限は行動から180日後が属する月末とする。
+- Isolation: ACTIVE User／Workspace Membershipを再確認し、Campaign由来のGroup帰属を同じWorkspace内で解決する。
+- Retry: 完了イベントは再処理せず、失敗イベントは安全な分類だけを記録して次Batchで再試行可能にする。本文や秘密情報を失敗記録へ残さない。
+- Scope: API/UI、交換、失効Job、Rule管理画面は含めない。
+- Source: `docs/POINT_ACTIVITY_PROCESSOR_REPORT.md`
 
 ## 2026-08-29: 利用者向けポイント画面は本人スコープのRead Modelとして提供する
 
@@ -1544,10 +1551,20 @@
 - Expiry: `RESERVED`のまま15分を超えた交換は、5分間隔の内部処理で上限100件ずつ解放する。
 - UX: 画像作成画面に必要ポイントと現在残高を表示し、残高不足またはポイント取得失敗時は作成ボタンを無効化する。既存の企画閲覧等は停止しない。
 - Split: 追加企画生成は生成境界を個別に確認してP-4Cで接続する。
-- Initial Rules: 企画初回確認1WP／日、投稿完了5WP／日、週3回達成10WP／週だけを固定Version 1で開始する。ログイン付与は追加しない。
-- Idempotency: 元イベントは`workspaceId + eventType + sourceEventId`、付与は`ruleId + day/week`で重複を防ぐ。
-- Time: 日・週境界は明示Timezone（初期`Asia/Tokyo`）で算出し、付与期限は行動から180日後が属する月末とする。
-- Isolation: ACTIVE User／Workspace Membershipを再確認し、Campaign由来のGroup帰属を同じWorkspace内で解決する。
-- Retry: 完了イベントは再処理せず、失敗イベントは安全な分類だけを記録して次Batchで再試行可能にする。本文や秘密情報を失敗記録へ残さない。
-- Scope: API/UI、交換、失効Job、Rule管理画面は含めない。
-- Source: `docs/POINT_ACTIVITY_PROCESSOR_REPORT.md`
+
+## 2026-08-29: バッジはUser単位の達成台帳としてPointと分離する
+
+- Purpose: バッジは開始、継続、挑戦、企業認定の証明と次の行動案内に使い、他Userとの順位やAIによる投稿品質評価には使わない。
+- Owner: Awardの所有者はUserとし、Bunshinは任意の根拠参照にする。仕様上のtenantは既存Workspaceへ、企業内単位はGroupへ対応させ、新しいtenant境界を作らない。
+- Migration: 既存`AchievementBadge`は簡易互換データとして保持し、新しいDefinition／Version／Progress／Award Coreへ一度だけ移行する。新旧処理を同時に特典へ接続しない。
+- Catalog: 初期共通Badgeは10種類に限定し、説明可能な既存行動だけを根拠にする。任意コード、任意API Event、AI品質採点は認めない。
+- Reward: Badge AwardとPoint Transactionを別レコードにし、Reward Link／Outboxで非同期接続する。初期10種類は特典なしを推奨し、既存投稿Pointとの二重付与を避ける。
+- Visibility: 初期値はPRIVATEとし、初期MVPの実公開は本人選択のGROUPまでとする。PUBLICプロフィールは公開基盤と同意設計の後に追加する。
+- Resilience: Badge、通知、特典の失敗で企画確認、コピー、投稿完了を停止しない。二重獲得より遅延獲得を選ぶ。
+- Boundary: B-0は文書のみとする。推奨初期値は承認済みとし、B-0 PRのマージ後にB-1へ進む。
+
+## 2026-08-29: 追加企画交換P-4Cは生成Coreの承認まで保留する
+
+- Finding: 最新`main`に利用者向け別案生成処理がなく、通常Daily Missionの同日一意性、派生履歴、回数、Provider受付境界が未設計である。
+- Decision: Catalogの`ALTERNATIVE_PLAN_GENERATION`を利用者へ公開せず、Pointだけを先行消費しない。
+- Resume: 別案生成Core、元Missionとの追記型関係、日次上限、原価、失敗返却、URL再解決境界を承認後に再開する。
