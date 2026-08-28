@@ -132,6 +132,12 @@ export interface SocialImageGenerationRequestRepository {
     toStatus: SocialImageGenerationStatus;
     errorCode: string | null;
   }): Promise<SocialImageGenerationRequestRecord | null>;
+  findMediaOwned(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+  }): Promise<SocialImageGeneratedMediaRecord | null>;
 }
 
 export interface SocialImageAssetGenerationProviderPort {

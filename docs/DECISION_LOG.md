@@ -1433,3 +1433,11 @@
 - Failure: 一時的な利用制限とProvider障害だけを再試行し、認証・安全性拒否・設定・権限・上限・緊急停止は自動再試行しない。最終失敗時だけRequestを`FAILED`へ移す。
 - Completion: 元素材、文字合成済み画像、サムネイルをPrivate Storageへ保存し、DBのMedia作成と`READY_FOR_REVIEW`化が失敗した場合は保存objectを削除する。
 - Boundary: Requestを作成してJobへ積む利用者API、進行表示、採否、再生成、download、LINE導線はI5で実装する。
+
+## 2026-08-28: SNS画像生成APIは本人操作と内部Request IDだけを公開する
+
+- Start: 生成開始は同一Origin、認証済み本人、Production、Groupと参加者の明示許可、同意、Bunshin SOCIAL Capability、Mission形式、Campaign参加、Pilot期間、緊急停止、成功上限をサーバー側で再確認する。
+- Idempotency: 利用者の操作KeyでRequest作成を冪等化する。Requestが`DRAFT`なら`QUEUED`へ進め、Job登録に失敗しても同じ操作を再送すれば既存`QUEUED` Requestへ同じJobを冪等登録できる。
+- Status: 進捗APIは本人所有のRequestについて、安全な状態、管理済みLayout、版、一般化した失敗code、完成Mediaの有無だけを返す。Provider Prompt、APIキー、Storage key、署名URL、原価を返さない。
+- Download: 完成画像取得はWorkspace・Group・Owner・Request・Mediaを再確認した後、Private Storageの短期署名URLへ一時転送する。永続公開URLを作らない。
+- Boundary: 採否、再生成、スマートフォン画面、LINE導線はI5-Bへ分離する。
