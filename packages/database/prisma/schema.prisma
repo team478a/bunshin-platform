@@ -112,6 +112,25 @@ enum PointProcessingStatus {
   FAILED
 }
 
+enum PointCatalogStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  RETIRED
+}
+
+enum PointRewardType {
+  SOCIAL_IMAGE_GENERATION
+  ALTERNATIVE_PLAN_GENERATION
+}
+
+enum PointRedemptionStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
+  REFUNDED
+}
+
 enum ProductPackStatus {
   DRAFT
   ACTIVE
@@ -883,6 +902,7 @@ model User {
   pointAccounts                     PointAccount[]
   pointTransactions                 PointTransaction[]
   pointProcessingEvents             PointProcessingEvent[]
+  pointRedemptions                  PointRedemption[]
 
   @@index([status])
   @@map("users")
@@ -973,6 +993,7 @@ model Workspace {
   pointRuleVersions            PointRuleVersion[]
   pointTransactions            PointTransaction[]
   pointProcessingEvents        PointProcessingEvent[]
+  pointRedemptions             PointRedemption[]
 
   @@index([status])
   @@map("workspaces")
@@ -1395,6 +1416,7 @@ model PointAccount {
   workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   user            User               @relation(fields: [userId], references: [id], onDelete: Restrict)
   transactions    PointTransaction[]
+  redemptions     PointRedemption[]
 
   @@unique([workspaceId, userId])
   @@unique([workspaceId, id, userId])
@@ -1462,12 +1484,64 @@ model PointTransaction {
   ruleVersion    PointRuleVersion?      @relation(fields: [ruleVersionId], references: [id], onDelete: Restrict)
   consumptions   PointConsumptionLink[] @relation("ConsumedGrant")
   consumptionFor PointConsumptionLink[] @relation("ConsumptionTransaction")
+  redemption     PointRedemption?       @relation("RedemptionConsumption")
 
   @@unique([accountId, idempotencyKey])
   @@index([workspaceId, userId, createdAt])
   @@index([groupId, campaignId, createdAt])
   @@index([expiresAt])
   @@map("point_transactions")
+}
+
+model PointRewardCatalogItem {
+  id          String             @id @default(uuid()) @db.Uuid
+  rewardKey   String             @map("reward_key") @db.VarChar(100)
+  version     Int
+  rewardType  PointRewardType    @map("reward_type")
+  title       String             @db.VarChar(100)
+  description String             @db.VarChar(500)
+  pointCost   Int                @map("point_cost")
+  status      PointCatalogStatus @default(DRAFT)
+  startsAt    DateTime?          @map("starts_at") @db.Timestamptz(6)
+  endsAt      DateTime?          @map("ends_at") @db.Timestamptz(6)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  redemptions PointRedemption[]
+
+  @@unique([rewardKey, version])
+  @@index([status, startsAt, endsAt])
+  @@map("point_reward_catalog_items")
+}
+
+model PointRedemption {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  workspaceId              String                 @map("workspace_id") @db.Uuid
+  userId                   String                 @map("user_id") @db.Uuid
+  accountId                String                 @map("account_id") @db.Uuid
+  catalogItemId            String                 @map("catalog_item_id") @db.Uuid
+  consumptionTransactionId String                 @unique @map("consumption_transaction_id") @db.Uuid
+  status                   PointRedemptionStatus  @default(RESERVED)
+  pointCost                Int                    @map("point_cost")
+  idempotencyKey           String                 @map("idempotency_key") @db.VarChar(200)
+  resourceType             String?                @map("resource_type") @db.VarChar(100)
+  resourceId               String?                @map("resource_id") @db.VarChar(200)
+  reservedAt               DateTime               @default(now()) @map("reserved_at") @db.Timestamptz(6)
+  reservationExpiresAt     DateTime               @map("reservation_expires_at") @db.Timestamptz(6)
+  confirmedAt              DateTime?              @map("confirmed_at") @db.Timestamptz(6)
+  releasedAt               DateTime?              @map("released_at") @db.Timestamptz(6)
+  refundedAt               DateTime?              @map("refunded_at") @db.Timestamptz(6)
+  failureReason            String?                @map("failure_reason") @db.VarChar(500)
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user                     User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  account                  PointAccount           @relation(fields: [workspaceId, accountId, userId], references: [workspaceId, id, userId], onDelete: Restrict)
+  catalogItem              PointRewardCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  consumptionTransaction   PointTransaction       @relation("RedemptionConsumption", fields: [consumptionTransactionId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, idempotencyKey])
+  @@index([workspaceId, userId, status, createdAt])
+  @@index([status, reservationExpiresAt])
+  @@map("point_redemptions")
 }
 
 model PointConsumptionLink {

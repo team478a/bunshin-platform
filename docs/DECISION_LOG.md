@@ -1526,6 +1526,15 @@
 - Privacy: Group管理者や他User向けの横断取得をP-3へ含めず、Group／Campaignの内部情報を利用者向け履歴へ表示しない。
 - Resilience: ポイント取得失敗時は専用画面だけを縮退表示し、BUNSHIN、企画確認、コピー、投稿完了を停止しない。
 - UX: アカウント画面から開く日本語のモバイル画面とし、台帳用語や英語のRule Keyを表示しない。
+
+## 2026-08-29: ポイント交換は短期予約後に外部処理の受付結果で確定する
+
+- Catalog: 交換対象と必要WPは版管理された共通Catalog Itemを正とし、画像生成50 WP、追加企画生成30 WPの初期版を登録する。
+- Atomicity: 予約、残高減算、消費Transaction、消費元Linkを同じSerializable Transactionで保存し、ポイントだけが減る部分成功を残さない。
+- Lifecycle: `RESERVED`からProvider受付成功時は`CONFIRMED`、受付前の失敗は`RELEASED`、受付後の最終的な技術失敗は`REFUNDED`へ進める。
+- Return: 解放と返却は元の消費を参照する追記型`REFUND` Transactionで一度だけ戻し、残高や過去Transactionを上書きしない。
+- Isolation: Catalog以外の交換記録はverified sessionのWorkspace・User本人だけが操作でき、Group管理者向け横断取得を作らない。
+- Split: P-4AはCore Persistence、Repository、Use Caseまでとし、画像生成・追加企画生成への実接続と期限切れ予約JobはP-4Bへ分離する。
 - Initial Rules: 企画初回確認1WP／日、投稿完了5WP／日、週3回達成10WP／週だけを固定Version 1で開始する。ログイン付与は追加しない。
 - Idempotency: 元イベントは`workspaceId + eventType + sourceEventId`、付与は`ruleId + day/week`で重複を防ぐ。
 - Time: 日・週境界は明示Timezone（初期`Asia/Tokyo`）で算出し、付与期限は行動から180日後が属する月末とする。

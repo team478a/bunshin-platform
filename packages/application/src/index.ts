@@ -2345,3 +2345,4 @@ export * from './group-line-configuration';
 export * from './group-line-webhook';
 export * from './point-core';
 export * from './point-activity-processor';
+export * from './point-redemption';

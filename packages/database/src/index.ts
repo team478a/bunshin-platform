@@ -137,6 +137,9 @@ import type {
   PointActivityCandidate,
   PointActivityProcessorRepository,
   PointActivityProcessResult,
+  PointRedemptionRepository,
+  PointRedemptionRecord,
+  PointRewardCatalogItemRecord,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -13598,6 +13601,246 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
           account: pointAccountRecord(account),
           transaction: pointTransactionRecord(transaction),
         };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+}
+
+const pointCatalogItemRecord = (
+  row: Prisma.PointRewardCatalogItemGetPayload<object>,
+): PointRewardCatalogItemRecord => ({
+  id: row.id,
+  rewardKey: row.rewardKey,
+  version: row.version,
+  rewardType: row.rewardType,
+  title: row.title,
+  description: row.description,
+  pointCost: row.pointCost,
+});
+
+const pointRedemptionRecord = (
+  row: Prisma.PointRedemptionGetPayload<object>,
+): PointRedemptionRecord => ({
+  id: row.id,
+  workspaceId: row.workspaceId,
+  userId: row.userId,
+  accountId: row.accountId,
+  catalogItemId: row.catalogItemId,
+  consumptionTransactionId: row.consumptionTransactionId,
+  status: row.status,
+  pointCost: row.pointCost,
+  idempotencyKey: row.idempotencyKey,
+  resourceType: row.resourceType,
+  resourceId: row.resourceId,
+  reservedAt: row.reservedAt,
+  reservationExpiresAt: row.reservationExpiresAt,
+  confirmedAt: row.confirmedAt,
+  releasedAt: row.releasedAt,
+  refundedAt: row.refundedAt,
+  failureReason: row.failureReason,
+});
+
+export class PrismaPointRedemptionRepository implements PointRedemptionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async activeMember(workspaceId: string, userId: string) {
+    return this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId,
+        userId,
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE' },
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  async listCatalog(input: Parameters<PointRedemptionRepository['listCatalog']>[0]) {
+    if (!(await this.activeMember(input.workspaceId, input.actorUserId))) return null;
+    const rows = await this.client.pointRewardCatalogItem.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [{ startsAt: null }, { startsAt: { lte: input.now } }],
+        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] }],
+      },
+      orderBy: [{ rewardKey: 'asc' }, { version: 'desc' }],
+    });
+    const unique = new Map<string, (typeof rows)[number]>();
+    rows.forEach((row) => {
+      if (!unique.has(row.rewardKey)) unique.set(row.rewardKey, row);
+    });
+    return [...unique.values()].map(pointCatalogItemRecord);
+  }
+
+  async reserve(input: Parameters<PointRedemptionRepository['reserve']>[0]) {
+    return this.client.$transaction(
+      async (tx) => {
+        const member = await tx.workspaceMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            workspace: { status: 'ACTIVE' },
+            user: { status: 'ACTIVE' },
+          },
+          select: { id: true },
+        });
+        if (!member) return null;
+        const account = await tx.pointAccount.findUnique({
+          where: {
+            workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId },
+          },
+        });
+        if (!account) return null;
+        const existing = await tx.pointRedemption.findUnique({
+          where: {
+            accountId_idempotencyKey: {
+              accountId: account.id,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+        });
+        if (existing) {
+          if (
+            existing.catalogItemId !== input.catalogItemId ||
+            existing.resourceType !== input.resourceType ||
+            existing.resourceId !== input.resourceId
+          )
+            throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
+          return pointRedemptionRecord(existing);
+        }
+        const item = await tx.pointRewardCatalogItem.findFirst({
+          where: {
+            id: input.catalogItemId,
+            status: 'ACTIVE',
+            OR: [{ startsAt: null }, { startsAt: { lte: input.now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] }],
+          },
+        });
+        if (!item) return null;
+        const changed = await tx.pointAccount.updateMany({
+          where: { id: account.id, availablePoints: { gte: item.pointCost }, recoveryDue: 0 },
+          data: { availablePoints: { decrement: item.pointCost }, revision: { increment: 1 } },
+        });
+        if (changed.count !== 1) return null;
+        const consumption = await tx.pointTransaction.create({
+          data: {
+            accountId: account.id,
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            type: 'CONSUME',
+            amount: -item.pointCost,
+            idempotencyKey: `redemption:${input.idempotencyKey}`,
+            sourceType: 'POINT_REDEMPTION',
+            sourceId: null,
+          },
+        });
+        const grants = await tx.pointTransaction.findMany({
+          where: {
+            accountId: account.id,
+            type: { in: ['GRANT', 'REFUND'] },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
+          },
+          include: { consumptions: true },
+        });
+        grants.sort((left, right) => {
+          if (left.expiresAt === null) return right.expiresAt === null ? 0 : 1;
+          if (right.expiresAt === null) return -1;
+          return left.expiresAt.getTime() - right.expiresAt.getTime();
+        });
+        let remaining = item.pointCost;
+        for (const grant of grants) {
+          const used = grant.consumptions.reduce((sum, link) => sum + link.amount, 0);
+          const amount = Math.min(remaining, Math.max(0, grant.amount - used));
+          if (amount === 0) continue;
+          await tx.pointConsumptionLink.create({
+            data: {
+              consumptionTransactionId: consumption.id,
+              grantTransactionId: grant.id,
+              amount,
+            },
+          });
+          remaining -= amount;
+          if (remaining === 0) break;
+        }
+        if (remaining !== 0)
+          throw new ApplicationError('CONFLICT', 'point ledger balance mismatch');
+        const redemption = await tx.pointRedemption.create({
+          data: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            accountId: account.id,
+            catalogItemId: item.id,
+            consumptionTransactionId: consumption.id,
+            pointCost: item.pointCost,
+            idempotencyKey: input.idempotencyKey,
+            resourceType: input.resourceType,
+            resourceId: input.resourceId,
+            reservedAt: input.now,
+            reservationExpiresAt: input.reservationExpiresAt,
+          },
+        });
+        await tx.pointTransaction.update({
+          where: { id: consumption.id },
+          data: { sourceId: redemption.id },
+        });
+        return pointRedemptionRecord(redemption);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async transition(input: Parameters<PointRedemptionRepository['transition']>[0]) {
+    return this.client.$transaction(
+      async (tx) => {
+        const redemption = await tx.pointRedemption.findFirst({
+          where: {
+            id: input.redemptionId,
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            workspace: { memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } } },
+          },
+        });
+        if (!redemption) return null;
+        if (redemption.status === input.targetStatus) return pointRedemptionRecord(redemption);
+        const expected = input.targetStatus === 'REFUNDED' ? 'CONFIRMED' : 'RESERVED';
+        if (redemption.status !== expected) return null;
+        if (input.targetStatus === 'CONFIRMED' && redemption.reservationExpiresAt <= input.now)
+          return null;
+        if (input.targetStatus !== 'CONFIRMED') {
+          const refundKey = `redemption:${redemption.id}:${input.targetStatus}`;
+          await tx.pointTransaction.create({
+            data: {
+              accountId: redemption.accountId,
+              workspaceId: redemption.workspaceId,
+              userId: redemption.userId,
+              type: 'REFUND',
+              amount: redemption.pointCost,
+              idempotencyKey: refundKey,
+              sourceType: 'POINT_REDEMPTION_REFUND',
+              sourceId: redemption.consumptionTransactionId,
+            },
+          });
+          await tx.pointAccount.update({
+            where: { id: redemption.accountId },
+            data: {
+              availablePoints: { increment: redemption.pointCost },
+              revision: { increment: 1 },
+            },
+          });
+        }
+        const updated = await tx.pointRedemption.update({
+          where: { id: redemption.id },
+          data:
+            input.targetStatus === 'CONFIRMED'
+              ? { status: 'CONFIRMED', confirmedAt: input.now }
+              : input.targetStatus === 'RELEASED'
+                ? { status: 'RELEASED', releasedAt: input.now, failureReason: input.reason }
+                : { status: 'REFUNDED', refundedAt: input.now, failureReason: input.reason },
+        });
+        return pointRedemptionRecord(updated);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
