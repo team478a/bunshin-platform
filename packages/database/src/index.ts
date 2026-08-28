@@ -130,6 +130,9 @@ import type {
   SocialImageGenerationAuthorizationPort,
   SocialImageGenerationExecutionContext,
   SocialImageGenerationExecutionRepository,
+  PointLedgerRepository,
+  PointAccountSnapshot,
+  PointTransactionRecord,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -13129,5 +13132,349 @@ export class PrismaVideoAssetRepository implements VideoAssetRepository {
       orderBy: { createdAt: 'desc' },
     });
     return rows.map(videoAssetRecord);
+  }
+}
+
+const pointAccountRecord = (row: Prisma.PointAccountGetPayload<object>): PointAccountSnapshot => ({
+  id: row.id,
+  workspaceId: row.workspaceId,
+  userId: row.userId,
+  availablePoints: row.availablePoints,
+  recoveryDue: row.recoveryDue,
+  updatedAt: row.updatedAt,
+});
+
+const pointTransactionRecord = (
+  row: Prisma.PointTransactionGetPayload<object>,
+): PointTransactionRecord => ({
+  id: row.id,
+  accountId: row.accountId,
+  workspaceId: row.workspaceId,
+  userId: row.userId,
+  groupId: row.groupId,
+  campaignId: row.campaignId,
+  type: row.type,
+  amount: row.amount,
+  idempotencyKey: row.idempotencyKey,
+  sourceType: row.sourceType,
+  sourceId: row.sourceId,
+  ruleVersionId: row.ruleVersionId,
+  expiresAt: row.expiresAt,
+  createdAt: row.createdAt,
+});
+
+export class PrismaPointLedgerRepository implements PointLedgerRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async activeMember(tx: Prisma.TransactionClient, workspaceId: string, userId: string) {
+    return tx.workspaceMembership.findFirst({
+      where: {
+        workspaceId,
+        userId,
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE' },
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+  }
+
+  private async validAttribution(
+    tx: Prisma.TransactionClient,
+    input: { workspaceId: string; groupId: string | null; campaignId: string | null },
+  ) {
+    if (input.campaignId && !input.groupId) return false;
+    if (input.groupId) {
+      const group = await tx.group.findFirst({
+        where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!group) return false;
+    }
+    if (input.campaignId) {
+      const campaign = await tx.campaign.findFirst({
+        where: {
+          id: input.campaignId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId!,
+        },
+        select: { id: true },
+      });
+      if (!campaign) return false;
+    }
+    return true;
+  }
+
+  async getAccount(input: { workspaceId: string; actorUserId: string }) {
+    const row = await this.client.pointAccount.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        workspace: { status: 'ACTIVE' },
+        user: { status: 'ACTIVE' },
+        AND: {
+          workspace: {
+            memberships: {
+              some: { userId: input.actorUserId, status: 'ACTIVE' },
+            },
+          },
+        },
+      },
+    });
+    return row ? pointAccountRecord(row) : null;
+  }
+
+  async grant(input: Parameters<PointLedgerRepository['grant']>[0]) {
+    try {
+      return await this.client.$transaction(
+        async (tx) => {
+          if (!(await this.activeMember(tx, input.workspaceId, input.actorUserId))) return null;
+          if (!(await this.validAttribution(tx, input))) return null;
+          if (input.ruleVersionId) {
+            const rule = await tx.pointRuleVersion.findFirst({
+              where: {
+                id: input.ruleVersionId,
+                status: 'ACTIVE',
+                OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }],
+              },
+              select: { id: true },
+            });
+            if (!rule) return null;
+          }
+          const account = await tx.pointAccount.upsert({
+            where: {
+              workspaceId_userId: {
+                workspaceId: input.workspaceId,
+                userId: input.actorUserId,
+              },
+            },
+            create: { workspaceId: input.workspaceId, userId: input.actorUserId },
+            update: {},
+          });
+          const existing = await tx.pointTransaction.findUnique({
+            where: {
+              accountId_idempotencyKey: {
+                accountId: account.id,
+                idempotencyKey: input.idempotencyKey,
+              },
+            },
+          });
+          if (existing && (existing.type !== 'GRANT' || existing.amount !== input.amount))
+            throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
+          if (existing)
+            return {
+              account: pointAccountRecord(account),
+              transaction: pointTransactionRecord(existing),
+            };
+          const transaction = await tx.pointTransaction.create({
+            data: {
+              accountId: account.id,
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId,
+              groupId: input.groupId,
+              campaignId: input.campaignId,
+              ruleVersionId: input.ruleVersionId,
+              type: 'GRANT',
+              amount: input.amount,
+              idempotencyKey: input.idempotencyKey,
+              sourceType: input.sourceType,
+              sourceId: input.sourceId,
+              expiresAt: input.expiresAt,
+            },
+          });
+          const updated = await tx.pointAccount.update({
+            where: { id: account.id },
+            data: { availablePoints: { increment: input.amount }, revision: { increment: 1 } },
+          });
+          return {
+            account: pointAccountRecord(updated),
+            transaction: pointTransactionRecord(transaction),
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
+      const account = await this.client.pointAccount.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId },
+        },
+      });
+      if (!account) throw error;
+      const transaction = await this.client.pointTransaction.findUnique({
+        where: {
+          accountId_idempotencyKey: { accountId: account.id, idempotencyKey: input.idempotencyKey },
+        },
+      });
+      if (!transaction) throw error;
+      return {
+        account: pointAccountRecord(account),
+        transaction: pointTransactionRecord(transaction),
+      };
+    }
+  }
+
+  async consume(input: Parameters<PointLedgerRepository['consume']>[0]) {
+    return this.client.$transaction(
+      async (tx) => {
+        if (!(await this.activeMember(tx, input.workspaceId, input.actorUserId))) return null;
+        if (!(await this.validAttribution(tx, input))) return null;
+        const account = await tx.pointAccount.findUnique({
+          where: {
+            workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId },
+          },
+        });
+        if (!account) return null;
+        const existing = await tx.pointTransaction.findUnique({
+          where: {
+            accountId_idempotencyKey: {
+              accountId: account.id,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+        });
+        if (existing && (existing.type !== 'CONSUME' || existing.amount !== -input.amount))
+          throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
+        if (existing)
+          return {
+            account: pointAccountRecord(account),
+            transaction: pointTransactionRecord(existing),
+          };
+        const changed = await tx.pointAccount.updateMany({
+          where: { id: account.id, availablePoints: { gte: input.amount }, recoveryDue: 0 },
+          data: { availablePoints: { decrement: input.amount }, revision: { increment: 1 } },
+        });
+        if (changed.count !== 1) return null;
+        const transaction = await tx.pointTransaction.create({
+          data: {
+            accountId: account.id,
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            groupId: input.groupId,
+            campaignId: input.campaignId,
+            type: 'CONSUME',
+            amount: -input.amount,
+            idempotencyKey: input.idempotencyKey,
+            sourceType: input.sourceType,
+            sourceId: input.sourceId,
+          },
+        });
+        const grants = await tx.pointTransaction.findMany({
+          where: {
+            accountId: account.id,
+            type: { in: ['GRANT', 'REFUND'] },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+          include: { consumptions: true },
+        });
+        grants.sort((left, right) =>
+          left.expiresAt === null
+            ? right.expiresAt === null
+              ? left.createdAt.getTime() - right.createdAt.getTime()
+              : 1
+            : right.expiresAt === null
+              ? -1
+              : left.expiresAt.getTime() - right.expiresAt.getTime(),
+        );
+        let remaining = input.amount;
+        for (const grant of grants) {
+          const used = grant.consumptions.reduce((sum, link) => sum + link.amount, 0);
+          const available = grant.amount - used;
+          if (available <= 0) continue;
+          const amount = Math.min(remaining, available);
+          await tx.pointConsumptionLink.create({
+            data: {
+              consumptionTransactionId: transaction.id,
+              grantTransactionId: grant.id,
+              amount,
+            },
+          });
+          remaining -= amount;
+          if (remaining === 0) break;
+        }
+        if (remaining !== 0)
+          throw new ApplicationError('CONFLICT', 'point ledger balance mismatch');
+        const updated = await tx.pointAccount.findUniqueOrThrow({ where: { id: account.id } });
+        return {
+          account: pointAccountRecord(updated),
+          transaction: pointTransactionRecord(transaction),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async refund(input: Parameters<PointLedgerRepository['refund']>[0]) {
+    return this.client.$transaction(
+      async (tx) => {
+        if (!(await this.activeMember(tx, input.workspaceId, input.actorUserId))) return null;
+        const consumption = await tx.pointTransaction.findFirst({
+          where: {
+            id: input.consumptionTransactionId,
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            type: 'CONSUME',
+          },
+        });
+        if (!consumption) return null;
+        const existing = await tx.pointTransaction.findUnique({
+          where: {
+            accountId_idempotencyKey: {
+              accountId: consumption.accountId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+        });
+        if (
+          existing &&
+          (existing.type !== 'REFUND' || existing.sourceId !== input.consumptionTransactionId)
+        )
+          throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
+        if (existing) {
+          const account = await tx.pointAccount.findUniqueOrThrow({
+            where: { id: consumption.accountId },
+          });
+          return {
+            account: pointAccountRecord(account),
+            transaction: pointTransactionRecord(existing),
+          };
+        }
+        const previous = await tx.pointTransaction.aggregate({
+          where: {
+            accountId: consumption.accountId,
+            type: 'REFUND',
+            sourceType: 'CONSUMPTION_REFUND',
+            sourceId: consumption.id,
+          },
+          _sum: { amount: true },
+        });
+        const amount = Math.abs(consumption.amount) - (previous._sum.amount ?? 0);
+        if (amount <= 0) return null;
+        const transaction = await tx.pointTransaction.create({
+          data: {
+            accountId: consumption.accountId,
+            workspaceId: consumption.workspaceId,
+            userId: consumption.userId,
+            groupId: consumption.groupId,
+            campaignId: consumption.campaignId,
+            type: 'REFUND',
+            amount,
+            idempotencyKey: input.idempotencyKey,
+            sourceType: 'CONSUMPTION_REFUND',
+            sourceId: consumption.id,
+          },
+        });
+        const account = await tx.pointAccount.update({
+          where: { id: consumption.accountId },
+          data: { availablePoints: { increment: amount }, revision: { increment: 1 } },
+        });
+        return {
+          account: pointAccountRecord(account),
+          transaction: pointTransactionRecord(transaction),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 }

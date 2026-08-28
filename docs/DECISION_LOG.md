@@ -1504,3 +1504,13 @@
 - Scope: 現金、購入、換金、譲渡、外部ポイント、紹介報酬、物品、抽選、ランキング、動画生成交換をMVPへ含めない。
 - Stop: 企業別費用負担、Workspace／Group契約境界、失効・退会規約、企業特典責任、実原価、限定検証対象の承認前にSchema、Migration、API、Job、画面を実装しない。
 - Source: `docs/POINT_FEATURE_IMPLEMENTATION_PLAN.md`
+
+## 2026-08-29: ワタシポイントCoreは追記型Transactionと条件付き残高更新で保護する
+
+- Account: `workspaceId + userId`で口座を一意にし、ACTIVE Workspace Membership本人だけが操作できる。
+- Idempotency: Transactionは`accountId + idempotencyKey`、処理Eventは`workspaceId + eventType + sourceEventId`で一意にする。同じKeyへ異なる操作内容を送った場合は拒否する。
+- Concurrency: 消費時は`availablePoints >= amount`かつ`recoveryDue = 0`を条件に残高を更新し、Serializable TransactionとDB CHECKで負残高を防ぐ。
+- Attribution: Group／Campaign指定時は対象Workspaceとの一致を確認し、消費元を期限の近い付与から`PointConsumptionLink`へ固定する。
+- Refund: 元の消費TransactionをWorkspace・本人範囲で再検証し、過剰返却と二重返却を拒否する。
+- Boundary: P-1では既存Activity Processor、API/UI、交換、失効Job、Group Rule管理を実装しない。
+- Source: `docs/POINT_CORE_PERSISTENCE_REPORT.md`
