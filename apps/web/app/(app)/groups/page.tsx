@@ -129,9 +129,19 @@ export default async function GroupsPage({
               </Link>
             ) : null}
             {membership.role === 'MANAGER' ? (
-              <Link className="button" href={`/groups/${membership.group.id}/members`}>
-                参加者が使える機能を設定
-              </Link>
+              <>
+                <Link className="button" href={`/groups/${membership.group.id}/members`}>
+                  参加者が使える機能を設定
+                </Link>
+                {imageAvailable ? (
+                  <Link
+                    className="button button--secondary"
+                    href={`/groups/${membership.group.id}/image-operations`}
+                  >
+                    画像生成の利用状況
+                  </Link>
+                ) : null}
+              </>
             ) : (
               <p>使える機能はグループ管理者が設定します。</p>
             )}
