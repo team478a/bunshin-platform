@@ -43,13 +43,19 @@ export function SocialImageWorkspace({
   groupId,
   groupMembershipId,
   missions,
+  initialMissionId,
 }: {
   workspaceId: string;
   groupId: string;
   groupMembershipId: string;
   missions: Mission[];
+  initialMissionId?: string | undefined;
 }) {
-  const [selectedId, setSelectedId] = useState(missions[0]?.id ?? '');
+  const [selectedId, setSelectedId] = useState(
+    missions.some((mission) => mission.id === initialMissionId)
+      ? (initialMissionId ?? '')
+      : (missions[0]?.id ?? ''),
+  );
   const selected = useMemo(
     () => missions.find((mission) => mission.id === selectedId) ?? null,
     [missions, selectedId],

@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   currentUser: vi.fn(),
   consume: vi.fn(),
   record: vi.fn(),
+  findMission: vi.fn(),
+  findMemberships: vi.fn(),
+  findEnrollment: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`);
   }),
@@ -38,6 +41,11 @@ vi.mock('@bunshin/database', () => ({
   PrismaDailyMissionRepository: class {},
   PrismaBunshinCapabilityAssignmentRepository: class {},
   PrismaMissionEngagementRepository: class {},
+  prisma: {
+    dailyMission: { findFirst: mocks.findMission },
+    groupMembership: { findMany: mocks.findMemberships },
+    socialImagePilotEnrollment: { findFirst: mocks.findEnrollment },
+  },
 }));
 vi.mock('../src/line/mission-deep-link-signer', () => ({ HkdfMissionDeepLinkSigner: class {} }));
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
@@ -45,7 +53,12 @@ vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () 
 import TodayPage from '../app/today/page';
 
 describe('Mission Deep Link landing', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findMission.mockResolvedValue({ format: 'TEXT', campaign: null, contentLinkUsage: null });
+    mocks.findMemberships.mockResolvedValue([]);
+    mocks.findEnrollment.mockResolvedValue(null);
+  });
 
   it('requires a verified session before consuming state', async () => {
     mocks.currentUser.mockResolvedValue(null);
@@ -100,5 +113,27 @@ describe('Mission Deep Link landing', () => {
       'NOT_FOUND',
     );
     expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it('sends an eligible image Mission to its group review page without starting generation', async () => {
+    mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
+    mocks.consume.mockResolvedValue({
+      id: 'state-a',
+      workspaceId: 'workspace-a',
+      bunshinId: 'bunshin-a',
+      dailyMissionId: 'mission-a',
+    });
+    mocks.record.mockResolvedValue({ id: 'activity-a' });
+    mocks.findMission.mockResolvedValue({
+      format: 'IMAGE',
+      campaign: { groupId: 'group-a' },
+      contentLinkUsage: null,
+    });
+    mocks.findMemberships.mockResolvedValue([{ id: 'membership-a' }]);
+    mocks.findEnrollment.mockResolvedValue({ groupId: 'group-a' });
+    await expect(
+      TodayPage({ searchParams: Promise.resolve({ state: 'secret-token' }) }),
+    ).rejects.toThrow('REDIRECT:/groups/group-a/images?mission=mission-a');
+    expect(mocks.redirect).not.toHaveBeenCalledWith(expect.stringContaining('secret-token'));
   });
 });

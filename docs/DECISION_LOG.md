@@ -1449,3 +1449,10 @@
 - Persistence: 既存の `SocialImageGeneratedMedia.status` を利用し、同じMissionで採用中の画像は最大1件に保つ。Missionの採否とは混同しない。
 - Isolation: Workspace、Group、参加者、User、Request、Mediaの所有範囲をサーバー側で再検証する。画面上のIDだけを信用しない。
 - LINE boundary: LINE通知は後続I5-B2で確認画面へのリンクだけを提供し、通知の受信やリンク表示だけでは画像生成を開始しない。
+
+## 2026-08-28 — LINEから画像確認画面への導線をI5-B2として実装
+
+- Decision: IMAGE / SLIDE形式のMissionは、一回限りの署名付きstateを消費し、本人・Mission・グループ機能・Pilot参加を再検証した場合だけグループ画像確認画面へ移動する。
+- No side effect: LINE通知の送信、受信、リンク表示、確認画面への移動では画像生成Requestを作らない。本人がWeb画面の「画像を作る」を押した場合だけ生成を開始する。
+- Fallback: 対象グループまたはPilot利用資格が確認できない場合は、従来どおり本人の「今日やること」へ移動する。
+- Privacy: 遷移後URLへ署名付きstateを引き継がず、Mission IDだけを初期選択用に使用する。画像画面でも所有権を改めて検証する。

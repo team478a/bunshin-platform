@@ -119,6 +119,12 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
                 ...(summary.externalLinkIncluded
                   ? ['あなた専用の紹介URLを入れました。URLは確認画面で安全に表示します。']
                   : []),
+                ...(['IMAGE', 'SLIDE'].includes(summary.format)
+                  ? [
+                      '画像は確認画面で作れます。',
+                      'このお知らせを開いただけでは画像づくりは始まりません。',
+                    ]
+                  : []),
                 '',
                 'くわしく見る',
                 input.deepLinkUrl,

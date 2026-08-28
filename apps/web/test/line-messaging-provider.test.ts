@@ -48,7 +48,7 @@ describe('LINE Messaging API adapter', () => {
       messages: [
         {
           type: 'text',
-          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n新しい情報も参考にした企画です。\nあなた専用の紹介URLを入れました。URLは確認画面で安全に表示します。\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
+          text: '今日やることができました。\nSNS：インスタグラム\n作るもの：スライド投稿\n目安：5分\nテーマ：朝の時間を上手に使うコツ\n新しい情報も参考にした企画です。\nあなた専用の紹介URLを入れました。URLは確認画面で安全に表示します。\n画像は確認画面で作れます。\nこのお知らせを開いただけでは画像づくりは始まりません。\n\nくわしく見る\nhttps://app.example.com/today?state=opaque',
         },
       ],
     });

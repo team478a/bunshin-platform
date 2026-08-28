@@ -8,8 +8,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function GroupImagesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ groupId: string }>;
+  searchParams: Promise<{ mission?: string }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
@@ -87,6 +89,7 @@ export default async function GroupImagesPage({
         workspaceId={membership.group.workspaceId}
         groupId={membership.group.id}
         groupMembershipId={membership.id}
+        initialMissionId={z.uuid().safeParse((await searchParams).mission).data}
         missions={available.map((mission) => ({
           id: mission.id,
           bunshinId: mission.bunshinId,
