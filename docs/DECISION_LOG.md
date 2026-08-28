@@ -1414,3 +1414,12 @@
 - Access: Application層で現在のRequest所有権とGroup利用権限を再確認した後だけ、対象Keyから5分間の署名URLを発行する。署名URLとbinaryはDB、通常log、監査logへ保存しない。
 - Failure: 連続保存の途中で失敗した場合は、その試行で保存済みのobjectを直ちに削除する。明示削除も同じ所有権境界を通し、保持期限に基づく非同期削除JobはI4以降へ分離する。
 - Delivery: I3-CはStorage Port、Supabase Adapter、所有権Use Case、MIME／寸法／分離テストまでとする。Provider、Job、Usage、API/UI、LINEは含めない。
+
+## 2026-08-28: SNS画像の元素材生成はOpenAI Images APIへ同期Adapterとして接続する
+
+- Credential: 管理画面で暗号化保存・接続確認・有効化した既存OpenAI設定からAPIキーだけを実行時解決する。画像modelとqualityはGroup画像Pilot版を正本とし、文章生成model設定へ混在させない。
+- API: Job WorkerからImages APIを1回呼び出し、PNGのBase64応答を最大30MBで復号する。Provider URL、raw response、APIキー、Base64、Prompt全文を永続化・通常log・監査logへ出さない。
+- Dimensions: 最終Canvasは1080×1350pxだが、Provider元素材は対応する縦長1024×1536pxで生成し、既存の管理Rendererでcrop・合成・固定寸法化する。
+- Safety: `moderation=auto`を明示し、認証・利用制限・安全拒否・不正要求・Provider障害・不正応答を安全な分類へ変換する。安全拒否と不正要求は自動再試行せず、429と5xx／通信障害だけを再試行候補にする。
+- Response: PNG magic byte、Base64長、復号後容量を検査する。Providerの申告MIMEや拡張子を信用しない。
+- Delivery: I4-AはProvider Port、OpenAI Adapter、契約テストまでとする。Job、Usage、Pilot上限、緊急停止、API/UI、LINEはI4-B以降へ分離する。

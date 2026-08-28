@@ -135,21 +135,23 @@ export interface SocialImageGenerationRequestRepository {
 }
 
 export interface SocialImageAssetGenerationProviderPort {
-  submit(input: {
+  generate(input: {
     requestId: string;
     prompt: string;
     width: typeof SOCIAL_IMAGE_WIDTH;
     height: typeof SOCIAL_IMAGE_HEIGHT;
     model: string;
     quality: string;
-  }): Promise<{ externalJobId: string }>;
-  inspect(input: {
-    externalJobId: string;
-  }): Promise<
-    | { status: 'PENDING' }
-    | { status: 'SUCCEEDED'; outputUrl: string }
-    | { status: 'FAILED'; errorCode: string }
-  >;
+  }): Promise<{
+    bytes: Uint8Array;
+    mimeType: 'image/png';
+    provider: string;
+    model: string;
+    quality: string;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    latencyMs: number;
+  }>;
 }
 
 export type SocialImageStorageObjectKind = 'SOURCE' | 'COMPLETED' | 'THUMBNAIL';
