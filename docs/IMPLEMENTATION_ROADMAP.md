@@ -294,7 +294,8 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 
 - I0: 既存実装監査、限定公開、所有権、予算、Storage、Go / No-Go — 文書完了
 - I1: 10テーマ方式比較と検証手順の確認 — 手順・評価票完了（テーマ、予算、評価者の確定と実査待ち）
-- I2: Domain、状態遷移、Provider Port、DB、Isolation
+- I2-A: Domain、状態遷移、Provider Port、Isolation Policy — 完了
+- I2-B: Prisma Schema、Migration、Repository、DB一意制約、rollback手順
 - I3: 5テンプレート、Satori / resvg / Sharp描画、非公開Storage
 - I4: OpenAI Image Adapter、Job、Usage、上限、緊急停止
 - I5: 利用者API/UI、採否、再生成、download、LINE導線

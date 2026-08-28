@@ -32,7 +32,8 @@ describe('video render webhook signer', () => {
     const state = new URL(await signer.createUrl({ workspaceId, renderId })).searchParams.get(
       'state',
     )!;
-    expect(() => signer.verify(`${state.slice(0, -1)}A`)).toThrow();
+    const replacement = state.endsWith('A') ? 'B' : 'A';
+    expect(() => signer.verify(`${state.slice(0, -1)}${replacement}`)).toThrow();
     vi.stubEnv('NODE_ENV', 'development');
     vi.stubEnv('APP_ENV', 'staging');
     vi.stubEnv('APP_URL', 'https://staging.example.com');

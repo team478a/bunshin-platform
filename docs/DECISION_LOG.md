@@ -1368,3 +1368,13 @@
 - Safety: Metadataがないことを理由にAI利用表示を省略しない。利用者が確認できる画面と投稿時の案内を優先し、秘密情報、個人情報、Prompt本文を完成ファイルへ入れない。
 - Revisit: 法令、SNS仕様、取引先要件、C2PA等の標準対応により必要性が生じた場合だけ、既存Render Provider Portと分離した後処理として別Phaseで再設計する。
 - Operations: Phase V-1の利用者検証は外部チームが担当する。現在の実装範囲ではCreatomate接続、SNS別AI表示Policy、Webhook、Private Storage、完成通知、管理監視の準備状況を管理画面から確認する。
+
+## 2026-08-28: グループ限定SNS画像生成CoreはProduction限定かつfail-closedとする
+
+- Scope: 一般ユーザー向け画像生成を前倒しせず、`SOCIAL.IMAGE_GENERATION`をGroupと参加者の両方に明示許可したProductionパイロットだけを対象にする。
+- Authorization: Request作成前と将来のJob実行直前に、Workspace、Group、Membership、同意、Bunshin、Daily Mission、Campaign、商品、安全Gate、利用上限を専用Portで再検証する。許可理由が一つでも欠ける場合は生成しない。
+- State: Requestは`DRAFT -> QUEUED -> GENERATING_ASSET -> COMPOSING -> READY_FOR_REVIEW`の一方向とし、失敗・中止から暗黙に再開しない。再生成は新しいRequestとして追記する。
+- Idempotency: 内部idempotency keyとrevisionを必須にし、同一Missionの二重処理と古い画面からの状態更新をDB実装で拒否できる契約にする。
+- Provider: Application層はProvider非依存Portだけを公開し、OpenAI固有modelをDomain enumへ入れない。1080×1350pxの出力契約を固定し、APIキー、raw response、Promptを永続Recordへ含めない。
+- Privacy: Group管理者向け集計から画像、投稿本文、個人Memory、Knowledge、自由記述Feedbackを除外する。所有Requestの取得はWorkspace、Group、Actorの全境界一致をRepository契約に要求する。
+- Delivery: 本変更はDomain・Port・Policyのみとし、Prisma SchemaとMigrationは次のI2-B専用PRでレビューする。Provider実呼び出し、Storage、UI、LINEは含めない。
