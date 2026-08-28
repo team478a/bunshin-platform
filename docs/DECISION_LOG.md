@@ -1490,3 +1490,17 @@
 - Authorization: Routing変更、設定Version登録、有効化はSUPER_ADMIN、接続確認はSUPER_ADMIN／OPERATOR、Group管理者は状態確認だけとする。
 - Scope: 一般提供、OEM、課金、Group管理者によるSecret登録は含めず、明示許可されたテストGroupだけに限定する。
 - Source: `docs/GROUP_DEDICATED_LINE_ADMIN_REPORT.md`
+
+## 2026-08-29: ワタシポイントは既存行動から派生する別台帳として設計する
+
+- Status: Phase P-0文書作成済み、人間レビュー待ち。
+- Source of Truth: 行動の正本は既存`MissionActivity`、`MissionDecision`、`PostRecord`とし、ポイント用に投稿本文や行動を複製しない。
+- Separation: WPは本人の継続行動を促す換金不能・譲渡不能の特典、販売プランのCreditは画像・動画等の原価と利用権を管理する単位とし、残高、台帳、APIを共用しない。
+- Ledger: 付与、利用、取消、返却、失効、回収は追記型Transactionで記録し、残高を直接上書きしない。冪等Key、一意制約、消費元Linkにより再送と同時処理を保護する。
+- Attribution: Transactionへ付与元、費用負担者、Workspace、Group、Campaign、Rule Versionを固定し、別企業限定特典への誤使用を防ぐ。
+- Recovery: 訂正はREVERSAL、技術的失敗はREFUND、使用済み付与の回収はRECOVERYとする。負残高を作らず、回収不能時は交換だけを停止する。
+- Availability: ポイントProcessor、台帳、交換が停止しても企画閲覧、コピー、投稿完了を継続できる疎結合構成とする。
+- Privacy: Group管理者へ個人の通常投稿、人格、Knowledge、Memoryを公開せず、別Workspace、別Group、別Userを全Use Caseで拒否する。
+- Scope: 現金、購入、換金、譲渡、外部ポイント、紹介報酬、物品、抽選、ランキング、動画生成交換をMVPへ含めない。
+- Stop: 企業別費用負担、Workspace／Group契約境界、失効・退会規約、企業特典責任、実原価、限定検証対象の承認前にSchema、Migration、API、Job、画面を実装しない。
+- Source: `docs/POINT_FEATURE_IMPLEMENTATION_PLAN.md`
