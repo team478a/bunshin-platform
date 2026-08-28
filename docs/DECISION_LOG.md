@@ -1535,6 +1535,15 @@
 - Return: 解放と返却は元の消費を参照する追記型`REFUND` Transactionで一度だけ戻し、残高や過去Transactionを上書きしない。
 - Isolation: Catalog以外の交換記録はverified sessionのWorkspace・User本人だけが操作でき、Group管理者向け横断取得を作らない。
 - Split: P-4AはCore Persistence、Repository、Use Caseまでとし、画像生成・追加企画生成への実接続と期限切れ予約JobはP-4Bへ分離する。
+
+## 2026-08-29: SNS画像生成はポイント確定を実行条件にする
+
+- Order: 既存のGroup・Workspace・本人認可後に画像生成Requestを作り、50 WPを予約する。Workerが先に動く競合を防ぐため、交換確定後にJobを登録し、登録失敗時は即時返却する。
+- Gate: WorkerはProvider呼び出し前に、同じWorkspace・User・画像Requestへ紐づく交換が`CONFIRMED`であることを再確認する。未確定、解放済み、別Userの交換では生成しない。
+- Recovery: 交換確定前の失敗は`RELEASED`、Job登録失敗またはJobの最終失敗は`REFUNDED`として一度だけポイントを戻す。
+- Expiry: `RESERVED`のまま15分を超えた交換は、5分間隔の内部処理で上限100件ずつ解放する。
+- UX: 画像作成画面に必要ポイントと現在残高を表示し、残高不足またはポイント取得失敗時は作成ボタンを無効化する。既存の企画閲覧等は停止しない。
+- Split: 追加企画生成は生成境界を個別に確認してP-4Cで接続する。
 - Initial Rules: 企画初回確認1WP／日、投稿完了5WP／日、週3回達成10WP／週だけを固定Version 1で開始する。ログイン付与は追加しない。
 - Idempotency: 元イベントは`workspaceId + eventType + sourceEventId`、付与は`ruleId + day/week`で重複を防ぐ。
 - Time: 日・週境界は明示Timezone（初期`Asia/Tokyo`）で算出し、付与期限は行動から180日後が属する月末とする。

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { GetPointUserDashboard, ListPointRewardCatalog } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
@@ -75,6 +76,29 @@ export default async function GroupImagesPage({
     select: { id: true, status: true, dailyMissionId: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   });
+  const redemptions = new db.PrismaPointRedemptionRepository();
+  let imagePointCost: number | null = null;
+  let availablePoints = 0;
+  try {
+    const [catalog, pointDashboard] = await Promise.all([
+      new ListPointRewardCatalog(redemptions).execute({
+        workspaceId: membership.group.workspaceId,
+        actorUserId: actor.userId,
+        now,
+      }),
+      new GetPointUserDashboard(new db.PrismaPointLedgerRepository()).execute({
+        workspaceId: membership.group.workspaceId,
+        actorUserId: actor.userId,
+        now,
+        timezone: 'Asia/Tokyo',
+      }),
+    ]);
+    imagePointCost =
+      catalog.find((item) => item.rewardType === 'SOCIAL_IMAGE_GENERATION')?.pointCost ?? null;
+    availablePoints = pointDashboard.account.availablePoints;
+  } catch {
+    // ポイント確認に失敗してもページ全体を壊さず、画像作成だけを停止する。
+  }
 
   return (
     <main className="app-page">
@@ -89,6 +113,8 @@ export default async function GroupImagesPage({
         workspaceId={membership.group.workspaceId}
         groupId={membership.group.id}
         groupMembershipId={membership.id}
+        pointCost={imagePointCost}
+        initialAvailablePoints={availablePoints}
         initialMissionId={z.uuid().safeParse((await searchParams).mission).data}
         missions={available.map((mission) => ({
           id: mission.id,

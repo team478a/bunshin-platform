@@ -42,12 +42,16 @@ export function SocialImageWorkspace({
   workspaceId,
   groupId,
   groupMembershipId,
+  pointCost,
+  initialAvailablePoints,
   missions,
   initialMissionId,
 }: {
   workspaceId: string;
   groupId: string;
   groupMembershipId: string;
+  pointCost: number | null;
+  initialAvailablePoints: number;
   missions: Mission[];
   initialMissionId?: string | undefined;
 }) {
@@ -64,6 +68,7 @@ export function SocialImageWorkspace({
   const [requestId, setRequestId] = useState(selected?.request?.id ?? null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
 
   const endpoint = selected
     ? `/api/workspaces/${workspaceId}/groups/${groupId}/bunshins/${selected.bunshinId}/daily-missions/${selected.id}/images`
@@ -121,13 +126,14 @@ export function SocialImageWorkspace({
       error?: { code?: string };
     } | null;
     if (response.ok && payload?.data?.id) {
+      if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
       setRequestId(payload.data.id);
       setRequestView(null);
       setMessage('画像づくりを始めました。このまま少しお待ちください。');
     } else {
       setMessage(
         payload?.error?.code === 'FORBIDDEN'
-          ? 'この機能はまだ利用できません。グループ管理者へお問い合わせください。'
+          ? 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
           : '画像づくりを始められませんでした。少し待ってから、もう一度お試しください。',
       );
     }
@@ -192,6 +198,10 @@ export function SocialImageWorkspace({
 
       <section className="settings-card social-image-review" aria-live="polite">
         <h2>{ready ? 'できあがった画像を確認' : '画像を作る'}</h2>
+        <p>
+          必要なポイント：{pointCost === null ? '現在利用できません' : `${pointCost} WP`} ／
+          いま使えるポイント：{availablePoints} WP
+        </p>
         {message ? <p className="notice">{message}</p> : null}
         {requestView && !ready && requestView.status !== 'READY_FOR_REVIEW' ? (
           <div className="social-image-progress">
@@ -245,7 +255,12 @@ export function SocialImageWorkspace({
         {!requestId ||
         requestView?.status === 'FAILED' ||
         (requestView?.status === 'READY_FOR_REVIEW' && !requestView.media) ? (
-          <button className="button" type="button" disabled={busy} onClick={() => void create()}>
+          <button
+            className="button"
+            type="button"
+            disabled={busy || pointCost === null || availablePoints < pointCost}
+            onClick={() => void create()}
+          >
             {requestView?.status === 'FAILED' ? '別の画像を作る' : '画像を作る'}
           </button>
         ) : null}
@@ -253,13 +268,18 @@ export function SocialImageWorkspace({
           <button
             className="button button--secondary"
             type="button"
-            disabled={busy}
+            disabled={busy || pointCost === null || availablePoints < pointCost}
             onClick={() => void create()}
           >
             別の画像を作る
           </button>
         ) : null}
         <p className="form-help">画像を作る操作は、この画面で本人が押したときだけ始まります。</p>
+        {pointCost !== null && availablePoints < pointCost ? (
+          <p className="form-help">
+            ポイントが足りません。今日の企画確認や投稿完了でためられます。
+          </p>
+        ) : null}
       </section>
     </div>
   );

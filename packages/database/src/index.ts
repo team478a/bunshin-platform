@@ -12937,7 +12937,16 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
   }
 
   async markFailed(input: { workspaceId: string; requestId: string; errorCode: string }) {
-    await this.client.socialImageGenerationRequest.updateMany({
+    const request = await this.client.socialImageGenerationRequest.findFirst({
+      where: {
+        id: input.requestId,
+        workspaceId: input.workspaceId,
+        status: { in: ['QUEUED', 'GENERATING_ASSET', 'COMPOSING'] },
+      },
+      select: { ownerUserId: true },
+    });
+    if (!request) return null;
+    const changed = await this.client.socialImageGenerationRequest.updateMany({
       where: {
         id: input.requestId,
         workspaceId: input.workspaceId,
@@ -12945,6 +12954,7 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
       },
       data: { status: 'FAILED', errorCode: input.errorCode, revision: { increment: 1 } },
     });
+    return changed.count === 1 ? request : null;
   }
 }
 
@@ -13792,6 +13802,25 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
     );
   }
 
+  async findOwnedByResource(
+    input: Parameters<PointRedemptionRepository['findOwnedByResource']>[0],
+  ) {
+    const row = await this.client.pointRedemption.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+        user: { status: 'ACTIVE' },
+      },
+    });
+    return row ? pointRedemptionRecord(row) : null;
+  }
+
   async transition(input: Parameters<PointRedemptionRepository['transition']>[0]) {
     return this.client.$transaction(
       async (tx) => {
@@ -13844,6 +13873,61 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  async releaseExpired(input: Parameters<PointRedemptionRepository['releaseExpired']>[0]) {
+    const candidates = await this.client.pointRedemption.findMany({
+      where: { status: 'RESERVED', reservationExpiresAt: { lte: input.now } },
+      select: { id: true },
+      orderBy: { reservationExpiresAt: 'asc' },
+      take: input.limit,
+    });
+    let released = 0;
+    for (const candidate of candidates) {
+      const changed = await this.client.$transaction(
+        async (tx) => {
+          const redemption = await tx.pointRedemption.findUnique({ where: { id: candidate.id } });
+          if (
+            !redemption ||
+            redemption.status !== 'RESERVED' ||
+            redemption.reservationExpiresAt > input.now
+          )
+            return false;
+          const claimed = await tx.pointRedemption.updateMany({
+            where: { id: redemption.id, status: 'RESERVED' },
+            data: {
+              status: 'RELEASED',
+              releasedAt: input.now,
+              failureReason: 'RESERVATION_EXPIRED',
+            },
+          });
+          if (claimed.count !== 1) return false;
+          await tx.pointTransaction.create({
+            data: {
+              accountId: redemption.accountId,
+              workspaceId: redemption.workspaceId,
+              userId: redemption.userId,
+              type: 'REFUND',
+              amount: redemption.pointCost,
+              idempotencyKey: `redemption:${redemption.id}:RELEASED`,
+              sourceType: 'POINT_REDEMPTION_REFUND',
+              sourceId: redemption.consumptionTransactionId,
+            },
+          });
+          await tx.pointAccount.update({
+            where: { id: redemption.accountId },
+            data: {
+              availablePoints: { increment: redemption.pointCost },
+              revision: { increment: 1 },
+            },
+          });
+          return true;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      if (changed) released += 1;
+    }
+    return released;
   }
 }
 

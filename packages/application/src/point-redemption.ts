@@ -55,6 +55,12 @@ export interface PointRedemptionRepository {
     now: Date;
     reservationExpiresAt: Date;
   }): Promise<PointRedemptionRecord | null>;
+  findOwnedByResource(input: {
+    workspaceId: string;
+    actorUserId: string;
+    resourceType: string;
+    resourceId: string;
+  }): Promise<PointRedemptionRecord | null>;
   transition(input: {
     workspaceId: string;
     actorUserId: string;
@@ -63,6 +69,36 @@ export interface PointRedemptionRepository {
     reason: string | null;
     now: Date;
   }): Promise<PointRedemptionRecord | null>;
+  releaseExpired(input: { now: Date; limit: number }): Promise<number>;
+}
+
+export class ReleaseExpiredPointReservations {
+  constructor(private readonly repository: PointRedemptionRepository) {}
+  async execute(input: { now?: Date; limit?: number } = {}) {
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid release limit');
+    return this.repository.releaseExpired({ now: input.now ?? new Date(), limit });
+  }
+}
+
+export class GetPointRedemptionByResource {
+  constructor(private readonly repository: PointRedemptionRepository) {}
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    resourceType: string;
+    resourceId: string;
+  }) {
+    const value = await this.repository.findOwnedByResource({
+      workspaceId: required(input.workspaceId, 'workspace id'),
+      actorUserId: required(input.actorUserId, 'actor user id'),
+      resourceType: required(input.resourceType, 'resource type', 100),
+      resourceId: required(input.resourceId, 'resource id'),
+    });
+    if (!value) throw new ApplicationError('NOT_FOUND', 'point redemption not found');
+    return value;
+  }
 }
 
 const required = (value: string, field: string, max = 200) => {

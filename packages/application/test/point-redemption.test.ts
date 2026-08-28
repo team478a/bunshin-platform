@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ConfirmPointRedemption,
+  GetPointRedemptionByResource,
   ListPointRewardCatalog,
   RefundPointRedemption,
   ReleasePointRedemption,
+  ReleaseExpiredPointReservations,
   ReservePointReward,
   type PointRedemptionRepository,
 } from '../src/point-redemption';
@@ -40,9 +42,11 @@ const repository = (): PointRedemptionRepository => ({
     },
   ]),
   reserve: vi.fn().mockResolvedValue(record),
+  findOwnedByResource: vi.fn().mockResolvedValue(record),
   transition: vi
     .fn()
     .mockImplementation(({ targetStatus }) => Promise.resolve({ ...record, status: targetStatus })),
+  releaseExpired: vi.fn().mockResolvedValue(2),
 });
 
 describe('point redemption use cases', () => {
@@ -54,6 +58,18 @@ describe('point redemption use cases', () => {
         actorUserId: 'user-1',
       }),
     ).resolves.toHaveLength(1);
+  });
+
+  it('finds a redemption only through the owner resource scope', async () => {
+    const port = repository();
+    await expect(
+      new GetPointRedemptionByResource(port).execute({
+        workspaceId: 'workspace-1',
+        actorUserId: 'user-1',
+        resourceType: 'SOCIAL_IMAGE_REQUEST',
+        resourceId: 'request-1',
+      }),
+    ).resolves.toEqual(record);
   });
 
   it('reserves for a short bounded period and normalizes identifiers', async () => {
@@ -101,6 +117,16 @@ describe('point redemption use cases', () => {
         redemptionId: 'redemption-1',
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('releases expired reservations in a bounded batch', async () => {
+    const port = repository();
+    await expect(
+      new ReleaseExpiredPointReservations(port).execute({
+        now: new Date('2026-08-29T01:00:00Z'),
+        limit: 50,
+      }),
+    ).resolves.toBe(2);
   });
 
   it('fails closed when the repository rejects another user', async () => {

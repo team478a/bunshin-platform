@@ -7,6 +7,9 @@ const fakes = vi.hoisted(() => ({
   findOwned: vi.fn(),
   setMediaStatus: vi.fn(),
   enqueue: vi.fn(),
+  listCatalog: vi.fn(),
+  reservePoint: vi.fn(),
+  transitionPoint: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -33,6 +36,11 @@ vi.mock('@bunshin/database', () => ({
   },
   PrismaJobRepository: class {
     enqueue = fakes.enqueue;
+  },
+  PrismaPointRedemptionRepository: class {
+    listCatalog = fakes.listCatalog;
+    reserve = fakes.reservePoint;
+    transition = fakes.transitionPoint;
   },
 }));
 
@@ -95,6 +103,24 @@ beforeEach(() => {
   fakes.transition.mockResolvedValue(row('QUEUED', 2));
   fakes.enqueue.mockResolvedValue({ id: 'job-1' });
   fakes.findOwned.mockResolvedValue(row('QUEUED', 2));
+  fakes.listCatalog.mockResolvedValue([
+    {
+      id: '00000000-0000-4000-8000-000000000501',
+      rewardKey: 'SOCIAL_IMAGE_GENERATION',
+      version: 1,
+      rewardType: 'SOCIAL_IMAGE_GENERATION',
+      title: '投稿用の画像を1回作る',
+      description: '投稿内容に合う画像を1回作れます。',
+      pointCost: 50,
+    },
+  ]);
+  fakes.reservePoint.mockResolvedValue({
+    id: '00000000-0000-4000-8000-000000000510',
+    status: 'RESERVED',
+  });
+  fakes.transitionPoint.mockImplementation(({ targetStatus }) =>
+    Promise.resolve({ id: '00000000-0000-4000-8000-000000000510', status: targetStatus }),
+  );
 });
 
 describe('social image HTTP', () => {
@@ -123,6 +149,41 @@ describe('social image HTTP', () => {
         jobType: 'SOCIAL_IMAGE_GENERATE',
         payloadReference: `social-image:${ids.requestId}`,
         idempotencyKey: `social-image:${ids.requestId}`,
+      }),
+    );
+    expect(fakes.reservePoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceType: 'SOCIAL_IMAGE_REQUEST',
+        resourceId: ids.requestId,
+      }),
+    );
+    expect(fakes.transitionPoint).toHaveBeenCalledWith(
+      expect.objectContaining({ targetStatus: 'CONFIRMED' }),
+    );
+  });
+
+  it('refunds confirmed points when the request cannot be enqueued', async () => {
+    fakes.enqueue.mockRejectedValueOnce(new Error('queue unavailable'));
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-2',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(500);
+    expect(fakes.transitionPoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetStatus: 'REFUNDED',
+        reason: 'IMAGE_REQUEST_NOT_ENQUEUED',
       }),
     );
   });
