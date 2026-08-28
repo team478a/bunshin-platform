@@ -1518,6 +1518,14 @@
 ## 2026-08-29: ポイント行動連携は既存VIEWEDとPostRecordを非同期処理する
 
 - Source: 企画確認は`MissionActivity.VIEWED`、投稿完了と週3回達成は`PostRecord`を正本とし、ポイント専用の行動記録を作らない。
+
+## 2026-08-29: 利用者向けポイント画面は本人スコープのRead Modelとして提供する
+
+- Scope: 認証済みUser本人とACTIVEなWorkspace Membershipを必須とし、URLやリクエスト本文で別Userを指定するAPIを作らない。
+- Contents: 残高、本人の直近20件の履歴、30日以内の未消費付与の失効予定、ACTIVEな獲得Rule、本人の週間投稿数だけを返す。
+- Privacy: Group管理者や他User向けの横断取得をP-3へ含めず、Group／Campaignの内部情報を利用者向け履歴へ表示しない。
+- Resilience: ポイント取得失敗時は専用画面だけを縮退表示し、BUNSHIN、企画確認、コピー、投稿完了を停止しない。
+- UX: アカウント画面から開く日本語のモバイル画面とし、台帳用語や英語のRule Keyを表示しない。
 - Initial Rules: 企画初回確認1WP／日、投稿完了5WP／日、週3回達成10WP／週だけを固定Version 1で開始する。ログイン付与は追加しない。
 - Idempotency: 元イベントは`workspaceId + eventType + sourceEventId`、付与は`ruleId + day/week`で重複を防ぐ。
 - Time: 日・週境界は明示Timezone（初期`Asia/Tokyo`）で算出し、付与期限は行動から180日後が属する月末とする。

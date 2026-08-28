@@ -43,6 +43,13 @@ export default async function AccountPage() {
             </span>
             <span aria-hidden="true">›</span>
           </Link>
+          <Link href="/points" className="settings-row">
+            <span>
+              <strong>ワタシポイント</strong>
+              <small>残高・ため方・最近の履歴</small>
+            </span>
+            <span aria-hidden="true">›</span>
+          </Link>
         </nav>
       </section>
 

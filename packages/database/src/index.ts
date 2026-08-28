@@ -133,6 +133,7 @@ import type {
   PointLedgerRepository,
   PointAccountSnapshot,
   PointTransactionRecord,
+  PointUserDashboard,
   PointActivityCandidate,
   PointActivityProcessorRepository,
   PointActivityProcessResult,
@@ -13225,6 +13226,127 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
       },
     });
     return row ? pointAccountRecord(row) : null;
+  }
+
+  async getUserDashboard(input: {
+    workspaceId: string;
+    actorUserId: string;
+    now: Date;
+    timezone: string;
+  }): Promise<PointUserDashboard | null> {
+    const membership = await this.client.workspaceMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE' },
+        user: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    if (!membership) return null;
+
+    const account = await this.client.pointAccount.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId },
+      },
+    });
+    const emptyAccount: PointAccountSnapshot = {
+      id: '',
+      workspaceId: input.workspaceId,
+      userId: input.actorUserId,
+      availablePoints: 0,
+      recoveryDue: 0,
+      updatedAt: input.now,
+    };
+    const thirtyDaysLater = new Date(input.now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const [transactions, expiring, rules, posts] = await Promise.all([
+      account
+        ? this.client.pointTransaction.findMany({
+            where: {
+              accountId: account.id,
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          })
+        : [],
+      account
+        ? this.client.pointTransaction.findMany({
+            where: {
+              accountId: account.id,
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId,
+              type: 'GRANT',
+              expiresAt: { gt: input.now, lte: thirtyDaysLater },
+            },
+            select: {
+              amount: true,
+              expiresAt: true,
+              consumptions: { select: { amount: true } },
+            },
+            orderBy: { expiresAt: 'asc' },
+          })
+        : [],
+      this.client.pointRuleVersion.findMany({
+        where: {
+          status: 'ACTIVE',
+          groupId: null,
+          campaignId: null,
+          OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }],
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+          ],
+        },
+        select: {
+          ruleKey: true,
+          grantAmount: true,
+          dailyLimit: true,
+          weeklyLimit: true,
+          workspaceId: true,
+          version: true,
+        },
+        orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
+      }),
+      this.client.postRecord.findMany({
+        where: { workspaceId: input.workspaceId, actorUserId: input.actorUserId },
+        select: { postedAt: true },
+        orderBy: { postedAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+    const weekKey = pointWeekKey(input.now, input.timezone);
+    const uniqueRules = new Map<string, (typeof rules)[number]>();
+    rules
+      .sort(
+        (left, right) =>
+          Number(right.workspaceId === input.workspaceId) -
+            Number(left.workspaceId === input.workspaceId) || right.version - left.version,
+      )
+      .forEach((rule) => {
+        if (!uniqueRules.has(rule.ruleKey)) uniqueRules.set(rule.ruleKey, rule);
+      });
+    const expiringBalances = expiring
+      .map((item) => ({
+        expiresAt: item.expiresAt,
+        amount: Math.max(
+          0,
+          item.amount - item.consumptions.reduce((used, link) => used + link.amount, 0),
+        ),
+      }))
+      .filter((item) => item.amount > 0);
+    return {
+      account: account ? pointAccountRecord(account) : emptyAccount,
+      recentTransactions: transactions.map(pointTransactionRecord),
+      expiringWithin30Days: expiringBalances.reduce((sum, item) => sum + item.amount, 0),
+      nextExpiryAt: expiringBalances[0]?.expiresAt ?? null,
+      earningMethods: [...uniqueRules.values()],
+      weeklyPosts: posts.filter((post) => pointWeekKey(post.postedAt, input.timezone) === weekKey)
+        .length,
+      weeklyPostGoal: 3,
+    };
   }
 
   async grant(input: Parameters<PointLedgerRepository['grant']>[0]) {

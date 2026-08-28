@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ConsumePoints,
   GetPointAccount,
+  GetPointUserDashboard,
   GrantPoints,
   RefundPoints,
   type PointLedgerRepository,
@@ -34,6 +35,17 @@ const transaction = {
 
 const repository = (): PointLedgerRepository => ({
   getAccount: vi.fn().mockResolvedValue(account),
+  getUserDashboard: vi.fn().mockResolvedValue({
+    account,
+    recentTransactions: [transaction],
+    expiringWithin30Days: 10,
+    nextExpiryAt: new Date('2026-09-01T00:00:00Z'),
+    earningMethods: [
+      { ruleKey: 'MISSION_VIEWED_DAILY', grantAmount: 1, dailyLimit: 1, weeklyLimit: null },
+    ],
+    weeklyPosts: 2,
+    weeklyPostGoal: 3,
+  }),
   grant: vi.fn().mockResolvedValue({ account, transaction }),
   consume: vi.fn().mockResolvedValue({
     account: { ...account, availablePoints: 5 },
@@ -46,6 +58,31 @@ const repository = (): PointLedgerRepository => ({
 });
 
 describe('point core use cases', () => {
+  it('reads a user dashboard only through the actor scope', async () => {
+    const port = repository();
+    const result = await new GetPointUserDashboard(port).execute({
+      workspaceId: ' workspace-1 ',
+      actorUserId: ' user-1 ',
+      now: new Date('2026-08-29T00:00:00Z'),
+    });
+    expect(result.weeklyPosts).toBe(2);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(port.getUserDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'workspace-1', actorUserId: 'user-1' }),
+    );
+  });
+
+  it('fails closed when another user cannot read the dashboard', async () => {
+    const port = repository();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    vi.mocked(port.getUserDashboard).mockResolvedValue(null);
+    await expect(
+      new GetPointUserDashboard(port).execute({
+        workspaceId: 'workspace-1',
+        actorUserId: 'user-2',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
   it('reads only through the workspace and actor scope', async () => {
     const port = repository();
     await expect(
