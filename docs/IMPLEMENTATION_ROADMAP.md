@@ -301,7 +301,8 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 - I3-C: 元素材・完成画像・サムネイルの非公開Storage — 完了
 - I4-A: OpenAI Image Adapter、応答検査、安全な失敗分類 — 完了
 - I4-B: 非同期Job、Usage、上限、緊急停止 — 完了
-- I5: 利用者API/UI、採否、再生成、download、LINE導線
+- I5-A: 利用者向け生成開始・進捗確認・Private download API — 完了
+- I5-B: mobile-first UI、採否、再生成、LINE導線
 - I6: Group / Platform管理、50テーマ比較、Security、Production Gate
 
 FREE一般ユーザーへは開放せず、Productionで明示許可したGroupと同意済みACTIVE Membershipだけを対象とする。Phase 10の一般向け画像・動画Providerを前倒ししない。越境、秘密漏えい、二重課金、重大な広告安全違反が1件でもあれば全体停止する。

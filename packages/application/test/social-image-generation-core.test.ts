@@ -61,6 +61,7 @@ const repository = (
 ): SocialImageGenerationRequestRepository => ({
   create: vi.fn().mockResolvedValue(record()),
   findOwned: vi.fn().mockResolvedValue(record()),
+  findMediaOwned: vi.fn().mockResolvedValue(null),
   transition: vi.fn().mockResolvedValue({ ...record('QUEUED'), revision: 2 }),
   ...overrides,
 });
