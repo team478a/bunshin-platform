@@ -412,12 +412,26 @@ FREE継続率を確認する前に作り込まない。
 - P-3: 利用者向け残高、履歴、失効予定、獲得方法、週間進捗 — 完了
 - P-4A: 共通交換カタログ、予約／確定／解放／返却Core — 完了
 - P-4B: SNS画像生成への交換Core接続、失敗時返却、期限切れ予約解放 — 実装完了、レビュー待ち
-- P-4C: 追加企画生成への交換Core接続
+- P-4C: 追加企画生成への交換Core接続 — 別案生成Core・同日一意性・原価境界の設計承認まで保留
 - P-5: Group利用可否、承認済み追加付与、企業独自特典
 - P-6: 管理、監査、CSV、予算、照合、失効、緊急停止
 - P-7: Feature Flagによる30人・4週間の限定検証
 
 WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし、販売プランの原価・利用権を管理するCreditとは別台帳にする。既存の企画閲覧、コピー、投稿完了をポイント処理へ同期依存させない。P-0の人間レビュー前にSchema、Migration、API、Job、画面へ進まない。
+
+## Phase B: バッジ
+
+状態: B-0文書作成・推奨初期値の確認完了。B-0 PRのマージ後にB-1へ進む。詳細は`docs/BADGE_FEATURE_REBASELINE.md`を正本とする。
+
+- B-0: 既存簡易Badge監査、User／Workspace／Group境界、Point分離、初期Catalog、移行方針 — 文書作成・推奨案承認済み
+- B-1: Badge Definition／Version／Progress／Award／Processing Event Core
+- B-2: 既存行動を根拠とする初期10共通Badge Processor
+- B-3: 利用者向け獲得済み／挑戦中／おすすめ／詳細／公開設定
+- B-4: Group独自Badgeの下書き／SUPER_ADMIN承認／候補承認／監査
+- B-5: Point／専用Entitlement／企業履行のOutbox連携
+- B-6: アプリ内・LINE通知、運用、30人・4週間限定検証
+
+Badgeは本人の達成証明、WPは利用可能報酬として別台帳にする。初期値はPoint特典なし、共通10種類、PRIVATE／GROUP公開までとし、PUBLICプロフィール、ランキング、AI品質評価、売買・譲渡を含めない。B-0 PRのマージ前にSchema、Migration、API、Job、画面へ進まない。
 
 ## Phase 10: Publishing Provider
 
