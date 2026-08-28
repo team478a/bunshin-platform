@@ -1378,3 +1378,12 @@
 - Provider: Application層はProvider非依存Portだけを公開し、OpenAI固有modelをDomain enumへ入れない。1080×1350pxの出力契約を固定し、APIキー、raw response、Promptを永続Recordへ含めない。
 - Privacy: Group管理者向け集計から画像、投稿本文、個人Memory、Knowledge、自由記述Feedbackを除外する。所有Requestの取得はWorkspace、Group、Actorの全境界一致をRepository契約に要求する。
 - Delivery: 本変更はDomain・Port・Policyのみとし、Prisma SchemaとMigrationは次のI2-B専用PRでレビューする。Provider実呼び出し、Storage、UI、LINEは含めない。
+
+## 2026-08-28: グループ画像生成の永続化は複合外部キーと部分一意制約で保護する
+
+- Pilot: Groupごとに版を追記し、`ACTIVE`は部分一意indexで最大1件とする。参加者は同意日時を持つEnrollmentへ明示登録し、停止・失効・緊急停止中はRepositoryもfail-closedにする。
+- Isolation: Request作成・取得・状態更新はWorkspace、Group、Membership、Owner、Bunshin、Mission、Enrollmentを同時に照合する。Campaign、商品版、生成Contextも指定時は同じ所有範囲を再検証する。
+- Concurrency: `workspaceId + groupId + ownerUserId + idempotencyKey`を一意にし、別Groupの同じkeyを混同しない。同一Missionの処理中Requestは部分一意indexで1件に限定する。状態更新はstatusとrevisionを含む条件付き更新にする。
+- Media: 元素材、完成画像、サムネイルは公開URLではなくStorage Keyだけを保持する。同一Missionで`ADOPTED`は部分一意indexにより最大1件とする。
+- Privacy: API Key、Provider raw response、Prompt全文、署名URL、Base64画像を本テーブルへ保存しない。画像内容と個人MemoryをGroup管理集計へ公開しない。
+- Rollback: 本番適用前にbackupを取得する。障害時は先にGroup機能権限とPilot緊急停止で新規作成を止め、code rollbackする。テーブル削除が必要な場合だけデータ退避後に別のforward-fix migrationを作成し、適用済みmigrationは編集しない。

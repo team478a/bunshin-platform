@@ -122,6 +122,8 @@ import type {
   VideoAssetRepository,
   VideoDisclosurePolicy,
   VideoDisclosurePolicyRepository,
+  SocialImageGenerationRequestRecord,
+  SocialImageGenerationRequestRepository,
 } from '@bunshin/application';
 import type { CurrentUser, CurrentUserAccountRepository, VerifiedSessionUser } from '@bunshin/auth';
 import {
@@ -11743,6 +11745,250 @@ export class PrismaVideoDisclosurePolicyRepository implements VideoDisclosurePol
       orderBy: { version: 'desc' },
     });
     return found ? videoDisclosurePolicyRecord(found) : null;
+  }
+}
+
+const socialImageGenerationRequestRecord = (
+  row: Prisma.SocialImageGenerationRequestGetPayload<object>,
+): SocialImageGenerationRequestRecord => ({
+  ...row,
+  status: row.status,
+  templateKey: row.templateKey as SocialImageGenerationRequestRecord['templateKey'],
+  layout: row.layout as unknown as SocialImageGenerationRequestRecord['layout'],
+});
+
+export class PrismaSocialImageGenerationRequestRepository implements SocialImageGenerationRequestRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async activeScope(
+    tx: Prisma.TransactionClient,
+    input: {
+      workspaceId: string;
+      groupId: string;
+      groupMembershipId: string;
+      actorUserId: string;
+      pilotEnrollmentId: string;
+    },
+    now = new Date(),
+  ) {
+    const membership = await tx.groupMembership.findFirst({
+      where: {
+        id: input.groupMembershipId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+        group: {
+          status: 'ACTIVE',
+          featurePolicies: {
+            some: {
+              featureKey: 'SOCIAL.IMAGE_GENERATION',
+              status: 'ENABLED',
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            },
+          },
+        },
+        featureAssignments: {
+          some: {
+            featureKey: 'SOCIAL.IMAGE_GENERATION',
+            status: 'ENABLED',
+            OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!membership) return false;
+    const enrollment = await tx.socialImagePilotEnrollment.findFirst({
+      where: {
+        id: input.pilotEnrollmentId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: input.groupMembershipId,
+        status: 'ACTIVE',
+        revokedAt: null,
+        pilot: {
+          status: 'ACTIVE',
+          emergencyStop: false,
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+      },
+      select: { id: true },
+    });
+    return Boolean(enrollment);
+  }
+
+  async create(input: Parameters<SocialImageGenerationRequestRepository['create']>[0]) {
+    const lookup = {
+      workspaceId_groupId_ownerUserId_idempotencyKey: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        ownerUserId: input.actorUserId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    } as const;
+    try {
+      return await this.client.$transaction(async (tx) => {
+        if (!(await this.activeScope(tx, input))) return null;
+        const existing = await tx.socialImageGenerationRequest.findUnique({ where: lookup });
+        if (existing) return socialImageGenerationRequestRecord(existing);
+        const bunshin = await tx.bunshin.findFirst({
+          where: {
+            id: input.bunshinId,
+            workspaceId: input.workspaceId,
+            ownerUserId: input.actorUserId,
+            status: { not: 'ARCHIVED' },
+          },
+          select: { id: true },
+        });
+        if (!bunshin) return null;
+        const mission = await tx.dailyMission.findFirst({
+          where: {
+            id: input.dailyMissionId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            format: { in: ['IMAGE', 'SLIDE'] },
+          },
+          select: { id: true },
+        });
+        if (!mission) return null;
+        if (input.campaignId) {
+          const campaign = await tx.campaign.findFirst({
+            where: {
+              id: input.campaignId,
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+            },
+            select: { id: true, productPackVersionId: true },
+          });
+          if (!campaign || campaign.productPackVersionId !== input.productPackVersionId)
+            return null;
+        } else if (input.productPackVersionId) {
+          const product = await tx.productPackVersion.findFirst({
+            where: {
+              id: input.productPackVersionId,
+              status: 'PUBLISHED',
+              productPack: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                status: 'ACTIVE',
+              },
+            },
+            select: { id: true },
+          });
+          if (!product) return null;
+        }
+        if (input.generationContextSnapshotId) {
+          const snapshot = await tx.generationContextSnapshot.findFirst({
+            where: {
+              id: input.generationContextSnapshotId,
+              workspaceId: input.workspaceId,
+              bunshinId: input.bunshinId,
+              dailyMissionId: input.dailyMissionId,
+            },
+            select: { id: true },
+          });
+          if (!snapshot) return null;
+        }
+        const row = await tx.socialImageGenerationRequest.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: input.groupMembershipId,
+            ownerUserId: input.actorUserId,
+            bunshinId: input.bunshinId,
+            dailyMissionId: input.dailyMissionId,
+            campaignId: input.campaignId,
+            productPackVersionId: input.productPackVersionId,
+            generationContextSnapshotId: input.generationContextSnapshotId,
+            pilotEnrollmentId: input.pilotEnrollmentId,
+            templateKey: input.layout.templateKey,
+            layout: input.layout as unknown as Prisma.InputJsonValue,
+            idempotencyKey: input.idempotencyKey,
+          },
+        });
+        return socialImageGenerationRequestRecord(row);
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
+      const existing = await this.client.socialImageGenerationRequest.findUnique({ where: lookup });
+      return existing ? socialImageGenerationRequestRecord(existing) : null;
+    }
+  }
+
+  async findOwned(input: Parameters<SocialImageGenerationRequestRepository['findOwned']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const row = await tx.socialImageGenerationRequest.findFirst({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+        },
+      });
+      if (!row) return null;
+      if (
+        !(await this.activeScope(tx, {
+          workspaceId: row.workspaceId,
+          groupId: row.groupId,
+          groupMembershipId: row.groupMembershipId,
+          actorUserId: row.ownerUserId,
+          pilotEnrollmentId: row.pilotEnrollmentId,
+        }))
+      )
+        return null;
+      return socialImageGenerationRequestRecord(row);
+    });
+  }
+
+  async transition(input: Parameters<SocialImageGenerationRequestRepository['transition']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const row = await tx.socialImageGenerationRequest.findFirst({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+        },
+      });
+      if (!row) return null;
+      if (
+        !(await this.activeScope(tx, {
+          workspaceId: row.workspaceId,
+          groupId: row.groupId,
+          groupMembershipId: row.groupMembershipId,
+          actorUserId: row.ownerUserId,
+          pilotEnrollmentId: row.pilotEnrollmentId,
+        }))
+      )
+        return null;
+      const changed = await tx.socialImageGenerationRequest.updateMany({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          revision: input.expectedRevision,
+          status: input.fromStatus,
+        },
+        data: {
+          status: input.toStatus,
+          errorCode: input.errorCode,
+          revision: { increment: 1 },
+        },
+      });
+      if (changed.count !== 1) return null;
+      return socialImageGenerationRequestRecord(
+        await tx.socialImageGenerationRequest.findUniqueOrThrow({
+          where: { id: input.requestId },
+        }),
+      );
+    });
   }
 }
 

@@ -129,6 +129,35 @@ enum VideoAssetStatus {
   DELETED
 }
 
+enum SocialImageGenerationPilotStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  SUPERSEDED
+}
+
+enum SocialImagePilotEnrollmentStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum SocialImageGenerationRequestStatus {
+  DRAFT
+  QUEUED
+  GENERATING_ASSET
+  COMPOSING
+  READY_FOR_REVIEW
+  FAILED
+  CANCELLED
+}
+
+enum SocialImageGeneratedMediaStatus {
+  READY
+  ADOPTED
+  REJECTED
+  DELETED
+}
+
 enum ProductPackAssignmentStatus {
   ACTIVE
   REVOKED
@@ -949,6 +978,7 @@ model Group {
   videoAssets                VideoAsset[]
 
   @@unique([workspaceId, name])
+  @@unique([workspaceId, id])
   @@index([workspaceId, status])
   @@map("groups")
 }
@@ -979,6 +1009,7 @@ model GroupMembership {
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, id, userId])
   @@index([workspaceId, userId, status])
   @@index([groupId, status])
   @@map("group_memberships")
@@ -1292,6 +1323,7 @@ model Campaign {
   contentLinkUsages              ContentLinkUsage[]
   videoProjects                  VideoProject[]
 
+  @@unique([workspaceId, groupId, id])
   @@index([workspaceId, status, startsAt, endsAt])
   @@index([groupId, status])
   @@map("campaigns")
@@ -1826,6 +1858,111 @@ model VideoAsset {
   @@index([groupId, groupMembershipId, status])
   @@index([videoProjectId, status])
   @@map("video_assets")
+}
+
+model SocialImageGenerationPilot {
+  id                 String                           @id @default(uuid()) @db.Uuid
+  workspaceId        String                           @map("workspace_id") @db.Uuid
+  groupId            String                           @map("group_id") @db.Uuid
+  version            Int
+  status             SocialImageGenerationPilotStatus @default(DRAFT)
+  startsAt           DateTime?                        @map("starts_at") @db.Timestamptz(6)
+  endsAt             DateTime?                        @map("ends_at") @db.Timestamptz(6)
+  dailyLimit         Int                              @map("daily_limit")
+  monthlyLimit       Int                              @map("monthly_limit")
+  memberMonthlyLimit Int                              @map("member_monthly_limit")
+  defaultModel       String                           @map("default_model") @db.VarChar(120)
+  defaultQuality     String                           @map("default_quality") @db.VarChar(40)
+  emergencyStop      Boolean                          @default(false) @map("emergency_stop")
+  changeReason       String                           @map("change_reason") @db.VarChar(1000)
+  createdByUserId    String                           @map("created_by_user_id") @db.Uuid
+  updatedByUserId    String                           @map("updated_by_user_id") @db.Uuid
+  createdAt          DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  enrollments        SocialImagePilotEnrollment[]
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([groupId, version])
+  @@index([workspaceId, groupId, status, createdAt])
+  @@map("social_image_generation_pilots")
+}
+
+model SocialImagePilotEnrollment {
+  id                String                           @id @default(uuid()) @db.Uuid
+  workspaceId       String                           @map("workspace_id") @db.Uuid
+  groupId           String                           @map("group_id") @db.Uuid
+  pilotId           String                           @map("pilot_id") @db.Uuid
+  groupMembershipId String                           @map("group_membership_id") @db.Uuid
+  status            SocialImagePilotEnrollmentStatus @default(ACTIVE)
+  consentedAt       DateTime                         @map("consented_at") @db.Timestamptz(6)
+  revokedAt         DateTime?                        @map("revoked_at") @db.Timestamptz(6)
+  createdAt         DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  pilot             SocialImageGenerationPilot       @relation(fields: [workspaceId, groupId, pilotId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  requests          SocialImageGenerationRequest[]
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, id, groupMembershipId])
+  @@unique([pilotId, groupMembershipId])
+  @@index([workspaceId, groupId, groupMembershipId, status])
+  @@map("social_image_pilot_enrollments")
+}
+
+model SocialImageGenerationRequest {
+  id                          String                             @id @default(uuid()) @db.Uuid
+  workspaceId                 String                             @map("workspace_id") @db.Uuid
+  groupId                     String                             @map("group_id") @db.Uuid
+  groupMembershipId           String                             @map("group_membership_id") @db.Uuid
+  ownerUserId                 String                             @map("owner_user_id") @db.Uuid
+  bunshinId                   String                             @map("bunshin_id") @db.Uuid
+  dailyMissionId              String                             @map("daily_mission_id") @db.Uuid
+  campaignId                  String?                            @map("campaign_id") @db.Uuid
+  productPackVersionId        String?                            @map("product_pack_version_id") @db.Uuid
+  generationContextSnapshotId String?                            @map("generation_context_snapshot_id") @db.Uuid
+  pilotEnrollmentId           String                             @map("pilot_enrollment_id") @db.Uuid
+  status                      SocialImageGenerationRequestStatus @default(DRAFT)
+  templateKey                 String                             @map("template_key") @db.VarChar(80)
+  layout                      Json
+  idempotencyKey              String                             @map("idempotency_key") @db.VarChar(200)
+  revision                    Int                                @default(1)
+  errorCode                   String?                            @map("error_code") @db.VarChar(80)
+  createdAt                   DateTime                           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  pilotEnrollment             SocialImagePilotEnrollment         @relation(fields: [workspaceId, groupId, pilotEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Restrict)
+  media                       SocialImageGeneratedMedia[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, groupId, id, ownerUserId, dailyMissionId])
+  @@unique([workspaceId, groupId, ownerUserId, idempotencyKey])
+  @@index([workspaceId, groupId, ownerUserId, status, updatedAt])
+  @@index([dailyMissionId, status])
+  @@index([pilotEnrollmentId, status])
+  @@map("social_image_generation_requests")
+}
+
+model SocialImageGeneratedMedia {
+  id                  String                          @id @default(uuid()) @db.Uuid
+  workspaceId         String                          @map("workspace_id") @db.Uuid
+  groupId             String                          @map("group_id") @db.Uuid
+  ownerUserId         String                          @map("owner_user_id") @db.Uuid
+  dailyMissionId      String                          @map("daily_mission_id") @db.Uuid
+  requestId           String                          @map("request_id") @db.Uuid
+  status              SocialImageGeneratedMediaStatus @default(READY)
+  sourceStorageKey    String?                         @map("source_storage_key") @db.VarChar(512)
+  completedStorageKey String                          @unique @map("completed_storage_key") @db.VarChar(512)
+  thumbnailStorageKey String                          @unique @map("thumbnail_storage_key") @db.VarChar(512)
+  width               Int
+  height              Int
+  contentHash         String                          @map("content_hash") @db.Char(64)
+  createdAt           DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  request             SocialImageGenerationRequest    @relation(fields: [workspaceId, groupId, requestId, ownerUserId, dailyMissionId], references: [workspaceId, groupId, id, ownerUserId, dailyMissionId], onDelete: Cascade)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, groupId, ownerUserId, status, createdAt])
+  @@index([dailyMissionId, status])
+  @@index([requestId, status])
+  @@map("social_image_generated_media")
 }
 
 model VideoScene {
@@ -2845,6 +2982,7 @@ model GenerationContextSnapshot {
   dailyMission   DailyMission @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
 
   @@unique([workspaceId, bunshinId, dailyMissionId])
+  @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, generatedAt])
   @@map("generation_context_snapshots")
 }
