@@ -120,58 +120,80 @@ export function GroupKnowledgeManager({
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
-    const file = values.get('file');
+    const files = values
+      .getAll('file')
+      .filter((value): value is File => value instanceof File && value.size > 0);
     const title = values.get('title');
-    if (!(file instanceof File) || file.size === 0 || typeof title !== 'string') return;
-    const type = file.type === 'application/pdf' ? 'PDF' : 'VIDEO';
-    if (!['application/pdf', 'video/mp4', 'video/quicktime'].includes(file.type)) {
-      setMessage('PDF、MP4、MOVのどれかを選んでください。');
+    if (files.length === 0 || typeof title !== 'string') return;
+    if (files.length > 10) {
+      setMessage('一度に追加できるのは10件までです。10件ずつに分けて選んでください。');
+      return;
+    }
+    const invalid = files.filter((file) => {
+      if (!['application/pdf', 'video/mp4', 'video/quicktime'].includes(file.type)) return true;
+      const maximum = file.type === 'application/pdf' ? 50_000_000 : 25_000_000;
+      return file.size > maximum;
+    });
+    if (invalid.length > 0) {
+      setMessage(
+        `追加できないファイルがあります：${invalid.map((file) => file.name).join('、')}。PDFは50MB、動画は25MBまでです。`,
+      );
       return;
     }
     setSaving(true);
-    setMessage('安全にアップロードする準備をしています…');
-    try {
-      const prepared = await parse(
-        await fetch(endpoint, {
+    const saved: Source[] = [];
+    const failed: string[] = [];
+    for (const [index, file] of files.entries()) {
+      setMessage(`${files.length}件中${index + 1}件目「${file.name}」を送信しています…`);
+      try {
+        const type = file.type === 'application/pdf' ? 'PDF' : 'VIDEO';
+        const prepared = await parse(
+          await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              type,
+              title:
+                files.length === 1 && title.trim()
+                  ? title.trim()
+                  : file.name.replace(/\.[^.]+$/u, ''),
+              originalFileName: file.name,
+              mimeType: file.type,
+              sizeBytes: file.size,
+              rightsConfirmed: values.get('rightsConfirmed') === 'on',
+              productPackVersionId: selectedProductVersion(values),
+            }),
+          }),
+        );
+        if (!prepared.upload) throw new Error('アップロードを準備できませんでした。');
+        const uploaded = await fetch(prepared.upload.uploadUrl, {
+          method: prepared.upload.method,
+          headers: prepared.upload.headers,
+          body: file,
+        });
+        if (!uploaded.ok) throw new Error('ファイルを送信できませんでした。');
+        const completed = await fetch(`${endpoint}/${prepared.source!.id}/complete`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            type,
-            title: title.trim() || file.name.replace(/\.[^.]+$/u, ''),
-            originalFileName: file.name,
-            mimeType: file.type,
-            sizeBytes: file.size,
-            rightsConfirmed: values.get('rightsConfirmed') === 'on',
-            productPackVersionId: selectedProductVersion(values),
-          }),
-        }),
-      );
-      if (!prepared.upload) throw new Error('アップロードを準備できませんでした。');
-      setMessage('ファイルを送信しています…');
-      const uploaded = await fetch(prepared.upload.uploadUrl, {
-        method: prepared.upload.method,
-        headers: prepared.upload.headers,
-        body: file,
-      });
-      if (!uploaded.ok) throw new Error('ファイルを送信できませんでした。');
-      setMessage('ファイルが正しいか確認しています…');
-      const completed = await fetch(`${endpoint}/${prepared.source!.id}/complete`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sizeBytes: file.size }),
-      });
-      if (!completed.ok) {
-        const body = (await completed.json()) as { error?: { message?: string } };
-        throw new Error(body.error?.message ?? 'ファイルを確認できませんでした。');
+          body: JSON.stringify({ sizeBytes: file.size }),
+        });
+        if (!completed.ok) throw new Error('ファイルを確認できませんでした。');
+        saved.push(prepared.source!);
+      } catch {
+        failed.push(file.name);
       }
-      add(prepared.source!);
-      fileForm.current?.reset();
-      setMessage('保存しました。内容の読み取りが始まるまでお待ちください。');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存できませんでした。');
-    } finally {
-      setSaving(false);
     }
+    setSources((current) => [
+      ...saved,
+      ...current.filter((item) => !saved.some((source) => source.id === item.id)),
+    ]);
+    fileForm.current?.reset();
+    setMessage(
+      failed.length === 0
+        ? `${saved.length}件を保存しました。内容の読み取りが始まるまでお待ちください。`
+        : `${saved.length}件を保存しました。保存できなかったファイル：${failed.join('、')}。失敗したファイルだけ、もう一度お試しください。`,
+    );
+    setSaving(false);
   }
 
   async function saveSimple(event: FormEvent<HTMLFormElement>, type: 'URL' | 'TEXT') {
@@ -310,9 +332,7 @@ export function GroupKnowledgeManager({
     <>
       <section className="settings-card">
         <h2>資料をアップロード</h2>
-        <p>
-          ファイルを1つ選ぶだけです。PDFか動画かは自動で判定し、資料名もファイル名から作ります。
-        </p>
+        <p>PDFや動画をまとめて選べます。種類と資料名はファイルから自動で判定します。</p>
         <form ref={fileForm} className="form-stack" onSubmit={(event) => void saveFile(event)}>
           <label className="field">
             <span className="field__label">ファイルを選ぶ</span>
@@ -321,12 +341,13 @@ export function GroupKnowledgeManager({
               name="file"
               type="file"
               accept="application/pdf,video/mp4,video/quicktime"
+              multiple
               required
             />
-            <small>PDFは50MBまで、動画は25MBまでです。</small>
+            <small>一度に10件まで選べます。PDFは1件50MBまで、動画は1件25MBまでです。</small>
           </label>
           <label className="field">
-            <span className="field__label">わかりやすい名前（書かなくても大丈夫）</span>
+            <span className="field__label">1件だけ選ぶ場合の名前（書かなくても大丈夫）</span>
             <input
               className="field__control"
               name="title"
@@ -342,7 +363,7 @@ export function GroupKnowledgeManager({
             </span>
           </label>
           <button className="button" type="submit" disabled={saving}>
-            この資料を追加する
+            選んだ資料をまとめて追加する
           </button>
         </form>
       </section>
