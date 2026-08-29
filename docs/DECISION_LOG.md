@@ -1626,5 +1626,14 @@
 - Compensation: Queue投入前またはJob最終失敗時は、実際に使用した支払元だけへ返却する。特典の使用履歴は削除せず`REFUNDED`として理由と日時を保持する。
 - Cost: 管理画面で設定したOpenAIの1回原価が特典の`maxUnitCostUsdMicros`以下の場合だけ特典を使用する。
 - Scope: 購入・課金、企業向け手動履行、再処理・監査の管理画面はB-5B3以降とし、本変更には含めない。
+
+## 2026-08-29 — Badge Reward B-5B3 operational completion
+
+- Access: 原価を伴う特典の手動付与とDead処理の再実行は、費用負担者と販売プランの委任方針が確定するまで`SUPER_ADMIN`だけに許可する。
+- Isolation: Mutationは画面上の表示値を信用せず、`workspaceId + rewardLinkId`をDBで再照合する。別Workspaceの特典を操作できない。
+- Retry: 自動再試行を使い切った`FAILED / DEAD`だけを再実行可能とし、管理者操作時に試行予算を明示的に再設定する。
+- Manual fulfillment: Badge Awardが有効で、まだEntitlementが存在しない場合だけSnapshotから手動付与する。既存Entitlementは上書き・重複発行しない。
+- Audit: 再実行・手動付与には理由を必須とし、操作者、対象Workspace／Group／Badge Award、変更前後、日時を`BadgeAdminAuditLog`へ保存する。
+- Operations UI: システム管理画面で付与状態、停止理由、試行回数、残数・期限、使用／返却履歴、管理者操作履歴を確認できる。
 - Privacy: 審査では個人の投稿本文、Personality、Knowledge、Memoryを取得しない。
 - Source: `docs/GROUP_BADGE_APPROVAL_CORE_REPORT.md`

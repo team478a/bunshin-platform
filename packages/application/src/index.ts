@@ -2352,3 +2352,4 @@ export * from './badge-user-experience';
 export * from './badge-group-workflow';
 export * from './badge-reward';
 export * from './badge-entitlement-consumption';
+export * from './badge-reward-operations';
