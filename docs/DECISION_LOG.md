@@ -1603,5 +1603,12 @@
 - Candidate: 付与対象者と候補登録者は候補を承認できず、別のACTIVE Group管理者による確認を必須にする。
 - Scope: 申請、候補、AwardはWorkspace／Group／Version／User境界をRepositoryとDB制約の両方で固定する。
 - Reward: B-4Aで申請できるGroup BadgeはMANUAL_APPROVALまたはIMPORT、reward type NONEに限定する。
+
+## 2026-08-29: バッジ報酬は用途限定EntitlementをOutbox経由で発行する
+
+- Separation: Badge Awardを先に確定し、Reward LinkとOutboxを介して報酬を非同期発行する。報酬失敗で獲得済みBadgeを取り消さない。
+- Idempotency: 1つのBadge AwardにつきReward LinkとOutboxを各1件に限定し、Workspace／User／Awardの複合外部キーで越境混入を拒否する。
+- Entitlement: 「画像生成1回」のような用途固定特典はWPへ換算せず、Feature Key、付与回数、残数、有効期限、1回原価上限、未使用時失効方針をSnapshotとして保持する。
+- Scope: 初期10共通BadgeとB-4 Group Badgeは引き続き特典なしとする。B-5Aは永続化と冪等発行Coreまでとし、Worker、消費接続、再試行・補償、企業手動履行、管理画面はB-5Bへ分離する。
 - Privacy: 審査では個人の投稿本文、Personality、Knowledge、Memoryを取得しない。
 - Source: `docs/GROUP_BADGE_APPROVAL_CORE_REPORT.md`

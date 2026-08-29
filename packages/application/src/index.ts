@@ -2350,3 +2350,4 @@ export * from './badge-core';
 export * from './badge-common-processor';
 export * from './badge-user-experience';
 export * from './badge-group-workflow';
+export * from './badge-reward';
