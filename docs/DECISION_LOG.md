@@ -1568,3 +1568,14 @@
 - Finding: 最新`main`に利用者向け別案生成処理がなく、通常Daily Missionの同日一意性、派生履歴、回数、Provider受付境界が未設計である。
 - Decision: Catalogの`ALTERNATIVE_PLAN_GENERATION`を利用者へ公開せず、Pointだけを先行消費しない。
 - Resume: 別案生成Core、元Missionとの追記型関係、日次上限、原価、失敗返却、URL再解決境界を承認後に再開する。
+
+## 2026-08-29: Badge Coreは旧AchievementBadgeを変更せず別台帳で追加する
+
+- Persistence: Definition、Version、Progress、Award、Processing Event、Admin Auditを独立Modelにし、既存`AchievementBadge`はB-2の一度限り移行まで保持する。
+- Scope: SYSTEM定義はWorkspace非依存、GROUP定義はWorkspaceとGroupの組を必須にする。Award所有者はUser、Bunshinは任意の根拠参照とする。
+- Authorization: SYSTEM操作はACTIVE SUPER_ADMIN、GROUP操作はACTIVE Workspace MembershipとGroup MANAGERを両方必要とする。
+- Isolation: GroupとBunshinはWorkspaceを含む複合外部キーで固定し、RepositoryでもMembership、Definition所有Scope、Userを再検証する。
+- Idempotency: AwardはWorkspace／User／KeyとBadge Version、Processing EventはWorkspace／Event Type／Source Eventで重複を防ぐ。
+- Evidence: 元本文や個人情報を複製せず、Source Type、Source ID、SHA-256 Evidence HashだけをAwardへ保持する。
+- Boundary: B-1はPersistence／Repository／Use Case／Testまでとし、Seed、判定Processor、API、UI、Point／Entitlement、通知は含めない。
+- Source: `docs/BADGE_CORE_PERSISTENCE_REPORT.md`
