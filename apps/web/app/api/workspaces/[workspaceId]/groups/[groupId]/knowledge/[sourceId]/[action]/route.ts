@@ -7,7 +7,7 @@ export async function POST(
   },
 ) {
   const { workspaceId, groupId, sourceId, action } = await context.params;
-  if (action !== 'approve' && action !== 'archive')
+  if (action !== 'approve' && action !== 'archive' && action !== 'retry')
     return Response.json(
       { error: { code: 'NOT_FOUND', message: '操作が見つかりません' } },
       { status: 404 },
