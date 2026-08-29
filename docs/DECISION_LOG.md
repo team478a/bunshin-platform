@@ -1662,3 +1662,11 @@
 - Provider Adapterへバッジ専用の日本語メッセージ送信を追加し、秘密値を本文・履歴へ保存しない。
 - 一時障害はFAILED、3回目の一時障害はDEAD、同意喪失・受信不能・上限到達はCANCELLEDとして保存する。
 - Job登録、再試行時刻、管理画面監視、DLQ再処理、緊急停止検証はB-6B2Bへ分離する。
+
+# 2026-08-29: バッジLINE配送を共通Job Workerへ接続する
+
+- 定期Schedulerは通知候補を補完した後、PENDING配送を環境＋配送IDの冪等キーでJob登録する。
+- `BADGE_LINE_DELIVER`はMission Jobと区別し、BunshinやSOCIAL Capabilityを必須にしない。
+- 共通Job WorkerのLease、指数バックオフ、最大3回、DEAD状態を再利用する。
+- LINE運用監視の再試行・DEAD Job集計にはMission通知とバッジ通知の両方を含める。
+- 管理者による個別DLQ再処理、整合性照合、緊急停止訓練と外部検証はB-6B2Cで行う。

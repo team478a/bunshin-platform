@@ -4,6 +4,7 @@ import {
   CompleteJob,
   ExecuteMissionAutomationJob,
   ExecuteLineDeliveryJob,
+  ExecuteBadgeLineDeliveryJob,
   ExecuteVideoRenderJob,
   ExecuteSocialImageGenerationJob,
   FailJob,
@@ -38,6 +39,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createWeeklyPlanJobHandler },
     { createDailyMissionJobHandler },
     { createLineDeliveryJobHandler },
+    { createBadgeLineDeliveryJobHandler },
     { createTrendResearchJobHandler },
     { createVideoRenderJobHandler },
     { createSocialImageGenerationJobHandler },
@@ -45,6 +47,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
     import('../jobs/line-delivery-job-handler'),
+    import('../jobs/badge-line-delivery-job-handler'),
     import('../jobs/trend-research-job-handler'),
     import('../jobs/video-render-job-handler'),
     import('../jobs/social-image-generation-job-handler'),
@@ -64,6 +67,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     fail,
   );
   const lineExecutor = new ExecuteLineDeliveryJob(createLineDeliveryJobHandler(), complete, fail);
+  const badgeLineExecutor = new ExecuteBadgeLineDeliveryJob(
+    createBadgeLineDeliveryJobHandler(),
+    complete,
+    fail,
+  );
   const videoExecutor = new ExecuteVideoRenderJob(createVideoRenderJobHandler(), complete, fail);
   const socialImageExecutor = new ExecuteSocialImageGenerationJob(
     createSocialImageGenerationJobHandler(),
@@ -74,11 +82,13 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     execute: (job, workerId) =>
       job.jobType === 'LINE_MISSION_DELIVER'
         ? lineExecutor.execute(job, workerId)
-        : job.jobType === 'VIDEO_RENDER_PROCESS'
-          ? videoExecutor.execute(job, workerId)
-          : job.jobType === 'SOCIAL_IMAGE_GENERATE'
-            ? socialImageExecutor.execute(job, workerId)
-            : missionExecutor.execute(job, workerId),
+        : job.jobType === 'BADGE_LINE_DELIVER'
+          ? badgeLineExecutor.execute(job, workerId)
+          : job.jobType === 'VIDEO_RENDER_PROCESS'
+            ? videoExecutor.execute(job, workerId)
+            : job.jobType === 'SOCIAL_IMAGE_GENERATE'
+              ? socialImageExecutor.execute(job, workerId)
+              : missionExecutor.execute(job, workerId),
   });
 }
 

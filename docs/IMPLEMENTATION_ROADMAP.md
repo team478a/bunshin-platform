@@ -436,7 +436,8 @@ WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし
 - B-6A: 同一Award 1回のアプリ内獲得通知、本人限定一覧、既読化 — 実装済み
 - B-6B1: テストGroup限定LINE通知の候補判定、同意Gate、重複防止、配信状態Core — 実装済み
 - B-6B2A: バッジLINE通知の排他取得、送信時Gate再確認、Quota、Provider送信、失敗・DEAD状態 — 実装済み
-- B-6B2B: Job接続、再試行Schedule、監視、DLQ、整合性照合、緊急停止、30人・4週間限定検証
+- B-6B2B: Scheduler／Job Worker接続、指数バックオフ再試行、DEAD監視 — 実装済み
+- B-6B2C: 管理画面からのDLQ再処理、整合性照合、緊急停止訓練、30人・4週間限定検証
 
 Badgeは本人の達成証明、WPは利用可能報酬として別台帳にする。初期値はPoint特典なし、共通10種類、PRIVATE／GROUP公開までとし、PUBLICプロフィール、ランキング、AI品質評価、売買・譲渡を含めない。B-0 PRのマージ前にSchema、Migration、API、Job、画面へ進まない。
 
