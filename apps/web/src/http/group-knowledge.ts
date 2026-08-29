@@ -42,6 +42,14 @@ const completeSchema = z
   .object({ sizeBytes: z.number().int().positive().max(200_000_000) })
   .strict();
 const updateScopeSchema = z.object({ productPackVersionId: z.uuid().nullable() }).strict();
+const updateReviewSchema = z
+  .object({
+    chunks: z
+      .array(z.object({ id: z.uuid(), content: z.string().trim().min(1).max(8000) }).strict())
+      .min(1)
+      .max(2000),
+  })
+  .strict();
 
 function publicSource(source: {
   id: string;
@@ -339,6 +347,40 @@ export async function updateGroupKnowledgeScopeResponse(
     });
     return Response.json(
       { data: { source: publicSource(source) }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function updateGroupKnowledgeReviewResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  sourceId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const current = await actor();
+    const input = updateReviewSchema.parse(await request.json());
+    const { service } = await dependencies();
+    const scope = {
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: current.userId,
+      sourceId: uuid.parse(sourceId),
+    };
+    await service.updateReviewChunkContents({ ...scope, chunks: input.chunks });
+    return Response.json(
+      { data: { chunks: input.chunks }, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {

@@ -15,6 +15,7 @@ const auditActionLabel = {
   APPROVED: '投稿づくりでの利用を開始',
   ARCHIVED: '資料の利用を停止',
   PRODUCT_SCOPE_UPDATED: '資料を使う範囲を変更',
+  REVIEW_EDITED: '読み取った内容を修正',
 } as const;
 
 function dateTime(value: Date) {

@@ -72,6 +72,18 @@ class Repository implements GroupKnowledgeRepository {
     this.source.productPackVersionId = input.productPackVersionId;
     return Promise.resolve(this.source);
   }
+  updateReviewChunkContents(
+    input: Parameters<GroupKnowledgeRepository['updateReviewChunkContents']>[0],
+  ) {
+    if (!this.allow || this.source.status !== 'REVIEW_REQUIRED') return Promise.resolve(false);
+    const updates = new Map(input.chunks.map((chunk) => [chunk.id, chunk.content]));
+    if (updates.size !== this.chunks.length) return Promise.resolve(false);
+    this.chunks = this.chunks.map((chunk) => ({
+      ...chunk,
+      content: updates.get(chunk.id) ?? chunk.content,
+    }));
+    return Promise.resolve(true);
+  }
   listForManagement() {
     return Promise.resolve(this.allow ? [this.source] : null);
   }
@@ -219,5 +231,30 @@ describe('GroupKnowledgeService', () => {
       sourceId: repository.source.id,
     });
     expect(repository.source.status).toBe('PROCESSING');
+  });
+
+  it('確認待ちの抽出文章を承認前に修正する', async () => {
+    const repository = new Repository();
+    repository.source.status = 'REVIEW_REQUIRED';
+    repository.chunks = [
+      {
+        id: 'chunk-1',
+        sourceId: repository.source.id,
+        sortOrder: 0,
+        type: 'FAQ',
+        content: '修正前',
+        sourceLabel: '3ページ',
+        pageNumber: 3,
+        startSeconds: null,
+        endSeconds: null,
+        confidence: 1,
+      },
+    ];
+    await new GroupKnowledgeService(repository).updateReviewChunkContents({
+      ...scope,
+      sourceId: repository.source.id,
+      chunks: [{ id: 'chunk-1', content: '修正後' }],
+    });
+    expect(repository.chunks[0]?.content).toBe('修正後');
   });
 });
