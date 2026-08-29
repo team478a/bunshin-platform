@@ -37,6 +37,15 @@ const request = {
   },
 };
 
+const approvalEvidence = [
+  'PLAN_APPROVAL',
+  'STORAGE_RETENTION',
+  'MOBILE_E2E',
+  'SECURITY_ISOLATION',
+  'TEN_THEME_VALIDATION',
+  'FINAL_APPROVAL',
+].map((checkKey) => ({ checkKey, action: 'RECORDED' }));
+
 function transaction(overrides: Record<string, unknown> = {}) {
   const tx = {
     socialImageGenerationRequest: {
@@ -45,6 +54,7 @@ function transaction(overrides: Record<string, unknown> = {}) {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: request.groupMembershipId }) },
+    socialImagePilotEvidence: { findMany: vi.fn().mockResolvedValue(approvalEvidence) },
     bunshin: { findFirst: vi.fn().mockResolvedValue({ id: request.bunshinId }) },
     campaign: { findFirst: vi.fn() },
     ...overrides,
@@ -117,6 +127,25 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
     await expect(repository(tx).claim(input)).resolves.toEqual({
       allowed: false,
       reason: 'DAILY_LIMIT_REACHED',
+    });
+    expect(tx.socialImageGenerationRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rechecks final approval immediately before provider execution', async () => {
+    const tx = transaction({
+      socialImagePilotEvidence: {
+        findMany: vi.fn().mockResolvedValue([
+          ...approvalEvidence,
+          {
+            checkKey: 'FINAL_APPROVAL',
+            action: 'REVOKED',
+          },
+        ]),
+      },
+    });
+    await expect(repository(tx).claim(input)).resolves.toEqual({
+      allowed: false,
+      reason: 'PILOT_STOPPED',
     });
     expect(tx.socialImageGenerationRequest.updateMany).not.toHaveBeenCalled();
   });

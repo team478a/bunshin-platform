@@ -304,7 +304,9 @@ Platform AdminがGroupへ許可した範囲だけをGroup Managerが参加者へ
 - I5-A: 利用者向け生成開始・進捗確認・Private download API — 完了
 - I5-B1: mobile-first UI、画像の採用・不採用・再生成・保存 — 完了
 - I5-B2: LINE通知から画像確認画面への安全な導線（LINEから生成は開始しない）— 完了
-- I6: Group / Platform管理、50テーマ比較、Security、Production Gate
+- I6-A: Group / Platform管理、自動Readiness、グループ・設定版別の追記型確認記録 — 完了
+- I6-B: 生成受付とProvider実行直前のProduction Gate、確認取消時の即時停止 — 完了
+- I6-C: 10テーマ／50テーマ比較、実端末E2E、Security実査、最終承認 — 人間による実査待ち
 
 FREE一般ユーザーへは開放せず、Productionで明示許可したGroupと同意済みACTIVE Membershipだけを対象とする。Phase 10の一般向け画像・動画Providerを前倒ししない。越境、秘密漏えい、二重課金、重大な広告安全違反が1件でもあれば全体停止する。
 
