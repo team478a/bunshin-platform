@@ -335,6 +335,20 @@ enum SocialImageGeneratedMediaStatus {
   DELETED
 }
 
+enum SocialImagePilotEvidenceCheckKey {
+  PLAN_APPROVAL
+  STORAGE_RETENTION
+  MOBILE_E2E
+  SECURITY_ISOLATION
+  TEN_THEME_VALIDATION
+  FINAL_APPROVAL
+}
+
+enum SocialImagePilotEvidenceAction {
+  RECORDED
+  REVOKED
+}
+
 enum ProductPackAssignmentStatus {
   ACTIVE
   REVOKED
@@ -1000,6 +1014,7 @@ model User {
   trendBenchmarkCases               TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
   trendBenchmarkObservations        TrendProviderBenchmarkObservation[] @relation("TrendBenchmarkObservationEditor")
   productionGateEvidence            ProductionGateEvidence[]            @relation("ProductionGateEvidenceActor")
+  socialImagePilotEvidence          SocialImagePilotEvidence[]          @relation("SocialImagePilotEvidenceActor")
   userOperationAuditsAsTarget       UserOperationAudit[]                @relation("UserOperationAuditTarget")
   userOperationAuditsAsActor        UserOperationAudit[]                @relation("UserOperationAuditActor")
   supportCasesAsTarget              SupportCase[]                       @relation("SupportCaseTarget")
@@ -2750,11 +2765,31 @@ model SocialImageGenerationPilot {
   createdAt          DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
   enrollments        SocialImagePilotEnrollment[]
+  evidence           SocialImagePilotEvidence[]
 
   @@unique([workspaceId, groupId, id])
   @@unique([groupId, version])
   @@index([workspaceId, groupId, status, createdAt])
   @@map("social_image_generation_pilots")
+}
+
+model SocialImagePilotEvidence {
+  id          String                           @id @default(uuid()) @db.Uuid
+  workspaceId String                           @map("workspace_id") @db.Uuid
+  groupId     String                           @map("group_id") @db.Uuid
+  pilotId     String                           @map("pilot_id") @db.Uuid
+  checkKey    SocialImagePilotEvidenceCheckKey @map("check_key")
+  action      SocialImagePilotEvidenceAction
+  reason      String                           @db.VarChar(1000)
+  evidenceUrl String?                          @map("evidence_url") @db.VarChar(2048)
+  actorUserId String                           @map("actor_user_id") @db.Uuid
+  occurredAt  DateTime                         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  pilot       SocialImageGenerationPilot       @relation(fields: [workspaceId, groupId, pilotId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  actor       User                             @relation("SocialImagePilotEvidenceActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, pilotId, checkKey, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("social_image_pilot_evidence")
 }
 
 model SocialImagePilotEnrollment {
