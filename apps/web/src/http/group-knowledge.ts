@@ -234,3 +234,85 @@ export async function completeGroupKnowledgeUploadResponse(
     });
   }
 }
+
+export async function getGroupKnowledgeReviewResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  sourceId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    const current = await actor();
+    const scope = {
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: current.userId,
+    };
+    const parsedSourceId = uuid.parse(sourceId);
+    const { service } = await dependencies();
+    const source = (await service.listForManagement(scope)).find(
+      (item) => item.id === parsedSourceId,
+    );
+    if (!source) throw new ApplicationError('NOT_FOUND', '資料が見つかりません');
+    const db = await import('@bunshin/database');
+    const chunks = await db.prisma.groupKnowledgeChunk.findMany({
+      where: {
+        sourceId: parsedSourceId,
+        source: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+      },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        type: true,
+        content: true,
+        sourceLabel: true,
+        pageNumber: true,
+        startSeconds: true,
+        endSeconds: true,
+        confidence: true,
+      },
+    });
+    return Response.json(
+      { data: { source: publicSource(source), chunks }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, { status: mapped.status });
+  }
+}
+
+export async function changeGroupKnowledgeStateResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  sourceId: string,
+  action: 'approve' | 'archive',
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const current = await actor();
+    const scope = {
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: current.userId,
+      sourceId: uuid.parse(sourceId),
+    };
+    const { service } = await dependencies();
+    if (action === 'approve') await service.approve(scope);
+    else await service.archive(scope);
+    const source = (await service.listForManagement(scope)).find(
+      (item) => item.id === scope.sourceId,
+    );
+    if (!source) throw new ApplicationError('NOT_FOUND', '資料が見つかりません');
+    return Response.json(
+      { data: { source: publicSource(source) }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, { status: mapped.status });
+  }
+}
