@@ -7,6 +7,7 @@ import {
   ExecuteBadgeLineDeliveryJob,
   ExecuteVideoRenderJob,
   ExecuteSocialImageGenerationJob,
+  ExecuteGroupKnowledgeExtractionJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -43,6 +44,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createTrendResearchJobHandler },
     { createVideoRenderJobHandler },
     { createSocialImageGenerationJobHandler },
+    { createGroupKnowledgeExtractionJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
@@ -51,6 +53,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/trend-research-job-handler'),
     import('../jobs/video-render-job-handler'),
     import('../jobs/social-image-generation-job-handler'),
+    import('../jobs/group-knowledge-extraction-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -78,6 +81,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
+  const groupKnowledgeExecutor = new ExecuteGroupKnowledgeExtractionJob(
+    createGroupKnowledgeExtractionJobHandler(),
+    complete,
+    fail,
+  );
   return new RunJobWorkerBatch(new ClaimJob(jobs), {
     execute: (job, workerId) =>
       job.jobType === 'LINE_MISSION_DELIVER'
@@ -88,7 +96,9 @@ async function configuredWorker(): Promise<JobWorkerPort> {
             ? videoExecutor.execute(job, workerId)
             : job.jobType === 'SOCIAL_IMAGE_GENERATE'
               ? socialImageExecutor.execute(job, workerId)
-              : missionExecutor.execute(job, workerId),
+              : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
+                ? groupKnowledgeExecutor.execute(job, workerId)
+                : missionExecutor.execute(job, workerId),
   });
 }
 

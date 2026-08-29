@@ -237,7 +237,7 @@ export function GroupKnowledgeManager({
               accept="application/pdf,video/mp4,video/quicktime"
               required
             />
-            <small>PDFは50MBまで、動画は200MBまでです。</small>
+            <small>PDFは50MBまで、動画は25MBまでです。</small>
           </label>
           <label className="field">
             <span className="field__label">わかりやすい名前（書かなくても大丈夫）</span>

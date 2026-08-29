@@ -2357,4 +2357,5 @@ export * from './badge-group-workflow';
 export * from './badge-reward';
 export * from './badge-entitlement-consumption';
 export * from './group-knowledge';
+export * from './group-knowledge-extraction-job';
 export * from './badge-reward-operations';

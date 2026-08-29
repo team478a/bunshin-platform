@@ -38,7 +38,7 @@ describe('SupabaseGroupKnowledgeStorage', () => {
     });
     expect(fake.createBucket).toHaveBeenCalledWith(
       'group-knowledge',
-      expect.objectContaining({ public: false, fileSizeLimit: 200_000_000 }),
+      expect.objectContaining({ public: false, fileSizeLimit: 25_000_000 }),
     );
     expect(fake.createSignedUploadUrl).toHaveBeenCalledWith('workspace/group/user/source', {
       upsert: false,
