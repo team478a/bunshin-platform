@@ -86,7 +86,10 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
-  return new RunJobWorkerBatch(new ClaimJob(jobs), {
+  // PDF / video extraction can legitimately wait up to 120 seconds on the provider.
+  // Keep the lease longer than every configured provider timeout so another cron
+  // invocation cannot claim and charge for the same extraction concurrently.
+  return new RunJobWorkerBatch(new ClaimJob(jobs, 5 * 60_000), {
     execute: (job, workerId) =>
       job.jobType === 'LINE_MISSION_DELIVER'
         ? lineExecutor.execute(job, workerId)

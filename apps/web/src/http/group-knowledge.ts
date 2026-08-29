@@ -88,6 +88,7 @@ async function enqueueExtraction(input: {
   sourceId: string;
   actorUserId: string;
   correlationId: string;
+  idempotencySuffix?: string;
 }) {
   const db = await import('@bunshin/database');
   const environment = getServerEnvironment().APP_ENV.toUpperCase() as
@@ -98,7 +99,7 @@ async function enqueueExtraction(input: {
     requestedBy: input.actorUserId,
     environment,
     jobType: GROUP_KNOWLEDGE_EXTRACTION_JOB_TYPE,
-    idempotencyKey: `group-knowledge:${input.sourceId}:v1`,
+    idempotencyKey: `group-knowledge:${input.sourceId}:${input.idempotencySuffix ?? 'v1'}`,
     payloadReference: `group-knowledge:${input.groupId}:${input.sourceId}:${input.actorUserId}`,
     maxAttempts: 3,
   });
@@ -317,7 +318,7 @@ export async function changeGroupKnowledgeStateResponse(
   workspaceId: string,
   groupId: string,
   sourceId: string,
-  action: 'approve' | 'archive',
+  action: 'approve' | 'archive' | 'retry',
 ) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
@@ -331,7 +332,18 @@ export async function changeGroupKnowledgeStateResponse(
     };
     const { service } = await dependencies();
     if (action === 'approve') await service.approve(scope);
-    else await service.archive(scope);
+    else if (action === 'archive') await service.archive(scope);
+    else {
+      const failed = (await service.listForManagement(scope)).find(
+        (item) => item.id === scope.sourceId && item.status === 'FAILED',
+      );
+      if (!failed) throw new ApplicationError('CONFLICT', '再読み取りできる状態ではありません');
+      await enqueueExtraction({
+        ...scope,
+        correlationId: requestId,
+        idempotencySuffix: `retry-${failed.updatedAt.getTime()}`,
+      });
+    }
     const source = (await service.listForManagement(scope)).find(
       (item) => item.id === scope.sourceId,
     );

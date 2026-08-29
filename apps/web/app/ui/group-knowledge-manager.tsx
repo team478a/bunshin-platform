@@ -24,6 +24,22 @@ const statusLabel = {
   ARCHIVED: '利用停止',
 } as const;
 
+const failureMessage: Record<string, string> = {
+  GROUP_KNOWLEDGE_PROVIDER_ERROR:
+    '外部サービスが混み合っているか、一時的に接続できませんでした。もう一度読み取れます。',
+  GROUP_KNOWLEDGE_VALIDATION_ERROR:
+    '資料の内容または形式を読み取れませんでした。ファイルやURLを確認してください。',
+  GROUP_KNOWLEDGE_FORBIDDEN: 'この資料を読み取る権限を確認できませんでした。',
+  GROUP_KNOWLEDGE_NOT_FOUND: '登録した資料が見つかりませんでした。',
+  GROUP_KNOWLEDGE_CONFLICT: '別の処理と重なりました。少し待ってからもう一度お試しください。',
+  SOURCE_NOT_FOUND: '登録した資料が見つかりませんでした。',
+  SOURCE_NOT_PROCESSABLE: 'この資料の形式には対応していません。',
+};
+
+function friendlyFailure(code: string) {
+  return failureMessage[code] ?? '内容を読み取れませんでした。もう一度お試しください。';
+}
+
 export function GroupKnowledgeManager({
   workspaceId,
   groupId,
@@ -195,9 +211,15 @@ export function GroupKnowledgeManager({
     }
   }
 
-  async function changeState(sourceId: string, action: 'approve' | 'archive') {
+  async function changeState(sourceId: string, action: 'approve' | 'archive' | 'retry') {
     setSaving(true);
-    setMessage(action === 'approve' ? '利用を開始しています…' : '利用を停止しています…');
+    setMessage(
+      action === 'approve'
+        ? '利用を開始しています…'
+        : action === 'archive'
+          ? '利用を停止しています…'
+          : 'もう一度読み取る準備をしています…',
+    );
     try {
       const response = await fetch(`${endpoint}/${sourceId}/${action}`, { method: 'POST' });
       const body = (await response.json()) as {
@@ -211,7 +233,9 @@ export function GroupKnowledgeManager({
       setMessage(
         action === 'approve'
           ? '投稿づくりに利用する資料として承認しました。'
-          : 'この資料の利用を停止しました。',
+          : action === 'archive'
+            ? 'この資料の利用を停止しました。'
+            : '再読み取りを受け付けました。少し待ってから画面を更新してください。',
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '変更できませんでした。');
@@ -382,7 +406,20 @@ export function GroupKnowledgeManager({
               {source.failureCode ? (
                 <>
                   <br />
-                  確認が必要です：{source.failureCode}
+                  {friendlyFailure(source.failureCode)}
+                </>
+              ) : null}
+              {source.status === 'FAILED' ? (
+                <>
+                  <br />
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeState(source.id, 'retry')}
+                  >
+                    もう一度読み取る
+                  </button>
                 </>
               ) : null}
               {['REVIEW_REQUIRED', 'ACTIVE'].includes(source.status) ? (
