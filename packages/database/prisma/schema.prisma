@@ -998,6 +998,7 @@ model User {
   pointRedemptions                  PointRedemption[]
   badgeProgress                     BadgeProgress[]
   badgeAwards                       BadgeAward[]
+  badgeAwardNotifications          BadgeAwardNotification[]
   badgeAwardVisibilities            BadgeAwardVisibility[]
   badgeProcessingEvents             BadgeProcessingEvent[]
   badgeAuditsPerformed              BadgeAdminAuditLog[]                @relation("BadgeAuditActor")
@@ -1100,6 +1101,7 @@ model Workspace {
   badgeDefinitions             BadgeDefinition[]
   badgeProgress                BadgeProgress[]
   badgeAwards                  BadgeAward[]
+  badgeAwardNotifications     BadgeAwardNotification[]
   badgeAwardVisibilities       BadgeAwardVisibility[]
   badgeProcessingEvents        BadgeProcessingEvent[]
   badgeAdminAudits             BadgeAdminAuditLog[]
@@ -1798,6 +1800,7 @@ model BadgeAward {
   audits          BadgeAdminAuditLog[]
   visibility      BadgeAwardVisibility?
   rewardLink      BadgeRewardLink?
+  notification    BadgeAwardNotification?
 
   @@unique([workspaceId, userId, idempotencyKey])
   @@unique([workspaceId, userId, badgeVersionId])
@@ -1805,6 +1808,23 @@ model BadgeAward {
   @@index([workspaceId, userId, status, awardedAt])
   @@index([groupId, status, awardedAt])
   @@map("badge_awards")
+}
+
+model BadgeAwardNotification {
+  id           String     @id @default(uuid()) @db.Uuid
+  workspaceId  String     @map("workspace_id") @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  badgeAwardId String     @unique @map("badge_award_id") @db.Uuid
+  readAt       DateTime?  @map("read_at") @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeAward   BadgeAward @relation(fields: [workspaceId, userId, badgeAwardId], references: [workspaceId, userId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, badgeAwardId])
+  @@index([workspaceId, userId, readAt, createdAt])
+  @@map("badge_award_notifications")
 }
 
 model BadgeAwardVisibility {

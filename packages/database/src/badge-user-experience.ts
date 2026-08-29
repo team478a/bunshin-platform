@@ -20,6 +20,26 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
       select: { id: true },
     });
     if (!membership) return null;
+    const activeAwards = await this.client.badgeAward.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        notification: null,
+      },
+      select: { id: true, awardedAt: true },
+    });
+    if (activeAwards.length) {
+      await this.client.badgeAwardNotification.createMany({
+        data: activeAwards.map((award) => ({
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          badgeAwardId: award.id,
+          createdAt: award.awardedAt,
+        })),
+        skipDuplicates: true,
+      });
+    }
     const groups = await this.client.groupMembership.findMany({
       where: {
         workspaceId: input.workspaceId,
@@ -62,6 +82,26 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
         },
       },
       orderBy: [{ definition: { category: 'asc' } }, { definition: { code: 'asc' } }],
+    });
+    const notifications = await this.client.badgeAwardNotification.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        badgeAward: { status: 'ACTIVE' },
+      },
+      select: {
+        id: true,
+        badgeAwardId: true,
+        readAt: true,
+        badgeAward: {
+          select: {
+            awardedAt: true,
+            badgeVersion: { select: { title: true, description: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     });
     const activeGroups = new Set(groupIds);
     const items: BadgeUserItem[] = versions.map((version) => {
@@ -108,6 +148,14 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
         .sort((a, b) => b.progressPercent - a.progressPercent)
         .slice(0, 3),
       shareableGroups: groups.map(({ group }) => group),
+      notifications: notifications.map((notification) => ({
+        id: notification.id,
+        badgeAwardId: notification.badgeAwardId,
+        title: notification.badgeAward.badgeVersion.title,
+        description: notification.badgeAward.badgeVersion.description,
+        awardedAt: notification.badgeAward.awardedAt,
+        readAt: notification.readAt,
+      })),
     };
     return dashboard;
   }
@@ -151,5 +199,35 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
       });
       return { visibility: result.visibility, sharedGroupId: result.sharedGroupId };
     });
+  }
+
+  async markNotificationRead(
+    input: Parameters<BadgeUserExperienceRepository['markNotificationRead']>[0],
+  ) {
+    const result = await this.client.badgeAwardNotification.updateMany({
+      where: {
+        id: input.notificationId,
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        readAt: null,
+        badgeAward: { status: 'ACTIVE' },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      data: { readAt: input.readAt },
+    });
+    if (result.count === 1) return true;
+    const existing = await this.client.badgeAwardNotification.findFirst({
+      where: {
+        id: input.notificationId,
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        readAt: { not: null },
+      },
+      select: { id: true },
+    });
+    return existing !== null;
   }
 }

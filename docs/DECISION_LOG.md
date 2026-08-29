@@ -1637,3 +1637,12 @@
 - Operations UI: システム管理画面で付与状態、停止理由、試行回数、残数・期限、使用／返却履歴、管理者操作履歴を確認できる。
 - Privacy: 審査では個人の投稿本文、Personality、Knowledge、Memoryを取得しない。
 - Source: `docs/GROUP_BADGE_APPROVAL_CORE_REPORT.md`
+
+# 2026-08-29: バッジ獲得通知はアプリ内を正としてAward単位で一度だけ作る
+
+- アプリ内通知をバッジ獲得通知の正本とし、LINE送信成否とは分離する。
+- `BadgeAwardNotification`を`BadgeAward`と1対1にし、DB一意制約と`createMany(skipDuplicates)`で同じAwardの重複通知を防ぐ。
+- 通知一覧と既読更新はWorkspace Membershipと本人のUser IDを毎回検証し、別Workspace・別Userの通知を返さない。
+- 既存Awardにも本人がバッジ画面を開いた時点で不足通知を補完し、移行前の獲得を失わない。
+- 取消・失効したAwardは通知一覧へ表示しない。通知削除は用意せず、本人の既読日時を保存する。
+- LINE通知はB-6BでテストGroupのFeature Flag、通知同意、Quiet Hours、Quota、全体停止を再利用して接続する。

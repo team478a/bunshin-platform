@@ -2,6 +2,7 @@ import { GetBadgeUserDashboard, type BadgeUserItem } from '@bunshin/application'
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { BadgeVisibilityControl } from './badge-visibility-control';
+import { BadgeNotificationList } from './badge-notification-list';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +73,15 @@ export default async function BadgesPage() {
         <h1>バッジ</h1>
         <p>できたことが増えると、バッジが集まります。</p>
       </header>
+
+      <BadgeNotificationList
+        workspaceId={workspace.id}
+        initialNotifications={dashboard.notifications.map((item) => ({
+          ...item,
+          awardedAt: item.awardedAt.toISOString(),
+          readAt: item.readAt?.toISOString() ?? null,
+        }))}
+      />
 
       <section className="settings-card" aria-labelledby="earned-badges">
         <h2 id="earned-badges">もらったバッジ</h2>
