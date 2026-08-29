@@ -172,6 +172,34 @@ enum BadgeCandidateStatus {
   REJECTED
 }
 
+enum BadgeRewardType {
+  ENTITLEMENT
+}
+
+enum BadgeRewardLinkStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BadgeRewardOutboxStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  RETRY
+  DEAD
+  CANCELLED
+}
+
+enum BadgeRewardEntitlementStatus {
+  ACTIVE
+  CONSUMED
+  REVOKED
+  EXPIRED
+}
+
 enum PointCatalogStatus {
   DRAFT
   ACTIVE
@@ -1708,6 +1736,7 @@ model BadgeVersion {
   audits           BadgeAdminAuditLog[]
   approvalRequests BadgeApprovalRequest[]
   awardCandidates  BadgeAwardCandidate[]
+  rewardLinks      BadgeRewardLink[]
 
   @@unique([definitionId, version])
   @@index([definitionId, publishedAt])
@@ -1763,6 +1792,7 @@ model BadgeAward {
   sourceBunshin   Bunshin?              @relation("BadgeAwardSourceBunshin", fields: [workspaceId, sourceBunshinId], references: [workspaceId, id], onDelete: Restrict)
   audits          BadgeAdminAuditLog[]
   visibility      BadgeAwardVisibility?
+  rewardLink      BadgeRewardLink?
 
   @@unique([workspaceId, userId, idempotencyKey])
   @@unique([workspaceId, userId, badgeVersionId])
@@ -1882,6 +1912,77 @@ model BadgeAdminAuditLog {
   @@index([badgeDefinitionId, occurredAt])
   @@index([badgeAwardId, occurredAt])
   @@map("badge_admin_audit_logs")
+}
+
+model BadgeRewardLink {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  userId               String                  @map("user_id") @db.Uuid
+  badgeAwardId         String                  @unique @map("badge_award_id") @db.Uuid
+  badgeVersionId       String                  @map("badge_version_id") @db.Uuid
+  rewardType           BadgeRewardType         @map("reward_type")
+  rewardConfigSnapshot Json                    @map("reward_config_snapshot")
+  status               BadgeRewardLinkStatus   @default(PENDING)
+  failureCode          String?                 @map("failure_code") @db.VarChar(100)
+  completedAt          DateTime?               @map("completed_at") @db.Timestamptz(6)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  badgeAward           BadgeAward              @relation(fields: [workspaceId, userId, badgeAwardId], references: [workspaceId, userId, id], onDelete: Restrict)
+  badgeVersion         BadgeVersion            @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  outbox               BadgeRewardOutbox?
+  entitlement          BadgeRewardEntitlement?
+
+  @@unique([workspaceId, userId, badgeAwardId])
+  @@unique([workspaceId, userId, id])
+  @@index([workspaceId, userId, status, createdAt])
+  @@map("badge_reward_links")
+}
+
+model BadgeRewardOutbox {
+  id              String                  @id @default(uuid()) @db.Uuid
+  workspaceId     String                  @map("workspace_id") @db.Uuid
+  userId          String                  @map("user_id") @db.Uuid
+  rewardLinkId    String                  @unique @map("reward_link_id") @db.Uuid
+  eventType       String                  @default("BADGE_REWARD_REQUESTED") @map("event_type") @db.VarChar(80)
+  status          BadgeRewardOutboxStatus @default(PENDING)
+  attemptCount    Int                     @default(0) @map("attempt_count")
+  maxAttempts     Int                     @default(5) @map("max_attempts")
+  availableAt     DateTime                @default(now()) @map("available_at") @db.Timestamptz(6)
+  leaseOwner      String?                 @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt  DateTime?               @map("lease_expires_at") @db.Timestamptz(6)
+  lastFailureCode String?                 @map("last_failure_code") @db.VarChar(100)
+  completedAt     DateTime?               @map("completed_at") @db.Timestamptz(6)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rewardLink      BadgeRewardLink         @relation(fields: [rewardLinkId], references: [id], onDelete: Restrict)
+
+  @@index([status, availableAt, createdAt])
+  @@index([workspaceId, userId, status])
+  @@map("badge_reward_outbox")
+}
+
+model BadgeRewardEntitlement {
+  id                   String                       @id @default(uuid()) @db.Uuid
+  workspaceId          String                       @map("workspace_id") @db.Uuid
+  userId               String                       @map("user_id") @db.Uuid
+  badgeAwardId         String                       @map("badge_award_id") @db.Uuid
+  rewardLinkId         String                       @unique @map("reward_link_id") @db.Uuid
+  featureKey           String                       @map("feature_key") @db.VarChar(120)
+  quantityGranted      Int                          @map("quantity_granted")
+  quantityRemaining    Int                          @map("quantity_remaining")
+  maxUnitCostUsdMicros Int                          @map("max_unit_cost_usd_micros")
+  revocationPolicy     String                       @default("REVOKE_UNUSED") @map("revocation_policy") @db.VarChar(40)
+  status               BadgeRewardEntitlementStatus @default(ACTIVE)
+  expiresAt            DateTime?                    @map("expires_at") @db.Timestamptz(6)
+  consumedAt           DateTime?                    @map("consumed_at") @db.Timestamptz(6)
+  revokedAt            DateTime?                    @map("revoked_at") @db.Timestamptz(6)
+  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rewardLink           BadgeRewardLink              @relation(fields: [rewardLinkId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, userId, featureKey, status, expiresAt])
+  @@index([badgeAwardId])
+  @@map("badge_reward_entitlements")
 }
 
 model ExternalTrackingSystem {
