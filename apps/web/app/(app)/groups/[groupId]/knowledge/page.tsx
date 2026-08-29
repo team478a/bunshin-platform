@@ -29,11 +29,29 @@ export default async function GroupKnowledgePage({
     select: { group: { select: { id: true, name: true, workspaceId: true } } },
   });
   if (!membership) notFound();
-  const sources = await new db.PrismaGroupKnowledgeRepository().listForManagement({
-    workspaceId: membership.group.workspaceId,
-    groupId: membership.group.id,
-    actorUserId: actor.userId,
-  });
+  const [sources, productVersions] = await Promise.all([
+    new db.PrismaGroupKnowledgeRepository().listForManagement({
+      workspaceId: membership.group.workspaceId,
+      groupId: membership.group.id,
+      actorUserId: actor.userId,
+    }),
+    db.prisma.productPackVersion.findMany({
+      where: {
+        status: 'PUBLISHED',
+        productPack: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          status: 'ACTIVE',
+        },
+      },
+      select: {
+        id: true,
+        version: true,
+        productPack: { select: { name: true } },
+      },
+      orderBy: [{ productPack: { name: 'asc' } }, { version: 'desc' }],
+    }),
+  ]);
   if (!sources) notFound();
 
   return (
@@ -48,12 +66,17 @@ export default async function GroupKnowledgePage({
       <GroupKnowledgeManager
         workspaceId={membership.group.workspaceId}
         groupId={membership.group.id}
+        productVersions={productVersions.map((item) => ({
+          id: item.id,
+          label: `${item.productPack.name}（第${item.version}版）`,
+        }))}
         initialSources={sources.map((source) => ({
           id: source.id,
           type: source.type,
           title: source.title,
           sourceUri: source.sourceUri,
           originalFileName: source.originalFileName,
+          productPackVersionId: source.productPackVersionId,
           status: source.status,
           version: source.version,
           failureCode: source.failureCode,
