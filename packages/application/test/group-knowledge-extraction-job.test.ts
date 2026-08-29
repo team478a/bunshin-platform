@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
 import {
   ExecuteGroupKnowledgeExtractionJob,
   GroupKnowledgeExtractionError,
@@ -77,5 +78,34 @@ describe('ExecuteGroupKnowledgeExtractionJob', () => {
       expect.objectContaining({ errorCategory: 'PROVIDER', retryable: true }),
     );
     expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it('資料容量超過を再試行せず具体的な停止理由として保存する', async () => {
+    const markFailed = vi.fn();
+    const handler: GroupKnowledgeExtractionJobHandler = {
+      execute: vi.fn().mockRejectedValue(
+        new ApplicationError('VALIDATION_ERROR', '動画の読み取りは25MBまでです', {
+          groupKnowledgeFailureCode: 'GROUP_KNOWLEDGE_VIDEO_TOO_LARGE',
+        }),
+      ),
+      markFailed,
+    };
+    const failExecute = vi.fn().mockResolvedValue({ ...job, status: 'DEAD' });
+    await new ExecuteGroupKnowledgeExtractionJob(
+      handler,
+      { execute: vi.fn() } as never,
+      { execute: failExecute } as never,
+    ).execute(job, 'worker');
+    expect(failExecute).toHaveBeenCalledWith(
+      job,
+      'worker',
+      expect.objectContaining({
+        errorCategory: 'GROUP_KNOWLEDGE_VIDEO_TOO_LARGE',
+        retryable: false,
+      }),
+    );
+    expect(markFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'GROUP_KNOWLEDGE_VIDEO_TOO_LARGE' }),
+    );
   });
 });

@@ -29,6 +29,18 @@ export class GroupKnowledgeExtractionError extends Error {
   }
 }
 
+const detailedValidationFailures = new Set([
+  'GROUP_KNOWLEDGE_WEB_RESPONSE_TOO_LARGE',
+  'GROUP_KNOWLEDGE_WEB_TEXT_TOO_LARGE',
+  'GROUP_KNOWLEDGE_VIDEO_TOO_LARGE',
+]);
+
+function detailedValidationFailure(error: ApplicationError) {
+  if (!error.cause || typeof error.cause !== 'object') return null;
+  const code = (error.cause as Record<string, unknown>).groupKnowledgeFailureCode;
+  return typeof code === 'string' && detailedValidationFailures.has(code) ? code : null;
+}
+
 export class ExecuteGroupKnowledgeExtractionJob {
   constructor(
     private readonly handler: GroupKnowledgeExtractionJobHandler,
@@ -56,13 +68,17 @@ export class ExecuteGroupKnowledgeExtractionJob {
       await this.handler.execute(input);
       return this.complete.execute(job.id, workerId);
     } catch (error) {
+      const detailedFailure =
+        error instanceof ApplicationError ? detailedValidationFailure(error) : null;
       const classified =
         error instanceof GroupKnowledgeExtractionError
           ? error
-          : error instanceof ApplicationError &&
-              ['VALIDATION_ERROR', 'FORBIDDEN', 'NOT_FOUND', 'CONFLICT'].includes(error.code)
-            ? new GroupKnowledgeExtractionError(`GROUP_KNOWLEDGE_${error.code}`, false)
-            : new GroupKnowledgeExtractionError('GROUP_KNOWLEDGE_PROVIDER_ERROR', true);
+          : detailedFailure
+            ? new GroupKnowledgeExtractionError(detailedFailure, false)
+            : error instanceof ApplicationError &&
+                ['VALIDATION_ERROR', 'FORBIDDEN', 'NOT_FOUND', 'CONFLICT'].includes(error.code)
+              ? new GroupKnowledgeExtractionError(`GROUP_KNOWLEDGE_${error.code}`, false)
+              : new GroupKnowledgeExtractionError('GROUP_KNOWLEDGE_PROVIDER_ERROR', true);
       const result = await this.fail.execute(job, workerId, {
         errorCategory: classified.category,
         retryable: classified.retryable,
