@@ -191,6 +191,7 @@ import { canManageBunshin } from '@bunshin/platform-domain';
 export { PrismaCommonBadgeProcessorRepository } from './badge-common-processor';
 export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
 export { PrismaBadgeLineNotificationPreparationRepository } from './badge-line-notification';
+export { PrismaBadgeLineDeliveryRepository } from './badge-line-notification';
 export { PrismaBadgeGroupWorkflowRepository } from './badge-group-workflow';
 export {
   PrismaBadgeEntitlementConsumptionRepository,
@@ -933,20 +934,43 @@ export class PrismaLineConnectionRepository implements LineConnectionRepository 
           user: { status: 'ACTIVE' },
           workspace: {
             status: 'ACTIVE',
-            bunshins: {
-              some: {
-                id: input.bunshinId,
-                status: { not: 'ARCHIVED' },
-                lineNotificationPreferences: {
-                  some: {
-                    userId: input.userId,
-                    enabled: true,
-                    notificationConsentAt: { not: null },
+            ...(input.bunshinId
+              ? {
+                  bunshins: {
+                    some: {
+                      id: input.bunshinId,
+                      status: { not: 'ARCHIVED' as const },
+                      lineNotificationPreferences: {
+                        some: {
+                          userId: input.userId,
+                          enabled: true,
+                          notificationConsentAt: { not: null },
+                        },
+                      },
+                    },
                   },
-                },
-              },
-            },
+                }
+              : {}),
           },
+        },
+        select: { providerUserId: true },
+      });
+      return row?.providerUserId ?? null;
+    }
+    if (!input.bunshinId) {
+      const row = await this.client.lineConnection.findFirst({
+        where: {
+          environment: input.environment,
+          workspaceId: input.workspaceId,
+          userId: input.userId,
+          status: 'ACTIVE',
+          friendshipStatus: 'FOLLOWING',
+          notificationConsentAt: { not: null },
+          user: {
+            status: 'ACTIVE',
+            memberships: { some: { workspaceId: input.workspaceId, status: 'ACTIVE' } },
+          },
+          workspace: { status: 'ACTIVE' },
         },
         select: { providerUserId: true },
       });
@@ -990,7 +1014,9 @@ export class PrismaLineConnectionRepository implements LineConnectionRepository 
         },
       },
     });
-    return row?.workspace.bunshins.length === 1 ? row.providerUserId : null;
+    return row && (!input.bunshinId || row.workspace.bunshins.length === 1)
+      ? row.providerUserId
+      : null;
   }
 }
 

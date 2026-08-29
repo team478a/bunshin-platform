@@ -141,6 +141,67 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     }
   }
 
+  async pushBadgeNotification(input: {
+    accessToken: string;
+    recipientId: string;
+    badgeUrl: string;
+    title: string;
+    description: string;
+  }) {
+    if (!input.accessToken.trim()) return httpFailure(401);
+    if (!input.recipientId.trim()) return httpFailure(400);
+    let badgeUrl: URL;
+    try {
+      badgeUrl = new URL(input.badgeUrl);
+    } catch {
+      return { ok: false, category: 'PROVIDER_UNAVAILABLE', retryable: false } as const;
+    }
+    if (badgeUrl.protocol !== 'https:' || badgeUrl.username || badgeUrl.password || badgeUrl.hash)
+      return { ok: false, category: 'PROVIDER_UNAVAILABLE', retryable: false } as const;
+    const clean = (value: string, limit: number) =>
+      [...value]
+        .map((character) => {
+          const code = character.charCodeAt(0);
+          return code <= 31 || code === 127 ? ' ' : character;
+        })
+        .join('')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, limit);
+    try {
+      const response = await this.request(`${endpoint}/v2/bot/message/push`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${input.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: input.recipientId,
+          messages: [
+            {
+              type: 'text',
+              text: [
+                '新しいバッジを獲得しました！',
+                `バッジ：${clean(input.title, 120)}`,
+                clean(input.description, 300),
+                '',
+                '獲得したバッジを見る',
+                badgeUrl.toString(),
+              ]
+                .filter(Boolean)
+                .join('\n'),
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) return httpFailure(response.status);
+      return { ok: true } as const;
+    } catch (error) {
+      return networkFailure(error);
+    }
+  }
+
   async pushVideoCompletion(input: {
     accessToken: string;
     recipientId: string;
