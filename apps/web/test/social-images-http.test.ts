@@ -10,6 +10,8 @@ const fakes = vi.hoisted(() => ({
   listCatalog: vi.fn(),
   reservePoint: vi.fn(),
   transitionPoint: vi.fn(),
+  consumeBadgeEntitlement: vi.fn(),
+  refundBadgeEntitlement: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -24,7 +26,16 @@ vi.mock('../src/auth/current-user', () => ({
   }),
 }));
 vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: vi.fn() }));
+vi.mock('../src/ai/runtime-provider-configuration', () => ({
+  resolveOpenAiRuntimeConfiguration: vi.fn().mockResolvedValue({
+    apiKey: 'not-used-by-http',
+    model: 'gpt-image-1',
+    requestCostUsdMicros: 50_000,
+    source: 'ADMIN_CONFIGURATION',
+  }),
+}));
 vi.mock('@bunshin/database', () => ({
+  prisma: {},
   PrismaSocialImageGenerationAuthorizationRepository: class {
     authorize = fakes.authorize;
   },
@@ -41,6 +52,10 @@ vi.mock('@bunshin/database', () => ({
     listCatalog = fakes.listCatalog;
     reserve = fakes.reservePoint;
     transition = fakes.transitionPoint;
+  },
+  PrismaBadgeEntitlementConsumptionRepository: class {
+    consume = fakes.consumeBadgeEntitlement;
+    refund = fakes.refundBadgeEntitlement;
   },
 }));
 
@@ -88,6 +103,7 @@ const row = (status: 'DRAFT' | 'QUEUED', revision: number) => ({
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('APP_ENV', 'development');
   vi.stubEnv('APP_URL', 'https://example.com');
@@ -120,6 +136,10 @@ beforeEach(() => {
   });
   fakes.transitionPoint.mockImplementation(({ targetStatus }) =>
     Promise.resolve({ id: '00000000-0000-4000-8000-000000000510', status: targetStatus }),
+  );
+  fakes.consumeBadgeEntitlement.mockResolvedValue(null);
+  fakes.refundBadgeEntitlement.mockImplementation(({ usageId, reason }) =>
+    Promise.resolve({ id: usageId, status: 'REFUNDED', refundReason: reason }),
   );
 });
 
@@ -185,6 +205,34 @@ describe('social image HTTP', () => {
         targetStatus: 'REFUNDED',
         reason: 'IMAGE_REQUEST_NOT_ENQUEUED',
       }),
+    );
+  });
+
+  it('uses an image entitlement before points and restores it when enqueue fails', async () => {
+    fakes.consumeBadgeEntitlement.mockResolvedValueOnce({
+      id: '00000000-0000-4000-8000-000000000520',
+      status: 'CONSUMED',
+    });
+    fakes.enqueue.mockRejectedValueOnce(new Error('queue unavailable'));
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-entitlement',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(500);
+    expect(fakes.reservePoint).not.toHaveBeenCalled();
+    expect(fakes.refundBadgeEntitlement).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'IMAGE_REQUEST_NOT_ENQUEUED' }),
     );
   });
 

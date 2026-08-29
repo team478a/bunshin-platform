@@ -9,9 +9,11 @@ import {
   ReservePointReward,
   ConfirmPointRedemption,
   RefundPointRedemption,
+  RefundBadgeEntitlementUsage,
   ReleasePointRedemption,
   SOCIAL_IMAGE_GENERATION_JOB_TYPE,
   TransitionSocialImageGenerationRequest,
+  TryConsumeBadgeEntitlement,
   type JobEnvironment,
   type SocialImageGenerationRequestRecord,
 } from '@bunshin/application';
@@ -22,6 +24,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
+import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 
 const uuid = z.string().uuid();
 const createSchema = z
@@ -99,6 +102,7 @@ export async function createSocialImageResponse(
     const db = await import('@bunshin/database');
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
     const redemptions = new db.PrismaPointRedemptionRepository();
+    const badgeEntitlements = new db.PrismaBadgeEntitlementConsumptionRepository(db.prisma);
     let created = await new CreateSocialImageGenerationRequest(
       new db.PrismaSocialImageGenerationAuthorizationRepository(),
       requests,
@@ -115,21 +119,36 @@ export async function createSocialImageResponse(
       layout: parsed.layout,
       idempotencyKey: parsed.idempotencyKey,
     });
-    const catalog = await new ListPointRewardCatalog(redemptions).execute({
+    const runtimeConfiguration = await resolveOpenAiRuntimeConfiguration();
+    const badgeUsage = await new TryConsumeBadgeEntitlement(badgeEntitlements).execute({
       workspaceId,
-      actorUserId: actor,
-    });
-    const imageReward = catalog.find((item) => item.rewardType === 'SOCIAL_IMAGE_GENERATION');
-    if (!imageReward)
-      throw new ApplicationError('CONFIGURATION_ERROR', 'image point reward is unavailable');
-    let reservation = await new ReservePointReward(redemptions).execute({
-      workspaceId,
-      actorUserId: actor,
-      catalogItemId: imageReward.id,
-      idempotencyKey: `social-image:${created.id}`,
+      userId: actor,
+      featureKey: 'SOCIAL.IMAGE_GENERATION',
       resourceType: 'SOCIAL_IMAGE_REQUEST',
       resourceId: created.id,
+      operationKey: `social-image:${created.id}`,
+      estimatedCostUsdMicros: runtimeConfiguration.requestCostUsdMicros,
     });
+    if (badgeUsage?.status === 'REFUNDED')
+      throw new ApplicationError('CONFLICT', 'image entitlement was already refunded');
+    let reservation = null;
+    if (!badgeUsage) {
+      const catalog = await new ListPointRewardCatalog(redemptions).execute({
+        workspaceId,
+        actorUserId: actor,
+      });
+      const imageReward = catalog.find((item) => item.rewardType === 'SOCIAL_IMAGE_GENERATION');
+      if (!imageReward)
+        throw new ApplicationError('CONFIGURATION_ERROR', 'image point reward is unavailable');
+      reservation = await new ReservePointReward(redemptions).execute({
+        workspaceId,
+        actorUserId: actor,
+        catalogItemId: imageReward.id,
+        idempotencyKey: `social-image:${created.id}`,
+        resourceType: 'SOCIAL_IMAGE_REQUEST',
+        resourceId: created.id,
+      });
+    }
     try {
       if (created.status === 'DRAFT')
         created = await new TransitionSocialImageGenerationRequest(requests).execute({
@@ -144,7 +163,7 @@ export async function createSocialImageResponse(
         });
       if (created.status !== 'QUEUED')
         throw new ApplicationError('CONFLICT', 'social image request cannot be queued');
-      if (reservation.status === 'RESERVED')
+      if (reservation?.status === 'RESERVED')
         reservation = await new ConfirmPointRedemption(redemptions).execute({
           workspaceId,
           actorUserId: actor,
@@ -164,7 +183,7 @@ export async function createSocialImageResponse(
         maxAttempts: 5,
       });
     } catch (error) {
-      if (reservation.status === 'RESERVED') {
+      if (reservation?.status === 'RESERVED') {
         await new ReleasePointRedemption(redemptions)
           .execute({
             workspaceId,
@@ -173,12 +192,21 @@ export async function createSocialImageResponse(
             reason: 'IMAGE_REQUEST_NOT_ACCEPTED',
           })
           .catch(() => undefined);
-      } else if (reservation.status === 'CONFIRMED') {
+      } else if (reservation?.status === 'CONFIRMED') {
         await new RefundPointRedemption(redemptions)
           .execute({
             workspaceId,
             actorUserId: actor,
             redemptionId: reservation.id,
+            reason: 'IMAGE_REQUEST_NOT_ENQUEUED',
+          })
+          .catch(() => undefined);
+      } else if (badgeUsage?.status === 'CONSUMED') {
+        await new RefundBadgeEntitlementUsage(badgeEntitlements)
+          .execute({
+            workspaceId,
+            userId: actor,
+            usageId: badgeUsage.id,
             reason: 'IMAGE_REQUEST_NOT_ENQUEUED',
           })
           .catch(() => undefined);
