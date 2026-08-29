@@ -68,6 +68,9 @@ export default async function BadgeApprovalPage({
         <p className="eyebrow">システム管理者</p>
         <h1>グループバッジの確認</h1>
         <p>グループから届いたバッジ案を確認し、利用開始または差戻しを決めます。</p>
+        <p>
+          <a href="/admin/badges/rewards">特典の付与状況と失敗処理を確認</a>
+        </p>
       </header>
       {query.reviewed ? <p className="notice notice--success">確認結果を保存しました。</p> : null}
       {query.error ? (

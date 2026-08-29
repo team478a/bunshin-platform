@@ -195,6 +195,7 @@ export {
   PrismaBadgeEntitlementConsumptionRepository,
   PrismaBadgeRewardRepository,
 } from './badge-reward';
+export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
 import { ApplicationError } from '@bunshin/shared';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
