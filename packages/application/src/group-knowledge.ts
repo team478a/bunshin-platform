@@ -74,6 +74,12 @@ export interface GroupKnowledgeRepository {
   updateProductScope(
     input: GroupKnowledgeScope & { sourceId: string; productPackVersionId: string | null },
   ): Promise<GroupKnowledgeSourceRecord | null>;
+  updateReviewChunkContents(
+    input: GroupKnowledgeScope & {
+      sourceId: string;
+      chunks: Array<{ id: string; content: string }>;
+    },
+  ): Promise<boolean>;
   listForManagement(input: GroupKnowledgeScope): Promise<GroupKnowledgeSourceRecord[] | null>;
   listApprovedChunksForGeneration(
     input: GroupKnowledgeScope & {
@@ -263,6 +269,24 @@ export class GroupKnowledgeService {
     if (value === null)
       throw new ApplicationError('FORBIDDEN', 'group knowledge product scope update denied');
     return value;
+  }
+
+  async updateReviewChunkContents(
+    input: GroupKnowledgeScope & {
+      sourceId: string;
+      chunks: Array<{ id: string; content: string }>;
+    },
+  ) {
+    if (input.chunks.length === 0 || input.chunks.length > 2000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid review chunks');
+    const chunks = input.chunks.map((chunk) => ({
+      id: requiredText(chunk.id, 'chunk id', 100),
+      content: requiredText(chunk.content, 'chunk content', 8000),
+    }));
+    if (new Set(chunks.map((chunk) => chunk.id)).size !== chunks.length)
+      throw new ApplicationError('VALIDATION_ERROR', 'duplicate review chunk');
+    if (!(await this.repository.updateReviewChunkContents({ ...input, chunks })))
+      throw new ApplicationError('CONFLICT', 'knowledge review cannot be updated');
   }
 
   async listForManagement(input: GroupKnowledgeScope) {

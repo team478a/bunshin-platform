@@ -11238,6 +11238,47 @@ export class PrismaGroupKnowledgeRepository implements GroupKnowledgeRepository 
     });
   }
 
+  async updateReviewChunkContents(
+    input: Parameters<GroupKnowledgeRepository['updateReviewChunkContents']>[0],
+  ) {
+    if (!(await this.canManage(input))) return false;
+    return this.client.$transaction(async (tx) => {
+      const source = await tx.groupKnowledgeSource.findFirst({
+        where: {
+          id: input.sourceId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: 'REVIEW_REQUIRED',
+        },
+        select: { id: true, chunks: { select: { id: true } } },
+      });
+      if (!source) return false;
+      const storedIds = new Set(source.chunks.map((chunk) => chunk.id));
+      if (
+        storedIds.size !== input.chunks.length ||
+        input.chunks.some((chunk) => !storedIds.has(chunk.id))
+      )
+        return false;
+      for (const chunk of input.chunks) {
+        await tx.groupKnowledgeChunk.update({
+          where: { id: chunk.id },
+          data: { content: chunk.content },
+        });
+      }
+      await tx.groupKnowledgeAuditLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          sourceId: source.id,
+          actorUserId: input.actorUserId,
+          action: 'REVIEW_EDITED',
+          details: { chunkCount: input.chunks.length },
+        },
+      });
+      return true;
+    });
+  }
+
   async listForManagement(input: Parameters<GroupKnowledgeRepository['listForManagement']>[0]) {
     if (!(await this.canManage(input))) return null;
     const rows = await this.client.groupKnowledgeSource.findMany({

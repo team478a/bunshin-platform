@@ -335,6 +335,46 @@ export function GroupKnowledgeManager({
     }
   }
 
+  async function saveReview() {
+    if (!review || review.source.status !== 'REVIEW_REQUIRED') return false;
+    setSaving(true);
+    setMessage('修正した内容を保存しています…');
+    try {
+      const response = await fetch(`${endpoint}/${review.source.id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          chunks: review.chunks.map((chunk) => ({ id: chunk.id, content: chunk.content })),
+        }),
+      });
+      const body = (await response.json()) as {
+        data?: { chunks: Array<{ id: string; content: string }> };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.data)
+        throw new Error(body.error?.message ?? '修正した内容を保存できませんでした。');
+      const saved = new Map(body.data.chunks.map((chunk) => [chunk.id, chunk.content]));
+      setReview((current) =>
+        current
+          ? {
+              ...current,
+              chunks: current.chunks.map((chunk) => ({
+                ...chunk,
+                content: saved.get(chunk.id) ?? chunk.content,
+              })),
+            }
+          : null,
+      );
+      setMessage('修正した内容を保存しました。確認後に利用を開始してください。');
+      return true;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '修正した内容を保存できませんでした。');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function changeProductScope(event: FormEvent<HTMLFormElement>, sourceId: string) {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
@@ -480,18 +520,49 @@ export function GroupKnowledgeManager({
                   <strong>{chunk.sourceLabel}</strong>
                   {chunk.pageNumber ? `（${chunk.pageNumber}ページ）` : ''}
                   {chunk.startSeconds !== null ? `（${chunk.startSeconds}秒から）` : ''}
-                  <p>{chunk.content}</p>
+                  {review.source.status === 'REVIEW_REQUIRED' ? (
+                    <textarea
+                      className="field__control"
+                      rows={6}
+                      maxLength={8000}
+                      value={chunk.content}
+                      aria-label={`${chunk.sourceLabel}の読み取り内容`}
+                      onChange={(event) =>
+                        setReview((current) =>
+                          current
+                            ? {
+                                ...current,
+                                chunks: current.chunks.map((item) =>
+                                  item.id === chunk.id
+                                    ? { ...item, content: event.target.value }
+                                    : item,
+                                ),
+                              }
+                            : null,
+                        )
+                      }
+                    />
+                  ) : (
+                    <p>{chunk.content}</p>
+                  )}
                 </li>
               ))}
             </ol>
           )}
           {review.source.status === 'REVIEW_REQUIRED' && review.chunks.length > 0 ? (
             <>
+              <button type="button" disabled={saving} onClick={() => void saveReview()}>
+                修正した内容を保存する
+              </button>
               <button
                 className="button"
                 type="button"
                 disabled={saving}
-                onClick={() => void changeState(review.source.id, 'approve')}
+                onClick={() =>
+                  void (async () => {
+                    if (await saveReview()) await changeState(review.source.id, 'approve');
+                  })()
+                }
               >
                 確認して投稿づくりに使う
               </button>

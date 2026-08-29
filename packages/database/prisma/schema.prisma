@@ -290,6 +290,7 @@ enum GroupKnowledgeAuditAction {
   APPROVED
   ARCHIVED
   PRODUCT_SCOPE_UPDATED
+  REVIEW_EDITED
 }
 
 enum VideoAssetKind {
