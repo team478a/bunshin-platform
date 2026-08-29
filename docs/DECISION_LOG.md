@@ -1596,3 +1596,12 @@
 - Persistence: `BadgeAwardVisibility`を`BadgeAward`から分離し、公開設定の変更で獲得根拠と履歴を上書きしない。
 - Exclusion: PUBLICプロフィール、ランキング、他User比較、AI品質評価はB-3に含めない。
 - Source: `docs/BADGE_USER_EXPERIENCE_REPORT.md`
+
+## 2026-08-29: グループ独自バッジは本部承認と二者確認を必須にする
+
+- Publish: Group管理者は下書きと申請までとし、公開はACTIVE SUPER_ADMINの承認時だけ行う。
+- Candidate: 付与対象者と候補登録者は候補を承認できず、別のACTIVE Group管理者による確認を必須にする。
+- Scope: 申請、候補、AwardはWorkspace／Group／Version／User境界をRepositoryとDB制約の両方で固定する。
+- Reward: B-4Aで申請できるGroup BadgeはMANUAL_APPROVALまたはIMPORT、reward type NONEに限定する。
+- Privacy: 審査では個人の投稿本文、Personality、Knowledge、Memoryを取得しない。
+- Source: `docs/GROUP_BADGE_APPROVAL_CORE_REPORT.md`
