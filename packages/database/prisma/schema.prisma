@@ -160,6 +160,18 @@ enum BadgeProcessingStatus {
   FAILED
 }
 
+enum BadgeApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BadgeCandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum PointCatalogStatus {
   DRAFT
   ACTIVE
@@ -956,6 +968,11 @@ model User {
   badgeAwardVisibilities            BadgeAwardVisibility[]
   badgeProcessingEvents             BadgeProcessingEvent[]
   badgeAuditsPerformed              BadgeAdminAuditLog[]                @relation("BadgeAuditActor")
+  badgeApprovalsRequested           BadgeApprovalRequest[]              @relation("BadgeApprovalRequester")
+  badgeApprovalsReviewed            BadgeApprovalRequest[]              @relation("BadgeApprovalReviewer")
+  badgeCandidates                   BadgeAwardCandidate[]               @relation("BadgeCandidateUser")
+  badgeCandidatesNominated          BadgeAwardCandidate[]               @relation("BadgeCandidateNominator")
+  badgeCandidatesReviewed           BadgeAwardCandidate[]               @relation("BadgeCandidateReviewer")
 
   @@index([status])
   @@map("users")
@@ -1053,6 +1070,8 @@ model Workspace {
   badgeAwardVisibilities       BadgeAwardVisibility[]
   badgeProcessingEvents        BadgeProcessingEvent[]
   badgeAdminAudits             BadgeAdminAuditLog[]
+  badgeApprovalRequests        BadgeApprovalRequest[]
+  badgeAwardCandidates         BadgeAwardCandidate[]
 
   @@index([status])
   @@map("workspaces")
@@ -1112,6 +1131,8 @@ model Group {
   badgeAwards                BadgeAward[]
   badgeAwardVisibilities     BadgeAwardVisibility[]
   badgeAdminAudits           BadgeAdminAuditLog[]
+  badgeApprovalRequests      BadgeApprovalRequest[]
+  badgeAwardCandidates       BadgeAwardCandidate[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -1664,27 +1685,29 @@ model BadgeDefinition {
 }
 
 model BadgeVersion {
-  id               String                @id @default(uuid()) @db.Uuid
-  definitionId     String                @map("definition_id") @db.Uuid
+  id               String                 @id @default(uuid()) @db.Uuid
+  definitionId     String                 @map("definition_id") @db.Uuid
   version          Int
-  title            String                @db.VarChar(120)
-  description      String                @db.VarChar(500)
-  imageKey         String                @map("image_key") @db.VarChar(255)
-  lockedImageKey   String?               @map("locked_image_key") @db.VarChar(255)
-  altText          String                @map("alt_text") @db.VarChar(200)
-  backgroundColor  String?               @map("background_color") @db.VarChar(20)
-  conditionType    BadgeConditionType    @map("condition_type")
-  conditionConfig  Json                  @map("condition_config")
-  visibilityPolicy BadgeVisibilityPolicy @default(PRIVATE) @map("visibility_policy")
-  rewardPolicy     Json                  @map("reward_policy")
-  startsAt         DateTime?             @map("starts_at") @db.Timestamptz(6)
-  endsAt           DateTime?             @map("ends_at") @db.Timestamptz(6)
-  publishedAt      DateTime?             @map("published_at") @db.Timestamptz(6)
-  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  definition       BadgeDefinition       @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  title            String                 @db.VarChar(120)
+  description      String                 @db.VarChar(500)
+  imageKey         String                 @map("image_key") @db.VarChar(255)
+  lockedImageKey   String?                @map("locked_image_key") @db.VarChar(255)
+  altText          String                 @map("alt_text") @db.VarChar(200)
+  backgroundColor  String?                @map("background_color") @db.VarChar(20)
+  conditionType    BadgeConditionType     @map("condition_type")
+  conditionConfig  Json                   @map("condition_config")
+  visibilityPolicy BadgeVisibilityPolicy  @default(PRIVATE) @map("visibility_policy")
+  rewardPolicy     Json                   @map("reward_policy")
+  startsAt         DateTime?              @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime?              @map("ends_at") @db.Timestamptz(6)
+  publishedAt      DateTime?              @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  definition       BadgeDefinition        @relation(fields: [definitionId], references: [id], onDelete: Restrict)
   progress         BadgeProgress[]
   awards           BadgeAward[]
   audits           BadgeAdminAuditLog[]
+  approvalRequests BadgeApprovalRequest[]
+  awardCandidates  BadgeAwardCandidate[]
 
   @@unique([definitionId, version])
   @@index([definitionId, publishedAt])
@@ -1786,6 +1809,53 @@ model BadgeProcessingEvent {
   @@unique([workspaceId, eventType, sourceEventId])
   @@index([workspaceId, userId, status, createdAt])
   @@map("badge_processing_events")
+}
+
+model BadgeApprovalRequest {
+  id                String              @id @default(uuid()) @db.Uuid
+  workspaceId       String              @map("workspace_id") @db.Uuid
+  groupId           String              @map("group_id") @db.Uuid
+  badgeVersionId    String              @unique @map("badge_version_id") @db.Uuid
+  status            BadgeApprovalStatus @default(PENDING)
+  requestedByUserId String              @map("requested_by_user_id") @db.Uuid
+  reviewedByUserId  String?             @map("reviewed_by_user_id") @db.Uuid
+  requestReason     String              @map("request_reason") @db.VarChar(1000)
+  reviewReason      String?             @map("review_reason") @db.VarChar(1000)
+  requestedAt       DateTime            @default(now()) @map("requested_at") @db.Timestamptz(6)
+  reviewedAt        DateTime?           @map("reviewed_at") @db.Timestamptz(6)
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group             Group               @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  badgeVersion      BadgeVersion        @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  requestedBy       User                @relation("BadgeApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy        User?               @relation("BadgeApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, status, requestedAt])
+  @@map("badge_approval_requests")
+}
+
+model BadgeAwardCandidate {
+  id                String               @id @default(uuid()) @db.Uuid
+  workspaceId       String               @map("workspace_id") @db.Uuid
+  groupId           String               @map("group_id") @db.Uuid
+  badgeVersionId    String               @map("badge_version_id") @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  status            BadgeCandidateStatus @default(PENDING)
+  nominatedByUserId String               @map("nominated_by_user_id") @db.Uuid
+  reviewedByUserId  String?              @map("reviewed_by_user_id") @db.Uuid
+  nominationReason  String               @map("nomination_reason") @db.VarChar(1000)
+  reviewReason      String?              @map("review_reason") @db.VarChar(1000)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  reviewedAt        DateTime?            @map("reviewed_at") @db.Timestamptz(6)
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group             Group                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  badgeVersion      BadgeVersion         @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  user              User                 @relation("BadgeCandidateUser", fields: [userId], references: [id], onDelete: Restrict)
+  nominatedBy       User                 @relation("BadgeCandidateNominator", fields: [nominatedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy        User?                @relation("BadgeCandidateReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId, badgeVersionId, userId])
+  @@index([workspaceId, groupId, status, createdAt])
+  @@map("badge_award_candidates")
 }
 
 model BadgeAdminAuditLog {

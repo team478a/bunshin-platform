@@ -190,6 +190,7 @@ import type {
 import { canManageBunshin } from '@bunshin/platform-domain';
 export { PrismaCommonBadgeProcessorRepository } from './badge-common-processor';
 export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
+export { PrismaBadgeGroupWorkflowRepository } from './badge-group-workflow';
 import { ApplicationError } from '@bunshin/shared';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
@@ -13389,6 +13390,7 @@ export class PrismaBadgeCoreRepository implements BadgeCoreRepository {
       const definition = await tx.badgeDefinition.findUnique({
         where: { id: input.definitionId },
       });
+      if (definition?.ownerType === 'GROUP') return null;
       if (
         !definition ||
         !(await this.canManageDefinition(tx, {

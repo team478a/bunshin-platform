@@ -427,7 +427,8 @@ WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし
 - B-1: Badge Definition／Version／Progress／Award／Processing Event Core — 完了
 - B-2: 既存行動を根拠とする初期10共通Badge Processor — 完了
 - B-3: 利用者向け獲得済み／挑戦中／おすすめ／詳細／公開設定 — 実装完了、レビュー待ち
-- B-4: Group独自Badgeの下書き／SUPER_ADMIN承認／候補承認／監査
+- B-4A: Group独自Badgeの申請／SUPER_ADMIN承認／候補承認／自己付与防止／監査Core — 実装完了、レビュー待ち
+- B-4B: Group管理画面／SUPER_ADMIN審査画面／CSV候補取込
 - B-5: Point／専用Entitlement／企業履行のOutbox連携
 - B-6: アプリ内・LINE通知、運用、30人・4週間限定検証
 
