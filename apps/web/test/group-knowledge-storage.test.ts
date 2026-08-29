@@ -4,6 +4,7 @@ import { SupabaseGroupKnowledgeStorage } from '../src/knowledge/group-knowledge-
 
 function storageClient() {
   const createBucket = vi.fn().mockResolvedValue({ data: {}, error: null });
+  const updateBucket = vi.fn().mockResolvedValue({ data: {}, error: null });
   const createSignedUploadUrl = vi.fn().mockResolvedValue({
     data: { signedUrl: 'https://project.supabase.co/storage/v1/object/upload/sign/key?token=safe' },
     error: null,
@@ -16,10 +17,11 @@ function storageClient() {
     storage: {
       getBucket: vi.fn().mockResolvedValue({ data: null, error: null }),
       createBucket,
+      updateBucket,
       from: vi.fn(() => ({ createSignedUploadUrl, createSignedUrl })),
     },
   };
-  return { client, createBucket, createSignedUploadUrl };
+  return { client, createBucket, updateBucket, createSignedUploadUrl };
 }
 
 describe('SupabaseGroupKnowledgeStorage', () => {
@@ -38,12 +40,36 @@ describe('SupabaseGroupKnowledgeStorage', () => {
     });
     expect(fake.createBucket).toHaveBeenCalledWith(
       'group-knowledge',
-      expect.objectContaining({ public: false, fileSizeLimit: 25_000_000 }),
+      expect.objectContaining({ public: false, fileSizeLimit: 50_000_000 }),
     );
     expect(fake.createSignedUploadUrl).toHaveBeenCalledWith('workspace/group/user/source', {
       upsert: false,
     });
     expect(result).toMatchObject({ method: 'PUT', headers: { 'content-type': 'application/pdf' } });
+  });
+
+  it('既存bucketもPDF上限50MBへ自動補正する', async () => {
+    const fake = storageClient();
+    fake.client.storage.getBucket.mockResolvedValue({
+      data: { id: 'group-knowledge', file_size_limit: 25_000_000 },
+      error: null,
+    });
+    const storage = new SupabaseGroupKnowledgeStorage({
+      client: fake.client,
+      configuration: { publicKey: 'public-key' },
+    } as never);
+
+    await storage.createUploadAuthorization({
+      storageKey: 'workspace/group/user/source',
+      mimeType: 'application/pdf',
+      sizeBytes: 40_000_000,
+    });
+
+    expect(fake.createBucket).not.toHaveBeenCalled();
+    expect(fake.updateBucket).toHaveBeenCalledWith(
+      'group-knowledge',
+      expect.objectContaining({ public: false, fileSizeLimit: 50_000_000 }),
+    );
   });
 
   it('拡張子や申告ではなくPDFの実データを確認する', async () => {

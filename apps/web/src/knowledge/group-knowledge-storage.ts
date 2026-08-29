@@ -7,6 +7,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const BUCKET = 'group-knowledge';
 const MAX_PDF_BYTES = 50_000_000;
 const MAX_VIDEO_BYTES = 25_000_000;
+const BUCKET_OPTIONS = {
+  public: false,
+  fileSizeLimit: MAX_PDF_BYTES,
+  allowedMimeTypes: ['application/pdf', 'video/mp4', 'video/quicktime'],
+};
 
 function storageConfiguration() {
   const environment = getServerEnvironment();
@@ -48,12 +53,13 @@ export class SupabaseGroupKnowledgeStorage {
 
   private async ensureBucket() {
     const found = await this.storage.storage.getBucket(BUCKET);
-    if (found.data) return;
-    const created = await this.storage.storage.createBucket(BUCKET, {
-      public: false,
-      fileSizeLimit: MAX_VIDEO_BYTES,
-      allowedMimeTypes: ['application/pdf', 'video/mp4', 'video/quicktime'],
-    });
+    if (found.data) {
+      const updated = await this.storage.storage.updateBucket(BUCKET, BUCKET_OPTIONS);
+      if (updated.error)
+        throw new ApplicationError('INTERNAL_ERROR', 'ナレッジの保存上限を確認できませんでした');
+      return;
+    }
+    const created = await this.storage.storage.createBucket(BUCKET, BUCKET_OPTIONS);
     if (created.error && !/already exists/iu.test(created.error.message))
       throw new ApplicationError('INTERNAL_ERROR', 'ナレッジの保存先を準備できませんでした');
   }
