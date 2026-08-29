@@ -1,6 +1,7 @@
 import {
   GetLineAdminFunnel,
   GetLineAdminMetrics,
+  InspectBadgeLineReconciliation,
   ListLineConfigurations,
   ListLineRichMenus,
 } from '@bunshin/application';
@@ -64,6 +65,9 @@ export default async function LineConfigurationPage({
     const metrics = await new GetLineAdminMetrics(
       new db.PrismaLineAdminMetricsRepository(),
     ).execute(user.userId, environment);
+    const badgeReconciliation = await new InspectBadgeLineReconciliation(
+      new db.PrismaBadgeLineReconciliationRepository(db.prisma),
+    ).execute({ actorUserId: user.userId, environment });
     const funnel = await new GetLineAdminFunnel(new db.PrismaLineAdminFunnelRepository()).execute({
       actorUserId: user.userId,
       environment,
@@ -232,6 +236,23 @@ export default async function LineConfigurationPage({
             })),
           ]}
         />
+        <section className="settings-card" aria-labelledby="badge-line-reconciliation-heading">
+          <h2 id="badge-line-reconciliation-heading">バッジ通知の安全確認</h2>
+          <p>
+            状態：<strong>{badgeReconciliation.healthy ? '問題なし' : '確認が必要'}</strong> ／
+            確認日時：{badgeReconciliation.checkedAt.toLocaleString('ja-JP')}
+          </p>
+          <ul>
+            <li>通知の準備漏れ：{badgeReconciliation.missingDeliveries}件</li>
+            <li>実行予定がない待機通知：{badgeReconciliation.pendingWithoutJob}件</li>
+            <li>自動再送を終了した通知：{badgeReconciliation.deadDeliveries}件</li>
+            <li>全体停止中の待機通知：{badgeReconciliation.pendingWhileGloballyPaused}件</li>
+            <li>停止中グループに残る通知：{badgeReconciliation.pendingInDisabledGroups}件</li>
+          </ul>
+          <p>
+            この確認は読み取り専用です。全体停止中の待機通知は送信されず、再開後に改めて安全条件を確認します。
+          </p>
+        </section>
         <LineRichMenuEditor
           environment={environment}
           initialMenus={richMenus.map((value) => ({
