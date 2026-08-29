@@ -314,8 +314,37 @@ export async function getGroupKnowledgeReviewResponse(
         confidence: true,
       },
     });
+    const previousSource =
+      source.version > 1
+        ? await db.prisma.groupKnowledgeSource.findFirst({
+            where: {
+              workspaceId: scope.workspaceId,
+              groupId: scope.groupId,
+              logicalKey: source.logicalKey,
+              version: { lt: source.version },
+              chunks: { some: {} },
+            },
+            orderBy: { version: 'desc' },
+            select: {
+              version: true,
+              chunks: {
+                orderBy: { sortOrder: 'asc' },
+                select: { id: true, content: true },
+              },
+            },
+          })
+        : null;
     return Response.json(
-      { data: { source: publicSource(source), chunks }, requestId },
+      {
+        data: {
+          source: publicSource(source),
+          chunks,
+          previousVersion: previousSource
+            ? { version: previousSource.version, chunks: previousSource.chunks }
+            : null,
+        },
+        requestId,
+      },
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {
