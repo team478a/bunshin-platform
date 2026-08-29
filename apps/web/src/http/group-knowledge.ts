@@ -1,0 +1,236 @@
+import 'server-only';
+
+import { randomUUID } from 'node:crypto';
+
+import { GroupKnowledgeService } from '@bunshin/application';
+import { requestIdFromHeader } from '@bunshin/observability';
+import { ApplicationError, toApiError } from '@bunshin/shared';
+import { z } from 'zod';
+
+import { currentUserProvider } from '../auth/current-user';
+import { requireSameOrigin } from '../auth/request-security';
+import { SupabaseGroupKnowledgeStorage } from '../knowledge/group-knowledge-storage';
+
+const uuid = z.string().uuid();
+const common = {
+  title: z.string().trim().min(1).max(200),
+  productPackVersionId: z.uuid().nullable().optional(),
+};
+const createSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('URL'), ...common, sourceUri: z.url().max(2048) }).strict(),
+  z
+    .object({ type: z.literal('TEXT'), ...common, content: z.string().trim().min(1).max(8000) })
+    .strict(),
+  z
+    .object({
+      type: z.enum(['PDF', 'VIDEO']),
+      ...common,
+      originalFileName: z.string().trim().min(1).max(255),
+      mimeType: z.enum(['application/pdf', 'video/mp4', 'video/quicktime']),
+      sizeBytes: z.number().int().positive().max(200_000_000),
+      rightsConfirmed: z.literal(true),
+    })
+    .strict(),
+]);
+
+const completeSchema = z
+  .object({ sizeBytes: z.number().int().positive().max(200_000_000) })
+  .strict();
+
+function publicSource(source: {
+  id: string;
+  type: string;
+  title: string;
+  sourceUri: string | null;
+  originalFileName: string | null;
+  mimeType: string | null;
+  status: string;
+  version: number;
+  failureCode: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: source.id,
+    type: source.type,
+    title: source.title,
+    sourceUri: source.sourceUri,
+    originalFileName: source.originalFileName,
+    mimeType: source.mimeType,
+    status: source.status,
+    version: source.version,
+    failureCode: source.failureCode,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  };
+}
+
+async function dependencies() {
+  const db = await import('@bunshin/database');
+  const repository = new db.PrismaGroupKnowledgeRepository();
+  return { repository, service: new GroupKnowledgeService(repository) };
+}
+
+async function actor() {
+  const value = await (await currentUserProvider()).getCurrentUser();
+  if (!value) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+  return value;
+}
+
+export async function listGroupKnowledgeResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    const current = await actor();
+    const { service } = await dependencies();
+    const sources = await service.listForManagement({
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: current.userId,
+    });
+    return Response.json(
+      { data: sources.map(publicSource), requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function createGroupKnowledgeResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const current = await actor();
+    const parsedWorkspaceId = uuid.parse(workspaceId);
+    const parsedGroupId = uuid.parse(groupId);
+    const input = createSchema.parse(await request.json());
+    const { service } = await dependencies();
+    const scope = {
+      workspaceId: parsedWorkspaceId,
+      groupId: parsedGroupId,
+      actorUserId: current.userId,
+    };
+    if (input.type === 'URL') {
+      const source = await service.createSource({
+        ...scope,
+        type: 'URL',
+        title: input.title,
+        sourceUri: input.sourceUri,
+        productPackVersionId: input.productPackVersionId ?? null,
+      });
+      return Response.json(
+        { data: { source: publicSource(source) }, requestId },
+        { status: 201, headers: { 'cache-control': 'private, no-store' } },
+      );
+    }
+    if (input.type === 'TEXT') {
+      const source = await service.createSource({
+        ...scope,
+        type: 'TEXT',
+        title: input.title,
+        productPackVersionId: input.productPackVersionId ?? null,
+      });
+      await service.beginProcessing({ ...scope, sourceId: source.id });
+      await service.saveExtraction({
+        ...scope,
+        sourceId: source.id,
+        chunks: [
+          { type: 'GENERAL', content: input.content, sourceLabel: input.title, confidence: 1 },
+        ],
+      });
+      const refreshed = (await service.listForManagement(scope)).find(
+        (item) => item.id === source.id,
+      );
+      return Response.json(
+        { data: { source: publicSource(refreshed ?? source) }, requestId },
+        { status: 201, headers: { 'cache-control': 'private, no-store' } },
+      );
+    }
+
+    const allowedMime =
+      input.type === 'PDF'
+        ? input.mimeType === 'application/pdf'
+        : ['video/mp4', 'video/quicktime'].includes(input.mimeType);
+    if (!allowedMime)
+      throw new ApplicationError('VALIDATION_ERROR', '選択した種類とファイルが一致しません');
+    const storageKey = `${parsedWorkspaceId}/${parsedGroupId}/${current.userId}/${randomUUID()}`;
+    const source = await service.createSource({
+      ...scope,
+      type: input.type,
+      title: input.title,
+      storageKey,
+      originalFileName: input.originalFileName,
+      mimeType: input.mimeType,
+      productPackVersionId: input.productPackVersionId ?? null,
+    });
+    const upload = await new SupabaseGroupKnowledgeStorage().createUploadAuthorization({
+      storageKey,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+    });
+    return Response.json(
+      { data: { source: publicSource(source), upload }, requestId },
+      { status: 201, headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function completeGroupKnowledgeUploadResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  sourceId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const current = await actor();
+    const input = completeSchema.parse(await request.json());
+    const scope = {
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: current.userId,
+    };
+    const { service } = await dependencies();
+    const source = (await service.listForManagement(scope)).find(
+      (item) => item.id === uuid.parse(sourceId),
+    );
+    if (!source?.storageKey || !source.mimeType || !['PDF', 'VIDEO'].includes(source.type))
+      throw new ApplicationError('NOT_FOUND', 'アップロード対象が見つかりません');
+    await new SupabaseGroupKnowledgeStorage().inspectUploadedObject({
+      storageKey: source.storageKey,
+      expectedMimeType: source.mimeType,
+      expectedSizeBytes: input.sizeBytes,
+    });
+    return Response.json(
+      { data: { source: publicSource(source), uploadVerified: true }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}

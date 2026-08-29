@@ -130,6 +130,9 @@ export default async function GroupsPage({
             ) : null}
             {membership.role === 'MANAGER' ? (
               <>
+                <Link className="button" href={`/groups/${membership.group.id}/knowledge`}>
+                  公式資料・FAQを登録
+                </Link>
                 <Link className="button" href={`/groups/${membership.group.id}/members`}>
                   参加者が使える機能を設定
                 </Link>
