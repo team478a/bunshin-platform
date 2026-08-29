@@ -79,6 +79,25 @@ export interface GroupKnowledgeRepository {
   ): Promise<GroupKnowledgeChunkRecord[] | null>;
 }
 
+export function selectGroupKnowledgeChunksForPrompt(
+  values: GroupKnowledgeChunkRecord[],
+  maximumItems = 20,
+  maximumCharacters = 12_000,
+) {
+  if (!Number.isInteger(maximumItems) || maximumItems < 1 || maximumCharacters < 1)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid group knowledge prompt limit');
+  const selected: GroupKnowledgeChunkRecord[] = [];
+  let characters = 0;
+  for (const chunk of values) {
+    const length = chunk.content.trim().length;
+    if (length === 0 || characters + length > maximumCharacters) continue;
+    selected.push(chunk);
+    characters += length;
+    if (selected.length >= maximumItems) break;
+  }
+  return selected;
+}
+
 const requiredText = (value: string, field: string, max: number) => {
   const normalized = value.trim();
   if (!normalized || normalized.length > max)

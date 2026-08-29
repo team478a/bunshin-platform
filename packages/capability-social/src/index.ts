@@ -1515,6 +1515,13 @@ export interface MissionContentGeneratorInput {
   approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+  groupKnowledge?: Array<{
+    chunkId: string;
+    sourceId: string;
+    type: 'GENERAL' | 'FACT' | 'FAQ' | 'RULE';
+    sourceLabel: string;
+    content: string;
+  }>;
   selectedMemories: SelectedBunshinMemory[];
   campaign?: CampaignPlanningContext | null;
   repairInstructions?: string[];
@@ -1586,6 +1593,7 @@ export interface MissionQualityCheckerInput {
   bunshin: DailyMissionPlannerInput['bunshin'];
   approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
   selectedMemories: SelectedBunshinMemory[];
+  groupKnowledge?: MissionContentGeneratorInput['groupKnowledge'];
 }
 
 export interface MissionQualityCheckerProviderInput extends Omit<

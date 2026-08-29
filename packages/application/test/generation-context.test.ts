@@ -13,6 +13,7 @@ const payload = (): GenerationContextSnapshotPayload => ({
     { id: 'memory-1', summary: '短い要約', selectionReason: '今回のテーマに関連する' },
   ],
   knowledge: [{ id: 'knowledge-1' }],
+  groupKnowledge: [{ id: 'group-chunk-1' }],
   socialProfile: { id: 'profile-1' },
   strategy: { id: 'strategy-1', version: 2 },
   weeklyPlan: { id: 'plan-1' },
@@ -88,6 +89,15 @@ describe('Generation Context Snapshot', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(repository.value).toBeNull();
+    await expect(
+      new RecordGenerationContextSnapshot(repository).execute({
+        ...scope,
+        payload: {
+          ...payload(),
+          groupKnowledge: [{ id: 'same' }, { id: 'same' }],
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('does not expose a snapshot outside its workspace and Bunshin scope', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   GroupKnowledgeService,
+  selectGroupKnowledgeChunksForPrompt,
   type GroupKnowledgeChunkRecord,
   type GroupKnowledgeRepository,
   type GroupKnowledgeSourceRecord,
@@ -76,6 +77,26 @@ class Repository implements GroupKnowledgeRepository {
 }
 
 describe('GroupKnowledgeService', () => {
+  it('生成Promptへ渡す件数と文字数を制限する', () => {
+    const chunks = Array.from({ length: 25 }, (_, index) => ({
+      id: `chunk-${index}`,
+      sourceId: 'source-1',
+      sortOrder: index,
+      type: 'GENERAL' as const,
+      content: 'あ'.repeat(700),
+      sourceLabel: '公式資料',
+      pageNumber: null,
+      startSeconds: null,
+      endSeconds: null,
+      confidence: 1,
+    }));
+    const selected = selectGroupKnowledgeChunksForPrompt(chunks);
+    expect(selected).toHaveLength(17);
+    expect(selected.reduce((sum, chunk) => sum + chunk.content.length, 0)).toBeLessThanOrEqual(
+      12_000,
+    );
+  });
+
   it('PDFの抽出結果を人間確認後だけ生成に公開する', async () => {
     const repository = new Repository();
     const service = new GroupKnowledgeService(repository);

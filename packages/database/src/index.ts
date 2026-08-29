@@ -11203,23 +11203,30 @@ export class PrismaGroupKnowledgeRepository implements GroupKnowledgeRepository 
     input: Parameters<GroupKnowledgeRepository['listApprovedChunksForGeneration']>[0],
   ) {
     if (!(await this.canUse(input))) return null;
-    const rows = await this.client.groupKnowledgeChunk.findMany({
-      where: {
-        source: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          status: 'ACTIVE',
-          OR: [
-            { productPackVersionId: null },
-            ...(input.productPackVersionId
-              ? [{ productPackVersionId: input.productPackVersionId }]
-              : []),
-          ],
-        },
-      },
-      orderBy: [{ source: { updatedAt: 'desc' } }, { sortOrder: 'asc' }],
-    });
-    return rows.map(groupKnowledgeChunk);
+    const commonWhere = {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      status: 'ACTIVE' as const,
+    };
+    const productRows = input.productPackVersionId
+      ? await this.client.groupKnowledgeChunk.findMany({
+          where: {
+            source: { ...commonWhere, productPackVersionId: input.productPackVersionId },
+          },
+          orderBy: [{ source: { updatedAt: 'desc' } }, { sortOrder: 'asc' }],
+          take: 20,
+        })
+      : [];
+    const remaining = 20 - productRows.length;
+    const commonRows =
+      remaining > 0
+        ? await this.client.groupKnowledgeChunk.findMany({
+            where: { source: { ...commonWhere, productPackVersionId: null } },
+            orderBy: [{ source: { updatedAt: 'desc' } }, { sortOrder: 'asc' }],
+            take: remaining,
+          })
+        : [];
+    return [...productRows, ...commonRows].map(groupKnowledgeChunk);
   }
 }
 

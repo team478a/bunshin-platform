@@ -16,6 +16,7 @@ export interface GenerationContextSnapshotPayload {
   personality: GenerationContextReference | null;
   selectedMemories: SelectedMemoryReference[];
   knowledge: GenerationContextReference[];
+  groupKnowledge?: GenerationContextReference[];
   socialProfile: GenerationContextReference;
   strategy: GenerationContextReference;
   weeklyPlan: GenerationContextReference;
@@ -88,6 +89,7 @@ export function validateGenerationContextSnapshot(payload: GenerationContextSnap
   requireText(payload.model, 'model');
   requireUniqueReferences(payload.selectedMemories, 'selectedMemories');
   requireUniqueReferences(payload.knowledge, 'knowledge');
+  requireUniqueReferences(payload.groupKnowledge ?? [], 'groupKnowledge');
   requireUniqueReferences(payload.trendCandidates, 'trendCandidates');
   for (const memory of payload.selectedMemories) {
     requireText(memory.summary, 'selectedMemory.summary');

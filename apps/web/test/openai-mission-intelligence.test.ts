@@ -85,9 +85,18 @@ describe('OpenAIMissionContentGenerator', () => {
       ...base,
       contentPillar: { title: '実践', description: null },
       grantedKnowledge: [],
+      groupKnowledge: [
+        {
+          chunkId: 'group-chunk-1',
+          sourceId: 'group-source-1',
+          type: 'RULE',
+          sourceLabel: '公式販売ルール',
+          content: '価格を断定せず、公式ページを確認するよう案内する',
+        },
+      ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v4',
+      promptVersion: 'mission-content-generator-v5',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -103,6 +112,7 @@ describe('OpenAIMissionContentGenerator', () => {
     expect(JSON.stringify(request)).toContain('personality-version-2');
     expect(JSON.stringify(request)).toContain('絶対');
     expect(JSON.stringify(request)).toContain('最初は毎日5分だけ発信した');
+    expect(JSON.stringify(request)).toContain('公式販売ルール');
     expect(Object.keys(request.text.format.schema.properties)).toEqual([
       'body',
       'threadParts',
@@ -194,7 +204,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v3',
+      promptVersion: 'mission-quality-checker-v4',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;

@@ -24,6 +24,8 @@ import {
   ExternalTrackingLinkService,
   ExternalLinkPlacementService,
   GroupFeatureEntitlementService,
+  GroupKnowledgeService,
+  selectGroupKnowledgeChunksForPrompt,
   applyExternalLinkPlacement,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
@@ -229,6 +231,24 @@ export class DailyMissionGenerationService {
         postingPolicy: strategy.postingPolicy,
       };
       const knowledge = granted.map(({ type, title, content }) => ({ type, title, content }));
+      const groupKnowledgeChunks = campaign
+        ? await new GroupKnowledgeService(
+            new db.PrismaGroupKnowledgeRepository(),
+          ).listApprovedChunksForGeneration({
+            ...scope,
+            groupId: campaign.productPack.groupId,
+            productPackVersionId: campaign.productPack.versionId,
+          })
+        : [];
+      const groupKnowledge = selectGroupKnowledgeChunksForPrompt(groupKnowledgeChunks).map(
+        (chunk) => ({
+          chunkId: chunk.id,
+          sourceId: chunk.sourceId,
+          type: chunk.type,
+          sourceLabel: chunk.sourceLabel,
+          content: chunk.content.trim(),
+        }),
+      );
       const usage = async (
         suffix: string,
         taskType: string,
@@ -306,6 +326,7 @@ export class DailyMissionGenerationService {
         approvedStrategy: strategyContext,
         contentPillar: { title: pillar.title, description: pillar.description },
         grantedKnowledge: knowledge,
+        groupKnowledge,
         selectedMemories,
         campaign,
       };
@@ -324,6 +345,7 @@ export class DailyMissionGenerationService {
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
         selectedMemories,
+        groupKnowledge,
       });
       let repairCount = 0;
       const qualityIssueCodes = new Set<string>();
@@ -479,6 +501,7 @@ export class DailyMissionGenerationService {
               selectionReason,
             })),
             knowledge: granted.map(({ id }) => ({ id })),
+            groupKnowledge: groupKnowledge.map(({ chunkId }) => ({ id: chunkId })),
             socialProfile: { id: profile.id },
             strategy: { id: strategy.id, version: strategy.version },
             weeklyPlan: { id: weeklyPlan.id },
