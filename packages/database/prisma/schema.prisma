@@ -289,6 +289,7 @@ enum GroupKnowledgeAuditAction {
   FAILED
   APPROVED
   ARCHIVED
+  PRODUCT_SCOPE_UPDATED
 }
 
 enum VideoAssetKind {

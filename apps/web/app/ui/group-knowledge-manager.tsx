@@ -280,6 +280,32 @@ export function GroupKnowledgeManager({
     }
   }
 
+  async function changeProductScope(event: FormEvent<HTMLFormElement>, sourceId: string) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setSaving(true);
+    setMessage('資料を使う範囲を変更しています…');
+    try {
+      const response = await fetch(`${endpoint}/${sourceId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ productPackVersionId: selectedProductVersion(values) }),
+      });
+      const body = (await response.json()) as {
+        data?: { source: Source };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.data?.source)
+        throw new Error(body.error?.message ?? '使う範囲を変更できませんでした。');
+      add(body.data.source);
+      setMessage('この資料を使う範囲を変更しました。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '使う範囲を変更できませんでした。');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       <section className="settings-card">
@@ -438,6 +464,32 @@ export function GroupKnowledgeManager({
                       ?.label ?? '登録済みの商品'
                   }」の投稿だけ`
                 : 'グループのすべての投稿'}
+              {source.status !== 'ARCHIVED' ? (
+                <form
+                  key={`${source.id}-${source.productPackVersionId ?? 'common'}`}
+                  className="form-stack"
+                  onSubmit={(event) => void changeProductScope(event, source.id)}
+                >
+                  <label className="field">
+                    <span className="field__label">使う範囲を変更</span>
+                    <select
+                      className="field__control"
+                      name="productPackVersionId"
+                      defaultValue={source.productPackVersionId ?? ''}
+                    >
+                      <option value="">グループのすべての投稿</option>
+                      {productVersions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          商品「{item.label}」の投稿だけ
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="submit" disabled={saving}>
+                    使う範囲を保存する
+                  </button>
+                </form>
+              ) : null}
               {source.originalFileName ? (
                 <>
                   <br />

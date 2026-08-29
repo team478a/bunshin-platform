@@ -1,0 +1,1 @@
+ALTER TYPE "GroupKnowledgeAuditAction" ADD VALUE 'PRODUCT_SCOPE_UPDATED';

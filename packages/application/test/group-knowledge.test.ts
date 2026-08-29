@@ -67,6 +67,11 @@ class Repository implements GroupKnowledgeRepository {
     this.source.status = 'ARCHIVED';
     return Promise.resolve(true);
   }
+  updateProductScope(input: Parameters<GroupKnowledgeRepository['updateProductScope']>[0]) {
+    if (!this.allow) return Promise.resolve(null);
+    this.source.productPackVersionId = input.productPackVersionId;
+    return Promise.resolve(this.source);
+  }
   listForManagement() {
     return Promise.resolve(this.allow ? [this.source] : null);
   }
@@ -159,6 +164,37 @@ describe('GroupKnowledgeService', () => {
         ...scope,
         type: 'TEXT',
         title: 'FAQ',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('資料を再登録せず商品専用とグループ共通を切り替える', async () => {
+    const repository = new Repository();
+    const service = new GroupKnowledgeService(repository);
+    await expect(
+      service.updateProductScope({
+        ...scope,
+        sourceId: repository.source.id,
+        productPackVersionId: 'product-version-1',
+      }),
+    ).resolves.toMatchObject({ productPackVersionId: 'product-version-1' });
+    await expect(
+      service.updateProductScope({
+        ...scope,
+        sourceId: repository.source.id,
+        productPackVersionId: null,
+      }),
+    ).resolves.toMatchObject({ productPackVersionId: null });
+  });
+
+  it('利用範囲の変更でも別グループとして扱われる対象を拒否する', async () => {
+    const repository = new Repository();
+    repository.allow = false;
+    await expect(
+      new GroupKnowledgeService(repository).updateProductScope({
+        ...scope,
+        sourceId: repository.source.id,
+        productPackVersionId: 'foreign-product-version',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });

@@ -11190,6 +11190,54 @@ export class PrismaGroupKnowledgeRepository implements GroupKnowledgeRepository 
     });
   }
 
+  async updateProductScope(input: Parameters<GroupKnowledgeRepository['updateProductScope']>[0]) {
+    if (!(await this.canManage(input))) return null;
+    return this.client.$transaction(async (tx) => {
+      if (input.productPackVersionId) {
+        const version = await tx.productPackVersion.findFirst({
+          where: {
+            id: input.productPackVersionId,
+            status: 'PUBLISHED',
+            productPack: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              status: 'ACTIVE',
+            },
+          },
+          select: { id: true },
+        });
+        if (!version) return null;
+      }
+      const source = await tx.groupKnowledgeSource.findFirst({
+        where: {
+          id: input.sourceId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: { not: 'ARCHIVED' },
+        },
+      });
+      if (!source) return null;
+      const updated = await tx.groupKnowledgeSource.update({
+        where: { id: source.id },
+        data: { productPackVersionId: input.productPackVersionId },
+      });
+      await tx.groupKnowledgeAuditLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          sourceId: source.id,
+          actorUserId: input.actorUserId,
+          action: 'PRODUCT_SCOPE_UPDATED',
+          details: {
+            beforeProductPackVersionId: source.productPackVersionId,
+            afterProductPackVersionId: input.productPackVersionId,
+          },
+        },
+      });
+      return groupKnowledgeSource(updated);
+    });
+  }
+
   async listForManagement(input: Parameters<GroupKnowledgeRepository['listForManagement']>[0]) {
     if (!(await this.canManage(input))) return null;
     const rows = await this.client.groupKnowledgeSource.findMany({

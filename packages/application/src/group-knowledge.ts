@@ -71,6 +71,9 @@ export interface GroupKnowledgeRepository {
   ): Promise<boolean>;
   approve(input: GroupKnowledgeScope & { sourceId: string; approvedAt: Date }): Promise<boolean>;
   archive(input: GroupKnowledgeScope & { sourceId: string; archivedAt: Date }): Promise<boolean>;
+  updateProductScope(
+    input: GroupKnowledgeScope & { sourceId: string; productPackVersionId: string | null },
+  ): Promise<GroupKnowledgeSourceRecord | null>;
   listForManagement(input: GroupKnowledgeScope): Promise<GroupKnowledgeSourceRecord[] | null>;
   listApprovedChunksForGeneration(
     input: GroupKnowledgeScope & {
@@ -248,6 +251,18 @@ export class GroupKnowledgeService {
   async archive(input: GroupKnowledgeScope & { sourceId: string }) {
     if (!(await this.repository.archive({ ...input, archivedAt: new Date() })))
       throw new ApplicationError('NOT_FOUND', 'knowledge source unavailable');
+  }
+
+  async updateProductScope(
+    input: GroupKnowledgeScope & { sourceId: string; productPackVersionId?: string | null },
+  ) {
+    const value = await this.repository.updateProductScope({
+      ...input,
+      productPackVersionId: input.productPackVersionId ?? null,
+    });
+    if (value === null)
+      throw new ApplicationError('FORBIDDEN', 'group knowledge product scope update denied');
+    return value;
   }
 
   async listForManagement(input: GroupKnowledgeScope) {
