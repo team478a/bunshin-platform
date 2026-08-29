@@ -259,6 +259,38 @@ enum ProductPackAssetType {
   LINK
 }
 
+enum GroupKnowledgeSourceType {
+  PDF
+  VIDEO
+  URL
+  TEXT
+}
+
+enum GroupKnowledgeSourceStatus {
+  DRAFT
+  PROCESSING
+  REVIEW_REQUIRED
+  ACTIVE
+  FAILED
+  ARCHIVED
+}
+
+enum GroupKnowledgeChunkType {
+  GENERAL
+  FACT
+  FAQ
+  RULE
+}
+
+enum GroupKnowledgeAuditAction {
+  CREATED
+  PROCESSING_STARTED
+  EXTRACTION_SAVED
+  FAILED
+  APPROVED
+  ARCHIVED
+}
+
 enum VideoAssetKind {
   IMAGE
   VIDEO
@@ -1018,6 +1050,9 @@ model User {
   badgeCandidates                   BadgeAwardCandidate[]               @relation("BadgeCandidateUser")
   badgeCandidatesNominated          BadgeAwardCandidate[]               @relation("BadgeCandidateNominator")
   badgeCandidatesReviewed           BadgeAwardCandidate[]               @relation("BadgeCandidateReviewer")
+  groupKnowledgeSourcesCreated      GroupKnowledgeSource[]              @relation("GroupKnowledgeSourceCreator")
+  groupKnowledgeSourcesApproved     GroupKnowledgeSource[]              @relation("GroupKnowledgeSourceApprover")
+  groupKnowledgeAudits              GroupKnowledgeAuditLog[]            @relation("GroupKnowledgeAuditActor")
 
   @@index([status])
   @@map("users")
@@ -1050,6 +1085,8 @@ model Workspace {
   groupInvitations                GroupInvitation[]
   productPacks                    ProductPack[]
   productPackAssignments          ProductPackAssignment[]
+  groupKnowledgeSources           GroupKnowledgeSource[]
+  groupKnowledgeAudits            GroupKnowledgeAuditLog[]
   bunshins                        Bunshin[]
   ownerKnowledge                  OwnerKnowledge[]
   knowledgeGrants                 BunshinKnowledgeGrant[]
@@ -1151,6 +1188,8 @@ model Group {
   memberships                     GroupMembership[]
   invitations                     GroupInvitation[]
   productPacks                    ProductPack[]
+  knowledgeSources                GroupKnowledgeSource[]
+  knowledgeAudits                 GroupKnowledgeAuditLog[]
   campaigns                       Campaign[]
   externalTrackingSystems         ExternalTrackingSystem[]
   externalTrackingDomains         ExternalTrackingAllowedDomain[]
@@ -1428,6 +1467,7 @@ model ProductPackVersion {
   campaigns                      Campaign[]
   externalLinkPlacementTemplates ExternalLinkPlacementTemplate[]
   contentLinkUsages              ContentLinkUsage[]
+  knowledgeSources               GroupKnowledgeSource[]
 
   @@unique([productPackId, version])
   @@index([productPackId, status])
@@ -1490,6 +1530,81 @@ model ProductPackAsset {
 
   @@index([productPackVersionId, type])
   @@map("product_pack_assets")
+}
+
+model GroupKnowledgeSource {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  workspaceId          String                     @map("workspace_id") @db.Uuid
+  groupId              String                     @map("group_id") @db.Uuid
+  productPackVersionId String?                    @map("product_pack_version_id") @db.Uuid
+  logicalKey           String                     @map("logical_key") @db.VarChar(100)
+  version              Int
+  type                 GroupKnowledgeSourceType
+  title                String                     @db.VarChar(200)
+  sourceUri            String?                    @map("source_uri") @db.VarChar(2048)
+  storageKey           String?                    @map("storage_key") @db.VarChar(1000)
+  originalFileName     String?                    @map("original_file_name") @db.VarChar(255)
+  mimeType             String?                    @map("mime_type") @db.VarChar(120)
+  contentHash          String?                    @map("content_hash") @db.Char(64)
+  status               GroupKnowledgeSourceStatus @default(DRAFT)
+  failureCode          String?                    @map("failure_code") @db.VarChar(100)
+  createdByUserId      String                     @map("created_by_user_id") @db.Uuid
+  approvedByUserId     String?                    @map("approved_by_user_id") @db.Uuid
+  approvedAt           DateTime?                  @map("approved_at") @db.Timestamptz(6)
+  archivedAt           DateTime?                  @map("archived_at") @db.Timestamptz(6)
+  createdAt            DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace            Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                Group                      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  productPackVersion   ProductPackVersion?        @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  createdBy            User                       @relation("GroupKnowledgeSourceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvedBy           User?                      @relation("GroupKnowledgeSourceApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  chunks               GroupKnowledgeChunk[]
+  audits               GroupKnowledgeAuditLog[]
+
+  @@unique([workspaceId, groupId, logicalKey, version])
+  @@index([workspaceId, groupId, status, updatedAt])
+  @@index([productPackVersionId, status])
+  @@index([contentHash])
+  @@map("group_knowledge_sources")
+}
+
+model GroupKnowledgeChunk {
+  id           String                  @id @default(uuid()) @db.Uuid
+  sourceId     String                  @map("source_id") @db.Uuid
+  sortOrder    Int                     @map("sort_order")
+  type         GroupKnowledgeChunkType @default(GENERAL)
+  content      String                  @db.VarChar(8000)
+  sourceLabel  String                  @map("source_label") @db.VarChar(300)
+  pageNumber   Int?                    @map("page_number")
+  startSeconds Int?                    @map("start_seconds")
+  endSeconds   Int?                    @map("end_seconds")
+  confidence   Decimal?                @db.Decimal(4, 3)
+  createdAt    DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  source       GroupKnowledgeSource    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, sortOrder])
+  @@index([sourceId, type])
+  @@map("group_knowledge_chunks")
+}
+
+model GroupKnowledgeAuditLog {
+  id          String                    @id @default(uuid()) @db.Uuid
+  workspaceId String                    @map("workspace_id") @db.Uuid
+  groupId     String                    @map("group_id") @db.Uuid
+  sourceId    String                    @map("source_id") @db.Uuid
+  actorUserId String                    @map("actor_user_id") @db.Uuid
+  action      GroupKnowledgeAuditAction
+  details     Json?
+  createdAt   DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace   Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group       Group                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  source      GroupKnowledgeSource      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  actor       User                      @relation("GroupKnowledgeAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, createdAt])
+  @@index([sourceId, createdAt])
+  @@map("group_knowledge_audit_logs")
 }
 
 model Campaign {
