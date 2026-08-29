@@ -7,6 +7,24 @@ import { GroupKnowledgeManager } from '../../../../ui/group-knowledge-manager';
 
 export const dynamic = 'force-dynamic';
 
+const auditActionLabel = {
+  CREATED: '資料を登録',
+  PROCESSING_STARTED: '読み取りを開始',
+  EXTRACTION_SAVED: '読み取り結果を保存',
+  FAILED: '読み取りに失敗',
+  APPROVED: '投稿づくりでの利用を開始',
+  ARCHIVED: '資料の利用を停止',
+  PRODUCT_SCOPE_UPDATED: '資料を使う範囲を変更',
+} as const;
+
+function dateTime(value: Date) {
+  return new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Tokyo',
+  }).format(value);
+}
+
 export default async function GroupKnowledgePage({
   params,
 }: {
@@ -29,7 +47,7 @@ export default async function GroupKnowledgePage({
     select: { group: { select: { id: true, name: true, workspaceId: true } } },
   });
   if (!membership) notFound();
-  const [sources, productVersions] = await Promise.all([
+  const [sources, productVersions, audits] = await Promise.all([
     new db.PrismaGroupKnowledgeRepository().listForManagement({
       workspaceId: membership.group.workspaceId,
       groupId: membership.group.id,
@@ -50,6 +68,21 @@ export default async function GroupKnowledgePage({
         productPack: { select: { name: true } },
       },
       orderBy: [{ productPack: { name: 'asc' } }, { version: 'desc' }],
+    }),
+    db.prisma.groupKnowledgeAuditLog.findMany({
+      where: {
+        workspaceId: membership.group.workspaceId,
+        groupId: membership.group.id,
+      },
+      select: {
+        id: true,
+        action: true,
+        createdAt: true,
+        source: { select: { title: true } },
+        actor: { select: { displayName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
     }),
   ]);
   if (!sources) notFound();
@@ -83,6 +116,22 @@ export default async function GroupKnowledgePage({
           updatedAt: source.updatedAt.toISOString(),
         }))}
       />
+      <section className="settings-card">
+        <h2>資料の変更履歴</h2>
+        <p>グループの共有資料に対して行われた操作を、新しい順に50件まで表示します。</p>
+        {audits.length === 0 ? <p>変更履歴はまだありません。</p> : null}
+        <ul className="plain-list">
+          {audits.map((audit) => (
+            <li key={audit.id}>
+              <strong>{audit.source.title}</strong>
+              <br />
+              {auditActionLabel[audit.action]} ／ 操作：{audit.actor.displayName} ／{' '}
+              {dateTime(audit.createdAt)}
+            </li>
+          ))}
+        </ul>
+        <p>この画面を更新すると、最新の操作が表示されます。資料の本文や秘密情報は表示しません。</p>
+      </section>
     </main>
   );
 }
