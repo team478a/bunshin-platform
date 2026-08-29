@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 type Source = {
   id: string;
@@ -95,8 +95,42 @@ export function GroupKnowledgeManager({
   const fileForm = useRef<HTMLFormElement>(null);
   const urlForm = useRef<HTMLFormElement>(null);
   const textForm = useRef<HTMLFormElement>(null);
+  const refreshInFlight = useRef(false);
 
   const endpoint = `/api/workspaces/${workspaceId}/groups/${groupId}/knowledge`;
+  const hasPendingSources = sources.some((source) =>
+    ['DRAFT', 'PROCESSING'].includes(source.status),
+  );
+
+  const refreshSources = useCallback(
+    async (announce: boolean) => {
+      if (refreshInFlight.current) return;
+      refreshInFlight.current = true;
+      try {
+        const response = await fetch(endpoint, { cache: 'no-store' });
+        const body = (await response.json()) as {
+          data?: Source[];
+          error?: { message?: string };
+        };
+        if (!response.ok || !body.data)
+          throw new Error(body.error?.message ?? '最新の状態を確認できませんでした。');
+        setSources(body.data);
+        if (announce) setMessage('最新の状態に更新しました。');
+      } catch (error) {
+        if (announce)
+          setMessage(error instanceof Error ? error.message : '最新の状態を確認できませんでした。');
+      } finally {
+        refreshInFlight.current = false;
+      }
+    },
+    [endpoint],
+  );
+
+  useEffect(() => {
+    if (!hasPendingSources) return;
+    const timer = window.setInterval(() => void refreshSources(false), 5000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingSources, refreshSources]);
   const visibleSources = useMemo(() => {
     const query = searchText.trim().normalize('NFKC').toLocaleLowerCase('ja');
     return sources.filter((source) => {
@@ -595,6 +629,12 @@ export function GroupKnowledgeManager({
           {statusCounts.review}件 ／ 読み取り中{statusCounts.processing}件 ／ 失敗
           {statusCounts.failed}件
         </p>
+        <button type="button" disabled={saving} onClick={() => void refreshSources(true)}>
+          最新の状態に更新する
+        </button>
+        {hasPendingSources ? (
+          <p>読み取り中の資料は5秒ごとに自動確認します。この画面を開いたままで大丈夫です。</p>
+        ) : null}
         <div className="form-grid">
           <label className="field">
             <span className="field__label">資料名で探す</span>
