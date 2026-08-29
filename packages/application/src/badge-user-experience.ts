@@ -29,6 +29,16 @@ export interface BadgeUserDashboard {
   inProgress: BadgeUserItem[];
   recommended: BadgeUserItem[];
   shareableGroups: Array<{ id: string; name: string }>;
+  notifications: BadgeAwardNotificationItem[];
+}
+
+export interface BadgeAwardNotificationItem {
+  id: string;
+  badgeAwardId: string;
+  title: string;
+  description: string;
+  awardedAt: Date;
+  readAt: Date | null;
 }
 
 export interface BadgeUserExperienceRepository {
@@ -44,6 +54,31 @@ export interface BadgeUserExperienceRepository {
     visibility: BadgeVisibilityPolicy;
     sharedGroupId: string | null;
   }): Promise<{ visibility: BadgeVisibilityPolicy; sharedGroupId: string | null } | null>;
+  markNotificationRead(input: {
+    workspaceId: string;
+    actorUserId: string;
+    notificationId: string;
+    readAt: Date;
+  }): Promise<boolean>;
+}
+
+export class MarkBadgeNotificationRead {
+  constructor(private readonly repository: BadgeUserExperienceRepository) {}
+  async execute(input: {
+    workspaceId: string;
+    actorUserId: string;
+    notificationId: string;
+    readAt?: Date;
+  }) {
+    const changed = await this.repository.markNotificationRead({
+      workspaceId: required(input.workspaceId, 'workspace id'),
+      actorUserId: required(input.actorUserId, 'actor user id'),
+      notificationId: required(input.notificationId, 'notification id'),
+      readAt: input.readAt ?? new Date(),
+    });
+    if (!changed) throw new ApplicationError('FORBIDDEN', 'badge notification is not available');
+    return { read: true as const };
+  }
 }
 
 const required = (value: string, field: string) => {

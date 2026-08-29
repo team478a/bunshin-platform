@@ -1,5 +1,9 @@
 import 'server-only';
-import { GetBadgeUserDashboard, SetBadgeAwardVisibility } from '@bunshin/application';
+import {
+  GetBadgeUserDashboard,
+  MarkBadgeNotificationRead,
+  SetBadgeAwardVisibility,
+} from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -42,6 +46,11 @@ const dto = (value: Awaited<ReturnType<GetBadgeUserDashboard['execute']>>) => ({
   })),
   inProgress: value.inProgress.map((item) => ({ ...item, awardedAt: null })),
   recommended: value.recommended.map((item) => ({ ...item, awardedAt: null })),
+  notifications: value.notifications.map((item) => ({
+    ...item,
+    awardedAt: item.awardedAt.toISOString(),
+    readAt: item.readAt?.toISOString() ?? null,
+  })),
 });
 
 export function getBadgeDashboardResponse(request: Request, workspaceId: string) {
@@ -52,6 +61,24 @@ export function getBadgeDashboardResponse(request: Request, workspaceId: string)
         new db.PrismaBadgeUserExperienceRepository(db.prisma),
       ).execute({ workspaceId: uuid.parse(workspaceId), actorUserId: await actorUserId() }),
     );
+  });
+}
+
+export function markBadgeNotificationReadResponse(
+  request: Request,
+  workspaceId: string,
+  notificationId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const db = await import('@bunshin/database');
+    return new MarkBadgeNotificationRead(
+      new db.PrismaBadgeUserExperienceRepository(db.prisma),
+    ).execute({
+      workspaceId: uuid.parse(workspaceId),
+      actorUserId: await actorUserId(),
+      notificationId: uuid.parse(notificationId),
+    });
   });
 }
 
