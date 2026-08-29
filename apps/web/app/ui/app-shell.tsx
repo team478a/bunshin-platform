@@ -6,6 +6,7 @@ import { BrandMark } from './brand-mark';
 
 const navigation = [
   { href: '/bunshins', label: 'ホーム', icon: 'home' },
+  { href: '/badges', label: 'バッジ', icon: 'badge' },
   { href: '/knowledge', label: '知識', icon: 'knowledge' },
   { href: '/account', label: 'アカウント', icon: 'account' },
 ] as const;
@@ -45,6 +46,13 @@ function NavigationIcon({ name }: { name: (typeof navigation)[number]['icon'] })
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M5 4.5A3.5 3.5 0 0 1 8.5 8H11v12H8.5A3.5 3.5 0 0 0 5 23V4.5Zm14 0A3.5 3.5 0 0 0 15.5 8H13v12h2.5A3.5 3.5 0 0 1 19 23V4.5Z" />
+      </svg>
+    );
+  }
+  if (name === 'badge') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m12 2 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" />
       </svg>
     );
   }

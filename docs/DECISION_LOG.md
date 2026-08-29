@@ -1587,3 +1587,12 @@
 - Time: 連続日は利用者Timezone、未設定時はAsia/Tokyo、週は月曜日開始で判定する。
 - Migration: 旧バッジは意味が一致するFIRST_CONFIRMATIONとFIRST_POSTのみ移行し、FIRST_PREPARATIONとTHREE_ACTIVE_DAYSは推測変換しない。
 - Source: `docs/BADGE_COMMON_PROCESSOR_REPORT.md`
+
+## 2026-08-29: バッジの公開範囲は獲得記録と分離して本人だけが変更する
+
+- Default: 獲得バッジは必ずPRIVATEから開始し、自動公開しない。
+- Ownership: 公開設定はAward所有User本人だけが変更でき、Group管理者による強制公開APIは作らない。
+- Group: GROUP共有は同一Workspaceで本人がACTIVE所属するACTIVE Groupだけに限定し、脱退・停止後の実効表示はPRIVATEへ戻す。
+- Persistence: `BadgeAwardVisibility`を`BadgeAward`から分離し、公開設定の変更で獲得根拠と履歴を上書きしない。
+- Exclusion: PUBLICプロフィール、ランキング、他User比較、AI品質評価はB-3に含めない。
+- Source: `docs/BADGE_USER_EXPERIENCE_REPORT.md`

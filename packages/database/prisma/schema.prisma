@@ -953,6 +953,7 @@ model User {
   pointRedemptions                  PointRedemption[]
   badgeProgress                     BadgeProgress[]
   badgeAwards                       BadgeAward[]
+  badgeAwardVisibilities            BadgeAwardVisibility[]
   badgeProcessingEvents             BadgeProcessingEvent[]
   badgeAuditsPerformed              BadgeAdminAuditLog[]                @relation("BadgeAuditActor")
 
@@ -1049,6 +1050,7 @@ model Workspace {
   badgeDefinitions             BadgeDefinition[]
   badgeProgress                BadgeProgress[]
   badgeAwards                  BadgeAward[]
+  badgeAwardVisibilities       BadgeAwardVisibility[]
   badgeProcessingEvents        BadgeProcessingEvent[]
   badgeAdminAudits             BadgeAdminAuditLog[]
 
@@ -1108,6 +1110,7 @@ model Group {
   badgeDefinitions           BadgeDefinition[]
   badgeProgress              BadgeProgress[]
   badgeAwards                BadgeAward[]
+  badgeAwardVisibilities     BadgeAwardVisibility[]
   badgeAdminAudits           BadgeAdminAuditLog[]
 
   @@unique([workspaceId, name])
@@ -1661,24 +1664,24 @@ model BadgeDefinition {
 }
 
 model BadgeVersion {
-  id               String                  @id @default(uuid()) @db.Uuid
-  definitionId     String                  @map("definition_id") @db.Uuid
+  id               String                @id @default(uuid()) @db.Uuid
+  definitionId     String                @map("definition_id") @db.Uuid
   version          Int
-  title            String                  @db.VarChar(120)
-  description      String                  @db.VarChar(500)
-  imageKey         String                  @map("image_key") @db.VarChar(255)
-  lockedImageKey   String?                 @map("locked_image_key") @db.VarChar(255)
-  altText          String                  @map("alt_text") @db.VarChar(200)
-  backgroundColor  String?                 @map("background_color") @db.VarChar(20)
-  conditionType    BadgeConditionType      @map("condition_type")
-  conditionConfig  Json                    @map("condition_config")
-  visibilityPolicy BadgeVisibilityPolicy   @default(PRIVATE) @map("visibility_policy")
-  rewardPolicy     Json                    @map("reward_policy")
-  startsAt         DateTime?               @map("starts_at") @db.Timestamptz(6)
-  endsAt           DateTime?               @map("ends_at") @db.Timestamptz(6)
-  publishedAt      DateTime?               @map("published_at") @db.Timestamptz(6)
-  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
-  definition       BadgeDefinition         @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  title            String                @db.VarChar(120)
+  description      String                @db.VarChar(500)
+  imageKey         String                @map("image_key") @db.VarChar(255)
+  lockedImageKey   String?               @map("locked_image_key") @db.VarChar(255)
+  altText          String                @map("alt_text") @db.VarChar(200)
+  backgroundColor  String?               @map("background_color") @db.VarChar(20)
+  conditionType    BadgeConditionType    @map("condition_type")
+  conditionConfig  Json                  @map("condition_config")
+  visibilityPolicy BadgeVisibilityPolicy @default(PRIVATE) @map("visibility_policy")
+  rewardPolicy     Json                  @map("reward_policy")
+  startsAt         DateTime?             @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime?             @map("ends_at") @db.Timestamptz(6)
+  publishedAt      DateTime?             @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  definition       BadgeDefinition       @relation(fields: [definitionId], references: [id], onDelete: Restrict)
   progress         BadgeProgress[]
   awards           BadgeAward[]
   audits           BadgeAdminAuditLog[]
@@ -1714,34 +1717,56 @@ model BadgeProgress {
 }
 
 model BadgeAward {
-  id              String           @id @default(uuid()) @db.Uuid
-  workspaceId     String           @map("workspace_id") @db.Uuid
-  userId          String           @map("user_id") @db.Uuid
-  badgeVersionId  String           @map("badge_version_id") @db.Uuid
-  groupId         String?          @map("group_id") @db.Uuid
-  sourceBunshinId String?          @map("source_bunshin_id") @db.Uuid
-  awardedAt       DateTime         @default(now()) @map("awarded_at") @db.Timestamptz(6)
-  sourceType      String           @map("source_type") @db.VarChar(100)
-  sourceId        String           @map("source_id") @db.VarChar(200)
-  evidenceHash    String           @map("evidence_hash") @db.Char(64)
-  idempotencyKey  String           @map("idempotency_key") @db.VarChar(200)
-  status          BadgeAwardStatus @default(ACTIVE)
-  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(6)
-  expiredAt       DateTime?        @map("expired_at") @db.Timestamptz(6)
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  badgeVersion    BadgeVersion     @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
-  group           Group?           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
-  sourceBunshin   Bunshin?         @relation("BadgeAwardSourceBunshin", fields: [workspaceId, sourceBunshinId], references: [workspaceId, id], onDelete: Restrict)
+  id              String                @id @default(uuid()) @db.Uuid
+  workspaceId     String                @map("workspace_id") @db.Uuid
+  userId          String                @map("user_id") @db.Uuid
+  badgeVersionId  String                @map("badge_version_id") @db.Uuid
+  groupId         String?               @map("group_id") @db.Uuid
+  sourceBunshinId String?               @map("source_bunshin_id") @db.Uuid
+  awardedAt       DateTime              @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  sourceType      String                @map("source_type") @db.VarChar(100)
+  sourceId        String                @map("source_id") @db.VarChar(200)
+  evidenceHash    String                @map("evidence_hash") @db.Char(64)
+  idempotencyKey  String                @map("idempotency_key") @db.VarChar(200)
+  status          BadgeAwardStatus      @default(ACTIVE)
+  revokedAt       DateTime?             @map("revoked_at") @db.Timestamptz(6)
+  expiredAt       DateTime?             @map("expired_at") @db.Timestamptz(6)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeVersion    BadgeVersion          @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  group           Group?                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  sourceBunshin   Bunshin?              @relation("BadgeAwardSourceBunshin", fields: [workspaceId, sourceBunshinId], references: [workspaceId, id], onDelete: Restrict)
   audits          BadgeAdminAuditLog[]
+  visibility      BadgeAwardVisibility?
 
   @@unique([workspaceId, userId, idempotencyKey])
   @@unique([workspaceId, userId, badgeVersionId])
+  @@unique([workspaceId, userId, id])
   @@index([workspaceId, userId, status, awardedAt])
   @@index([groupId, status, awardedAt])
   @@map("badge_awards")
+}
+
+model BadgeAwardVisibility {
+  id            String                @id @default(uuid()) @db.Uuid
+  workspaceId   String                @map("workspace_id") @db.Uuid
+  userId        String                @map("user_id") @db.Uuid
+  badgeAwardId  String                @unique @map("badge_award_id") @db.Uuid
+  visibility    BadgeVisibilityPolicy @default(PRIVATE)
+  sharedGroupId String?               @map("shared_group_id") @db.Uuid
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace     Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeAward    BadgeAward            @relation(fields: [workspaceId, userId, badgeAwardId], references: [workspaceId, userId, id], onDelete: Cascade)
+  sharedGroup   Group?                @relation(fields: [workspaceId, sharedGroupId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, userId, badgeAwardId])
+  @@index([workspaceId, userId, visibility])
+  @@index([workspaceId, sharedGroupId, visibility])
+  @@map("badge_award_visibilities")
 }
 
 model BadgeProcessingEvent {
@@ -3066,7 +3091,7 @@ model Bunshin {
   campaignParticipations      CampaignParticipation[]
   campaignSimilarityReviews   CampaignSimilarityReview[]
   achievementBadges           AchievementBadge[]
-  badgeAwards                 BadgeAward[]                 @relation("BadgeAwardSourceBunshin")
+  badgeAwards                 BadgeAward[]                  @relation("BadgeAwardSourceBunshin")
   videoProjects               VideoProject[]
 
   @@unique([workspaceId, slug])

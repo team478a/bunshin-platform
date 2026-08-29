@@ -5,6 +5,7 @@ describe('authenticated app shell navigation', () => {
   it('keeps the parent destination active on nested screens', () => {
     expect(isNavigationItemActive('/bunshins/bunshin-1', '/bunshins')).toBe(true);
     expect(isNavigationItemActive('/knowledge/item-1', '/knowledge')).toBe(true);
+    expect(isNavigationItemActive('/badges', '/badges')).toBe(true);
   });
 
   it('does not activate destinations with only a shared prefix', () => {
