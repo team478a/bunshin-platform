@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { getServerEnvironment } from '@bunshin/config';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
+import { ListSocialImagePilotEvidence } from '@bunshin/application';
+import { ImagePilotEvidenceEditor } from './evidence-editor';
 import { buildImagePilotReadiness } from './readiness-view-model';
 
 export const dynamic = 'force-dynamic';
@@ -166,6 +168,17 @@ export default async function ImagePilotAdminPage({
         orderBy: { version: 'desc' },
       })
     : null;
+  const evidence =
+    selected && pilot
+      ? await new ListSocialImagePilotEvidence(
+          new db.PrismaSocialImagePilotEvidenceRepository(),
+        ).execute({
+          workspaceId: selected.workspaceId,
+          groupId: selected.id,
+          pilotId: pilot.id,
+          actorUserId: actor.userId,
+        })
+      : [];
   const members = selected
     ? await db.prisma.groupMembership.findMany({
         where: { workspaceId: selected.workspaceId, groupId: selected.id, status: 'ACTIVE' },
@@ -299,6 +312,23 @@ export default async function ImagePilotAdminPage({
               </Link>
             </p>
           </section>
+          {pilot ? (
+            <ImagePilotEvidenceEditor
+              workspaceId={selected.workspaceId}
+              groupId={selected.id}
+              pilotId={pilot.id}
+              canEdit={admin.role === 'SUPER_ADMIN'}
+              initialEvidence={evidence.map((item) => ({
+                ...item,
+                occurredAt: item.occurredAt.toISOString(),
+              }))}
+            />
+          ) : (
+            <section className="settings-card">
+              <h2>開始前に人が確認すること</h2>
+              <p>先に試験設定を保存すると、確認項目を記録できるようになります。</p>
+            </section>
+          )}
           <section className="settings-card">
             <h2>開始前の自動確認</h2>
             <p>
