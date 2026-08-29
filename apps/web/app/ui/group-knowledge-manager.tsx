@@ -36,6 +36,18 @@ export function GroupKnowledgeManager({
   const [sources, setSources] = useState(initialSources);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [review, setReview] = useState<{
+    source: Source;
+    chunks: Array<{
+      id: string;
+      type: string;
+      content: string;
+      sourceLabel: string;
+      pageNumber: number | null;
+      startSeconds: number | null;
+      endSeconds: number | null;
+    }>;
+  } | null>(null);
   const fileForm = useRef<HTMLFormElement>(null);
   const urlForm = useRef<HTMLFormElement>(null);
   const textForm = useRef<HTMLFormElement>(null);
@@ -142,6 +154,51 @@ export function GroupKnowledgeManager({
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存できませんでした。');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function openReview(sourceId: string) {
+    setSaving(true);
+    setMessage('読み取った内容を開いています…');
+    try {
+      const response = await fetch(`${endpoint}/${sourceId}`, { cache: 'no-store' });
+      const body = (await response.json()) as {
+        data?: { source: Source; chunks: NonNullable<typeof review>['chunks'] };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.data)
+        throw new Error(body.error?.message ?? '内容を開けませんでした。');
+      setReview(body.data);
+      setMessage('内容を確認してください。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '内容を開けませんでした。');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeState(sourceId: string, action: 'approve' | 'archive') {
+    setSaving(true);
+    setMessage(action === 'approve' ? '利用を開始しています…' : '利用を停止しています…');
+    try {
+      const response = await fetch(`${endpoint}/${sourceId}/${action}`, { method: 'POST' });
+      const body = (await response.json()) as {
+        data?: { source: Source };
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.data?.source)
+        throw new Error(body.error?.message ?? '変更できませんでした。');
+      add(body.data.source);
+      setReview(null);
+      setMessage(
+        action === 'approve'
+          ? '投稿づくりに利用する資料として承認しました。'
+          : 'この資料の利用を停止しました。',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '変更できませんでした。');
     } finally {
       setSaving(false);
     }
@@ -257,6 +314,42 @@ export function GroupKnowledgeManager({
         {message}
       </p>
 
+      {review ? (
+        <section className="settings-card">
+          <h2>読み取った内容を確認</h2>
+          <p>
+            <strong>{review.source.title}</strong>
+          </p>
+          {review.chunks.length === 0 ? (
+            <p>読み取った内容はまだありません。</p>
+          ) : (
+            <ol className="plain-list">
+              {review.chunks.map((chunk) => (
+                <li key={chunk.id}>
+                  <strong>{chunk.sourceLabel}</strong>
+                  {chunk.pageNumber ? `（${chunk.pageNumber}ページ）` : ''}
+                  {chunk.startSeconds !== null ? `（${chunk.startSeconds}秒から）` : ''}
+                  <p>{chunk.content}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+          {review.source.status === 'REVIEW_REQUIRED' && review.chunks.length > 0 ? (
+            <button
+              className="button"
+              type="button"
+              disabled={saving}
+              onClick={() => void changeState(review.source.id, 'approve')}
+            >
+              確認して投稿づくりに使う
+            </button>
+          ) : null}
+          <button type="button" disabled={saving} onClick={() => setReview(null)}>
+            閉じる
+          </button>
+        </section>
+      ) : null}
+
       <section className="settings-card">
         <h2>保存したナレッジ</h2>
         {sources.length === 0 ? <p>保存した資料はまだありません。</p> : null}
@@ -283,6 +376,27 @@ export function GroupKnowledgeManager({
                   <br />
                   確認が必要です：{source.failureCode}
                 </>
+              ) : null}
+              {['REVIEW_REQUIRED', 'ACTIVE'].includes(source.status) ? (
+                <>
+                  <br />
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void openReview(source.id)}
+                  >
+                    内容を確認する
+                  </button>
+                </>
+              ) : null}
+              {source.status === 'ACTIVE' ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void changeState(source.id, 'archive')}
+                >
+                  利用を停止する
+                </button>
               ) : null}
             </li>
           ))}
