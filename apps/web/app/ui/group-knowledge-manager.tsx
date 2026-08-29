@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 
 type Source = {
   id: string;
@@ -76,6 +76,10 @@ export function GroupKnowledgeManager({
   const [sources, setSources] = useState(initialSources);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [scopeFilter, setScopeFilter] = useState('ALL');
   const [review, setReview] = useState<{
     source: Source;
     chunks: Array<{
@@ -93,6 +97,35 @@ export function GroupKnowledgeManager({
   const textForm = useRef<HTMLFormElement>(null);
 
   const endpoint = `/api/workspaces/${workspaceId}/groups/${groupId}/knowledge`;
+  const visibleSources = useMemo(() => {
+    const query = searchText.trim().normalize('NFKC').toLocaleLowerCase('ja');
+    return sources.filter((source) => {
+      const matchesText =
+        query.length === 0 ||
+        [source.title, source.originalFileName, source.sourceUri]
+          .filter((value): value is string => Boolean(value))
+          .some((value) => value.normalize('NFKC').toLocaleLowerCase('ja').includes(query));
+      const matchesType = typeFilter === 'ALL' || source.type === typeFilter;
+      const matchesStatus = statusFilter === 'ALL' || source.status === statusFilter;
+      const matchesScope =
+        scopeFilter === 'ALL' ||
+        (scopeFilter === 'COMMON'
+          ? source.productPackVersionId === null
+          : source.productPackVersionId === scopeFilter);
+      return matchesText && matchesType && matchesStatus && matchesScope;
+    });
+  }, [scopeFilter, searchText, sources, statusFilter, typeFilter]);
+
+  const statusCounts = useMemo(
+    () => ({
+      active: sources.filter((source) => source.status === 'ACTIVE').length,
+      review: sources.filter((source) => source.status === 'REVIEW_REQUIRED').length,
+      processing: sources.filter((source) => ['DRAFT', 'PROCESSING'].includes(source.status))
+        .length,
+      failed: sources.filter((source) => source.status === 'FAILED').length,
+    }),
+    [sources],
+  );
 
   function selectedProductVersion(values: FormData) {
     const value = values.get('productPackVersionId');
@@ -470,9 +503,87 @@ export function GroupKnowledgeManager({
 
       <section className="settings-card">
         <h2>保存したナレッジ</h2>
+        <p>
+          全{sources.length}件 ／ 利用中{statusCounts.active}件 ／ 内容の確認待ち
+          {statusCounts.review}件 ／ 読み取り中{statusCounts.processing}件 ／ 失敗
+          {statusCounts.failed}件
+        </p>
+        <div className="form-grid">
+          <label className="field">
+            <span className="field__label">資料名で探す</span>
+            <input
+              className="field__control"
+              type="search"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="資料名、ファイル名、URL"
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">資料の種類</span>
+            <select
+              className="field__control"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+            >
+              <option value="ALL">すべて</option>
+              <option value="PDF">PDF</option>
+              <option value="VIDEO">動画</option>
+              <option value="URL">Webページ</option>
+              <option value="TEXT">入力した文章</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">現在の状態</span>
+            <select
+              className="field__control"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="ALL">すべて</option>
+              {Object.entries(statusLabel).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">使う範囲</span>
+            <select
+              className="field__control"
+              value={scopeFilter}
+              onChange={(event) => setScopeFilter(event.target.value)}
+            >
+              <option value="ALL">すべて</option>
+              <option value="COMMON">グループのすべての投稿</option>
+              {productVersions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  商品「{item.label}」の投稿だけ
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {searchText || typeFilter !== 'ALL' || statusFilter !== 'ALL' || scopeFilter !== 'ALL' ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSearchText('');
+              setTypeFilter('ALL');
+              setStatusFilter('ALL');
+              setScopeFilter('ALL');
+            }}
+          >
+            絞り込みをすべて戻す
+          </button>
+        ) : null}
         {sources.length === 0 ? <p>保存した資料はまだありません。</p> : null}
+        {sources.length > 0 && visibleSources.length === 0 ? (
+          <p>条件に合う資料はありません。検索や絞り込みを変えてください。</p>
+        ) : null}
         <ul className="plain-list">
-          {sources.map((source) => (
+          {visibleSources.map((source) => (
             <li key={source.id}>
               <strong>{source.title}</strong>
               <br />
