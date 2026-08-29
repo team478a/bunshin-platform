@@ -1646,3 +1646,11 @@
 - 既存Awardにも本人がバッジ画面を開いた時点で不足通知を補完し、移行前の獲得を失わない。
 - 取消・失効したAwardは通知一覧へ表示しない。通知削除は用意せず、本人の既読日時を保存する。
 - LINE通知はB-6BでテストGroupのFeature Flag、通知同意、Quiet Hours、Quota、全体停止を再利用して接続する。
+
+# 2026-08-29: バッジLINE通知はテストGroup限定の独立Deliveryとして準備する
+
+- Daily Mission必須の`LineMessageDelivery`へバッジを混在させず、`BadgeLineNotificationDelivery`を独立させる。
+- 対象はGroup Badge Awardに限定し、Group LINE Routing Policyの`pilotEnabled`をFeature Flagとして使用する。
+- Group在籍・参加同意、LINE接続・友だち状態・通知同意、利用者通知設定、停止期間をすべて満たす場合だけ配信候補を作る。
+- 同じAward通知は環境ごとに最大1件とし、DB一意制約と冪等Keyで重複配信を防ぐ。
+- B-6B1は候補準備と状態Coreまでとし、Provider送信、Quiet Hours再評価、Quota、再試行、DLQ、緊急停止はB-6B2で既存LINE Gateへ接続する。

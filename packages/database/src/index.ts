@@ -190,6 +190,7 @@ import type {
 import { canManageBunshin } from '@bunshin/platform-domain';
 export { PrismaCommonBadgeProcessorRepository } from './badge-common-processor';
 export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
+export { PrismaBadgeLineNotificationPreparationRepository } from './badge-line-notification';
 export { PrismaBadgeGroupWorkflowRepository } from './badge-group-workflow';
 export {
   PrismaBadgeEntitlementConsumptionRepository,
