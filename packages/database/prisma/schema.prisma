@@ -154,6 +154,15 @@ enum BadgeAwardStatus {
   EXPIRED
 }
 
+enum BadgeLineNotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+  DEAD
+}
+
 enum BadgeProcessingStatus {
   PROCESSING
   COMPLETED
@@ -999,6 +1008,7 @@ model User {
   badgeProgress                     BadgeProgress[]
   badgeAwards                       BadgeAward[]
   badgeAwardNotifications          BadgeAwardNotification[]
+  badgeLineNotificationDeliveries  BadgeLineNotificationDelivery[]
   badgeAwardVisibilities            BadgeAwardVisibility[]
   badgeProcessingEvents             BadgeProcessingEvent[]
   badgeAuditsPerformed              BadgeAdminAuditLog[]                @relation("BadgeAuditActor")
@@ -1102,6 +1112,7 @@ model Workspace {
   badgeProgress                BadgeProgress[]
   badgeAwards                  BadgeAward[]
   badgeAwardNotifications     BadgeAwardNotification[]
+  badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
   badgeAwardVisibilities       BadgeAwardVisibility[]
   badgeProcessingEvents        BadgeProcessingEvent[]
   badgeAdminAudits             BadgeAdminAuditLog[]
@@ -1168,6 +1179,7 @@ model Group {
   badgeAdminAudits           BadgeAdminAuditLog[]
   badgeApprovalRequests      BadgeApprovalRequest[]
   badgeAwardCandidates       BadgeAwardCandidate[]
+  badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -1821,10 +1833,38 @@ model BadgeAwardNotification {
   workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   user         User       @relation(fields: [userId], references: [id], onDelete: Restrict)
   badgeAward   BadgeAward @relation(fields: [workspaceId, userId, badgeAwardId], references: [workspaceId, userId, id], onDelete: Cascade)
+  lineDeliveries BadgeLineNotificationDelivery[]
 
   @@unique([workspaceId, userId, badgeAwardId])
   @@index([workspaceId, userId, readAt, createdAt])
   @@map("badge_award_notifications")
+}
+
+model BadgeLineNotificationDelivery {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  environment         LineConfigurationEnvironment
+  workspaceId         String                      @map("workspace_id") @db.Uuid
+  groupId             String                      @map("group_id") @db.Uuid
+  userId              String                      @map("user_id") @db.Uuid
+  badgeNotificationId String                      @map("badge_notification_id") @db.Uuid
+  status              BadgeLineNotificationStatus @default(PENDING)
+  idempotencyKey      String                      @map("idempotency_key") @db.VarChar(200)
+  scheduledAt         DateTime                    @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  sentAt              DateTime?                   @map("sent_at") @db.Timestamptz(6)
+  attemptCount        Int                         @default(0) @map("attempt_count")
+  lastErrorCategory   String?                     @map("last_error_category") @db.VarChar(80)
+  createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace           Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group               Group                       @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  user                User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeNotification   BadgeAwardNotification      @relation(fields: [badgeNotificationId], references: [id], onDelete: Cascade)
+
+  @@unique([environment, badgeNotificationId])
+  @@unique([environment, idempotencyKey])
+  @@index([environment, status, scheduledAt])
+  @@index([workspaceId, groupId, status, createdAt])
+  @@map("badge_line_notification_deliveries")
 }
 
 model BadgeAwardVisibility {
