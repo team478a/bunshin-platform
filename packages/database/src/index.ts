@@ -193,6 +193,7 @@ export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
 export { PrismaBadgeLineNotificationPreparationRepository } from './badge-line-notification';
 export { PrismaBadgeLineDeliveryRepository } from './badge-line-notification';
 export { PrismaBadgeLineJobCandidateRepository } from './badge-line-notification';
+export { PrismaBadgeLineDeliveryRetryRepository } from './badge-line-notification';
 export { PrismaBadgeGroupWorkflowRepository } from './badge-group-workflow';
 export {
   PrismaBadgeEntitlementConsumptionRepository,
@@ -1175,6 +1176,7 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
       jobCounts,
       failureRows,
       retryableFailures,
+      retryableBadgeFailures,
       configuration,
     ] = await Promise.all([
       Promise.all([
@@ -1231,6 +1233,26 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
             take: 100,
           })
         : Promise.resolve([]),
+      ['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)
+        ? this.client.badgeLineNotificationDelivery.findMany({
+            where: {
+              environment,
+              status: 'DEAD',
+              sentAt: null,
+              cancelledAt: null,
+              lastErrorCategory: { in: [...LINE_ADMIN_RETRYABLE_FAILURES] },
+            },
+            select: {
+              id: true,
+              lastErrorCategory: true,
+              attemptCount: true,
+              updatedAt: true,
+              retryRequests: { select: { deliveryAttemptCount: true } },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 100,
+          })
+        : Promise.resolve([]),
       this.client.lineChannelConfiguration.findFirst({ where: { environment, status: 'ACTIVE' } }),
     ]);
     const [pending = 0, processing = 0, sent = 0, failed = 0, cancelled = 0] = deliveryCounts;
@@ -1254,6 +1276,21 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
         .sort((left, right) => right.count - left.count)
         .slice(0, 8),
       retryableFailures: retryableFailures
+        .flatMap((row) =>
+          row.lastErrorCategory &&
+          !row.retryRequests.some((request) => request.deliveryAttemptCount === row.attemptCount)
+            ? [
+                {
+                  deliveryId: row.id,
+                  category: row.lastErrorCategory,
+                  attemptCount: row.attemptCount,
+                  failedAt: row.updatedAt,
+                },
+              ]
+            : [],
+        )
+        .slice(0, 20),
+      retryableBadgeFailures: retryableBadgeFailures
         .flatMap((row) =>
           row.lastErrorCategory &&
           !row.retryRequests.some((request) => request.deliveryAttemptCount === row.attemptCount)

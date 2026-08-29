@@ -959,6 +959,7 @@ model User {
   lineMessageDeliveries             LineMessageDelivery[]
   missionDeepLinkStates             MissionDeepLinkState[]
   lineDeliveryRetryRequests         LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
+  badgeLineDeliveryRetryRequests    BadgeLineDeliveryRetryRequest[]     @relation("BadgeLineDeliveryRetryActor")
   videoRenderRetryRequests          VideoRenderRetryRequest[]           @relation("VideoRenderRetryActor")
   videoDisclosurePoliciesCreated    VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyCreator")
   videoDisclosurePoliciesActivated  VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyActivator")
@@ -1007,8 +1008,8 @@ model User {
   pointRedemptions                  PointRedemption[]
   badgeProgress                     BadgeProgress[]
   badgeAwards                       BadgeAward[]
-  badgeAwardNotifications          BadgeAwardNotification[]
-  badgeLineNotificationDeliveries  BadgeLineNotificationDelivery[]
+  badgeAwardNotifications           BadgeAwardNotification[]
+  badgeLineNotificationDeliveries   BadgeLineNotificationDelivery[]
   badgeAwardVisibilities            BadgeAwardVisibility[]
   badgeProcessingEvents             BadgeProcessingEvent[]
   badgeAuditsPerformed              BadgeAdminAuditLog[]                @relation("BadgeAuditActor")
@@ -1037,87 +1038,87 @@ model AuthIdentity {
 }
 
 model Workspace {
-  id                           String                           @id @default(uuid()) @db.Uuid
-  type                         WorkspaceType
-  name                         String                           @db.VarChar(120)
-  status                       WorkspaceStatus                  @default(ACTIVE)
-  createdAt                    DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                    DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  memberships                  WorkspaceMembership[]
-  groups                       Group[]
-  groupMemberships             GroupMembership[]
-  groupInvitations             GroupInvitation[]
-  productPacks                 ProductPack[]
-  productPackAssignments       ProductPackAssignment[]
-  bunshins                     Bunshin[]
-  ownerKnowledge               OwnerKnowledge[]
-  knowledgeGrants              BunshinKnowledgeGrant[]
-  memories                     BunshinMemory[]
-  capabilityAssignments        BunshinCapabilityAssignment[]
-  socialProfiles               SocialProfile[]
-  socialAccountStrategies      SocialAccountStrategy[]
-  contentPillars               ContentPillar[]
-  weeklyPlans                  WeeklyPlan[]
-  weeklyPlanItems              WeeklyPlanItem[]
-  dailyMissions                DailyMission[]
-  missionContents              MissionContent[]
-  missionDecisions             MissionDecision[]
-  missionActivities            MissionActivity[]
-  postRecords                  PostRecord[]
-  missionFeedback              MissionFeedback[]
-  aiUsageEvents                AiUsageEvent[]
-  lineNotificationPreferences  LineNotificationPreference[]
-  lineConnections              LineConnection[]
-  lineWebhookEvents            LineWebhookEvent[]
-  jobs                         Job[]
-  lineMessageDeliveries        LineMessageDelivery[]
-  groupLineRoutingPolicies     GroupLineRoutingPolicy[]
-  groupLineConfigurations      GroupLineChannelConfiguration[]
-  groupLineConfigurationAudits GroupLineConfigurationAudit[]
-  groupLineConnections         GroupLineConnection[]
-  groupLineWebhookEvents       GroupLineWebhookEvent[]
-  missionDeepLinkStates        MissionDeepLinkState[]
-  trendResearchRuns            TrendResearchRun[]
-  trendEvidence                TrendEvidence[]
-  trendIdeaCandidates          TrendIdeaCandidate[]
-  missionTrendContexts         MissionTrendContext[]
-  generationContextSnapshots   GenerationContextSnapshot[]
-  personalityVersions          BunshinPersonalityVersion[]
-  userEvidence                 UserEvidence[]
-  advertisingSafetyReviews     AdvertisingSafetyReview[]
-  campaignsOwned               Campaign[]                       @relation("CampaignOwnerWorkspace")
-  campaignParticipations       CampaignParticipation[]          @relation("CampaignParticipantWorkspace")
-  campaignSimilarityReviews    CampaignSimilarityReview[]
-  externalTrackingSystems      ExternalTrackingSystem[]
-  externalTrackingDomains      ExternalTrackingAllowedDomain[]
-  externalTrackingIdentities   ExternalTrackingMemberIdentity[]
-  externalTrackingLinks        ExternalTrackingLink[]
-  externalTrackingAudits       ExternalTrackingAuditLog[]
-  externalLinkPlacements       ExternalLinkPlacementTemplate[]
-  contentLinkUsages            ContentLinkUsage[]
-  groupFeaturePolicies         GroupFeaturePolicy[]
-  groupFeatureAssignments      GroupMemberFeatureAssignment[]
-  groupFeatureAudits           GroupFeatureAuditLog[]
-  groupMembershipAudits        GroupMembershipAuditLog[]
-  groupFeatureUsageEvents      GroupFeatureUsageEvent[]
-  achievementBadges            AchievementBadge[]
-  videoProjects                VideoProject[]
-  videoAssets                  VideoAsset[]
-  pointAccounts                PointAccount[]
-  pointRuleVersions            PointRuleVersion[]
-  pointTransactions            PointTransaction[]
-  pointProcessingEvents        PointProcessingEvent[]
-  pointRedemptions             PointRedemption[]
-  badgeDefinitions             BadgeDefinition[]
-  badgeProgress                BadgeProgress[]
-  badgeAwards                  BadgeAward[]
-  badgeAwardNotifications     BadgeAwardNotification[]
+  id                              String                           @id @default(uuid()) @db.Uuid
+  type                            WorkspaceType
+  name                            String                           @db.VarChar(120)
+  status                          WorkspaceStatus                  @default(ACTIVE)
+  createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships                     WorkspaceMembership[]
+  groups                          Group[]
+  groupMemberships                GroupMembership[]
+  groupInvitations                GroupInvitation[]
+  productPacks                    ProductPack[]
+  productPackAssignments          ProductPackAssignment[]
+  bunshins                        Bunshin[]
+  ownerKnowledge                  OwnerKnowledge[]
+  knowledgeGrants                 BunshinKnowledgeGrant[]
+  memories                        BunshinMemory[]
+  capabilityAssignments           BunshinCapabilityAssignment[]
+  socialProfiles                  SocialProfile[]
+  socialAccountStrategies         SocialAccountStrategy[]
+  contentPillars                  ContentPillar[]
+  weeklyPlans                     WeeklyPlan[]
+  weeklyPlanItems                 WeeklyPlanItem[]
+  dailyMissions                   DailyMission[]
+  missionContents                 MissionContent[]
+  missionDecisions                MissionDecision[]
+  missionActivities               MissionActivity[]
+  postRecords                     PostRecord[]
+  missionFeedback                 MissionFeedback[]
+  aiUsageEvents                   AiUsageEvent[]
+  lineNotificationPreferences     LineNotificationPreference[]
+  lineConnections                 LineConnection[]
+  lineWebhookEvents               LineWebhookEvent[]
+  jobs                            Job[]
+  lineMessageDeliveries           LineMessageDelivery[]
+  groupLineRoutingPolicies        GroupLineRoutingPolicy[]
+  groupLineConfigurations         GroupLineChannelConfiguration[]
+  groupLineConfigurationAudits    GroupLineConfigurationAudit[]
+  groupLineConnections            GroupLineConnection[]
+  groupLineWebhookEvents          GroupLineWebhookEvent[]
+  missionDeepLinkStates           MissionDeepLinkState[]
+  trendResearchRuns               TrendResearchRun[]
+  trendEvidence                   TrendEvidence[]
+  trendIdeaCandidates             TrendIdeaCandidate[]
+  missionTrendContexts            MissionTrendContext[]
+  generationContextSnapshots      GenerationContextSnapshot[]
+  personalityVersions             BunshinPersonalityVersion[]
+  userEvidence                    UserEvidence[]
+  advertisingSafetyReviews        AdvertisingSafetyReview[]
+  campaignsOwned                  Campaign[]                       @relation("CampaignOwnerWorkspace")
+  campaignParticipations          CampaignParticipation[]          @relation("CampaignParticipantWorkspace")
+  campaignSimilarityReviews       CampaignSimilarityReview[]
+  externalTrackingSystems         ExternalTrackingSystem[]
+  externalTrackingDomains         ExternalTrackingAllowedDomain[]
+  externalTrackingIdentities      ExternalTrackingMemberIdentity[]
+  externalTrackingLinks           ExternalTrackingLink[]
+  externalTrackingAudits          ExternalTrackingAuditLog[]
+  externalLinkPlacements          ExternalLinkPlacementTemplate[]
+  contentLinkUsages               ContentLinkUsage[]
+  groupFeaturePolicies            GroupFeaturePolicy[]
+  groupFeatureAssignments         GroupMemberFeatureAssignment[]
+  groupFeatureAudits              GroupFeatureAuditLog[]
+  groupMembershipAudits           GroupMembershipAuditLog[]
+  groupFeatureUsageEvents         GroupFeatureUsageEvent[]
+  achievementBadges               AchievementBadge[]
+  videoProjects                   VideoProject[]
+  videoAssets                     VideoAsset[]
+  pointAccounts                   PointAccount[]
+  pointRuleVersions               PointRuleVersion[]
+  pointTransactions               PointTransaction[]
+  pointProcessingEvents           PointProcessingEvent[]
+  pointRedemptions                PointRedemption[]
+  badgeDefinitions                BadgeDefinition[]
+  badgeProgress                   BadgeProgress[]
+  badgeAwards                     BadgeAward[]
+  badgeAwardNotifications         BadgeAwardNotification[]
   badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
-  badgeAwardVisibilities       BadgeAwardVisibility[]
-  badgeProcessingEvents        BadgeProcessingEvent[]
-  badgeAdminAudits             BadgeAdminAuditLog[]
-  badgeApprovalRequests        BadgeApprovalRequest[]
-  badgeAwardCandidates         BadgeAwardCandidate[]
+  badgeAwardVisibilities          BadgeAwardVisibility[]
+  badgeProcessingEvents           BadgeProcessingEvent[]
+  badgeAdminAudits                BadgeAdminAuditLog[]
+  badgeApprovalRequests           BadgeApprovalRequest[]
+  badgeAwardCandidates            BadgeAwardCandidate[]
 
   @@index([status])
   @@map("workspaces")
@@ -1140,45 +1141,45 @@ model WorkspaceMembership {
 }
 
 model Group {
-  id                         String                           @id @default(uuid()) @db.Uuid
-  workspaceId                String                           @map("workspace_id") @db.Uuid
-  name                       String                           @db.VarChar(120)
-  status                     GroupStatus                      @default(ACTIVE)
-  createdAt                  DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                  DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                  Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  memberships                GroupMembership[]
-  invitations                GroupInvitation[]
-  productPacks               ProductPack[]
-  campaigns                  Campaign[]
-  externalTrackingSystems    ExternalTrackingSystem[]
-  externalTrackingDomains    ExternalTrackingAllowedDomain[]
-  externalTrackingIdentities ExternalTrackingMemberIdentity[]
-  externalTrackingLinks      ExternalTrackingLink[]
-  externalTrackingAudits     ExternalTrackingAuditLog[]
-  externalLinkPlacements     ExternalLinkPlacementTemplate[]
-  contentLinkUsages          ContentLinkUsage[]
-  featurePolicies            GroupFeaturePolicy[]
-  featureAssignments         GroupMemberFeatureAssignment[]
-  featureAudits              GroupFeatureAuditLog[]
-  membershipAudits           GroupMembershipAuditLog[]
-  featureUsageEvents         GroupFeatureUsageEvent[]
-  videoProjects              VideoProject[]
-  videoAssets                VideoAsset[]
-  lineRoutingPolicies        GroupLineRoutingPolicy[]
-  lineChannelConfigurations  GroupLineChannelConfiguration[]
-  lineConfigurationAudits    GroupLineConfigurationAudit[]
-  lineConnections            GroupLineConnection[]
-  lineWebhookEvents          GroupLineWebhookEvent[]
-  pointRuleVersions          PointRuleVersion[]
-  pointTransactions          PointTransaction[]
-  badgeDefinitions           BadgeDefinition[]
-  badgeProgress              BadgeProgress[]
-  badgeAwards                BadgeAward[]
-  badgeAwardVisibilities     BadgeAwardVisibility[]
-  badgeAdminAudits           BadgeAdminAuditLog[]
-  badgeApprovalRequests      BadgeApprovalRequest[]
-  badgeAwardCandidates       BadgeAwardCandidate[]
+  id                              String                           @id @default(uuid()) @db.Uuid
+  workspaceId                     String                           @map("workspace_id") @db.Uuid
+  name                            String                           @db.VarChar(120)
+  status                          GroupStatus                      @default(ACTIVE)
+  createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships                     GroupMembership[]
+  invitations                     GroupInvitation[]
+  productPacks                    ProductPack[]
+  campaigns                       Campaign[]
+  externalTrackingSystems         ExternalTrackingSystem[]
+  externalTrackingDomains         ExternalTrackingAllowedDomain[]
+  externalTrackingIdentities      ExternalTrackingMemberIdentity[]
+  externalTrackingLinks           ExternalTrackingLink[]
+  externalTrackingAudits          ExternalTrackingAuditLog[]
+  externalLinkPlacements          ExternalLinkPlacementTemplate[]
+  contentLinkUsages               ContentLinkUsage[]
+  featurePolicies                 GroupFeaturePolicy[]
+  featureAssignments              GroupMemberFeatureAssignment[]
+  featureAudits                   GroupFeatureAuditLog[]
+  membershipAudits                GroupMembershipAuditLog[]
+  featureUsageEvents              GroupFeatureUsageEvent[]
+  videoProjects                   VideoProject[]
+  videoAssets                     VideoAsset[]
+  lineRoutingPolicies             GroupLineRoutingPolicy[]
+  lineChannelConfigurations       GroupLineChannelConfiguration[]
+  lineConfigurationAudits         GroupLineConfigurationAudit[]
+  lineConnections                 GroupLineConnection[]
+  lineWebhookEvents               GroupLineWebhookEvent[]
+  pointRuleVersions               PointRuleVersion[]
+  pointTransactions               PointTransaction[]
+  badgeDefinitions                BadgeDefinition[]
+  badgeProgress                   BadgeProgress[]
+  badgeAwards                     BadgeAward[]
+  badgeAwardVisibilities          BadgeAwardVisibility[]
+  badgeAdminAudits                BadgeAdminAuditLog[]
+  badgeApprovalRequests           BadgeApprovalRequest[]
+  badgeAwardCandidates            BadgeAwardCandidate[]
   badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
 
   @@unique([workspaceId, name])
@@ -1788,27 +1789,27 @@ model BadgeProgress {
 }
 
 model BadgeAward {
-  id              String                @id @default(uuid()) @db.Uuid
-  workspaceId     String                @map("workspace_id") @db.Uuid
-  userId          String                @map("user_id") @db.Uuid
-  badgeVersionId  String                @map("badge_version_id") @db.Uuid
-  groupId         String?               @map("group_id") @db.Uuid
-  sourceBunshinId String?               @map("source_bunshin_id") @db.Uuid
-  awardedAt       DateTime              @default(now()) @map("awarded_at") @db.Timestamptz(6)
-  sourceType      String                @map("source_type") @db.VarChar(100)
-  sourceId        String                @map("source_id") @db.VarChar(200)
-  evidenceHash    String                @map("evidence_hash") @db.Char(64)
-  idempotencyKey  String                @map("idempotency_key") @db.VarChar(200)
-  status          BadgeAwardStatus      @default(ACTIVE)
-  revokedAt       DateTime?             @map("revoked_at") @db.Timestamptz(6)
-  expiredAt       DateTime?             @map("expired_at") @db.Timestamptz(6)
-  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  user            User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  badgeVersion    BadgeVersion          @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
-  group           Group?                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
-  sourceBunshin   Bunshin?              @relation("BadgeAwardSourceBunshin", fields: [workspaceId, sourceBunshinId], references: [workspaceId, id], onDelete: Restrict)
+  id              String                  @id @default(uuid()) @db.Uuid
+  workspaceId     String                  @map("workspace_id") @db.Uuid
+  userId          String                  @map("user_id") @db.Uuid
+  badgeVersionId  String                  @map("badge_version_id") @db.Uuid
+  groupId         String?                 @map("group_id") @db.Uuid
+  sourceBunshinId String?                 @map("source_bunshin_id") @db.Uuid
+  awardedAt       DateTime                @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  sourceType      String                  @map("source_type") @db.VarChar(100)
+  sourceId        String                  @map("source_id") @db.VarChar(200)
+  evidenceHash    String                  @map("evidence_hash") @db.Char(64)
+  idempotencyKey  String                  @map("idempotency_key") @db.VarChar(200)
+  status          BadgeAwardStatus        @default(ACTIVE)
+  revokedAt       DateTime?               @map("revoked_at") @db.Timestamptz(6)
+  expiredAt       DateTime?               @map("expired_at") @db.Timestamptz(6)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeVersion    BadgeVersion            @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  group           Group?                  @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  sourceBunshin   Bunshin?                @relation("BadgeAwardSourceBunshin", fields: [workspaceId, sourceBunshinId], references: [workspaceId, id], onDelete: Restrict)
   audits          BadgeAdminAuditLog[]
   visibility      BadgeAwardVisibility?
   rewardLink      BadgeRewardLink?
@@ -1823,16 +1824,16 @@ model BadgeAward {
 }
 
 model BadgeAwardNotification {
-  id           String     @id @default(uuid()) @db.Uuid
-  workspaceId  String     @map("workspace_id") @db.Uuid
-  userId       String     @map("user_id") @db.Uuid
-  badgeAwardId String     @unique @map("badge_award_id") @db.Uuid
-  readAt       DateTime?  @map("read_at") @db.Timestamptz(6)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Restrict)
-  badgeAward   BadgeAward @relation(fields: [workspaceId, userId, badgeAwardId], references: [workspaceId, userId, id], onDelete: Cascade)
+  id             String                          @id @default(uuid()) @db.Uuid
+  workspaceId    String                          @map("workspace_id") @db.Uuid
+  userId         String                          @map("user_id") @db.Uuid
+  badgeAwardId   String                          @unique @map("badge_award_id") @db.Uuid
+  readAt         DateTime?                       @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user           User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeAward     BadgeAward                      @relation(fields: [workspaceId, userId, badgeAwardId], references: [workspaceId, userId, id], onDelete: Cascade)
   lineDeliveries BadgeLineNotificationDelivery[]
 
   @@unique([workspaceId, userId, badgeAwardId])
@@ -1841,27 +1842,28 @@ model BadgeAwardNotification {
 }
 
 model BadgeLineNotificationDelivery {
-  id                  String                      @id @default(uuid()) @db.Uuid
+  id                  String                          @id @default(uuid()) @db.Uuid
   environment         LineConfigurationEnvironment
-  workspaceId         String                      @map("workspace_id") @db.Uuid
-  groupId             String                      @map("group_id") @db.Uuid
-  userId              String                      @map("user_id") @db.Uuid
-  badgeNotificationId String                      @map("badge_notification_id") @db.Uuid
-  status              BadgeLineNotificationStatus @default(PENDING)
-  idempotencyKey      String                      @map("idempotency_key") @db.VarChar(200)
-  scheduledAt         DateTime                    @default(now()) @map("scheduled_at") @db.Timestamptz(6)
-  sentAt              DateTime?                   @map("sent_at") @db.Timestamptz(6)
-  cancelledAt         DateTime?                   @map("cancelled_at") @db.Timestamptz(6)
-  attemptCount        Int                         @default(0) @map("attempt_count")
-  lastErrorCategory   String?                     @map("last_error_category") @db.VarChar(80)
-  leaseOwner          String?                     @map("lease_owner") @db.VarChar(100)
-  leaseExpiresAt      DateTime?                   @map("lease_expires_at") @db.Timestamptz(6)
-  createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace           Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  group               Group                       @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
-  user                User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  badgeNotification   BadgeAwardNotification      @relation(fields: [badgeNotificationId], references: [id], onDelete: Cascade)
+  workspaceId         String                          @map("workspace_id") @db.Uuid
+  groupId             String                          @map("group_id") @db.Uuid
+  userId              String                          @map("user_id") @db.Uuid
+  badgeNotificationId String                          @map("badge_notification_id") @db.Uuid
+  status              BadgeLineNotificationStatus     @default(PENDING)
+  idempotencyKey      String                          @map("idempotency_key") @db.VarChar(200)
+  scheduledAt         DateTime                        @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  sentAt              DateTime?                       @map("sent_at") @db.Timestamptz(6)
+  cancelledAt         DateTime?                       @map("cancelled_at") @db.Timestamptz(6)
+  attemptCount        Int                             @default(0) @map("attempt_count")
+  lastErrorCategory   String?                         @map("last_error_category") @db.VarChar(80)
+  leaseOwner          String?                         @map("lease_owner") @db.VarChar(100)
+  leaseExpiresAt      DateTime?                       @map("lease_expires_at") @db.Timestamptz(6)
+  createdAt           DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace           Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group               Group                           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  user                User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeNotification   BadgeAwardNotification          @relation(fields: [badgeNotificationId], references: [id], onDelete: Cascade)
+  retryRequests       BadgeLineDeliveryRetryRequest[]
 
   @@unique([environment, badgeNotificationId])
   @@unique([environment, idempotencyKey])
@@ -2031,23 +2033,23 @@ model BadgeRewardOutbox {
 }
 
 model BadgeRewardEntitlement {
-  id                   String                       @id @default(uuid()) @db.Uuid
-  workspaceId          String                       @map("workspace_id") @db.Uuid
-  userId               String                       @map("user_id") @db.Uuid
-  badgeAwardId         String                       @map("badge_award_id") @db.Uuid
-  rewardLinkId         String                       @unique @map("reward_link_id") @db.Uuid
-  featureKey           String                       @map("feature_key") @db.VarChar(120)
-  quantityGranted      Int                          @map("quantity_granted")
-  quantityRemaining    Int                          @map("quantity_remaining")
-  maxUnitCostUsdMicros Int                          @map("max_unit_cost_usd_micros")
-  revocationPolicy     String                       @default("REVOKE_UNUSED") @map("revocation_policy") @db.VarChar(40)
-  status               BadgeRewardEntitlementStatus @default(ACTIVE)
-  expiresAt            DateTime?                    @map("expires_at") @db.Timestamptz(6)
-  consumedAt           DateTime?                    @map("consumed_at") @db.Timestamptz(6)
-  revokedAt            DateTime?                    @map("revoked_at") @db.Timestamptz(6)
-  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  rewardLink           BadgeRewardLink              @relation(fields: [rewardLinkId], references: [id], onDelete: Restrict)
+  id                   String                        @id @default(uuid()) @db.Uuid
+  workspaceId          String                        @map("workspace_id") @db.Uuid
+  userId               String                        @map("user_id") @db.Uuid
+  badgeAwardId         String                        @map("badge_award_id") @db.Uuid
+  rewardLinkId         String                        @unique @map("reward_link_id") @db.Uuid
+  featureKey           String                        @map("feature_key") @db.VarChar(120)
+  quantityGranted      Int                           @map("quantity_granted")
+  quantityRemaining    Int                           @map("quantity_remaining")
+  maxUnitCostUsdMicros Int                           @map("max_unit_cost_usd_micros")
+  revocationPolicy     String                        @default("REVOKE_UNUSED") @map("revocation_policy") @db.VarChar(40)
+  status               BadgeRewardEntitlementStatus  @default(ACTIVE)
+  expiresAt            DateTime?                     @map("expires_at") @db.Timestamptz(6)
+  consumedAt           DateTime?                     @map("consumed_at") @db.Timestamptz(6)
+  revokedAt            DateTime?                     @map("revoked_at") @db.Timestamptz(6)
+  createdAt            DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rewardLink           BadgeRewardLink               @relation(fields: [rewardLinkId], references: [id], onDelete: Restrict)
   usages               BadgeRewardEntitlementUsage[]
 
   @@unique([workspaceId, userId, id])
@@ -2057,22 +2059,22 @@ model BadgeRewardEntitlement {
 }
 
 model BadgeRewardEntitlementUsage {
-  id                       String                              @id @default(uuid()) @db.Uuid
-  workspaceId              String                              @map("workspace_id") @db.Uuid
-  userId                   String                              @map("user_id") @db.Uuid
-  entitlementId            String                              @map("entitlement_id") @db.Uuid
-  featureKey               String                              @map("feature_key") @db.VarChar(120)
-  resourceType             String                              @map("resource_type") @db.VarChar(100)
-  resourceId               String                              @map("resource_id") @db.VarChar(200)
-  operationKey             String                              @map("operation_key") @db.VarChar(200)
-  estimatedCostUsdMicros    Int                                 @map("estimated_cost_usd_micros")
-  status                   BadgeRewardEntitlementUsageStatus   @default(CONSUMED)
-  consumedAt               DateTime                            @map("consumed_at") @db.Timestamptz(6)
-  refundedAt               DateTime?                           @map("refunded_at") @db.Timestamptz(6)
-  refundReason             String?                             @map("refund_reason") @db.VarChar(500)
-  createdAt                DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
-  entitlement              BadgeRewardEntitlement              @relation(fields: [workspaceId, userId, entitlementId], references: [workspaceId, userId, id], onDelete: Restrict)
+  id                     String                            @id @default(uuid()) @db.Uuid
+  workspaceId            String                            @map("workspace_id") @db.Uuid
+  userId                 String                            @map("user_id") @db.Uuid
+  entitlementId          String                            @map("entitlement_id") @db.Uuid
+  featureKey             String                            @map("feature_key") @db.VarChar(120)
+  resourceType           String                            @map("resource_type") @db.VarChar(100)
+  resourceId             String                            @map("resource_id") @db.VarChar(200)
+  operationKey           String                            @map("operation_key") @db.VarChar(200)
+  estimatedCostUsdMicros Int                               @map("estimated_cost_usd_micros")
+  status                 BadgeRewardEntitlementUsageStatus @default(CONSUMED)
+  consumedAt             DateTime                          @map("consumed_at") @db.Timestamptz(6)
+  refundedAt             DateTime?                         @map("refunded_at") @db.Timestamptz(6)
+  refundReason           String?                           @map("refund_reason") @db.VarChar(500)
+  createdAt              DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  entitlement            BadgeRewardEntitlement            @relation(fields: [workspaceId, userId, entitlementId], references: [workspaceId, userId, id], onDelete: Restrict)
 
   @@unique([workspaceId, userId, operationKey])
   @@unique([workspaceId, userId, resourceType, resourceId])
@@ -3397,34 +3399,35 @@ model AiUsageEvent {
 }
 
 model Job {
-  id                       String                       @id @default(uuid()) @db.Uuid
-  environment              LineConfigurationEnvironment
-  workspaceId              String                       @map("workspace_id") @db.Uuid
-  bunshinId                String?                      @map("bunshin_id") @db.Uuid
-  capabilityType           CapabilityType?              @map("capability_type")
-  jobType                  String                       @map("job_type") @db.VarChar(80)
-  payloadReference         String                       @map("payload_reference") @db.VarChar(500)
-  idempotencyKey           String                       @map("idempotency_key") @db.VarChar(200)
-  correlationId            String                       @map("correlation_id") @db.VarChar(120)
-  requestedBy              String                       @map("requested_by") @db.Uuid
-  status                   JobStatus                    @default(PENDING)
-  priority                 Int                          @default(100)
-  scheduledAt              DateTime                     @default(now()) @map("scheduled_at") @db.Timestamptz(6)
-  attemptCount             Int                          @default(0) @map("attempt_count")
-  maxAttempts              Int                          @default(5) @map("max_attempts")
-  leaseOwner               String?                      @map("lease_owner") @db.VarChar(120)
-  leaseExpiresAt           DateTime?                    @map("lease_expires_at") @db.Timestamptz(6)
-  nextRetryAt              DateTime?                    @map("next_retry_at") @db.Timestamptz(6)
-  lastErrorCategory        String?                      @map("last_error_category") @db.VarChar(80)
-  completedAt              DateTime?                    @map("completed_at") @db.Timestamptz(6)
-  cancelledAt              DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
-  createdAt                DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin                  Bunshin?                     @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  requester                User                         @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
-  lineDeliveryRetryRequest LineDeliveryRetryRequest?
-  videoRenderRetryRequest  VideoRenderRetryRequest?
+  id                            String                         @id @default(uuid()) @db.Uuid
+  environment                   LineConfigurationEnvironment
+  workspaceId                   String                         @map("workspace_id") @db.Uuid
+  bunshinId                     String?                        @map("bunshin_id") @db.Uuid
+  capabilityType                CapabilityType?                @map("capability_type")
+  jobType                       String                         @map("job_type") @db.VarChar(80)
+  payloadReference              String                         @map("payload_reference") @db.VarChar(500)
+  idempotencyKey                String                         @map("idempotency_key") @db.VarChar(200)
+  correlationId                 String                         @map("correlation_id") @db.VarChar(120)
+  requestedBy                   String                         @map("requested_by") @db.Uuid
+  status                        JobStatus                      @default(PENDING)
+  priority                      Int                            @default(100)
+  scheduledAt                   DateTime                       @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  attemptCount                  Int                            @default(0) @map("attempt_count")
+  maxAttempts                   Int                            @default(5) @map("max_attempts")
+  leaseOwner                    String?                        @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt                DateTime?                      @map("lease_expires_at") @db.Timestamptz(6)
+  nextRetryAt                   DateTime?                      @map("next_retry_at") @db.Timestamptz(6)
+  lastErrorCategory             String?                        @map("last_error_category") @db.VarChar(80)
+  completedAt                   DateTime?                      @map("completed_at") @db.Timestamptz(6)
+  cancelledAt                   DateTime?                      @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                     DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                     Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                       Bunshin?                       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  requester                     User                           @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  lineDeliveryRetryRequest      LineDeliveryRetryRequest?
+  badgeLineDeliveryRetryRequest BadgeLineDeliveryRetryRequest?
+  videoRenderRetryRequest       VideoRenderRetryRequest?
 
   @@unique([environment, idempotencyKey])
   @@index([environment, status, scheduledAt, priority])
@@ -4164,6 +4167,25 @@ model LineDeliveryRetryRequest {
   @@index([environment, createdAt])
   @@index([actorUserId, createdAt])
   @@map("line_delivery_retry_requests")
+}
+
+model BadgeLineDeliveryRetryRequest {
+  id                   String                        @id @db.Uuid
+  environment          LineConfigurationEnvironment
+  deliveryId           String                        @map("delivery_id") @db.Uuid
+  deliveryAttemptCount Int                           @map("delivery_attempt_count")
+  actorUserId          String                        @map("actor_user_id") @db.Uuid
+  reason               String                        @db.VarChar(500)
+  jobId                String                        @unique @map("job_id") @db.Uuid
+  createdAt            DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  delivery             BadgeLineNotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  actor                User                          @relation("BadgeLineDeliveryRetryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  job                  Job                           @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([deliveryId, deliveryAttemptCount])
+  @@index([environment, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("badge_line_delivery_retry_requests")
 }
 
 model LineMessageDeliveryAttempt {

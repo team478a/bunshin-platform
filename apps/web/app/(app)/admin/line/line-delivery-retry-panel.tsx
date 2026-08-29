@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 
 type Failure = {
   deliveryId: string;
+  kind: 'MISSION' | 'BADGE';
   category: string;
   attemptCount: number;
   failedAt: string;
@@ -21,7 +22,12 @@ export function LineDeliveryRetryPanel({ failures }: { failures: Failure[] }) {
     const reason = typeof reasonValue === 'string' ? reasonValue.trim() : '';
     setBusyId(deliveryId);
     setMessage('');
-    const response = await fetch(`/api/admin/line-deliveries/${deliveryId}/retry`, {
+    const kind = failures.find((failure) => failure.deliveryId === deliveryId)?.kind;
+    const endpoint =
+      kind === 'BADGE'
+        ? `/api/admin/badge-line-deliveries/${deliveryId}/retry`
+        : `/api/admin/line-deliveries/${deliveryId}/retry`;
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ reason }),
@@ -47,6 +53,7 @@ export function LineDeliveryRetryPanel({ failures }: { failures: Failure[] }) {
           {failures.map((failure) => (
             <li key={failure.deliveryId}>
               <p>
+                {failure.kind === 'BADGE' ? 'バッジ獲得通知' : '今日やることの通知'} /{' '}
                 {failure.category} / 試行 {failure.attemptCount}回 /{' '}
                 {new Date(failure.failedAt).toLocaleString('ja-JP')}
               </p>
