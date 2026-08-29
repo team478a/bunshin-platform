@@ -66,4 +66,38 @@ describe('OpenAiGroupKnowledgeExtractor', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+
+  it('500KBを超えるWebページはAIへ送信しない', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response('本文', {
+        status: 200,
+        headers: { 'content-type': 'text/html', 'content-length': '500001' },
+      }),
+    );
+    await expect(
+      new OpenAiGroupKnowledgeExtractor({
+        apiKey: 'secret',
+        model: 'gpt-test',
+        fetch: fetcher,
+      }).extractUrl({ url: 'https://1.1.1.1/large', title: '大きな資料' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('本文の実データが500KBを超えた場合も途中で停止する', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array(500_001), {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      }),
+    );
+    await expect(
+      new OpenAiGroupKnowledgeExtractor({
+        apiKey: 'secret',
+        model: 'gpt-test',
+        fetch: fetcher,
+      }).extractUrl({ url: 'https://1.1.1.1/stream', title: '大きな資料' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });

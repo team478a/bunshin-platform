@@ -60,6 +60,35 @@ type ResponseValue = {
   error?: unknown;
 };
 
+const MAX_WEB_PAGE_BYTES = 500_000;
+
+async function readWebPage(response: Response) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_WEB_PAGE_BYTES)
+    throw new ApplicationError('VALIDATION_ERROR', 'Webページの本文は500KBまでです');
+
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_WEB_PAGE_BYTES) {
+        await reader.cancel();
+        throw new ApplicationError('VALIDATION_ERROR', 'Webページの本文は500KBまでです');
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export class OpenAiGroupKnowledgeExtractor {
   constructor(private readonly options: { apiKey: string; model: string; fetch?: typeof fetch }) {}
 
@@ -115,7 +144,7 @@ export class OpenAiGroupKnowledgeExtractor {
     const contentType = response.headers.get('content-type') ?? '';
     if (!/text\/(?:html|plain)/iu.test(contentType))
       throw new ApplicationError('VALIDATION_ERROR', '文章のWebページではありません');
-    const html = (await response.text()).slice(0, 500_000);
+    const html = await readWebPage(response);
     const text = html
       .replace(/<script[\s\S]*?<\/script>/giu, ' ')
       .replace(/<style[\s\S]*?<\/style>/giu, ' ')
