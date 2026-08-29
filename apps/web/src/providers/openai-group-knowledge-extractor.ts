@@ -63,6 +63,7 @@ type ResponseValue = {
 const MAX_WEB_RESPONSE_BYTES = 2_000_000;
 const MAX_WEB_TEXT_BYTES = 500_000;
 const WEB_TEXT_PART_BYTES = 100_000;
+const MAX_VIDEO_BYTES = 25_000_000;
 const textEncoder = new TextEncoder();
 
 function splitTextByBytes(text: string, maxBytes: number) {
@@ -108,6 +109,39 @@ async function readWebPage(response: Response) {
   } finally {
     reader.releaseLock();
   }
+}
+
+async function readVideo(response: Response) {
+  const tooLarge = () => new ApplicationError('VALIDATION_ERROR', '動画の読み取りは25MBまでです');
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_VIDEO_BYTES) throw tooLarge();
+  if (!response.body) throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', '動画を取得できません');
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_VIDEO_BYTES) {
+        await reader.cancel();
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes.buffer;
 }
 
 export class OpenAiGroupKnowledgeExtractor {
@@ -196,9 +230,7 @@ export class OpenAiGroupKnowledgeExtractor {
     });
     if (!downloaded.ok)
       throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', '動画を取得できません');
-    const bytes = await downloaded.arrayBuffer();
-    if (bytes.byteLength > 25_000_000)
-      throw new ApplicationError('VALIDATION_ERROR', '動画の読み取りは25MBまでです');
+    const bytes = await readVideo(downloaded);
     const form = new FormData();
     form.set('model', 'gpt-4o-mini-transcribe');
     form.set('file', new Blob([bytes], { type: input.mimeType }), input.title);
