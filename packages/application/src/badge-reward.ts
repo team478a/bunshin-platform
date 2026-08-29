@@ -36,6 +36,24 @@ export interface BadgeRewardEntitlementRecord {
   expiresAt: Date | null;
 }
 
+export interface BadgeRewardWorkItem {
+  outboxId: string;
+  rewardLinkId: string;
+  workspaceId: string;
+  userId: string;
+  attemptCount: number;
+  maxAttempts: number;
+}
+
+export interface BadgeRewardWorkerSummary {
+  claimed: number;
+  completed: number;
+  retryScheduled: number;
+  dead: number;
+  infrastructureFailures: number;
+  drained: boolean;
+}
+
 export interface BadgeRewardRepository {
   queue(input: {
     workspaceId: string;
@@ -51,6 +69,19 @@ export interface BadgeRewardRepository {
     outboxId: string;
     now: Date;
   }): Promise<BadgeRewardEntitlementRecord | null>;
+  claimNext(input: {
+    workerId: string;
+    now: Date;
+    leaseExpiresAt: Date;
+  }): Promise<BadgeRewardWorkItem | null>;
+  fail(input: {
+    outboxId: string;
+    rewardLinkId: string;
+    workerId: string;
+    failureCode: string;
+    now: Date;
+    retryAt: Date;
+  }): Promise<'RETRY' | 'DEAD' | null>;
 }
 
 const featureKey = (value: string) => {
@@ -115,5 +146,79 @@ export class FulfillBadgeRewardEntitlement {
     });
     if (!result) throw new ApplicationError('NOT_FOUND', 'pending badge reward not found');
     return result;
+  }
+}
+
+const safeFailureCode = (error: unknown) =>
+  error instanceof ApplicationError
+    ? `APPLICATION_${error.code}`
+    : 'BADGE_REWARD_FULFILLMENT_FAILED';
+
+export class RunBadgeRewardWorkerBatch {
+  constructor(
+    private readonly repository: BadgeRewardRepository,
+    private readonly now = () => new Date(),
+    private readonly maximumBatchSize = 10,
+    private readonly leaseMilliseconds = 60_000,
+  ) {}
+
+  async execute(input: {
+    workerId: string;
+    batchSize?: number;
+  }): Promise<BadgeRewardWorkerSummary> {
+    const workerId = input.workerId.trim();
+    const batchSize = input.batchSize ?? 5;
+    if (workerId.length < 3 || workerId.length > 120)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid badge reward workerId');
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > this.maximumBatchSize)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid badge reward batch size');
+    const summary: BadgeRewardWorkerSummary = {
+      claimed: 0,
+      completed: 0,
+      retryScheduled: 0,
+      dead: 0,
+      infrastructureFailures: 0,
+      drained: false,
+    };
+    while (summary.claimed < batchSize) {
+      const claimedAt = this.now();
+      const item = await this.repository.claimNext({
+        workerId,
+        now: claimedAt,
+        leaseExpiresAt: new Date(claimedAt.getTime() + this.leaseMilliseconds),
+      });
+      if (!item) {
+        summary.drained = true;
+        break;
+      }
+      summary.claimed += 1;
+      try {
+        const completed = await this.repository.fulfillEntitlement({
+          workspaceId: item.workspaceId,
+          userId: item.userId,
+          rewardLinkId: item.rewardLinkId,
+          outboxId: item.outboxId,
+          now: this.now(),
+        });
+        if (!completed)
+          throw new ApplicationError('CONFLICT', 'badge reward fulfillment unavailable');
+        summary.completed += 1;
+      } catch (error) {
+        const failedAt = this.now();
+        const delay = Math.min(3_600_000, 30_000 * 2 ** Math.max(0, item.attemptCount - 1));
+        const status = await this.repository.fail({
+          outboxId: item.outboxId,
+          rewardLinkId: item.rewardLinkId,
+          workerId,
+          failureCode: safeFailureCode(error),
+          now: failedAt,
+          retryAt: new Date(failedAt.getTime() + delay),
+        });
+        if (status === 'RETRY') summary.retryScheduled += 1;
+        else if (status === 'DEAD') summary.dead += 1;
+        else summary.infrastructureFailures += 1;
+      }
+    }
+    return summary;
   }
 }

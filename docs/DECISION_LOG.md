@@ -1610,5 +1610,13 @@
 - Idempotency: 1つのBadge AwardにつきReward LinkとOutboxを各1件に限定し、Workspace／User／Awardの複合外部キーで越境混入を拒否する。
 - Entitlement: 「画像生成1回」のような用途固定特典はWPへ換算せず、Feature Key、付与回数、残数、有効期限、1回原価上限、未使用時失効方針をSnapshotとして保持する。
 - Scope: 初期10共通BadgeとB-4 Group Badgeは引き続き特典なしとする。B-5Aは永続化と冪等発行Coreまでとし、Worker、消費接続、再試行・補償、企業手動履行、管理画面はB-5Bへ分離する。
+
+## 2026-08-29: バッジ報酬配送は専用WorkerでLeaseと有限再試行を行う
+
+- Claim: Outboxは期限付きLeaseで1件ずつ取得し、Worker停止後は期限切れLeaseを別Workerが回収できるようにする。
+- Retry: 失敗は安全な分類コードだけを保存し、30秒から最大1時間の指数Backoffで再試行する。Provider応答、秘密値、投稿内容は保存しない。
+- Exhaustion: 既定5回でOutboxをDEAD、Reward LinkをFAILEDにするが、Badge AwardはACTIVEのまま維持する。
+- Operations: Cron Secretで保護した内部Endpointから固定件数だけ処理し、応答とログには集計値だけを出す。
+- Next: 画像生成は現状Point予約が必須のため、B-5B2でPointまたは用途限定Entitlementを選ぶ統一消費境界と失敗時補償を追加してから接続する。
 - Privacy: 審査では個人の投稿本文、Personality、Knowledge、Memoryを取得しない。
 - Source: `docs/GROUP_BADGE_APPROVAL_CORE_REPORT.md`
