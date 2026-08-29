@@ -316,6 +316,34 @@ export function GroupKnowledgeManager({
     }
   }
 
+  async function refreshUrlSource(source: Source) {
+    if (source.type !== 'URL' || !source.sourceUri) return;
+    setSaving(true);
+    setMessage('Webページの新しい内容を読み取る準備をしています…');
+    try {
+      const saved = await parse(
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'URL',
+            title: source.title,
+            sourceUri: source.sourceUri,
+            productPackVersionId: source.productPackVersionId,
+          }),
+        }),
+      );
+      add(saved.source!);
+      setMessage(
+        'Webページの新しい版を受け付けました。確認して承認するまでは、現在の承認済み情報を使い続けます。',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '新しい内容を取得できませんでした。');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function openReview(sourceId: string) {
     setSaving(true);
     setMessage('読み取った内容を開いています…');
@@ -793,13 +821,27 @@ export function GroupKnowledgeManager({
                 </>
               ) : null}
               {source.status === 'ACTIVE' ? (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void changeState(source.id, 'archive')}
-                >
-                  利用を停止する
-                </button>
+                <>
+                  {source.type === 'URL' &&
+                  (source.productPackVersionId === null ||
+                    productVersions.some((item) => item.id === source.productPackVersionId)) ? (
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void refreshUrlSource(source)}
+                    >
+                      Webページの最新内容を読み取る
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changeState(source.id, 'archive')}
+                  >
+                    利用を停止する
+                  </button>
+                </>
               ) : null}
               {['FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
                 <button
