@@ -371,14 +371,15 @@ export async function changeGroupKnowledgeStateResponse(
     if (action === 'approve') await service.approve(scope);
     else if (action === 'archive') await service.archive(scope);
     else {
-      const failed = (await service.listForManagement(scope)).find(
-        (item) => item.id === scope.sourceId && item.status === 'FAILED',
+      const recoverable = (await service.listForManagement(scope)).find(
+        (item) => item.id === scope.sourceId && ['FAILED', 'REVIEW_REQUIRED'].includes(item.status),
       );
-      if (!failed) throw new ApplicationError('CONFLICT', '再読み取りできる状態ではありません');
+      if (!recoverable)
+        throw new ApplicationError('CONFLICT', '再読み取りできる状態ではありません');
       await enqueueExtraction({
         ...scope,
         correlationId: requestId,
-        idempotencySuffix: `retry-${failed.updatedAt.getTime()}`,
+        idempotencySuffix: `retry-${recoverable.updatedAt.getTime()}`,
       });
     }
     const source = (await service.listForManagement(scope)).find(

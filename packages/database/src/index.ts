@@ -11043,7 +11043,7 @@ export class PrismaGroupKnowledgeRepository implements GroupKnowledgeRepository 
           id: input.sourceId,
           workspaceId: input.workspaceId,
           groupId: input.groupId,
-          status: { in: ['DRAFT', 'FAILED'] },
+          status: { in: ['DRAFT', 'FAILED', 'REVIEW_REQUIRED'] },
         },
         data: { status: 'PROCESSING', failureCode: null },
       });

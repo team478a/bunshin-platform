@@ -38,7 +38,7 @@ class Repository implements GroupKnowledgeRepository {
     return Promise.resolve(this.source);
   }
   beginProcessing() {
-    if (this.source.status !== 'DRAFT' && this.source.status !== 'FAILED')
+    if (!['DRAFT', 'FAILED', 'REVIEW_REQUIRED'].includes(this.source.status))
       return Promise.resolve(false);
     this.source.status = 'PROCESSING';
     return Promise.resolve(true);
@@ -209,5 +209,15 @@ describe('GroupKnowledgeService', () => {
         chunks: [{ content: '説明', sourceLabel: '動画', startSeconds: 20, endSeconds: 10 }],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('確認待ちの内容を承認せず再読み取りできる', async () => {
+    const repository = new Repository();
+    repository.source.status = 'REVIEW_REQUIRED';
+    await new GroupKnowledgeService(repository).beginProcessing({
+      ...scope,
+      sourceId: repository.source.id,
+    });
+    expect(repository.source.status).toBe('PROCESSING');
   });
 });

@@ -486,14 +486,30 @@ export function GroupKnowledgeManager({
             </ol>
           )}
           {review.source.status === 'REVIEW_REQUIRED' && review.chunks.length > 0 ? (
-            <button
-              className="button"
-              type="button"
-              disabled={saving}
-              onClick={() => void changeState(review.source.id, 'approve')}
-            >
-              確認して投稿づくりに使う
-            </button>
+            <>
+              <button
+                className="button"
+                type="button"
+                disabled={saving}
+                onClick={() => void changeState(review.source.id, 'approve')}
+              >
+                確認して投稿づくりに使う
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void changeState(review.source.id, 'retry')}
+              >
+                内容をもう一度読み取る
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void changeState(review.source.id, 'archive')}
+              >
+                この資料を使わない
+              </button>
+            </>
           ) : null}
           <button type="button" disabled={saving} onClick={() => setReview(null)}>
             閉じる
@@ -640,7 +656,7 @@ export function GroupKnowledgeManager({
                   {friendlyFailure(source.failureCode)}
                 </>
               ) : null}
-              {source.status === 'FAILED' ? (
+              {['FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
                 <>
                   <br />
                   <button
@@ -649,7 +665,7 @@ export function GroupKnowledgeManager({
                     disabled={saving}
                     onClick={() => void changeState(source.id, 'retry')}
                   >
-                    もう一度読み取る
+                    {source.status === 'FAILED' ? 'もう一度読み取る' : '内容を読み取り直す'}
                   </button>
                 </>
               ) : null}
@@ -672,6 +688,15 @@ export function GroupKnowledgeManager({
                   onClick={() => void changeState(source.id, 'archive')}
                 >
                   利用を停止する
+                </button>
+              ) : null}
+              {['FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void changeState(source.id, 'archive')}
+                >
+                  この資料を使わない
                 </button>
               ) : null}
             </li>
