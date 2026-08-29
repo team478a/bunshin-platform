@@ -66,6 +66,12 @@ const WEB_TEXT_PART_BYTES = 100_000;
 const MAX_VIDEO_BYTES = 25_000_000;
 const textEncoder = new TextEncoder();
 
+function sizeValidationError(message: string, failureCode: string) {
+  return new ApplicationError('VALIDATION_ERROR', message, {
+    groupKnowledgeFailureCode: failureCode,
+  });
+}
+
 function splitTextByBytes(text: string, maxBytes: number) {
   const parts: string[] = [];
   let part = '';
@@ -87,7 +93,10 @@ function splitTextByBytes(text: string, maxBytes: number) {
 async function readWebPage(response: Response) {
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_WEB_RESPONSE_BYTES)
-    throw new ApplicationError('VALIDATION_ERROR', 'Webページの取得サイズは2MBまでです');
+    throw sizeValidationError(
+      'Webページの取得サイズは2MBまでです',
+      'GROUP_KNOWLEDGE_WEB_RESPONSE_TOO_LARGE',
+    );
 
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -101,7 +110,10 @@ async function readWebPage(response: Response) {
       totalBytes += value.byteLength;
       if (totalBytes > MAX_WEB_RESPONSE_BYTES) {
         await reader.cancel();
-        throw new ApplicationError('VALIDATION_ERROR', 'Webページの取得サイズは2MBまでです');
+        throw sizeValidationError(
+          'Webページの取得サイズは2MBまでです',
+          'GROUP_KNOWLEDGE_WEB_RESPONSE_TOO_LARGE',
+        );
       }
       text += decoder.decode(value, { stream: true });
     }
@@ -112,7 +124,8 @@ async function readWebPage(response: Response) {
 }
 
 async function readVideo(response: Response) {
-  const tooLarge = () => new ApplicationError('VALIDATION_ERROR', '動画の読み取りは25MBまでです');
+  const tooLarge = () =>
+    sizeValidationError('動画の読み取りは25MBまでです', 'GROUP_KNOWLEDGE_VIDEO_TOO_LARGE');
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_VIDEO_BYTES) throw tooLarge();
   if (!response.body) throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', '動画を取得できません');
@@ -207,9 +220,9 @@ export class OpenAiGroupKnowledgeExtractor {
       .replace(/\s+/gu, ' ')
       .trim();
     if (textEncoder.encode(text).byteLength > MAX_WEB_TEXT_BYTES)
-      throw new ApplicationError(
-        'VALIDATION_ERROR',
+      throw sizeValidationError(
         'メニューなどを除いた本文が500KBを超えています。ページを分けて登録してください',
+        'GROUP_KNOWLEDGE_WEB_TEXT_TOO_LARGE',
       );
     const parts = splitTextByBytes(text, WEB_TEXT_PART_BYTES);
     return this.structured([

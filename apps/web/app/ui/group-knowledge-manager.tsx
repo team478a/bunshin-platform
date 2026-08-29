@@ -37,6 +37,12 @@ const failureMessage: Record<string, string> = {
   GROUP_KNOWLEDGE_FORBIDDEN: 'この資料を読み取る権限を確認できませんでした。',
   GROUP_KNOWLEDGE_NOT_FOUND: '登録した資料が見つかりませんでした。',
   GROUP_KNOWLEDGE_CONFLICT: '別の処理と重なりました。少し待ってからもう一度お試しください。',
+  GROUP_KNOWLEDGE_WEB_RESPONSE_TOO_LARGE:
+    'Webページ全体が2MBを超えています。必要な内容だけのページ、PDF、または文章で登録してください。',
+  GROUP_KNOWLEDGE_WEB_TEXT_TOO_LARGE:
+    'Webページの本文が長すぎます。内容を複数のページに分けて登録してください。',
+  GROUP_KNOWLEDGE_VIDEO_TOO_LARGE:
+    '動画が25MBを超えています。短く分けるか、画質を下げてから登録してください。',
   SOURCE_NOT_FOUND: '登録した資料が見つかりませんでした。',
   SOURCE_NOT_PROCESSABLE: 'この資料の形式には対応していません。',
 };
