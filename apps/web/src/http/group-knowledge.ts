@@ -41,6 +41,7 @@ const createSchema = z.discriminatedUnion('type', [
 const completeSchema = z
   .object({ sizeBytes: z.number().int().positive().max(200_000_000) })
   .strict();
+const updateScopeSchema = z.object({ productPackVersionId: z.uuid().nullable() }).strict();
 
 function publicSource(source: {
   id: string;
@@ -312,6 +313,40 @@ export async function getGroupKnowledgeReviewResponse(
   } catch (error) {
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, { status: mapped.status });
+  }
+}
+
+export async function updateGroupKnowledgeScopeResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  sourceId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const current = await actor();
+    const input = updateScopeSchema.parse(await request.json());
+    const { service } = await dependencies();
+    const source = await service.updateProductScope({
+      workspaceId: uuid.parse(workspaceId),
+      groupId: uuid.parse(groupId),
+      actorUserId: current.userId,
+      sourceId: uuid.parse(sourceId),
+      productPackVersionId: input.productPackVersionId,
+    });
+    return Response.json(
+      { data: { source: publicSource(source) }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
   }
 }
 
