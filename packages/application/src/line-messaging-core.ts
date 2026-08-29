@@ -132,7 +132,7 @@ export interface LineRecipientResolverPort {
     environment: LineConfigurationEnvironment;
     workspaceId: string;
     groupId?: string | null;
-    bunshinId: string;
+    bunshinId?: string;
     userId: string;
   }): Promise<string | null>;
 }
@@ -264,6 +264,13 @@ export interface LineMessagingProviderPort {
     deepLinkUrl: string;
     summary: LineMissionNotificationSummary;
     kind: LineMessageKind;
+  }): Promise<{ ok: true } | LineProviderFailure>;
+  pushBadgeNotification?(input: {
+    accessToken: string;
+    recipientId: string;
+    badgeUrl: string;
+    title: string;
+    description: string;
   }): Promise<{ ok: true } | LineProviderFailure>;
 }
 

@@ -3,6 +3,27 @@ vi.mock('server-only', () => ({}));
 import { LineMessagingApiAdapter } from '../src/line/messaging-provider';
 
 describe('LINE Messaging API adapter', () => {
+  it('sends a Japanese badge award message without exposing secrets', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    await expect(
+      new LineMessagingApiAdapter(request).pushBadgeNotification({
+        accessToken: 'secret-token',
+        recipientId: 'line-user-1',
+        badgeUrl: 'https://watashi-works.example/badges',
+        title: 'はじめの一歩',
+        description: '初めての行動を達成しました。',
+      }),
+    ).resolves.toEqual({ ok: true });
+    const requestBody = request.mock.calls[0]?.[1]?.body;
+    expect(typeof requestBody).toBe('string');
+    const body = JSON.parse(requestBody as string) as {
+      messages: Array<{ text: string }>;
+    };
+    expect(body.messages[0]?.text).toContain('新しいバッジを獲得しました！');
+    expect(body.messages[0]?.text).toContain('https://watashi-works.example/badges');
+    expect(body.messages[0]?.text).not.toContain('secret-token');
+  });
+
   it('reads quota without returning raw provider responses', async () => {
     const request = vi
       .fn<typeof fetch>()
