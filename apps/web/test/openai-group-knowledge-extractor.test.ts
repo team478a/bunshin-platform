@@ -67,6 +67,27 @@ describe('OpenAiGroupKnowledgeExtractor', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('Content-Lengthで25MB超と分かる動画は本文を読まずに拒否する', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array([1]), {
+        status: 200,
+        headers: { 'content-length': '25000001' },
+      }),
+    );
+    await expect(
+      new OpenAiGroupKnowledgeExtractor({
+        apiKey: 'secret',
+        model: 'gpt-test',
+        fetch: fetcher,
+      }).extractVideo({
+        fileUrl: 'https://signed.example/large.mp4',
+        title: '大きな動画.mp4',
+        mimeType: 'video/mp4',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('2MBを超えるWebページはAIへ送信しない', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response('本文', {
