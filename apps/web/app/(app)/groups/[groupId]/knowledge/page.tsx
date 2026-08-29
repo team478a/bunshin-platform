@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { summarizeGroupKnowledgeUsage } from '../../../../../src/knowledge/group-knowledge-usage';
 import { GroupKnowledgeManager } from '../../../../ui/group-knowledge-manager';
 
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export default async function GroupKnowledgePage({
     select: { group: { select: { id: true, name: true, workspaceId: true } } },
   });
   if (!membership) notFound();
-  const [sources, productVersions, audits] = await Promise.all([
+  const [sources, productVersions, audits, usageSnapshots] = await Promise.all([
     new db.PrismaGroupKnowledgeRepository().listForManagement({
       workspaceId: membership.group.workspaceId,
       groupId: membership.group.id,
@@ -85,8 +86,25 @@ export default async function GroupKnowledgePage({
       orderBy: { createdAt: 'desc' },
       take: 50,
     }),
+    db.prisma.generationContextSnapshot.findMany({
+      where: {
+        workspaceId: membership.group.workspaceId,
+        dailyMission: { campaign: { groupId: membership.group.id } },
+      },
+      select: { payload: true, generatedAt: true },
+    }),
   ]);
   if (!sources) notFound();
+  const usageChunks = await db.prisma.groupKnowledgeChunk.findMany({
+    where: { source: { workspaceId: membership.group.workspaceId, groupId: membership.group.id } },
+    select: { id: true, sourceId: true },
+  });
+  const usageBySource = new Map(
+    summarizeGroupKnowledgeUsage(usageSnapshots, usageChunks).map((usage) => [
+      usage.sourceId,
+      usage,
+    ]),
+  );
 
   return (
     <main className="app-page">
@@ -104,18 +122,23 @@ export default async function GroupKnowledgePage({
           id: item.id,
           label: `${item.productPack.name}（第${item.version}版）`,
         }))}
-        initialSources={sources.map((source) => ({
-          id: source.id,
-          type: source.type,
-          title: source.title,
-          sourceUri: source.sourceUri,
-          originalFileName: source.originalFileName,
-          productPackVersionId: source.productPackVersionId,
-          status: source.status,
-          version: source.version,
-          failureCode: source.failureCode,
-          updatedAt: source.updatedAt.toISOString(),
-        }))}
+        initialSources={sources.map((source) => {
+          const usage = usageBySource.get(source.id);
+          return {
+            id: source.id,
+            type: source.type,
+            title: source.title,
+            sourceUri: source.sourceUri,
+            originalFileName: source.originalFileName,
+            productPackVersionId: source.productPackVersionId,
+            status: source.status,
+            version: source.version,
+            failureCode: source.failureCode,
+            updatedAt: source.updatedAt.toISOString(),
+            generationCount: usage?.generationCount ?? 0,
+            lastUsedAt: usage?.lastUsedAt.toISOString() ?? null,
+          };
+        })}
       />
       <section className="settings-card">
         <h2>資料の変更履歴</h2>

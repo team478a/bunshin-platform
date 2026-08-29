@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
-type Source = {
+type SourceData = {
   id: string;
   type: 'PDF' | 'VIDEO' | 'URL' | 'TEXT';
   title: string;
@@ -14,6 +14,8 @@ type Source = {
   failureCode: string | null;
   updatedAt: string;
 };
+
+type Source = SourceData & { generationCount: number; lastUsedAt: string | null };
 
 const typeLabel = { PDF: 'PDF', VIDEO: '動画', URL: 'Webページ', TEXT: '入力した文章' } as const;
 const statusLabel = {
@@ -39,6 +41,14 @@ const failureMessage: Record<string, string> = {
 
 function friendlyFailure(code: string) {
   return failureMessage[code] ?? '内容を読み取れませんでした。もう一度お試しください。';
+}
+
+function usageDateTime(value: string) {
+  return new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Tokyo',
+  }).format(new Date(value));
 }
 
 function ProductScopeField({
@@ -109,12 +119,19 @@ export function GroupKnowledgeManager({
       try {
         const response = await fetch(endpoint, { cache: 'no-store' });
         const body = (await response.json()) as {
-          data?: Source[];
+          data?: SourceData[];
           error?: { message?: string };
         };
         if (!response.ok || !body.data)
           throw new Error(body.error?.message ?? '最新の状態を確認できませんでした。');
-        setSources(body.data);
+        setSources((current) => {
+          const usage = new Map(current.map((source) => [source.id, source]));
+          return body.data!.map((source) => ({
+            ...source,
+            generationCount: usage.get(source.id)?.generationCount ?? 0,
+            lastUsedAt: usage.get(source.id)?.lastUsedAt ?? null,
+          }));
+        });
         if (announce) setMessage('最新の状態に更新しました。');
       } catch (error) {
         if (announce)
@@ -166,14 +183,24 @@ export function GroupKnowledgeManager({
     return typeof value === 'string' && value.length > 0 ? value : null;
   }
 
-  function add(source: Source) {
-    setSources((current) => [source, ...current.filter((item) => item.id !== source.id)]);
+  function add(source: SourceData) {
+    setSources((current) => {
+      const previous = current.find((item) => item.id === source.id);
+      return [
+        {
+          ...source,
+          generationCount: previous?.generationCount ?? 0,
+          lastUsedAt: previous?.lastUsedAt ?? null,
+        },
+        ...current.filter((item) => item.id !== source.id),
+      ];
+    });
   }
 
   async function parse(response: Response) {
     const body = (await response.json()) as {
       data?: {
-        source?: Source;
+        source?: SourceData;
         upload?: { method: 'PUT'; uploadUrl: string; headers: Record<string, string> };
       };
       error?: { message?: string };
@@ -208,7 +235,7 @@ export function GroupKnowledgeManager({
       return;
     }
     setSaving(true);
-    const saved: Source[] = [];
+    const saved: SourceData[] = [];
     const failed: string[] = [];
     for (const [index, file] of files.entries()) {
       setMessage(`${files.length}件中${index + 1}件目「${file.name}」を送信しています…`);
@@ -251,7 +278,11 @@ export function GroupKnowledgeManager({
       }
     }
     setSources((current) => [
-      ...saved,
+      ...saved.map((source) => ({
+        ...source,
+        generationCount: 0,
+        lastUsedAt: null,
+      })),
       ...current.filter((item) => !saved.some((source) => source.id === item.id)),
     ]);
     fileForm.current?.reset();
@@ -376,7 +407,7 @@ export function GroupKnowledgeManager({
     try {
       const response = await fetch(`${endpoint}/${sourceId}/${action}`, { method: 'POST' });
       const body = (await response.json()) as {
-        data?: { source: Source };
+        data?: { source: SourceData };
         error?: { message?: string };
       };
       if (!response.ok || !body.data?.source)
@@ -743,6 +774,11 @@ export function GroupKnowledgeManager({
               <strong>{source.title}</strong>
               <br />
               {typeLabel[source.type]} ／ {statusLabel[source.status]} ／ 第{source.version}版
+              <br />
+              投稿案での利用：
+              {source.generationCount > 0 && source.lastUsedAt
+                ? `${source.generationCount}回（最後：${usageDateTime(source.lastUsedAt)}）`
+                : 'まだありません'}
               <br />
               使う範囲：
               {source.productPackVersionId
