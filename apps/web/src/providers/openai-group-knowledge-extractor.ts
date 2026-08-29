@@ -60,12 +60,33 @@ type ResponseValue = {
   error?: unknown;
 };
 
-const MAX_WEB_PAGE_BYTES = 500_000;
+const MAX_WEB_RESPONSE_BYTES = 2_000_000;
+const MAX_WEB_TEXT_BYTES = 500_000;
+const WEB_TEXT_PART_BYTES = 100_000;
+const textEncoder = new TextEncoder();
+
+function splitTextByBytes(text: string, maxBytes: number) {
+  const parts: string[] = [];
+  let part = '';
+  let partBytes = 0;
+  for (const character of text) {
+    const bytes = textEncoder.encode(character).byteLength;
+    if (part && partBytes + bytes > maxBytes) {
+      parts.push(part);
+      part = '';
+      partBytes = 0;
+    }
+    part += character;
+    partBytes += bytes;
+  }
+  if (part) parts.push(part);
+  return parts;
+}
 
 async function readWebPage(response: Response) {
   const declaredLength = Number(response.headers.get('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_WEB_PAGE_BYTES)
-    throw new ApplicationError('VALIDATION_ERROR', 'Webページの本文は500KBまでです');
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_WEB_RESPONSE_BYTES)
+    throw new ApplicationError('VALIDATION_ERROR', 'Webページの取得サイズは2MBまでです');
 
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -77,9 +98,9 @@ async function readWebPage(response: Response) {
       const { done, value } = await reader.read();
       if (done) break;
       totalBytes += value.byteLength;
-      if (totalBytes > MAX_WEB_PAGE_BYTES) {
+      if (totalBytes > MAX_WEB_RESPONSE_BYTES) {
         await reader.cancel();
-        throw new ApplicationError('VALIDATION_ERROR', 'Webページの本文は500KBまでです');
+        throw new ApplicationError('VALIDATION_ERROR', 'Webページの取得サイズは2MBまでです');
       }
       text += decoder.decode(value, { stream: true });
     }
@@ -151,11 +172,21 @@ export class OpenAiGroupKnowledgeExtractor {
       .replace(/<[^>]+>/gu, ' ')
       .replace(/\s+/gu, ' ')
       .trim();
+    if (textEncoder.encode(text).byteLength > MAX_WEB_TEXT_BYTES)
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        'メニューなどを除いた本文が500KBを超えています。ページを分けて登録してください',
+      );
+    const parts = splitTextByBytes(text, WEB_TEXT_PART_BYTES);
     return this.structured([
       {
         type: 'input_text',
-        text: `資料名: ${input.title}\nURL: ${url.toString()}\n本文:\n${text}`,
+        text: `資料名: ${input.title}\nURL: ${url.toString()}\n本文は${parts.length}個に分けています。`,
       },
+      ...parts.map((part, index) => ({
+        type: 'input_text',
+        text: `本文 ${index + 1}/${parts.length}:\n${part}`,
+      })),
     ]);
   }
 

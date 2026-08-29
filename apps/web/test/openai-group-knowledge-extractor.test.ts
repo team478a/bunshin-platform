@@ -67,11 +67,11 @@ describe('OpenAiGroupKnowledgeExtractor', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('500KBを超えるWebページはAIへ送信しない', async () => {
+  it('2MBを超えるWebページはAIへ送信しない', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response('本文', {
         status: 200,
-        headers: { 'content-type': 'text/html', 'content-length': '500001' },
+        headers: { 'content-type': 'text/html', 'content-length': '2000001' },
       }),
     );
     await expect(
@@ -84,9 +84,9 @@ describe('OpenAiGroupKnowledgeExtractor', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('本文の実データが500KBを超えた場合も途中で停止する', async () => {
+  it('実際の受信量が2MBを超えた場合も途中で停止する', async () => {
     const fetcher = vi.fn().mockResolvedValue(
-      new Response(new Uint8Array(500_001), {
+      new Response(new Uint8Array(2_000_001), {
         status: 200,
         headers: { 'content-type': 'text/plain' },
       }),
@@ -97,6 +97,53 @@ describe('OpenAiGroupKnowledgeExtractor', () => {
         model: 'gpt-test',
         fetch: fetcher,
       }).extractUrl({ url: 'https://1.1.1.1/stream', title: '大きな資料' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('不要部分を除去できれば500KBを超えるHTMLも読み取る', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(`<script>${'x'.repeat(600_000)}</script><main>大切な説明です。</main>`, {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(responsePayload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    const result = await new OpenAiGroupKnowledgeExtractor({
+      apiKey: 'secret',
+      model: 'gpt-test',
+      fetch: fetcher,
+    }).extractUrl({ url: 'https://1.1.1.1/guide', title: '説明資料' });
+    expect(result[0]).toMatchObject({ type: 'FACT' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const request = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)) as {
+      input: Array<{ content: Array<{ text?: string }> }>;
+    };
+    expect(request.input[0]?.content.map((item) => item.text).join('\n')).toContain(
+      '大切な説明です。',
+    );
+  });
+
+  it('不要部分を除いた本文が500KBを超える場合は登録を止める', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(`<main>${'あ'.repeat(170_000)}</main>`, {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+    await expect(
+      new OpenAiGroupKnowledgeExtractor({
+        apiKey: 'secret',
+        model: 'gpt-test',
+        fetch: fetcher,
+      }).extractUrl({ url: 'https://1.1.1.1/long', title: '長い資料' }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
