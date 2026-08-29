@@ -1618,5 +1618,13 @@
 - Exhaustion: 既定5回でOutboxをDEAD、Reward LinkをFAILEDにするが、Badge AwardはACTIVEのまま維持する。
 - Operations: Cron Secretで保護した内部Endpointから固定件数だけ処理し、応答とログには集計値だけを出す。
 - Next: 画像生成は現状Point予約が必須のため、B-5B2でPointまたは用途限定Entitlementを選ぶ統一消費境界と失敗時補償を追加してから接続する。
+
+## 2026-08-29 — Badge Reward B-5B2 unified image payment boundary
+
+- Decision: SNS画像生成では、期限と原価上限を満たす`SOCIAL.IMAGE_GENERATION`用途限定特典をPointより先に消費し、対象特典がない場合だけPointを使用する。
+- Safety: Workspace、User、用途、Resourceを永続化し、Resource単位の一意制約とDB advisory lockで同じ画像依頼への二重消費を防ぐ。Pointと特典が同時に見つかったJobは生成を停止する。
+- Compensation: Queue投入前またはJob最終失敗時は、実際に使用した支払元だけへ返却する。特典の使用履歴は削除せず`REFUNDED`として理由と日時を保持する。
+- Cost: 管理画面で設定したOpenAIの1回原価が特典の`maxUnitCostUsdMicros`以下の場合だけ特典を使用する。
+- Scope: 購入・課金、企業向け手動履行、再処理・監査の管理画面はB-5B3以降とし、本変更には含めない。
 - Privacy: 審査では個人の投稿本文、Personality、Knowledge、Memoryを取得しない。
 - Source: `docs/GROUP_BADGE_APPROVAL_CORE_REPORT.md`

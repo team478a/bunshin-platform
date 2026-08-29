@@ -1,9 +1,11 @@
 import 'server-only';
 import {
   ClaimSocialImageGenerationExecution,
+  GetBadgeEntitlementUsageByResource,
   GetPointRedemptionByResource,
   GroupFeatureEntitlementService,
   RefundPointRedemption,
+  RefundBadgeEntitlementUsage,
   SocialImageGenerationJobHandlerError,
   type SocialImageGenerationJobHandler,
 } from '@bunshin/application';
@@ -50,9 +52,20 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           resourceId: context.requestId,
         })
         .catch(() => null);
-      if (redemption?.status !== 'CONFIRMED')
+      const badgeEntitlements = new db.PrismaBadgeEntitlementConsumptionRepository(db.prisma);
+      const badgeUsage = await new GetBadgeEntitlementUsageByResource(badgeEntitlements).execute({
+        workspaceId: context.workspaceId,
+        userId: context.ownerUserId,
+        resourceType: 'SOCIAL_IMAGE_REQUEST',
+        resourceId: context.requestId,
+      });
+      const pointPayment = redemption?.status === 'CONFIRMED';
+      const badgePayment = badgeUsage?.status === 'CONSUMED';
+      if (pointPayment === badgePayment)
         throw new SocialImageGenerationJobHandlerError(
-          'SOCIAL_IMAGE_POINT_REDEMPTION_UNAVAILABLE',
+          pointPayment
+            ? 'SOCIAL_IMAGE_MULTIPLE_PAYMENTS_FOUND'
+            : 'SOCIAL_IMAGE_PAYMENT_UNAVAILABLE',
           false,
         );
       const now = new Date();
@@ -171,6 +184,20 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           workspaceId: input.workspaceId,
           actorUserId: failed.ownerUserId,
           redemptionId: redemption.id,
+          reason: input.errorCode,
+        });
+      const badgeEntitlements = new db.PrismaBadgeEntitlementConsumptionRepository(db.prisma);
+      const badgeUsage = await badgeEntitlements.findByResource({
+        workspaceId: input.workspaceId,
+        userId: failed.ownerUserId,
+        resourceType: 'SOCIAL_IMAGE_REQUEST',
+        resourceId: input.requestId,
+      });
+      if (badgeUsage?.status === 'CONSUMED')
+        await new RefundBadgeEntitlementUsage(badgeEntitlements).execute({
+          workspaceId: input.workspaceId,
+          userId: failed.ownerUserId,
+          usageId: badgeUsage.id,
           reason: input.errorCode,
         });
     },

@@ -200,6 +200,11 @@ enum BadgeRewardEntitlementStatus {
   EXPIRED
 }
 
+enum BadgeRewardEntitlementUsageStatus {
+  CONSUMED
+  REFUNDED
+}
+
 enum PointCatalogStatus {
   DRAFT
   ACTIVE
@@ -1979,10 +1984,36 @@ model BadgeRewardEntitlement {
   createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
   rewardLink           BadgeRewardLink              @relation(fields: [rewardLinkId], references: [id], onDelete: Restrict)
+  usages               BadgeRewardEntitlementUsage[]
 
+  @@unique([workspaceId, userId, id])
   @@index([workspaceId, userId, featureKey, status, expiresAt])
   @@index([badgeAwardId])
   @@map("badge_reward_entitlements")
+}
+
+model BadgeRewardEntitlementUsage {
+  id                       String                              @id @default(uuid()) @db.Uuid
+  workspaceId              String                              @map("workspace_id") @db.Uuid
+  userId                   String                              @map("user_id") @db.Uuid
+  entitlementId            String                              @map("entitlement_id") @db.Uuid
+  featureKey               String                              @map("feature_key") @db.VarChar(120)
+  resourceType             String                              @map("resource_type") @db.VarChar(100)
+  resourceId               String                              @map("resource_id") @db.VarChar(200)
+  operationKey             String                              @map("operation_key") @db.VarChar(200)
+  estimatedCostUsdMicros    Int                                 @map("estimated_cost_usd_micros")
+  status                   BadgeRewardEntitlementUsageStatus   @default(CONSUMED)
+  consumedAt               DateTime                            @map("consumed_at") @db.Timestamptz(6)
+  refundedAt               DateTime?                           @map("refunded_at") @db.Timestamptz(6)
+  refundReason             String?                             @map("refund_reason") @db.VarChar(500)
+  createdAt                DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  entitlement              BadgeRewardEntitlement              @relation(fields: [workspaceId, userId, entitlementId], references: [workspaceId, userId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, userId, operationKey])
+  @@unique([workspaceId, userId, resourceType, resourceId])
+  @@index([entitlementId, status, createdAt])
+  @@map("badge_reward_entitlement_usages")
 }
 
 model ExternalTrackingSystem {
