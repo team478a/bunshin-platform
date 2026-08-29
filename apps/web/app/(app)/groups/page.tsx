@@ -133,6 +133,12 @@ export default async function GroupsPage({
                 <Link className="button" href={`/groups/${membership.group.id}/members`}>
                   参加者が使える機能を設定
                 </Link>
+                <Link
+                  className="button button--secondary"
+                  href={`/groups/${membership.group.id}/badges`}
+                >
+                  グループのバッジを管理
+                </Link>
                 {imageAvailable ? (
                   <Link
                     className="button button--secondary"
