@@ -77,9 +77,12 @@ export function GroupKnowledgeManager({
     const values = new FormData(form);
     const file = values.get('file');
     const title = values.get('title');
-    const type = values.get('type');
     if (!(file instanceof File) || file.size === 0 || typeof title !== 'string') return;
-    if (type !== 'PDF' && type !== 'VIDEO') return;
+    const type = file.type === 'application/pdf' ? 'PDF' : 'VIDEO';
+    if (!['application/pdf', 'video/mp4', 'video/quicktime'].includes(file.type)) {
+      setMessage('PDF、MP4、MOVのどれかを選んでください。');
+      return;
+    }
     setSaving(true);
     setMessage('安全にアップロードする準備をしています…');
     try {
@@ -89,7 +92,7 @@ export function GroupKnowledgeManager({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             type,
-            title,
+            title: title.trim() || file.name.replace(/\.[^.]+$/u, ''),
             originalFileName: file.name,
             mimeType: file.type,
             sizeBytes: file.size,
@@ -131,13 +134,26 @@ export function GroupKnowledgeManager({
     const values = new FormData(form);
     const title = values.get('title');
     if (typeof title !== 'string') return;
+    const sourceUri = values.get('sourceUri');
     setSaving(true);
     setMessage('保存しています…');
     try {
       const payload =
         type === 'URL'
-          ? { type, title, sourceUri: values.get('sourceUri') }
-          : { type, title, content: values.get('content') };
+          ? {
+              type,
+              title:
+                title.trim() ||
+                (() => {
+                  try {
+                    return new URL(typeof sourceUri === 'string' ? sourceUri : '').hostname;
+                  } catch {
+                    return '登録したWebページ';
+                  }
+                })(),
+              sourceUri,
+            }
+          : { type, title: title.trim() || '入力したFAQ', content: values.get('content') };
       const saved = await parse(
         await fetch(endpoint, {
           method: 'POST',
@@ -207,28 +223,13 @@ export function GroupKnowledgeManager({
   return (
     <>
       <section className="settings-card">
-        <h2>PDF・動画を追加</h2>
-        <p>商品資料、よくある質問、研修動画などを選んでください。</p>
+        <h2>資料をアップロード</h2>
+        <p>
+          ファイルを1つ選ぶだけです。PDFか動画かは自動で判定し、資料名もファイル名から作ります。
+        </p>
         <form ref={fileForm} className="form-stack" onSubmit={(event) => void saveFile(event)}>
           <label className="field">
-            <span className="field__label">資料の種類</span>
-            <select className="field__control" name="type" defaultValue="PDF">
-              <option value="PDF">PDF</option>
-              <option value="VIDEO">動画</option>
-            </select>
-          </label>
-          <label className="field">
-            <span className="field__label">資料の名前</span>
-            <input
-              className="field__control"
-              name="title"
-              maxLength={200}
-              required
-              placeholder="例：商品FAQ 2026年版"
-            />
-          </label>
-          <label className="field">
-            <span className="field__label">ファイル</span>
+            <span className="field__label">ファイルを選ぶ</span>
             <input
               className="field__control"
               name="file"
@@ -236,18 +237,25 @@ export function GroupKnowledgeManager({
               accept="application/pdf,video/mp4,video/quicktime"
               required
             />
+            <small>PDFは50MBまで、動画は200MBまでです。</small>
           </label>
-          <p>
-            PDFは50MBまで、動画は200MBまでです。社外秘資料を登録できる権限があることを確認してください。
-          </p>
+          <label className="field">
+            <span className="field__label">わかりやすい名前（書かなくても大丈夫）</span>
+            <input
+              className="field__control"
+              name="title"
+              maxLength={200}
+              placeholder="空欄ならファイル名を使います"
+            />
+          </label>
           <label className="field">
             <span>
               <input name="rightsConfirmed" type="checkbox" required />
-              この資料を登録し、投稿づくりに利用できる権限があることを確認しました
+              この資料をワタシワークスで使っても大丈夫です
             </span>
           </label>
           <button className="button" type="submit" disabled={saving}>
-            資料を保存する
+            この資料を追加する
           </button>
         </form>
       </section>
@@ -261,8 +269,8 @@ export function GroupKnowledgeManager({
           onSubmit={(event) => void saveSimple(event, 'URL')}
         >
           <label className="field">
-            <span className="field__label">資料の名前</span>
-            <input className="field__control" name="title" maxLength={200} required />
+            <span className="field__label">名前（書かなくても大丈夫）</span>
+            <input className="field__control" name="title" maxLength={200} />
           </label>
           <label className="field">
             <span className="field__label">WebページのURL</span>
@@ -290,8 +298,8 @@ export function GroupKnowledgeManager({
           onSubmit={(event) => void saveSimple(event, 'TEXT')}
         >
           <label className="field">
-            <span className="field__label">資料の名前</span>
-            <input className="field__control" name="title" maxLength={200} required />
+            <span className="field__label">名前（書かなくても大丈夫）</span>
+            <input className="field__control" name="title" maxLength={200} />
           </label>
           <label className="field">
             <span className="field__label">内容</span>
