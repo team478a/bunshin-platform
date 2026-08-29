@@ -2743,3 +2743,93 @@ body:has(.app-shell) > .site-footer {
     animation-iteration-count: 1 !important;
   }
 }
+.badge-page {
+  display: grid;
+  gap: 1rem;
+}
+.badge-list {
+  display: grid;
+  gap: 0.9rem;
+}
+.badge-card {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #dfe2ea);
+  border-radius: 1rem;
+}
+.badge-card h3 {
+  margin: 0 0 0.35rem;
+}
+.badge-card p {
+  margin: 0 0 0.65rem;
+}
+.badge-mark {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: #e8e9ef;
+  color: #9ca1af;
+  font-size: 1.6rem;
+}
+.badge-mark.is-earned {
+  color: #fff;
+  background: linear-gradient(145deg, #ff5a36, #ff9d2e);
+  box-shadow: 0 0.35rem 0.8rem rgb(255 90 54 / 22%);
+}
+.badge-sharing {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #e7e8ed;
+}
+.badge-sharing p,
+.badge-sharing small {
+  margin: 0;
+}
+.badge-sharing label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.86rem;
+}
+.badge-sharing select,
+.badge-sharing button {
+  min-height: 2.75rem;
+  border: 1px solid #cfd3df;
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  background: #fff;
+  color: #14213d;
+}
+.badge-sharing button {
+  font-weight: 700;
+  cursor: pointer;
+}
+.badge-sharing button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.badge-sharing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.badge-privacy-note {
+  color: #5f6678;
+  font-size: 0.88rem;
+}
+@media (max-width: 520px) {
+  .badge-card {
+    grid-template-columns: 3rem 1fr;
+    padding: 0.85rem;
+  }
+  .badge-mark {
+    width: 3rem;
+    height: 3rem;
+  }
+}

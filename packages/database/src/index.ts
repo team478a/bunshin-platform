@@ -189,6 +189,7 @@ import type {
 } from '@bunshin/platform-domain';
 import { canManageBunshin } from '@bunshin/platform-domain';
 export { PrismaCommonBadgeProcessorRepository } from './badge-common-processor';
+export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
 import { ApplicationError } from '@bunshin/shared';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
