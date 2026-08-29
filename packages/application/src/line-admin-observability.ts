@@ -19,6 +19,12 @@ export interface LineAdminMetrics {
     attemptCount: number;
     failedAt: Date;
   }>;
+  retryableBadgeFailures: Array<{
+    deliveryId: string;
+    category: string;
+    attemptCount: number;
+    failedAt: Date;
+  }>;
   configuration: {
     active: boolean;
     verified: boolean;

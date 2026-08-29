@@ -219,10 +219,18 @@ export default async function LineConfigurationPage({
           {funnel.cohort.truncated && <p>5,000件を超えたため率は表示していません。</p>}
         </section>
         <LineDeliveryRetryPanel
-          failures={metrics.retryableFailures.map((failure) => ({
-            ...failure,
-            failedAt: failure.failedAt.toISOString(),
-          }))}
+          failures={[
+            ...metrics.retryableFailures.map((failure) => ({
+              ...failure,
+              kind: 'MISSION' as const,
+              failedAt: failure.failedAt.toISOString(),
+            })),
+            ...metrics.retryableBadgeFailures.map((failure) => ({
+              ...failure,
+              kind: 'BADGE' as const,
+              failedAt: failure.failedAt.toISOString(),
+            })),
+          ]}
         />
         <LineRichMenuEditor
           environment={environment}
