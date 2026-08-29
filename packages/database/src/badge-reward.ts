@@ -129,4 +129,84 @@ export class PrismaBadgeRewardRepository implements BadgeRewardRepository {
       return entitlement;
     });
   }
+
+  async claimNext(input: Parameters<BadgeRewardRepository['claimNext']>[0]) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const claimed = await this.client.$transaction(async (tx) => {
+        const candidate = await tx.badgeRewardOutbox.findFirst({
+          where: {
+            OR: [
+              { status: { in: ['PENDING', 'RETRY'] }, availableAt: { lte: input.now } },
+              { status: 'PROCESSING', leaseExpiresAt: { lt: input.now } },
+            ],
+          },
+          orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
+        });
+        if (!candidate) return null;
+        const updated = await tx.badgeRewardOutbox.updateMany({
+          where: {
+            id: candidate.id,
+            status: candidate.status,
+            updatedAt: candidate.updatedAt,
+          },
+          data: {
+            status: 'PROCESSING',
+            attemptCount: { increment: 1 },
+            leaseOwner: input.workerId,
+            leaseExpiresAt: input.leaseExpiresAt,
+            lastFailureCode: null,
+          },
+        });
+        if (updated.count !== 1) return undefined;
+        await tx.badgeRewardLink.updateMany({
+          where: { id: candidate.rewardLinkId, status: { in: ['PENDING', 'PROCESSING'] } },
+          data: { status: 'PROCESSING', failureCode: null },
+        });
+        return {
+          outboxId: candidate.id,
+          rewardLinkId: candidate.rewardLinkId,
+          workspaceId: candidate.workspaceId,
+          userId: candidate.userId,
+          attemptCount: candidate.attemptCount + 1,
+          maxAttempts: candidate.maxAttempts,
+        };
+      });
+      if (claimed !== undefined) return claimed;
+    }
+    return null;
+  }
+
+  async fail(input: Parameters<BadgeRewardRepository['fail']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const current = await tx.badgeRewardOutbox.findFirst({
+        where: {
+          id: input.outboxId,
+          rewardLinkId: input.rewardLinkId,
+          status: 'PROCESSING',
+          leaseOwner: input.workerId,
+        },
+      });
+      if (!current) return null;
+      const dead = current.attemptCount >= current.maxAttempts;
+      await tx.badgeRewardOutbox.update({
+        where: { id: current.id },
+        data: {
+          status: dead ? 'DEAD' : 'RETRY',
+          availableAt: dead ? current.availableAt : input.retryAt,
+          lastFailureCode: input.failureCode,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          completedAt: dead ? input.now : null,
+        },
+      });
+      await tx.badgeRewardLink.update({
+        where: { id: current.rewardLinkId },
+        data: {
+          status: dead ? 'FAILED' : 'PENDING',
+          failureCode: dead ? input.failureCode : null,
+        },
+      });
+      return dead ? 'DEAD' : 'RETRY';
+    });
+  }
 }

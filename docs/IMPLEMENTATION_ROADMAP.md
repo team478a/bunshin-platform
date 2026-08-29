@@ -430,7 +430,9 @@ WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし
 - B-4A: Group独自Badgeの申請／SUPER_ADMIN承認／候補承認／自己付与防止／監査Core — 完了
 - B-4B: Group管理画面／SUPER_ADMIN審査画面／CSV候補取込 — 実装完了、レビュー待ち
 - B-5A: Badge Reward Link／Outbox／用途限定Entitlement Core（冪等発行、原価上限、失効方針）— 実装済み
-- B-5B: 報酬Worker、消費接続、再試行・補償、企業手動履行、運用画面
+- B-5B1: 報酬Outbox Worker、Lease、指数Backoff再試行、Dead化、Cron認証境界 — 実装済み
+- B-5B2: Point／用途限定Entitlementの統一消費境界、失敗時補償、画像生成接続
+- B-5B3: 企業手動履行、再処理・監査・運用画面
 - B-6: アプリ内・LINE通知、運用、30人・4週間限定検証
 
 Badgeは本人の達成証明、WPは利用可能報酬として別台帳にする。初期値はPoint特典なし、共通10種類、PRIVATE／GROUP公開までとし、PUBLICプロフィール、ランキング、AI品質評価、売買・譲渡を含めない。B-0 PRのマージ前にSchema、Migration、API、Job、画面へ進まない。
