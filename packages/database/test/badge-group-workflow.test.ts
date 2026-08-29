@@ -35,6 +35,13 @@ describe('group badge workflow boundaries', () => {
     expect(source).toContain('GROUP_BADGE_CANDIDATE_NOMINATED');
     expect(badgeCoreSource).toContain("definition?.ownerType === 'GROUP'");
   });
+  it('creates group drafts with fixed safe policies in one transaction', () => {
+    expect(source).toContain("conditionType: 'MANUAL_APPROVAL'");
+    expect(source).toContain("visibilityPolicy: 'GROUP'");
+    expect(source).toContain("rewardPolicy: { type: 'NONE' }");
+    expect(source).toContain('GROUP_BADGE_CREATED_AND_SUBMITTED');
+    expect(source).toContain('tx.groupMembership.findFirst');
+  });
   it('does not read private content for approval', () => {
     expect(source).not.toContain('ownerKnowledge');
     expect(source).not.toContain('bunshinMemory');

@@ -421,14 +421,14 @@ WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし
 
 ## Phase B: バッジ
 
-状態: B-2完了。B-3の利用者向けバッジ画面と本人管理の公開設定を実装しレビュー中。詳細は`docs/BADGE_FEATURE_REBASELINE.md`を正本とする。
+状態: B-3とB-4A完了。B-4Bのグループ・システム管理画面とCSV候補取込を実装しレビュー中。詳細は`docs/BADGE_FEATURE_REBASELINE.md`を正本とする。
 
 - B-0: 既存簡易Badge監査、User／Workspace／Group境界、Point分離、初期Catalog、移行方針 — 文書作成・推奨案承認済み
 - B-1: Badge Definition／Version／Progress／Award／Processing Event Core — 完了
 - B-2: 既存行動を根拠とする初期10共通Badge Processor — 完了
 - B-3: 利用者向け獲得済み／挑戦中／おすすめ／詳細／公開設定 — 実装完了、レビュー待ち
-- B-4A: Group独自Badgeの申請／SUPER_ADMIN承認／候補承認／自己付与防止／監査Core — 実装完了、レビュー待ち
-- B-4B: Group管理画面／SUPER_ADMIN審査画面／CSV候補取込
+- B-4A: Group独自Badgeの申請／SUPER_ADMIN承認／候補承認／自己付与防止／監査Core — 完了
+- B-4B: Group管理画面／SUPER_ADMIN審査画面／CSV候補取込 — 実装完了、レビュー待ち
 - B-5: Point／専用Entitlement／企業履行のOutbox連携
 - B-6: アプリ内・LINE通知、運用、30人・4週間限定検証
 

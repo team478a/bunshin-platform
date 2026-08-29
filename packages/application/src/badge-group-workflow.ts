@@ -4,6 +4,18 @@ export type BadgeApprovalDecision = 'APPROVED' | 'REJECTED';
 export type BadgeCandidateDecision = 'APPROVED' | 'REJECTED';
 
 export interface BadgeGroupWorkflowRepository {
+  createAndSubmit(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    code: string;
+    category: string;
+    title: string;
+    description: string;
+    imageKey: string;
+    altText: string;
+    reason: string;
+  }): Promise<{ definitionId: string; badgeVersionId: string; approvalRequestId: string } | null>;
   submit(input: {
     workspaceId: string;
     groupId: string;
@@ -50,6 +62,27 @@ export class SubmitGroupBadge {
       reason: required(input.reason, 'reason'),
     });
     if (!result) throw new ApplicationError('FORBIDDEN', 'badge submission is not allowed');
+    return result;
+  }
+}
+
+export class CreateAndSubmitGroupBadge {
+  constructor(private readonly repository: BadgeGroupWorkflowRepository) {}
+  async execute(input: Parameters<BadgeGroupWorkflowRepository['createAndSubmit']>[0]) {
+    const code = required(input.code, 'code', 100).toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9_-]*$/.test(code))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid badge code');
+    const result = await this.repository.createAndSubmit({
+      ...input,
+      code,
+      category: required(input.category, 'category', 80),
+      title: required(input.title, 'title', 120),
+      description: required(input.description, 'description', 500),
+      imageKey: required(input.imageKey, 'image key', 255),
+      altText: required(input.altText, 'alt text', 200),
+      reason: required(input.reason, 'reason'),
+    });
+    if (!result) throw new ApplicationError('FORBIDDEN', 'badge creation is not allowed');
     return result;
   }
 }

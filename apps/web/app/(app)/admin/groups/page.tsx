@@ -85,7 +85,8 @@ export default async function GroupAdminPage({
                   このグループで使える機能を設定
                 </Link>{' '}
                 ／ <Link href={`/admin/groups/${group.id}/line` as Route}>専用LINEを設定</Link> ／{' '}
-                <Link href={`/groups/${group.id}/members`}>参加者と管理者を設定</Link>
+                <Link href={`/groups/${group.id}/members`}>参加者と管理者を設定</Link> ／{' '}
+                <Link href={`/groups/${group.id}/badges`}>バッジを設定</Link>
               </li>
             ))}
           </ul>
