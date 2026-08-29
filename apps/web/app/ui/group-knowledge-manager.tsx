@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
+import { compareGroupKnowledgeVersions } from '../../src/knowledge/group-knowledge-version-diff';
+
 type SourceData = {
   id: string;
   type: 'PDF' | 'VIDEO' | 'URL' | 'TEXT';
@@ -101,6 +103,10 @@ export function GroupKnowledgeManager({
       startSeconds: number | null;
       endSeconds: number | null;
     }>;
+    previousVersion: {
+      version: number;
+      chunks: Array<{ id: string; content: string }>;
+    } | null;
   } | null>(null);
   const fileForm = useRef<HTMLFormElement>(null);
   const urlForm = useRef<HTMLFormElement>(null);
@@ -381,7 +387,7 @@ export function GroupKnowledgeManager({
     try {
       const response = await fetch(`${endpoint}/${sourceId}`, { cache: 'no-store' });
       const body = (await response.json()) as {
-        data?: { source: Source; chunks: NonNullable<typeof review>['chunks'] };
+        data?: NonNullable<typeof review>;
         error?: { message?: string };
       };
       if (!response.ok || !body.data)
@@ -604,6 +610,41 @@ export function GroupKnowledgeManager({
           <p>
             <strong>{review.source.title}</strong>
           </p>
+          {review.previousVersion ? (
+            <details>
+              <summary>前の第{review.previousVersion.version}版との違いを確認する</summary>
+              <p>左がこれまで使っていた内容、右が今回の内容です。</p>
+              <ul className="plain-list">
+                {compareGroupKnowledgeVersions(review.previousVersion.chunks, review.chunks).map(
+                  (row) => (
+                    <li
+                      key={`${row.index}-${row.previous?.id ?? 'none'}-${row.current?.id ?? 'none'}`}
+                    >
+                      <strong>
+                        {row.status === 'UNCHANGED'
+                          ? '変更なし'
+                          : row.status === 'CHANGED'
+                            ? '内容が変わりました'
+                            : row.status === 'ADDED'
+                              ? '新しく追加されました'
+                              : '今回の版では削除されました'}
+                      </strong>
+                      <div className="form-grid">
+                        <div>
+                          <small>前の内容</small>
+                          <p>{row.previous?.content ?? 'ありません'}</p>
+                        </div>
+                        <div>
+                          <small>今回の内容</small>
+                          <p>{row.current?.content ?? 'ありません'}</p>
+                        </div>
+                      </div>
+                    </li>
+                  ),
+                )}
+              </ul>
+            </details>
+          ) : null}
           {review.chunks.length === 0 ? (
             <p>読み取った内容はまだありません。</p>
           ) : (
