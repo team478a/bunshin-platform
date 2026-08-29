@@ -30,5 +30,6 @@ describe('badge LINE notification isolation', () => {
     expect(repository).toContain("friendshipStatus !== 'FOLLOWING'");
     expect(repository).toContain('notificationConsentAt');
     expect(repository).toContain('consentedAt: { not: null }');
+    expect(repository).toContain('lineDeliveries: { none: { environment: input.environment } }');
   });
 });

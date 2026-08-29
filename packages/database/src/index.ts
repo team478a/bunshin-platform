@@ -192,6 +192,7 @@ export { PrismaCommonBadgeProcessorRepository } from './badge-common-processor';
 export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
 export { PrismaBadgeLineNotificationPreparationRepository } from './badge-line-notification';
 export { PrismaBadgeLineDeliveryRepository } from './badge-line-notification';
+export { PrismaBadgeLineJobCandidateRepository } from './badge-line-notification';
 export { PrismaBadgeGroupWorkflowRepository } from './badge-group-workflow';
 export {
   PrismaBadgeEntitlementConsumptionRepository,
@@ -1196,7 +1197,11 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
       Promise.all(
         (['RETRY_SCHEDULED', 'DEAD'] as const).map((status) =>
           this.client.job.count({
-            where: { environment, jobType: 'LINE_MISSION_DELIVER', status },
+            where: {
+              environment,
+              jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+              status,
+            },
           }),
         ),
       ),
@@ -1282,10 +1287,18 @@ export class PrismaLineOperationalSnapshotRepository implements LineOperationalS
     const [failed, retryScheduled, dead, failureRows, configuration] = await Promise.all([
       this.client.lineMessageDelivery.count({ where: { environment, status: 'FAILED' } }),
       this.client.job.count({
-        where: { environment, jobType: 'LINE_MISSION_DELIVER', status: 'RETRY_SCHEDULED' },
+        where: {
+          environment,
+          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          status: 'RETRY_SCHEDULED',
+        },
       }),
       this.client.job.count({
-        where: { environment, jobType: 'LINE_MISSION_DELIVER', status: 'DEAD' },
+        where: {
+          environment,
+          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          status: 'DEAD',
+        },
       }),
       this.client.lineMessageDelivery.findMany({
         where: { environment, status: 'FAILED', lastErrorCategory: { not: null } },
@@ -8767,7 +8780,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         by: ['status'],
         where: {
           environment: input.environment,
-          jobType: 'LINE_MISSION_DELIVER',
+          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
           status: { in: ['RETRY_SCHEDULED', 'DEAD'] },
         },
         _count: { _all: true },
@@ -8775,7 +8788,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       this.client.job.count({
         where: {
           environment: input.environment,
-          jobType: { not: 'LINE_MISSION_DELIVER' },
+          jobType: { notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
           status: 'DEAD',
         },
       }),
