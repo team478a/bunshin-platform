@@ -2,7 +2,10 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { getServerEnvironment } from '@bunshin/config';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
+import { buildImagePilotReadiness } from './readiness-view-model';
 
 export const dynamic = 'force-dynamic';
 
@@ -179,6 +182,38 @@ export default async function ImagePilotAdminPage({
       })
     : [];
   const enrolled = new Set(pilot?.enrollments.map((item) => item.groupMembershipId) ?? []);
+  const provider = await db.prisma.aiProviderConfiguration.findFirst({
+    where: {
+      environment: currentAiProviderEnvironment(),
+      provider: 'OPENAI',
+      status: 'ACTIVE',
+    },
+    orderBy: { version: 'desc' },
+    select: {
+      apiKeyMask: true,
+      lastVerifiedAt: true,
+      globallyPaused: true,
+      lastErrorCategory: true,
+    },
+  });
+  const environment = getServerEnvironment();
+  const readiness = buildImagePilotReadiness({
+    now: new Date(),
+    pilot,
+    enrolledCount: enrolled.size,
+    provider: provider
+      ? {
+          apiKeyConfigured: Boolean(provider.apiKeyMask),
+          lastVerifiedAt: provider.lastVerifiedAt,
+          globallyPaused: provider.globallyPaused,
+          lastErrorCategory: provider.lastErrorCategory,
+        }
+      : null,
+    storageConfigured: Boolean(
+      (process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? environment.SUPABASE_AUTH_ADMIN_URL) &&
+      environment.SUPABASE_SERVICE_ROLE_KEY,
+    ),
+  });
   const requestCounts = selected
     ? await db.prisma.socialImageGenerationRequest.groupBy({
         by: ['status'],
@@ -263,6 +298,31 @@ export default async function ImagePilotAdminPage({
                 グループ向け利用レポートを見る
               </Link>
             </p>
+          </section>
+          <section className="settings-card">
+            <h2>開始前の自動確認</h2>
+            <p>
+              判定：
+              <strong className={readiness.ready ? 'status-success' : 'status-warning'}>
+                {readiness.ready
+                  ? '自動確認は完了しています'
+                  : `${readiness.blockerCount}件の対応が必要です`}
+              </strong>
+            </p>
+            <p>
+              この確認だけでは本番開始になりません。スマートフォン確認、予算、評価担当者、保持期間は
+              人が確認して記録します。
+            </p>
+            <ul className="admin-check-list">
+              {readiness.items.map((item) => (
+                <li key={item.key}>
+                  <strong>{item.ready ? '完了' : '要対応'}：</strong> {item.label}
+                  <br />
+                  {item.detail}{' '}
+                  {!item.ready ? <Link href={item.href}>{item.actionLabel}</Link> : null}
+                </li>
+              ))}
+            </ul>
           </section>
           <section className="settings-card">
             <h2>試験設定を更新</h2>
