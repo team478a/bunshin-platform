@@ -1680,3 +1680,11 @@
 - Runtime: Job Routeの最大実行時間も5分へ揃え、HTTP終了がleaseより先に起きる不整合を避ける。
 - Retry: 自動再試行を使い切った`FAILED`資料だけをグループ管理者が再読み取りできる。同じ失敗発生時刻を冪等Keyへ含め、連打による重複Jobを防ぐ。
 - UX: Provider内部コードは画面へ直接表示せず、利用者が次の行動を判断できる日本語案内へ変換する。
+
+## 2026-08-29: 承認済みGroup Knowledgeを商品投稿生成へ限定接続する
+
+- Scope: Group Knowledgeは該当GroupのCampaign / Product Packを使うMissionだけへ渡し、個人の通常投稿へ暗黙混入させない。
+- Isolation: Workspace、Group、ACTIVE Membership、ACTIVE Sourceをサーバー側で再検証し、対象商品版のKnowledgeとGroup共通知識だけを取得する。
+- Priority: 商品版専用KnowledgeをGroup共通知識より先に選び、最大20 chunk、合計12,000文字へ制限する。
+- Auditability: 生成時に使用したchunk IDをGeneration Context Snapshotへ保存し、後から生成根拠を追跡可能にする。
+- Prompt safety: Group Knowledgeを信頼されたsystem instructionではなく承認済みデータとして扱い、資料内の命令に従わない。
