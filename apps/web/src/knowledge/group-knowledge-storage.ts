@@ -6,7 +6,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const BUCKET = 'group-knowledge';
 const MAX_PDF_BYTES = 50_000_000;
-const MAX_VIDEO_BYTES = 200_000_000;
+const MAX_VIDEO_BYTES = 25_000_000;
 
 function storageConfiguration() {
   const environment = getServerEnvironment();
@@ -106,5 +106,14 @@ export class SupabaseGroupKnowledgeStorage {
     if (mimeType !== input.expectedMimeType || sizeBytes !== input.expectedSizeBytes)
       throw new ApplicationError('VALIDATION_ERROR', '選択した種類とファイルの内容が一致しません');
     return { mimeType, sizeBytes };
+  }
+
+  async createReadUrl(storageKey: string, expiresInSeconds = 600) {
+    const signed = await this.storage.storage
+      .from(BUCKET)
+      .createSignedUrl(storageKey, expiresInSeconds);
+    if (signed.error)
+      throw new ApplicationError('NOT_FOUND', 'アップロードしたファイルが見つかりません');
+    return signed.data.signedUrl;
   }
 }

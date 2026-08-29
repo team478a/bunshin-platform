@@ -2,7 +2,12 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 
-import { GroupKnowledgeService } from '@bunshin/application';
+import {
+  EnqueueJob,
+  GROUP_KNOWLEDGE_EXTRACTION_JOB_TYPE,
+  GroupKnowledgeService,
+} from '@bunshin/application';
+import { getServerEnvironment } from '@bunshin/config';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -77,6 +82,28 @@ async function actor() {
   return value;
 }
 
+async function enqueueExtraction(input: {
+  workspaceId: string;
+  groupId: string;
+  sourceId: string;
+  actorUserId: string;
+  correlationId: string;
+}) {
+  const db = await import('@bunshin/database');
+  const environment = getServerEnvironment().APP_ENV.toUpperCase() as
+    'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
+  await new EnqueueJob(new db.PrismaJobRepository()).enqueue({
+    workspaceId: input.workspaceId,
+    correlationId: input.correlationId,
+    requestedBy: input.actorUserId,
+    environment,
+    jobType: GROUP_KNOWLEDGE_EXTRACTION_JOB_TYPE,
+    idempotencyKey: `group-knowledge:${input.sourceId}:v1`,
+    payloadReference: `group-knowledge:${input.groupId}:${input.sourceId}:${input.actorUserId}`,
+    maxAttempts: 3,
+  });
+}
+
 export async function listGroupKnowledgeResponse(
   request: Request,
   workspaceId: string,
@@ -132,6 +159,7 @@ export async function createGroupKnowledgeResponse(
         sourceUri: input.sourceUri,
         productPackVersionId: input.productPackVersionId ?? null,
       });
+      await enqueueExtraction({ ...scope, sourceId: source.id, correlationId: requestId });
       return Response.json(
         { data: { source: publicSource(source) }, requestId },
         { status: 201, headers: { 'cache-control': 'private, no-store' } },
@@ -222,6 +250,7 @@ export async function completeGroupKnowledgeUploadResponse(
       expectedMimeType: source.mimeType,
       expectedSizeBytes: input.sizeBytes,
     });
+    await enqueueExtraction({ ...scope, sourceId: source.id, correlationId: requestId });
     return Response.json(
       { data: { source: publicSource(source), uploadVerified: true }, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
