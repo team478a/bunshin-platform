@@ -1579,3 +1579,11 @@
 - Evidence: 元本文や個人情報を複製せず、Source Type、Source ID、SHA-256 Evidence HashだけをAwardへ保持する。
 - Boundary: B-1はPersistence／Repository／Use Case／Testまでとし、Seed、判定Processor、API、UI、Point／Entitlement、通知は含めない。
 - Source: `docs/BADGE_CORE_PERSISTENCE_REPORT.md`
+
+## 2026-08-29: 共通バッジは既存の客観行動から非同期に判定する
+
+- Catalog: 承認済みの初期10種類だけをSYSTEM所有のVersion 1として登録し、Point特典なし・本人非公開で開始する。
+- Evidence: Bunshin作成、SNS戦略承認、Mission確認／採用、投稿、Feedback、画像完了の既存正本だけを使い、AIによる品質採点は行わない。
+- Time: 連続日は利用者Timezone、未設定時はAsia/Tokyo、週は月曜日開始で判定する。
+- Migration: 旧バッジは意味が一致するFIRST_CONFIRMATIONとFIRST_POSTのみ移行し、FIRST_PREPARATIONとTHREE_ACTIVE_DAYSは推測変換しない。
+- Source: `docs/BADGE_COMMON_PROCESSOR_REPORT.md`

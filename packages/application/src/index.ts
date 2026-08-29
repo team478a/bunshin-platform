@@ -2347,3 +2347,4 @@ export * from './point-core';
 export * from './point-activity-processor';
 export * from './point-redemption';
 export * from './badge-core';
+export * from './badge-common-processor';
