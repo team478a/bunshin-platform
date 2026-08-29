@@ -8,6 +8,7 @@ type Source = {
   title: string;
   sourceUri: string | null;
   originalFileName: string | null;
+  productPackVersionId: string | null;
   status: 'DRAFT' | 'PROCESSING' | 'REVIEW_REQUIRED' | 'ACTIVE' | 'FAILED' | 'ARCHIVED';
   version: number;
   failureCode: string | null;
@@ -40,13 +41,36 @@ function friendlyFailure(code: string) {
   return failureMessage[code] ?? '内容を読み取れませんでした。もう一度お試しください。';
 }
 
+function ProductScopeField({
+  productVersions,
+}: {
+  productVersions: Array<{ id: string; label: string }>;
+}) {
+  return (
+    <label className="field">
+      <span className="field__label">この資料を使う範囲</span>
+      <select className="field__control" name="productPackVersionId" defaultValue="">
+        <option value="">グループのすべての投稿で使う</option>
+        {productVersions.map((item) => (
+          <option key={item.id} value={item.id}>
+            商品「{item.label}」の投稿だけで使う
+          </option>
+        ))}
+      </select>
+      <small>商品専用の資料を選ぶと、その商品の投稿では共通資料より優先して使います。</small>
+    </label>
+  );
+}
+
 export function GroupKnowledgeManager({
   workspaceId,
   groupId,
+  productVersions,
   initialSources,
 }: {
   workspaceId: string;
   groupId: string;
+  productVersions: Array<{ id: string; label: string }>;
   initialSources: Source[];
 }) {
   const [sources, setSources] = useState(initialSources);
@@ -69,6 +93,11 @@ export function GroupKnowledgeManager({
   const textForm = useRef<HTMLFormElement>(null);
 
   const endpoint = `/api/workspaces/${workspaceId}/groups/${groupId}/knowledge`;
+
+  function selectedProductVersion(values: FormData) {
+    const value = values.get('productPackVersionId');
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  }
 
   function add(source: Source) {
     setSources((current) => [source, ...current.filter((item) => item.id !== source.id)]);
@@ -113,6 +142,7 @@ export function GroupKnowledgeManager({
             mimeType: file.type,
             sizeBytes: file.size,
             rightsConfirmed: values.get('rightsConfirmed') === 'on',
+            productPackVersionId: selectedProductVersion(values),
           }),
         }),
       );
@@ -168,8 +198,14 @@ export function GroupKnowledgeManager({
                   }
                 })(),
               sourceUri,
+              productPackVersionId: selectedProductVersion(values),
             }
-          : { type, title: title.trim() || '入力したFAQ', content: values.get('content') };
+          : {
+              type,
+              title: title.trim() || '入力したFAQ',
+              content: values.get('content'),
+              productPackVersionId: selectedProductVersion(values),
+            };
       const saved = await parse(
         await fetch(endpoint, {
           method: 'POST',
@@ -272,6 +308,7 @@ export function GroupKnowledgeManager({
               placeholder="空欄ならファイル名を使います"
             />
           </label>
+          <ProductScopeField productVersions={productVersions} />
           <label className="field">
             <span>
               <input name="rightsConfirmed" type="checkbox" required />
@@ -307,6 +344,7 @@ export function GroupKnowledgeManager({
               placeholder="https://example.jp/faq"
             />
           </label>
+          <ProductScopeField productVersions={productVersions} />
           <button className="button" type="submit" disabled={saving}>
             Webページを保存する
           </button>
@@ -336,6 +374,7 @@ export function GroupKnowledgeManager({
               placeholder="例：Q. 返品できますか？ A. 商品到着後7日以内に…"
             />
           </label>
+          <ProductScopeField productVersions={productVersions} />
           <button className="button" type="submit" disabled={saving}>
             文章を保存する
           </button>
@@ -391,6 +430,14 @@ export function GroupKnowledgeManager({
               <strong>{source.title}</strong>
               <br />
               {typeLabel[source.type]} ／ {statusLabel[source.status]} ／ 第{source.version}版
+              <br />
+              使う範囲：
+              {source.productPackVersionId
+                ? `商品「${
+                    productVersions.find((item) => item.id === source.productPackVersionId)
+                      ?.label ?? '登録済みの商品'
+                  }」の投稿だけ`
+                : 'グループのすべての投稿'}
               {source.originalFileName ? (
                 <>
                   <br />

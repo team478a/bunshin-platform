@@ -49,6 +49,7 @@ function publicSource(source: {
   sourceUri: string | null;
   originalFileName: string | null;
   mimeType: string | null;
+  productPackVersionId: string | null;
   status: string;
   version: number;
   failureCode: string | null;
@@ -62,6 +63,7 @@ function publicSource(source: {
     sourceUri: source.sourceUri,
     originalFileName: source.originalFileName,
     mimeType: source.mimeType,
+    productPackVersionId: source.productPackVersionId,
     status: source.status,
     version: source.version,
     failureCode: source.failureCode,
