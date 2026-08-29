@@ -194,6 +194,7 @@ export { PrismaBadgeLineNotificationPreparationRepository } from './badge-line-n
 export { PrismaBadgeLineDeliveryRepository } from './badge-line-notification';
 export { PrismaBadgeLineJobCandidateRepository } from './badge-line-notification';
 export { PrismaBadgeLineDeliveryRetryRepository } from './badge-line-notification';
+export { PrismaBadgeLineReconciliationRepository } from './badge-line-notification';
 export { PrismaBadgeGroupWorkflowRepository } from './badge-group-workflow';
 export {
   PrismaBadgeEntitlementConsumptionRepository,

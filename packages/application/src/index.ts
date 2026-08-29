@@ -2352,6 +2352,7 @@ export * from './badge-user-experience';
 export * from './badge-line-notification';
 export * from './badge-line-delivery-job';
 export * from './badge-line-admin-retry';
+export * from './badge-line-reconciliation';
 export * from './badge-group-workflow';
 export * from './badge-reward';
 export * from './badge-entitlement-consumption';
