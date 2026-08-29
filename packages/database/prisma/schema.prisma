@@ -112,6 +112,54 @@ enum PointProcessingStatus {
   FAILED
 }
 
+enum BadgeOwnerType {
+  SYSTEM
+  GROUP
+}
+
+enum BadgeDefinitionStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+  SUSPENDED
+}
+
+enum BadgeConditionType {
+  FIRST
+  COUNT
+  STREAK_DAILY
+  STREAK_WEEKLY
+  WINDOW
+  COMPOSITE
+  DISTINCT
+  MANUAL_APPROVAL
+  IMPORT
+}
+
+enum BadgeVisibilityPolicy {
+  PRIVATE
+  GROUP
+}
+
+enum BadgeProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ELIGIBLE
+  AWARDED
+}
+
+enum BadgeAwardStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum BadgeProcessingStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum PointCatalogStatus {
   DRAFT
   ACTIVE
@@ -903,6 +951,10 @@ model User {
   pointTransactions                 PointTransaction[]
   pointProcessingEvents             PointProcessingEvent[]
   pointRedemptions                  PointRedemption[]
+  badgeProgress                     BadgeProgress[]
+  badgeAwards                       BadgeAward[]
+  badgeProcessingEvents             BadgeProcessingEvent[]
+  badgeAuditsPerformed              BadgeAdminAuditLog[]                @relation("BadgeAuditActor")
 
   @@index([status])
   @@map("users")
@@ -994,6 +1046,11 @@ model Workspace {
   pointTransactions            PointTransaction[]
   pointProcessingEvents        PointProcessingEvent[]
   pointRedemptions             PointRedemption[]
+  badgeDefinitions             BadgeDefinition[]
+  badgeProgress                BadgeProgress[]
+  badgeAwards                  BadgeAward[]
+  badgeProcessingEvents        BadgeProcessingEvent[]
+  badgeAdminAudits             BadgeAdminAuditLog[]
 
   @@index([status])
   @@map("workspaces")
@@ -1048,6 +1105,10 @@ model Group {
   lineWebhookEvents          GroupLineWebhookEvent[]
   pointRuleVersions          PointRuleVersion[]
   pointTransactions          PointTransaction[]
+  badgeDefinitions           BadgeDefinition[]
+  badgeProgress              BadgeProgress[]
+  badgeAwards                BadgeAward[]
+  badgeAdminAudits           BadgeAdminAuditLog[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -1576,6 +1637,156 @@ model PointProcessingEvent {
   @@unique([workspaceId, eventType, sourceEventId])
   @@index([workspaceId, userId, status, createdAt])
   @@map("point_processing_events")
+}
+
+model BadgeDefinition {
+  id             String                @id @default(uuid()) @db.Uuid
+  ownerType      BadgeOwnerType        @map("owner_type")
+  workspaceId    String?               @map("workspace_id") @db.Uuid
+  groupId        String?               @map("group_id") @db.Uuid
+  code           String                @db.VarChar(100)
+  category       String                @db.VarChar(80)
+  status         BadgeDefinitionStatus @default(DRAFT)
+  currentVersion Int                   @default(0) @map("current_version")
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group          Group?                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  versions       BadgeVersion[]
+  audits         BadgeAdminAuditLog[]
+
+  @@index([ownerType, status, code])
+  @@index([workspaceId, groupId, status])
+  @@map("badge_definitions")
+}
+
+model BadgeVersion {
+  id               String                  @id @default(uuid()) @db.Uuid
+  definitionId     String                  @map("definition_id") @db.Uuid
+  version          Int
+  title            String                  @db.VarChar(120)
+  description      String                  @db.VarChar(500)
+  imageKey         String                  @map("image_key") @db.VarChar(255)
+  lockedImageKey   String?                 @map("locked_image_key") @db.VarChar(255)
+  altText          String                  @map("alt_text") @db.VarChar(200)
+  backgroundColor  String?                 @map("background_color") @db.VarChar(20)
+  conditionType    BadgeConditionType      @map("condition_type")
+  conditionConfig  Json                    @map("condition_config")
+  visibilityPolicy BadgeVisibilityPolicy   @default(PRIVATE) @map("visibility_policy")
+  rewardPolicy     Json                    @map("reward_policy")
+  startsAt         DateTime?               @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime?               @map("ends_at") @db.Timestamptz(6)
+  publishedAt      DateTime?               @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  definition       BadgeDefinition         @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  progress         BadgeProgress[]
+  awards           BadgeAward[]
+  audits           BadgeAdminAuditLog[]
+
+  @@unique([definitionId, version])
+  @@index([definitionId, publishedAt])
+  @@map("badge_versions")
+}
+
+model BadgeProgress {
+  id             String              @id @default(uuid()) @db.Uuid
+  workspaceId    String              @map("workspace_id") @db.Uuid
+  userId         String              @map("user_id") @db.Uuid
+  badgeVersionId String              @map("badge_version_id") @db.Uuid
+  groupId        String?             @map("group_id") @db.Uuid
+  currentValue   Int                 @default(0) @map("current_value")
+  targetValue    Int                 @map("target_value")
+  streakState    Json?               @map("streak_state")
+  status         BadgeProgressStatus @default(NOT_STARTED)
+  lastEventAt    DateTime?           @map("last_event_at") @db.Timestamptz(6)
+  revision       Int                 @default(0)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user           User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeVersion   BadgeVersion        @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  group          Group?              @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, userId, badgeVersionId])
+  @@index([workspaceId, userId, status, updatedAt])
+  @@index([groupId, status])
+  @@map("badge_progress")
+}
+
+model BadgeAward {
+  id              String           @id @default(uuid()) @db.Uuid
+  workspaceId     String           @map("workspace_id") @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  badgeVersionId  String           @map("badge_version_id") @db.Uuid
+  groupId         String?          @map("group_id") @db.Uuid
+  sourceBunshinId String?          @map("source_bunshin_id") @db.Uuid
+  awardedAt       DateTime         @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  sourceType      String           @map("source_type") @db.VarChar(100)
+  sourceId        String           @map("source_id") @db.VarChar(200)
+  evidenceHash    String           @map("evidence_hash") @db.Char(64)
+  idempotencyKey  String           @map("idempotency_key") @db.VarChar(200)
+  status          BadgeAwardStatus @default(ACTIVE)
+  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(6)
+  expiredAt       DateTime?        @map("expired_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badgeVersion    BadgeVersion     @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  group           Group?           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  sourceBunshin   Bunshin?         @relation("BadgeAwardSourceBunshin", fields: [workspaceId, sourceBunshinId], references: [workspaceId, id], onDelete: Restrict)
+  audits          BadgeAdminAuditLog[]
+
+  @@unique([workspaceId, userId, idempotencyKey])
+  @@unique([workspaceId, userId, badgeVersionId])
+  @@index([workspaceId, userId, status, awardedAt])
+  @@index([groupId, status, awardedAt])
+  @@map("badge_awards")
+}
+
+model BadgeProcessingEvent {
+  id            String                @id @default(uuid()) @db.Uuid
+  workspaceId   String                @map("workspace_id") @db.Uuid
+  userId        String                @map("user_id") @db.Uuid
+  eventType     String                @map("event_type") @db.VarChar(100)
+  sourceEventId String                @map("source_event_id") @db.VarChar(200)
+  status        BadgeProcessingStatus @default(PROCESSING)
+  failureCode   String?               @map("failure_code") @db.VarChar(100)
+  processedAt   DateTime?             @map("processed_at") @db.Timestamptz(6)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace     Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, eventType, sourceEventId])
+  @@index([workspaceId, userId, status, createdAt])
+  @@map("badge_processing_events")
+}
+
+model BadgeAdminAuditLog {
+  id                String           @id @default(uuid()) @db.Uuid
+  workspaceId       String?          @map("workspace_id") @db.Uuid
+  groupId           String?          @map("group_id") @db.Uuid
+  badgeDefinitionId String?          @map("badge_definition_id") @db.Uuid
+  badgeVersionId    String?          @map("badge_version_id") @db.Uuid
+  badgeAwardId      String?          @map("badge_award_id") @db.Uuid
+  action            String           @db.VarChar(80)
+  beforeData        Json?            @map("before_data")
+  afterData         Json?            @map("after_data")
+  reason            String           @db.VarChar(1000)
+  performedByUserId String           @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group             Group?           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  badgeDefinition   BadgeDefinition? @relation(fields: [badgeDefinitionId], references: [id], onDelete: Restrict)
+  badgeVersion      BadgeVersion?    @relation(fields: [badgeVersionId], references: [id], onDelete: Restrict)
+  badgeAward        BadgeAward?      @relation(fields: [badgeAwardId], references: [id], onDelete: Restrict)
+  performedBy       User             @relation("BadgeAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, occurredAt])
+  @@index([badgeDefinitionId, occurredAt])
+  @@index([badgeAwardId, occurredAt])
+  @@map("badge_admin_audit_logs")
 }
 
 model ExternalTrackingSystem {
@@ -2855,6 +3066,7 @@ model Bunshin {
   campaignParticipations      CampaignParticipation[]
   campaignSimilarityReviews   CampaignSimilarityReview[]
   achievementBadges           AchievementBadge[]
+  badgeAwards                 BadgeAward[]                 @relation("BadgeAwardSourceBunshin")
   videoProjects               VideoProject[]
 
   @@unique([workspaceId, slug])
