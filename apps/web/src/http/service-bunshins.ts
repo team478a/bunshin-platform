@@ -1,5 +1,11 @@
 import 'server-only';
-import { CreateBunshin, ListServiceBunshins } from '@bunshin/application';
+import {
+  ArchiveBunshin,
+  CreateBunshin,
+  GetBunshin,
+  ListServiceBunshins,
+  UpdateBunshinProfile,
+} from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -16,6 +22,8 @@ const createSchema = z
   })
   .strict();
 
+const updateSchema = createSchema.partial().refine((value) => Object.keys(value).length > 0);
+
 async function actorUserId(): Promise<string> {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
@@ -26,9 +34,23 @@ async function useCases() {
   const db = await import('@bunshin/database');
   const repository = new db.PrismaBunshinRepository();
   return {
+    archive: new ArchiveBunshin(repository),
     create: new CreateBunshin(repository),
+    get: new GetBunshin(repository),
     list: new ListServiceBunshins(repository),
+    update: new UpdateBunshinProfile(repository),
   };
+}
+
+async function jsonBody(request: Request): Promise<unknown> {
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+    throw new ApplicationError('VALIDATION_ERROR', 'application/json is required');
+  }
+  try {
+    return await request.json();
+  } catch (error) {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid JSON', error);
+  }
 }
 
 async function response(request: Request, operation: () => Promise<unknown>, status = 200) {
@@ -66,10 +88,7 @@ export function createServiceBunshinResponse(request: Request, serviceSlug: stri
     request,
     async () => {
       requireSameOrigin(request);
-      if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
-        throw new ApplicationError('VALIDATION_ERROR', 'application/json is required');
-      }
-      const parsed = createSchema.safeParse(await request.json());
+      const parsed = createSchema.safeParse(await jsonBody(request));
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
       const [service, actor] = await Promise.all([
         resolvePublicServiceContext(serviceSlug),
@@ -89,4 +108,76 @@ export function createServiceBunshinResponse(request: Request, serviceSlug: stri
     },
     201,
   );
+}
+
+export function getServiceBunshinResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return response(request, async () => {
+    const [service, actor] = await Promise.all([
+      resolvePublicServiceContext(serviceSlug),
+      actorUserId(),
+    ]);
+    return (await useCases()).get.execute({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      bunshinId,
+      actorUserId: actor,
+    });
+  });
+}
+
+export function updateServiceBunshinResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return response(request, async () => {
+    requireSameOrigin(request);
+    const parsed = updateSchema.safeParse(await jsonBody(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const [service, actor] = await Promise.all([
+      resolvePublicServiceContext(serviceSlug),
+      actorUserId(),
+    ]);
+    return (await useCases()).update.execute({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      bunshinId,
+      actorUserId: actor,
+      ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
+      ...(parsed.data.objectiveSummary === undefined
+        ? {}
+        : { objectiveSummary: parsed.data.objectiveSummary }),
+      ...(parsed.data.audienceSummary === undefined
+        ? {}
+        : { audienceSummary: parsed.data.audienceSummary }),
+      ...(parsed.data.personalitySummary === undefined
+        ? {}
+        : { personalitySummary: parsed.data.personalitySummary }),
+    });
+  });
+}
+
+export function archiveServiceBunshinResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return response(request, async () => {
+    requireSameOrigin(request);
+    await jsonBody(request);
+    const [service, actor] = await Promise.all([
+      resolvePublicServiceContext(serviceSlug),
+      actorUserId(),
+    ]);
+    return (await useCases()).archive.execute({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      bunshinId,
+      actorUserId: actor,
+    });
+  });
 }

@@ -23,4 +23,11 @@ describe('service Bunshin web boundary', () => {
     expect(homeSource).toContain('/bunshins` as Route');
     expect(homeSource).toContain('投稿パートナーを作る・見る');
   });
+
+  it('keeps detail and updates scoped by the server-resolved service', () => {
+    expect(httpSource).toContain('getServiceBunshinResponse');
+    expect(httpSource).toContain('updateServiceBunshinResponse');
+    expect(httpSource).toContain('archiveServiceBunshinResponse');
+    expect(httpSource).toContain('groupId: service.serviceId');
+  });
 });
