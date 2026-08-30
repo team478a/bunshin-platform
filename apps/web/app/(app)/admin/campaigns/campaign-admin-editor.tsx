@@ -54,17 +54,19 @@ export function CampaignAdminEditor({
   workspaceId,
   initialCampaigns,
   versions,
+  apiBase,
 }: {
   workspaceId: string;
   initialCampaigns: Campaign[];
   versions: Version[];
+  apiBase?: string;
 }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [versionId, setVersionId] = useState(versions[0]?.id ?? '');
   const [message, setMessage] = useState('');
   const selected = versions.find((item) => item.id === versionId);
   const reload = async () => {
-    const response = await fetch(`/api/workspaces/${workspaceId}/campaigns`, {
+    const response = await fetch(apiBase ?? `/api/workspaces/${workspaceId}/campaigns`, {
       cache: 'no-store',
     });
     setCampaigns(((await response.json()) as { data: Campaign[] }).data);
@@ -85,7 +87,7 @@ export function CampaignAdminEditor({
     const current = selected;
     if (!current) return;
     void run(() =>
-      post(`/api/workspaces/${workspaceId}/campaigns`, {
+      post(apiBase ?? `/api/workspaces/${workspaceId}/campaigns`, {
         groupId: current.groupId,
         productPackVersionId: current.id,
         name: value(data, 'name'),
@@ -107,7 +109,7 @@ export function CampaignAdminEditor({
   };
   const transition = (campaign: Campaign, to: 'OPEN' | 'CLOSED' | 'CANCELLED') =>
     run(() =>
-      post(`/api/workspaces/${workspaceId}/campaigns/${campaign.id}/transition`, {
+      post(`${apiBase ?? `/api/workspaces/${workspaceId}/campaigns`}/${campaign.id}/transition`, {
         from: campaign.status,
         to,
         reason: null,

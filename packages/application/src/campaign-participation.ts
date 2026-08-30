@@ -32,6 +32,7 @@ export interface CampaignPlanningContext {
 export interface CampaignAdminScope {
   workspaceId: string;
   actorUserId: string;
+  groupId?: string;
 }
 
 export interface CampaignParticipantScope {

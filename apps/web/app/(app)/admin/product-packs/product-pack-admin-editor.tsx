@@ -46,15 +46,17 @@ export function ProductPackAdminEditor({
   workspaceId,
   groups,
   initialPacks,
+  apiBase,
 }: {
   workspaceId: string;
   groups: Group[];
   initialPacks: unknown[];
+  apiBase?: string;
 }) {
   const [packs, setPacks] = useState(initialPacks as Pack[]);
   const [message, setMessage] = useState('');
   const reload = async () => {
-    const response = await fetch(`/api/workspaces/${workspaceId}/product-packs`, {
+    const response = await fetch(apiBase ?? `/api/workspaces/${workspaceId}/product-packs`, {
       cache: 'no-store',
     });
     const result = (await response.json()) as { data: Pack[] };
@@ -74,7 +76,7 @@ export function ProductPackAdminEditor({
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     void run(async () => {
-      await api(`/api/workspaces/${workspaceId}/product-packs`, {
+      await api(apiBase ?? `/api/workspaces/${workspaceId}/product-packs`, {
         groupId: formText(data, 'groupId'),
         name: formText(data, 'name'),
       });
@@ -92,7 +94,7 @@ export function ProductPackAdminEditor({
     });
     const assets = parseProductPackAssets(formText(data, 'assets'));
     void run(() =>
-      api(`/api/workspaces/${workspaceId}/product-packs/${packId}/versions`, {
+      api(`${apiBase ?? `/api/workspaces/${workspaceId}/product-packs`}/${packId}/versions`, {
         summary: formText(data, 'summary'),
         providerName: formText(data, 'providerName'),
         targetCustomer: formText(data, 'targetCustomer'),
@@ -213,7 +215,7 @@ export function ProductPackAdminEditor({
                         onClick={() =>
                           void run(() =>
                             api(
-                              `/api/workspaces/${workspaceId}/product-packs/${pack.id}/versions/${version.id}/publish`,
+                              `${apiBase ?? `/api/workspaces/${workspaceId}/product-packs`}/${pack.id}/versions/${version.id}/publish`,
                             ),
                           )
                         }

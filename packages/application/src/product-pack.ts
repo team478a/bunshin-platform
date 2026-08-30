@@ -7,6 +7,7 @@ export type ProductPackAssetType = 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LINK';
 export interface ProductPackScope {
   workspaceId: string;
   actorUserId: string;
+  groupId?: string | null;
 }
 
 export interface ProductPackVersionInput {

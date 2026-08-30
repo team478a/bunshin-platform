@@ -11301,8 +11301,8 @@ export class PrismaExternalLinkPlacementRepository implements ExternalLinkPlacem
 export class PrismaProductPackRepository implements ProductPackRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  private manage(workspaceId: string, actorUserId: string) {
-    return this.client.workspaceMembership.findFirst({
+  private async manage(workspaceId: string, actorUserId: string, groupId?: string | null) {
+    const workspaceManager = await this.client.workspaceMembership.findFirst({
       where: {
         workspaceId,
         userId: actorUserId,
@@ -11312,12 +11312,30 @@ export class PrismaProductPackRepository implements ProductPackRepository {
       },
       select: { id: true },
     });
+    if (workspaceManager) return true;
+    if (!groupId) return false;
+    return Boolean(
+      await this.client.groupMembership.findFirst({
+        where: {
+          workspaceId,
+          groupId,
+          userId: actorUserId,
+          status: 'ACTIVE',
+          role: 'MANAGER',
+          group: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      }),
+    );
   }
 
   async list(input: Parameters<ProductPackRepository['list']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.productPack.findMany({
-      where: { workspaceId: input.workspaceId },
+      where: {
+        workspaceId: input.workspaceId,
+        ...(input.groupId ? { groupId: input.groupId } : {}),
+      },
       include: {
         group: { select: { id: true, name: true } },
         versions: { orderBy: { version: 'desc' }, include: { rules: true, assets: true } },
@@ -11328,9 +11346,13 @@ export class PrismaProductPackRepository implements ProductPackRepository {
   }
 
   async get(input: Parameters<ProductPackRepository['get']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.productPack.findFirst({
-      where: { id: input.productPackId, workspaceId: input.workspaceId },
+      where: {
+        id: input.productPackId,
+        workspaceId: input.workspaceId,
+        ...(input.groupId ? { groupId: input.groupId } : {}),
+      },
       include: {
         group: { select: { id: true, name: true } },
         versions: { orderBy: { version: 'desc' }, include: { rules: true, assets: true } },
@@ -11340,7 +11362,7 @@ export class PrismaProductPackRepository implements ProductPackRepository {
   }
 
   async createPack(input: Parameters<ProductPackRepository['createPack']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     const group = await this.client.group.findFirst({
       where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
       select: { id: true },
@@ -11352,13 +11374,14 @@ export class PrismaProductPackRepository implements ProductPackRepository {
   }
 
   async createDraftVersion(input: Parameters<ProductPackRepository['createDraftVersion']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.$transaction(async (tx) => {
       const pack = await tx.productPack.findFirst({
         where: {
           id: input.productPackId,
           workspaceId: input.workspaceId,
           status: { not: 'ARCHIVED' },
+          ...(input.groupId ? { groupId: input.groupId } : {}),
         },
         include: { _count: { select: { versions: true } } },
       });
@@ -11390,14 +11413,18 @@ export class PrismaProductPackRepository implements ProductPackRepository {
   }
 
   async publishVersion(input: Parameters<ProductPackRepository['publishVersion']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.$transaction(async (tx) => {
       const draft = await tx.productPackVersion.findFirst({
         where: {
           id: input.versionId,
           productPackId: input.productPackId,
           status: 'DRAFT',
-          productPack: { workspaceId: input.workspaceId, status: { not: 'ARCHIVED' } },
+          productPack: {
+            workspaceId: input.workspaceId,
+            status: { not: 'ARCHIVED' },
+            ...(input.groupId ? { groupId: input.groupId } : {}),
+          },
         },
       });
       if (!draft) return null;
@@ -11495,10 +11522,15 @@ export class PrismaProductPackRepository implements ProductPackRepository {
   }
 
   async suspend(input: Parameters<ProductPackRepository['suspend']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.$transaction(async (tx) => {
       const pack = await tx.productPack.findFirst({
-        where: { id: input.productPackId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+        where: {
+          id: input.productPackId,
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          ...(input.groupId ? { groupId: input.groupId } : {}),
+        },
       });
       if (!pack) return null;
       await tx.productPackAssignment.updateMany({
@@ -12159,8 +12191,8 @@ type CampaignPlanningRow = Prisma.CampaignGetPayload<{
 export class PrismaCampaignRepository implements CampaignRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  private manage(workspaceId: string, actorUserId: string) {
-    return this.client.workspaceMembership.findFirst({
+  private async manage(workspaceId: string, actorUserId: string, groupId?: string) {
+    const workspaceManager = await this.client.workspaceMembership.findFirst({
       where: {
         workspaceId,
         userId: actorUserId,
@@ -12170,12 +12202,30 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
       select: { id: true },
     });
+    if (workspaceManager) return true;
+    if (!groupId) return false;
+    return Boolean(
+      await this.client.groupMembership.findFirst({
+        where: {
+          workspaceId,
+          groupId,
+          userId: actorUserId,
+          status: 'ACTIVE',
+          role: 'MANAGER',
+          group: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      }),
+    );
   }
 
   async listManaged(input: Parameters<CampaignRepository['listManaged']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     const campaigns = await this.client.campaign.findMany({
-      where: { workspaceId: input.workspaceId },
+      where: {
+        workspaceId: input.workspaceId,
+        ...(input.groupId ? { groupId: input.groupId } : {}),
+      },
       include: {
         group: { select: { name: true } },
         productPackVersion: {
@@ -12220,7 +12270,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
   }
 
   async createDraft(input: Parameters<CampaignRepository['createDraft']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.$transaction(async (tx) => {
       const version = await tx.productPackVersion.findFirst({
         where: {
@@ -12279,12 +12329,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
   }
 
   async transition(input: Parameters<CampaignRepository['transition']>[0]) {
-    if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!(await this.manage(input.workspaceId, input.actorUserId, input.groupId))) return null;
     return this.client.$transaction(async (tx) => {
       const changed = await tx.campaign.updateMany({
         where: {
           id: input.campaignId,
           workspaceId: input.workspaceId,
+          ...(input.groupId ? { groupId: input.groupId } : {}),
           status: input.from,
           ...(input.to === 'OPEN' ? { endsAt: { gt: input.now } } : {}),
         },

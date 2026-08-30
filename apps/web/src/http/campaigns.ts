@@ -71,24 +71,31 @@ async function respond(request: Request, operation: () => Promise<unknown>, stat
   }
 }
 
-export function managedCampaignsResponse(request: Request, workspaceId: string) {
+export function managedCampaignsResponse(request: Request, workspaceId: string, groupId?: string) {
   return respond(request, async () => {
     const { actorUserId, service } = await context();
-    return service.listManaged({ workspaceId: uuid.parse(workspaceId), actorUserId });
+    return service.listManaged({
+      workspaceId: uuid.parse(workspaceId),
+      actorUserId,
+      ...(groupId ? { groupId } : {}),
+    });
   });
 }
 
-export function createCampaignResponse(request: Request, workspaceId: string) {
+export function createCampaignResponse(request: Request, workspaceId: string, groupId?: string) {
   return respond(
     request,
     async () => {
       requireSameOrigin(request);
       const value = createSchema.parse(await body(request));
+      if (groupId && value.groupId !== groupId)
+        throw new ApplicationError('FORBIDDEN', 'service boundary mismatch');
       const { actorUserId, service } = await context();
       return service.createDraft({
         workspaceId: uuid.parse(workspaceId),
         actorUserId,
         ...value,
+        groupId: groupId ?? value.groupId,
         startsAt: new Date(value.startsAt),
         endsAt: new Date(value.endsAt),
       });
@@ -101,6 +108,7 @@ export function transitionCampaignResponse(
   request: Request,
   workspaceId: string,
   campaignId: string,
+  groupId?: string,
 ) {
   return respond(request, async () => {
     requireSameOrigin(request);
@@ -109,6 +117,7 @@ export function transitionCampaignResponse(
     return service.transition({
       workspaceId: uuid.parse(workspaceId),
       actorUserId,
+      ...(groupId ? { groupId } : {}),
       campaignId: uuid.parse(campaignId),
       from: value.from,
       to: value.to,
