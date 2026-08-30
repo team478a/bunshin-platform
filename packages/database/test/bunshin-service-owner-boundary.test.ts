@@ -19,4 +19,20 @@ describe('service Bunshin owner boundary', () => {
     expect(method).toContain('groupId: input.groupId ?? null');
     expect(method).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
+
+  it('keeps capability assignments inside the requested service and owner boundary', () => {
+    const start = source.indexOf('export class PrismaBunshinCapabilityAssignmentRepository');
+    const end = source.indexOf('export class PrismaSocialProfileRepository', start);
+    const repository = source.slice(start, end);
+    expect(repository).toContain('groupId: input.groupId ?? null');
+    expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
+  });
+
+  it('keeps social profiles inside the requested service and owner boundary', () => {
+    const start = source.indexOf('export class PrismaSocialProfileRepository');
+    const end = source.indexOf('export class PrismaContentPillarRepository', start);
+    const repository = source.slice(start, end);
+    expect(repository).toContain('groupId: input.groupId ?? null');
+    expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
+  });
 });

@@ -7068,12 +7068,19 @@ export class PrismaBunshinCapabilityAssignmentRepository implements BunshinCapab
 
   private async managed(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
   ) {
     const bunshin = await client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -7142,6 +7149,8 @@ export class PrismaBunshinCapabilityAssignmentRepository implements BunshinCapab
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -7212,12 +7221,19 @@ export class PrismaSocialProfileRepository implements SocialProfileRepository {
 
   private async accessible(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
   ) {
     return client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -7230,12 +7246,19 @@ export class PrismaSocialProfileRepository implements SocialProfileRepository {
 
   private async managed(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
   ) {
     const bunshin = await client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',

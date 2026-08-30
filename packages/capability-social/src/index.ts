@@ -65,6 +65,7 @@ export interface SocialProfile {
 
 export interface CreateSocialProfileInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
   platform: SocialPlatform;
@@ -78,6 +79,7 @@ export interface CreateSocialProfileInput {
 
 export interface UpdateSocialProfileInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
   platform: SocialPlatform;
@@ -93,11 +95,13 @@ export interface SocialProfileRepository {
   create(input: CreateSocialProfileInput): Promise<SocialProfile | null>;
   list(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
   }): Promise<SocialProfile[] | null>;
   findByPlatform(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     platform: SocialPlatform;
@@ -105,6 +109,7 @@ export interface SocialProfileRepository {
   update(input: UpdateSocialProfileInput): Promise<SocialProfile | null>;
   setActive(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     platform: SocialPlatform;
@@ -193,6 +198,7 @@ export function normalizeCreateSocialProfileInput(
 ): CreateSocialProfileInput {
   return {
     workspaceId: input.workspaceId,
+    ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
     actorUserId: input.actorUserId,
     bunshinId: input.bunshinId,
     platform: validateEnum(input.platform, SOCIAL_PLATFORMS, 'platform'),
@@ -227,6 +233,7 @@ export function normalizeUpdateSocialProfileInput(
   }
   return {
     workspaceId: input.workspaceId,
+    ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
     actorUserId: input.actorUserId,
     bunshinId: input.bunshinId,
     platform: validateEnum(input.platform, SOCIAL_PLATFORMS, 'platform'),
@@ -259,6 +266,7 @@ abstract class SocialProfileMutation {
 
   protected async requireActive(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
   }) {
@@ -281,7 +289,12 @@ export class CreateSocialProfile extends SocialProfileMutation {
 
 export class ListSocialProfiles {
   constructor(private readonly profiles: SocialProfileRepository) {}
-  async execute(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
+  async execute(input: {
+    workspaceId: string;
+    groupId?: string | null;
+    actorUserId: string;
+    bunshinId: string;
+  }) {
     const values = await this.profiles.list(input);
     if (values === null) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
     return values;
@@ -292,6 +305,7 @@ export class GetSocialProfile {
   constructor(private readonly profiles: SocialProfileRepository) {}
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     platform: SocialPlatform;
@@ -323,6 +337,7 @@ abstract class SetSocialProfileActive extends SocialProfileMutation {
 
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     platform: SocialPlatform;
