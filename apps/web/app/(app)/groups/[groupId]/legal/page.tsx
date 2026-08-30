@@ -179,7 +179,12 @@ export default async function ServiceLegalPage({
   searchParams,
 }: {
   params: Promise<{ groupId: string }>;
-  searchParams: Promise<{ created?: string; published?: string; error?: string }>;
+  searchParams: Promise<{
+    created?: string;
+    published?: string;
+    error?: string;
+    service?: string;
+  }>;
 }) {
   const parsed = z.uuid().safeParse((await params).groupId);
   if (!parsed.success) notFound();
@@ -204,7 +209,15 @@ export default async function ServiceLegalPage({
         <p className="eyebrow">サービス運営</p>
         <h1>{service.displayName}の法務文書</h1>
         <p>参加者が登録時に確認する利用規約とプライバシーポリシーを管理します。</p>
-        <a href={`/groups/${service.groupId}/members`}>← 参加者管理へ戻る</a>
+        <a
+          href={
+            query.service
+              ? `/s/${query.service}/manage/members`
+              : `/groups/${service.groupId}/members`
+          }
+        >
+          ← 参加者管理へ戻る
+        </a>
       </header>
       {query.created === '1' && <p className="notice notice--success">下書きを保存しました。</p>}
       {query.published === '1' && (

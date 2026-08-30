@@ -29,8 +29,10 @@ function dateTime(value: Date) {
 
 export default async function GroupKnowledgePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ groupId: string }>;
+  searchParams?: Promise<{ service?: string }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
@@ -105,15 +107,20 @@ export default async function GroupKnowledgePage({
       usage,
     ]),
   );
+  const serviceSlug = (await searchParams)?.service;
 
   return (
     <main className="app-page">
       <header className="app-page__heading">
-        <p className="eyebrow">グループの公式情報</p>
+        <p className="eyebrow">サービスの公式情報</p>
         <h1>投稿づくりで使うナレッジ</h1>
         <p>{membership.group.name}の商品資料、FAQ、研修動画、公式Webページを登録します。</p>
         <p>保存しただけでは投稿に使いません。読み取った内容を管理者が確認してから利用します。</p>
-        <Link href="/groups">← グループ一覧へ戻る</Link>
+        {serviceSlug ? (
+          <a href={`/s/${serviceSlug}/home`}>← サービスのホームへ戻る</a>
+        ) : (
+          <Link href="/groups">← グループ一覧へ戻る</Link>
+        )}
       </header>
       <GroupKnowledgeManager
         workspaceId={membership.group.workspaceId}

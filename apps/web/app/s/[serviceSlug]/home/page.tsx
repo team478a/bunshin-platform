@@ -126,8 +126,6 @@ export default async function ServiceMemberHome({
     '--service-secondary': service.configuration.brand.secondaryColor,
     '--service-font': service.configuration.brand.fontFamily,
   } as CSSProperties;
-  const groupId = service.serviceId;
-
   return (
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry service-member-home" style={style}>
@@ -248,18 +246,18 @@ export default async function ServiceMemberHome({
             <h2>サービスを管理する</h2>
             <p>参加者、公式資料、利用規約などをこのサービスの範囲だけで管理します。</p>
             <div className="service-home-actions">
-              <Link className="button" href={`/groups/${groupId}/members` as Route}>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/members`}>
                 参加者と利用機能
-              </Link>
-              <Link className="button" href={`/groups/${groupId}/knowledge` as Route}>
+              </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/knowledge`}>
                 公式資料・FAQ
-              </Link>
-              <Link className="button" href={`/groups/${groupId}/legal` as Route}>
+              </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/legal`}>
                 利用規約
-              </Link>
-              <Link className="button" href={`/groups/${groupId}/badges` as Route}>
+              </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/badges`}>
                 バッジ
-              </Link>
+              </a>
             </div>
           </section>
         )}
