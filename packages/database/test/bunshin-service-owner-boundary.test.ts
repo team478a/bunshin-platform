@@ -43,4 +43,12 @@ describe('service Bunshin owner boundary', () => {
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
+
+  it('keeps account strategies inside the requested service and owner boundary', () => {
+    const start = source.indexOf('export class PrismaSocialAccountStrategyRepository');
+    const end = source.indexOf('export class PrismaTrendResearchRepository', start);
+    const repository = source.slice(start, end);
+    expect(repository).toContain('groupId: input.groupId ?? null');
+    expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
+  });
 });

@@ -424,6 +424,7 @@ export interface SocialAccountStrategy {
 }
 export interface CreateSocialAccountStrategyInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
   socialProfileId: string;
@@ -444,12 +445,14 @@ export interface SocialAccountStrategyRepository {
   createVersion(input: CreateSocialAccountStrategyInput): Promise<SocialAccountStrategy | null>;
   list(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     socialProfileId: string;
   }): Promise<SocialAccountStrategy[] | null>;
   approve(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     strategyId: string;

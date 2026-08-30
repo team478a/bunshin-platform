@@ -60,12 +60,14 @@ export function AccountStrategySection({
   profiles,
   strategies,
   active,
+  endpointBase,
 }: {
   workspaceId: string;
   bunshinId: string;
   profiles: Array<{ id: string; platform: SocialPlatform }>;
   strategies: StrategyView[];
   active: boolean;
+  endpointBase?: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -80,27 +82,27 @@ export function AccountStrategySection({
     destinationDetail: '',
   });
   const profile = profiles.find((item) => item.id === form.socialProfileId);
+  const endpoint =
+    endpointBase ??
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/social-account-strategies`;
   async function create(event: FormEvent) {
     event.preventDefault();
     if (!profile) return;
     setPending(true);
-    const response = await fetch(
-      `/api/workspaces/${workspaceId}/bunshins/${bunshinId}/social-account-strategies/generate`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          socialProfileId: profile.id,
-          platform: profile.platform,
-          goal: form.goal,
-          availableMinutes: form.availableMinutes,
-          destinationType: form.destinationType,
-          destinationDetail: form.destinationDetail || null,
-          wizardTopic: form.topic,
-          wizardAudience: form.audience,
-        }),
-      },
-    );
+    const response = await fetch(`${endpoint}/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        socialProfileId: profile.id,
+        platform: profile.platform,
+        goal: form.goal,
+        availableMinutes: form.availableMinutes,
+        destinationType: form.destinationType,
+        destinationDetail: form.destinationDetail || null,
+        wizardTopic: form.topic,
+        wizardAudience: form.audience,
+      }),
+    });
     setPending(false);
     setMessage(
       response.ok
@@ -111,10 +113,11 @@ export function AccountStrategySection({
   }
   async function approve(id: string) {
     setPending(true);
-    const response = await fetch(
-      `/api/workspaces/${workspaceId}/bunshins/${bunshinId}/social-account-strategies/${id}/approve`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
-    );
+    const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/approve`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
     setPending(false);
     setMessage(response.ok ? '戦略を承認しました。' : '承認できませんでした。');
     if (response.ok) router.refresh();
