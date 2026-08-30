@@ -59,7 +59,7 @@ describe('service admin HTTP', () => {
     vi.stubEnv('DIRECT_URL', 'postgresql://local');
     vi.stubEnv('SESSION_SECRET', '12345678901234567890123456789012');
     state.user = { userId: 'admin-1' };
-    state.create.mockResolvedValue({ id: 'service-1', workspaceId, groupId: 'group-1', ...body });
+    state.create.mockResolvedValue({ id: 'service-1', groupId: 'group-1', ...body });
   });
 
   it('requires authentication and same-origin mutation', async () => {
