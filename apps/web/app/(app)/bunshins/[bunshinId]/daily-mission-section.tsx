@@ -130,7 +130,7 @@ export function missionGuide(mission: DailyMissionView) {
   ];
 }
 
-function MissionIdea({ mission }: { mission: DailyMissionView }) {
+export function MissionIdea({ mission }: { mission: DailyMissionView }) {
   return (
     <div className="mission-assistance-content">
       <h4>今日の企画</h4>
@@ -195,7 +195,7 @@ function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
   );
 }
 
-function MissionGuide({ mission }: { mission: DailyMissionView }) {
+export function MissionGuide({ mission }: { mission: DailyMissionView }) {
   return (
     <div className="mission-assistance-content">
       <h4>作り方</h4>
@@ -208,7 +208,7 @@ function MissionGuide({ mission }: { mission: DailyMissionView }) {
   );
 }
 
-function MissionContent({ mission }: { mission: DailyMissionView }) {
+export function MissionContent({ mission }: { mission: DailyMissionView }) {
   const content = mission.content;
   if (mission.format === 'TEXT') {
     return (

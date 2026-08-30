@@ -1,9 +1,11 @@
 import { GetBunshin, ListBunshinCapabilityAssignments } from '@bunshin/application';
 import {
   ListContentPillars,
+  ListDailyMissions,
   ListSocialAccountStrategies,
   ListSocialProfiles,
   ListWeeklyPlans,
+  type SocialProfile,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -16,7 +18,9 @@ import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/soc
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
 import { AccountStrategySection } from '../../../../(app)/bunshins/[bunshinId]/account-strategy-section';
 import { WeeklyPlanSection } from '../../../../(app)/bunshins/[bunshinId]/weekly-plan-section';
+import type { DailyMissionView } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 import { ServiceBunshinEditor } from './service-bunshin-editor';
+import { ServiceDailyMissionSection } from './service-daily-mission-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,10 +54,11 @@ export default async function ServiceBunshinDetailPage({
   const db = await import('@bunshin/database');
   let bunshin;
   let capabilities;
-  let socialProfiles;
+  let socialProfiles: SocialProfile[];
   let contentPillars;
   let accountStrategies;
   let weeklyPlans;
+  let dailyMissions: DailyMissionView[];
   try {
     const scope = {
       workspaceId: service.workspaceId,
@@ -83,6 +88,39 @@ export default async function ServiceBunshinDetailPage({
       )
     ).flat();
     weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(scope);
+    dailyMissions = (
+      await new ListDailyMissions(new db.PrismaDailyMissionRepository()).execute(scope)
+    ).map((mission) => ({
+      id: mission.id,
+      missionDate: mission.missionDate,
+      status: mission.status,
+      format: mission.format,
+      assistanceLevel: mission.assistanceLevel,
+      estimatedMinutes: mission.estimatedMinutes,
+      topic: mission.topic,
+      angle: mission.angle,
+      reason: mission.reason,
+      campaignId: mission.campaignId,
+      classification: mission.classification,
+      qualityScore: mission.qualityScore,
+      content: mission.content,
+      decision: 'PENDING',
+      rejectionReason: null,
+      platform: socialProfiles.find(({ id }) => id === mission.socialProfileId)?.platform ?? null,
+      postedAt: null,
+      feedback: null,
+      trendContext: null,
+      externalLinkUsage: mission.linkUsage
+        ? {
+            linkName: mission.linkUsage.linkName,
+            insertedUrl: mission.linkUsage.insertedUrl,
+            expiresAt: mission.linkUsage.expiresAt?.toISOString() ?? null,
+            productName: mission.linkUsage.productName,
+            campaignName: mission.linkUsage.campaignName,
+            advertisingClassification: mission.linkUsage.advertisingClassification,
+          }
+        : null,
+    }));
   } catch {
     notFound();
   }
@@ -152,6 +190,17 @@ export default async function ServiceBunshinDetailPage({
             plans={weeklyPlans}
             endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/weekly-plans`}
             managedGenerationOnly
+          />
+        </section>
+        <section className="service-entry__card">
+          <ServiceDailyMissionSection
+            endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
+            profiles={socialProfiles}
+            missions={dailyMissions}
+            active={
+              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
+              'ACTIVE'
+            }
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>
