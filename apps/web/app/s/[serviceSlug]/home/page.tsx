@@ -249,6 +249,9 @@ export default async function ServiceMemberHome({
               <a className="button" href={`/s/${service.configuration.slug}/manage/settings`}>
                 サービスの見た目・登録設定
               </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/line`}>
+                サービス専用LINE
+              </a>
               <a className="button" href={`/s/${service.configuration.slug}/manage/members`}>
                 参加者と利用機能
               </a>
