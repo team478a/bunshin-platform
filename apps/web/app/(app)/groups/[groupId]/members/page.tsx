@@ -32,6 +32,13 @@ const membershipSchema = z.object({
   reason: z.string().trim().min(5).max(1000),
 });
 
+const approvalSchema = z.object({
+  workspaceId: z.uuid(),
+  groupId: z.uuid(),
+  groupMembershipId: z.uuid(),
+  reason: z.string().trim().min(5).max(1000),
+});
+
 function optionalLimit(value: string): number | null {
   if (value.trim() === '') return null;
   const parsed = Number(value);
@@ -108,6 +115,35 @@ async function saveMembership(formData: FormData) {
   redirect(memberPath(input.data.groupId, input.data.groupMembershipId, '&memberSaved=1'));
 }
 
+async function approveParticipation(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const input = approvalSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/groups');
+  try {
+    const db = await import('@bunshin/database');
+    const { ServiceParticipationService } = await import('@bunshin/application');
+    await new ServiceParticipationService(new db.PrismaServiceParticipationRepository()).approve({
+      workspaceId: input.data.workspaceId,
+      serviceId: input.data.groupId,
+      groupMembershipId: input.data.groupMembershipId,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+    });
+  } catch (error) {
+    const code =
+      error instanceof ApplicationError && error.code === 'VALIDATION_ERROR'
+        ? 'approval-invalid'
+        : error instanceof ApplicationError && error.code === 'FORBIDDEN'
+          ? 'approval-forbidden'
+          : 'approval-failed';
+    redirect(memberPath(input.data.groupId, undefined, `?error=${code}`));
+  }
+  revalidatePath(memberPath(input.data.groupId));
+  redirect(memberPath(input.data.groupId, undefined, '?approved=1'));
+}
+
 function localDateTime(value: Date | null): string {
   if (!value) return '';
   return value
@@ -128,6 +164,7 @@ export default async function GroupMemberFeaturesPage({
     member?: string;
     saved?: string;
     memberSaved?: string;
+    approved?: string;
     error?: string;
   }>;
 }) {
@@ -219,7 +256,12 @@ export default async function GroupMemberFeaturesPage({
 
   const query = await searchParams;
   const selectedMember =
-    group.memberships.find((item) => item.id === query.member) ?? group.memberships[0];
+    group.memberships.find(
+      (item) => item.id === query.member && item.status !== 'PENDING_APPROVAL',
+    ) ?? group.memberships.find((item) => item.status !== 'PENDING_APPROVAL');
+  const pendingMemberships = group.memberships.filter(
+    (membership) => membership.status === 'PENDING_APPROVAL',
+  );
   const assignments = new Map(
     (selectedMember?.featureAssignments ?? []).map((item) => [item.featureKey, item]),
   );
@@ -234,6 +276,9 @@ export default async function GroupMemberFeaturesPage({
     'member-forbidden':
       'この変更は許可されていません。最後の管理者は停止できず、管理者の任命はシステム管理者が行います。',
     'member-failed': '参加者の状態を保存できませんでした。もう一度お試しください。',
+    'approval-invalid': '承認理由を5文字以上で入力してください。',
+    'approval-forbidden': 'この参加申請を承認する権限がありません。',
+    'approval-failed': '参加申請を承認できませんでした。もう一度お試しください。',
   };
 
   return (
@@ -256,6 +301,11 @@ export default async function GroupMemberFeaturesPage({
           参加者の役割と状態を保存しました。
         </p>
       ) : null}
+      {query.approved === '1' ? (
+        <p className="notice notice--success" role="status">
+          参加申請を承認しました。
+        </p>
+      ) : null}
       {query.error ? (
         <p className="notice notice--danger" role="alert">
           {errors[query.error] ?? errors.failed}
@@ -265,17 +315,56 @@ export default async function GroupMemberFeaturesPage({
       <GroupInvitationEditor workspaceId={group.workspaceId} groupId={group.id} />
 
       <section className="settings-card">
+        <h2>承認を待っている参加申請</h2>
+        {pendingMemberships.length === 0 ? (
+          <p>現在、確認が必要な参加申請はありません。</p>
+        ) : (
+          <div className="admin-list">
+            {pendingMemberships.map((membership) => (
+              <article className="admin-list__item" key={membership.id}>
+                <h3>{membership.user.displayName}</h3>
+                <p>{membership.user.email ?? 'メールアドレスなし'}</p>
+                <form className="form-stack" action={approveParticipation}>
+                  <input type="hidden" name="workspaceId" value={group.workspaceId} />
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="groupMembershipId" value={membership.id} />
+                  <label className="field">
+                    <span className="field__label">承認する理由</span>
+                    <textarea
+                      className="field__control"
+                      name="reason"
+                      required
+                      minLength={5}
+                      maxLength={1000}
+                      placeholder="例：登録内容を確認したため承認"
+                    />
+                  </label>
+                  <button className="button" type="submit">
+                    この人の参加を承認する
+                  </button>
+                </form>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="settings-card">
         <h2>設定する参加者</h2>
-        {group.memberships.length === 0 ? <p>参加者がまだいません。</p> : null}
+        {group.memberships.length === pendingMemberships.length ? (
+          <p>利用中の参加者はまだいません。</p>
+        ) : null}
         <form method="get" className="form-stack">
           <label className="field">
             <span className="field__label">参加者を選ぶ</span>
             <select className="field__control" name="member" defaultValue={selectedMember?.id}>
-              {group.memberships.map((membership) => (
-                <option key={membership.id} value={membership.id}>
-                  {membership.user.displayName}（{roleLabel[membership.role]}）
-                </option>
-              ))}
+              {group.memberships
+                .filter((membership) => membership.status !== 'PENDING_APPROVAL')
+                .map((membership) => (
+                  <option key={membership.id} value={membership.id}>
+                    {membership.user.displayName}（{roleLabel[membership.role]}）
+                  </option>
+                ))}
             </select>
           </label>
           <button className="button button--secondary" type="submit">
