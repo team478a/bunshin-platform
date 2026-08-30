@@ -36,6 +36,7 @@ export interface CampaignAdminScope {
 
 export interface CampaignParticipantScope {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
 }

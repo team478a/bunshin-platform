@@ -12426,6 +12426,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
   private planningWhere(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     campaignId?: string;
@@ -12434,6 +12435,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
   }): Prisma.CampaignWhereInput {
     return {
       ...(input.campaignId ? { id: input.campaignId } : {}),
+      ...(input.groupId ? { groupId: input.groupId } : {}),
       status: 'OPEN',
       startsAt: { lte: input.to },
       endsAt: { gt: input.from },

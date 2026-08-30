@@ -29,11 +29,12 @@ describe('service daily mission boundary', () => {
     expect(source).not.toContain('workspaceId: z.');
   });
 
-  it('uses safe service generation without personal context', () => {
+  it('uses safe service generation without personal context and rechecks campaign ownership', () => {
     expect(source).toContain('serviceSafeMode: true');
     expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*null/);
     expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*\[\]/);
-    expect(generation).toContain("'service campaign generation is not connected'");
+    expect(generation).toContain('campaign.productPack.groupId !== input.groupId');
+    expect(generation).toContain("'service campaign unavailable'");
   });
 
   it('connects the service mission view and endpoint', () => {

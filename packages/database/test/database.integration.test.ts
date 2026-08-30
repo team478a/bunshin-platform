@@ -3632,6 +3632,17 @@ integration('database ownership boundaries', () => {
     await expect(
       service.listPlanningContexts({
         workspaceId: participant.workspace.id,
+        groupId: randomUUID(),
+        actorUserId: participant.user.id,
+        bunshinId: bunshin.id,
+        from: new Date(),
+        to: new Date(Date.now() + 60_000),
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      service.listPlanningContexts({
+        workspaceId: participant.workspace.id,
+        groupId: group.id,
         actorUserId: participant.user.id,
         bunshinId: bunshin.id,
         from: new Date(),

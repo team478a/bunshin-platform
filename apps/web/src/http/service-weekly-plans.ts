@@ -136,7 +136,7 @@ export function generateServiceWeeklyPlanResponse(
         usageIdempotencyKey: `${requestId}:service-weekly-plan`,
         existingPolicy: 'CONFLICT',
         includeGrantedKnowledge: false,
-        includeCampaigns: false,
+        includeCampaigns: true,
         additionalKnowledge: serviceKnowledge.officialKnowledge,
       });
       return weeklyPlanDto(result.plan, result.titles);

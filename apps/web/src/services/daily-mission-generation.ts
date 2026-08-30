@@ -149,8 +149,6 @@ export class DailyMissionGenerationService {
       const weeklyItem = weeklyPlan.items.find(
         ({ scheduledDate }) => scheduledDate === input.missionDate,
       )!;
-      if (input.serviceSafeMode && weeklyItem.campaignId)
-        throw new ApplicationError('CONFLICT', 'service campaign generation is not connected');
       const campaign = weeklyItem.campaignId
         ? await new CampaignService(new db.PrismaCampaignRepository()).resolvePlanningContext({
             ...scope,
@@ -158,6 +156,8 @@ export class DailyMissionGenerationService {
             at: new Date(`${input.missionDate}T12:00:00.000Z`),
           })
         : null;
+      if (campaign && input.serviceSafeMode && campaign.productPack.groupId !== input.groupId)
+        throw new ApplicationError('NOT_FOUND', 'service campaign unavailable');
       if (campaign) {
         const entitlements = new GroupFeatureEntitlementService(
           new db.PrismaGroupFeatureEntitlementRepository(),
