@@ -3438,13 +3438,20 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
   private async authorized(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
     manage: boolean,
   ) {
     const value = await client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',

@@ -3,6 +3,7 @@ import {
   ListContentPillars,
   ListSocialAccountStrategies,
   ListSocialProfiles,
+  ListWeeklyPlans,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
@@ -14,6 +15,7 @@ import { PublicShell } from '../../../../ui/public-shell';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
 import { AccountStrategySection } from '../../../../(app)/bunshins/[bunshinId]/account-strategy-section';
+import { WeeklyPlanSection } from '../../../../(app)/bunshins/[bunshinId]/weekly-plan-section';
 import { ServiceBunshinEditor } from './service-bunshin-editor';
 
 export const dynamic = 'force-dynamic';
@@ -51,6 +53,7 @@ export default async function ServiceBunshinDetailPage({
   let socialProfiles;
   let contentPillars;
   let accountStrategies;
+  let weeklyPlans;
   try {
     const scope = {
       workspaceId: service.workspaceId,
@@ -79,6 +82,7 @@ export default async function ServiceBunshinDetailPage({
         ),
       )
     ).flat();
+    weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(scope);
   } catch {
     notFound();
   }
@@ -134,6 +138,20 @@ export default async function ServiceBunshinDetailPage({
               'ACTIVE'
             }
             endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-account-strategies`}
+          />
+        </section>
+        <section className="service-entry__card">
+          <WeeklyPlanSection
+            workspaceId={service.workspaceId}
+            bunshinId={bunshin.id}
+            capabilityStatus={
+              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
+            }
+            profiles={socialProfiles}
+            pillars={contentPillars}
+            plans={weeklyPlans}
+            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/weekly-plans`}
+            managedGenerationOnly
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>

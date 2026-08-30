@@ -870,6 +870,7 @@ export interface WeeklyPlan {
 }
 export interface WeeklyPlanScope {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
 }

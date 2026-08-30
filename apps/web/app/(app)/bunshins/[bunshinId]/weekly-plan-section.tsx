@@ -178,6 +178,8 @@ export function WeeklyPlanSection({
   profiles,
   pillars,
   plans,
+  endpointBase,
+  managedGenerationOnly = false,
 }: {
   workspaceId: string;
   bunshinId: string;
@@ -185,9 +187,13 @@ export function WeeklyPlanSection({
   profiles: SocialProfileView[];
   pillars: ContentPillarView[];
   plans: WeeklyPlanView[];
+  endpointBase?: string;
+  managedGenerationOnly?: boolean;
 }) {
   const router = useRouter();
-  const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/weekly-plans`;
+  const endpoint =
+    endpointBase ??
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/weekly-plans`;
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -315,7 +321,8 @@ export function WeeklyPlanSection({
         </form>
       ) : null}
       {plans.map((plan) => {
-        const editable = capabilityStatus === 'ACTIVE' && plan.status === 'DRAFT';
+        const actionable = capabilityStatus === 'ACTIVE' && plan.status === 'DRAFT';
+        const editable = actionable && !managedGenerationOnly;
         return (
           <article className="weekly-plan-card" key={plan.id}>
             <h3>
@@ -416,15 +423,17 @@ export function WeeklyPlanSection({
                 onSubmit={(value) => mutation(`${endpoint}/${plan.id}/items`, 'POST', value)}
               />
             ) : null}
-            {editable ? (
+            {actionable ? (
               <div className="weekly-plan-actions">
-                <button
-                  disabled={pending || activePillars.length === 0}
-                  type="button"
-                  onClick={() => setAddingTo(plan.id)}
-                >
-                  予定を追加
-                </button>
+                {!managedGenerationOnly ? (
+                  <button
+                    disabled={pending || activePillars.length === 0}
+                    type="button"
+                    onClick={() => setAddingTo(plan.id)}
+                  >
+                    予定を追加
+                  </button>
+                ) : null}
                 <button
                   disabled={pending}
                   type="button"
@@ -450,7 +459,7 @@ export function WeeklyPlanSection({
           </article>
         );
       })}
-      {capabilityStatus === 'ACTIVE' && !creating ? (
+      {capabilityStatus === 'ACTIVE' && !creating && !managedGenerationOnly ? (
         <button disabled={pending} type="button" onClick={() => setCreating(true)}>
           自分で1週間の予定を作る
         </button>
