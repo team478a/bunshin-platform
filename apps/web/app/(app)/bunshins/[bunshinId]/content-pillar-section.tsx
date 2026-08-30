@@ -81,18 +81,25 @@ export function ContentPillarSection({
   bunshinId,
   capabilityStatus,
   pillars,
+  endpointBase,
+  autoStart = false,
 }: {
   workspaceId: string;
   bunshinId: string;
   capabilityStatus: SocialCapabilityStatus;
   pillars: ContentPillarView[];
+  endpointBase?: string;
+  autoStart?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/content-pillars`;
-  const readonly = capabilityStatus === 'SUSPENDED' || capabilityStatus === 'LOCKED';
+  const endpoint =
+    endpointBase ??
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/content-pillars`;
+  const effectiveStatus = autoStart && capabilityStatus === null ? 'ACTIVE' : capabilityStatus;
+  const readonly = effectiveStatus === 'SUSPENDED' || effectiveStatus === 'LOCKED';
 
   async function mutation(url: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown) {
     setPending(true);
@@ -122,7 +129,9 @@ export function ContentPillarSection({
     <section className="content-pillar-section">
       <h2>投稿するテーマ</h2>
       <p>よく投稿したい話題を登録します。数字が大きいテーマほど、たくさん使います。</p>
-      {capabilityStatus === null ? <p>先に「SNSのお手伝いをはじめる」を押してください。</p> : null}
+      {capabilityStatus === null && !autoStart ? (
+        <p>先に「SNSのお手伝いをはじめる」を押してください。</p>
+      ) : null}
       {readonly ? <p>今はテーマを見ることだけできます。内容を変えることはできません。</p> : null}
       {pillars.length === 0 ? <p>投稿するテーマはまだありません。</p> : null}
       <ul className="content-pillar-list">
@@ -142,7 +151,7 @@ export function ContentPillarSection({
                 </h3>
                 {pillar.description ? <p>{pillar.description}</p> : null}
                 <p>使う多さ：{pillar.weight}</p>
-                {!readonly && capabilityStatus === 'ACTIVE' ? (
+                {!readonly && effectiveStatus === 'ACTIVE' ? (
                   <div className="content-pillar-actions">
                     <button disabled={pending} type="button" onClick={() => setEditing(pillar.id)}>
                       編集
@@ -177,7 +186,7 @@ export function ContentPillarSection({
           </li>
         ))}
       </ul>
-      {capabilityStatus === 'ACTIVE' && editing === null ? (
+      {effectiveStatus === 'ACTIVE' && editing === null ? (
         <button type="button" disabled={pending} onClick={() => setEditing('NEW')}>
           投稿テーマを追加
         </button>
