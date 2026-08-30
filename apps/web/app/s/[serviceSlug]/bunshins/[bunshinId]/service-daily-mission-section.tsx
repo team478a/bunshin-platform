@@ -6,6 +6,8 @@ import {
   MissionContent,
   MissionGuide,
   MissionIdea,
+  copyOptions,
+  rejectionReasons,
   type DailyMissionView,
 } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 
@@ -39,6 +41,9 @@ export function ServiceDailyMissionSection({
   const [missionDate, setMissionDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [otherDetail, setOtherDetail] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
   async function generate() {
@@ -66,6 +71,74 @@ export function ServiceDailyMissionSection({
     } finally {
       setPending(false);
     }
+  }
+
+  const key = () => crypto.randomUUID();
+
+  async function record(id: string, resource: string, payload: Record<string, unknown>) {
+    if (pendingAction) return false;
+    setPendingAction(`${id}:${resource}`);
+    setMessage(null);
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(id)}/${resource}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        setMessage('操作を記録できませんでした。もう一度お試しください。');
+        return false;
+      }
+      return true;
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function decide(id: string, decision: 'ACCEPTED' | 'REJECTED', rejectionReason?: string) {
+    const ok = await record(id, 'decision', {
+      decision,
+      idempotencyKey: key(),
+      ...(rejectionReason ? { rejectionReason } : {}),
+      ...(rejectionReason === 'OTHER' && otherDetail.trim()
+        ? { rejectionDetail: otherDetail.trim() }
+        : {}),
+    });
+    if (ok) {
+      setRejecting(null);
+      setOtherDetail('');
+      router.refresh();
+    }
+  }
+
+  async function copy(id: string, value: string, type: string, metadata?: { slideIndex: number }) {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      setMessage('コピーできませんでした。ブラウザの設定を確認してください。');
+      return;
+    }
+    const ok = await record(id, 'activities', {
+      type,
+      idempotencyKey: key(),
+      ...(metadata ? { metadata } : {}),
+    });
+    setMessage(ok ? 'コピーしました。SNSへ貼り付けて使えます。' : null);
+  }
+
+  async function markPosted(mission: DailyMissionView) {
+    if (!mission.platform) return;
+    if (
+      await record(mission.id, 'post-record', {
+        platform: mission.platform,
+        idempotencyKey: key(),
+      })
+    )
+      router.refresh();
+  }
+
+  async function feedback(id: string, rating: 'GOOD' | 'NEUTRAL' | 'BAD') {
+    if (await record(id, 'feedback', { rating, idempotencyKey: key() })) router.refresh();
   }
 
   return (
@@ -119,7 +192,15 @@ export function ServiceDailyMissionSection({
             <p>{mission.reason}</p>
             <button
               type="button"
-              onClick={() => setExpanded(expanded === mission.id ? null : mission.id)}
+              onClick={() => {
+                const opening = expanded !== mission.id;
+                setExpanded(opening ? mission.id : null);
+                if (opening && active)
+                  void record(mission.id, 'activities', {
+                    type: 'VIEWED',
+                    idempotencyKey: key(),
+                  });
+              }}
             >
               {expanded === mission.id ? '閉じる' : '内容を見る'}
             </button>
@@ -128,6 +209,108 @@ export function ServiceDailyMissionSection({
                 <MissionIdea mission={mission} />
                 <MissionGuide mission={mission} />
                 <MissionContent mission={mission} />
+                {active && mission.decision !== 'ACCEPTED' ? (
+                  <div className="mission-decision-actions">
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => void decide(mission.id, 'ACCEPTED')}
+                    >
+                      採用する
+                    </button>{' '}
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => setRejecting(mission.id)}
+                    >
+                      今回は使わない
+                    </button>
+                  </div>
+                ) : null}
+                {active && rejecting === mission.id ? (
+                  <div className="mission-rejection">
+                    <p>近い理由を1つ選んでください。</p>
+                    {rejectionReasons.map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => void decide(mission.id, 'REJECTED', value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <label>
+                      その他（書かなくても大丈夫です）
+                      <textarea
+                        value={otherDetail}
+                        maxLength={1000}
+                        onChange={(event) => setOtherDetail(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => void decide(mission.id, 'REJECTED', 'OTHER')}
+                    >
+                      その他で決定
+                    </button>
+                  </div>
+                ) : null}
+                {mission.decision === 'REJECTED' ? <p>今回は使わないと記録しました。</p> : null}
+                {active && mission.decision === 'ACCEPTED' ? (
+                  <div className="mission-accepted">
+                    <p className="mission-step-complete">✓ 採用しました</p>
+                    {copyOptions(mission).map((option, index) => (
+                      <button
+                        key={`${option.type}:${index}`}
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() =>
+                          void copy(
+                            mission.id,
+                            option.value,
+                            option.type,
+                            'metadata' in option ? option.metadata : undefined,
+                          )
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                    {mission.postedAt === null ? (
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null || mission.platform === null}
+                        onClick={() => void markPosted(mission)}
+                      >
+                        投稿しました
+                      </button>
+                    ) : (
+                      <div className="mission-feedback">
+                        <p className="mission-step-complete">✓ 投稿済み</p>
+                        <p>この投稿は、あなたらしかったですか？</p>
+                        {(
+                          [
+                            ['GOOD', '👍 自分らしい'],
+                            ['NEUTRAL', '😐 普通'],
+                            ['BAD', '👎 違う'],
+                          ] as const
+                        ).map(([rating, label]) => (
+                          <button
+                            key={rating}
+                            type="button"
+                            aria-pressed={mission.feedback === rating}
+                            disabled={pendingAction !== null || mission.feedback === rating}
+                            onClick={() => void feedback(mission.id, rating)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </li>

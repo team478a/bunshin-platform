@@ -2333,6 +2333,7 @@ export class DecideMission extends DailyMissionMutation {
   }
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     dailyMissionId: string;
@@ -2382,6 +2383,7 @@ export class RecordMissionActivity extends DailyMissionMutation {
   }
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     dailyMissionId: string;

@@ -265,7 +265,7 @@ export function MissionContent({ mission }: { mission: DailyMissionView }) {
   );
 }
 
-const rejectionReasons = [
+export const rejectionReasons = [
   ['NOT_MY_STYLE', '自分らしくない'],
   ['WRONG_TOPIC', '話題が違う'],
   ['TOO_DIFFICULT', '難しすぎる'],
