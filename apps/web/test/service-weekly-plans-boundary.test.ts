@@ -22,9 +22,10 @@ describe('service weekly plan boundary', () => {
     expect(source).not.toContain('workspaceId: z.');
   });
 
-  it('does not mix personal knowledge or campaigns into service generation', () => {
+  it('excludes personal knowledge and enables service-scoped campaigns', () => {
     expect(source).toContain('includeGrantedKnowledge: false');
-    expect(source).toContain('includeCampaigns: false');
+    expect(source).toContain('includeCampaigns: true');
+    expect(source).toContain('groupId: service.serviceId');
     expect(generation).toContain('input.includeGrantedKnowledge === false');
     expect(generation).toContain('input.includeCampaigns !== false');
   });
