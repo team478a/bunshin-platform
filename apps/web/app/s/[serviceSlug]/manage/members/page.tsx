@@ -13,6 +13,7 @@ export default async function ServiceMembersPage({
     member?: string;
     saved?: string;
     memberSaved?: string;
+    staffSaved?: string;
     approved?: string;
     error?: string;
   }>;

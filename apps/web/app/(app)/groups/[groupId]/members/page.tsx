@@ -1,4 +1,8 @@
-import { GroupFeatureEntitlementService, GroupParticipationService } from '@bunshin/application';
+import {
+  GroupFeatureEntitlementService,
+  GroupParticipationService,
+  ServiceStaffRoleService,
+} from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import type { Route } from 'next';
 import Link from 'next/link';
@@ -41,6 +45,15 @@ const approvalSchema = z.object({
   groupMembershipId: z.uuid(),
   reason: z.string().trim().min(5).max(1000),
   serviceSlug: z.string().trim().max(120).optional(),
+});
+
+const serviceRoleSchema = z.object({
+  workspaceId: z.uuid(),
+  groupId: z.uuid(),
+  groupMembershipId: z.uuid(),
+  serviceRole: z.enum(['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR', 'PARTICIPANT']),
+  reason: z.string().trim().min(5).max(1000),
+  serviceSlug: z.string().trim().min(1).max(120),
 });
 
 function optionalLimit(value: string): number | null {
@@ -139,6 +152,41 @@ async function saveMembership(formData: FormData) {
   redirect(`${returnPath}&memberSaved=1` as Route);
 }
 
+async function saveServiceRole(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const input = serviceRoleSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/groups');
+  const returnPath = await memberReturnPath(
+    input.data.groupId,
+    input.data.serviceSlug,
+    input.data.groupMembershipId,
+  );
+  try {
+    const db = await import('@bunshin/database');
+    await new ServiceStaffRoleService(new db.PrismaServiceStaffRoleRepository()).set({
+      workspaceId: input.data.workspaceId,
+      groupId: input.data.groupId,
+      membershipId: input.data.groupMembershipId,
+      serviceRole: input.data.serviceRole,
+      actorUserId: actor.userId,
+      reason: input.data.reason,
+    });
+  } catch (error) {
+    const code =
+      error instanceof ApplicationError && error.code === 'VALIDATION_ERROR'
+        ? 'staff-invalid'
+        : error instanceof ApplicationError && error.code === 'FORBIDDEN'
+          ? 'staff-forbidden'
+          : 'staff-failed';
+    redirect(`${returnPath}&error=${code}` as Route);
+  }
+  revalidatePath(memberPath(input.data.groupId));
+  revalidatePath(`/s/${input.data.serviceSlug}/manage/members`);
+  redirect(`${returnPath}&staffSaved=1` as Route);
+}
+
 async function approveParticipation(formData: FormData) {
   'use server';
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -178,6 +226,12 @@ function localDateTime(value: Date | null): string {
 }
 
 const roleLabel = { MANAGER: 'グループ管理者', PARTICIPANT: '参加者' } as const;
+const serviceRoleLabel = {
+  SERVICE_OWNER: 'サービス所有者',
+  SERVICE_ADMIN: '運営管理者',
+  CONTENT_EDITOR: 'コンテンツ担当者',
+  PARTICIPANT: '一般参加者',
+} as const;
 const statusLabel = { ENABLED: '利用できる', DISABLED: '利用できない' } as const;
 
 export default async function GroupMemberFeaturesPage({
@@ -189,6 +243,7 @@ export default async function GroupMemberFeaturesPage({
     member?: string;
     saved?: string;
     memberSaved?: string;
+    staffSaved?: string;
     approved?: string;
     error?: string;
     service?: string;
@@ -209,7 +264,7 @@ export default async function GroupMemberFeaturesPage({
   const [manager, workspaceManager, platformAdmin] = await Promise.all([
     db.prisma.groupMembership.findFirst({
       where: { groupId: groupId.data, userId: actor.userId, role: 'MANAGER', status: 'ACTIVE' },
-      select: { id: true },
+      select: { id: true, serviceRole: true },
     }),
     db.prisma.workspaceMembership.findFirst({
       where: {
@@ -218,7 +273,7 @@ export default async function GroupMemberFeaturesPage({
         status: 'ACTIVE',
         role: { in: ['OWNER', 'ADMIN'] },
       },
-      select: { id: true },
+      select: { id: true, role: true },
     }),
     db.prisma.platformAdmin.findFirst({
       where: {
@@ -226,11 +281,13 @@ export default async function GroupMemberFeaturesPage({
         status: 'ACTIVE',
         role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
       },
-      select: { id: true },
+      select: { id: true, role: true },
     }),
   ]);
   if (!manager && !workspaceManager && !platformAdmin) notFound();
   const elevated = Boolean(workspaceManager || platformAdmin);
+  const canManageStaff =
+    manager?.serviceRole === 'SERVICE_OWNER' || platformAdmin?.role === 'SUPER_ADMIN';
 
   const group = await db.prisma.group.findFirst({
     where: { id: groupId.data, workspaceId: groupScope.workspaceId, status: 'ACTIVE' },
@@ -238,11 +295,13 @@ export default async function GroupMemberFeaturesPage({
       id: true,
       workspaceId: true,
       name: true,
+      serviceConfiguration: { select: { id: true } },
       workspace: { select: { name: true } },
       memberships: {
         select: {
           id: true,
           role: true,
+          serviceRole: true,
           status: true,
           user: { select: { displayName: true, email: true } },
           featureAssignments: true,
@@ -305,6 +364,10 @@ export default async function GroupMemberFeaturesPage({
     'approval-invalid': '承認理由を5文字以上で入力してください。',
     'approval-forbidden': 'この参加申請を承認する権限がありません。',
     'approval-failed': '参加申請を承認できませんでした。もう一度お試しください。',
+    'staff-invalid': '担当する役割と変更理由を確認してください。変更理由は5文字以上必要です。',
+    'staff-forbidden':
+      '担当者の役割を変更できません。サービス所有者だけが変更でき、最後の所有者は外せません。',
+    'staff-failed': '担当者の役割を保存できませんでした。もう一度お試しください。',
   };
 
   return (
@@ -335,6 +398,11 @@ export default async function GroupMemberFeaturesPage({
       {query.memberSaved === '1' ? (
         <p className="notice notice--success" role="status">
           参加者の役割と状態を保存しました。
+        </p>
+      ) : null}
+      {query.staffSaved === '1' ? (
+        <p className="notice notice--success" role="status">
+          担当者の役割を保存しました。
         </p>
       ) : null}
       {query.approved === '1' ? (
@@ -406,7 +474,11 @@ export default async function GroupMemberFeaturesPage({
                 .filter((membership) => membership.status !== 'PENDING_APPROVAL')
                 .map((membership) => (
                   <option key={membership.id} value={membership.id}>
-                    {membership.user.displayName}（{roleLabel[membership.role]}）
+                    {membership.user.displayName}（
+                    {group.serviceConfiguration
+                      ? serviceRoleLabel[membership.serviceRole]
+                      : roleLabel[membership.role]}
+                    ）
                   </option>
                 ))}
             </select>
@@ -421,25 +493,76 @@ export default async function GroupMemberFeaturesPage({
               選択中：{selectedMember.user.displayName} ／{' '}
               {selectedMember.user.email ?? 'メールなし'}
             </p>
+            {group.serviceConfiguration && query.service ? (
+              <section className="settings-card settings-card--nested">
+                <h3>サービスで担当する役割</h3>
+                <p>
+                  運営の責任者、日々の管理担当、投稿内容を作る担当、一般参加者を分けて設定します。
+                </p>
+                <form className="form-stack" action={saveServiceRole}>
+                  <input type="hidden" name="serviceSlug" value={query.service} />
+                  <input type="hidden" name="workspaceId" value={group.workspaceId} />
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="groupMembershipId" value={selectedMember.id} />
+                  <label className="field">
+                    <span className="field__label">担当する役割</span>
+                    <select
+                      className="field__control"
+                      name="serviceRole"
+                      defaultValue={selectedMember.serviceRole}
+                      disabled={!canManageStaff}
+                    >
+                      <option value="SERVICE_OWNER">サービス所有者</option>
+                      <option value="SERVICE_ADMIN">運営管理者</option>
+                      <option value="CONTENT_EDITOR">コンテンツ担当者</option>
+                      <option value="PARTICIPANT">一般参加者</option>
+                    </select>
+                  </label>
+                  <p>
+                    サービス所有者は担当者の役割を変更できます。運営管理者は日々の運営、コンテンツ担当者は投稿内容の準備を担当します。
+                  </p>
+                  <label className="field">
+                    <span className="field__label">変更理由</span>
+                    <textarea
+                      className="field__control"
+                      name="reason"
+                      required
+                      minLength={5}
+                      maxLength={1000}
+                      placeholder="例：投稿内容を準備する担当になったため"
+                      disabled={!canManageStaff}
+                    />
+                  </label>
+                  <button className="button" type="submit" disabled={!canManageStaff}>
+                    担当する役割を保存
+                  </button>
+                  {!canManageStaff ? <p>この設定はサービス所有者だけが変更できます。</p> : null}
+                </form>
+              </section>
+            ) : null}
             <form className="form-stack" action={saveMembership}>
               {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
               <input type="hidden" name="workspaceId" value={group.workspaceId} />
               <input type="hidden" name="groupId" value={group.id} />
               <input type="hidden" name="groupMembershipId" value={selectedMember.id} />
-              <label className="field">
-                <span className="field__label">役割</span>
-                <select
-                  className="field__control"
-                  name="role"
-                  defaultValue={selectedMember.role}
-                  disabled={!elevated && selectedMember.role === 'MANAGER'}
-                >
-                  <option value="PARTICIPANT">参加者</option>
-                  <option value="MANAGER" disabled={!elevated}>
-                    グループ管理者
-                  </option>
-                </select>
-              </label>
+              {!group.serviceConfiguration ? (
+                <label className="field">
+                  <span className="field__label">役割</span>
+                  <select
+                    className="field__control"
+                    name="role"
+                    defaultValue={selectedMember.role}
+                    disabled={!elevated && selectedMember.role === 'MANAGER'}
+                  >
+                    <option value="PARTICIPANT">参加者</option>
+                    <option value="MANAGER" disabled={!elevated}>
+                      グループ管理者
+                    </option>
+                  </select>
+                </label>
+              ) : (
+                <input type="hidden" name="role" value={selectedMember.role} />
+              )}
               <label className="field">
                 <span className="field__label">現在の状態</span>
                 <select
