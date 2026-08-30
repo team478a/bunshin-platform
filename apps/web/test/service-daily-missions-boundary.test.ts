@@ -13,6 +13,13 @@ const detailPage = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
   'utf8',
 );
+const experience = readFileSync(
+  new URL(
+    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('service daily mission boundary', () => {
   it('derives service authority on the server', () => {
@@ -32,5 +39,17 @@ describe('service daily mission boundary', () => {
   it('connects the service mission view and endpoint', () => {
     expect(detailPage).toContain('<ServiceDailyMissionSection');
     expect(detailPage).toContain('/daily-missions`}');
+  });
+
+  it('connects decisions, copies, posting and feedback through service routes', () => {
+    expect(source).toContain('decideServiceDailyMissionResponse');
+    expect(source).toContain('recordServiceMissionActivityResponse');
+    expect(source).toContain('recordServicePostResponse');
+    expect(source).toContain('recordServiceMissionFeedbackResponse');
+    expect(experience).toContain('採用する');
+    expect(experience).toContain('今回は使わない');
+    expect(experience).toContain('copyOptions(mission)');
+    expect(experience).toContain('投稿しました');
+    expect(experience).toContain('この投稿は、あなたらしかったですか？');
   });
 });

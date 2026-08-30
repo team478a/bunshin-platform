@@ -20,6 +20,8 @@ MS-2D-Dではサービス専用の週間投稿計画のAI生成・一覧・確�
 
 MS-2D-Eでは確定済み週間計画を基に、サービス専用の毎日の投稿案の生成・一覧・内容確認を接続した。未接続の個人Knowledge、Memory、Personality Version、Trend、Product Pack、Campaignはサービス版の生成入力から除外する。次は採用・不採用、コピー、投稿完了、Feedbackをサービス境界で接続する。
 
+MS-2D-Fではサービス専用の投稿案へ、採用・不採用、不採用理由、コピー履歴、手動投稿完了、本人らしさFeedbackを接続した。すべての操作でサービス、所有者、分身、投稿案の境界をサーバー側で再検証する。次はサービス専用LINEから今日の投稿案へ戻る導線と継続状況表示を検討する。
+
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 
 - MS-1: Service Foundation

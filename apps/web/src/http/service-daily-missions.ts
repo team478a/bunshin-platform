@@ -1,5 +1,14 @@
 import 'server-only';
-import { ListDailyMissions } from '@bunshin/capability-social';
+import {
+  DecideMission,
+  ListDailyMissions,
+  MISSION_FEEDBACK_RATINGS,
+  MISSION_REJECTION_REASONS,
+  RecordManualPost,
+  RecordMissionActivity,
+  RecordMissionFeedback,
+  SOCIAL_PLATFORMS,
+} from '@bunshin/capability-social';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -7,6 +16,8 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { dailyMissionDto } from './daily-missions';
+import { missionActivityDto, missionDecisionDto } from './mission-engagement';
+import { missionFeedbackDto, postRecordDto } from './mission-outcome';
 
 const uuidSchema = z.string().uuid();
 const generateSchema = z
@@ -16,6 +27,41 @@ const generateSchema = z
     socialProfileId: uuidSchema,
     idempotencyKey: uuidSchema,
   })
+  .strict();
+const keySchema = z.string().trim().min(1).max(200);
+const decisionSchema = z.discriminatedUnion('decision', [
+  z.object({ decision: z.literal('ACCEPTED'), idempotencyKey: keySchema }).strict(),
+  z
+    .object({
+      decision: z.literal('REJECTED'),
+      rejectionReason: z.enum(MISSION_REJECTION_REASONS),
+      rejectionDetail: z.string().max(1000).nullable().optional(),
+      idempotencyKey: keySchema,
+    })
+    .strict(),
+]);
+const activitySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('VIEWED'), idempotencyKey: keySchema }).strict(),
+  z.object({ type: z.literal('COPIED_TEXT'), idempotencyKey: keySchema }).strict(),
+  z.object({ type: z.literal('COPIED_IMAGE_INSTRUCTION'), idempotencyKey: keySchema }).strict(),
+  z.object({ type: z.literal('COPIED_VIDEO_PROMPT'), idempotencyKey: keySchema }).strict(),
+  z.object({ type: z.literal('COPIED_SCRIPT'), idempotencyKey: keySchema }).strict(),
+  z
+    .object({
+      type: z.literal('COPIED_SLIDE'),
+      idempotencyKey: keySchema,
+      metadata: z
+        .object({ slideIndex: z.number().int().min(1).max(7) })
+        .strict()
+        .optional(),
+    })
+    .strict(),
+]);
+const postSchema = z
+  .object({ platform: z.enum(SOCIAL_PLATFORMS), idempotencyKey: keySchema })
+  .strict();
+const feedbackSchema = z
+  .object({ rating: z.enum(MISSION_FEEDBACK_RATINGS), idempotencyKey: keySchema })
   .strict();
 
 async function actorUserId() {
@@ -118,4 +164,121 @@ export function generateServiceDailyMissionResponse(
     201,
     requestId,
   );
+}
+
+export function decideServiceDailyMissionResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = decisionSchema.safeParse(await body(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const db = await import('@bunshin/database');
+    const common = {
+      ...(await scope(serviceSlug, bunshinId)),
+      dailyMissionId: uuidSchema.parse(dailyMissionId),
+      idempotencyKey: parsed.data.idempotencyKey,
+    };
+    const result = await new DecideMission(
+      new db.PrismaDailyMissionRepository(),
+      new db.PrismaBunshinCapabilityAssignmentRepository(),
+      new db.PrismaMissionEngagementRepository(),
+    ).execute(
+      parsed.data.decision === 'ACCEPTED'
+        ? { ...common, decision: 'ACCEPTED' }
+        : {
+            ...common,
+            decision: 'REJECTED',
+            rejectionReason: parsed.data.rejectionReason,
+            rejectionDetail: parsed.data.rejectionDetail ?? null,
+          },
+    );
+    return {
+      decision: missionDecisionDto(result.decision),
+      activity: missionActivityDto(result.activity),
+    };
+  });
+}
+
+export function recordServiceMissionActivityResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = activitySchema.safeParse(await body(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const db = await import('@bunshin/database');
+    return missionActivityDto(
+      await new RecordMissionActivity(
+        new db.PrismaDailyMissionRepository(),
+        new db.PrismaBunshinCapabilityAssignmentRepository(),
+        new db.PrismaMissionEngagementRepository(),
+      ).execute({
+        ...(await scope(serviceSlug, bunshinId)),
+        dailyMissionId: uuidSchema.parse(dailyMissionId),
+        type: parsed.data.type,
+        idempotencyKey: parsed.data.idempotencyKey,
+        ...(parsed.data.type === 'COPIED_SLIDE' && parsed.data.metadata
+          ? { metadata: parsed.data.metadata }
+          : {}),
+      }),
+    );
+  });
+}
+
+export function recordServicePostResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = postSchema.safeParse(await body(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const db = await import('@bunshin/database');
+    const result = await new RecordManualPost(
+      new db.PrismaDailyMissionRepository(),
+      new db.PrismaBunshinCapabilityAssignmentRepository(),
+      new db.PrismaMissionOutcomeRepository(),
+    ).execute({
+      ...(await scope(serviceSlug, bunshinId)),
+      dailyMissionId: uuidSchema.parse(dailyMissionId),
+      ...parsed.data,
+    });
+    return { post: postRecordDto(result.post), activity: missionActivityDto(result.activity) };
+  });
+}
+
+export function recordServiceMissionFeedbackResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = feedbackSchema.safeParse(await body(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const db = await import('@bunshin/database');
+    const result = await new RecordMissionFeedback(
+      new db.PrismaDailyMissionRepository(),
+      new db.PrismaBunshinCapabilityAssignmentRepository(),
+      new db.PrismaMissionOutcomeRepository(),
+    ).execute({
+      ...(await scope(serviceSlug, bunshinId)),
+      dailyMissionId: uuidSchema.parse(dailyMissionId),
+      ...parsed.data,
+    });
+    return {
+      feedback: missionFeedbackDto(result.feedback),
+      activity: missionActivityDto(result.activity),
+    };
+  });
 }

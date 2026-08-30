@@ -67,4 +67,20 @@ describe('service Bunshin owner boundary', () => {
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
+
+  it('keeps mission decisions and activities inside the service owner boundary', () => {
+    const start = source.indexOf('export class PrismaMissionEngagementRepository');
+    const end = source.indexOf('function achievementBadge', start);
+    const repository = source.slice(start, end);
+    expect(repository).toContain('groupId: input.groupId ?? null');
+    expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
+  });
+
+  it('keeps posting and feedback inside the service owner boundary', () => {
+    const start = source.indexOf('export class PrismaMissionOutcomeRepository');
+    const end = source.indexOf('function workspace(', start);
+    const repository = source.slice(start, end);
+    expect(repository).toContain('groupId: input.groupId ?? null');
+    expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
+  });
 });

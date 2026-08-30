@@ -2,6 +2,7 @@ import { GetBunshin, ListBunshinCapabilityAssignments } from '@bunshin/applicati
 import {
   ListContentPillars,
   ListDailyMissions,
+  GetMissionDecision,
   ListSocialAccountStrategies,
   ListSocialProfiles,
   ListWeeklyPlans,
@@ -88,9 +89,22 @@ export default async function ServiceBunshinDetailPage({
       )
     ).flat();
     weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(scope);
-    dailyMissions = (
-      await new ListDailyMissions(new db.PrismaDailyMissionRepository()).execute(scope)
-    ).map((mission) => ({
+    const missionRecords = await new ListDailyMissions(
+      new db.PrismaDailyMissionRepository(),
+    ).execute(scope);
+    const engagementRepository = new db.PrismaMissionEngagementRepository();
+    const outcomeRepository = new db.PrismaMissionOutcomeRepository();
+    const missionStates = await Promise.all(
+      missionRecords.map(async (mission) => ({
+        decision: await new GetMissionDecision(engagementRepository).execute({
+          ...scope,
+          dailyMissionId: mission.id,
+        }),
+        post: await outcomeRepository.getPost({ ...scope, dailyMissionId: mission.id }),
+        feedback: await outcomeRepository.getFeedback({ ...scope, dailyMissionId: mission.id }),
+      })),
+    );
+    dailyMissions = missionRecords.map((mission, index) => ({
       id: mission.id,
       missionDate: mission.missionDate,
       status: mission.status,
@@ -104,11 +118,11 @@ export default async function ServiceBunshinDetailPage({
       classification: mission.classification,
       qualityScore: mission.qualityScore,
       content: mission.content,
-      decision: 'PENDING',
-      rejectionReason: null,
+      decision: missionStates[index]!.decision.decision,
+      rejectionReason: missionStates[index]!.decision.rejectionReason,
       platform: socialProfiles.find(({ id }) => id === mission.socialProfileId)?.platform ?? null,
-      postedAt: null,
-      feedback: null,
+      postedAt: missionStates[index]!.post?.postedAt.toISOString() ?? null,
+      feedback: missionStates[index]!.feedback?.rating ?? null,
       trendContext: null,
       externalLinkUsage: mission.linkUsage
         ? {
