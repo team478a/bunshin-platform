@@ -13,6 +13,7 @@ import {
   weeklyCalendar,
 } from '../../../../src/activity-progress';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -59,6 +60,7 @@ export default async function ServiceMemberHome({
       role: true,
       serviceRole: true,
       user: { select: { displayName: true } },
+      serviceOnboardingResponse: { select: { id: true } },
       featureAssignments: {
         where: { status: 'ENABLED' },
         select: { featureKey: true, startsAt: true, endsAt: true },
@@ -75,6 +77,13 @@ export default async function ServiceMemberHome({
     },
   });
   if (!membership) redirect(`/s/${service.configuration.slug}` as Route);
+  const onboarding = readServiceOnboardingSettings(
+    service.configuration.registration.onboardingConfig,
+    service.configuration.registration.surveyConfig,
+  );
+  if (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) {
+    redirect(`/s/${service.configuration.slug}/onboarding` as Route);
+  }
 
   const now = new Date();
   const active = (value: { startsAt: Date | null; endsAt: Date | null }) =>
