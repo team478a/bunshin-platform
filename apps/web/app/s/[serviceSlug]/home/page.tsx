@@ -264,6 +264,12 @@ export default async function ServiceMemberHome({
               <a className="button" href={`/s/${service.configuration.slug}/manage/campaigns`}>
                 参加募集
               </a>
+              <a
+                className="button"
+                href={`/s/${service.configuration.slug}/manage/external-tracking`}
+              >
+                参加者の専用URL
+              </a>
             </div>
           </section>
         )}
