@@ -1,10 +1,17 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import {
+  SERVICE_CREATION_TEMPLATES,
+  type ServiceCreationTemplateKey,
+} from '../../../../src/services/service-creation-templates';
 
 export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: string }[] }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [templateKey, setTemplateKey] =
+    useState<ServiceCreationTemplateKey>('SIDE_HUSTLE_AFFILIATE');
+  const template = SERVICE_CREATION_TEMPLATES[templateKey];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -22,6 +29,7 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           workspaceId: string('workspaceId'),
+          templateKey: string('templateKey'),
           slug: string('slug'),
           displayName: string('displayName'),
           description: string('description'),
@@ -60,7 +68,23 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
     <section className="settings-card">
       <h2>新しいサービスを作る</h2>
       <p>名前・専用URL・登録方法をまとめて保存します。作成直後は非公開をおすすめします。</p>
-      <form onSubmit={(event) => void submit(event)} className="admin-form-grid">
+      <label>
+        サービスの種類
+        <select
+          value={templateKey}
+          onChange={(event) => setTemplateKey(event.target.value as ServiceCreationTemplateKey)}
+          disabled={saving}
+        >
+          {Object.entries(SERVICE_CREATION_TEMPLATES).map(([key, value]) => (
+            <option key={key} value={key}>
+              {value.label}
+            </option>
+          ))}
+        </select>
+        <small>{template.description}</small>
+      </label>
+      <form key={templateKey} onSubmit={(event) => void submit(event)} className="admin-form-grid">
+        <input type="hidden" name="templateKey" value={templateKey} />
         <label>
           運営する団体
           <select name="workspaceId" required>
@@ -107,7 +131,7 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
         </label>
         <label>
           登録方法
-          <select name="registrationMode" defaultValue="INVITATION_ONLY">
+          <select name="registrationMode" defaultValue={template.registrationMode}>
             <option value="INVITATION_ONLY">招待された人だけ</option>
             <option value="PUBLIC">誰でも登録できる</option>
             <option value="APPROVAL_REQUIRED">管理者の承認が必要</option>
@@ -137,16 +161,27 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
         <fieldset>
           <legend>登録に使う方法</legend>
           <label>
-            <input name="emailEnabled" type="checkbox" defaultChecked /> メール
+            <input name="emailEnabled" type="checkbox" defaultChecked={template.emailEnabled} />{' '}
+            メール
           </label>
           <label>
-            <input name="lineEnabled" type="checkbox" /> LINE
+            <input name="lineEnabled" type="checkbox" defaultChecked={template.lineEnabled} /> LINE
           </label>
           <label>
-            <input name="inviteCodeEnabled" type="checkbox" /> 招待コード
+            <input
+              name="inviteCodeEnabled"
+              type="checkbox"
+              defaultChecked={template.inviteCodeEnabled}
+            />{' '}
+            招待コード
           </label>
           <label>
-            <input name="referralEnabled" type="checkbox" /> 紹介元を記録
+            <input
+              name="referralEnabled"
+              type="checkbox"
+              defaultChecked={template.referralEnabled}
+            />{' '}
+            紹介元を記録
           </label>
         </fieldset>
         <label>
