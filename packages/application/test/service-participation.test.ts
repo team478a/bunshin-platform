@@ -16,11 +16,28 @@ const membership = {
 };
 
 const repository = (): ServiceParticipationRepository => ({
+  findView: vi.fn(() => Promise.resolve(null)),
   request: vi.fn(() => Promise.resolve(membership)),
   approve: vi.fn(() => Promise.resolve({ ...membership, status: 'ACTIVE' as const })),
 });
 
 describe('ServiceParticipationService', () => {
+  it('returns the current service participation view', async () => {
+    const view = {
+      registrationMode: 'PUBLIC' as const,
+      membership: null,
+      legalDocuments: [],
+    };
+    const findView = vi.fn(() => Promise.resolve(view));
+    const service = new ServiceParticipationService({ ...repository(), findView });
+    await expect(
+      service.findView({ slug: 'side-job-support', actorUserId: 'user-1' }),
+    ).resolves.toEqual(view);
+    expect(findView).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'side-job-support', actorUserId: 'user-1' }),
+    );
+  });
+
   it('requests participation without accepting a client supplied service ID', async () => {
     const request = vi.fn(() => Promise.resolve(membership));
     const repo: ServiceParticipationRepository = { ...repository(), request };

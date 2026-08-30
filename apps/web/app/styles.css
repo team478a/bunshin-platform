@@ -1912,6 +1912,43 @@ a {
   text-align: center;
 }
 
+.service-participation {
+  display: grid;
+  gap: 16px;
+  text-align: left;
+}
+
+.service-participation__document {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dfe4ee;
+  border-radius: 14px;
+  background: #f8f9fc;
+}
+
+.service-participation__document summary {
+  cursor: pointer;
+  color: var(--service-primary);
+  font-weight: 700;
+}
+
+.service-participation__document details div {
+  max-height: 240px;
+  margin-top: 12px;
+  overflow: auto;
+  color: #4f5a70;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.service-participation__document label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-weight: 700;
+}
+
 .auth-panel {
   display: grid;
   gap: 24px;

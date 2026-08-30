@@ -1,7 +1,24 @@
 import type { GroupMembership } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 
+export interface ServiceParticipationView {
+  registrationMode: 'PUBLIC' | 'INVITATION_ONLY' | 'APPROVAL_REQUIRED' | 'CLOSED';
+  membership: GroupMembership | null;
+  legalDocuments: Array<{
+    id: string;
+    type: 'TERMS' | 'PRIVACY';
+    version: number;
+    title: string;
+    content: string;
+  }>;
+}
+
 export interface ServiceParticipationRepository {
+  findView(input: {
+    slug: string;
+    actorUserId: string | null;
+    now: Date;
+  }): Promise<ServiceParticipationView | null>;
   request(input: {
     slug: string;
     actorUserId: string;
@@ -20,6 +37,14 @@ export interface ServiceParticipationRepository {
 
 export class ServiceParticipationService {
   constructor(private readonly repository: ServiceParticipationRepository) {}
+
+  async findView(input: { slug: string; actorUserId: string | null; now?: Date }) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) || input.slug.length > 80)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid service slug');
+    const result = await this.repository.findView({ ...input, now: input.now ?? new Date() });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'service not found');
+    return result;
+  }
 
   async request(input: {
     slug: string;

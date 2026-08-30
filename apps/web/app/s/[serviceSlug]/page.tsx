@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PublicShell } from '../../ui/public-shell';
 import { resolvePublicServiceContext } from '../../../src/services/public-service';
+import { currentUserProvider } from '../../../src/auth/current-user';
+import { ParticipationForm } from './participation-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +64,12 @@ export default async function ServiceEntryPage({
 }) {
   const { serviceSlug } = await params;
   const { configuration } = await service(serviceSlug);
+  const currentUser = await (await currentUserProvider()).getCurrentUser();
+  const db = await import('@bunshin/database');
+  const { ServiceParticipationService } = await import('@bunshin/application');
+  const participation = await new ServiceParticipationService(
+    new db.PrismaServiceParticipationRepository(),
+  ).findView({ slug: serviceSlug, actorUserId: currentUser?.userId ?? null });
   const copy = registrationCopy[configuration.registration.mode];
   const returnTo = `/s/${configuration.slug}`;
   const style = {
@@ -88,26 +96,54 @@ export default async function ServiceEntryPage({
         </header>
 
         <section className="service-entry__card" aria-labelledby="registration-title">
-          <h2 id="registration-title">{copy.title}</h2>
-          <p>{copy.description}</p>
-          {copy.action && (
-            <form action="/auth/line" method="post">
-              <input name="returnTo" type="hidden" value={returnTo} />
-              <button className="button button--line button--full" type="submit">
-                <span className="button__line-mark" aria-hidden="true">
-                  LINE
-                </span>
-                {copy.action}
-              </button>
-            </form>
-          )}
-          {configuration.registration.emailEnabled && copy.action && (
-            <Link
-              className="service-entry__login-link"
-              href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
-            >
-              メールでログインする
-            </Link>
+          {participation.membership?.status === 'ACTIVE' ? (
+            <>
+              <h2 id="registration-title">参加手続きは完了しています</h2>
+              <p>このサービスを利用できます。</p>
+              <Link className="button button--primary button--full" href="/bunshins">
+                利用をはじめる
+              </Link>
+            </>
+          ) : participation.membership?.status === 'PENDING_APPROVAL' ? (
+            <>
+              <h2 id="registration-title">参加申し込みを受け付けました</h2>
+              <p>運営者が確認しています。承認されるまで、しばらくお待ちください。</p>
+            </>
+          ) : currentUser &&
+            ['PUBLIC', 'APPROVAL_REQUIRED'].includes(participation.registrationMode) ? (
+            <>
+              <h2 id="registration-title">{copy.title}</h2>
+              <p>{copy.description}</p>
+              <ParticipationForm
+                documents={participation.legalDocuments}
+                requiresApproval={participation.registrationMode === 'APPROVAL_REQUIRED'}
+                serviceSlug={serviceSlug}
+              />
+            </>
+          ) : (
+            <>
+              <h2 id="registration-title">{copy.title}</h2>
+              <p>{copy.description}</p>
+              {copy.action && !currentUser && configuration.registration.lineEnabled && (
+                <form action="/auth/line" method="post">
+                  <input name="returnTo" type="hidden" value={returnTo} />
+                  <button className="button button--line button--full" type="submit">
+                    <span className="button__line-mark" aria-hidden="true">
+                      LINE
+                    </span>
+                    {copy.action}
+                  </button>
+                </form>
+              )}
+              {configuration.registration.emailEnabled && copy.action && !currentUser && (
+                <Link
+                  className="service-entry__login-link"
+                  href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+                >
+                  メールでログインする
+                </Link>
+              )}
+            </>
           )}
         </section>
 
