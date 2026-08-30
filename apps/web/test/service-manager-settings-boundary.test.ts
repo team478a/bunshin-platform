@@ -8,7 +8,8 @@ describe('service manager settings boundary', () => {
     const resolver = source('src/services/public-service.ts');
     expect(resolver).toContain('resolveManagedServiceContext');
     expect(resolver).toContain("SERVICE_MANAGEMENT_ROLES = ['SERVICE_OWNER', 'SERVICE_ADMIN']");
-    expect(resolver).toContain('serviceRole: { in: [...SERVICE_MANAGEMENT_ROLES] }');
+    expect(resolver).toContain("permission: ServiceManagementPermission = 'ADMINISTRATION'");
+    expect(resolver).toContain('serviceRole: { in: allowedRoles }');
     expect(resolver).toContain('findByGroup({ ...target, actorUserId })');
   });
 

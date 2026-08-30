@@ -2,7 +2,7 @@
 
 ## マルチサービス化
 
-状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-S3-Aまで完了）。
+状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-S3-Bまで完了）。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。
 
@@ -51,6 +51,8 @@ MS-2D-S1では、既存の`MANAGER / PARTICIPANT`を壊さず、サービス内�
 MS-2D-S2では、サービス内担当者の一覧・役割変更APIと参加者管理画面を接続した。サービス所有者またはSUPER_ADMINだけが役割を変更でき、Service Slug、Workspace、Service、Membershipをサーバー側とRepositoryで再照合する。一般向け表示は「サービス所有者・運営管理者・コンテンツ担当者・一般参加者」とし、従来のグループ役割変更欄はサービス画面から隠して二重管理を防止する。S3で各管理機能へ役割別の認可を適用する。
 
 MS-2D-S3-Aでは、サービス管理画面の共通入口認可を旧`MANAGER`から`SERVICE_OWNER / SERVICE_ADMIN`へ切り替えた。設定、LINE、参加者、公式資料、法務、バッジ、商品、参加募集、専用URLの全入口で同じService Slug・Active Membership・Service Role境界を利用し、一般参加者とコンテンツ担当者には管理メニューを表示しない。コンテンツ担当者への限定編集開放はRepository認可と同時に行うS3-Bへ分離する。
+
+MS-2D-S3-Bでは、`CONTENT_EDITOR`へ公式資料・FAQ、公式商品情報、参加募集の3機能だけを開放した。画面、Service Slug解決、Repositoryのすべてで同じService RoleとActive Membershipを検証し、サービス設定、LINE、参加者、法務、バッジ、専用URLは引き続き`SERVICE_OWNER / SERVICE_ADMIN`だけに制限する。
 
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 

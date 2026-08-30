@@ -11,9 +11,12 @@ export interface PublicServiceContext {
 
 export const SERVICE_MANAGEMENT_ROLES = ['SERVICE_OWNER', 'SERVICE_ADMIN'] as const;
 export type ServiceManagementRole = (typeof SERVICE_MANAGEMENT_ROLES)[number];
+export const SERVICE_CONTENT_ROLES = ['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR'] as const;
+export type ServiceContentRole = (typeof SERVICE_CONTENT_ROLES)[number];
+export type ServiceManagementPermission = 'ADMINISTRATION' | 'CONTENT';
 
 export interface ManagedServiceContext extends PublicServiceContext {
-  serviceRole: ServiceManagementRole;
+  serviceRole: ServiceContentRole;
 }
 
 export async function resolvePublicServiceContext(slug: string): Promise<PublicServiceContext> {
@@ -32,9 +35,12 @@ export async function resolvePublicServiceContext(slug: string): Promise<PublicS
 export async function resolveManagedServiceContext(
   slug: string,
   actorUserId: string,
+  permission: ServiceManagementPermission = 'ADMINISTRATION',
 ): Promise<ManagedServiceContext> {
   if (slug.length > 80 || !SERVICE_SLUG.test(slug)) throw new Error('SERVICE_NOT_FOUND');
   const db = await import('@bunshin/database');
+  const allowedRoles =
+    permission === 'CONTENT' ? [...SERVICE_CONTENT_ROLES] : [...SERVICE_MANAGEMENT_ROLES];
   const target = await db.prisma.serviceConfiguration.findFirst({
     where: {
       slug,
@@ -44,7 +50,7 @@ export async function resolveManagedServiceContext(
         memberships: {
           some: {
             userId: actorUserId,
-            serviceRole: { in: [...SERVICE_MANAGEMENT_ROLES] },
+            serviceRole: { in: allowedRoles },
             status: 'ACTIVE',
           },
         },
@@ -66,7 +72,7 @@ export async function resolveManagedServiceContext(
   });
   if (!target) throw new Error('SERVICE_NOT_FOUND');
   const serviceRole = target.group.memberships[0]?.serviceRole;
-  if (serviceRole !== 'SERVICE_OWNER' && serviceRole !== 'SERVICE_ADMIN')
+  if (!serviceRole || !(allowedRoles as readonly string[]).includes(serviceRole))
     throw new Error('SERVICE_NOT_FOUND');
   const configuration = await new ServiceFoundationService(
     new db.PrismaServiceFoundationRepository(),
@@ -75,6 +81,6 @@ export async function resolveManagedServiceContext(
     workspaceId: configuration.workspaceId,
     serviceId: configuration.groupId,
     configuration,
-    serviceRole,
+    serviceRole: serviceRole as ServiceContentRole,
   };
 }

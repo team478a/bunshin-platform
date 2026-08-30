@@ -38,12 +38,29 @@ export default async function GroupKnowledgePage({
   if (!actor) redirect('/login');
   const parsed = z.uuid().safeParse((await params).groupId);
   if (!parsed.success) notFound();
+  const serviceSlug = (await searchParams)?.service;
   const db = await import('@bunshin/database');
   const membership = await db.prisma.groupMembership.findFirst({
     where: {
       groupId: parsed.data,
       userId: actor.userId,
-      role: 'MANAGER',
+      OR: [
+        { role: 'MANAGER' },
+        ...(serviceSlug
+          ? [
+              {
+                serviceRole: {
+                  in: [
+                    'SERVICE_OWNER' as const,
+                    'SERVICE_ADMIN' as const,
+                    'CONTENT_EDITOR' as const,
+                  ],
+                },
+                group: { serviceConfiguration: { slug: serviceSlug } },
+              },
+            ]
+          : []),
+      ],
       status: 'ACTIVE',
       consentedAt: { not: null },
       group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
@@ -107,8 +124,6 @@ export default async function GroupKnowledgePage({
       usage,
     ]),
   );
-  const serviceSlug = (await searchParams)?.service;
-
   return (
     <main className="app-page">
       <header className="app-page__heading">

@@ -15,7 +15,7 @@ export default async function ServiceKnowledgePage({
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/knowledge`)}`);
-  const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId, 'CONTENT');
   return GroupKnowledgePage({
     params: Promise.resolve({ groupId: service.serviceId }),
     searchParams: Promise.resolve({ service: service.configuration.slug }),

@@ -15,7 +15,7 @@ export default async function ServiceProductPacksPage({
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/product-packs`)}`);
-  const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId, 'CONTENT');
   const db = await import('@bunshin/database');
   const packs = await new ProductPackService(new db.PrismaProductPackRepository()).list({
     workspaceId: service.workspaceId,
