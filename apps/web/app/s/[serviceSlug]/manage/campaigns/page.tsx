@@ -15,7 +15,7 @@ export default async function ServiceCampaignsPage({
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor)
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/campaigns`)}`);
-  const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId, 'CONTENT');
   const db = await import('@bunshin/database');
   const [campaigns, versions] = await Promise.all([
     new CampaignService(new db.PrismaCampaignRepository()).listManaged({

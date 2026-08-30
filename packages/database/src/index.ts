@@ -11543,7 +11543,13 @@ export class PrismaProductPackRepository implements ProductPackRepository {
           groupId,
           userId: actorUserId,
           status: 'ACTIVE',
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           group: { status: 'ACTIVE' },
         },
         select: { id: true },
@@ -11878,7 +11884,13 @@ export class PrismaGroupKnowledgeRepository implements GroupKnowledgeRepository 
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           consentedAt: { not: null },
           group: { status: 'ACTIVE' },
@@ -12433,7 +12445,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
           groupId,
           userId: actorUserId,
           status: 'ACTIVE',
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           group: { status: 'ACTIVE' },
         },
         select: { id: true },

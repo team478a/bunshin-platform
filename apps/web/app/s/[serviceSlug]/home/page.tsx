@@ -285,6 +285,24 @@ export default async function ServiceMemberHome({
           </section>
         )}
 
+        {membership.serviceRole === 'CONTENT_EDITOR' && (
+          <section className="service-entry__card">
+            <h2>公式コンテンツを管理する</h2>
+            <p>公式資料、商品情報、参加募集だけをこのサービスの範囲で管理します。</p>
+            <div className="service-home-actions">
+              <a className="button" href={`/s/${service.configuration.slug}/manage/knowledge`}>
+                公式資料・FAQ
+              </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/product-packs`}>
+                公式商品情報
+              </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/campaigns`}>
+                参加募集
+              </a>
+            </div>
+          </section>
+        )}
+
         <footer className="service-entry__details">
           <span>運営：{service.configuration.operatorName}</span>
           {service.configuration.contactEmail && (

@@ -15,7 +15,7 @@ describe('service manager entry boundary', () => {
     }
   });
 
-  it.each(['members', 'knowledge', 'legal', 'badges'])(
+  it.each(['members', 'legal', 'badges'])(
     'resolves %s from the server-side service context',
     (section) => {
       const page = source(`s/[serviceSlug]/manage/${section}/page.tsx`);
@@ -24,6 +24,12 @@ describe('service manager entry boundary', () => {
       expect(page).not.toContain('groupId: searchParams');
     },
   );
+
+  it('resolves knowledge with the limited content permission', () => {
+    const page = source('s/[serviceSlug]/manage/knowledge/page.tsx');
+    expect(page).toContain("resolveManagedServiceContext(serviceSlug, actor.userId, 'CONTENT')");
+    expect(page).toContain('groupId: service.serviceId');
+  });
 
   it('preserves manager authorization in every reused management screen', () => {
     expect(source('(app)/groups/[groupId]/members/page.tsx')).toContain("role: 'MANAGER'");
