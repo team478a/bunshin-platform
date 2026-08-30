@@ -1,8 +1,8 @@
 import { CampaignService } from '@bunshin/application';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { CampaignAdminEditor } from '../../../../(app)/admin/campaigns/campaign-admin-editor';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
-import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
+import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,24 +11,12 @@ export default async function ServiceCampaignsPage({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }) {
-  const service = await resolvePublicServiceContext((await params).serviceSlug);
+  const serviceSlug = (await params).serviceSlug;
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor)
-    redirect(
-      `/login?returnTo=${encodeURIComponent(`/s/${service.configuration.slug}/manage/campaigns`)}`,
-    );
+    redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/campaigns`)}`);
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
   const db = await import('@bunshin/database');
-  const manager = await db.prisma.groupMembership.findFirst({
-    where: {
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-      userId: actor.userId,
-      role: 'MANAGER',
-      status: 'ACTIVE',
-    },
-    select: { id: true },
-  });
-  if (!manager) notFound();
   const [campaigns, versions] = await Promise.all([
     new CampaignService(new db.PrismaCampaignRepository()).listManaged({
       workspaceId: service.workspaceId,

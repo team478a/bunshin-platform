@@ -57,6 +57,7 @@ export default async function ServiceMemberHome({
     select: {
       id: true,
       role: true,
+      serviceRole: true,
       user: { select: { displayName: true } },
       featureAssignments: {
         where: { status: 'ENABLED' },
@@ -212,9 +213,13 @@ export default async function ServiceMemberHome({
 
         <section className="service-entry__card">
           <h2>利用できる機能</h2>
-          {!imageAvailable && !videoAvailable && membership.role !== 'MANAGER' && (
-            <p>現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。</p>
-          )}
+          {!imageAvailable &&
+            !videoAvailable &&
+            !['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole) && (
+              <p>
+                現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。
+              </p>
+            )}
           <div className="service-home-actions">
             <Link
               className="button button--primary"
@@ -241,7 +246,7 @@ export default async function ServiceMemberHome({
           </div>
         </section>
 
-        {membership.role === 'MANAGER' && (
+        {['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole) && (
           <section className="service-entry__card">
             <h2>サービスを管理する</h2>
             <p>参加者、公式資料、利用規約などをこのサービスの範囲だけで管理します。</p>

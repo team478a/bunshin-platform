@@ -7,9 +7,9 @@ const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8')
 describe('service external tracking boundary', () => {
   it('resolves the service on the server and requires its manager', () => {
     const page = source('app/s/[serviceSlug]/manage/external-tracking/page.tsx');
-    expect(page).toContain('resolvePublicServiceContext');
+    expect(page).toContain('resolveManagedServiceContext');
     expect(page).toContain('groupId: service.serviceId');
-    expect(page).toContain("role: 'MANAGER'");
+    expect(page).not.toContain("role: 'MANAGER'");
     expect(page).not.toContain('searchParams');
   });
 

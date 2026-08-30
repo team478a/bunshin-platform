@@ -19,7 +19,7 @@ describe('service manager entry boundary', () => {
     'resolves %s from the server-side service context',
     (section) => {
       const page = source(`s/[serviceSlug]/manage/${section}/page.tsx`);
-      expect(page).toContain('resolvePublicServiceContext(serviceSlug)');
+      expect(page).toContain('resolveManagedServiceContext(serviceSlug, actor.userId)');
       expect(page).toContain('groupId: service.serviceId');
       expect(page).not.toContain('groupId: searchParams');
     },
