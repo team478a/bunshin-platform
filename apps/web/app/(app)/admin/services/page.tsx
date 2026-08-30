@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { ServiceEditor } from './service-editor';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,8 @@ export default async function ServicesAdminPage() {
                 {service.registration?.mode ?? '未設定'} ／ 内部状態：{service.group.status}
                 <br />
                 <code>/s/{service.slug}</code>
+                <br />
+                <Link href={`/groups/${service.groupId}/legal`}>利用規約を管理</Link>
               </li>
             ))}
           </ul>
