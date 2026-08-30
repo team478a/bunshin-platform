@@ -108,6 +108,12 @@ export default async function ServiceMemberHome({
             <p>現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。</p>
           )}
           <div className="service-home-actions">
+            <Link
+              className="button button--primary"
+              href={`/s/${service.configuration.slug}/bunshins` as Route}
+            >
+              投稿パートナーを作る・見る
+            </Link>
             {imageAvailable && (
               <Link className="button button--primary" href={`/groups/${groupId}/images` as Route}>
                 投稿に使う画像を作る
