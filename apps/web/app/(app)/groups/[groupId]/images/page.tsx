@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { GetPointUserDashboard, ListPointRewardCatalog } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -109,7 +108,7 @@ export default async function GroupImagesPage({
         <h1>投稿に使う画像</h1>
         <p>{membership.group.name}の投稿案から、スマートフォンで使える画像を作ります。</p>
         <p>内容を確認して「この画像を使う」を押すまで、採用にはなりません。</p>
-        <Link href={serviceHome}>← 戻る</Link>
+        <a href={serviceHome}>← 戻る</a>
       </header>
       <SocialImageWorkspace
         workspaceId={membership.group.workspaceId}

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { GetVideoProject } from '@bunshin/application';
 import { z } from 'zod';
@@ -70,9 +69,9 @@ export default async function VideoProjectPage({
         <p className="eyebrow">動画づくり</p>
         <h1>{project.title}</h1>
         <p>{project.durationSeconds}秒の動画です。</p>
-        <Link href={serviceSlug ? `/s/${serviceSlug}/videos` : `/groups/${project.groupId}/videos`}>
+        <a href={serviceSlug ? `/s/${serviceSlug}/videos` : `/groups/${project.groupId}/videos`}>
           ← 動画一覧へ戻る
-        </Link>
+        </a>
       </header>
 
       <section className="settings-card">

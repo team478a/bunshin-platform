@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
@@ -81,11 +80,11 @@ export default async function VideoAssetsPage({
         <p className="eyebrow">動画づくり</p>
         <h1>写真・動画・ロゴ</h1>
         <p>{membership.group.name}で作る動画に、自分の素材を使えるようにします。</p>
-        <Link
+        <a
           href={serviceSlug ? `/s/${serviceSlug}/videos` : `/groups/${membership.group.id}/videos`}
         >
           ← 動画一覧へ戻る
-        </Link>
+        </a>
       </header>
       <VideoAssetUploader
         workspaceId={membership.group.workspaceId}
