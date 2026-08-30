@@ -12,6 +12,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { createWeeklyPlanGenerationService } from '../services/weekly-plan-generation';
+import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
 import { weeklyPlanDto } from './weekly-plans';
 
 const uuidSchema = z.string().uuid();
@@ -122,6 +123,11 @@ export function generateServiceWeeklyPlanResponse(
       const parsed = generateSchema.safeParse(await body(request));
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
       const input = await scope(serviceSlug, bunshinId);
+      const serviceKnowledge = await loadServiceGenerationKnowledge({
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        actorUserId: input.actorUserId,
+      });
       const result = await (
         await createWeeklyPlanGenerationService()
       ).execute({
@@ -131,6 +137,7 @@ export function generateServiceWeeklyPlanResponse(
         existingPolicy: 'CONFLICT',
         includeGrantedKnowledge: false,
         includeCampaigns: false,
+        additionalKnowledge: serviceKnowledge.officialKnowledge,
       });
       return weeklyPlanDto(result.plan, result.titles);
     },
