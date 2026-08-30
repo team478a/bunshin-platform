@@ -32,6 +32,7 @@ import {
 
 interface Scope {
   workspaceId: string;
+  groupId?: string | null;
   bunshinId: string;
   actorUserId: string;
 }
@@ -78,6 +79,8 @@ export class WeeklyPlanGenerationService {
       socialProfileId?: string;
       usageIdempotencyKey: string;
       existingPolicy: 'RETURN' | 'CONFLICT';
+      includeGrantedKnowledge?: boolean;
+      includeCampaigns?: boolean;
     },
   ) {
     const started = this.dependencies.now();
@@ -117,18 +120,20 @@ export class WeeklyPlanGenerationService {
       const timezone = input.timezone ?? (await this.dependencies.resolveTimezone(input));
       if (!timezone) throw new ApplicationError('CONFIGURATION_ERROR', 'timezone is required');
       const bunshin = await new GetBunshin(this.dependencies.bunshins).execute(input);
-      const granted = await new ListGrantedKnowledgeForBunshin(this.dependencies.knowledge).execute(
-        input,
-      );
+      const granted =
+        input.includeGrantedKnowledge === false
+          ? []
+          : await new ListGrantedKnowledgeForBunshin(this.dependencies.knowledge).execute(input);
       const weekEnd = new Date(`${input.weekStartDate}T23:59:59.999Z`);
       weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
-      const campaigns = this.dependencies.campaigns
-        ? await new CampaignService(this.dependencies.campaigns).listPlanningContexts({
-            ...input,
-            from: new Date(`${input.weekStartDate}T00:00:00.000Z`),
-            to: weekEnd,
-          })
-        : [];
+      const campaigns =
+        input.includeCampaigns !== false && this.dependencies.campaigns
+          ? await new CampaignService(this.dependencies.campaigns).listPlanningContexts({
+              ...input,
+              from: new Date(`${input.weekStartDate}T00:00:00.000Z`),
+              to: weekEnd,
+            })
+          : [];
       providerAttempted = true;
       const result = await new GenerateWeeklyPlan(this.dependencies.planner).execute({
         weekStartDate: input.weekStartDate,
