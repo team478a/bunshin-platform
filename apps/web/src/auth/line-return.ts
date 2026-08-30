@@ -9,7 +9,13 @@ export function missionReturnPath(token: string): string | null {
 }
 
 export function safeLineAuthReturnPath(value: string | null | undefined): string | null {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
+  if (
+    !value ||
+    value.length > MAX_STATE_LENGTH ||
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    value.includes('\\')
+  ) {
     return null;
   }
 
@@ -17,6 +23,8 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     const url = new URL(value, 'https://bunshin.invalid');
     if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
     if (/^\/groups\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
+      return url.pathname;
+    if (/^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname) && url.search === '')
       return url.pathname;
     if (url.pathname !== '/today') return null;
     if ([...url.searchParams.keys()].some((key) => key !== 'state')) return null;
