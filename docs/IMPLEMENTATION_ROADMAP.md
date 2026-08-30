@@ -2,7 +2,7 @@
 
 ## マルチサービス化
 
-状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-Iまで完了）。
+状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-Jまで完了）。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。
 
@@ -27,6 +27,8 @@ MS-2D-Gではサービス専用ホームへ、投稿パートナーごとの今�
 MS-2D-Hでは、同じサービスの管理者が承認した共通公式Knowledgeを、サービス専用のSNS戦略、週間投稿計画、毎日の投稿案へ接続した。サービスIDと参加者をRepositoryで再検証し、商品専用資料はCampaign接続まで除外する。個人Knowledge、他サービスKnowledge、未承認資料は生成へ渡さない。
 
 MS-2D-Iでは、同じサービスの参加者が承諾した有効なCampaignと公開済みProduct Packを、週間投稿計画と毎日の投稿案へ接続した。Campaign検索をサービスIDで制限し、必須表記・禁止表現・公式商品Knowledge・専用URL選択・使用履歴を既存の安全処理経由で適用する。他サービスの商品・Campaign・専用URLは生成へ渡さない。
+
+MS-2D-Jでは、サービスホームの画像・動画導線を`/s/{serviceSlug}`配下へ移した。画像、動画一覧、動画素材、動画詳細はSlugからサーバー側でサービスIDを解決した後、既存の参加者・機能割当・所有者認可を再利用する。利用者は内部のGroup IDをURLで扱わず、動画機能内の移動もサービス専用URLに維持する。
 
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 
