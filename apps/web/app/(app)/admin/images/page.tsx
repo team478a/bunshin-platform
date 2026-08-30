@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getServerEnvironment } from '@bunshin/config';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
+import { buildSocialImagePilotStatus } from '../../../../src/social-image-pilot-status';
 import { ListSocialImagePilotEvidence } from '@bunshin/application';
 import { ImagePilotEvidenceEditor } from './evidence-editor';
 import { buildImagePilotReadiness } from './readiness-view-model';
@@ -210,8 +211,10 @@ export default async function ImagePilotAdminPage({
     },
   });
   const environment = getServerEnvironment();
+  const now = new Date();
+  const effectiveStatus = buildSocialImagePilotStatus({ pilot, evidence, now });
   const readiness = buildImagePilotReadiness({
-    now: new Date(),
+    now,
     pilot,
     enrolledCount: enrolled.size,
     provider: provider
@@ -299,8 +302,11 @@ export default async function ImagePilotAdminPage({
             <h2>現在の状態</h2>
             <p>
               設定：{pilot ? `第${pilot.version}版` : '未設定'} ／ 運転：
-              <strong>{!pilot ? '停止中' : pilot.emergencyStop ? '緊急停止中' : '利用中'}</strong>
+              <strong>{effectiveStatus.label}</strong>
             </p>
+            {effectiveStatus.state === 'PREPARING' ? (
+              <p>人による開始前確認があと{effectiveStatus.remainingChecks}件必要です。</p>
+            ) : null}
             <p>
               参加者：{enrolled.size}人 ／ 生成受付：{total}件 ／ 完成：{count('READY_FOR_REVIEW')}
               件 ／ 失敗：{count('FAILED')}件

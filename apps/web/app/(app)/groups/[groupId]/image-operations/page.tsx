@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { buildSocialImagePilotStatus } from '../../../../../src/social-image-pilot-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,18 @@ export default async function GroupImageOperationsPage({
     where: { workspaceId: scopedGroup.workspaceId, groupId: scopedGroup.id, status: 'ACTIVE' },
     orderBy: { version: 'desc' },
   });
+  const evidence = pilot
+    ? await db.prisma.socialImagePilotEvidence.findMany({
+        where: {
+          workspaceId: scopedGroup.workspaceId,
+          groupId: scopedGroup.id,
+          pilotId: pilot.id,
+        },
+        orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+        select: { checkKey: true, action: true },
+      })
+    : [];
+  const effectiveStatus = buildSocialImagePilotStatus({ pilot, evidence, now: new Date() });
   const requests = await db.prisma.socialImageGenerationRequest.findMany({
     where: { workspaceId: scopedGroup.workspaceId, groupId: scopedGroup.id },
     select: {
@@ -140,9 +153,15 @@ export default async function GroupImageOperationsPage({
       <section className="settings-card">
         <h2>現在の試験設定</h2>
         <p>
-          状態：<strong>{!pilot ? '未設定' : pilot.emergencyStop ? '緊急停止中' : '利用中'}</strong>
+          状態：<strong>{effectiveStatus.label}</strong>
           {pilot ? ` ／ 第${pilot.version}版` : ''}
         </p>
+        {effectiveStatus.state === 'PREPARING' ? (
+          <p>
+            本部管理者による開始前確認があと{effectiveStatus.remainingChecks}
+            件あります。完了するまで画像は生成できません。
+          </p>
+        ) : null}
         {pilot ? (
           <p>
             上限：1日{pilot.dailyLimit}回 ／ グループ月{pilot.monthlyLimit}回 ／ 1人月
