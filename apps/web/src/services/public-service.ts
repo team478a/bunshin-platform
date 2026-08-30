@@ -21,3 +21,33 @@ export async function resolvePublicServiceContext(slug: string): Promise<PublicS
     configuration,
   };
 }
+
+export async function resolveManagedServiceContext(
+  slug: string,
+  actorUserId: string,
+): Promise<PublicServiceContext> {
+  if (slug.length > 80 || !SERVICE_SLUG.test(slug)) throw new Error('SERVICE_NOT_FOUND');
+  const db = await import('@bunshin/database');
+  const target = await db.prisma.serviceConfiguration.findFirst({
+    where: {
+      slug,
+      group: {
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE' },
+        memberships: {
+          some: { userId: actorUserId, role: 'MANAGER', status: 'ACTIVE' },
+        },
+      },
+    },
+    select: { workspaceId: true, groupId: true },
+  });
+  if (!target) throw new Error('SERVICE_NOT_FOUND');
+  const configuration = await new ServiceFoundationService(
+    new db.PrismaServiceFoundationRepository(),
+  ).findByGroup({ ...target, actorUserId });
+  return {
+    workspaceId: configuration.workspaceId,
+    serviceId: configuration.groupId,
+    configuration,
+  };
+}
