@@ -6,6 +6,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ServiceBunshinForm } from './service-bunshin-form';
+import { ServiceBunshinProposals } from './service-bunshin-proposals';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,7 @@ export default async function NewServiceBunshinPage({
       status: 'ACTIVE',
       group: { status: 'ACTIVE' },
     },
-    select: { id: true },
+    select: { id: true, serviceOnboardingResponse: { select: { id: true } } },
   });
   if (!membership) redirect(`/s/${service.configuration.slug}` as Route);
   const style = {
@@ -57,12 +58,20 @@ export default async function NewServiceBunshinPage({
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry service-member-home" style={style}>
         <header className="service-entry__header">
-          <p className="eyebrow">4つの質問で完成します</p>
+          <p className="eyebrow">
+            {membership.serviceOnboardingResponse
+              ? '選ぶだけで完成します'
+              : '4つの質問で完成します'}
+          </p>
           <h1>投稿パートナーを作る</h1>
           <p>むずかしく考えなくて大丈夫です。あとから変更できます。</p>
         </header>
         <section className="service-entry__card">
-          <ServiceBunshinForm serviceSlug={service.configuration.slug} />
+          {membership.serviceOnboardingResponse ? (
+            <ServiceBunshinProposals serviceSlug={service.configuration.slug} />
+          ) : (
+            <ServiceBunshinForm serviceSlug={service.configuration.slug} />
+          )}
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>作らずに戻る</Link>
       </article>
