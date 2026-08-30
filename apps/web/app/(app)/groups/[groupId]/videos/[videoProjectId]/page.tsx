@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { GetVideoProject } from '@bunshin/application';
 import { z } from 'zod';
@@ -30,8 +29,10 @@ function disclosureGuide(value: Record<string, unknown>) {
 
 export default async function VideoProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ groupId: string; videoProjectId: string }>;
+  searchParams?: Promise<{ service?: string }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
@@ -61,13 +62,16 @@ export default async function VideoProjectPage({
   }
   const disclosure = disclosureGuide(project.disclosureSnapshot);
 
+  const serviceSlug = (await searchParams)?.service;
   return (
     <main className="app-page">
       <header className="app-page__heading">
         <p className="eyebrow">動画づくり</p>
         <h1>{project.title}</h1>
         <p>{project.durationSeconds}秒の動画です。</p>
-        <Link href={`/groups/${project.groupId}/videos`}>← 動画一覧へ戻る</Link>
+        <a href={serviceSlug ? `/s/${serviceSlug}/videos` : `/groups/${project.groupId}/videos`}>
+          ← 動画一覧へ戻る
+        </a>
       </header>
 
       <section className="settings-card">

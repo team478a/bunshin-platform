@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
@@ -14,7 +13,13 @@ const statusLabel: Record<string, string> = {
   FAILED: '作成できませんでした',
 };
 
-export default async function VideosPage({ params }: { params: Promise<{ groupId: string }> }) {
+export default async function VideosPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ groupId: string }>;
+  searchParams?: Promise<{ service?: string }>;
+}) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
   const groupId = z.uuid().safeParse((await params).groupId);
@@ -87,6 +92,8 @@ export default async function VideosPage({ params }: { params: Promise<{ groupId
     }),
   ]);
 
+  const serviceSlug = (await searchParams)?.service;
+  const serviceBase = serviceSlug ? `/s/${serviceSlug}` : null;
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -94,8 +101,16 @@ export default async function VideosPage({ params }: { params: Promise<{ groupId
         <h1>動画の企画と台本</h1>
         <p>{membership.group.name}で使う短い動画を、分身と一緒に考えます。</p>
         <p>ここでは企画と台本を作ります。動画本体は、内容を確認したあとに作ります。</p>
-        <Link href="/groups">← グループ一覧へ戻る</Link>{' '}
-        <Link href={`/groups/${membership.group.id}/video-assets`}>写真・動画・ロゴを管理</Link>
+        <a href={serviceBase ? `${serviceBase}/home` : '/groups'}>← 戻る</a>{' '}
+        <a
+          href={
+            serviceBase
+              ? `${serviceBase}/video-assets`
+              : `/groups/${membership.group.id}/video-assets`
+          }
+        >
+          写真・動画・ロゴを管理
+        </a>
       </header>
       <VideoProjectCreator
         workspaceId={membership.group.workspaceId}
@@ -109,10 +124,17 @@ export default async function VideosPage({ params }: { params: Promise<{ groupId
         {projects.length === 0 ? <p>まだありません。</p> : null}
         <div className="form-stack">
           {projects.map((project) => (
-            <Link key={project.id} href={`/groups/${membership.group.id}/videos/${project.id}`}>
+            <a
+              key={project.id}
+              href={
+                serviceBase
+                  ? `${serviceBase}/videos/${project.id}`
+                  : `/groups/${membership.group.id}/videos/${project.id}`
+              }
+            >
               <strong>{project.title}</strong>（{project.durationSeconds}秒）—{' '}
               {statusLabel[project.status] ?? '作成中'}
-            </Link>
+            </a>
           ))}
         </div>
       </section>

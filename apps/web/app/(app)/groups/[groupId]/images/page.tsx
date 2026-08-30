@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { GetPointUserDashboard, ListPointRewardCatalog } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -12,7 +11,7 @@ export default async function GroupImagesPage({
   searchParams,
 }: {
   params: Promise<{ groupId: string }>;
-  searchParams: Promise<{ mission?: string }>;
+  searchParams: Promise<{ mission?: string; service?: string }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
@@ -100,6 +99,8 @@ export default async function GroupImagesPage({
     // ポイント確認に失敗してもページ全体を壊さず、画像作成だけを停止する。
   }
 
+  const query = await searchParams;
+  const serviceHome = query.service ? `/s/${query.service}/home` : '/groups';
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -107,7 +108,7 @@ export default async function GroupImagesPage({
         <h1>投稿に使う画像</h1>
         <p>{membership.group.name}の投稿案から、スマートフォンで使える画像を作ります。</p>
         <p>内容を確認して「この画像を使う」を押すまで、採用にはなりません。</p>
-        <Link href="/groups">← グループ一覧へ戻る</Link>
+        <a href={serviceHome}>← 戻る</a>
       </header>
       <SocialImageWorkspace
         workspaceId={membership.group.workspaceId}
@@ -115,7 +116,7 @@ export default async function GroupImagesPage({
         groupMembershipId={membership.id}
         pointCost={imagePointCost}
         initialAvailablePoints={availablePoints}
-        initialMissionId={z.uuid().safeParse((await searchParams).mission).data}
+        initialMissionId={z.uuid().safeParse(query.mission).data}
         missions={available.map((mission) => ({
           id: mission.id,
           bunshinId: mission.bunshinId,

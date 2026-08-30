@@ -225,12 +225,18 @@ export default async function ServiceMemberHome({
               投稿パートナーを作る・見る
             </Link>
             {imageAvailable && (
-              <Link className="button button--primary" href={`/groups/${groupId}/images` as Route}>
+              <Link
+                className="button button--primary"
+                href={`/s/${service.configuration.slug}/images` as Route}
+              >
                 投稿に使う画像を作る
               </Link>
             )}
             {videoAvailable && (
-              <Link className="button button--primary" href={`/groups/${groupId}/videos` as Route}>
+              <Link
+                className="button button--primary"
+                href={`/s/${service.configuration.slug}/videos` as Route}
+              >
                 投稿に使う動画を作る
               </Link>
             )}
