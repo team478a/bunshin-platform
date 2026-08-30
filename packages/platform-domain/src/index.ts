@@ -58,6 +58,7 @@ export type GroupRole = (typeof GROUP_ROLES)[number];
 
 export const GROUP_MEMBERSHIP_STATUSES = [
   'INVITED',
+  'PENDING_APPROVAL',
   'ACTIVE',
   'SUSPENDED',
   'DECLINED',

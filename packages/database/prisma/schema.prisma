@@ -55,6 +55,7 @@ enum GroupRole {
 
 enum GroupMembershipStatus {
   INVITED
+  PENDING_APPROVAL
   ACTIVE
   SUSPENDED
   DECLINED
@@ -62,6 +63,8 @@ enum GroupMembershipStatus {
 }
 
 enum GroupMembershipAuditAction {
+  REQUESTED
+  APPROVED
   ROLE_CHANGED
   SUSPENDED
   REACTIVATED
@@ -1003,6 +1006,8 @@ model User {
   aiUsageEvents                     AiUsageEvent[]                      @relation("AiUsageActor")
   legalDocuments                    LegalDocument[]                     @relation("LegalDocumentAuthor")
   legalConsents                     UserLegalConsent[]
+  serviceLegalDocumentsCreated      ServiceLegalDocument[]              @relation("ServiceLegalDocumentAuthor")
+  serviceLegalConsents              ServiceLegalConsent[]
   accountDeletionRequests           AccountDeletionRequest[]
   accountDeletionAudits             AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
   lineConfigurationAudits           LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
@@ -1192,6 +1197,8 @@ model Workspace {
   serviceBrands                   ServiceBrand[]
   serviceRegistrationPolicies     ServiceRegistrationPolicy[]
   serviceConfigurationAudits      ServiceConfigurationAudit[]
+  serviceLegalDocuments           ServiceLegalDocument[]
+  serviceLegalConsents            ServiceLegalConsent[]
 
   @@index([status])
   @@map("workspaces")
@@ -1260,6 +1267,8 @@ model Group {
   serviceBrand                    ServiceBrand?
   serviceRegistrationPolicy       ServiceRegistrationPolicy?
   serviceConfigurationAudits      ServiceConfigurationAudit[]
+  serviceLegalDocuments           ServiceLegalDocument[]
+  serviceLegalConsents            ServiceLegalConsent[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -1293,6 +1302,7 @@ model ServiceConfiguration {
   brand            ServiceBrand?
   registration     ServiceRegistrationPolicy?
   audits           ServiceConfigurationAudit[]
+  legalDocuments   ServiceLegalDocument[]
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId])
@@ -1368,6 +1378,52 @@ model ServiceConfigurationAudit {
   @@map("service_configuration_audits")
 }
 
+model ServiceLegalDocument {
+  id              String                @id @default(uuid()) @db.Uuid
+  workspaceId     String                @map("workspace_id") @db.Uuid
+  groupId         String                @map("group_id") @db.Uuid
+  configurationId String                @map("configuration_id") @db.Uuid
+  type            LegalDocumentType
+  version         Int
+  title           String                @db.VarChar(200)
+  content         String                @db.Text
+  status          LegalDocumentStatus   @default(DRAFT)
+  effectiveAt     DateTime?             @map("effective_at") @db.Timestamptz(6)
+  publishedAt     DateTime?             @map("published_at") @db.Timestamptz(6)
+  createdByUserId String                @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group                 @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration   ServiceConfiguration  @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  createdBy       User                  @relation("ServiceLegalDocumentAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  consents        ServiceLegalConsent[]
+
+  @@unique([groupId, type, version])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, type, status, publishedAt])
+  @@map("service_legal_documents")
+}
+
+model ServiceLegalConsent {
+  id                String               @id @default(uuid()) @db.Uuid
+  workspaceId       String               @map("workspace_id") @db.Uuid
+  groupId           String               @map("group_id") @db.Uuid
+  groupMembershipId String               @map("group_membership_id") @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  legalDocumentId   String               @map("legal_document_id") @db.Uuid
+  consentedAt       DateTime             @default(now()) @map("consented_at") @db.Timestamptz(6)
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership      @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legalDocument     ServiceLegalDocument @relation(fields: [workspaceId, groupId, legalDocumentId], references: [workspaceId, groupId, id], onDelete: Restrict)
+
+  @@unique([groupMembershipId, legalDocumentId])
+  @@index([workspaceId, groupId, userId, consentedAt])
+  @@map("service_legal_consents")
+}
+
 model GroupMembership {
   id                         String                           @id @default(uuid()) @db.Uuid
   workspaceId                String                           @map("workspace_id") @db.Uuid
@@ -1392,6 +1448,7 @@ model GroupMembership {
   videoProjects              VideoProject[]
   videoAssets                VideoAsset[]
   lineConnections            GroupLineConnection[]
+  serviceLegalConsents       ServiceLegalConsent[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
