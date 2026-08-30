@@ -136,6 +136,8 @@ import type {
   SocialImageGenerationExecutionRepository,
   SocialImagePilotEvidenceRecord,
   SocialImagePilotEvidenceRepository,
+  ServiceFoundationRecord,
+  ServiceFoundationRepository,
   PointLedgerRepository,
   PointAccountSnapshot,
   PointTransactionRecord,
@@ -9138,6 +9140,210 @@ const groupMembershipRecord = (row: Prisma.GroupMembershipGetPayload<object>): G
 const groupInvitationRecord = (row: Prisma.GroupInvitationGetPayload<object>): GroupInvitation => ({
   ...row,
 });
+
+const serviceFoundationRecord = (
+  row: Prisma.ServiceConfigurationGetPayload<{ include: { brand: true; registration: true } }>,
+): ServiceFoundationRecord => {
+  if (row.brand === null || row.registration === null)
+    throw new Error('service foundation aggregate is incomplete');
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    groupId: row.groupId,
+    slug: row.slug,
+    displayName: row.displayName,
+    description: row.description,
+    operatorName: row.operatorName,
+    contactEmail: row.contactEmail,
+    visibility: row.visibility,
+    poweredByEnabled: row.poweredByEnabled,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    termsUrl: row.termsUrl,
+    privacyUrl: row.privacyUrl,
+    brand: {
+      logoUrl: row.brand.logoUrl,
+      iconUrl: row.brand.iconUrl,
+      faviconUrl: row.brand.faviconUrl,
+      primaryColor: row.brand.primaryColor,
+      secondaryColor: row.brand.secondaryColor,
+      fontFamily: row.brand.fontFamily,
+    },
+    registration: {
+      mode: row.registration.mode,
+      emailEnabled: row.registration.emailEnabled,
+      lineEnabled: row.registration.lineEnabled,
+      inviteCodeEnabled: row.registration.inviteCodeEnabled,
+      referralEnabled: row.registration.referralEnabled,
+      onboardingConfig: row.registration.onboardingConfig,
+      surveyConfig: row.registration.surveyConfig,
+    },
+  };
+};
+
+export class PrismaServiceFoundationRepository implements ServiceFoundationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async save(input: Parameters<ServiceFoundationRepository['save']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const [admin, group, existing] = await Promise.all([
+        tx.platformAdmin.findFirst({
+          where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+          select: { id: true },
+        }),
+        tx.group.findFirst({
+          where: { id: input.groupId, workspaceId: input.workspaceId },
+          select: { id: true },
+        }),
+        tx.serviceConfiguration.findUnique({
+          where: { groupId: input.groupId },
+          include: { brand: true, registration: true },
+        }),
+      ]);
+      if (admin === null || group === null) return null;
+      const value = input.configuration;
+      const configuration = await tx.serviceConfiguration.upsert({
+        where: { groupId: input.groupId },
+        create: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          slug: value.slug,
+          displayName: value.displayName,
+          description: value.description,
+          operatorName: value.operatorName,
+          contactEmail: value.contactEmail,
+          visibility: value.visibility,
+          poweredByEnabled: value.poweredByEnabled,
+          startsAt: value.startsAt,
+          endsAt: value.endsAt,
+          termsUrl: value.termsUrl,
+          privacyUrl: value.privacyUrl,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+        update: {
+          slug: value.slug,
+          displayName: value.displayName,
+          description: value.description,
+          operatorName: value.operatorName,
+          contactEmail: value.contactEmail,
+          visibility: value.visibility,
+          poweredByEnabled: value.poweredByEnabled,
+          startsAt: value.startsAt,
+          endsAt: value.endsAt,
+          termsUrl: value.termsUrl,
+          privacyUrl: value.privacyUrl,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await Promise.all([
+        tx.serviceBrand.upsert({
+          where: { groupId: input.groupId },
+          create: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            configurationId: configuration.id,
+            ...value.brand,
+          },
+          update: value.brand,
+        }),
+        tx.serviceRegistrationPolicy.upsert({
+          where: { groupId: input.groupId },
+          create: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            configurationId: configuration.id,
+            ...value.registration,
+            onboardingConfig: value.registration.onboardingConfig as Prisma.InputJsonValue,
+            surveyConfig: value.registration.surveyConfig as Prisma.InputJsonValue,
+          },
+          update: {
+            ...value.registration,
+            onboardingConfig: value.registration.onboardingConfig as Prisma.InputJsonValue,
+            surveyConfig: value.registration.surveyConfig as Prisma.InputJsonValue,
+          },
+        }),
+      ]);
+      const saved = await tx.serviceConfiguration.findUniqueOrThrow({
+        where: { id: configuration.id },
+        include: { brand: true, registration: true },
+      });
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          configurationId: configuration.id,
+          action: existing === null ? 'CREATED' : 'UPDATED',
+          ...(existing === null
+            ? {}
+            : {
+                beforeData: serviceFoundationRecord(existing) as unknown as Prisma.InputJsonValue,
+              }),
+          afterData: serviceFoundationRecord(saved) as unknown as Prisma.InputJsonValue,
+          reason: input.reason,
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return serviceFoundationRecord(saved);
+    });
+  }
+
+  async findByGroup(input: Parameters<ServiceFoundationRepository['findByGroup']>[0]) {
+    const [platformAdmin, access] = await Promise.all([
+      this.client.platformAdmin.findFirst({
+        where: { userId: input.actorUserId, status: 'ACTIVE' },
+        select: { id: true },
+      }),
+      this.client.group.findFirst({
+        where: {
+          id: input.groupId,
+          workspaceId: input.workspaceId,
+          OR: [
+            {
+              memberships: {
+                some: { userId: input.actorUserId, role: 'MANAGER', status: 'ACTIVE' },
+              },
+            },
+            {
+              workspace: {
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    role: { in: ['OWNER', 'ADMIN'] },
+                    status: 'ACTIVE',
+                  },
+                },
+              },
+            },
+          ],
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (platformAdmin === null && access === null) return null;
+    const value = await this.client.serviceConfiguration.findFirst({
+      where: { workspaceId: input.workspaceId, groupId: input.groupId },
+      include: { brand: true, registration: true },
+    });
+    return value === null ? null : serviceFoundationRecord(value);
+  }
+
+  async findPublicBySlug(input: Parameters<ServiceFoundationRepository['findPublicBySlug']>[0]) {
+    const value = await this.client.serviceConfiguration.findFirst({
+      where: {
+        slug: input.slug,
+        visibility: 'PUBLIC',
+        group: { status: 'ACTIVE' },
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+          { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+        ],
+      },
+      include: { brand: true, registration: true },
+    });
+    return value === null ? null : serviceFoundationRecord(value);
+  }
+}
 
 export class PrismaGroupParticipationRepository implements GroupParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}

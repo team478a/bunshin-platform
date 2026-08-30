@@ -75,6 +75,18 @@ enum GroupInvitationStatus {
   REVOKED
 }
 
+enum ServiceVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum ServiceRegistrationMode {
+  PUBLIC
+  INVITATION_ONLY
+  APPROVAL_REQUIRED
+  CLOSED
+}
+
 enum FeatureDefinitionStatus {
   ACTIVE
   RETIRED
@@ -1070,6 +1082,9 @@ model User {
   groupKnowledgeSourcesCreated      GroupKnowledgeSource[]              @relation("GroupKnowledgeSourceCreator")
   groupKnowledgeSourcesApproved     GroupKnowledgeSource[]              @relation("GroupKnowledgeSourceApprover")
   groupKnowledgeAudits              GroupKnowledgeAuditLog[]            @relation("GroupKnowledgeAuditActor")
+  serviceConfigurationsCreated      ServiceConfiguration[]              @relation("ServiceConfigurationCreator")
+  serviceConfigurationsUpdated      ServiceConfiguration[]              @relation("ServiceConfigurationUpdater")
+  serviceConfigurationAudits        ServiceConfigurationAudit[]         @relation("ServiceConfigurationAuditActor")
 
   @@index([status])
   @@map("users")
@@ -1173,6 +1188,10 @@ model Workspace {
   badgeAdminAudits                BadgeAdminAuditLog[]
   badgeApprovalRequests           BadgeApprovalRequest[]
   badgeAwardCandidates            BadgeAwardCandidate[]
+  serviceConfigurations           ServiceConfiguration[]
+  serviceBrands                   ServiceBrand[]
+  serviceRegistrationPolicies     ServiceRegistrationPolicy[]
+  serviceConfigurationAudits      ServiceConfigurationAudit[]
 
   @@index([status])
   @@map("workspaces")
@@ -1237,11 +1256,116 @@ model Group {
   badgeApprovalRequests           BadgeApprovalRequest[]
   badgeAwardCandidates            BadgeAwardCandidate[]
   badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
+  serviceConfiguration            ServiceConfiguration?
+  serviceBrand                    ServiceBrand?
+  serviceRegistrationPolicy       ServiceRegistrationPolicy?
+  serviceConfigurationAudits      ServiceConfigurationAudit[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
   @@index([workspaceId, status])
   @@map("groups")
+}
+
+model ServiceConfiguration {
+  id               String                      @id @default(uuid()) @db.Uuid
+  workspaceId      String                      @map("workspace_id") @db.Uuid
+  groupId          String                      @unique @map("group_id") @db.Uuid
+  slug             String                      @unique @db.VarChar(80)
+  displayName      String                      @map("display_name") @db.VarChar(120)
+  description      String                      @db.VarChar(1000)
+  operatorName     String                      @map("operator_name") @db.VarChar(160)
+  contactEmail     String?                     @map("contact_email") @db.VarChar(320)
+  visibility       ServiceVisibility           @default(PRIVATE)
+  poweredByEnabled Boolean                     @default(true) @map("powered_by_enabled")
+  startsAt         DateTime?                   @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime?                   @map("ends_at") @db.Timestamptz(6)
+  termsUrl         String?                     @map("terms_url") @db.VarChar(2048)
+  privacyUrl       String?                     @map("privacy_url") @db.VarChar(2048)
+  createdByUserId  String                      @map("created_by_user_id") @db.Uuid
+  updatedByUserId  String                      @map("updated_by_user_id") @db.Uuid
+  createdAt        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace        Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group            Group                       @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy        User                        @relation("ServiceConfigurationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy        User                        @relation("ServiceConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  brand            ServiceBrand?
+  registration     ServiceRegistrationPolicy?
+  audits           ServiceConfigurationAudit[]
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId])
+  @@index([workspaceId, visibility, startsAt, endsAt])
+  @@map("service_configurations")
+}
+
+model ServiceBrand {
+  id              String               @id @default(uuid()) @db.Uuid
+  workspaceId     String               @map("workspace_id") @db.Uuid
+  groupId         String               @unique @map("group_id") @db.Uuid
+  configurationId String               @unique @map("configuration_id") @db.Uuid
+  logoUrl         String?              @map("logo_url") @db.VarChar(2048)
+  iconUrl         String?              @map("icon_url") @db.VarChar(2048)
+  faviconUrl      String?              @map("favicon_url") @db.VarChar(2048)
+  primaryColor    String               @default("#0B356A") @map("primary_color") @db.Char(7)
+  secondaryColor  String               @default("#FF3B30") @map("secondary_color") @db.Char(7)
+  fontFamily      String               @default("system-ui") @map("font_family") @db.VarChar(120)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration   ServiceConfiguration @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId])
+  @@unique([workspaceId, groupId, configurationId])
+  @@index([workspaceId, groupId])
+  @@map("service_brands")
+}
+
+model ServiceRegistrationPolicy {
+  id                String                  @id @default(uuid()) @db.Uuid
+  workspaceId       String                  @map("workspace_id") @db.Uuid
+  groupId           String                  @unique @map("group_id") @db.Uuid
+  configurationId   String                  @unique @map("configuration_id") @db.Uuid
+  mode              ServiceRegistrationMode @default(INVITATION_ONLY)
+  emailEnabled      Boolean                 @default(true) @map("email_enabled")
+  lineEnabled       Boolean                 @default(false) @map("line_enabled")
+  inviteCodeEnabled Boolean                 @default(false) @map("invite_code_enabled")
+  referralEnabled   Boolean                 @default(false) @map("referral_enabled")
+  onboardingConfig  Json                    @default("{}") @map("onboarding_config")
+  surveyConfig      Json                    @default("{}") @map("survey_config")
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                   @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration     ServiceConfiguration    @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId])
+  @@unique([workspaceId, groupId, configurationId])
+  @@index([workspaceId, groupId, mode])
+  @@map("service_registration_policies")
+}
+
+model ServiceConfigurationAudit {
+  id                String               @id @default(uuid()) @db.Uuid
+  workspaceId       String               @map("workspace_id") @db.Uuid
+  groupId           String               @map("group_id") @db.Uuid
+  configurationId   String               @map("configuration_id") @db.Uuid
+  action            String               @db.VarChar(40)
+  beforeData        Json?                @map("before_data")
+  afterData         Json                 @map("after_data")
+  reason            String               @db.VarChar(1000)
+  performedByUserId String               @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime             @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration     ServiceConfiguration @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  performedBy       User                 @relation("ServiceConfigurationAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, occurredAt])
+  @@index([configurationId, occurredAt])
+  @@map("service_configuration_audits")
 }
 
 model GroupMembership {
