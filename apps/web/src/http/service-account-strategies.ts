@@ -18,6 +18,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { resolvePublicServiceContext } from '../services/public-service';
+import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
 
 const uuidSchema = z.string().uuid();
 const generateSchema = z
@@ -170,6 +171,11 @@ export function generateServiceAccountStrategyResponse(
       const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
       const { assignments, bunshins, profiles, strategies } = await repositories();
       const bunshin = await new GetBunshin(bunshins).execute(input);
+      const serviceKnowledge = await loadServiceGenerationKnowledge({
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        actorUserId: input.actorUserId,
+      });
       const profile = await profiles.findByPlatform({
         ...input,
         platform: parsed.data.platform,
@@ -197,7 +203,7 @@ export function generateServiceAccountStrategyResponse(
             audiences: bunshin.audiences,
             personality: bunshin.personality,
           },
-          grantedKnowledge: [],
+          grantedKnowledge: serviceKnowledge.officialKnowledge,
         });
         logger.info('service strategy generation complete', {
           status: 'success',

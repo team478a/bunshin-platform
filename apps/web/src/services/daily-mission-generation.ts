@@ -36,6 +36,7 @@ import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-pla
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import { campaignContentSignature } from './campaign-content-signature';
+import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 
 interface Input {
   workspaceId: string;
@@ -242,24 +243,31 @@ export class DailyMissionGenerationService {
         postingPolicy: strategy.postingPolicy,
       };
       const knowledge = granted.map(({ type, title, content }) => ({ type, title, content }));
-      const groupKnowledgeChunks = campaign
-        ? await new GroupKnowledgeService(
-            new db.PrismaGroupKnowledgeRepository(),
-          ).listApprovedChunksForGeneration({
-            ...scope,
-            groupId: campaign.productPack.groupId,
-            productPackVersionId: campaign.productPack.versionId,
-          })
-        : [];
-      const groupKnowledge = selectGroupKnowledgeChunksForPrompt(groupKnowledgeChunks).map(
-        (chunk) => ({
-          chunkId: chunk.id,
-          sourceId: chunk.sourceId,
-          type: chunk.type,
-          sourceLabel: chunk.sourceLabel,
-          content: chunk.content.trim(),
-        }),
-      );
+      const groupKnowledge = campaign
+        ? selectGroupKnowledgeChunksForPrompt(
+            await new GroupKnowledgeService(
+              new db.PrismaGroupKnowledgeRepository(),
+            ).listApprovedChunksForGeneration({
+              ...scope,
+              groupId: campaign.productPack.groupId,
+              productPackVersionId: campaign.productPack.versionId,
+            }),
+          ).map((chunk) => ({
+            chunkId: chunk.id,
+            sourceId: chunk.sourceId,
+            type: chunk.type,
+            sourceLabel: chunk.sourceLabel,
+            content: chunk.content.trim(),
+          }))
+        : input.serviceSafeMode && input.groupId
+          ? (
+              await loadServiceGenerationKnowledge({
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                actorUserId: input.actorUserId,
+              })
+            ).groupKnowledge
+          : [];
       const usage = async (
         suffix: string,
         taskType: string,

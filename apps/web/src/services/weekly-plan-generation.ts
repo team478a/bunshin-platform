@@ -81,6 +81,7 @@ export class WeeklyPlanGenerationService {
       existingPolicy: 'RETURN' | 'CONFLICT';
       includeGrantedKnowledge?: boolean;
       includeCampaigns?: boolean;
+      additionalKnowledge?: Array<{ type: string; title: string; content: string }>;
     },
   ) {
     const started = this.dependencies.now();
@@ -159,7 +160,10 @@ export class WeeklyPlanGenerationService {
           description,
           weight,
         })),
-        grantedKnowledge: granted.map(({ type, title, content }) => ({ type, title, content })),
+        grantedKnowledge: [
+          ...granted.map(({ type, title, content }) => ({ type, title, content })),
+          ...(input.additionalKnowledge ?? []),
+        ],
         campaigns,
       });
       const plan = await new CreateGeneratedWeeklyPlan(
