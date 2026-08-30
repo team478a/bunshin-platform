@@ -1801,6 +1801,7 @@ export interface DailyMission {
 }
 export interface DailyMissionScope {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
 }

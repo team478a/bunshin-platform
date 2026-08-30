@@ -39,6 +39,7 @@ import { campaignContentSignature } from './campaign-content-signature';
 
 interface Input {
   workspaceId: string;
+  groupId?: string | null;
   bunshinId: string;
   actorUserId: string;
   missionDate: string;
@@ -47,6 +48,7 @@ interface Input {
   generationIdempotencyKey: string;
   usageIdempotencyPrefix: string;
   existingPolicy: 'RETURN' | 'CONFLICT';
+  serviceSafeMode?: boolean;
 }
 
 const errorCategory = (error: unknown) => {
@@ -78,6 +80,7 @@ export class DailyMissionGenerationService {
     });
     const scope = {
       workspaceId: input.workspaceId,
+      ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
       bunshinId: input.bunshinId,
       actorUserId: input.actorUserId,
     };
@@ -108,9 +111,11 @@ export class DailyMissionGenerationService {
           to: daysBefore(input.missionDate, 1),
         })
       ).map(({ format }) => format);
-      const productPack = await new ProductPackService(
-        new db.PrismaProductPackRepository(),
-      ).resolveForGeneration(scope);
+      const productPack = input.serviceSafeMode
+        ? null
+        : await new ProductPackService(new db.PrismaProductPackRepository()).resolveForGeneration(
+            scope,
+          );
       const profiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
         scope,
       );
@@ -123,13 +128,13 @@ export class DailyMissionGenerationService {
       ).execute({ ...scope, socialProfileId: profile.id });
       const strategy = strategies.find(({ status }) => status === 'APPROVED');
       if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
-      const trendIdeas = await new ListActiveTrendIdeas(
-        new db.PrismaTrendResearchRepository(),
-      ).execute({
-        ...scope,
-        socialProfileId: profile.id,
-        at: new Date(),
-      });
+      const trendIdeas = input.serviceSafeMode
+        ? []
+        : await new ListActiveTrendIdeas(new db.PrismaTrendResearchRepository()).execute({
+            ...scope,
+            socialProfileId: profile.id,
+            at: new Date(),
+          });
       const weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(
         scope,
       );
@@ -143,6 +148,8 @@ export class DailyMissionGenerationService {
       const weeklyItem = weeklyPlan.items.find(
         ({ scheduledDate }) => scheduledDate === input.missionDate,
       )!;
+      if (input.serviceSafeMode && weeklyItem.campaignId)
+        throw new ApplicationError('CONFLICT', 'service campaign generation is not connected');
       const campaign = weeklyItem.campaignId
         ? await new CampaignService(new db.PrismaCampaignRepository()).resolvePlanningContext({
             ...scope,
@@ -174,13 +181,17 @@ export class DailyMissionGenerationService {
         scope,
       );
       const bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
-      const personalityVersions = await new ListPersonalityVersions(
-        new db.PrismaPersonalityVersionRepository(),
-      ).execute(scope);
+      const personalityVersions = input.serviceSafeMode
+        ? []
+        : await new ListPersonalityVersions(new db.PrismaPersonalityVersionRepository()).execute(
+            scope,
+          );
       const currentPersonality = personalityVersions[0] ?? null;
-      const granted = await new ListGrantedKnowledgeForBunshin(
-        new db.PrismaKnowledgeGrantRepository(),
-      ).execute(scope);
+      const granted = input.serviceSafeMode
+        ? []
+        : await new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
+            scope,
+          );
       const generations = new db.PrismaDailyMissionGenerationRepository();
       const claim = await generations.claim({
         ...scope,
@@ -298,21 +309,21 @@ export class DailyMissionGenerationService {
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
-      const selectedMemories = await new SelectBunshinMemories(
-        new db.PrismaBunshinMemoryRepository(),
-      ).execute({
-        ...scope,
-        query: [
-          brief.output.topic,
-          brief.output.angle,
-          brief.output.reason,
-          pillar.title,
-          pillar.description ?? '',
-          strategy.targetSummary,
-        ].join('\n'),
-        maxItems: 5,
-        maxCharacters: 3000,
-      });
+      const selectedMemories = input.serviceSafeMode
+        ? []
+        : await new SelectBunshinMemories(new db.PrismaBunshinMemoryRepository()).execute({
+            ...scope,
+            query: [
+              brief.output.topic,
+              brief.output.angle,
+              brief.output.reason,
+              pillar.title,
+              pillar.description ?? '',
+              strategy.targetSummary,
+            ].join('\n'),
+            maxItems: 5,
+            maxCharacters: 3000,
+          });
       const generator = new GenerateMissionContent(
         new OpenAIMissionContentGenerator({
           apiKey,
