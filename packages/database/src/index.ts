@@ -9437,7 +9437,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
 
   async save(input: Parameters<ServiceFoundationRepository['save']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const [admin, group, existing] = await Promise.all([
+      const [admin, group, manager, existing] = await Promise.all([
         tx.platformAdmin.findFirst({
           where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
           select: { id: true },
@@ -9446,13 +9446,34 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           where: { id: input.groupId, workspaceId: input.workspaceId },
           select: { id: true },
         }),
+        tx.groupMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            status: 'ACTIVE',
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+          },
+          select: { id: true },
+        }),
         tx.serviceConfiguration.findUnique({
           where: { groupId: input.groupId },
           include: { brand: true, registration: true },
         }),
       ]);
-      if (admin === null || group === null) return null;
+      if ((admin === null && manager === null) || group === null) return null;
       const value = input.configuration;
+      if (
+        admin === null &&
+        (existing === null ||
+          value.slug !== existing.slug ||
+          value.visibility !== existing.visibility ||
+          value.poweredByEnabled !== existing.poweredByEnabled ||
+          value.startsAt?.getTime() !== existing.startsAt?.getTime() ||
+          value.endsAt?.getTime() !== existing.endsAt?.getTime())
+      )
+        return null;
       const configuration = await tx.serviceConfiguration.upsert({
         where: { groupId: input.groupId },
         create: {
@@ -9488,6 +9509,10 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
         },
       });
       await Promise.all([
+        tx.group.update({
+          where: { id: input.groupId },
+          data: { name: value.displayName },
+        }),
         tx.serviceBrand.upsert({
           where: { groupId: input.groupId },
           create: {
