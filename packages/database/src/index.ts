@@ -9230,20 +9230,33 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           privacyUrl: value.privacyUrl,
           createdByUserId: input.actorUserId,
           updatedByUserId: input.actorUserId,
-          brand: { create: { workspaceId: input.workspaceId, groupId: group.id, ...value.brand } },
-          registration: {
-            create: {
-              workspaceId: input.workspaceId,
-              groupId: group.id,
-              ...value.registration,
-              onboardingConfig: value.registration.onboardingConfig as Prisma.InputJsonValue,
-              surveyConfig: value.registration.surveyConfig as Prisma.InputJsonValue,
-            },
-          },
         },
+      });
+      await Promise.all([
+        tx.serviceBrand.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            configurationId: configuration.id,
+            ...value.brand,
+          },
+        }),
+        tx.serviceRegistrationPolicy.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            configurationId: configuration.id,
+            ...value.registration,
+            onboardingConfig: value.registration.onboardingConfig as Prisma.InputJsonValue,
+            surveyConfig: value.registration.surveyConfig as Prisma.InputJsonValue,
+          },
+        }),
+      ]);
+      const saved = await tx.serviceConfiguration.findUniqueOrThrow({
+        where: { id: configuration.id },
         include: { brand: true, registration: true },
       });
-      const record = serviceFoundationRecord(configuration);
+      const record = serviceFoundationRecord(saved);
       await tx.serviceConfigurationAudit.create({
         data: {
           workspaceId: input.workspaceId,
