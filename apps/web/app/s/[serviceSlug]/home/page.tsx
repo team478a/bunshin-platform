@@ -258,6 +258,12 @@ export default async function ServiceMemberHome({
               <a className="button" href={`/s/${service.configuration.slug}/manage/badges`}>
                 バッジ
               </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/product-packs`}>
+                公式商品情報
+              </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/campaigns`}>
+                参加募集
+              </a>
             </div>
           </section>
         )}

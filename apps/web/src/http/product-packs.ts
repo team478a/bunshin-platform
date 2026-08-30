@@ -59,12 +59,16 @@ const versionSchema = z
   .strict();
 const assignmentSchema = z.object({ versionId: uuid, bunshinId: uuid }).strict();
 
-async function service(workspaceId: string) {
+async function service(workspaceId: string, groupId?: string) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
   const db = await import('@bunshin/database');
   return {
-    scope: { workspaceId: uuid.parse(workspaceId), actorUserId: user.userId },
+    scope: {
+      workspaceId: uuid.parse(workspaceId),
+      actorUserId: user.userId,
+      ...(groupId ? { groupId } : {}),
+    },
     value: new ProductPackService(new db.PrismaProductPackRepository()),
   };
 }
@@ -97,6 +101,7 @@ export function createProductPackVersionResponse(
   request: Request,
   workspaceId: string,
   productPackId: string,
+  groupId?: string,
 ) {
   return respond(
     request,
@@ -115,7 +120,7 @@ export function createProductPackVersionResponse(
         })),
         assets: parsed.assets.map((asset) => ({ ...asset, validUntil: toDate(asset.validUntil) })),
       };
-      const { scope, value } = await service(workspaceId);
+      const { scope, value } = await service(workspaceId, groupId);
       return value.createDraftVersion({
         ...scope,
         productPackId: uuid.parse(productPackId),
@@ -131,10 +136,11 @@ export function publishProductPackVersionResponse(
   workspaceId: string,
   productPackId: string,
   versionId: string,
+  groupId?: string,
 ) {
   return respond(request, async () => {
     requireSameOrigin(request);
-    const { scope, value } = await service(workspaceId);
+    const { scope, value } = await service(workspaceId, groupId);
     return value.publishVersion({
       ...scope,
       productPackId: uuid.parse(productPackId),
