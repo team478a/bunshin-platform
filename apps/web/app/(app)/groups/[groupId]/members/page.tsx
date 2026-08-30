@@ -6,6 +6,7 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { serviceManagementReturnPath } from '../../../../../src/services/service-management-return';
 import { GroupInvitationEditor } from '../../../../ui/group-invitation-editor';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ const assignmentSchema = z.object({
   startsAt: z.string().max(40),
   endsAt: z.string().max(40),
   reason: z.string().trim().min(5).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 
 const membershipSchema = z.object({
@@ -30,6 +32,7 @@ const membershipSchema = z.object({
   role: z.enum(['MANAGER', 'PARTICIPANT']),
   status: z.enum(['ACTIVE', 'SUSPENDED', 'REVOKED']),
   reason: z.string().trim().min(5).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 
 const approvalSchema = z.object({
@@ -37,6 +40,7 @@ const approvalSchema = z.object({
   groupId: z.uuid(),
   groupMembershipId: z.uuid(),
   reason: z.string().trim().min(5).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 
 function optionalLimit(value: string): number | null {
@@ -60,12 +64,27 @@ function memberPath(groupId: string, membershipId?: string, suffix = ''): Route 
   return `/groups/${groupId}/members${query}` as Route;
 }
 
+async function memberReturnPath(
+  groupId: string,
+  serviceSlug?: string,
+  membershipId?: string,
+  suffix = '',
+) {
+  const query = membershipId ? `?member=${membershipId}${suffix}` : suffix;
+  return serviceManagementReturnPath({ groupId, serviceSlug, section: 'members', query });
+}
+
 async function saveMemberFeatureAssignment(formData: FormData) {
   'use server';
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
   const input = assignmentSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const returnPath = await memberReturnPath(
+    input.data.groupId,
+    input.data.serviceSlug,
+    input.data.groupMembershipId,
+  );
   try {
     const db = await import('@bunshin/database');
     await new GroupFeatureEntitlementService(
@@ -85,10 +104,10 @@ async function saveMemberFeatureAssignment(formData: FormData) {
         : error instanceof ApplicationError && error.code === 'FORBIDDEN'
           ? 'forbidden'
           : 'failed';
-    redirect(memberPath(input.data.groupId, input.data.groupMembershipId, `&error=${code}`));
+    redirect(`${returnPath}&error=${code}` as Route);
   }
   revalidatePath(memberPath(input.data.groupId));
-  redirect(memberPath(input.data.groupId, input.data.groupMembershipId, '&saved=1'));
+  redirect(`${returnPath}&saved=1` as Route);
 }
 
 async function saveMembership(formData: FormData) {
@@ -97,6 +116,11 @@ async function saveMembership(formData: FormData) {
   if (!actor) redirect('/login');
   const input = membershipSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const returnPath = await memberReturnPath(
+    input.data.groupId,
+    input.data.serviceSlug,
+    input.data.groupMembershipId,
+  );
   try {
     const db = await import('@bunshin/database');
     await new GroupParticipationService(
@@ -109,10 +133,10 @@ async function saveMembership(formData: FormData) {
         : error instanceof ApplicationError && error.code === 'FORBIDDEN'
           ? 'member-forbidden'
           : 'member-failed';
-    redirect(memberPath(input.data.groupId, input.data.groupMembershipId, `&error=${code}`));
+    redirect(`${returnPath}&error=${code}` as Route);
   }
   revalidatePath(memberPath(input.data.groupId));
-  redirect(memberPath(input.data.groupId, input.data.groupMembershipId, '&memberSaved=1'));
+  redirect(`${returnPath}&memberSaved=1` as Route);
 }
 
 async function approveParticipation(formData: FormData) {
@@ -121,6 +145,7 @@ async function approveParticipation(formData: FormData) {
   if (!actor) redirect('/login');
   const input = approvalSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const returnPath = await memberReturnPath(input.data.groupId, input.data.serviceSlug);
   try {
     const db = await import('@bunshin/database');
     const { ServiceParticipationService } = await import('@bunshin/application');
@@ -138,10 +163,10 @@ async function approveParticipation(formData: FormData) {
         : error instanceof ApplicationError && error.code === 'FORBIDDEN'
           ? 'approval-forbidden'
           : 'approval-failed';
-    redirect(memberPath(input.data.groupId, undefined, `?error=${code}`));
+    redirect(`${returnPath}?error=${code}` as Route);
   }
   revalidatePath(memberPath(input.data.groupId));
-  redirect(memberPath(input.data.groupId, undefined, '?approved=1'));
+  redirect(`${returnPath}?approved=1` as Route);
 }
 
 function localDateTime(value: Date | null): string {
@@ -336,6 +361,9 @@ export default async function GroupMemberFeaturesPage({
                 <h3>{membership.user.displayName}</h3>
                 <p>{membership.user.email ?? 'メールアドレスなし'}</p>
                 <form className="form-stack" action={approveParticipation}>
+                  {query.service && (
+                    <input type="hidden" name="serviceSlug" value={query.service} />
+                  )}
                   <input type="hidden" name="workspaceId" value={group.workspaceId} />
                   <input type="hidden" name="groupId" value={group.id} />
                   <input type="hidden" name="groupMembershipId" value={membership.id} />
@@ -366,6 +394,7 @@ export default async function GroupMemberFeaturesPage({
           <p>利用中の参加者はまだいません。</p>
         ) : null}
         <form method="get" className="form-stack">
+          {query.service && <input type="hidden" name="service" value={query.service} />}
           <label className="field">
             <span className="field__label">参加者を選ぶ</span>
             <select className="field__control" name="member" defaultValue={selectedMember?.id}>
@@ -389,6 +418,7 @@ export default async function GroupMemberFeaturesPage({
               {selectedMember.user.email ?? 'メールなし'}
             </p>
             <form className="form-stack" action={saveMembership}>
+              {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
               <input type="hidden" name="workspaceId" value={group.workspaceId} />
               <input type="hidden" name="groupId" value={group.id} />
               <input type="hidden" name="groupMembershipId" value={selectedMember.id} />
@@ -476,6 +506,9 @@ export default async function GroupMemberFeaturesPage({
                   </strong>
                 </p>
                 <form className="form-stack" action={saveMemberFeatureAssignment}>
+                  {query.service && (
+                    <input type="hidden" name="serviceSlug" value={query.service} />
+                  )}
                   <input type="hidden" name="workspaceId" value={group.workspaceId} />
                   <input type="hidden" name="groupId" value={group.id} />
                   <input type="hidden" name="groupMembershipId" value={selectedMember.id} />

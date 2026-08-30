@@ -10,6 +10,7 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { serviceManagementReturnPath } from '../../../../../src/services/service-management-return';
 import { BadgeCsvImporter } from './badge-csv-importer';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ const draftSchema = z.object({
   description: z.string().trim().min(1).max(500),
   altText: z.string().trim().min(1).max(200),
   reason: z.string().trim().min(3).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 const nominateSchema = z.object({
   workspaceId: z.uuid(),
@@ -30,12 +32,14 @@ const nominateSchema = z.object({
   badgeVersionId: z.uuid(),
   userId: z.uuid(),
   reason: z.string().trim().min(3).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 const reviewSchema = z.object({
   groupId: z.uuid(),
   candidateId: z.uuid(),
   decision: z.enum(['APPROVED', 'REJECTED']),
   reason: z.string().trim().min(3).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 
 const path = (groupId: string, query = '') => `/groups/${groupId}/badges${query}` as Route;
@@ -48,6 +52,11 @@ async function createBadge(formData: FormData) {
   if (!actor) redirect('/login');
   const parsed = draftSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: parsed.data.groupId,
+    serviceSlug: parsed.data.serviceSlug,
+    section: 'badges',
+  });
   try {
     const db = await import('@bunshin/database');
     await new CreateAndSubmitGroupBadge(
@@ -58,10 +67,10 @@ async function createBadge(formData: FormData) {
       actorUserId: actor.userId,
     });
   } catch (error) {
-    redirect(path(parsed.data.groupId, `?error=${errorCode(error)}`));
+    redirect(`${returnPath}?error=${errorCode(error)}` as Route);
   }
   revalidatePath(path(parsed.data.groupId));
-  redirect(path(parsed.data.groupId, '?created=1'));
+  redirect(`${returnPath}?created=1` as Route);
 }
 
 async function nominate(formData: FormData) {
@@ -70,16 +79,21 @@ async function nominate(formData: FormData) {
   if (!actor) redirect('/login');
   const parsed = nominateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: parsed.data.groupId,
+    serviceSlug: parsed.data.serviceSlug,
+    section: 'badges',
+  });
   try {
     const db = await import('@bunshin/database');
     await new NominateGroupBadgeCandidate(
       new db.PrismaBadgeGroupWorkflowRepository(db.prisma),
     ).execute({ ...parsed.data, actorUserId: actor.userId });
   } catch (error) {
-    redirect(path(parsed.data.groupId, `?error=${errorCode(error)}`));
+    redirect(`${returnPath}?error=${errorCode(error)}` as Route);
   }
   revalidatePath(path(parsed.data.groupId));
-  redirect(path(parsed.data.groupId, '?nominated=1'));
+  redirect(`${returnPath}?nominated=1` as Route);
 }
 
 async function reviewCandidate(formData: FormData) {
@@ -88,6 +102,11 @@ async function reviewCandidate(formData: FormData) {
   if (!actor) redirect('/login');
   const parsed = reviewSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: parsed.data.groupId,
+    serviceSlug: parsed.data.serviceSlug,
+    section: 'badges',
+  });
   try {
     const db = await import('@bunshin/database');
     await new ReviewGroupBadgeCandidate(
@@ -99,10 +118,10 @@ async function reviewCandidate(formData: FormData) {
       actorUserId: actor.userId,
     });
   } catch (error) {
-    redirect(path(parsed.data.groupId, `?error=${errorCode(error)}`));
+    redirect(`${returnPath}?error=${errorCode(error)}` as Route);
   }
   revalidatePath(path(parsed.data.groupId));
-  redirect(path(parsed.data.groupId, '?reviewed=1'));
+  redirect(`${returnPath}?reviewed=1` as Route);
 }
 
 const approvalLabel = {
@@ -199,6 +218,7 @@ export default async function GroupBadgesPage({
         <h2>新しいバッジを本部へ申請</h2>
         <p>申請後、本部が内容を確認するまで参加者には付与できません。</p>
         <form action={createBadge} className="form-stack">
+          {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
           <input type="hidden" name="workspaceId" value={group.workspaceId} />
           <input type="hidden" name="groupId" value={group.id} />
           <label className="field">
@@ -267,6 +287,7 @@ export default async function GroupBadgesPage({
           <p>本部の承認が終わったバッジがありません。</p>
         ) : (
           <form action={nominate} className="form-stack">
+            {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
             <input type="hidden" name="workspaceId" value={group.workspaceId} />
             <input type="hidden" name="groupId" value={group.id} />
             <label className="field">
@@ -326,6 +347,9 @@ export default async function GroupBadgesPage({
               </p>
               {candidate.status === 'PENDING' ? (
                 <form action={reviewCandidate} className="form-stack">
+                  {query.service && (
+                    <input type="hidden" name="serviceSlug" value={query.service} />
+                  )}
                   <input type="hidden" name="groupId" value={group.id} />
                   <input type="hidden" name="candidateId" value={candidate.id} />
                   <label className="field">
