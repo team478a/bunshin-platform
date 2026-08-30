@@ -9184,6 +9184,94 @@ const serviceFoundationRecord = (
 export class PrismaServiceFoundationRepository implements ServiceFoundationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async create(input: Parameters<ServiceFoundationRepository['create']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const [admin, workspace] = await Promise.all([
+        tx.platformAdmin.findFirst({
+          where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+          select: { id: true },
+        }),
+        tx.workspace.findFirst({
+          where: { id: input.workspaceId, type: 'ORGANIZATION', status: 'ACTIVE' },
+          select: { id: true },
+        }),
+      ]);
+      if (admin === null || workspace === null) return null;
+      const value = input.configuration;
+      const group = await tx.group.create({
+        data: {
+          workspaceId: input.workspaceId,
+          name: value.displayName,
+          memberships: {
+            create: {
+              workspaceId: input.workspaceId,
+              userId: input.actorUserId,
+              role: 'MANAGER',
+              status: 'ACTIVE',
+              consentedAt: new Date(),
+            },
+          },
+        },
+      });
+      const configuration = await tx.serviceConfiguration.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: group.id,
+          slug: value.slug,
+          displayName: value.displayName,
+          description: value.description,
+          operatorName: value.operatorName,
+          contactEmail: value.contactEmail,
+          visibility: value.visibility,
+          poweredByEnabled: value.poweredByEnabled,
+          startsAt: value.startsAt,
+          endsAt: value.endsAt,
+          termsUrl: value.termsUrl,
+          privacyUrl: value.privacyUrl,
+          createdByUserId: input.actorUserId,
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await Promise.all([
+        tx.serviceBrand.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            configurationId: configuration.id,
+            ...value.brand,
+          },
+        }),
+        tx.serviceRegistrationPolicy.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            configurationId: configuration.id,
+            ...value.registration,
+            onboardingConfig: value.registration.onboardingConfig as Prisma.InputJsonValue,
+            surveyConfig: value.registration.surveyConfig as Prisma.InputJsonValue,
+          },
+        }),
+      ]);
+      const saved = await tx.serviceConfiguration.findUniqueOrThrow({
+        where: { id: configuration.id },
+        include: { brand: true, registration: true },
+      });
+      const record = serviceFoundationRecord(saved);
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: group.id,
+          configurationId: configuration.id,
+          action: 'CREATED',
+          afterData: record as unknown as Prisma.InputJsonValue,
+          reason: input.reason,
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return record;
+    });
+  }
+
   async save(input: Parameters<ServiceFoundationRepository['save']>[0]) {
     return this.client.$transaction(async (tx) => {
       const [admin, group, existing] = await Promise.all([

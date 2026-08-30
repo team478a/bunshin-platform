@@ -46,6 +46,12 @@ export interface ServiceFoundationRecord {
 }
 
 export interface ServiceFoundationRepository {
+  create(input: {
+    workspaceId: string;
+    actorUserId: string;
+    reason: string;
+    configuration: Omit<ServiceFoundationRecord, 'id' | 'workspaceId' | 'groupId'>;
+  }): Promise<ServiceFoundationRecord | null>;
   save(input: {
     workspaceId: string;
     groupId: string;
@@ -99,9 +105,12 @@ const color = (value: string, field: string) => {
 export class ServiceFoundationService {
   constructor(private readonly repository: ServiceFoundationRepository) {}
 
-  async save(
-    input: Parameters<ServiceFoundationRepository['save']>[0],
-  ): Promise<ServiceFoundationRecord> {
+  private normalize<
+    T extends {
+      reason: string;
+      configuration: Omit<ServiceFoundationRecord, 'id' | 'workspaceId' | 'groupId'>;
+    },
+  >(input: T): T {
     const { configuration } = input;
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(configuration.slug))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid slug');
@@ -114,7 +123,7 @@ export class ServiceFoundationService {
     if (!configuration.registration.emailEnabled && !configuration.registration.lineEnabled)
       throw new ApplicationError('VALIDATION_ERROR', 'at least one registration provider required');
 
-    const result = await this.repository.save({
+    return {
       ...input,
       reason: text(input.reason, 'reason', 1000),
       configuration: {
@@ -135,7 +144,22 @@ export class ServiceFoundationService {
           fontFamily: text(configuration.brand.fontFamily, 'fontFamily', 120),
         },
       },
-    });
+    };
+  }
+
+  async create(
+    input: Parameters<ServiceFoundationRepository['create']>[0],
+  ): Promise<ServiceFoundationRecord> {
+    const result = await this.repository.create(this.normalize(input));
+    if (result === null)
+      throw new ApplicationError('FORBIDDEN', 'service configuration management denied');
+    return result;
+  }
+
+  async save(
+    input: Parameters<ServiceFoundationRepository['save']>[0],
+  ): Promise<ServiceFoundationRecord> {
+    const result = await this.repository.save(this.normalize(input));
     if (result === null)
       throw new ApplicationError('FORBIDDEN', 'service configuration management denied');
     return result;
