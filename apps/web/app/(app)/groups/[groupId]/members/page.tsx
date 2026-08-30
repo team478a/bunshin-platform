@@ -166,6 +166,7 @@ export default async function GroupMemberFeaturesPage({
     memberSaved?: string;
     approved?: string;
     error?: string;
+    service?: string;
   }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -286,11 +287,19 @@ export default async function GroupMemberFeaturesPage({
       <header className="app-page__heading">
         <p className="eyebrow">参加者の利用機能</p>
         <h1>{group.name}</h1>
-        <p>グループに許可された機能の中から、各参加者が使える機能と上限を設定します。</p>
+        <p>サービスに許可された機能の中から、各参加者が使える機能と上限を設定します。</p>
         <p>団体：{group.workspace.name}</p>
-        <Link href="/groups">← グループ一覧へ戻る</Link>
+        {query.service ? (
+          <a href={`/s/${query.service}/home`}>← サービスのホームへ戻る</a>
+        ) : (
+          <Link href="/groups">← グループ一覧へ戻る</Link>
+        )}
         <br />
-        <Link href={`/groups/${group.id}/legal`}>このサービスの利用規約を管理</Link>
+        {query.service ? (
+          <a href={`/s/${query.service}/manage/legal`}>このサービスの利用規約を管理</a>
+        ) : (
+          <Link href={`/groups/${group.id}/legal`}>このサービスの利用規約を管理</Link>
+        )}
       </header>
 
       {query.saved === '1' ? (

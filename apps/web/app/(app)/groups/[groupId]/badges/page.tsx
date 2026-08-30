@@ -121,6 +121,7 @@ export default async function GroupBadgesPage({
     nominated?: string;
     reviewed?: string;
     error?: string;
+    service?: string;
   }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -172,10 +173,14 @@ export default async function GroupBadgesPage({
   return (
     <main className="app-page">
       <header className="app-page__heading">
-        <p className="eyebrow">グループ管理者</p>
+        <p className="eyebrow">サービス管理者</p>
         <h1>{group.name}のバッジ</h1>
-        <p>グループで使うバッジを本部へ申請し、参加者への付与を二人で確認します。</p>
-        <Link href={`/groups/${group.id}/members`}>← 参加者管理へ戻る</Link>
+        <p>サービスで使うバッジを本部へ申請し、参加者への付与を二人で確認します。</p>
+        {query.service ? (
+          <a href={`/s/${query.service}/manage/members`}>← 参加者管理へ戻る</a>
+        ) : (
+          <Link href={`/groups/${group.id}/members`}>← 参加者管理へ戻る</Link>
+        )}
       </header>
       {query.created ? (
         <p className="notice notice--success">バッジ案を本部へ送りました。</p>
