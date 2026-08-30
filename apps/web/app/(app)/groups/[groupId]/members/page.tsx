@@ -289,6 +289,8 @@ export default async function GroupMemberFeaturesPage({
         <p>グループに許可された機能の中から、各参加者が使える機能と上限を設定します。</p>
         <p>団体：{group.workspace.name}</p>
         <Link href="/groups">← グループ一覧へ戻る</Link>
+        <br />
+        <Link href={`/groups/${group.id}/legal`}>このサービスの利用規約を管理</Link>
       </header>
 
       {query.saved === '1' ? (
