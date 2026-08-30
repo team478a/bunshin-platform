@@ -2,9 +2,11 @@
 
 ## マルチサービス化
 
-状態: MS-1完了。MS-2A Bunshinサービス分離Coreを実装中。
+状態: MS-1、MS-2A完了。MS-2B サービス専用Bunshin API・画面を実装中。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。
+
+MS-2BではサービスSlugからサーバー側でWorkspace・Groupを解決し、サービス参加者専用のBunshin作成・一覧API/UIを接続する。利用者向けには「投稿パートナー」と表示し、4問だけで作成できるようにする。
 
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 
