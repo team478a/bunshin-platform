@@ -2,7 +2,7 @@
 
 ## マルチサービス化
 
-状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-Rまで完了）。
+状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-S1まで完了）。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。
 
@@ -45,6 +45,8 @@ MS-2D-Pでは、サービス管理者向けのブランド・登録設定を`/s/
 MS-2D-Qでは、サービス管理者向けの専用LINE設定を`/s/{serviceSlug}/manage/line`へ接続した。LINE方式、暗号化Channel設定、接続確認、有効化を自サービスへ固定する。Service Slug、ACTIVEなManager Membership、Workspace、Service、Environmentを再検証し、秘密値は保存後に末尾マスクだけを表示する。既存のVersion、ACTIVE一意制約、Webhook Routing、Audit Logを維持する。
 
 MS-2D-Rでは、プラットフォーム管理者向けのサービス公開・利用管理を`/admin/services`へ接続した。公開・非公開、利用開始・終了日時、Powered by表示、サービス一時停止・再開を管理画面から変更できる。対象Service IDからWorkspaceとGroupをサーバー側で解決し、SUPER_ADMINを再検証し、変更前後・理由・実行者を既存監査ログへ保存する。サービス管理者はこれらのプラットフォーム管理項目を変更できない。
+
+MS-2D-S1では、既存の`MANAGER / PARTICIPANT`を壊さず、サービス内の業務責任を`SERVICE_OWNER / SERVICE_ADMIN / CONTENT_EDITOR / PARTICIPANT`として分離するCoreを追加した。既存サービスの作成者を責任者、その他の管理者をサービス管理者へ移行し、最後の責任者を削除できない制約、理由必須の変更監査、プラットフォーム管理者と責任者だけが変更できるRepository境界を実装した。S2で管理API・画面、S3で各管理機能への権限適用を行う。
 
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 
