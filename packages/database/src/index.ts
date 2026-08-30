@@ -6218,6 +6218,7 @@ function bunshinAggregate(row: BunshinRow): BunshinAggregate {
   return {
     id: row.id,
     workspaceId: row.workspaceId,
+    groupId: row.groupId,
     ownerUserId: row.ownerUserId,
     name: row.name,
     slug: row.slug,
@@ -6279,9 +6280,42 @@ export class PrismaBunshinRepository implements BunshinRepository {
       if (actorMembership === null || ownerMembership === null) {
         throw new ApplicationError('NOT_FOUND', 'workspace not found');
       }
+      if (input.groupId) {
+        const [actorGroupMembership, ownerGroupMembership] = await Promise.all([
+          tx.groupMembership.findFirst({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              group: { status: 'ACTIVE' },
+            },
+            select: { id: true },
+          }),
+          tx.groupMembership.findFirst({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              userId: ownerUserId,
+              status: 'ACTIVE',
+            },
+            select: { id: true },
+          }),
+        ]);
+        if (!actorGroupMembership || !ownerGroupMembership) {
+          throw new ApplicationError('NOT_FOUND', 'service not found');
+        }
+      }
 
       const data: Prisma.BunshinCreateInput = {
         workspace: { connect: { id: input.workspaceId } },
+        ...(input.groupId
+          ? {
+              group: {
+                connect: { workspaceId_id: { workspaceId: input.workspaceId, id: input.groupId } },
+              },
+            }
+          : {}),
         ownerUser: { connect: { id: ownerUserId } },
         name: input.name,
         slug: input.slug,
@@ -6329,8 +6363,30 @@ export class PrismaBunshinRepository implements BunshinRepository {
     const rows = await this.client.bunshin.findMany({
       where: {
         workspaceId: input.workspaceId,
+        groupId: null,
         status: { not: 'ARCHIVED' },
         workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: bunshinRelations,
+    });
+    return rows.map(bunshinAggregate);
+  }
+
+  async listForService(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }): Promise<BunshinAggregate[]> {
+    const rows = await this.client.bunshin.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: { not: 'ARCHIVED' },
+        group: {
           status: 'ACTIVE',
           memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
         },
@@ -6346,11 +6402,21 @@ export class PrismaBunshinRepository implements BunshinRepository {
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
           memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
         },
+        OR: [
+          { groupId: null },
+          {
+            group: {
+              status: 'ACTIVE',
+              memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+            },
+          },
+        ],
       },
       include: bunshinRelations,
     });
@@ -6382,13 +6448,27 @@ export class PrismaBunshinRepository implements BunshinRepository {
         where: {
           id: input.bunshinId,
           workspaceId: input.workspaceId,
+          groupId: input.groupId ?? null,
           status: { not: 'ARCHIVED' },
           workspace: { status: 'ACTIVE' },
-          AND: {
-            workspace: {
-              memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          AND: [
+            {
+              workspace: {
+                memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+              },
             },
-          },
+            {
+              OR: [
+                { groupId: null },
+                {
+                  group: {
+                    status: 'ACTIVE',
+                    memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+                  },
+                },
+              ],
+            },
+          ],
         },
         select: {
           id: true,

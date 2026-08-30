@@ -1727,6 +1727,7 @@ export class CancelJob {
 
 export interface CreateBunshinInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   ownerUserId?: string;
   name: string;
@@ -1745,6 +1746,7 @@ export interface CreateBunshinInput {
 
 export interface UpdateBunshinInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
   name?: string;
@@ -1756,6 +1758,7 @@ export interface UpdateBunshinInput {
 
 export interface ScopedBunshinReference {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
 }
@@ -1763,6 +1766,11 @@ export interface ScopedBunshinReference {
 export interface BunshinRepository {
   create(input: CreateBunshinInput & { slug: string }): Promise<BunshinAggregate>;
   list(input: { workspaceId: string; actorUserId: string }): Promise<BunshinAggregate[]>;
+  listForService(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }): Promise<BunshinAggregate[]>;
   find(input: ScopedBunshinReference): Promise<BunshinAggregate | null>;
   update(input: UpdateBunshinInput): Promise<BunshinAggregate | null>;
   archive(input: ScopedBunshinReference): Promise<BunshinAggregate | null>;
@@ -1853,6 +1861,17 @@ export class ListBunshins {
   constructor(private readonly repository: BunshinRepository) {}
   execute(input: { workspaceId: string; actorUserId: string }): Promise<BunshinAggregate[]> {
     return this.repository.list(input);
+  }
+}
+
+export class ListServiceBunshins {
+  constructor(private readonly repository: BunshinRepository) {}
+  execute(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }): Promise<BunshinAggregate[]> {
+    return this.repository.listForService(input);
   }
 }
 

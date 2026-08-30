@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BunshinAggregate } from '@bunshin/platform-domain';
 import type { BunshinRepository } from '../src';
-import { ArchiveBunshin, CreateBunshin, GetBunshin, UpdateBunshinProfile } from '../src';
+import {
+  ArchiveBunshin,
+  CreateBunshin,
+  GetBunshin,
+  ListServiceBunshins,
+  UpdateBunshinProfile,
+} from '../src';
 
 const aggregate: BunshinAggregate = {
   id: 'bunshin-1',
@@ -27,6 +33,7 @@ function repository(overrides: Partial<BunshinRepository> = {}): BunshinReposito
   return {
     create: vi.fn(() => Promise.resolve(aggregate)),
     list: vi.fn(() => Promise.resolve([aggregate])),
+    listForService: vi.fn(() => Promise.resolve([aggregate])),
     find: vi.fn(() => Promise.resolve(aggregate)),
     update: vi.fn(() => Promise.resolve(aggregate)),
     archive: vi.fn(() => Promise.resolve(aggregate)),
@@ -71,6 +78,19 @@ describe('Bunshin use cases', () => {
         personalitySummary: 'Calm',
       }),
     ).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  });
+
+  it('keeps the complete service scope when listing service bunshins', async () => {
+    const listForService = vi.fn(() => Promise.resolve([aggregate]));
+    const scope = {
+      workspaceId: 'workspace-1',
+      groupId: 'service-1',
+      actorUserId: 'user-1',
+    };
+    await expect(
+      new ListServiceBunshins(repository({ listForService })).execute(scope),
+    ).resolves.toEqual([aggregate]);
+    expect(listForService).toHaveBeenCalledWith(scope);
   });
 
   it('maps inaccessible get, update, and archive results to NOT_FOUND', async () => {

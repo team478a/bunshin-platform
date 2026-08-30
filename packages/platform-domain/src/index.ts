@@ -144,6 +144,7 @@ export type FacePolicy = (typeof FACE_POLICIES)[number];
 export interface Bunshin {
   id: string;
   workspaceId: string;
+  groupId?: string | null;
   ownerUserId: string;
   name: string;
   slug: string;
