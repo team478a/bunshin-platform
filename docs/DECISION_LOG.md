@@ -1709,3 +1709,12 @@
 - Public lookup: slugだけで認可せず、PUBLIC、ACTIVE Group、利用期間内をすべて満たす場合だけ公開情報を返す。
 - Safety: 法務・Brand URLはHTTPS、認証情報なし、Queryなし、Fragmentなしを必須にする。変更理由と前後Snapshotを監査へ保存する。
 - Source: `docs/MULTI_SERVICE_FOUNDATION_CORE_REPORT.md`
+
+# 2026-08-30: サービス新規作成はGroupと設定を同一Transactionで作成する
+
+- UX: Platform AdminはGroupを先に作らず、サービス名、slug、Brand、登録方式を1画面で作成できる。
+- Atomicity: Group、最初のManager、Service Configuration、Brand、Registration Policy、Auditを同一Transactionへ保存する。
+- Authority: 新規作成はACTIVE SUPER_ADMINだけに許可し、対象はACTIVE ORGANIZATION Workspaceに限定する。
+- Boundary: ClientにgroupIdや別のserviceIdを生成・指定させず、既存Group IDをTransaction内でサービス境界として確定する。
+- Default: PRIVATE、INVITATION_ONLY、Email有効、LINE無効、Powered by表示から開始する。
+- Source: `docs/MULTI_SERVICE_ADMIN_REPORT.md`

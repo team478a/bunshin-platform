@@ -21,6 +21,7 @@ const adminNavigation = [
   { href: '/admin/support', label: '問い合わせ対応' },
   { href: '/admin/access', label: '管理者と権限' },
   { href: '/admin/groups', label: 'グループ管理' },
+  { href: '/admin/services', label: 'サービス管理' },
   { href: '/admin/badges', label: 'グループバッジ確認' },
   { href: '/admin/badges/rewards', label: 'バッジ特典運用' },
   { href: '/admin/trends', label: 'トレンド企画' },

@@ -40,6 +40,7 @@ const record: ServiceFoundationRecord = {
 };
 
 const repository = (save: ServiceFoundationRepository['save']): ServiceFoundationRepository => ({
+  create: (input) => save({ ...input, groupId: record.groupId }),
   save,
   findByGroup: () => Promise.resolve(record),
   findPublicBySlug: () => Promise.resolve(record),
