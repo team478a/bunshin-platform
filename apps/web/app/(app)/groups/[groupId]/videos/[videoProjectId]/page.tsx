@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import type { Route } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { GetVideoProject } from '@bunshin/application';
 import { z } from 'zod';
@@ -71,13 +70,7 @@ export default async function VideoProjectPage({
         <p className="eyebrow">動画づくり</p>
         <h1>{project.title}</h1>
         <p>{project.durationSeconds}秒の動画です。</p>
-        <Link
-          href={
-            (serviceSlug
-              ? `/s/${serviceSlug}/videos`
-              : `/groups/${project.groupId}/videos`) as Route
-          }
-        >
+        <Link href={serviceSlug ? `/s/${serviceSlug}/videos` : `/groups/${project.groupId}/videos`}>
           ← 動画一覧へ戻る
         </Link>
       </header>
