@@ -6385,6 +6385,7 @@ export class PrismaBunshinRepository implements BunshinRepository {
       where: {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
+        ownerUserId: input.actorUserId,
         status: { not: 'ARCHIVED' },
         group: {
           status: 'ACTIVE',
@@ -6403,6 +6404,7 @@ export class PrismaBunshinRepository implements BunshinRepository {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
         groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',

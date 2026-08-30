@@ -79,7 +79,7 @@ export default async function ServiceBunshinsPage({
               <ul className="bunshin-card-list">
                 {bunshins.map((bunshin) => (
                   <li key={bunshin.id}>
-                    <div>
+                    <Link href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}` as Route}>
                       <span className="bunshin-avatar" aria-hidden="true">
                         {bunshin.name.slice(0, 1)}
                       </span>
@@ -87,7 +87,8 @@ export default async function ServiceBunshinsPage({
                         <strong>{bunshin.name}</strong>
                         <small>{bunshin.objectiveSummary}</small>
                       </span>
-                    </div>
+                      <span aria-hidden="true">›</span>
+                    </Link>
                   </li>
                 ))}
               </ul>
