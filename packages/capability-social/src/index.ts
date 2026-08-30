@@ -2291,6 +2291,7 @@ export interface MissionEngagementRepository {
   }): Promise<MissionActivity | null>;
   listProgressDays(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     from: string | null;
@@ -2451,6 +2452,7 @@ export class GetMissionProgress {
 
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     weekStart: string;
@@ -2459,6 +2461,7 @@ export class GetMissionProgress {
   }): Promise<MissionProgress> {
     await new RequireActiveBunshinCapability(this.assignments).execute({
       workspaceId: input.workspaceId,
+      ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
       actorUserId: input.actorUserId,
       bunshinId: input.bunshinId,
       capabilityType: 'SOCIAL',
@@ -2471,6 +2474,7 @@ export class GetMissionProgress {
     const weeklyGoal = missionInteger(input.weeklyGoal ?? 3, 1, 7, 'weekly goal');
     const scope = {
       workspaceId: input.workspaceId,
+      ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
       actorUserId: input.actorUserId,
       bunshinId: input.bunshinId,
     };

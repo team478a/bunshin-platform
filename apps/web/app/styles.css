@@ -1967,6 +1967,19 @@ a {
   text-align: center;
 }
 
+.service-activity-list {
+  display: grid;
+  gap: 16px;
+}
+
+.service-activity-list .activity-progress {
+  margin-bottom: 0;
+}
+
+.service-activity-list .button {
+  margin-top: 12px;
+}
+
 .auth-panel {
   display: grid;
   gap: 24px;

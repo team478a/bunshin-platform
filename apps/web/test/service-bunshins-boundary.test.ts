@@ -30,4 +30,13 @@ describe('service Bunshin web boundary', () => {
     expect(httpSource).toContain('archiveServiceBunshinResponse');
     expect(httpSource).toContain('groupId: service.serviceId');
   });
+
+  it('shows service-scoped weekly activity and a direct path to todays proposal', () => {
+    expect(homeSource).toContain('GetMissionProgress');
+    expect(homeSource).toContain('groupId: service.serviceId');
+    expect(homeSource).toContain('actorUserId: actor.userId');
+    expect(homeSource).toContain('今週の進み具合');
+    expect(homeSource).toContain('今日の投稿案を見る');
+    expect(homeSource).not.toContain('href={`/today');
+  });
 });
