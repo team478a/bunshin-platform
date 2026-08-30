@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
 
 export interface ServiceSettingsValue {
   displayName: string;
@@ -23,6 +24,8 @@ export interface ServiceSettingsValue {
     lineEnabled: boolean;
     inviteCodeEnabled: boolean;
     referralEnabled: boolean;
+    onboardingConfig: unknown;
+    surveyConfig: unknown;
   };
 }
 
@@ -35,6 +38,10 @@ export function ServiceSettingsEditor({
 }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const onboarding = readServiceOnboardingSettings(
+    value.registration.onboardingConfig,
+    value.registration.surveyConfig,
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,6 +74,12 @@ export function ServiceSettingsEditor({
           lineEnabled: data.has('lineEnabled'),
           inviteCodeEnabled: data.has('inviteCodeEnabled'),
           referralEnabled: data.has('referralEnabled'),
+          welcomeTitle: text('welcomeTitle'),
+          welcomeMessage: text('welcomeMessage'),
+          onboardingQuestions: text('onboardingQuestions')
+            .split(/\r?\n/)
+            .map((item) => item.trim())
+            .filter(Boolean),
           reason: text('reason'),
         }),
       });
@@ -214,6 +227,38 @@ export function ServiceSettingsEditor({
           紹介元を記録する
         </label>
         <small>メールかLINEのどちらか一つは必ず選んでください。</small>
+      </fieldset>
+      <fieldset>
+        <legend>初めて参加する人への案内</legend>
+        <label>
+          最初に表示する見出し
+          <input
+            name="welcomeTitle"
+            maxLength={120}
+            defaultValue={onboarding.welcomeTitle}
+            placeholder="例：一緒に投稿を始めましょう"
+          />
+        </label>
+        <label>
+          最初に表示する説明
+          <textarea
+            name="welcomeMessage"
+            maxLength={1000}
+            rows={4}
+            defaultValue={onboarding.welcomeMessage}
+            placeholder="このサービスでできることを、やさしい言葉で説明します。"
+          />
+        </label>
+        <label>
+          最初に聞く質問
+          <textarea
+            name="onboardingQuestions"
+            rows={7}
+            defaultValue={onboarding.questions.join('\n')}
+            placeholder={'1行に1つ入力します。\n例：どのSNSを使いたいですか？'}
+          />
+          <small>1行に1問、最大7問です。答えを迷わない具体的な質問にしてください。</small>
+        </label>
       </fieldset>
       <label>
         変更した理由

@@ -30,6 +30,9 @@ const schema = z
     lineEnabled: z.boolean(),
     inviteCodeEnabled: z.boolean(),
     referralEnabled: z.boolean(),
+    welcomeTitle: z.string().max(120).default(''),
+    welcomeMessage: z.string().max(1000).default(''),
+    onboardingQuestions: z.array(z.string().min(1).max(200)).max(7).default([]),
     reason: z.string().min(1).max(1000),
   })
   .strict();
@@ -78,6 +81,16 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
           lineEnabled: value.lineEnabled,
           inviteCodeEnabled: value.inviteCodeEnabled,
           referralEnabled: value.referralEnabled,
+          onboardingConfig: {
+            ...(typeof current.registration.onboardingConfig === 'object' &&
+            current.registration.onboardingConfig !== null &&
+            !Array.isArray(current.registration.onboardingConfig)
+              ? current.registration.onboardingConfig
+              : {}),
+            welcomeTitle: value.welcomeTitle.trim(),
+            welcomeMessage: value.welcomeMessage.trim(),
+          },
+          surveyConfig: { questions: value.onboardingQuestions.map((item) => item.trim()) },
         },
       },
     });
