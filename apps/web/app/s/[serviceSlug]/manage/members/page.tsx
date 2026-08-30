@@ -1,6 +1,8 @@
 import GroupMemberFeaturesPage from '../../../../(app)/groups/[groupId]/members/page';
+import { redirect } from 'next/navigation';
 
-import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
+import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +21,9 @@ export default async function ServiceMembersPage({
   }>;
 }) {
   const { serviceSlug } = await params;
-  const service = await resolvePublicServiceContext(serviceSlug);
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/members`)}`);
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
   return GroupMemberFeaturesPage({
     params: Promise.resolve({ groupId: service.serviceId }),
     searchParams: Promise.resolve({ ...(await searchParams), service: service.configuration.slug }),

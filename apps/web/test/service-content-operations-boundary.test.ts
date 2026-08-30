@@ -8,9 +8,9 @@ const source = (path: string) => readFileSync(join(web, path), 'utf8');
 describe('service content operations boundary', () => {
   it.each(['product-packs', 'campaigns'])('resolves %s from the service slug', (section) => {
     const page = source(`app/s/[serviceSlug]/manage/${section}/page.tsx`);
-    expect(page).toContain('resolvePublicServiceContext');
+    expect(page).toContain('resolveManagedServiceContext');
     expect(page).toContain('groupId: service.serviceId');
-    expect(page).toContain("role: 'MANAGER'");
+    expect(page).not.toContain("role: 'MANAGER'");
     expect(page).not.toContain('searchParams');
   });
 

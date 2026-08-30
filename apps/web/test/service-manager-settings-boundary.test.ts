@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest';
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 describe('service manager settings boundary', () => {
-  it('resolves private and public services through an active manager membership', () => {
+  it('resolves private and public services through an active service management role', () => {
     const resolver = source('src/services/public-service.ts');
     expect(resolver).toContain('resolveManagedServiceContext');
-    expect(resolver).toContain("role: 'MANAGER', status: 'ACTIVE'");
+    expect(resolver).toContain("SERVICE_MANAGEMENT_ROLES = ['SERVICE_OWNER', 'SERVICE_ADMIN']");
+    expect(resolver).toContain('serviceRole: { in: [...SERVICE_MANAGEMENT_ROLES] }');
     expect(resolver).toContain('findByGroup({ ...target, actorUserId })');
   });
 
