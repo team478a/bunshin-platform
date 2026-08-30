@@ -56,6 +56,14 @@ export type GroupStatus = (typeof GROUP_STATUSES)[number];
 export const GROUP_ROLES = ['MANAGER', 'PARTICIPANT'] as const;
 export type GroupRole = (typeof GROUP_ROLES)[number];
 
+export const SERVICE_ROLES = [
+  'SERVICE_OWNER',
+  'SERVICE_ADMIN',
+  'CONTENT_EDITOR',
+  'PARTICIPANT',
+] as const;
+export type ServiceRole = (typeof SERVICE_ROLES)[number];
+
 export const GROUP_MEMBERSHIP_STATUSES = [
   'INVITED',
   'PENDING_APPROVAL',
@@ -84,6 +92,8 @@ export interface GroupMembership {
   groupId: string;
   userId: string;
   role: GroupRole;
+  /** Service-scoped duty. Optional only for compatibility with pre-migration callers. */
+  serviceRole?: ServiceRole;
   status: GroupMembershipStatus;
   consentedAt: Date | null;
   declinedAt: Date | null;

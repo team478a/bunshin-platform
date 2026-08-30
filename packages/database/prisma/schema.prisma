@@ -53,6 +53,13 @@ enum GroupRole {
   PARTICIPANT
 }
 
+enum ServiceRole {
+  SERVICE_OWNER
+  SERVICE_ADMIN
+  CONTENT_EDITOR
+  PARTICIPANT
+}
+
 enum GroupMembershipStatus {
   INVITED
   PENDING_APPROVAL
@@ -1431,6 +1438,7 @@ model GroupMembership {
   groupId                    String                           @map("group_id") @db.Uuid
   userId                     String                           @map("user_id") @db.Uuid
   role                       GroupRole                        @default(PARTICIPANT)
+  serviceRole                ServiceRole                      @default(PARTICIPANT) @map("service_role")
   status                     GroupMembershipStatus            @default(INVITED)
   consentedAt                DateTime?                        @map("consented_at") @db.Timestamptz(6)
   declinedAt                 DateTime?                        @map("declined_at") @db.Timestamptz(6)
@@ -1456,6 +1464,7 @@ model GroupMembership {
   @@unique([workspaceId, groupId, id, userId])
   @@index([workspaceId, userId, status])
   @@index([groupId, status])
+  @@index([groupId, serviceRole, status])
   @@map("group_memberships")
 }
 
