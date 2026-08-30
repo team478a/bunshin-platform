@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
-const state = vi.hoisted(() => ({
-  user: { userId: 'admin-1' } as { userId: string } | null,
-  create: vi.fn(),
-}));
+const state: { user: { userId: string } | null; create: ReturnType<typeof vi.fn> } = vi.hoisted(
+  () => ({
+    user: { userId: 'admin-1' },
+    create: vi.fn(),
+  }),
+);
 
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),

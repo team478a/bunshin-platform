@@ -10,7 +10,10 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const string = (name: string) => String(data.get(name) ?? '');
+    const string = (name: string) => {
+      const value = data.get(name);
+      return typeof value === 'string' ? value : '';
+    };
     setSaving(true);
     setMessage('サービスを作成しています…');
     try {
