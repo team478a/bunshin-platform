@@ -7418,12 +7418,19 @@ export class PrismaSocialAccountStrategyRepository implements SocialAccountStrat
   constructor(private readonly client: PrismaClient = prisma) {}
   private managed(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
   ) {
     return client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -7435,11 +7442,18 @@ export class PrismaSocialAccountStrategyRepository implements SocialAccountStrat
       select: { id: true },
     });
   }
-  private accessible(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
+  private accessible(input: {
+    workspaceId: string;
+    groupId?: string | null;
+    actorUserId: string;
+    bunshinId: string;
+  }) {
     return this.client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -7470,8 +7484,9 @@ export class PrismaSocialAccountStrategyRepository implements SocialAccountStrat
           where: { socialProfileId: input.socialProfileId },
           _max: { version: true },
         });
-        const { actorUserId, status, ...data } = input;
+        const { actorUserId, groupId, status, ...data } = input;
         void actorUserId;
+        void groupId;
         return socialAccountStrategy(
           await tx.socialAccountStrategy.create({
             data: {

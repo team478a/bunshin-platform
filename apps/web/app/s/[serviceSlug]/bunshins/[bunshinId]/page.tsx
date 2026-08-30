@@ -1,5 +1,9 @@
 import { GetBunshin, ListBunshinCapabilityAssignments } from '@bunshin/application';
-import { ListContentPillars, ListSocialProfiles } from '@bunshin/capability-social';
+import {
+  ListContentPillars,
+  ListSocialAccountStrategies,
+  ListSocialProfiles,
+} from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
@@ -9,6 +13,7 @@ import { resolvePublicServiceContext } from '../../../../../src/services/public-
 import { PublicShell } from '../../../../ui/public-shell';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
+import { AccountStrategySection } from '../../../../(app)/bunshins/[bunshinId]/account-strategy-section';
 import { ServiceBunshinEditor } from './service-bunshin-editor';
 
 export const dynamic = 'force-dynamic';
@@ -45,6 +50,7 @@ export default async function ServiceBunshinDetailPage({
   let capabilities;
   let socialProfiles;
   let contentPillars;
+  let accountStrategies;
   try {
     const scope = {
       workspaceId: service.workspaceId,
@@ -62,6 +68,17 @@ export default async function ServiceBunshinDetailPage({
     contentPillars = await new ListContentPillars(new db.PrismaContentPillarRepository()).execute(
       scope,
     );
+    const strategyRepository = new db.PrismaSocialAccountStrategyRepository();
+    accountStrategies = (
+      await Promise.all(
+        socialProfiles.map((profile) =>
+          new ListSocialAccountStrategies(strategyRepository).execute({
+            ...scope,
+            socialProfileId: profile.id,
+          }),
+        ),
+      )
+    ).flat();
   } catch {
     notFound();
   }
@@ -104,6 +121,19 @@ export default async function ServiceBunshinDetailPage({
             profiles={socialProfiles}
             endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-profiles`}
             autoStart
+          />
+        </section>
+        <section className="service-entry__card">
+          <AccountStrategySection
+            workspaceId={service.workspaceId}
+            bunshinId={bunshin.id}
+            profiles={socialProfiles}
+            strategies={accountStrategies}
+            active={
+              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
+              'ACTIVE'
+            }
+            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-account-strategies`}
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>
