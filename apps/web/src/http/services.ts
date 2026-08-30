@@ -5,6 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { SERVICE_CREATION_TEMPLATE_KEYS } from '../services/service-creation-templates';
 
 const uuid = z.string().uuid();
 const optionalUrl = z
@@ -13,6 +14,7 @@ const optionalUrl = z
 const createSchema = z
   .object({
     workspaceId: uuid,
+    templateKey: z.enum(SERVICE_CREATION_TEMPLATE_KEYS).default('CUSTOM'),
     slug: z.string().min(1).max(80),
     displayName: z.string().min(1).max(120),
     description: z.string().min(1).max(1000),
@@ -90,7 +92,7 @@ export async function createServiceResponse(request: Request) {
           lineEnabled: value.lineEnabled,
           inviteCodeEnabled: value.inviteCodeEnabled,
           referralEnabled: value.referralEnabled,
-          onboardingConfig: {},
+          onboardingConfig: { templateKey: value.templateKey },
           surveyConfig: {},
         },
       },

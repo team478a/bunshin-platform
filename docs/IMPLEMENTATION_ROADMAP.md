@@ -54,6 +54,8 @@ MS-2D-S3-Aでは、サービス管理画面の共通入口認可を旧`MANAGER`�
 
 MS-2D-S3-Bでは、`CONTENT_EDITOR`へ公式資料・FAQ、公式商品情報、参加募集の3機能だけを開放した。画面、Service Slug解決、Repositoryのすべてで同じService RoleとActive Membershipを検証し、サービス設定、LINE、参加者、法務、バッジ、専用URLは引き続き`SERVICE_OWNER / SERVICE_ADMIN`だけに制限する。
 
+MS-3-Aでは、プラットフォーム管理者のサービス作成画面へ「副業・アフィリエイト向け」「企業・代理店向け」「自由設定」の初期設定テンプレートを追加する。サービス名は固定せず、登録方式、LINE、招待コード、紹介元記録の推奨値だけを準備し、選択したテンプレートはオンボーディング設定へ記録する。
+
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 
 - MS-1: Service Foundation
