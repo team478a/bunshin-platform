@@ -1,5 +1,19 @@
 # BUNSHIN Platform 実装ロードマップ
 
+## マルチサービス化
+
+状態: 再設計方針確定、実装前。
+
+ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
+
+- MS-1: Service Foundation
+- MS-2: Service Data Isolation
+- MS-3: 副業・アフィリエイト向け第一号サービス
+- MS-4: 企業向けテンプレート
+- MS-5: 課金・OEM
+
+MS-1とMS-2を完了する前に、第一号サービスを一般公開しない。
+
 ## 基本方針
 
 BUNSHINはSNS投稿を完全自動化するサービスではなく、ユーザー専用のSNS戦略を設計し、毎日具体的な行動を提示するAI企画担当として作る。

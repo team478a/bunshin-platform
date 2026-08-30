@@ -1688,3 +1688,15 @@
 - Priority: 商品版専用KnowledgeをGroup共通知識より先に選び、最大20 chunk、合計12,000文字へ制限する。
 - Auditability: 生成時に使用したchunk IDをGeneration Context Snapshotへ保存し、後から生成根拠を追跡可能にする。
 - Prompt safety: Group Knowledgeを信頼されたsystem instructionではなく承認済みデータとして扱い、資料内の命令に従わない。
+
+# 2026-08-30: 既存Groupをマルチサービス基盤の内部Service境界として利用する
+
+- Brand: 共通基盤の表示名はワタシワークス、プロジェクト・リポジトリ名は`bunshin`を維持する。第一号サービス名をコードへ固定しない。
+- Identity: 既存`Group.id`を`service_id`相当、`GroupMembership.id`を`service_membership_id`相当として利用し、並行するService IDを追加しない。
+- UI: 利用者・導入企業向けには「グループ」を原則表示せず、サービス、公式プログラム等の目的に合う名称を使う。
+- Isolation: 新規サービス処理は`workspaceId + groupId`を必須境界とし、API、AI生成、LINE、Job、Point、Badgeのすべてでサーバー側検証する。
+- Migration: 既存の個人人格、Memory、通常投稿をサービスへ自動移行しない。安全にGroup帰属を特定できるデータだけを段階的にbackfillする。
+- User: `User.id`を共通ユーザーIDとして維持するが、サービス固有プロフィール、人格、履歴、Point、Badge、権限、課金を自動共有しない。
+- Billing: MS-1〜MS-4では契約・負担者・上限の保持境界までとし、決済、従量請求、独自ドメインはMS-5へ分離する。
+- Exclusion: サービス間広告、企業案件マーケット、マッチング、成果報酬精算、共通Point移転を初期範囲へ含めない。
+- Source: `docs/MULTI_SERVICE_PLATFORM_REBASELINE.md`
