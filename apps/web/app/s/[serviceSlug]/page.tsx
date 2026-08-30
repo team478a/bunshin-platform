@@ -1,5 +1,5 @@
 import { cache, type CSSProperties } from 'react';
-import type { Metadata } from 'next';
+import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PublicShell } from '../../ui/public-shell';
@@ -100,7 +100,10 @@ export default async function ServiceEntryPage({
             <>
               <h2 id="registration-title">参加手続きは完了しています</h2>
               <p>このサービスを利用できます。</p>
-              <Link className="button button--primary button--full" href="/bunshins">
+              <Link
+                className="button button--primary button--full"
+                href={`/s/${configuration.slug}/home` as Route}
+              >
                 利用をはじめる
               </Link>
             </>

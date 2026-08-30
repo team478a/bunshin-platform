@@ -1949,6 +1949,24 @@ a {
   font-weight: 700;
 }
 
+.service-member-home {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.service-home-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.service-home-actions .button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
 .auth-panel {
   display: grid;
   gap: 24px;
