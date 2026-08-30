@@ -237,17 +237,23 @@ export function SocialProfileSection({
   bunshinId,
   capabilityStatus,
   profiles,
+  endpointBase,
+  autoStart = false,
 }: {
   workspaceId: string;
   bunshinId: string;
   capabilityStatus: SocialCapabilityStatus;
   profiles: SocialProfileView[];
+  endpointBase?: string;
+  autoStart?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<SocialPlatform | 'NEW' | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/social-profiles`;
+  const endpoint =
+    endpointBase ??
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/social-profiles`;
   const available = SOCIAL_PLATFORMS.filter(
     (value) => !profiles.some(({ platform }) => platform === value),
   );
@@ -272,13 +278,14 @@ export function SocialProfileSection({
     }
   }
 
-  const readonly = capabilityStatus === 'SUSPENDED' || capabilityStatus === 'LOCKED';
+  const effectiveStatus = autoStart && capabilityStatus === null ? 'ACTIVE' : capabilityStatus;
+  const readonly = effectiveStatus === 'SUSPENDED' || effectiveStatus === 'LOCKED';
   return (
     <section className="social-profile-section">
       <h2>使いたいSNSを決める</h2>
       <p>インスタグラムやXなど、どのSNSで、だれに、何を伝えたいかを決めます。</p>
       <p>BUNSHINが投稿案を作ります。SNSへの投稿は、あなたが自分で行います。</p>
-      {capabilityStatus === null ? (
+      {capabilityStatus === null && !autoStart ? (
         <p>まず、上の「SNSのお手伝いをはじめる」を押してください。</p>
       ) : null}
       {readonly ? <p>今は設定を見ることだけできます。内容を変えることはできません。</p> : null}
@@ -315,7 +322,7 @@ export function SocialProfileSection({
                 <p>
                   BUNSHINにお願いすること：{assistanceLevelLabel(profile.defaultAssistanceLevel)}
                 </p>
-                {!readonly && capabilityStatus === 'ACTIVE' ? (
+                {!readonly && effectiveStatus === 'ACTIVE' ? (
                   <div className="social-profile-actions">
                     <button
                       type="button"
@@ -344,7 +351,7 @@ export function SocialProfileSection({
           </li>
         ))}
       </ul>
-      {capabilityStatus === 'ACTIVE' && available.length > 0 && editing === null ? (
+      {effectiveStatus === 'ACTIVE' && available.length > 0 && editing === null ? (
         <button type="button" onClick={() => setEditing('NEW')}>
           使うSNSを追加
         </button>
