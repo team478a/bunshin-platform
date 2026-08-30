@@ -102,7 +102,7 @@ export default async function ServiceEntryPage({
               <p>このサービスを利用できます。</p>
               <Link
                 className="button button--primary button--full"
-                href={`/s/${configuration.slug}/home` as Route}
+                href={`/s/${configuration.slug}/onboarding` as Route}
               >
                 利用をはじめる
               </Link>

@@ -1015,6 +1015,7 @@ model User {
   legalConsents                     UserLegalConsent[]
   serviceLegalDocumentsCreated      ServiceLegalDocument[]              @relation("ServiceLegalDocumentAuthor")
   serviceLegalConsents              ServiceLegalConsent[]
+  serviceOnboardingResponses        ServiceOnboardingResponse[]
   accountDeletionRequests           AccountDeletionRequest[]
   accountDeletionAudits             AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
   lineConfigurationAudits           LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
@@ -1126,6 +1127,7 @@ model Workspace {
   memberships                     WorkspaceMembership[]
   groups                          Group[]
   groupMemberships                GroupMembership[]
+  serviceOnboardingResponses      ServiceOnboardingResponse[]
   groupInvitations                GroupInvitation[]
   productPacks                    ProductPack[]
   productPackAssignments          ProductPackAssignment[]
@@ -1276,6 +1278,7 @@ model Group {
   serviceConfigurationAudits      ServiceConfigurationAudit[]
   serviceLegalDocuments           ServiceLegalDocument[]
   serviceLegalConsents            ServiceLegalConsent[]
+  serviceOnboardingResponses      ServiceOnboardingResponse[]
   bunshins                        Bunshin[]
 
   @@unique([workspaceId, name])
@@ -1432,6 +1435,27 @@ model ServiceLegalConsent {
   @@map("service_legal_consents")
 }
 
+model ServiceOnboardingResponse {
+  id                String          @id @default(uuid()) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  groupId           String          @map("group_id") @db.Uuid
+  groupMembershipId String          @unique @map("group_membership_id") @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  questionsSnapshot Json            @map("questions_snapshot")
+  answers           Json
+  completedAt       DateTime        @default(now()) @map("completed_at") @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, userId])
+  @@index([workspaceId, groupId, userId, completedAt])
+  @@map("service_onboarding_responses")
+}
+
 model GroupMembership {
   id                         String                           @id @default(uuid()) @db.Uuid
   workspaceId                String                           @map("workspace_id") @db.Uuid
@@ -1458,6 +1482,7 @@ model GroupMembership {
   videoAssets                VideoAsset[]
   lineConnections            GroupLineConnection[]
   serviceLegalConsents       ServiceLegalConsent[]
+  serviceOnboardingResponse  ServiceOnboardingResponse?
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
