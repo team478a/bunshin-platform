@@ -1700,3 +1700,12 @@
 - Billing: MS-1〜MS-4では契約・負担者・上限の保持境界までとし、決済、従量請求、独自ドメインはMS-5へ分離する。
 - Exclusion: サービス間広告、企業案件マーケット、マッチング、成果報酬精算、共通Point移転を初期範囲へ含めない。
 - Source: `docs/MULTI_SERVICE_PLATFORM_REBASELINE.md`
+
+# 2026-08-30: サービス基本設定はGroupと1対1の独立Aggregateで保存する
+
+- Identity: `ServiceConfiguration`は既存Groupと1対1にし、Group IDをサービス境界として維持する。
+- Separation: 基本情報、Brand、Registration Policyを分離し、画像URLや登録方式をGroup本体へ詰め込まない。
+- Authorization: 初期の作成・更新はACTIVE SUPER_ADMINだけに許可し、Group ManagerとWorkspace OWNER／ADMINは自分の範囲を読み取れる。
+- Public lookup: slugだけで認可せず、PUBLIC、ACTIVE Group、利用期間内をすべて満たす場合だけ公開情報を返す。
+- Safety: 法務・Brand URLはHTTPS、認証情報なし、Queryなし、Fragmentなしを必須にする。変更理由と前後Snapshotを監査へ保存する。
+- Source: `docs/MULTI_SERVICE_FOUNDATION_CORE_REPORT.md`
