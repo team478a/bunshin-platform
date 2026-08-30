@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { ServiceEditor } from './service-editor';
 import Link from 'next/link';
+import { ServiceLifecycleEditor } from './service-lifecycle-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,19 +44,28 @@ export default async function ServicesAdminPage() {
         {services.length === 0 ? (
           <p>まだサービスはありません。</p>
         ) : (
-          <ul>
+          <div className="settings-stack">
             {services.map((service) => (
-              <li key={service.id}>
-                <strong>{service.displayName}</strong> —{' '}
-                {service.visibility === 'PUBLIC' ? '公開中' : '準備中'} ／ 登録：
-                {service.registration?.mode ?? '未設定'} ／ 内部状態：{service.group.status}
-                <br />
-                <code>/s/{service.slug}</code>
-                <br />
-                <Link href={`/groups/${service.groupId}/legal`}>利用規約を管理</Link>
-              </li>
+              <div key={service.id}>
+                <ServiceLifecycleEditor
+                  service={{
+                    id: service.id,
+                    displayName: service.displayName,
+                    visibility: service.visibility,
+                    status: service.group.status,
+                    poweredByEnabled: service.poweredByEnabled,
+                    startsAt: service.startsAt?.toISOString() ?? null,
+                    endsAt: service.endsAt?.toISOString() ?? null,
+                  }}
+                />
+                <p>
+                  専用URL：<code>/s/{service.slug}</code> ／ 登録方法：
+                  {service.registration?.mode ?? '未設定'} ／{' '}
+                  <Link href={`/groups/${service.groupId}/legal`}>利用規約を管理</Link>
+                </p>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
     </main>

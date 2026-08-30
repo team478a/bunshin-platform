@@ -1,10 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
-const state: { user: { userId: string } | null; create: ReturnType<typeof vi.fn> } = vi.hoisted(
-  () => ({
+const state = vi.hoisted(
+  (): {
+    user: { userId: string } | null;
+    create: ReturnType<typeof vi.fn>;
+    platformAdmin: ReturnType<typeof vi.fn>;
+    findService: ReturnType<typeof vi.fn>;
+    updateService: ReturnType<typeof vi.fn>;
+    updateGroup: ReturnType<typeof vi.fn>;
+    createAudit: ReturnType<typeof vi.fn>;
+  } => ({
     user: { userId: 'admin-1' },
     create: vi.fn(),
+    platformAdmin: vi.fn(),
+    findService: vi.fn(),
+    updateService: vi.fn(),
+    updateGroup: vi.fn(),
+    createAudit: vi.fn(),
   }),
 );
 
@@ -15,11 +28,24 @@ vi.mock('@bunshin/database', () => ({
   PrismaServiceFoundationRepository: class {
     create = state.create;
   },
+  prisma: {
+    $transaction: (callback: (tx: unknown) => unknown) =>
+      callback({
+        platformAdmin: { findFirst: state.platformAdmin },
+        serviceConfiguration: {
+          findUnique: state.findService,
+          update: state.updateService,
+        },
+        group: { update: state.updateGroup },
+        serviceConfigurationAudit: { create: state.createAudit },
+      }),
+  },
 }));
 
-import { createServiceResponse } from '../src/http/services';
+import { createServiceResponse, updateServiceLifecycleResponse } from '../src/http/services';
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
+const configurationId = '22222222-2222-4222-8222-222222222222';
 const body = {
   workspaceId,
   slug: 'side-job-support',
@@ -62,6 +88,25 @@ describe('service admin HTTP', () => {
     vi.stubEnv('SESSION_SECRET', '12345678901234567890123456789012');
     state.user = { userId: 'admin-1' };
     state.create.mockResolvedValue({ id: 'service-1', groupId: 'group-1', ...body });
+    state.platformAdmin.mockResolvedValue({ id: 'platform-admin-1' });
+    state.findService.mockResolvedValue({
+      id: configurationId,
+      workspaceId,
+      groupId: 'group-1',
+      visibility: 'PRIVATE',
+      poweredByEnabled: true,
+      startsAt: null,
+      endsAt: null,
+      group: { status: 'ACTIVE' },
+    });
+    state.updateService.mockResolvedValue({
+      visibility: 'PUBLIC',
+      poweredByEnabled: true,
+      startsAt: null,
+      endsAt: null,
+    });
+    state.updateGroup.mockResolvedValue({ status: 'ACTIVE' });
+    state.createAudit.mockResolvedValue({ id: 'audit-1' });
   });
 
   it('requires authentication and same-origin mutation', async () => {
@@ -94,5 +139,53 @@ describe('service admin HTTP', () => {
   it('rejects a malformed slug before persistence', async () => {
     expect((await createServiceResponse(request({ ...body, slug: 'Bad Slug' }))).status).toBe(400);
     expect(state.create).not.toHaveBeenCalled();
+  });
+
+  it('updates platform-owned lifecycle settings and records the reason', async () => {
+    const response = await updateServiceLifecycleResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}`, {
+        method: 'PATCH',
+        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          visibility: 'PUBLIC',
+          status: 'ACTIVE',
+          poweredByEnabled: true,
+          startsAt: null,
+          endsAt: null,
+          reason: '公開準備が完了したため',
+        }),
+      }),
+      configurationId,
+    );
+    expect(response.status).toBe(200);
+    expect(state.updateService).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: configurationId } }),
+    );
+    expect(state.createAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ reason: '公開準備が完了したため' }),
+      }),
+    );
+  });
+
+  it('rejects lifecycle changes from users who are not platform super administrators', async () => {
+    state.platformAdmin.mockResolvedValue(null);
+    const response = await updateServiceLifecycleResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}`, {
+        method: 'PATCH',
+        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          visibility: 'PRIVATE',
+          status: 'SUSPENDED',
+          poweredByEnabled: false,
+          startsAt: null,
+          endsAt: null,
+          reason: '運用を一時停止するため',
+        }),
+      }),
+      configurationId,
+    );
+    expect(response.status).toBe(403);
+    expect(state.updateService).not.toHaveBeenCalled();
   });
 });
