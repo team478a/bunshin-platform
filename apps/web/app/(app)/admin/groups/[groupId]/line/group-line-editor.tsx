@@ -38,12 +38,15 @@ export function GroupLineEditor(props: {
   webhookOrigin: string;
   initialMode: Mode;
   initialConfigurations: Item[];
+  endpoint?: string;
+  scopeLabel?: string;
 }) {
   const [mode, setMode] = useState(props.initialMode);
   const [items, setItems] = useState(props.initialConfigurations);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const endpoint = `/api/admin/groups/${props.groupId}/line-configurations`;
+  const endpoint = props.endpoint ?? `/api/admin/groups/${props.groupId}/line-configurations`;
+  const scopeLabel = props.scopeLabel ?? 'グループ';
   async function call(url: string, method: string, data: unknown) {
     setBusy(true);
     setMessage('処理しています…');
@@ -83,7 +86,7 @@ export function GroupLineEditor(props: {
     <>
       <section className="settings-card">
         <h2>どのLINEを使いますか</h2>
-        <p>テスト中は「このグループ専用」を選べます。</p>
+        <p>「この{scopeLabel}専用」を選ぶと、共通LINEと分けて運用できます。</p>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -106,7 +109,7 @@ export function GroupLineEditor(props: {
               onChange={(e) => setMode(e.target.value as typeof mode)}
             >
               <option value="SHARED">ワタシワークス共通LINE</option>
-              <option value="DEDICATED">このグループ専用LINE</option>
+              <option value="DEDICATED">この{scopeLabel}専用LINE</option>
               <option value="DISABLED">LINEを使わない</option>
             </select>
           </label>{' '}

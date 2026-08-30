@@ -2789,14 +2789,30 @@ function groupLineConfiguration(
 export class PrismaGroupLineConfigurationRepository implements GroupLineConfigurationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  private admin(actorUserId: string) {
-    return this.client.platformAdmin.findFirst({
-      where: { userId: actorUserId, status: 'ACTIVE' },
-    });
+  private async access(actorUserId: string, workspaceId: string, groupId: string) {
+    const [admin, manager] = await Promise.all([
+      this.client.platformAdmin.findFirst({
+        where: { userId: actorUserId, status: 'ACTIVE' },
+        select: { role: true },
+      }),
+      this.client.groupMembership.findFirst({
+        where: {
+          userId: actorUserId,
+          workspaceId,
+          groupId,
+          role: 'MANAGER',
+          status: 'ACTIVE',
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+        },
+        select: { id: true },
+      }),
+    ]);
+    return { admin, manager };
   }
 
   async list(input: Parameters<GroupLineConfigurationRepository['list']>[0]) {
-    if (!(await this.admin(input.actorUserId))) return null;
+    const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
+    if (!access.admin && !access.manager) return null;
     const policy = await this.client.groupLineRoutingPolicy.findUnique({
       where: {
         workspaceId_groupId_environment: {
@@ -2822,8 +2838,8 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
   }
 
   async createVersion(input: Parameters<GroupLineConfigurationRepository['createVersion']>[0]) {
-    const admin = await this.admin(input.actorUserId);
-    if (admin?.role !== 'SUPER_ADMIN') return null;
+    const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
+    if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
       const policy = await tx.groupLineRoutingPolicy.findUnique({
         where: {
@@ -2883,8 +2899,12 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
   }
 
   async getForTest(input: Parameters<GroupLineConfigurationRepository['getForTest']>[0]) {
-    const admin = await this.admin(input.actorUserId);
-    if (!admin || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role)) return null;
+    const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
+    if (
+      (!access.admin || !['SUPER_ADMIN', 'OPERATOR'].includes(access.admin.role)) &&
+      !access.manager
+    )
+      return null;
     const row = await this.client.groupLineChannelConfiguration.findFirst({
       where: {
         id: input.configurationId,
@@ -2904,8 +2924,11 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
   }
 
   async recordTest(input: Parameters<GroupLineConfigurationRepository['recordTest']>[0]) {
-    const admin = await this.admin(input.actorUserId);
-    if (!admin || !['SUPER_ADMIN', 'OPERATOR'].includes(admin.role))
+    const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
+    if (
+      (!access.admin || !['SUPER_ADMIN', 'OPERATOR'].includes(access.admin.role)) &&
+      !access.manager
+    )
       throw new ApplicationError('FORBIDDEN', 'admin required');
     await this.client.$transaction(async (tx) => {
       const target = await tx.groupLineChannelConfiguration.findFirst({
@@ -2941,8 +2964,8 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
   }
 
   async activate(input: Parameters<GroupLineConfigurationRepository['activate']>[0]) {
-    const admin = await this.admin(input.actorUserId);
-    if (admin?.role !== 'SUPER_ADMIN') return null;
+    const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
+    if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
       const target = await tx.groupLineChannelConfiguration.findFirst({
         where: {
@@ -2986,8 +3009,8 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
   }
 
   async setPolicy(input: Parameters<GroupLineConfigurationRepository['setPolicy']>[0]) {
-    const admin = await this.admin(input.actorUserId);
-    if (admin?.role !== 'SUPER_ADMIN') return null;
+    const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
+    if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
       const group = await tx.group.findFirst({
         where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
