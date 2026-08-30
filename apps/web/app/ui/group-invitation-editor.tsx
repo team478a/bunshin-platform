@@ -5,9 +5,11 @@ import { useState, type FormEvent } from 'react';
 export function GroupInvitationEditor({
   workspaceId,
   groupId,
+  serviceSlug,
 }: {
   workspaceId: string;
   groupId: string;
+  serviceSlug?: string | undefined;
 }) {
   const [message, setMessage] = useState('');
   const [invitationUrl, setInvitationUrl] = useState('');
@@ -25,7 +27,7 @@ export function GroupInvitationEditor({
       const response = await fetch(`/api/workspaces/${workspaceId}/groups/${groupId}/invitations`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role, ...(serviceSlug ? { serviceSlug } : {}) }),
       });
       const result = (await response.json()) as {
         data?: { invitationUrl?: string };
@@ -61,7 +63,7 @@ export function GroupInvitationEditor({
           <span className="field__label">招待する人の役割</span>
           <select className="field__control" name="role" defaultValue="PARTICIPANT">
             <option value="PARTICIPANT">参加者</option>
-            <option value="MANAGER">グループ管理者</option>
+            <option value="MANAGER">{serviceSlug ? 'サービス管理者' : 'グループ管理者'}</option>
           </select>
         </label>
         <button className="button" type="submit" disabled={saving}>

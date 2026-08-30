@@ -26,6 +26,15 @@ describe('LINE authentication return path', () => {
     expect(safeLineAuthReturnPath('/s/Bad-Slug')).toBeNull();
   });
 
+  it('accepts only an exact service invitation path', () => {
+    const token = 'a'.repeat(43);
+    expect(safeLineAuthReturnPath(`/s/side-job-support/join/${token}`)).toBe(
+      `/s/side-job-support/join/${token}`,
+    );
+    expect(safeLineAuthReturnPath(`/s/side-job-support/join/${token}?next=/admin`)).toBeNull();
+    expect(safeLineAuthReturnPath(`/s/Bad-Slug/join/${token}`)).toBeNull();
+  });
+
   it.each([
     'https://evil.example/today?state=x',
     '//evil.example/today?state=x',

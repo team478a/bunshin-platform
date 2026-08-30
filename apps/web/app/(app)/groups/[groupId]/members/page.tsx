@@ -348,7 +348,11 @@ export default async function GroupMemberFeaturesPage({
         </p>
       ) : null}
 
-      <GroupInvitationEditor workspaceId={group.workspaceId} groupId={group.id} />
+      <GroupInvitationEditor
+        workspaceId={group.workspaceId}
+        groupId={group.id}
+        serviceSlug={query.service}
+      />
 
       <section className="settings-card">
         <h2>承認を待っている参加申請</h2>

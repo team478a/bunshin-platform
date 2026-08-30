@@ -2,7 +2,7 @@
 
 ## マルチサービス化
 
-状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-Lまで完了）。
+状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-Mまで完了）。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。
 
@@ -33,6 +33,8 @@ MS-2D-Jでは、サービスホームの画像・動画導線を`/s/{serviceSlug
 MS-2D-Kでは、サービス運営管理者向けの参加者、公式資料・FAQ、法務文書、バッジ管理の入口を`/s/{serviceSlug}/manage`配下へ移した。Slugからサーバー側でサービスIDを解決し、既存の管理者認可を再利用する。登録・変更後の戻り先をサービス専用URLへ統一する作業はMS-2D-Lで行う。
 
 MS-2D-Lでは、参加者設定・参加承認・法務文書・バッジの登録、変更、審査後もサービス専用管理URLへ戻るようにした。フォームから任意URLは受け取らず、対象GroupとService Slugの一致をServer Action側で再検証する。一致しない場合は既存Group管理URLへ安全に戻す。
+
+MS-2D-Mでは、サービス管理者が作る一回限りの招待リンクを`/s/{serviceSlug}/join/{token}`へ移した。発行時と承諾・辞退時にService Slug、Group、Workspace、招待Tokenの一致をサーバー側で再検証し、ログイン後もサービス専用画面へ戻す。既存Group招待URLは互換性のため維持する。
 
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 
