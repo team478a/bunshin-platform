@@ -12860,6 +12860,28 @@ const socialImagePilotEvidenceRecord = (
   action: row.action,
 });
 
+const socialImagePilotApprovalChecks = [
+  'PLAN_APPROVAL',
+  'STORAGE_RETENTION',
+  'MOBILE_E2E',
+  'SECURITY_ISOLATION',
+  'TEN_THEME_VALIDATION',
+  'FINAL_APPROVAL',
+] as const;
+
+async function socialImagePilotIsApproved(
+  client: PrismaClient | Prisma.TransactionClient,
+  input: { workspaceId: string; groupId: string; pilotId: string },
+) {
+  const rows = await client.socialImagePilotEvidence.findMany({
+    where: input,
+    orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    select: { checkKey: true, action: true },
+  });
+  const latest = new Map(rows.map((row) => [row.checkKey, row.action]));
+  return socialImagePilotApprovalChecks.every((key) => latest.get(key) === 'RECORDED');
+}
+
 export class PrismaSocialImagePilotEvidenceRepository implements SocialImagePilotEvidenceRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -13337,6 +13359,14 @@ export class PrismaSocialImageGenerationAuthorizationRepository implements Socia
       orderBy: { createdAt: 'desc' },
     });
     if (!enrollment) return { allowed: false as const, reason: 'PILOT_UNAVAILABLE' as const };
+    if (
+      !(await socialImagePilotIsApproved(this.client, {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        pilotId: enrollment.pilotId,
+      }))
+    )
+      return { allowed: false as const, reason: 'PILOT_UNAVAILABLE' as const };
     const dailyFrom = new Date(
       Date.UTC(input.now.getUTCFullYear(), input.now.getUTCMonth(), input.now.getUTCDate()),
     );
@@ -13425,6 +13455,14 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           pilot.emergencyStop ||
           (pilot.startsAt && pilot.startsAt > input.now) ||
           (pilot.endsAt && pilot.endsAt <= input.now)
+        )
+          return { allowed: false as const, reason: 'PILOT_STOPPED' as const };
+        if (
+          !(await socialImagePilotIsApproved(tx, {
+            workspaceId: request.workspaceId,
+            groupId: request.groupId,
+            pilotId: pilot.id,
+          }))
         )
           return { allowed: false as const, reason: 'PILOT_STOPPED' as const };
 

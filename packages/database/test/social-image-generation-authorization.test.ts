@@ -20,6 +20,15 @@ const enrollment = {
   pilot: { dailyLimit: 10, monthlyLimit: 100, memberMonthlyLimit: 20 },
 };
 
+const approvalEvidence = [
+  'PLAN_APPROVAL',
+  'STORAGE_RETENTION',
+  'MOBILE_E2E',
+  'SECURITY_ISOLATION',
+  'TEN_THEME_VALIDATION',
+  'FINAL_APPROVAL',
+].map((checkKey) => ({ checkKey, action: 'RECORDED' }));
+
 function client(overrides: Record<string, unknown> = {}) {
   return {
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: input.groupMembershipId }) },
@@ -56,6 +65,7 @@ function client(overrides: Record<string, unknown> = {}) {
     dailyMission: { findFirst: vi.fn().mockResolvedValue({ id: input.dailyMissionId }) },
     campaign: { findFirst: vi.fn() },
     socialImagePilotEnrollment: { findFirst: vi.fn().mockResolvedValue(enrollment) },
+    socialImagePilotEvidence: { findMany: vi.fn().mockResolvedValue(approvalEvidence) },
     socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(0) },
     ...overrides,
   };
@@ -100,5 +110,33 @@ describe('PrismaSocialImageGenerationAuthorizationRepository', () => {
     await expect(
       new PrismaSocialImageGenerationAuthorizationRepository(database as never).authorize(input),
     ).resolves.toEqual({ allowed: false, reason: 'LIMIT_REACHED' });
+  });
+
+  it('blocks creation until all pilot checks and final approval are current', async () => {
+    const database = client({
+      socialImagePilotEvidence: {
+        findMany: vi.fn().mockResolvedValue(approvalEvidence.slice(0, -1)),
+      },
+    });
+    await expect(
+      new PrismaSocialImageGenerationAuthorizationRepository(database as never).authorize(input),
+    ).resolves.toEqual({ allowed: false, reason: 'PILOT_UNAVAILABLE' });
+    expect(database.socialImageGenerationRequest.count).not.toHaveBeenCalled();
+  });
+
+  it('blocks creation when a prerequisite was revoked after final approval', async () => {
+    const database = client({
+      socialImagePilotEvidence: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            ...approvalEvidence,
+            { checkKey: 'SECURITY_ISOLATION', action: 'REVOKED' },
+          ]),
+      },
+    });
+    await expect(
+      new PrismaSocialImageGenerationAuthorizationRepository(database as never).authorize(input),
+    ).resolves.toEqual({ allowed: false, reason: 'PILOT_UNAVAILABLE' });
   });
 });
