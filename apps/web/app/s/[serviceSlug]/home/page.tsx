@@ -1,8 +1,17 @@
+import { ListServiceBunshins } from '@bunshin/application';
+import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { currentActivityContinuityRule } from '../../../../src/activity-continuity-rule';
+import {
+  localDateInTimezone,
+  progressStatusLabel,
+  weekRange,
+  weeklyCalendar,
+} from '../../../../src/activity-progress';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
 import { PublicShell } from '../../../ui/public-shell';
 
@@ -76,6 +85,42 @@ export default async function ServiceMemberHome({
     membership.featureAssignments.some((item) => item.featureKey === featureKey && active(item));
   const imageAvailable = available('SOCIAL.IMAGE_GENERATION');
   const videoAvailable = available('VIDEO_GENERATION');
+  const bunshins = await new ListServiceBunshins(new db.PrismaBunshinRepository()).execute({
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    actorUserId: actor.userId,
+  });
+  const localDate = localDateInTimezone(now, 'Asia/Tokyo');
+  const currentWeek = weekRange(localDate);
+  const activityRule = await currentActivityContinuityRule();
+  const assignmentRepository = new db.PrismaBunshinCapabilityAssignmentRepository();
+  const engagementRepository = new db.PrismaMissionEngagementRepository();
+  const activities = (
+    await Promise.all(
+      bunshins.map(async (bunshin) => {
+        const assignment = await assignmentRepository.find({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          actorUserId: actor.userId,
+          bunshinId: bunshin.id,
+          capabilityType: 'SOCIAL',
+        });
+        if (assignment?.status !== 'ACTIVE') return null;
+        const progress = await new GetMissionProgress(
+          assignmentRepository,
+          engagementRepository,
+        ).execute({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          actorUserId: actor.userId,
+          bunshinId: bunshin.id,
+          ...currentWeek,
+          weeklyGoal: activityRule.weeklyGoal,
+        });
+        return { bunshin, progress, calendar: weeklyCalendar(progress) };
+      }),
+    )
+  ).filter((value): value is NonNullable<typeof value> => value !== null);
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
     '--service-secondary': service.configuration.brand.secondaryColor,
@@ -101,6 +146,71 @@ export default async function ServiceMemberHome({
           <h1>{service.configuration.displayName}</h1>
           <p>{membership.user.displayName}さん、今日も一緒に進めましょう。</p>
         </header>
+
+        <section className="service-entry__card">
+          <h2>今週の進み具合</h2>
+          {bunshins.length === 0 ? (
+            <div className="empty-state">
+              <p>まずは、投稿を一緒に考えるパートナーを作りましょう。</p>
+              <Link
+                className="button button--primary button--full"
+                href={`/s/${service.configuration.slug}/bunshins/new` as Route}
+              >
+                投稿パートナーを作る
+              </Link>
+            </div>
+          ) : activities.length === 0 ? (
+            <div className="empty-state">
+              <p>投稿の準備が整うと、ここに今週の記録が表示されます。</p>
+              <Link
+                className="button button--primary button--full"
+                href={`/s/${service.configuration.slug}/bunshins` as Route}
+              >
+                投稿パートナーを見る
+              </Link>
+            </div>
+          ) : (
+            <div className="service-activity-list">
+              {activities.map(({ bunshin, progress, calendar }) => (
+                <section className="activity-progress" key={bunshin.id}>
+                  <div className="activity-progress__summary">
+                    <div>
+                      <small>{bunshin.name}</small>
+                      <h3>今週 {progress.weekly.confirmedDays}日進みました</h3>
+                    </div>
+                    <strong>目標 {progress.weeklyGoal}日</strong>
+                  </div>
+                  <div className="activity-calendar" aria-label={`${bunshin.name}の今週の記録`}>
+                    {calendar.map((day) => (
+                      <div
+                        className={`activity-calendar__day activity-calendar__day--${day.status.toLowerCase()}`}
+                        key={day.missionDate}
+                      >
+                        <time dateTime={day.missionDate}>
+                          {new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(
+                            new Date(`${day.missionDate}T00:00:00.000Z`),
+                          )}
+                        </time>
+                        <span>{progressStatusLabel[day.status]}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p>
+                    {progress.remainingConfirmations === 0
+                      ? '今週の目標を達成しました。よく続けられています。'
+                      : `あと${progress.remainingConfirmations}日で今週の目標です。`}
+                  </p>
+                  <Link
+                    className="button button--primary button--full"
+                    href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}` as Route}
+                  >
+                    今日の投稿案を見る
+                  </Link>
+                </section>
+              ))}
+            </div>
+          )}
+        </section>
 
         <section className="service-entry__card">
           <h2>利用できる機能</h2>

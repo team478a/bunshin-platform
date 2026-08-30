@@ -40,6 +40,7 @@ const activity: MissionActivity = {
   createdAt: now,
 };
 class Assignments implements BunshinCapabilityAssignmentRepository {
+  lastFind: Parameters<BunshinCapabilityAssignmentRepository['find']>[0] | null = null;
   constructor(private readonly status: 'MISSING' | 'ACTIVE' | 'SUSPENDED' = 'ACTIVE') {}
   assign() {
     return Promise.resolve(null);
@@ -50,7 +51,10 @@ class Assignments implements BunshinCapabilityAssignmentRepository {
   setStatus() {
     return Promise.resolve(null);
   }
-  find(): Promise<BunshinCapabilityAssignment | null> {
+  find(
+    input: Parameters<BunshinCapabilityAssignmentRepository['find']>[0],
+  ): Promise<BunshinCapabilityAssignment | null> {
+    this.lastFind = input;
     return Promise.resolve(
       this.status === 'MISSING'
         ? null
@@ -194,8 +198,11 @@ describe('Mission Decision and Activity core', () => {
   });
 
   it('derives weekly and cumulative progress without treating a rest day as failure', async () => {
-    const result = await new GetMissionProgress(new Assignments(), new Engagement()).execute({
+    const assignments = new Assignments();
+    const engagement = new Engagement();
+    const result = await new GetMissionProgress(assignments, engagement).execute({
       workspaceId: 'workspace-1',
+      groupId: 'group-1',
       actorUserId: 'user-1',
       bunshinId: 'bunshin-1',
       weekStart: '2026-08-17',
@@ -216,6 +223,7 @@ describe('Mission Decision and Activity core', () => {
       'RESTED',
       'UNSEEN',
     ]);
+    expect(assignments.lastFind).toMatchObject({ groupId: 'group-1' });
   });
 
   it('rejects invalid progress weeks and suspended SOCIAL assignments', async () => {
