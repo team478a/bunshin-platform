@@ -9,7 +9,15 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 
 const uuid = z.uuid();
-const bodySchema = z.object({ role: z.enum(['MANAGER', 'PARTICIPANT']) }).strict();
+const bodySchema = z
+  .object({
+    role: z.enum(['MANAGER', 'PARTICIPANT']),
+    serviceSlug: z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+  })
+  .strict();
 
 export function groupInvitationTokenHash(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
@@ -31,6 +39,18 @@ export async function createGroupInvitationResponse(
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const db = await import('@bunshin/database');
+    if (value.serviceSlug) {
+      const service = await db.prisma.serviceConfiguration.findFirst({
+        where: {
+          workspaceId: uuid.parse(workspaceId),
+          groupId: uuid.parse(groupId),
+          slug: value.serviceSlug,
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+        },
+        select: { id: true },
+      });
+      if (!service) throw new ApplicationError('VALIDATION_ERROR', 'service scope mismatch');
+    }
     await new GroupParticipationService(
       new db.PrismaGroupParticipationRepository(),
     ).createInvitation({
@@ -42,7 +62,10 @@ export async function createGroupInvitationResponse(
       expiresAt,
       maxUses: 1,
     });
-    const invitationUrl = new URL(`/groups/invitations/${token}`, getServerEnvironment().APP_URL);
+    const invitationPath = value.serviceSlug
+      ? `/s/${value.serviceSlug}/join/${token}`
+      : `/groups/invitations/${token}`;
+    const invitationUrl = new URL(invitationPath, getServerEnvironment().APP_URL);
     return Response.json(
       { data: { invitationUrl: invitationUrl.toString(), expiresAt }, requestId },
       { status: 201, headers: { 'cache-control': 'private, no-store' } },
