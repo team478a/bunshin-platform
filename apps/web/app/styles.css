@@ -1823,6 +1823,95 @@ a {
   border-radius: 11px;
 }
 
+.service-entry {
+  display: grid;
+  gap: 28px;
+  padding: clamp(28px, 7vw, 56px) 0;
+  color: #14213d;
+  font-family: var(--service-font), system-ui, sans-serif;
+}
+
+.service-entry__header {
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+
+.service-entry__header h1 {
+  margin: 0;
+  color: var(--service-primary);
+  font-size: clamp(2rem, 7vw, 3.4rem);
+  line-height: 1.15;
+}
+
+.service-entry__header p {
+  max-width: 620px;
+  margin: 0 auto;
+  color: #526078;
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.service-entry__header .eyebrow {
+  color: var(--service-secondary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.service-entry__logo {
+  width: min(100%, 360px);
+  height: 96px;
+  margin: 0 auto 8px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.service-entry__card {
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 6vw, 40px);
+  border: 1px solid color-mix(in srgb, var(--service-primary) 16%, white);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgb(27 43 75 / 8%);
+  text-align: center;
+}
+
+.service-entry__card h2,
+.service-entry__card p {
+  margin: 0;
+}
+
+.service-entry__card p {
+  color: #5c667a;
+  line-height: 1.75;
+}
+
+.service-entry__login-link {
+  color: var(--service-primary);
+  font-weight: 700;
+}
+
+.service-entry__details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 20px;
+  color: #6a7486;
+  font-size: 0.86rem;
+}
+
+.service-entry__details a {
+  color: var(--service-primary);
+}
+
+.service-entry__details small {
+  flex-basis: 100%;
+  text-align: center;
+}
+
 .auth-panel {
   display: grid;
   gap: 24px;

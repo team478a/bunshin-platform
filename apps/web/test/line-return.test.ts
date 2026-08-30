@@ -20,6 +20,12 @@ describe('LINE authentication return path', () => {
     expect(safeLineAuthReturnPath(`/groups/invitations/${token}/extra`)).toBeNull();
   });
 
+  it('accepts only an exact service entry path', () => {
+    expect(safeLineAuthReturnPath('/s/side-job-support')).toBe('/s/side-job-support');
+    expect(safeLineAuthReturnPath('/s/side-job-support?next=/admin')).toBeNull();
+    expect(safeLineAuthReturnPath('/s/Bad-Slug')).toBeNull();
+  });
+
   it.each([
     'https://evil.example/today?state=x',
     '//evil.example/today?state=x',
