@@ -9437,6 +9437,50 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
 export class PrismaServiceParticipationRepository implements ServiceParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
+  async findView(input: Parameters<ServiceParticipationRepository['findView']>[0]) {
+    const configuration = await this.client.serviceConfiguration.findFirst({
+      where: {
+        slug: input.slug,
+        visibility: 'PUBLIC',
+        group: { status: 'ACTIVE' },
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+          { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+        ],
+      },
+      include: { registration: true },
+    });
+    if (configuration?.registration === null || configuration === null) return null;
+    const documents = await this.client.serviceLegalDocument.findMany({
+      where: {
+        workspaceId: configuration.workspaceId,
+        groupId: configuration.groupId,
+        status: 'PUBLISHED',
+        effectiveAt: { lte: input.now },
+      },
+      orderBy: [{ type: 'asc' }, { version: 'desc' }],
+    });
+    const legalDocuments = [
+      ...new Map(documents.map((document) => [document.type, document])).values(),
+    ].map(({ id, type, version, title, content }) => ({ id, type, version, title, content }));
+    const membership =
+      input.actorUserId === null
+        ? null
+        : await this.client.groupMembership.findUnique({
+            where: {
+              groupId_userId: {
+                groupId: configuration.groupId,
+                userId: input.actorUserId,
+              },
+            },
+          });
+    return {
+      registrationMode: configuration.registration.mode,
+      membership: membership === null ? null : groupMembershipRecord(membership),
+      legalDocuments,
+    };
+  }
+
   async request(input: Parameters<ServiceParticipationRepository['request']>[0]) {
     return this.client.$transaction(async (tx) => {
       const configuration = await tx.serviceConfiguration.findFirst({
