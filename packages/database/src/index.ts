@@ -3238,12 +3238,19 @@ export class PrismaContentPillarRepository implements ContentPillarRepository {
 
   private async accessible(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
   ) {
     return client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -3256,12 +3263,19 @@ export class PrismaContentPillarRepository implements ContentPillarRepository {
 
   private async managed(
     client: PrismaClient | Prisma.TransactionClient,
-    input: { workspaceId: string; actorUserId: string; bunshinId: string },
+    input: {
+      workspaceId: string;
+      groupId?: string | null;
+      actorUserId: string;
+      bunshinId: string;
+    },
   ) {
     const bunshin = await client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        groupId: input.groupId ?? null,
+        ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',

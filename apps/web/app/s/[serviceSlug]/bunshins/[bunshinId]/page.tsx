@@ -1,5 +1,5 @@
 import { GetBunshin, ListBunshinCapabilityAssignments } from '@bunshin/application';
-import { ListSocialProfiles } from '@bunshin/capability-social';
+import { ListContentPillars, ListSocialProfiles } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
+import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
 import { ServiceBunshinEditor } from './service-bunshin-editor';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,7 @@ export default async function ServiceBunshinDetailPage({
   let bunshin;
   let capabilities;
   let socialProfiles;
+  let contentPillars;
   try {
     const scope = {
       workspaceId: service.workspaceId,
@@ -55,6 +57,9 @@ export default async function ServiceBunshinDetailPage({
       new db.PrismaBunshinCapabilityAssignmentRepository(),
     ).execute(scope);
     socialProfiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
+      scope,
+    );
+    contentPillars = await new ListContentPillars(new db.PrismaContentPillarRepository()).execute(
       scope,
     );
   } catch {
@@ -76,6 +81,18 @@ export default async function ServiceBunshinDetailPage({
         </header>
         <section className="service-entry__card">
           <ServiceBunshinEditor serviceSlug={service.configuration.slug} bunshin={bunshin} />
+        </section>
+        <section className="service-entry__card">
+          <ContentPillarSection
+            workspaceId={service.workspaceId}
+            bunshinId={bunshin.id}
+            capabilityStatus={
+              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
+            }
+            pillars={contentPillars}
+            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/content-pillars`}
+            autoStart
+          />
         </section>
         <section className="service-entry__card">
           <SocialProfileSection

@@ -601,6 +601,7 @@ export interface ContentPillar {
 
 export interface CreateContentPillarInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
   title: string;
@@ -610,6 +611,7 @@ export interface CreateContentPillarInput {
 
 export interface UpdateContentPillarInput {
   workspaceId: string;
+  groupId?: string | null;
   actorUserId: string;
   bunshinId: string;
   pillarId: string;
@@ -622,11 +624,13 @@ export interface ContentPillarRepository {
   create(input: CreateContentPillarInput): Promise<ContentPillar | null>;
   list(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
   }): Promise<ContentPillar[] | null>;
   find(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     pillarId: string;
@@ -634,6 +638,7 @@ export interface ContentPillarRepository {
   update(input: UpdateContentPillarInput): Promise<ContentPillar | null>;
   setActive(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     pillarId: string;
@@ -641,6 +646,7 @@ export interface ContentPillarRepository {
   }): Promise<ContentPillar | null>;
   softDelete(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     pillarId: string;
@@ -680,6 +686,7 @@ export function normalizeCreateContentPillarInput(
 ): CreateContentPillarInput {
   return {
     workspaceId: input.workspaceId,
+    ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
     actorUserId: input.actorUserId,
     bunshinId: input.bunshinId,
     title: pillarTitle(input.title),
@@ -698,6 +705,7 @@ export function normalizeUpdateContentPillarInput(
   }
   return {
     workspaceId: input.workspaceId,
+    ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
     actorUserId: input.actorUserId,
     bunshinId: input.bunshinId,
     pillarId: input.pillarId,
@@ -716,6 +724,7 @@ abstract class ContentPillarMutation {
   ) {}
   protected async requireActive(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
   }) {
@@ -738,7 +747,12 @@ export class CreateContentPillar extends ContentPillarMutation {
 
 export class ListContentPillars {
   constructor(private readonly pillars: ContentPillarRepository) {}
-  async execute(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
+  async execute(input: {
+    workspaceId: string;
+    groupId?: string | null;
+    actorUserId: string;
+    bunshinId: string;
+  }) {
     const values = await this.pillars.list(input);
     if (values === null) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
     return values;
@@ -749,6 +763,7 @@ export class GetContentPillar {
   constructor(private readonly pillars: ContentPillarRepository) {}
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     pillarId: string;
@@ -779,6 +794,7 @@ abstract class SetContentPillarActive extends ContentPillarMutation {
   }
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     pillarId: string;
@@ -804,6 +820,7 @@ export class DeactivateContentPillar extends SetContentPillarActive {
 export class DeleteContentPillar extends ContentPillarMutation {
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
     pillarId: string;
