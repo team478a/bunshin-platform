@@ -9587,18 +9587,38 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
 
   async approve(input: Parameters<ServiceParticipationRepository['approve']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const manager = await tx.groupMembership.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: input.serviceId,
-          userId: input.actorUserId,
-          role: 'MANAGER',
-          status: 'ACTIVE',
-          group: { status: 'ACTIVE' },
-        },
-        select: { id: true },
-      });
-      if (manager === null) return null;
+      const [manager, workspaceManager, platformAdmin] = await Promise.all([
+        tx.groupMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.serviceId,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            status: 'ACTIVE',
+            group: { status: 'ACTIVE' },
+          },
+          select: { id: true },
+        }),
+        tx.workspaceMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            role: { in: ['OWNER', 'ADMIN'] },
+            status: 'ACTIVE',
+            workspace: { status: 'ACTIVE' },
+          },
+          select: { id: true },
+        }),
+        tx.platformAdmin.findFirst({
+          where: {
+            userId: input.actorUserId,
+            role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (manager === null && workspaceManager === null && platformAdmin === null) return null;
       const target = await tx.groupMembership.findFirst({
         where: {
           id: input.groupMembershipId,
