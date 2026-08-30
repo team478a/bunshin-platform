@@ -51,7 +51,7 @@ const statusLabel: Record<string, string> = {
   DELETED: '削除済み',
 };
 const scopeLabel: Record<string, string> = {
-  GROUP: 'グループ共通',
+  GROUP: 'サービス共通',
   MEMBER: '参加者共通',
   PRODUCT: '商品共通',
   CAMPAIGN: '企画共通',
@@ -63,10 +63,12 @@ export function ExternalTrackingOperations({
   workspaceId,
   groupId,
   initialConfiguration,
+  apiBase,
 }: {
   workspaceId: string;
   groupId: string;
   initialConfiguration: Configuration;
+  apiBase?: string;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function ExternalTrackingOperations({
     [],
   );
   const [busy, setBusy] = useState(false);
-  const base = `/api/workspaces/${workspaceId}/external-tracking`;
+  const base = apiBase ?? `/api/workspaces/${workspaceId}/external-tracking`;
   async function send(path: string, body: Record<string, unknown>) {
     setBusy(true);
     setMessage(null);
@@ -271,7 +273,7 @@ export function ExternalTrackingOperations({
             }}
           >
             <p>
-              この簡単登録ではグループ共通URLを作ります。参加者・商品・企画別はCSV取込で追加予定です。
+              この簡単登録ではサービス共通URLを作ります。参加者・商品・企画別はCSV取込で追加できます。
             </p>
             <label>
               URL名

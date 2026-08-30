@@ -10513,10 +10513,13 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
 }
 
 export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLinkRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly serviceId?: string,
+  ) {}
 
-  private manage(workspaceId: string, actorUserId: string) {
-    return this.client.workspaceMembership.findFirst({
+  private async manage(workspaceId: string, actorUserId: string) {
+    const workspaceManager = await this.client.workspaceMembership.findFirst({
       where: {
         workspaceId,
         userId: actorUserId,
@@ -10526,12 +10529,32 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
       },
       select: { id: true },
     });
+    if (workspaceManager) return true;
+    if (!this.serviceId) return false;
+    return Boolean(
+      await this.client.groupMembership.findFirst({
+        where: {
+          workspaceId,
+          groupId: this.serviceId,
+          userId: actorUserId,
+          role: 'MANAGER',
+          status: 'ACTIVE',
+          group: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      }),
+    );
+  }
+
+  private serviceMatches(groupId: string) {
+    return !this.serviceId || this.serviceId === groupId;
   }
 
   async listConfiguration(
     input: Parameters<ExternalTrackingLinkRepository['listConfiguration']>[0],
   ) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!this.serviceMatches(input.groupId)) return null;
     const group = await this.client.group.findFirst({
       where: { id: input.groupId, workspaceId: input.workspaceId },
       select: { id: true, name: true, status: true },
@@ -10648,7 +10671,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         id: input.allowedDomainId,
         workspaceId: input.workspaceId,
         status: 'ACTIVE',
-        system: { status: 'ACTIVE' },
+        system: { status: 'ACTIVE', ...(this.serviceId ? { groupId: this.serviceId } : {}) },
       },
       select: {
         id: true,
@@ -10662,6 +10685,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
 
   async createSystem(input: Parameters<ExternalTrackingLinkRepository['createSystem']>[0]) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
+    if (!this.serviceMatches(input.groupId)) return null;
     const group = await this.client.group.findFirst({
       where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
       select: { id: true },
@@ -10697,7 +10721,12 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
   async addAllowedDomain(input: Parameters<ExternalTrackingLinkRepository['addAllowedDomain']>[0]) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
     const system = await this.client.externalTrackingSystem.findFirst({
-      where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      where: {
+        id: input.systemId,
+        workspaceId: input.workspaceId,
+        status: 'ACTIVE',
+        ...(this.serviceId ? { groupId: this.serviceId } : {}),
+      },
     });
     if (!system) return null;
     return this.client.$transaction(async (tx) => {
@@ -10739,7 +10768,12 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
     return this.client.$transaction(async (tx) => {
       const system = await tx.externalTrackingSystem.findFirst({
-        where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+        where: {
+          id: input.systemId,
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          ...(this.serviceId ? { groupId: this.serviceId } : {}),
+        },
       });
       if (!system) return null;
       const membership = await tx.groupMembership.findFirst({
@@ -10811,7 +10845,12 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
     return this.client.$transaction(async (tx) => {
       const system = await tx.externalTrackingSystem.findFirst({
-        where: { id: input.systemId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+        where: {
+          id: input.systemId,
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          ...(this.serviceId ? { groupId: this.serviceId } : {}),
+        },
       });
       if (!system) return null;
       const domain = await tx.externalTrackingAllowedDomain.findFirst({
@@ -10906,6 +10945,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         where: {
           id: input.linkId,
           workspaceId: input.workspaceId,
+          ...(this.serviceId ? { groupId: this.serviceId } : {}),
           status: { in: ['DRAFT', 'SUSPENDED'] },
           OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
           system: { status: 'ACTIVE' },
@@ -10952,7 +10992,12 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
   async suspendLink(input: Parameters<ExternalTrackingLinkRepository['suspendLink']>[0]) {
     if (!(await this.manage(input.workspaceId, input.actorUserId))) return null;
     const link = await this.client.externalTrackingLink.findFirst({
-      where: { id: input.linkId, workspaceId: input.workspaceId, status: 'ACTIVE' },
+      where: {
+        id: input.linkId,
+        workspaceId: input.workspaceId,
+        status: 'ACTIVE',
+        ...(this.serviceId ? { groupId: this.serviceId } : {}),
+      },
       select: { id: true },
     });
     if (!link) return null;
@@ -10988,6 +11033,7 @@ export class PrismaExternalTrackingLinkRepository implements ExternalTrackingLin
         where: {
           id: input.linkId,
           workspaceId: input.workspaceId,
+          ...(this.serviceId ? { groupId: this.serviceId } : {}),
           status: { in: ['DRAFT', 'SUSPENDED'] },
         },
       });

@@ -89,13 +89,15 @@ const placementSchema = z
 
 const toDate = (value: string | null | undefined) => (value ? new Date(value) : null);
 
-async function service(workspaceId: string) {
+async function service(workspaceId: string, serviceId?: string) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
   const db = await import('@bunshin/database');
   return {
     scope: { workspaceId: uuid.parse(workspaceId), actorUserId: user.userId },
-    value: new ExternalTrackingLinkService(new db.PrismaExternalTrackingLinkRepository()),
+    value: new ExternalTrackingLinkService(
+      new db.PrismaExternalTrackingLinkRepository(undefined, serviceId),
+    ),
   };
 }
 
@@ -131,10 +133,16 @@ async function respond(request: Request, operation: () => Promise<unknown>, stat
   }
 }
 
-export function listExternalTrackingConfigurationResponse(request: Request, workspaceId: string) {
+export function listExternalTrackingConfigurationResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   return respond(request, async () => {
     const groupId = uuid.parse(new URL(request.url).searchParams.get('groupId'));
-    const { scope, value } = await service(workspaceId);
+    if (serviceId && groupId !== serviceId)
+      throw new ApplicationError('FORBIDDEN', 'service boundary mismatch');
+    const { scope, value } = await service(workspaceId, serviceId);
     return value.listConfiguration({ ...scope, groupId });
   });
 }
@@ -149,14 +157,20 @@ const csvCell = (value: unknown) => {
   return `"${text.replaceAll('"', '""')}"`;
 };
 
-export function exportExternalTrackingResponse(request: Request, workspaceId: string) {
+export function exportExternalTrackingResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   return (async () => {
     try {
       const url = new URL(request.url);
       const groupId = uuid.parse(url.searchParams.get('groupId'));
       const kind = z.enum(['links', 'usages']).parse(url.searchParams.get('kind') ?? 'links');
-      const { scope, value } = await service(workspaceId);
+      if (serviceId && groupId !== serviceId)
+        throw new ApplicationError('FORBIDDEN', 'service boundary mismatch');
+      const { scope, value } = await service(workspaceId, serviceId);
       const configuration = (await value.listConfiguration({ ...scope, groupId })) as {
         links: Array<Record<string, unknown>>;
         usages: Array<Record<string, unknown>>;
@@ -250,7 +264,11 @@ const findCatalogItem = <T extends { id: string; name: string }>(items: T[], val
   return matches[0]!;
 };
 
-export function importExternalTrackingCsvResponse(request: Request, workspaceId: string) {
+export function importExternalTrackingCsvResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   return respond(request, async () => {
     requireSameOrigin(request);
     const contentLength = Number(request.headers.get('content-length') ?? 0);
@@ -258,13 +276,15 @@ export function importExternalTrackingCsvResponse(request: Request, workspaceId:
       throw new ApplicationError('VALIDATION_ERROR', 'CSVは5MB以下にしてください。');
     const form = await request.formData();
     const groupId = uuid.parse(form.get('groupId'));
+    if (serviceId && groupId !== serviceId)
+      throw new ApplicationError('FORBIDDEN', 'service boundary mismatch');
     const systemId = uuid.parse(form.get('systemId'));
     const allowedDomainId = uuid.parse(form.get('allowedDomainId'));
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0)
       throw new ApplicationError('VALIDATION_ERROR', 'CSVファイルを選んでください。');
     const rows = parseExternalTrackingCsv(new Uint8Array(await file.arrayBuffer()));
-    const { scope, value } = await service(workspaceId);
+    const { scope, value } = await service(workspaceId, serviceId);
     const configuration = (await value.listConfiguration({
       ...scope,
       groupId,
@@ -382,13 +402,19 @@ export function importExternalTrackingCsvResponse(request: Request, workspaceId:
   });
 }
 
-export function createExternalTrackingSystemResponse(request: Request, workspaceId: string) {
+export function createExternalTrackingSystemResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   return respond(
     request,
     async () => {
       requireSameOrigin(request);
       const input = systemSchema.parse(await json(request));
-      const { scope, value } = await service(workspaceId);
+      if (serviceId && input.groupId !== serviceId)
+        throw new ApplicationError('FORBIDDEN', 'service boundary mismatch');
+      const { scope, value } = await service(workspaceId, serviceId);
       return value.createSystem({
         ...scope,
         ...input,
@@ -399,13 +425,17 @@ export function createExternalTrackingSystemResponse(request: Request, workspace
   );
 }
 
-export function createExternalTrackingDomainResponse(request: Request, workspaceId: string) {
+export function createExternalTrackingDomainResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   return respond(
     request,
     async () => {
       requireSameOrigin(request);
       const input = domainSchema.parse(await json(request));
-      const { scope, value } = await service(workspaceId);
+      const { scope, value } = await service(workspaceId, serviceId);
       return value.addAllowedDomain({
         ...scope,
         ...input,
@@ -417,11 +447,15 @@ export function createExternalTrackingDomainResponse(request: Request, workspace
   );
 }
 
-export function upsertExternalTrackingIdentityResponse(request: Request, workspaceId: string) {
+export function upsertExternalTrackingIdentityResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   return respond(request, async () => {
     requireSameOrigin(request);
     const input = identitySchema.parse(await json(request));
-    const { scope, value } = await service(workspaceId);
+    const { scope, value } = await service(workspaceId, serviceId);
     return value.upsertMemberIdentity({
       ...scope,
       ...input,
@@ -432,13 +466,17 @@ export function upsertExternalTrackingIdentityResponse(request: Request, workspa
   });
 }
 
-export function createExternalTrackingLinkResponse(request: Request, workspaceId: string) {
+export function createExternalTrackingLinkResponse(
+  request: Request,
+  workspaceId: string,
+  serviceId?: string,
+) {
   return respond(
     request,
     async () => {
       requireSameOrigin(request);
       const input = linkSchema.parse(await json(request));
-      const { scope, value } = await service(workspaceId);
+      const { scope, value } = await service(workspaceId, serviceId);
       return value.createLink({
         ...scope,
         ...input,
@@ -460,11 +498,12 @@ export function updateExternalTrackingLinkResponse(
   request: Request,
   workspaceId: string,
   linkId: string,
+  serviceId?: string,
 ) {
   return respond(request, async () => {
     requireSameOrigin(request);
     const input = updateSchema.parse(await json(request));
-    const { scope, value } = await service(workspaceId);
+    const { scope, value } = await service(workspaceId, serviceId);
     return value.updateLink({
       ...scope,
       linkId: uuid.parse(linkId),
@@ -481,10 +520,11 @@ export function transitionExternalTrackingLinkResponse(
   workspaceId: string,
   linkId: string,
   action: 'activate' | 'suspend',
+  serviceId?: string,
 ) {
   return respond(request, async () => {
     requireSameOrigin(request);
-    const { scope, value } = await service(workspaceId);
+    const { scope, value } = await service(workspaceId, serviceId);
     const input = { ...scope, linkId: uuid.parse(linkId) };
     return action === 'activate' ? value.activateLink(input) : value.suspendLink(input);
   });
