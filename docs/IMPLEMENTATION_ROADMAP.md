@@ -2,7 +2,7 @@
 
 ## マルチサービス化
 
-状態: MS-1A Core Persistence、MS-1B 管理API/UI完了。MS-1C 専用入口・Service Contextはレビュー中。
+状態: MS-1A〜MS-1C完了。MS-1D-A 参加・法務同意Core Persistenceはレビュー中。
 
 ワタシワークスを目的・対象者ごとの独立サービスを稼働できる共通基盤へ拡張する。既存`Group.id`を内部の`service_id`相当として維持し、GroupとServiceの二重ID管理は行わない。詳細、段階移行、データ分離、受け入れ条件は`MULTI_SERVICE_PLATFORM_REBASELINE.md`を正本とする。
 

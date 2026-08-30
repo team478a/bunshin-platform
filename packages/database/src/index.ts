@@ -138,6 +138,7 @@ import type {
   SocialImagePilotEvidenceRepository,
   ServiceFoundationRecord,
   ServiceFoundationRepository,
+  ServiceParticipationRepository,
   PointLedgerRepository,
   PointAccountSnapshot,
   PointTransactionRecord,
@@ -9430,6 +9431,158 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
       include: { brand: true, registration: true },
     });
     return value === null ? null : serviceFoundationRecord(value);
+  }
+}
+
+export class PrismaServiceParticipationRepository implements ServiceParticipationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async request(input: Parameters<ServiceParticipationRepository['request']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const configuration = await tx.serviceConfiguration.findFirst({
+        where: {
+          slug: input.slug,
+          visibility: 'PUBLIC',
+          group: { status: 'ACTIVE' },
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+          ],
+        },
+        include: { registration: true },
+      });
+      if (
+        configuration?.registration === null ||
+        configuration === null ||
+        ['INVITATION_ONLY', 'CLOSED'].includes(configuration.registration.mode)
+      )
+        return null;
+
+      const published = await tx.serviceLegalDocument.findMany({
+        where: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          status: 'PUBLISHED',
+          effectiveAt: { lte: input.now },
+        },
+        orderBy: [{ type: 'asc' }, { version: 'desc' }],
+      });
+      const latest = [...new Map(published.map((document) => [document.type, document])).values()];
+      const requiredIds = latest.map(({ id }) => id).sort();
+      if (requiredIds.join(':') !== [...input.legalDocumentIds].sort().join(':')) return null;
+
+      const workspaceMembership = await tx.workspaceMembership.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: configuration.workspaceId,
+            userId: input.actorUserId,
+          },
+        },
+      });
+      if (workspaceMembership !== null && workspaceMembership.status !== 'ACTIVE') return null;
+      if (workspaceMembership === null)
+        await tx.workspaceMembership.create({
+          data: {
+            workspaceId: configuration.workspaceId,
+            userId: input.actorUserId,
+            role: 'MEMBER',
+          },
+        });
+
+      const existing = await tx.groupMembership.findUnique({
+        where: {
+          groupId_userId: { groupId: configuration.groupId, userId: input.actorUserId },
+        },
+      });
+      if (existing !== null && !['ACTIVE', 'PENDING_APPROVAL'].includes(existing.status))
+        return null;
+      const status = configuration.registration.mode === 'PUBLIC' ? 'ACTIVE' : 'PENDING_APPROVAL';
+      const membership = await tx.groupMembership.upsert({
+        where: {
+          groupId_userId: { groupId: configuration.groupId, userId: input.actorUserId },
+        },
+        create: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          userId: input.actorUserId,
+          role: 'PARTICIPANT',
+          status,
+          consentedAt: input.now,
+        },
+        update: { status, consentedAt: input.now, declinedAt: null, revokedAt: null },
+      });
+      if (latest.length > 0)
+        await tx.serviceLegalConsent.createMany({
+          data: latest.map(({ id }) => ({
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            legalDocumentId: id,
+            consentedAt: input.now,
+          })),
+          skipDuplicates: true,
+        });
+      await tx.groupMembershipAuditLog.create({
+        data: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          groupMembershipId: membership.id,
+          action: status === 'ACTIVE' ? 'APPROVED' : 'REQUESTED',
+          beforeData: existing === null ? {} : { status: existing.status },
+          afterData: { role: membership.role, status: membership.status },
+          reason:
+            status === 'ACTIVE' ? 'public service registration' : 'service participation requested',
+          performedByUserId: input.actorUserId,
+          occurredAt: input.now,
+        },
+      });
+      return groupMembershipRecord(membership);
+    });
+  }
+
+  async approve(input: Parameters<ServiceParticipationRepository['approve']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const manager = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.serviceId,
+          userId: input.actorUserId,
+          role: 'MANAGER',
+          status: 'ACTIVE',
+          group: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      });
+      if (manager === null) return null;
+      const target = await tx.groupMembership.findFirst({
+        where: {
+          id: input.groupMembershipId,
+          workspaceId: input.workspaceId,
+          groupId: input.serviceId,
+          status: 'PENDING_APPROVAL',
+        },
+      });
+      if (target === null) return null;
+      const updated = await tx.groupMembership.update({
+        where: { id: target.id },
+        data: { status: 'ACTIVE' },
+      });
+      await tx.groupMembershipAuditLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.serviceId,
+          groupMembershipId: target.id,
+          action: 'APPROVED',
+          beforeData: { role: target.role, status: target.status },
+          afterData: { role: updated.role, status: updated.status },
+          reason: input.reason,
+          performedByUserId: input.actorUserId,
+          occurredAt: input.now,
+        },
+      });
+      return groupMembershipRecord(updated);
+    });
   }
 }
 

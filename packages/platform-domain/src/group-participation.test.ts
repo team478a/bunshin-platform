@@ -12,6 +12,7 @@ describe('group participation domain values', () => {
     expect(GROUP_ROLES).toEqual(['MANAGER', 'PARTICIPANT']);
     expect(GROUP_MEMBERSHIP_STATUSES).toEqual([
       'INVITED',
+      'PENDING_APPROVAL',
       'ACTIVE',
       'SUSPENDED',
       'DECLINED',
