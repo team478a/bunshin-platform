@@ -4,6 +4,7 @@ import type { Route } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { serviceManagementReturnPath } from '../../../../../src/services/service-management-return';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
   content: z.string().trim().min(1).max(100_000),
   reason: z.string().trim().min(5).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 const publishSchema = z.object({
   workspaceId: z.uuid(),
@@ -24,6 +26,7 @@ const publishSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
     .transform((value) => new Date(`${value}:00+09:00`)),
   reason: z.string().trim().min(5).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
 });
 
 const path = (groupId: string, query = '') => `/groups/${groupId}/legal${query}` as Route;
@@ -62,6 +65,11 @@ async function createDraft(formData: FormData) {
   'use server';
   const input = createSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: input.data.groupId,
+    serviceSlug: input.data.serviceSlug,
+    section: 'legal',
+  });
   const userId = await actorId();
   const db = await import('@bunshin/database');
   try {
@@ -108,16 +116,21 @@ async function createDraft(formData: FormData) {
     });
   } catch (error) {
     const code = error instanceof ApplicationError ? 'forbidden' : 'failed';
-    redirect(path(input.data.groupId, `?error=${code}`));
+    redirect(`${returnPath}?error=${code}` as Route);
   }
   revalidatePath(path(input.data.groupId));
-  redirect(path(input.data.groupId, '?created=1'));
+  redirect(`${returnPath}?created=1` as Route);
 }
 
 async function publish(formData: FormData) {
   'use server';
   const input = publishSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: input.data.groupId,
+    serviceSlug: input.data.serviceSlug,
+    section: 'legal',
+  });
   const userId = await actorId();
   const db = await import('@bunshin/database');
   try {
@@ -168,10 +181,10 @@ async function publish(formData: FormData) {
     });
   } catch (error) {
     const code = error instanceof ApplicationError ? 'forbidden' : 'failed';
-    redirect(path(input.data.groupId, `?error=${code}`));
+    redirect(`${returnPath}?error=${code}` as Route);
   }
   revalidatePath(path(input.data.groupId));
-  redirect(path(input.data.groupId, '?published=1'));
+  redirect(`${returnPath}?published=1` as Route);
 }
 
 export default async function ServiceLegalPage({
@@ -234,6 +247,7 @@ export default async function ServiceLegalPage({
         <h2>新しい版を下書き保存</h2>
         <p>公開中の本文は直接書き換えません。変更するときは新しい版を作成します。</p>
         <form className="form-stack" action={createDraft}>
+          {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
           <input type="hidden" name="workspaceId" value={service.group.workspaceId} />
           <input type="hidden" name="groupId" value={service.groupId} />
           <label className="field">
@@ -294,6 +308,9 @@ export default async function ServiceLegalPage({
               </details>
               {document.status === 'DRAFT' && (
                 <form className="form-stack" action={publish}>
+                  {query.service && (
+                    <input type="hidden" name="serviceSlug" value={query.service} />
+                  )}
                   <input type="hidden" name="workspaceId" value={service.group.workspaceId} />
                   <input type="hidden" name="groupId" value={service.groupId} />
                   <input type="hidden" name="documentId" value={document.id} />
