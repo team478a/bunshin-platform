@@ -1,5 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import { revalidatePath } from 'next/cache';
+import type { Route } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
@@ -25,7 +26,7 @@ const publishSchema = z.object({
   reason: z.string().trim().min(5).max(1000),
 });
 
-const path = (groupId: string, query = '') => `/groups/${groupId}/legal${query}`;
+const path = (groupId: string, query = '') => `/groups/${groupId}/legal${query}` as Route;
 
 async function actorId() {
   const actor = await (await currentUserProvider()).getCurrentUser();
