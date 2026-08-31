@@ -18,6 +18,7 @@ const input: VideoPlanGeneratorInput = {
       preferredExpressions: ['いっしょに'],
       prohibitedExpressions: ['絶対'],
     },
+    character: null,
     product: {
       name: '公式商品',
       facts: ['内容量100g'],
@@ -97,5 +98,36 @@ describe('OpenAIVideoPlanGenerator', () => {
     await expect(
       new OpenAIVideoPlanGenerator({ apiKey: 'secret', fetch: fetcher }).generate(input),
     ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+  });
+
+  it('passes only the fixed character planning context to the planner', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          model: 'gpt-5.2',
+          output: [{ content: [{ type: 'output_text', text: JSON.stringify(output) }] }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await new OpenAIVideoPlanGenerator({ apiKey: 'test-key', fetch: fetcher }).generate({
+      ...input,
+      context: {
+        ...input.context,
+        character: {
+          name: '案内役ミナ',
+          appearance: '赤いジャケットの案内役',
+          worldSetting: '明るいスタジオ',
+          safetyRules: ['実在人物に似せない'],
+          referenceImageCount: 2,
+        },
+      },
+    });
+    const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
+      input: Array<{ content: string }>;
+    };
+    expect(request.input[1]?.content).toContain('案内役ミナ');
+    expect(request.input[1]?.content).toContain('赤いジャケットの案内役');
+    expect(request.input[1]?.content).not.toContain('storageKey');
   });
 });
