@@ -13746,7 +13746,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     return {
       generation: videoSceneGenerationRecord(row),
       prompt,
-      durationSeconds: (durationMs <= 5_000 ? 5 : 10) as 5 | 10,
+      durationSeconds: durationMs <= 5_000 ? 5 : 10,
       referenceStorageKeys: references.slice(0, 7),
     } satisfies VideoSceneGenerationExecutionContext;
   }
