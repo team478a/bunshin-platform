@@ -8,6 +8,7 @@ import {
   QueueVideoRender,
   QueueVideoSceneGenerations,
   ResolveVideoDisclosurePolicy,
+  VIDEO_AI_SCENE_GENERATION_JOB_TYPE,
   VIDEO_RENDER_JOB_TYPE,
   isAiVideoScene,
   type JobEnvironment,
@@ -379,6 +380,22 @@ export async function queueVideoAiScenesResponse(
       model: runtime.model,
       estimatedCostUsdMicrosPerSecond: runtime.estimatedCostUsdMicrosPerSecond,
     });
+    const dispatcher = new EnqueueJob(new db.PrismaJobRepository());
+    await Promise.all(
+      generations.map((generation) =>
+        dispatcher.enqueue({
+          workspaceId: parsedWorkspaceId,
+          correlationId: requestId,
+          requestedBy: actor.userId,
+          environment: jobEnvironment[getServerEnvironment().APP_ENV],
+          jobType: VIDEO_AI_SCENE_GENERATION_JOB_TYPE,
+          payloadReference: `video-ai-scene:${generation.id}`,
+          idempotencyKey: `video-ai-scene:${generation.id}`,
+          priority: 40,
+          maxAttempts: 12,
+        }),
+      ),
+    );
     return Response.json(
       {
         data: generations.map((generation) => ({ id: generation.id, status: generation.status })),
