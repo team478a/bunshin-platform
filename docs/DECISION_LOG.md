@@ -1819,3 +1819,11 @@
 - Isolation: Video Projectを`workspaceId`、`groupId`、所有者、Bunshin、Campaignで再検証し、別Serviceや別利用者のSnapshotを企画に混入させない。
 - Rendering: 現行の標準動画は基準画像を使ったAI動画生成を行わない。参照画像対応Provider Adapterは外部チームの検証後に導入する。
 - Source: `docs/VIDEO_CHARACTER_REFERENCE_SNAPSHOT_REPORT.md`
+
+# 2026-09-01: 動画は利用者ごとの個別生成を基本とする
+
+- Product: 同じ完成動画を複数の利用者へ配る仕組みを中心機能にしない。利用者ごとのVideo Project、分身、ゴール、SNS、キャラクター設定、許可済みコンテキストから個別動画を作る。
+- Candidate: 参照画像・非同期Job・短尺動画を扱えるfal経由Klingを第一候補とし、Creatomateは字幕・静止画・文字演出の標準動画用として維持する。
+- Boundary: Providerへの画像送信はサーバー側だけで行い、Private Storage Key、APIキー、画像の恒久公開URLをブラウザや通常ログへ出さない。
+- Gate: Providerの実行前に、利用許諾、同一Service・同一利用者のProject Snapshot、原価上限、緊急停止、画像送信同意を再検証する。
+- Source: `docs/VIDEO_AI_PROVIDER_RESEARCH.md`

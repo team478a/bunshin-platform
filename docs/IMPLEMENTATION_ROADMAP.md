@@ -479,16 +479,16 @@ FREE継続率を確認する前に作り込まない。
 - AV-4B: AI Character、利用許諾、Prompt Version管理API/UI — 完了
 - AV-4C1: 基準画像Private Storage Upload、認証済み表示、監査ログ — 実装済み・レビュー待ち
 - AV-4C2: 動画機能へ基準画像Snapshot接続 — 完了
-- AV-4D1: AI Character Snapshotを動画企画へ安全に接続 — 実装済み・レビュー待ち
-- AV-4D2: 参照画像対応Video Provider Adapter（外部チーム検証後）
-- AV-5: 確認済み完成動画のDistribution / Assignment / 利用権Snapshot Core
-- AV-6: 管理者割当、利用者確認・採用・ダウンロード・投稿完了API/UI
+- AV-4D1: AI Character Snapshotを動画企画へ安全に接続 — 完了
+- AV-4D2: Provider非依存の個別AI動画生成Core — 設計済み
+- AV-4D3: fal / Kling参照画像対応Video Provider Adapter — 接続先・原価上限の運営確認後
+- AV-5: 利用者別の完成動画確認・採用・ダウンロード・投稿完了API/UI
 - AV-7: 媒体・動画・利用者別の登録経路とFunnel Event
 - AV-8: 美女・共感・実演Variant、手動SNS実績、最低母数、7日・30日比較
 - AV-9: 確認を必須とする週次改善提案
 - AV-10: Feature Flagによる自社サービス・5〜10人限定検証
 
-初期実証ではKling等の生成AI動画Providerを自動実行せず、運営が確認した完成動画の配布から開始する。Programの無料提供と手動参加を先行し、Checkout、請求、返金、売上分配、代理店報酬は販売プランPhaseへ分離する。SNS投稿は本人が行い、顧客情報管理を含めない。
+初期実証では同じ完成動画を無制限に配布しない。利用者ごとのProject、分身、ゴール、対象SNS、許可済み情報を使う個別生成を基本とし、AI動画Providerは接続先・原価上限・画像送信同意を運営確認後に有効化する。Programの無料提供と手動参加を先行し、Checkout、請求、返金、売上分配、代理店報酬は販売プランPhaseへ分離する。SNS投稿は本人が行い、顧客情報管理を含めない。
 
 ## Phase 7-K: 販売プラン・契約・利用権基盤
 
