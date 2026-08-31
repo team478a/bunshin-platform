@@ -3320,6 +3320,8 @@ model VideoRender {
   notificationAttemptCount Int                                @default(0) @map("notification_attempt_count")
   notificationErrorCode    String?                            @map("notification_error_code") @db.VarChar(80)
   notifiedAt               DateTime?                          @map("notified_at") @db.Timestamptz(6)
+  expiresAt                DateTime?                          @map("expires_at") @db.Timestamptz(6)
+  deletedAt                DateTime?                          @map("deleted_at") @db.Timestamptz(6)
   createdAt                DateTime                           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
   project                  VideoProject                       @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
@@ -3330,6 +3332,7 @@ model VideoRender {
   @@index([groupId, groupMembershipId, status])
   @@index([provider, externalJobId])
   @@index([notificationStatus, completedAt])
+  @@index([status, expiresAt])
   @@map("video_renders")
 }
 
@@ -3373,6 +3376,8 @@ model VideoSceneGeneration {
   errorCode              String?                    @map("error_code") @db.VarChar(80)
   startedAt              DateTime?                  @map("started_at") @db.Timestamptz(6)
   completedAt            DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  expiresAt              DateTime?                  @map("expires_at") @db.Timestamptz(6)
+  deletedAt              DateTime?                  @map("deleted_at") @db.Timestamptz(6)
   createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
   project                VideoProject               @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
@@ -3383,6 +3388,7 @@ model VideoSceneGeneration {
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([groupId, groupMembershipId, status])
   @@index([provider, externalJobId])
+  @@index([status, expiresAt])
   @@map("video_scene_generations")
 }
 
@@ -3427,6 +3433,7 @@ model VideoAsset {
   usageTerms        String?          @map("usage_terms") @db.VarChar(1000)
   failureCode       String?          @map("failure_code") @db.VarChar(80)
   expiresAt         DateTime?        @map("expires_at") @db.Timestamptz(6)
+  deletedAt         DateTime?        @map("deleted_at") @db.Timestamptz(6)
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -3439,6 +3446,7 @@ model VideoAsset {
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([groupId, groupMembershipId, status])
   @@index([videoProjectId, status])
+  @@index([status, expiresAt])
   @@map("video_assets")
 }
 
@@ -3556,6 +3564,8 @@ model SocialImageGeneratedMedia {
   width               Int
   height              Int
   contentHash         String                          @map("content_hash") @db.Char(64)
+  expiresAt           DateTime?                       @map("expires_at") @db.Timestamptz(6)
+  deletedAt           DateTime?                       @map("deleted_at") @db.Timestamptz(6)
   createdAt           DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
   request             SocialImageGenerationRequest    @relation(fields: [workspaceId, groupId, requestId, ownerUserId, dailyMissionId], references: [workspaceId, groupId, id, ownerUserId, dailyMissionId], onDelete: Cascade)
@@ -3564,6 +3574,7 @@ model SocialImageGeneratedMedia {
   @@index([workspaceId, groupId, ownerUserId, status, createdAt])
   @@index([dailyMissionId, status])
   @@index([requestId, status])
+  @@index([status, expiresAt])
   @@map("social_image_generated_media")
 }
 
