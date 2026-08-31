@@ -60,7 +60,9 @@ const project = (): VideoProjectRecord => ({
 });
 const repository = (value: VideoRenderRecord): VideoRenderRepository => ({
   enqueueApproved: vi.fn(),
-  findForExecution: vi.fn().mockResolvedValue({ render: value, project: project() }),
+  findForExecution: vi
+    .fn()
+    .mockResolvedValue({ render: value, project: project(), aiSceneSources: [] }),
   markSubmitted: vi.fn().mockResolvedValue({ ...value, status: 'SUBMITTED', externalJobId: 'job' }),
   markRendering: vi.fn().mockResolvedValue({ ...value, status: 'RENDERING' }),
   markSucceeded: vi
@@ -78,8 +80,9 @@ describe('video render execution', () => {
     };
     const storage = { store: vi.fn() };
     const webhook = { createUrl: vi.fn().mockResolvedValue('https://app.example/webhook') };
+    const sceneSources = { createUrl: vi.fn() };
     await expect(
-      new ExecuteVideoRenderStep(values, provider, storage, webhook).execute({
+      new ExecuteVideoRenderStep(values, provider, storage, webhook, sceneSources).execute({
         workspaceId,
         renderId,
       }),
@@ -87,6 +90,7 @@ describe('video render execution', () => {
     expect(provider.submit).toHaveBeenCalledWith({
       renderId,
       project: expect.objectContaining({ id: render().videoProjectId }),
+      aiSceneSources: [],
       webhookUrl: 'https://app.example/webhook',
     });
     expect(values.markSubmitted).toHaveBeenCalledWith({
@@ -106,8 +110,15 @@ describe('video render execution', () => {
         .mockResolvedValue({ status: 'SUCCEEDED', outputUrl: 'https://cdn.creatomate.com/a.mp4' }),
     };
     const storage = { store: vi.fn().mockResolvedValue({ storageKey: 'safe/output.mp4' }) };
+    const sceneSources = { createUrl: vi.fn() };
     await expect(
-      new ExecuteVideoRenderStep(values, provider, storage, { createUrl: vi.fn() }).execute({
+      new ExecuteVideoRenderStep(
+        values,
+        provider,
+        storage,
+        { createUrl: vi.fn() },
+        sceneSources,
+      ).execute({
         workspaceId,
         renderId,
       }),
@@ -124,6 +135,70 @@ describe('video render execution', () => {
       renderId,
       outputStorageKey: 'safe/output.mp4',
     });
+  });
+
+  it('uses a short-lived URL for each approved AI scene only when it starts composition', async () => {
+    const values = repository(render());
+    const aiProject = {
+      ...project(),
+      standardComposition: false,
+      aiVideoSceneCount: 1,
+      scenes: [
+        {
+          id: '88888888-8888-4888-8888-888888888888',
+          videoProjectId: render().videoProjectId,
+          sceneNo: 1,
+          durationMs: 5_000,
+          narration: '説明',
+          caption: '画面',
+          visualType: 'AI_VIDEO' as const,
+          visualPrompt: '人物が話す',
+          keywords: [],
+          aiProcessingTypes: ['VIDEO_GENERATION' as const],
+          locked: false,
+          revision: 1,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    };
+    const aiScene = aiProject.scenes[0];
+    if (!aiScene) throw new Error('AI scene fixture is required');
+    values.findForExecution = vi.fn().mockResolvedValue({
+      render: render(),
+      project: aiProject,
+      aiSceneSources: [
+        {
+          videoSceneId: aiScene.id,
+          storageKey: 'private/scene.mp4',
+        },
+      ],
+    });
+    const provider = {
+      submit: vi.fn().mockResolvedValue({ externalJobId: 'job' }),
+      inspect: vi.fn(),
+    };
+    const sceneSources = {
+      createUrl: vi.fn().mockResolvedValue('https://storage.example/private/scene.mp4?short=1'),
+    };
+    await new ExecuteVideoRenderStep(
+      values,
+      provider,
+      { store: vi.fn() },
+      { createUrl: vi.fn().mockResolvedValue('https://app.example/webhook') },
+      sceneSources,
+    ).execute({ workspaceId, renderId });
+    expect(sceneSources.createUrl).toHaveBeenCalledWith('private/scene.mp4');
+    expect(provider.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiSceneSources: [
+          {
+            videoSceneId: aiScene.id,
+            url: 'https://storage.example/private/scene.mp4?short=1',
+          },
+        ],
+      }),
+    );
   });
 });
 

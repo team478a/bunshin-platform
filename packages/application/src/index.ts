@@ -24,6 +24,7 @@ import type {
 import { isValidBunshinSlug, normalizeBunshinSlug } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 export * from './video-render-job';
+export * from './video-ai-scene-generation-job';
 export * from './video-render-completion';
 export * from './social-image-generation-job';
 export * from './social-image-pilot-evidence';
@@ -259,7 +260,15 @@ export interface PlatformAdminRepository {
   findActivePlatformAdminByUserId(userId: string): Promise<PlatformAdmin | null>;
 }
 
-export const AI_PROVIDER_KEYS = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL', 'CREATOMATE'] as const;
+export const AI_PROVIDER_KEYS = [
+  'OPENAI',
+  'GROK',
+  'EXA',
+  'FIRECRAWL',
+  'CREATOMATE',
+  'FAL',
+  'RUNWAY',
+] as const;
 export type AiProviderKey = (typeof AI_PROVIDER_KEYS)[number];
 export type AiProviderConfigurationStatus = 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ERROR';
 export interface AiProviderConfiguration {
@@ -383,9 +392,9 @@ export class CreateAiProviderConfigurationVersion {
     if (reason.length < 3 || reason.length > 500)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
     const model = input.model?.trim() || null;
-    if (['OPENAI', 'GROK'].includes(input.provider) && model === null)
+    if (['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model === null)
       throw new ApplicationError('VALIDATION_ERROR', 'AI model is required');
-    if (!['OPENAI', 'GROK'].includes(input.provider) && model !== null)
+    if (!['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model !== null)
       throw new ApplicationError('VALIDATION_ERROR', 'model is not supported for this provider');
     if (
       !Number.isSafeInteger(input.dailyBudgetUsdMicros) ||
@@ -2370,6 +2379,7 @@ export * from './advertising-safety';
 export * from './campaign-participation';
 export * from './campaign-safety-validation';
 export * from './video-core';
+export * from './video-ai-scene-generation';
 export * from './video-assets';
 export * from './video-render-operations';
 export * from './video-disclosure-policy';

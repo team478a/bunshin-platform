@@ -82,6 +82,32 @@ export class AiCharacterReferenceStorage {
     if (value.error) throw new ApplicationError('NOT_FOUND', '画像が見つかりません');
     return new Uint8Array(await value.data.arrayBuffer());
   }
+  /**
+   * A provider receives a temporary read URL rather than a public object URL. The URL is
+   * deliberately short-lived because reference images can identify a character or person.
+   */
+  async createTemporaryReadUrl(input: { storageKey: string; expiresInSeconds?: number }) {
+    const storageKey = input.storageKey.trim();
+    const expiresInSeconds = input.expiresInSeconds ?? 5 * 60;
+    if (
+      !storageKey ||
+      storageKey.length > 512 ||
+      storageKey.startsWith('/') ||
+      storageKey.includes('..') ||
+      !Number.isInteger(expiresInSeconds) ||
+      expiresInSeconds < 60 ||
+      expiresInSeconds > 15 * 60
+    )
+      throw new ApplicationError('VALIDATION_ERROR', '画像参照URLを準備できませんでした');
+    const signed = await this.storage.storage
+      .from(BUCKET)
+      .createSignedUrl(storageKey, expiresInSeconds);
+    if (signed.error) throw new ApplicationError('NOT_FOUND', '画像参照URLを準備できませんでした');
+    const url = new URL(signed.data.signedUrl);
+    if (url.protocol !== 'https:' || url.username || url.password)
+      throw new ApplicationError('INTERNAL_ERROR', '画像参照URLを準備できませんでした');
+    return { url: url.toString(), expiresAt: new Date(Date.now() + expiresInSeconds * 1000) };
+  }
   async remove(key: string) {
     await this.storage.storage.from(BUCKET).remove([key]);
   }

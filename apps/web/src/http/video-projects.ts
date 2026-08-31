@@ -1,12 +1,16 @@
 import 'server-only';
 import {
   ApproveVideoPlan,
+  AuthorizeVideoAiGenerationCost,
   CreateVideoProject,
   EnqueueJob,
   GenerateVideoPlan,
   QueueVideoRender,
+  QueueVideoSceneGenerations,
   ResolveVideoDisclosurePolicy,
+  VIDEO_AI_SCENE_GENERATION_JOB_TYPE,
   VIDEO_RENDER_JOB_TYPE,
+  isAiVideoScene,
   type JobEnvironment,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
@@ -16,6 +20,7 @@ import { z } from 'zod';
 import {
   resolveCreatomateRuntimeConfiguration,
   resolveOpenAiRuntimeConfiguration,
+  resolveVideoAiRuntimeConfiguration,
 } from '../ai/runtime-provider-configuration';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
@@ -37,11 +42,18 @@ const createSchema = z
     platform: z.enum(['INSTAGRAM', 'TIKTOK', 'YOUTUBE_SHORTS']),
     type: z.enum(['EXPLAINER', 'PRODUCT_INTRODUCTION', 'PHOTO_SLIDESHOW']),
     durationSeconds: z.union([z.literal(30), z.literal(60)]),
+    compositionMode: z.enum(['STANDARD', 'AI_SCENES']).default('STANDARD'),
   })
   .strict();
 const generateSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
 const approveSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
 const renderSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
+const queueAiScenesSchema = z
+  .object({
+    expectedRevision: z.number().int().positive(),
+    provider: z.literal('FAL'),
+  })
+  .strict();
 const jobEnvironment = {
   development: 'DEVELOPMENT',
   staging: 'STAGING',
@@ -91,6 +103,8 @@ export async function createVideoProjectResponse(
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = createSchema.parse(await request.json());
+    if (input.compositionMode === 'AI_SCENES' && !input.characterProfileVersionId)
+      throw new ApplicationError('VALIDATION_ERROR', 'AI動画ではAIキャラクターを選んでください');
     const db = await import('@bunshin/database');
     const disclosure = await new ResolveVideoDisclosurePolicy(
       new db.PrismaVideoDisclosurePolicyRepository(),
@@ -107,6 +121,7 @@ export async function createVideoProjectResponse(
       platform: input.platform,
       type: input.type,
       durationSeconds: input.durationSeconds,
+      standardComposition: input.compositionMode === 'STANDARD',
       aiProcessingTypes: [],
       disclosureSnapshot: {
         schemaVersion: 1,
@@ -120,9 +135,12 @@ export async function createVideoProjectResponse(
         guidance: disclosure.guidance,
         outputMetadata: disclosure.outputMetadata,
         resolvedAt: disclosure.resolvedAt.toISOString(),
-        standardComposition: true,
-        aiVideoGeneration: false,
-        explanation: 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',
+        standardComposition: input.compositionMode === 'STANDARD',
+        aiVideoGeneration: input.compositionMode === 'AI_SCENES',
+        explanation:
+          input.compositionMode === 'AI_SCENES'
+            ? 'AIが台本とAI動画用の場面を提案します。外部生成は承認後に、設定と予算を確認して開始します。'
+            : 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',
       },
     });
     return Response.json(
@@ -300,6 +318,96 @@ export async function queueVideoRenderResponse(
     });
     return Response.json(
       { data: { id: render.id, status: render.status }, requestId },
+      { status: 202, headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+/**
+ * Records one independently auditable request per AI-video scene. The external provider is
+ * intentionally not invoked here: a dedicated worker will submit only these approved records.
+ */
+export async function queueVideoAiScenesResponse(
+  request: Request,
+  workspaceId: string,
+  groupId: string,
+  videoProjectId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const input = queueAiScenesSchema.parse(await request.json());
+    const parsedWorkspaceId = uuid.parse(workspaceId);
+    const parsedGroupId = uuid.parse(groupId);
+    const parsedVideoProjectId = uuid.parse(videoProjectId);
+    const db = await import('@bunshin/database');
+    const projects = new db.PrismaVideoProjectRepository();
+    const project = await projects.findOwned({
+      workspaceId: parsedWorkspaceId,
+      groupId: parsedGroupId,
+      actorUserId: actor.userId,
+      videoProjectId: parsedVideoProjectId,
+    });
+    if (!project) throw new ApplicationError('NOT_FOUND', 'video project not found');
+    if (project.revision !== input.expectedRevision)
+      throw new ApplicationError('CONFLICT', 'video project revision conflict');
+    const runtime = await resolveVideoAiRuntimeConfiguration({ provider: input.provider });
+    const estimatedSceneCostsUsdMicros = project.scenes
+      .filter(isAiVideoScene)
+      .map((scene) =>
+        Math.round((scene.durationMs / 1_000) * runtime.estimatedCostUsdMicrosPerSecond),
+      );
+    await new AuthorizeVideoAiGenerationCost(
+      new db.PrismaVideoAiProviderCostPolicyRepository(),
+    ).execute({
+      environment: jobEnvironment[getServerEnvironment().APP_ENV],
+      provider: runtime.provider,
+      model: runtime.model,
+      estimatedSceneCostsUsdMicros,
+    });
+    const generations = await new QueueVideoSceneGenerations(
+      new db.PrismaVideoSceneGenerationRepository(),
+    ).execute({
+      workspaceId: parsedWorkspaceId,
+      groupId: parsedGroupId,
+      actorUserId: actor.userId,
+      videoProjectId: parsedVideoProjectId,
+      expectedRevision: input.expectedRevision,
+      provider: runtime.provider,
+      model: runtime.model,
+      estimatedCostUsdMicrosPerSecond: runtime.estimatedCostUsdMicrosPerSecond,
+    });
+    const dispatcher = new EnqueueJob(new db.PrismaJobRepository());
+    await Promise.all(
+      generations.map((generation) =>
+        dispatcher.enqueue({
+          workspaceId: parsedWorkspaceId,
+          correlationId: requestId,
+          requestedBy: actor.userId,
+          environment: jobEnvironment[getServerEnvironment().APP_ENV],
+          jobType: VIDEO_AI_SCENE_GENERATION_JOB_TYPE,
+          payloadReference: `video-ai-scene:${generation.id}`,
+          idempotencyKey: `video-ai-scene:${generation.id}`,
+          priority: 40,
+          maxAttempts: 12,
+        }),
+      ),
+    );
+    return Response.json(
+      {
+        data: generations.map((generation) => ({ id: generation.id, status: generation.status })),
+        requestId,
+      },
       { status: 202, headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {

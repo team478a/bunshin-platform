@@ -80,6 +80,7 @@ export interface VideoProjectRepository {
     platform: VideoPlatform;
     type: VideoProjectType;
     durationSeconds: 30 | 60;
+    standardComposition: boolean;
     aiProcessingTypes: VideoAiProcessingType[];
     disclosureSnapshot: Record<string, unknown>;
   }): Promise<VideoProjectRecord | null>;
@@ -145,7 +146,7 @@ export interface VideoRenderRepository {
   findForExecution(input: {
     workspaceId: string;
     renderId: string;
-  }): Promise<{ render: VideoRenderRecord; project: VideoProjectRecord } | null>;
+  }): Promise<VideoRenderExecutionContext | null>;
   markSubmitted(input: {
     workspaceId: string;
     renderId: string;
@@ -167,10 +168,25 @@ export interface VideoRenderRepository {
   }): Promise<VideoRenderRecord | null>;
 }
 
+/**
+ * The render worker receives storage keys, never a public scene URL.  It creates short-lived
+ * URLs immediately before submitting the composition to the render provider.
+ */
+export interface VideoRenderExecutionContext {
+  render: VideoRenderRecord;
+  project: VideoProjectRecord;
+  aiSceneSources: Array<{ videoSceneId: string; storageKey: string }>;
+}
+
+export interface VideoSceneRenderSourcePort {
+  createUrl(storageKey: string): Promise<string>;
+}
+
 export interface VideoRenderProviderPort {
   submit(input: {
     renderId: string;
     project: VideoProjectRecord;
+    aiSceneSources: Array<{ videoSceneId: string; url: string }>;
     webhookUrl: string;
   }): Promise<{ externalJobId: string }>;
   inspect(input: {
@@ -324,6 +340,7 @@ export class CreateVideoProject {
         ? id(input.characterProfileVersionId, 'characterProfileVersionId')
         : null,
       title: text(input.title, 'title', 160),
+      standardComposition: input.standardComposition,
       aiProcessingTypes: aiTypes(input.aiProcessingTypes),
     });
     if (!value) throw new ApplicationError('FORBIDDEN', 'video project unavailable');
@@ -382,11 +399,18 @@ export class ReplaceVideoPlan {
           'VALIDATION_ERROR',
           'standard composition cannot contain AI video',
         );
+      const visualPrompt = scene.visualPrompt?.trim() || null;
+      if (
+        !input.standardComposition &&
+        (scene.visualType === 'AI_VIDEO' || types.includes('VIDEO_GENERATION')) &&
+        (!visualPrompt || ![5_000, 10_000].includes(scene.durationMs))
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid AI video scene');
       return {
         ...scene,
         narration: text(scene.narration, 'narration', 2_000),
         caption: text(scene.caption, 'caption', 240),
-        visualPrompt: scene.visualPrompt?.trim() || null,
+        visualPrompt,
         keywords: [...new Set(scene.keywords.map((keyword) => text(keyword, 'keyword', 80)))].slice(
           0,
           20,
@@ -456,6 +480,7 @@ export class ExecuteVideoRenderStep {
     private readonly provider: VideoRenderProviderPort,
     private readonly storage: VideoRenderOutputStoragePort,
     private readonly webhook: VideoRenderWebhookPort,
+    private readonly sceneSources: VideoSceneRenderSourcePort,
   ) {}
 
   async execute(input: {
@@ -477,9 +502,16 @@ export class ExecuteVideoRenderStep {
     let render = value.render;
     if (render.status === 'QUEUED') {
       const webhookUrl = await this.webhook.createUrl(scope);
+      const aiSceneSources = await Promise.all(
+        value.aiSceneSources.map(async (source) => ({
+          videoSceneId: source.videoSceneId,
+          url: await this.sceneSources.createUrl(source.storageKey),
+        })),
+      );
       const submitted = await this.provider.submit({
         renderId: render.id,
         project: value.project,
+        aiSceneSources,
         webhookUrl,
       });
       const updated = await this.repository.markSubmitted({

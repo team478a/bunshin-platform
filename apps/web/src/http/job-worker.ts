@@ -5,6 +5,7 @@ import {
   ExecuteMissionAutomationJob,
   ExecuteLineDeliveryJob,
   ExecuteBadgeLineDeliveryJob,
+  ExecuteVideoAiSceneGenerationJob,
   ExecuteVideoRenderJob,
   ExecuteSocialImageGenerationJob,
   ExecuteGroupKnowledgeExtractionJob,
@@ -43,6 +44,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createBadgeLineDeliveryJobHandler },
     { createTrendResearchJobHandler },
     { createVideoRenderJobHandler },
+    { createVideoAiSceneGenerationJobHandler },
     { createSocialImageGenerationJobHandler },
     { createGroupKnowledgeExtractionJobHandler },
   ] = await Promise.all([
@@ -52,6 +54,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/badge-line-delivery-job-handler'),
     import('../jobs/trend-research-job-handler'),
     import('../jobs/video-render-job-handler'),
+    import('../jobs/video-ai-scene-generation-job-handler'),
     import('../jobs/social-image-generation-job-handler'),
     import('../jobs/group-knowledge-extraction-job-handler'),
   ]);
@@ -76,6 +79,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     fail,
   );
   const videoExecutor = new ExecuteVideoRenderJob(createVideoRenderJobHandler(), complete, fail);
+  const videoAiSceneExecutor = new ExecuteVideoAiSceneGenerationJob(
+    createVideoAiSceneGenerationJobHandler(),
+    complete,
+    fail,
+  );
   const socialImageExecutor = new ExecuteSocialImageGenerationJob(
     createSocialImageGenerationJobHandler(),
     complete,
@@ -97,11 +105,13 @@ async function configuredWorker(): Promise<JobWorkerPort> {
           ? badgeLineExecutor.execute(job, workerId)
           : job.jobType === 'VIDEO_RENDER_PROCESS'
             ? videoExecutor.execute(job, workerId)
-            : job.jobType === 'SOCIAL_IMAGE_GENERATE'
-              ? socialImageExecutor.execute(job, workerId)
-              : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
-                ? groupKnowledgeExecutor.execute(job, workerId)
-                : missionExecutor.execute(job, workerId),
+            : job.jobType === 'VIDEO_AI_SCENE_GENERATION_PROCESS'
+              ? videoAiSceneExecutor.execute(job, workerId)
+              : job.jobType === 'SOCIAL_IMAGE_GENERATE'
+                ? socialImageExecutor.execute(job, workerId)
+                : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
+                  ? groupKnowledgeExecutor.execute(job, workerId)
+                  : missionExecutor.execute(job, workerId),
   });
 }
 

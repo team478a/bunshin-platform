@@ -12,7 +12,12 @@ const repository = (): VideoRenderOperationsRepository => ({
 
 describe('video render operations', () => {
   it('returns the current-environment snapshot', async () => {
-    const snapshot = { counts: { QUEUED: 1 } as never, items: [] };
+    const snapshot = {
+      counts: { QUEUED: 1 } as never,
+      items: [],
+      sceneCounts: { QUEUED: 2, FAILED: 1 } as never,
+      sceneItems: [],
+    };
     const getSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const result = await new GetVideoRenderOperations({
       ...repository(),
@@ -20,6 +25,7 @@ describe('video render operations', () => {
     }).execute({ actorUserId: 'admin', environment: 'PRODUCTION' });
 
     expect(result).toBe(snapshot);
+    expect(result.sceneCounts).toMatchObject({ QUEUED: 2, FAILED: 1 });
     expect(getSnapshot).toHaveBeenCalledWith({
       actorUserId: 'admin',
       environment: 'PRODUCTION',
