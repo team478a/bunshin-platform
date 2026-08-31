@@ -95,6 +95,32 @@ export default async function VideoProjectPage({
         },
         orderBy: { createdAt: 'asc' },
       });
+  const aiSceneIds = new Set(
+    project.scenes
+      .filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' || scene.aiProcessingTypes.includes('VIDEO_GENERATION'),
+      )
+      .map((scene) => scene.id),
+  );
+  const completedAiSceneIds = new Set(
+    sceneGenerations
+      .filter(
+        (generation) =>
+          generation.status === 'SUCCEEDED' &&
+          generation.outputStorageKey &&
+          aiSceneIds.has(generation.videoSceneId),
+      )
+      .map((generation) => generation.videoSceneId),
+  );
+  const aiSceneGenerationFailed = sceneGenerations.some(
+    (generation) => aiSceneIds.has(generation.videoSceneId) && generation.status === 'FAILED',
+  );
+  const canComposeAiVideo =
+    !project.standardComposition &&
+    aiSceneIds.size > 0 &&
+    completedAiSceneIds.size === aiSceneIds.size &&
+    !aiSceneGenerationFailed;
 
   const serviceSlug = (await searchParams)?.service;
   return (
@@ -224,15 +250,31 @@ export default async function VideoProjectPage({
                 </>
               ) : (
                 <>
-                  <p>
-                    AI動画を使う場面を一つずつ作ります。設定と予算を確認できる場合だけ開始します。
-                  </p>
-                  <VideoAiSceneRequester
-                    workspaceId={project.workspaceId}
-                    groupId={project.groupId}
-                    projectId={project.id}
-                    revision={project.revision}
-                  />
+                  {canComposeAiVideo ? (
+                    <>
+                      <p>すべてのAI動画の場面ができました。場面をつないで完成動画を作ります。</p>
+                      <VideoRenderRequester
+                        workspaceId={project.workspaceId}
+                        groupId={project.groupId}
+                        projectId={project.id}
+                        revision={project.revision}
+                      />
+                    </>
+                  ) : aiSceneGenerationFailed ? (
+                    <p>作れなかった場面があります。管理者が設定を確認します。</p>
+                  ) : (
+                    <>
+                      <p>
+                        AI動画を使う場面を一つずつ作ります。設定と予算を確認できる場合だけ開始します。
+                      </p>
+                      <VideoAiSceneRequester
+                        workspaceId={project.workspaceId}
+                        groupId={project.groupId}
+                        projectId={project.id}
+                        revision={project.revision}
+                      />
+                    </>
+                  )}
                 </>
               )}
             </section>

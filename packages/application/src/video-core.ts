@@ -146,7 +146,7 @@ export interface VideoRenderRepository {
   findForExecution(input: {
     workspaceId: string;
     renderId: string;
-  }): Promise<{ render: VideoRenderRecord; project: VideoProjectRecord } | null>;
+  }): Promise<VideoRenderExecutionContext | null>;
   markSubmitted(input: {
     workspaceId: string;
     renderId: string;
@@ -168,10 +168,25 @@ export interface VideoRenderRepository {
   }): Promise<VideoRenderRecord | null>;
 }
 
+/**
+ * The render worker receives storage keys, never a public scene URL.  It creates short-lived
+ * URLs immediately before submitting the composition to the render provider.
+ */
+export interface VideoRenderExecutionContext {
+  render: VideoRenderRecord;
+  project: VideoProjectRecord;
+  aiSceneSources: Array<{ videoSceneId: string; storageKey: string }>;
+}
+
+export interface VideoSceneRenderSourcePort {
+  createUrl(storageKey: string): Promise<string>;
+}
+
 export interface VideoRenderProviderPort {
   submit(input: {
     renderId: string;
     project: VideoProjectRecord;
+    aiSceneSources: Array<{ videoSceneId: string; url: string }>;
     webhookUrl: string;
   }): Promise<{ externalJobId: string }>;
   inspect(input: {
@@ -465,6 +480,7 @@ export class ExecuteVideoRenderStep {
     private readonly provider: VideoRenderProviderPort,
     private readonly storage: VideoRenderOutputStoragePort,
     private readonly webhook: VideoRenderWebhookPort,
+    private readonly sceneSources: VideoSceneRenderSourcePort,
   ) {}
 
   async execute(input: {
@@ -486,9 +502,16 @@ export class ExecuteVideoRenderStep {
     let render = value.render;
     if (render.status === 'QUEUED') {
       const webhookUrl = await this.webhook.createUrl(scope);
+      const aiSceneSources = await Promise.all(
+        value.aiSceneSources.map(async (source) => ({
+          videoSceneId: source.videoSceneId,
+          url: await this.sceneSources.createUrl(source.storageKey),
+        })),
+      );
       const submitted = await this.provider.submit({
         renderId: render.id,
         project: value.project,
+        aiSceneSources,
         webhookUrl,
       });
       const updated = await this.repository.markSubmitted({
