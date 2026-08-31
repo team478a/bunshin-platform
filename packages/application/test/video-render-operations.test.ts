@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   GetVideoRenderOperations,
+  RequestVideoSceneGenerationRetry,
   RequestVideoRenderRetry,
   type VideoRenderOperationsRepository,
 } from '../src/index';
@@ -8,6 +9,7 @@ import {
 const repository = (): VideoRenderOperationsRepository => ({
   getSnapshot: vi.fn(),
   requestRetry: vi.fn(),
+  requestSceneRetry: vi.fn(),
 });
 
 describe('video render operations', () => {
@@ -66,5 +68,17 @@ describe('video render operations', () => {
     expect(requestRetry).toHaveBeenCalledWith(
       expect.objectContaining({ reason: '通信障害の復旧後に再実行' }),
     );
+  });
+
+  it('requires a reason when retrying a failed AI scene', async () => {
+    await expect(
+      new RequestVideoSceneGenerationRetry(repository()).execute({
+        requestId: '11111111-1111-4111-8111-111111111111',
+        actorUserId: 'admin',
+        environment: 'PRODUCTION',
+        generationId: '22222222-2222-4222-8222-222222222222',
+        reason: '  ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

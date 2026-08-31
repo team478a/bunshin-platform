@@ -1456,6 +1456,7 @@ model User {
   lineDeliveryRetryRequests         LineDeliveryRetryRequest[]          @relation("LineDeliveryRetryActor")
   badgeLineDeliveryRetryRequests    BadgeLineDeliveryRetryRequest[]     @relation("BadgeLineDeliveryRetryActor")
   videoRenderRetryRequests          VideoRenderRetryRequest[]           @relation("VideoRenderRetryActor")
+  videoSceneGenerationRetryRequests VideoSceneGenerationRetryRequest[]  @relation("VideoSceneGenerationRetryActor")
   videoDisclosurePoliciesCreated    VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyCreator")
   videoDisclosurePoliciesActivated  VideoDisclosurePolicy[]             @relation("VideoDisclosurePolicyActivator")
   trendBenchmarkCases               TrendProviderBenchmarkCase[]        @relation("TrendBenchmarkCaseAuthor")
@@ -3376,12 +3377,32 @@ model VideoSceneGeneration {
   updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
   project                VideoProject               @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
   scene                  VideoScene                 @relation(fields: [videoSceneId], references: [id], onDelete: Cascade)
+  retryRequests          VideoSceneGenerationRetryRequest[]
 
   @@unique([videoProjectId, projectRevision, videoSceneId, sceneRevision, provider, model])
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([groupId, groupMembershipId, status])
   @@index([provider, externalJobId])
   @@map("video_scene_generations")
+}
+
+model VideoSceneGenerationRetryRequest {
+  id                     String               @id @db.Uuid
+  environment            LineConfigurationEnvironment
+  videoSceneGenerationId String               @map("video_scene_generation_id") @db.Uuid
+  failedAtSnapshot       DateTime             @map("failed_at_snapshot") @db.Timestamptz(6)
+  actorUserId            String               @map("actor_user_id") @db.Uuid
+  reason                 String               @db.VarChar(500)
+  jobId                  String               @unique @map("job_id") @db.Uuid
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  generation             VideoSceneGeneration @relation(fields: [videoSceneGenerationId], references: [id], onDelete: Restrict)
+  actor                  User                 @relation("VideoSceneGenerationRetryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  job                    Job                  @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([videoSceneGenerationId, failedAtSnapshot])
+  @@index([environment, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("video_scene_generation_retry_requests")
 }
 
 model VideoAsset {
@@ -4260,6 +4281,7 @@ model Job {
   lineDeliveryRetryRequest      LineDeliveryRetryRequest?
   badgeLineDeliveryRetryRequest BadgeLineDeliveryRetryRequest?
   videoRenderRetryRequest       VideoRenderRetryRequest?
+  videoSceneGenerationRetryRequest VideoSceneGenerationRetryRequest?
 
   @@unique([environment, idempotencyKey])
   @@index([environment, status, scheduledAt, priority])
