@@ -4265,6 +4265,7 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
                 campaignId: eligibleCampaign.id,
                 bunshinId: input.bunshinId,
                 dailyMissionId: created.id,
+                contentSnapshot: input.content as Prisma.InputJsonValue,
                 requestedByUserId: input.actorUserId,
               },
             });
