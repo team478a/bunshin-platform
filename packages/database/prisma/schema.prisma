@@ -466,6 +466,23 @@ model AiCharacterReferenceAsset {
   @@map("ai_character_reference_assets")
 }
 
+model AiCharacterAuditLog {
+  id                 String   @id @default(uuid()) @db.Uuid
+  workspaceId        String   @map("workspace_id") @db.Uuid
+  groupId            String?  @map("group_id") @db.Uuid
+  characterProfileId String   @map("character_profile_id") @db.Uuid
+  resourceType       String   @map("resource_type") @db.VarChar(80)
+  resourceId         String   @map("resource_id") @db.Uuid
+  action             String   @db.VarChar(80)
+  beforeData         Json?    @map("before_data")
+  afterData          Json     @map("after_data")
+  performedByUserId  String   @map("performed_by_user_id") @db.Uuid
+  performedAt        DateTime @default(now()) @map("performed_at") @db.Timestamptz(3)
+
+  @@index([workspaceId, groupId, characterProfileId, performedAt])
+  @@map("ai_character_audit_logs")
+}
+
 enum AiCharacterProfileScope {
   PLATFORM
   SERVICE

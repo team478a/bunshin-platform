@@ -1782,3 +1782,13 @@
 - Asset: 基準画像は公開URLを保存せず、Private Storage Key、MIME、容量、SHA-256、権利確認日時を保存する。
 - Isolation: SERVICE/PERSONALデータは`workspaceId + groupId`の複合外部キーでProfile・Version・Assetを拘束する。
 - Source: `docs/AI_CHARACTER_PROFILE_CORE_REPORT.md`
+
+# 2026-09-01: サービス管理者がAIキャラクターを段階的に公開する
+
+- Flow: キャラクター作成、利用許諾記録、Prompt Version公開の順に進め、許諾なしの公開を禁止する。
+- Authorization: ACTIVE SERVICE_OWNER／SERVICE_ADMINだけが自サービスのCharacterを管理できる。
+- License gate: 公開時に同じService・Profileの有効なLicense Versionを再検証し、内容をSnapshotする。
+- History: 新しいPrompt Version公開時は旧版を削除せずSUPERSEDEDにし、同時公開を1版へ制限する。
+- Audit: Profile、License、Prompt Versionの作成・公開を専用Audit Logへ記録する。
+- UX: 法務用語だけを並べず、「仕事で使える」「加工できる」「参加者へ渡せる」と平易に表示する。
+- Source: `docs/AI_CHARACTER_ADMIN_REPORT.md`

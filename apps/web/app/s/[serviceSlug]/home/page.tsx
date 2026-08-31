@@ -287,6 +287,9 @@ export default async function ServiceMemberHome({
               <a className="button" href={`/s/${service.configuration.slug}/manage/program-goals`}>
                 支援方法と目標候補
               </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/characters`}>
+                AIキャラクター
+              </a>
               <a className="button" href={`/s/${service.configuration.slug}/manage/knowledge`}>
                 公式資料・FAQ
               </a>
