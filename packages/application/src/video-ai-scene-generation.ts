@@ -293,6 +293,8 @@ export class ExecuteVideoSceneGenerationStep {
         throw new ApplicationError('CONFLICT', 'video scene generation transition conflict');
       return { status: 'FAILED', generation: updated };
     }
+    if (inspected.status !== 'SUCCEEDED')
+      throw new ApplicationError('INTERNAL_ERROR', 'invalid video scene provider status');
     const stored = await this.storage.store({
       workspaceId: generation.workspaceId,
       groupId: generation.groupId,
