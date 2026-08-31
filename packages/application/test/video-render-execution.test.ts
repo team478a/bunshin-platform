@@ -162,12 +162,14 @@ describe('video render execution', () => {
         },
       ],
     };
+    const aiScene = aiProject.scenes[0];
+    if (!aiScene) throw new Error('AI scene fixture is required');
     values.findForExecution = vi.fn().mockResolvedValue({
       render: render(),
       project: aiProject,
       aiSceneSources: [
         {
-          videoSceneId: aiProject.scenes[0].id,
+          videoSceneId: aiScene.id,
           storageKey: 'private/scene.mp4',
         },
       ],
@@ -191,7 +193,7 @@ describe('video render execution', () => {
       expect.objectContaining({
         aiSceneSources: [
           {
-            videoSceneId: aiProject.scenes[0].id,
+            videoSceneId: aiScene.id,
             url: 'https://storage.example/private/scene.mp4?short=1',
           },
         ],
