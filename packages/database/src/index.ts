@@ -5,6 +5,7 @@ import {
   calculateFirstWeekThreePostKpi,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
+  VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES,
   VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
   isLineNotificationSuppressed,
@@ -14173,6 +14174,11 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
         errorCode: row.errorCode,
         estimatedCostUsdMicros: row.estimatedCostUsdMicros,
         actualCostUsdMicros: row.actualCostUsdMicros,
+        retryable:
+          row.status === 'FAILED' &&
+          VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES.includes(
+            row.errorCode as (typeof VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES)[number],
+          ),
         createdAt: row.createdAt,
         startedAt: row.startedAt,
         completedAt: row.completedAt,
@@ -14280,6 +14286,122 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
         throw new ApplicationError('CONFLICT', 'this video render failure already has a retry job');
+      throw error;
+    }
+  }
+
+  async requestSceneRetry(
+    input: Parameters<VideoRenderOperationsRepository['requestSceneRetry']>[0],
+  ) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        const now = new Date();
+        const admin = await tx.platformAdmin.findFirst({
+          where: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+          },
+          select: { id: true },
+        });
+        if (!admin) return null;
+        const generation = await tx.videoSceneGeneration.findFirst({
+          where: {
+            id: input.generationId,
+            status: 'FAILED',
+            errorCode: { in: [...VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES] },
+            completedAt: { not: null },
+            project: {
+              status: 'FAILED',
+              group: {
+                status: 'ACTIVE',
+                featurePolicies: {
+                  some: {
+                    featureKey: 'VIDEO_GENERATION',
+                    status: 'ENABLED',
+                    OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+                  },
+                },
+              },
+              groupMembership: {
+                status: 'ACTIVE',
+                consentedAt: { not: null },
+                featureAssignments: {
+                  some: {
+                    featureKey: 'VIDEO_GENERATION',
+                    status: 'ENABLED',
+                    OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+                  },
+                },
+              },
+              ownerUser: { status: 'ACTIVE' },
+              workspace: { status: 'ACTIVE' },
+            },
+          },
+          include: { project: { select: { bunshinId: true } } },
+        });
+        if (!generation?.completedAt) return null;
+        const originalJob = await tx.job.findFirst({
+          where: {
+            environment: input.environment,
+            jobType: 'VIDEO_AI_SCENE_GENERATION_PROCESS',
+            payloadReference: `video-ai-scene:${generation.id}`,
+          },
+          select: { id: true },
+        });
+        if (!originalJob) return null;
+        const changed = await tx.videoSceneGeneration.updateMany({
+          where: { id: generation.id, status: 'FAILED', completedAt: generation.completedAt },
+          data: {
+            status: 'QUEUED',
+            externalJobId: null,
+            outputStorageKey: null,
+            errorCode: null,
+            startedAt: null,
+            completedAt: null,
+            actualCostUsdMicros: null,
+          },
+        });
+        if (changed.count !== 1) return null;
+        await tx.videoProject.update({
+          where: { id: generation.videoProjectId },
+          data: { status: 'QUEUED' },
+        });
+        const job = await tx.job.create({
+          data: {
+            environment: input.environment,
+            workspaceId: generation.workspaceId,
+            bunshinId: generation.project.bunshinId,
+            jobType: 'VIDEO_AI_SCENE_GENERATION_PROCESS',
+            payloadReference: `video-ai-scene:${generation.id}`,
+            idempotencyKey: `video-ai-scene-admin-retry:${generation.id}:${generation.completedAt.toISOString()}`,
+            correlationId: input.requestId,
+            requestedBy: generation.ownerUserId,
+            priority: 40,
+            maxAttempts: 12,
+          },
+        });
+        return tx.videoSceneGenerationRetryRequest.create({
+          data: {
+            id: input.requestId,
+            environment: input.environment,
+            videoSceneGenerationId: generation.id,
+            failedAtSnapshot: generation.completedAt,
+            actorUserId: input.actorUserId,
+            reason: input.reason,
+            jobId: job.id,
+          },
+          select: { id: true, jobId: true, createdAt: true },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError(
+          'CONFLICT',
+          'this video scene generation failure already has a retry job',
+        );
       throw error;
     }
   }

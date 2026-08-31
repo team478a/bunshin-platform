@@ -8,6 +8,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { VideoRenderRetryForm } from './video-render-retry-form';
+import { VideoSceneGenerationRetryForm } from './video-scene-generation-retry-form';
 import { buildVideoReadiness } from './readiness-view-model';
 
 export const dynamic = 'force-dynamic';
@@ -119,6 +120,7 @@ export default async function VideoRenderOperationsPage() {
                 </p>
                 <p>受付日時：{item.createdAt.toLocaleString('ja-JP')}</p>
                 {item.errorCode ? <p>停止理由：{item.errorCode}</p> : null}
+                {item.retryable ? <VideoSceneGenerationRetryForm generationId={item.id} /> : null}
               </li>
             ))}
           </ul>
