@@ -42,7 +42,10 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
           return {
             status: result.generation.status === 'SUBMITTED' ? 'SUBMITTED' : 'GENERATING',
           };
-        return { status: result.status, errorCode: result.generation.errorCode ?? undefined };
+        if (result.status === 'SUCCEEDED') return { status: 'SUCCEEDED' };
+        return result.generation.errorCode
+          ? { status: 'FAILED', errorCode: result.generation.errorCode }
+          : { status: 'FAILED' };
       } catch (error) {
         if (error instanceof FalKlingVideoProviderError)
           throw new VideoAiSceneGenerationJobHandlerError(`FAL_${error.category}`, error.retryable);
