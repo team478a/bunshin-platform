@@ -2,12 +2,7 @@ import { ApplicationError } from '@bunshin/shared';
 import type { VideoSceneRecord } from './video-core';
 
 export type VideoSceneGenerationStatus =
-  | 'QUEUED'
-  | 'SUBMITTED'
-  | 'GENERATING'
-  | 'SUCCEEDED'
-  | 'FAILED'
-  | 'CANCELLED';
+  'QUEUED' | 'SUBMITTED' | 'GENERATING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
 export interface VideoSceneGenerationRecord {
   id: string;
