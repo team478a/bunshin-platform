@@ -31,6 +31,15 @@ export interface CreatomateRuntimeConfiguration {
   requestCostUsdMicros: number;
 }
 
+export interface VideoAiRuntimeConfiguration {
+  provider: 'FAL' | 'RUNWAY';
+  apiKey: string;
+  model: string;
+  dailyBudgetUsdMicros: number;
+  monthlyBudgetUsdMicros: number;
+  estimatedCostUsdMicrosPerSecond: number;
+}
+
 interface Dependencies {
   repository: AiProviderConfigurationRepository;
   crypto: AiProviderSecretCryptoPort;
@@ -130,5 +139,37 @@ export async function resolveCreatomateRuntimeConfiguration(input?: {
   return {
     apiKey: (input?.crypto ?? new AesGcmAiProviderSecretCrypto()).decrypt(resolved.encryptedApiKey),
     requestCostUsdMicros: resolved.configuration.requestCostUsdMicros ?? 0,
+  };
+}
+
+/**
+ * Resolves only an active, verified video provider configuration for the current runtime
+ * environment. Video providers intentionally have no legacy environment-variable fallback:
+ * every paid generation must remain visible and pausable in the admin console.
+ */
+export async function resolveVideoAiRuntimeConfiguration(input: {
+  provider: 'FAL' | 'RUNWAY';
+  repository?: AiProviderConfigurationRepository;
+  crypto?: AiProviderSecretCryptoPort;
+}): Promise<VideoAiRuntimeConfiguration> {
+  let repository = input.repository;
+  if (!repository) {
+    const db = await import('@bunshin/database');
+    repository = new db.PrismaAiProviderConfigurationRepository();
+  }
+  const resolved = await new ResolveAiProviderRuntimeConfiguration(repository).execute({
+    environment: currentAiProviderEnvironment(),
+    provider: input.provider,
+  });
+  const model = resolved.configuration.model?.trim();
+  if (!model)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'active video provider model is required');
+  return {
+    provider: input.provider,
+    apiKey: (input.crypto ?? new AesGcmAiProviderSecretCrypto()).decrypt(resolved.encryptedApiKey),
+    model,
+    dailyBudgetUsdMicros: resolved.configuration.dailyBudgetUsdMicros,
+    monthlyBudgetUsdMicros: resolved.configuration.monthlyBudgetUsdMicros,
+    estimatedCostUsdMicrosPerSecond: resolved.configuration.requestCostUsdMicros ?? 0,
   };
 }
