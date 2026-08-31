@@ -29,10 +29,12 @@ describe('service daily mission boundary', () => {
     expect(source).not.toContain('workspaceId: z.');
   });
 
-  it('uses safe service generation without personal context and rechecks campaign ownership', () => {
+  it('uses safe service generation without personal context, while retaining own trend candidates', () => {
     expect(source).toContain('serviceSafeMode: true');
     expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*null/);
     expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*\[\]/);
+    expect(generation).toContain('new ListActiveTrendIdeas(');
+    expect(generation).not.toMatch(/const trendIdeas = input\.serviceSafeMode\s*\?\s*\[\]/);
     expect(generation).toContain('campaign.productPack.groupId !== input.groupId');
     expect(generation).toContain("'service campaign unavailable'");
   });

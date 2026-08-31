@@ -129,13 +129,16 @@ export class DailyMissionGenerationService {
       ).execute({ ...scope, socialProfileId: profile.id });
       const strategy = strategies.find(({ status }) => status === 'APPROVED');
       if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
-      const trendIdeas = input.serviceSafeMode
-        ? []
-        : await new ListActiveTrendIdeas(new db.PrismaTrendResearchRepository()).execute({
-            ...scope,
-            socialProfileId: profile.id,
-            at: new Date(),
-          });
+      // Trend candidates are always scoped to the current workspace, Bunshin and social profile.
+      // They are public-source based, so service mode can use the participant's own candidates
+      // without exposing personal memories or another service's data.
+      const trendIdeas = await new ListActiveTrendIdeas(
+        new db.PrismaTrendResearchRepository(),
+      ).execute({
+        ...scope,
+        socialProfileId: profile.id,
+        at: new Date(),
+      });
       const weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(
         scope,
       );
