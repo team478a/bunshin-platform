@@ -567,7 +567,9 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
   }
 }
 
-export class PrismaMissionAutomationCandidateRepository implements MissionAutomationCandidateRepository {
+export class PrismaMissionAutomationCandidateRepository
+  implements MissionAutomationCandidateRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async listEnabled(limit: number) {
@@ -591,7 +593,9 @@ export class PrismaMissionAutomationCandidateRepository implements MissionAutoma
   }
 }
 
-export class PrismaTrendResearchAutomationCandidateRepository implements TrendResearchAutomationCandidateRepository {
+export class PrismaTrendResearchAutomationCandidateRepository
+  implements TrendResearchAutomationCandidateRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async listEligible(limit: number) {
@@ -629,7 +633,9 @@ export class PrismaTrendResearchAutomationCandidateRepository implements TrendRe
   }
 }
 
-export class PrismaTrendResearchGenerationContextRepository implements TrendResearchGenerationContextRepository {
+export class PrismaTrendResearchGenerationContextRepository
+  implements TrendResearchGenerationContextRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async get(input: Parameters<TrendResearchGenerationContextRepository['get']>[0]) {
@@ -1992,7 +1998,9 @@ export class PrismaMissionDeepLinkStateRepository implements MissionDeepLinkStat
   }
 }
 
-export class PrismaLineNotificationPreferenceRepository implements LineNotificationPreferenceRepository {
+export class PrismaLineNotificationPreferenceRepository
+  implements LineNotificationPreferenceRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   private accessible(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
@@ -4409,7 +4417,9 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
   }
 }
 
-export class PrismaLineMissionNotificationSummaryRepository implements LineMissionNotificationSummaryRepository {
+export class PrismaLineMissionNotificationSummaryRepository
+  implements LineMissionNotificationSummaryRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async resolve(input: Parameters<LineMissionNotificationSummaryRepository['resolve']>[0]) {
@@ -4596,7 +4606,9 @@ function generationContextSnapshot(
   };
 }
 
-export class PrismaGenerationContextSnapshotRepository implements GenerationContextSnapshotRepository {
+export class PrismaGenerationContextSnapshotRepository
+  implements GenerationContextSnapshotRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   private async authorizedMission(
@@ -5684,7 +5696,9 @@ export class PrismaAccountDeletionRequestRepository implements AccountDeletionRe
   }
 }
 
-export class PrismaAccountDeletionExecutionRepository implements AccountDeletionExecutionRepository {
+export class PrismaAccountDeletionExecutionRepository
+  implements AccountDeletionExecutionRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async claimAndSuspendNext(
@@ -6135,7 +6149,9 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
   }
 }
 
-export class PrismaAccountDeletionOrchestrationRepository implements AccountDeletionOrchestrationRepository {
+export class PrismaAccountDeletionOrchestrationRepository
+  implements AccountDeletionOrchestrationRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async findEmailIdentity(
@@ -6214,7 +6230,9 @@ export class PrismaAccountDeletionOrchestrationRepository implements AccountDele
   }
 }
 
-export class PrismaAccountDeletionAdminOperationsRepository implements AccountDeletionAdminOperationsRepository {
+export class PrismaAccountDeletionAdminOperationsRepository
+  implements AccountDeletionAdminOperationsRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async retryBlocked(
@@ -7132,7 +7150,9 @@ function capabilityAssignment(
   };
 }
 
-export class PrismaBunshinCapabilityAssignmentRepository implements BunshinCapabilityAssignmentRepository {
+export class PrismaBunshinCapabilityAssignmentRepository
+  implements BunshinCapabilityAssignmentRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   private async managed(
@@ -13617,7 +13637,8 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
             },
             character: {
               name:
-                typeof (project.characterProfileSnapshot as Record<string, unknown>).name === 'string'
+                typeof (project.characterProfileSnapshot as Record<string, unknown>).name ===
+                'string'
                   ? (project.characterProfileSnapshot as Record<string, unknown>).name
                   : null,
               referenceImageCount: Array.isArray(project.characterReferenceSnapshot)
@@ -14383,7 +14404,9 @@ async function socialImagePilotIsApproved(
   return socialImagePilotApprovalChecks.every((key) => latest.get(key) === 'RECORDED');
 }
 
-export class PrismaSocialImagePilotEvidenceRepository implements SocialImagePilotEvidenceRepository {
+export class PrismaSocialImagePilotEvidenceRepository
+  implements SocialImagePilotEvidenceRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async list(input: Parameters<SocialImagePilotEvidenceRepository['list']>[0]) {
@@ -14460,7 +14483,9 @@ export class PrismaSocialImagePilotEvidenceRepository implements SocialImagePilo
   }
 }
 
-export class PrismaSocialImageGenerationRequestRepository implements SocialImageGenerationRequestRepository {
+export class PrismaSocialImageGenerationRequestRepository
+  implements SocialImageGenerationRequestRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   private async activeScope(
@@ -14767,7 +14792,9 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
   }
 }
 
-export class PrismaSocialImageGenerationAuthorizationRepository implements SocialImageGenerationAuthorizationPort {
+export class PrismaSocialImageGenerationAuthorizationRepository
+  implements SocialImageGenerationAuthorizationPort
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async authorize(input: Parameters<SocialImageGenerationAuthorizationPort['authorize']>[0]) {
@@ -14905,7 +14932,9 @@ export class PrismaSocialImageGenerationAuthorizationRepository implements Socia
   }
 }
 
-export class PrismaSocialImageGenerationExecutionRepository implements SocialImageGenerationExecutionRepository {
+export class PrismaSocialImageGenerationExecutionRepository
+  implements SocialImageGenerationExecutionRepository
+{
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async claim(input: Parameters<SocialImageGenerationExecutionRepository['claim']>[0]) {
