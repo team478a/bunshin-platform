@@ -42,6 +42,7 @@ const createSchema = z
     platform: z.enum(['INSTAGRAM', 'TIKTOK', 'YOUTUBE_SHORTS']),
     type: z.enum(['EXPLAINER', 'PRODUCT_INTRODUCTION', 'PHOTO_SLIDESHOW']),
     durationSeconds: z.union([z.literal(30), z.literal(60)]),
+    compositionMode: z.enum(['STANDARD', 'AI_SCENES']).default('STANDARD'),
   })
   .strict();
 const generateSchema = z.object({ expectedRevision: z.number().int().positive() }).strict();
@@ -102,6 +103,8 @@ export async function createVideoProjectResponse(
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = createSchema.parse(await request.json());
+    if (input.compositionMode === 'AI_SCENES' && !input.characterProfileVersionId)
+      throw new ApplicationError('VALIDATION_ERROR', 'AI動画ではAIキャラクターを選んでください');
     const db = await import('@bunshin/database');
     const disclosure = await new ResolveVideoDisclosurePolicy(
       new db.PrismaVideoDisclosurePolicyRepository(),
@@ -118,6 +121,7 @@ export async function createVideoProjectResponse(
       platform: input.platform,
       type: input.type,
       durationSeconds: input.durationSeconds,
+      standardComposition: input.compositionMode === 'STANDARD',
       aiProcessingTypes: [],
       disclosureSnapshot: {
         schemaVersion: 1,
@@ -131,9 +135,12 @@ export async function createVideoProjectResponse(
         guidance: disclosure.guidance,
         outputMetadata: disclosure.outputMetadata,
         resolvedAt: disclosure.resolvedAt.toISOString(),
-        standardComposition: true,
-        aiVideoGeneration: false,
-        explanation: 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',
+        standardComposition: input.compositionMode === 'STANDARD',
+        aiVideoGeneration: input.compositionMode === 'AI_SCENES',
+        explanation:
+          input.compositionMode === 'AI_SCENES'
+            ? 'AIが台本とAI動画用の場面を提案します。外部生成は承認後に、設定と予算を確認して開始します。'
+            : 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',
       },
     });
     return Response.json(

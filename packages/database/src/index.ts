@@ -13356,6 +13356,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
       }
       let characterProfileSnapshot: Prisma.InputJsonValue = {};
       let characterReferenceSnapshot: Prisma.InputJsonValue = [];
+      if (!input.standardComposition && !input.characterProfileVersionId) return null;
       if (input.characterProfileVersionId) {
         const characterVersion = await tx.aiCharacterProfileVersion.findFirst({
           where: {
@@ -13432,6 +13433,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           platform: input.platform,
           type: input.type,
           durationSeconds: input.durationSeconds,
+          standardComposition: input.standardComposition,
           aiProcessingTypes: input.aiProcessingTypes,
           disclosureSnapshot: input.disclosureSnapshot as Prisma.InputJsonValue,
         },

@@ -5,6 +5,7 @@ import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { VideoPlanGenerator } from '../../../../../ui/video-plan-generator';
 import { VideoPlanApprover } from '../../../../../ui/video-plan-approver';
 import { VideoRenderRequester } from '../../../../../ui/video-render-requester';
+import { VideoAiSceneRequester } from '../../../../../ui/video-ai-scene-requester';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,13 +194,27 @@ export default async function VideoProjectPage({
           {project.status === 'APPROVED' ? (
             <section className="settings-card">
               <h2>台本を確認しました</h2>
-              <p>この内容から動画を作ります。受付後は画面を閉じても大丈夫です。</p>
-              <VideoRenderRequester
-                workspaceId={project.workspaceId}
-                groupId={project.groupId}
-                projectId={project.id}
-                revision={project.revision}
-              />
+              {project.standardComposition ? (
+                <>
+                  <p>この内容から動画を作ります。受付後は画面を閉じても大丈夫です。</p>
+                  <VideoRenderRequester
+                    workspaceId={project.workspaceId}
+                    groupId={project.groupId}
+                    projectId={project.id}
+                    revision={project.revision}
+                  />
+                </>
+              ) : (
+                <>
+                  <p>AI動画を使う場面を一つずつ作ります。設定と予算を確認できる場合だけ開始します。</p>
+                  <VideoAiSceneRequester
+                    workspaceId={project.workspaceId}
+                    groupId={project.groupId}
+                    projectId={project.id}
+                    revision={project.revision}
+                  />
+                </>
+              )}
             </section>
           ) : null}
           {['QUEUED', 'RENDERING'].includes(project.status) ? (
