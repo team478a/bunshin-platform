@@ -110,6 +110,13 @@ export default async function ServiceManagementHome({
     },
   });
   if (!group) notFound();
+  const pendingPostApprovalCount = await db.prisma.campaignPostingApprovalRequest.count({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      status: 'PENDING',
+    },
+  });
   const configuration = service.configuration;
   const onboarding = readServiceOnboardingSettings(
     configuration.registration.onboardingConfig,
@@ -150,6 +157,18 @@ export default async function ServiceManagementHome({
               : '「設定する」と表示されている項目を確認してください。'}
           </p>
         </section>
+        {pendingPostApprovalCount > 0 ? (
+          <section className="settings-card">
+            <h2>確認を待っている商品投稿があります</h2>
+            <p>{pendingPostApprovalCount}件の投稿案が、参加者のコピー前の確認を待っています。</p>
+            <Link
+              className="button"
+              href={`/s/${configuration.slug}/manage/post-approvals` as Route}
+            >
+              投稿案を確認する
+            </Link>
+          </section>
+        ) : null}
         <section className="settings-card">
           <h2>開始準備</h2>
           <div className="settings-status-list">
