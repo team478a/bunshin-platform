@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { serviceManagementReturnPath } from '../../../../../src/services/service-management-return';
+import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
 import { GroupInvitationEditor } from '../../../../ui/group-invitation-editor';
 
 export const dynamic = 'force-dynamic';
@@ -296,6 +297,7 @@ export default async function GroupMemberFeaturesPage({
       workspaceId: true,
       name: true,
       serviceConfiguration: { select: { id: true } },
+      serviceRegistrationPolicy: { select: { onboardingConfig: true, surveyConfig: true } },
       workspace: { select: { name: true } },
       memberships: {
         select: {
@@ -304,6 +306,7 @@ export default async function GroupMemberFeaturesPage({
           serviceRole: true,
           status: true,
           user: { select: { displayName: true, email: true } },
+          serviceOnboardingResponse: { select: { completedAt: true } },
           featureAssignments: true,
         },
         orderBy: { user: { displayName: 'asc' } },
@@ -338,6 +341,12 @@ export default async function GroupMemberFeaturesPage({
     },
   });
   if (!group) notFound();
+
+  const onboardingSettings = readServiceOnboardingSettings(
+    group.serviceRegistrationPolicy?.onboardingConfig,
+    group.serviceRegistrationPolicy?.surveyConfig,
+  );
+  const onboardingRequired = onboardingSettings.questions.length > 0;
 
   const query = await searchParams;
   const selectedMember =
@@ -478,6 +487,9 @@ export default async function GroupMemberFeaturesPage({
                     {group.serviceConfiguration
                       ? serviceRoleLabel[membership.serviceRole]
                       : roleLabel[membership.role]}
+                    {group.serviceConfiguration && onboardingRequired
+                      ? `・初回設定${membership.serviceOnboardingResponse ? '完了' : '未完了'}`
+                      : ''}
                     ）
                   </option>
                 ))}
@@ -493,6 +505,26 @@ export default async function GroupMemberFeaturesPage({
               選択中：{selectedMember.user.displayName} ／{' '}
               {selectedMember.user.email ?? 'メールなし'}
             </p>
+            {group.serviceConfiguration ? (
+              <section className="settings-card settings-card--nested">
+                <h3>初回設定の状況</h3>
+                {!onboardingRequired ? (
+                  <p>このサービスには初回質問が設定されていません。</p>
+                ) : selectedMember.serviceOnboardingResponse ? (
+                  <p>
+                    <strong>完了</strong> ／{' '}
+                    {selectedMember.serviceOnboardingResponse.completedAt.toLocaleString('ja-JP', {
+                      timeZone: 'Asia/Tokyo',
+                    })}
+                  </p>
+                ) : (
+                  <p>
+                    <strong>未完了</strong> — 参加者がサービスを開くと、最初の質問が表示されます。
+                  </p>
+                )}
+                <p>回答内容は本人の投稿パートナー作成だけに使い、この画面には表示しません。</p>
+              </section>
+            ) : null}
             {group.serviceConfiguration && query.service ? (
               <section className="settings-card settings-card--nested">
                 <h3>サービスで担当する役割</h3>
