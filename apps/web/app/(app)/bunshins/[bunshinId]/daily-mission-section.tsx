@@ -358,6 +358,7 @@ export function DailyMissionSection({
     Record<string, ContentAssistanceLevel>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [resubmitMissionId, setResubmitMissionId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -508,6 +509,7 @@ export function DailyMissionSection({
       data?: { allowed?: boolean; reason?: string; reviewNote?: string | null };
     };
     if (!result.data?.allowed) {
+      setResubmitMissionId(result.data?.reason === 'APPROVAL_CHANGES_REQUESTED' ? id : null);
       setError(
         result.data?.reason === 'LINK_CHANGED'
           ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
@@ -520,6 +522,7 @@ export function DailyMissionSection({
       setPendingAction(null);
       return;
     }
+    setResubmitMissionId(null);
     try {
       await navigator.clipboard.writeText(value);
     } catch {
@@ -529,6 +532,30 @@ export function DailyMissionSection({
     }
     setPendingAction(null);
     await activity(id, type, metadata);
+  }
+  async function resubmitForApproval(id: string) {
+    if (pendingAction !== null) return;
+    setError(null);
+    setPendingAction(`${id}:resubmit`);
+    try {
+      const response = await fetch(
+        `${endpoint}/${encodeURIComponent(id)}/posting-approval/resubmit`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      if (!response.ok) {
+        setError('確認をもう一度お願いできませんでした。画面を更新してお試しください。');
+        return;
+      }
+      setResubmitMissionId(null);
+      setError('運営者へ、もう一度確認をお願いしました。');
+      router.refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }
   async function markPosted(mission: DailyMissionView) {
     if (!mission.platform) {
@@ -649,6 +676,19 @@ export function DailyMissionSection({
       {error && (
         <div className="notice notice--danger" role="alert">
           {error}
+        </div>
+      )}
+      {resubmitMissionId && (
+        <div className="notice">
+          <p>案内を確認したら、運営者へもう一度確認をお願いできます。</p>
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => void resubmitForApproval(resubmitMissionId)}
+          >
+            もう一度確認をお願いする
+          </button>
         </div>
       )}
       {missions.length === 0 ? (

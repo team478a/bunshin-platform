@@ -230,6 +230,41 @@ export function authorizeDailyMissionCopyResponse(
   });
 }
 
+export function resubmitCampaignPostingApprovalResponse(
+  request: Request,
+  workspaceId: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    if (!emptySchema.safeParse(await jsonBody(request)).success)
+      throw new ApplicationError('VALIDATION_ERROR', 'empty body required');
+    const actor = await actorUserId();
+    const db = await import('@bunshin/database');
+    const updated = await db.prisma.campaignPostingApprovalRequest.updateMany({
+      where: {
+        workspaceId: resourceId(workspaceId),
+        bunshinId: resourceId(bunshinId),
+        dailyMissionId: resourceId(dailyMissionId),
+        requestedByUserId: actor,
+        status: 'CHANGES_REQUESTED',
+        campaign: {
+          group: {
+            status: 'ACTIVE',
+            memberships: {
+              some: { userId: actor, status: 'ACTIVE', consentedAt: { not: null } },
+            },
+          },
+        },
+      },
+      data: { status: 'PENDING', reviewNote: null, reviewedByUserId: null, reviewedAt: null },
+    });
+    if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'approval request not found');
+    return { status: 'PENDING' as const };
+  });
+}
+
 export function transitionDailyMissionResponse(
   request: Request,
   workspaceId: string,
