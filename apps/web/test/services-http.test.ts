@@ -136,6 +136,46 @@ describe('service admin HTTP', () => {
     );
   });
 
+  it('stores the recommended onboarding copy and questions from the selected template', async () => {
+    const response = await createServiceResponse(
+      request({ ...body, templateKey: 'SIDE_HUSTLE_AFFILIATE' }),
+    );
+    expect(response.status).toBe(201);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configuration: expect.objectContaining({
+          registration: expect.objectContaining({
+            onboardingConfig: expect.objectContaining({
+              templateKey: 'SIDE_HUSTLE_AFFILIATE',
+              welcomeTitle: expect.any(String),
+              welcomeMessage: expect.any(String),
+            }),
+            surveyConfig: { questions: expect.arrayContaining(['どのSNSで発信したいですか？']) },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('keeps onboarding empty for a custom service', async () => {
+    const response = await createServiceResponse(request({ ...body, templateKey: 'CUSTOM' }));
+    expect(response.status).toBe(201);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configuration: expect.objectContaining({
+          registration: expect.objectContaining({
+            onboardingConfig: {
+              templateKey: 'CUSTOM',
+              welcomeTitle: '',
+              welcomeMessage: '',
+            },
+            surveyConfig: { questions: [] },
+          }),
+        }),
+      }),
+    );
+  });
+
   it('rejects a malformed slug before persistence', async () => {
     expect((await createServiceResponse(request({ ...body, slug: 'Bad Slug' }))).status).toBe(400);
     expect(state.create).not.toHaveBeenCalled();

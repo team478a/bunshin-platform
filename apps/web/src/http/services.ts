@@ -5,7 +5,10 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { SERVICE_CREATION_TEMPLATE_KEYS } from '../services/service-creation-templates';
+import {
+  SERVICE_CREATION_TEMPLATE_KEYS,
+  SERVICE_CREATION_TEMPLATES,
+} from '../services/service-creation-templates';
 
 const uuid = z.string().uuid();
 const optionalUrl = z
@@ -59,6 +62,7 @@ export async function createServiceResponse(request: Request) {
     const user = await (await currentUserProvider()).getCurrentUser();
     if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const value = createSchema.parse(await request.json());
+    const template = SERVICE_CREATION_TEMPLATES[value.templateKey];
     const db = await import('@bunshin/database');
     const service = await new ServiceFoundationService(
       new db.PrismaServiceFoundationRepository(),
@@ -92,8 +96,12 @@ export async function createServiceResponse(request: Request) {
           lineEnabled: value.lineEnabled,
           inviteCodeEnabled: value.inviteCodeEnabled,
           referralEnabled: value.referralEnabled,
-          onboardingConfig: { templateKey: value.templateKey },
-          surveyConfig: {},
+          onboardingConfig: {
+            templateKey: value.templateKey,
+            welcomeTitle: template.onboarding.welcomeTitle,
+            welcomeMessage: template.onboarding.welcomeMessage,
+          },
+          surveyConfig: { questions: [...template.onboarding.questions] },
         },
       },
     });
