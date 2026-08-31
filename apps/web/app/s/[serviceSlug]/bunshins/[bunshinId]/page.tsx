@@ -127,15 +127,6 @@ export default async function ServiceBunshinDetailPage({
         ? {
             whyNow: mission.trendContext.snapshot.candidate.whyNow,
             fitReason: mission.trendContext.snapshot.candidate.fitReason,
-            researchedAt: mission.trendContext.createdAt.toISOString(),
-            evidence: mission.trendContext.snapshot.evidence.map(
-              ({ sourceUrl, sourceTitle, publishedAt, retrievedAt }) => ({
-                sourceUrl,
-                sourceTitle,
-                publishedAt,
-                retrievedAt,
-              }),
-            ),
           }
         : null,
       externalLinkUsage: mission.linkUsage
