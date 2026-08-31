@@ -206,7 +206,9 @@ export default async function VideoProjectPage({
                 </>
               ) : (
                 <>
-                  <p>AI動画を使う場面を一つずつ作ります。設定と予算を確認できる場合だけ開始します。</p>
+                  <p>
+                    AI動画を使う場面を一つずつ作ります。設定と予算を確認できる場合だけ開始します。
+                  </p>
                   <VideoAiSceneRequester
                     workspaceId={project.workspaceId}
                     groupId={project.groupId}
