@@ -1772,3 +1772,13 @@
 - UX: 管理者には「支援方法と目標候補」、参加者には「参加中のプログラムと目標」と平易な名称で表示する。
 - Security: Same Origin、Session、Workspace、Service、Membership、Enrollmentをサーバー側で再検証する。
 - Source: `docs/PROGRAM_GOALS_UI_REPORT.md`
+
+# 2026-09-01: AIキャラクターの人格設定・許諾・画像を別Resourceとして版管理する
+
+- Generic: 「美女」を固定Enumや専用機能にせず、任意の外見・世界観を持つ汎用AI Character Profileとして扱う。
+- Ownership: PLATFORM、SERVICE、PERSONALの所有範囲を明示し、所有範囲に合わないGroup・User組合せをDBで拒否する。
+- License: 権利者、商用利用、改変、再配布、期間、同意記録をLicense Versionへ保存し、Prompt VersionへSnapshotする。
+- Version: 外見、世界観、基本Prompt、Negative Prompt、安全ルールを版管理し、公開版を同時に1件へ制限する。
+- Asset: 基準画像は公開URLを保存せず、Private Storage Key、MIME、容量、SHA-256、権利確認日時を保存する。
+- Isolation: SERVICE/PERSONALデータは`workspaceId + groupId`の複合外部キーでProfile・Version・Assetを拘束する。
+- Source: `docs/AI_CHARACTER_PROFILE_CORE_REPORT.md`

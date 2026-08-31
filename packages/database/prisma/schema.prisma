@@ -377,6 +377,120 @@ enum ProgramResponsibilityOwner {
   SERVICE
 }
 
+model AiCharacterProfile {
+  id              String                   @id @default(uuid()) @db.Uuid
+  workspaceId     String                   @map("workspace_id") @db.Uuid
+  groupId         String?                  @map("group_id") @db.Uuid
+  ownerUserId     String?                  @map("owner_user_id") @db.Uuid
+  scope           AiCharacterProfileScope
+  name            String                   @db.VarChar(160)
+  description     String                   @db.VarChar(1000)
+  status          AiCharacterProfileStatus @default(DRAFT)
+  createdByUserId String                   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, ownerUserId, status])
+  @@map("ai_character_profiles")
+}
+
+model AiCharacterLicenseVersion {
+  id                    String    @id @default(uuid()) @db.Uuid
+  workspaceId           String    @map("workspace_id") @db.Uuid
+  groupId               String?   @map("group_id") @db.Uuid
+  characterProfileId    String    @map("character_profile_id") @db.Uuid
+  version               Int
+  rightsHolder          String    @map("rights_holder") @db.VarChar(300)
+  commercialUseAllowed  Boolean   @map("commercial_use_allowed")
+  derivativeUseAllowed  Boolean   @map("derivative_use_allowed")
+  redistributionAllowed Boolean   @map("redistribution_allowed")
+  terms                 String    @db.VarChar(3000)
+  startsAt              DateTime  @map("starts_at") @db.Timestamptz(3)
+  endsAt                DateTime? @map("ends_at") @db.Timestamptz(3)
+  consentRecordedAt     DateTime  @map("consent_recorded_at") @db.Timestamptz(3)
+  recordedByUserId      String    @map("recorded_by_user_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([characterProfileId, version])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, groupId, characterProfileId])
+  @@map("ai_character_license_versions")
+}
+
+model AiCharacterProfileVersion {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  workspaceId        String                   @map("workspace_id") @db.Uuid
+  groupId            String?                  @map("group_id") @db.Uuid
+  characterProfileId String                   @map("character_profile_id") @db.Uuid
+  licenseVersionId   String                   @map("license_version_id") @db.Uuid
+  version            Int
+  status             AiCharacterVersionStatus @default(DRAFT)
+  appearance         String                   @db.VarChar(2000)
+  worldSetting       String                   @map("world_setting") @db.VarChar(2000)
+  basePrompt         String                   @map("base_prompt") @db.VarChar(5000)
+  negativePrompt     String                   @map("negative_prompt") @db.VarChar(3000)
+  safetyRules        Json                     @map("safety_rules")
+  licenseSnapshot    Json                     @map("license_snapshot")
+  createdByUserId    String                   @map("created_by_user_id") @db.Uuid
+  publishedAt        DateTime?                @map("published_at") @db.Timestamptz(3)
+  supersededAt       DateTime?                @map("superseded_at") @db.Timestamptz(3)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([characterProfileId, version])
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, characterProfileId, status])
+  @@map("ai_character_profile_versions")
+}
+
+model AiCharacterReferenceAsset {
+  id                        String                          @id @default(uuid()) @db.Uuid
+  workspaceId               String                          @map("workspace_id") @db.Uuid
+  groupId                   String?                         @map("group_id") @db.Uuid
+  characterProfileVersionId String                          @map("character_profile_version_id") @db.Uuid
+  storageKey                String                          @map("storage_key") @db.VarChar(500)
+  originalFilename          String                          @map("original_filename") @db.VarChar(255)
+  mimeType                  String                          @map("mime_type") @db.VarChar(100)
+  sizeBytes                 Int                             @map("size_bytes")
+  sha256                    String                          @db.Char(64)
+  status                    AiCharacterReferenceAssetStatus @default(PENDING_UPLOAD)
+  rightsConfirmedAt         DateTime                        @map("rights_confirmed_at") @db.Timestamptz(3)
+  createdByUserId           String                          @map("created_by_user_id") @db.Uuid
+  createdAt                 DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, groupId, characterProfileVersionId, status])
+  @@map("ai_character_reference_assets")
+}
+
+enum AiCharacterProfileScope {
+  PLATFORM
+  SERVICE
+  PERSONAL
+}
+
+enum AiCharacterProfileStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum AiCharacterVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum AiCharacterReferenceAssetStatus {
+  PENDING_UPLOAD
+  READY
+  REJECTED
+  DELETED
+}
+
 enum FeatureDefinitionStatus {
   ACTIVE
   RETIRED
