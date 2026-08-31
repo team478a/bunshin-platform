@@ -1752,3 +1752,13 @@
 - Atomicity: Programと初版、Service ProgramとOffering、EnrollmentとAuditをそれぞれ同一Transactionで保存し、中途半端な状態を残さない。
 - Initial scope: Checkout、請求、返金、売上分配、代理店報酬、動画Provider実行は含めない。
 - Source: `docs/PROGRAM_MANAGEMENT_AV2_REPORT.md`
+
+# 2026-08-31: Programの支援方針・希望・目標を独立Resourceにする
+
+- Policy: サービスの支援方針はService Program単位で版管理し、同時にACTIVEな版を1件へ制限する。
+- Preference: 利用者が欲しい支援方法はEnrollment単位で保存し、管理者が設定したSupport Policyとは分離する。
+- Goal definition: サービス管理者が再利用できる目標候補と、利用者個別の目標・進捗を別Resourceにする。
+- Measurement: 目標種別をACTION、TRAFFIC、BUSINESSに分け、利用者の好みと市場成果を同一指標へ混ぜない。
+- Isolation: 全Resourceを`workspaceId + groupId`の複合外部キーでProgram、Enrollment、Membershipへ拘束する。
+- History: 支援方針の旧版と終了済み目標を削除せず、監査・改善判断に利用できる状態で保持する。
+- Source: `docs/PROGRAM_GOALS_CORE_REPORT.md`

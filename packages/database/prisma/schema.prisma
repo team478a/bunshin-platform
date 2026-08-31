@@ -202,6 +202,92 @@ model ProgramEnrollment {
   @@map("program_enrollments")
 }
 
+model ServiceProgramSupportPolicy {
+  id                  String              @id @default(uuid()) @db.Uuid
+  workspaceId         String              @map("workspace_id") @db.Uuid
+  groupId             String              @map("group_id") @db.Uuid
+  serviceProgramId    String              @map("service_program_id") @db.Uuid
+  version             Int
+  status              ProgramPolicyStatus @default(ACTIVE)
+  allowedSupportModes Json                @map("allowed_support_modes")
+  defaultSupportMode  ProgramSupportMode  @map("default_support_mode")
+  memberMayChoose     Boolean             @default(true) @map("member_may_choose")
+  guidance            String              @db.VarChar(1000)
+  createdByUserId     String              @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  supersededAt        DateTime?           @map("superseded_at") @db.Timestamptz(3)
+
+  @@unique([serviceProgramId, version])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, serviceProgramId, status])
+  @@map("service_program_support_policies")
+}
+
+model ProgramMemberPreference {
+  id                   String             @id @default(uuid()) @db.Uuid
+  workspaceId          String             @map("workspace_id") @db.Uuid
+  groupId              String             @map("group_id") @db.Uuid
+  programEnrollmentId  String             @map("program_enrollment_id") @db.Uuid
+  groupMembershipId    String             @map("group_membership_id") @db.Uuid
+  preferredSupportMode ProgramSupportMode @map("preferred_support_mode")
+  notes                String             @default("") @db.VarChar(500)
+  updatedByUserId      String             @map("updated_by_user_id") @db.Uuid
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([programEnrollmentId])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, groupMembershipId])
+  @@map("program_member_preferences")
+}
+
+model ProgramGoalDefinition {
+  id               String                      @id @default(uuid()) @db.Uuid
+  workspaceId      String                      @map("workspace_id") @db.Uuid
+  groupId          String                      @map("group_id") @db.Uuid
+  serviceProgramId String                      @map("service_program_id") @db.Uuid
+  name             String                      @db.VarChar(160)
+  description      String                      @db.VarChar(1000)
+  metricType       ProgramGoalMetricType       @map("metric_type")
+  unit             String                      @db.VarChar(40)
+  suggestedTarget  Decimal?                    @map("suggested_target") @db.Decimal(18, 2)
+  status           ProgramGoalDefinitionStatus @default(ACTIVE)
+  sortOrder        Int                         @default(0) @map("sort_order")
+  createdByUserId  String                      @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, serviceProgramId, status, sortOrder])
+  @@map("program_goal_definitions")
+}
+
+model ProgramMemberGoal {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  workspaceId         String                  @map("workspace_id") @db.Uuid
+  groupId             String                  @map("group_id") @db.Uuid
+  programEnrollmentId String                  @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String                  @map("group_membership_id") @db.Uuid
+  goalDefinitionId    String?                 @map("goal_definition_id") @db.Uuid
+  title               String                  @db.VarChar(160)
+  metricType          ProgramGoalMetricType   @map("metric_type")
+  targetValue         Decimal                 @map("target_value") @db.Decimal(18, 2)
+  currentValue        Decimal                 @default(0) @map("current_value") @db.Decimal(18, 2)
+  unit                String                  @db.VarChar(40)
+  status              ProgramMemberGoalStatus @default(ACTIVE)
+  startsAt            DateTime                @map("starts_at") @db.Timestamptz(3)
+  dueAt               DateTime?               @map("due_at") @db.Timestamptz(3)
+  createdByUserId     String                  @map("created_by_user_id") @db.Uuid
+  updatedByUserId     String                  @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, groupMembershipId, status])
+  @@index([workspaceId, groupId, programEnrollmentId])
+  @@map("program_member_goals")
+}
+
 model ProgramAuditLog {
   id                String   @id @default(uuid()) @db.Uuid
   workspaceId       String   @map("workspace_id") @db.Uuid
@@ -261,6 +347,29 @@ enum ProgramSupportMode {
   IDEA_ONLY
   GUIDED
   READY_TO_USE
+}
+
+enum ProgramPolicyStatus {
+  ACTIVE
+  SUPERSEDED
+}
+
+enum ProgramGoalMetricType {
+  ACTION
+  TRAFFIC
+  BUSINESS
+}
+
+enum ProgramGoalDefinitionStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum ProgramMemberGoalStatus {
+  ACTIVE
+  ACHIEVED
+  PAUSED
+  CANCELLED
 }
 
 enum ProgramResponsibilityOwner {
