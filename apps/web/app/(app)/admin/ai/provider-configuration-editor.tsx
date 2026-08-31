@@ -1,7 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 
-type Provider = 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE';
+type Provider = 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
 type Configuration = {
   id: string;
   provider: Provider;
@@ -23,6 +23,8 @@ const labels: Record<Provider, string> = {
   EXA: '話題を調べる検索（Exa）',
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
   CREATOMATE: '動画を仕上げるサービス（Creatomate）',
+  FAL: 'AI動画を作るサービス（fal）',
+  RUNWAY: 'AI動画を作るサービス（Runway）',
 };
 const usd = (micros: number) => (micros / 1_000_000).toFixed(2);
 const connectionErrors: Record<string, string> = {
@@ -31,6 +33,7 @@ const connectionErrors: Record<string, string> = {
   MODEL_UNAVAILABLE: '指定したAIモデルを利用できません',
   PROVIDER_CONFIGURATION_INVALID: '外部サービス側の設定を確認してください',
   PROVIDER_UNAVAILABLE: '外部サービスへ一時的に接続できません',
+  VIDEO_PROVIDER_CONNECTION_NOT_IMPLEMENTED: '動画Providerの接続機能は次の更新で利用できます',
 };
 
 export function AiProviderConfigurationEditor(props: {
@@ -56,7 +59,7 @@ export function AiProviderConfigurationEditor(props: {
         body: JSON.stringify({
           provider,
           reason: form.get('reason'),
-          model: provider === 'OPENAI' || provider === 'GROK' ? form.get('model') : null,
+          model: ['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? form.get('model') : null,
           dailyBudgetUsd: Number(form.get('dailyBudgetUsd')),
           monthlyBudgetUsd: Number(form.get('monthlyBudgetUsd')),
           requestCostUsd: Number(form.get('requestCostUsd')),
@@ -257,6 +260,12 @@ export function AiProviderConfigurationEditor(props: {
             <li>
               Creatomate：<a href="https://creatomate.com/dashboard">管理画面を開く</a>
             </li>
+            <li>
+              fal：<a href="https://fal.ai/dashboard/keys">APIキー管理を開く</a>
+            </li>
+            <li>
+              Runway：<a href="https://app.runwayml.com/settings/api-keys">APIキー管理を開く</a>
+            </li>
           </ul>
           <p>APIキーはチャット、変更理由、メモ欄へ書かないでください。</p>
         </section>
@@ -281,13 +290,21 @@ export function AiProviderConfigurationEditor(props: {
               ))}
             </select>
           </label>
-          {provider === 'OPENAI' || provider === 'GROK' ? (
+          {['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? (
             <label>
               使うAIモデル
               <input
                 key={provider}
                 name="model"
-                defaultValue={provider === 'GROK' ? 'grok-4.6' : 'gpt-5-mini'}
+                defaultValue={
+                  provider === 'GROK'
+                    ? 'grok-4.6'
+                    : provider === 'FAL'
+                      ? 'kling-o1-reference-to-video'
+                      : provider === 'RUNWAY'
+                        ? 'gen4-turbo'
+                        : 'gpt-5-mini'
+                }
                 required
                 maxLength={120}
               />

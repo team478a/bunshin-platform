@@ -983,6 +983,8 @@ enum AiProviderKey {
   EXA
   FIRECRAWL
   CREATOMATE
+  FAL
+  RUNWAY
 }
 
 enum AiProviderConfigurationStatus {
