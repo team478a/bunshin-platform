@@ -8,6 +8,22 @@ AIキャラクター動画を使い、ワタシワークスの個別サービス
 
 最初は自社運営の限定サービスで実証する。成果が確認できる前に一般ユーザー向け標準機能として公開しない。
 
+## 汎用プログラム基盤としての位置づけ
+
+本機能をAI女性キャラクター、ダンス、副業へ固定しない。ワタシワークスの共通機能を組み合わせた「実践プログラム」を作成し、対象サービスへ提供できる基盤とする。
+
+構造を次のように分離する。
+
+1. 共通機能: AIキャラクター、画像、動画、台本、Prompt、Mission、LINE、実績
+2. Program Template: 再利用可能な内容・進行・ゴール・安全ルールの原型
+3. Service Program: 個別サービスが採用し、ブランド・素材・提供条件を設定した版
+4. Program Offering: 無料・有料、期間、上限、販売・原価・サポート責任を示す提供条件
+5. Program Enrollment: 利用者が選んだ支援方法・ゴール・開始時点の条件
+
+第一号は「AI女性キャラクターのダンス動画を使い、SNS収益化を目指す実践プログラム」とする。表示では収益を保証せず、投稿・計測・改善を行うプログラムとして説明する。
+
+同じ基盤で、商品紹介、顔出しなし解説、店舗集客、企業アンバサダー、採用、地域活動等のプログラムを追加できるようにする。
+
 ## 2. 採用する提供方式
 
 利用者はサービス内で、必要な支援方法を選べる。
@@ -143,6 +159,43 @@ Preference（採用、不採用、本人らしさ）とOutcome（投稿、登録
 
 ## 8. データ構造候補
 
+### ProgramTemplate / ProgramTemplateVersion
+
+プラットフォームまたは許可されたサービス運営者が作る再利用可能な原型を保持する。
+
+- 名称、説明、カテゴリー、対象者
+- 標準期間、Mission構成、ゴール候補
+- 対応する支援方法、動画・投稿Template
+- AIキャラクター要件
+- 必須表記、禁止表現、安全ルール
+- 標準上限
+- 所有者、状態、Version、公開範囲
+
+原型の更新で提供中の内容を上書きせず、採用Versionを固定する。
+
+### ServiceProgram
+
+サービスが採用したProgram Template Versionと、サービス固有の表示名、Brand、素材、商品、LINE、期間、機能設定を保持する。他サービスへ自動共有しない。
+
+### ProgramOffering
+
+販売・提供条件をSnapshot可能な形で保持する。
+
+- seller: 販売者
+- priceOwner: 価格決定者
+- paymentOwner: 売上受取責任者
+- apiCostOwner: AI原価負担者
+- supportOwner: 問い合わせ対応者
+- contentOwner: 台本・素材の所有者
+- characterOwner: AIキャラクター所有者
+- 無料・有料、価格参照、利用期間、座席、生成上限、再生成上限
+
+AVの初期実証では無料・手動参加だけを扱う。Checkout、請求、返金、売上分配、代理店報酬は販売プランPhaseで実装する。
+
+### ProgramEnrollment
+
+Service MembershipとService Programを結び、開始・終了、選択した支援方法、Goal、利用権、参加時点のOffering Versionを保持する。契約条件や過去の進捗を後の設定変更で上書きしない。
+
 ### ServiceSupportPolicy
 
 サービスで利用可能な`IDEA_ONLY / GUIDED / READY_TO_USE`、初期値、変更可否を保持する。
@@ -208,35 +261,43 @@ Preference（採用、不採用、本人らしさ）とOutcome（投稿、登録
 
 本書、Decision Log、Roadmapを更新する。コード、Schema、Migrationは変更しない。
 
-### AV-1: 支援方法・ゴールCore
+### AV-1: Program Core
 
-Service Support Policy、Member Preference、Goal Definition、Member Goal、Version、Audit、Isolation Testを実装する。
+Program Template / Version、Service Program、Offering、Enrollment、所有・販売・原価・サポート責任、Version、Audit、Isolation Testを実装する。決済は接続しない。
 
-### AV-2: 支援方法・ゴールAPI/UI
+### AV-2: Program管理API/UI
+
+プラットフォーム管理者の公式Program作成、対象サービスへの提供、サービス管理者の採用・設定、利用者の参加を接続する。初期は無料・招待限定・手動Enrollmentとする。
+
+### AV-3: 支援方法・ゴールCore/API/UI
 
 サービス管理画面と利用者初回設定へ接続し、週間計画・Daily Missionの安全なContextへ反映する。
 
-### AV-3: 完成動画配布Core
+### AV-4: 汎用AIキャラクターCore/API/UI
+
+個人、サービス公式、プラットフォーム公式のAI Character Profile、基準画像、外見・世界観・Prompt、利用許諾、安全ルール、Versionを動画生成機能へ接続する。「美女」は設定例とし、固定Enumにしない。
+
+### AV-5: 完成動画配布Core
 
 確認済みRenderのDistribution、Assignment、配布上限、期限、停止、利用権Snapshot、Isolation Testを実装する。
 
-### AV-4: 完成動画配布API/UI
+### AV-6: 完成動画配布API/UI
 
 管理者の登録・割当と、利用者の確認、採用、不採用、ダウンロード、投稿完了を接続する。
 
-### AV-5: 登録経路・Funnel Event
+### AV-7: 登録経路・Funnel Event
 
 媒体・動画・利用者別のSource Code、登録、オンボーディング、Mission、投稿、D7 Eventを冪等に接続する。
 
-### AV-6: 実証プロジェクト・比較
+### AV-8: 実証プロジェクト・比較
 
 美女・共感・実演のVariant、最低母数、7日・30日判定、手動SNS実績、比較画面を実装する。
 
-### AV-7: 週次改善
+### AV-9: 週次改善
 
 前週実績から一つだけ改善項目を提案する。AI出力だけで設定を自動変更せず、管理者または利用者が確認する。
 
-### AV-8: 限定モニター
+### AV-10: 限定モニター
 
 Feature Flagで対象サービスと参加者を限定し、原価、所要時間、投稿率、D7継続を検証する。
 
@@ -249,10 +310,14 @@ Feature Flagで対象サービスと参加者を限定し、原価、所要時�
 - 同じ完成動画の無制限配布
 - 一般サービスへの自動開放
 - 複数サービス間での目標・実績・動画割当の共有
+- Checkout、請求、返金、売上分配、代理店報酬
 
 ## 12. 受入条件
 
 - サービスが利用可能な支援方法を設定できる。
+- プラットフォームまたは許可されたサービス運営者が汎用ProgramをVersion管理できる。
+- サービスがProgramを採用し、他サービスと分離して提供できる。
+- Programの所有者、販売者、価格決定者、原価負担者、サポート担当を区別できる。
 - 利用者が自分の支援方法とゴールを選択・変更できる。
 - ゴールが同じ利用者・サービスの計画とMissionだけへ反映される。
 - 管理者が確認済み完成動画を対象利用者へ割り当てられる。
@@ -267,4 +332,4 @@ Feature Flagで対象サービスと参加者を限定し、原価、所要時�
 
 各Phaseを独立PRにする。AV-0のレビュー後にAV-1へ進む。
 
-AV-1着手前に、支援方法の初期値、自由ゴールの許可範囲、同時ACTIVE Goal上限を人間確認する。AV-3着手前に、完成動画の利用規約、最大配布数、利用期限、原価負担者を確認する。AV-5着手前に、Cookie・同意・保持期間・登録経路のプライバシー方針を確認する。
+AV-1着手前に、Programを作成できる役割、公式Templateの公開範囲、所有・販売・価格・原価・サポート責任を人間確認する。AV-3着手前に、支援方法の初期値、自由ゴールの許可範囲、同時ACTIVE Goal上限を確認する。AV-5着手前に、完成動画の利用規約、最大配布数、利用期限、原価負担者を確認する。AV-7着手前に、Cookie・同意・保持期間・登録経路のプライバシー方針を確認する。

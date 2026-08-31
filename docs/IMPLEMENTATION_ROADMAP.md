@@ -468,19 +468,21 @@ FREE継続率を確認する前に作り込まない。
 
 ## Phase AV: AIキャラクター動画 登録獲得実証
 
-状態: AV-0設計文書作成済み・レビュー待ち。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
+状態: AV-0設計文書作成済み・レビュー待ち。AI女性キャラクターダンス動画は、汎用実践Program基盤上の第一号Programとして扱う。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
 
-- AV-0: 作り方／完成品の提供方式、利用者別ゴール、登録経路、KPI、権限、停止条件 — 文書作成済み
-- AV-1: Service Support Policy / Member Preference / Goal Definition / Member Goal Core
-- AV-2: サービス管理・利用者設定API/UI、週間計画・Daily Mission Context接続
-- AV-3: 確認済み完成動画のDistribution / Assignment / 利用権Snapshot Core
-- AV-4: 管理者割当、利用者確認・採用・ダウンロード・投稿完了API/UI
-- AV-5: 媒体・動画・利用者別の登録経路とFunnel Event
-- AV-6: 美女・共感・実演Variant、手動SNS実績、最低母数、7日・30日比較
-- AV-7: 確認を必須とする週次改善提案
-- AV-8: Feature Flagによる自社サービス・5〜10人限定検証
+- AV-0: 汎用Program、作り方／完成品、利用者別ゴール、販売責任、登録経路、KPI、停止条件 — 文書作成済み
+- AV-1: Program Template / Version / Service Program / Offering / Enrollment Core
+- AV-2: 公式Program作成、サービス採用、無料・招待限定参加API/UI
+- AV-3: Service Support Policy / Member Preference / Goal Definition / Member Goal Core/API/UI
+- AV-4: 汎用AI Character Profile、基準画像、Prompt、利用許諾、Version Core/API/UI
+- AV-5: 確認済み完成動画のDistribution / Assignment / 利用権Snapshot Core
+- AV-6: 管理者割当、利用者確認・採用・ダウンロード・投稿完了API/UI
+- AV-7: 媒体・動画・利用者別の登録経路とFunnel Event
+- AV-8: 美女・共感・実演Variant、手動SNS実績、最低母数、7日・30日比較
+- AV-9: 確認を必須とする週次改善提案
+- AV-10: Feature Flagによる自社サービス・5〜10人限定検証
 
-初期実証ではKling等の生成AI動画Providerを自動実行せず、運営が確認した完成動画の配布から開始する。SNS投稿は本人が行い、成果報酬計算、支払い、顧客情報管理を含めない。
+初期実証ではKling等の生成AI動画Providerを自動実行せず、運営が確認した完成動画の配布から開始する。Programの無料提供と手動参加を先行し、Checkout、請求、返金、売上分配、代理店報酬は販売プランPhaseへ分離する。SNS投稿は本人が行い、顧客情報管理を含めない。
 
 ## Phase 7-K: 販売プラン・契約・利用権基盤
 

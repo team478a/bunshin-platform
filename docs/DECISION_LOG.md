@@ -1721,6 +1721,9 @@
 
 # 2026-08-31: AIキャラクター動画実証は支援方法と利用者別ゴールを分離する
 
+- Program: AI女性キャラクター、ダンス、副業を固定機能にせず、Program Template、Service Program、Offering、Enrollmentの汎用階層で扱う。第一号Programとして自社副業サービスで実証する。
+- Commerce roles: programOwner、seller、priceOwner、paymentOwner、apiCostOwner、supportOwner、contentOwner、characterOwnerを分離し、同一主体であることを前提にしない。
+- Initial sales: 初期実証は無料・招待限定・手動Enrollmentとし、Checkout、請求、返金、売上分配、代理店報酬は販売プランPhaseへ分離する。
 - Offering: 利用者は`IDEA_ONLY / GUIDED / READY_TO_USE`からサービスが許可した支援方法を選ぶ。GUIDEDは作り方・台本・Prompt、READY_TO_USEは運営確認済み完成動画を提供する。
 - Video: 初期実証では生成AI動画Providerを自動実行せず、既存Video Renderを基に運営が確認した完成動画を対象利用者へ明示的に割り当てる。
 - Goal: ゴールはサービスへ固定せず、サービス管理者の候補と利用者の目標値・期限・補足を組み合わせる。行動、集客、事業目標を分離する。
