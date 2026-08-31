@@ -16,7 +16,7 @@ export default async function CharactersPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [profiles, licenses, versions] = await Promise.all([
+  const [profiles, licenses, versions, referenceAssets] = await Promise.all([
     db.prisma.aiCharacterProfile.findMany({
       where: {
         workspaceId: service.workspaceId,
@@ -33,6 +33,14 @@ export default async function CharactersPage({
     db.prisma.aiCharacterProfileVersion.findMany({
       where: { workspaceId: service.workspaceId, groupId: service.serviceId, status: 'PUBLISHED' },
     }),
+    db.prisma.aiCharacterReferenceAsset.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'READY',
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
   return (
     <PublicShell showPlatformBrand={false}>
@@ -45,21 +53,37 @@ export default async function CharactersPage({
         </header>
         <CharacterAdminEditor
           serviceSlug={serviceSlug}
-          profiles={profiles.map((profile) => ({
-            id: profile.id,
-            name: profile.name,
-            description: profile.description,
-            status: profile.status,
-            licenses: licenses
-              .filter((item) => item.characterProfileId === profile.id)
-              .map((item) => ({
-                id: item.id,
-                version: item.version,
-                rightsHolder: item.rightsHolder,
-              })),
-            publishedVersion:
-              versions.find((item) => item.characterProfileId === profile.id)?.version ?? null,
-          }))}
+          profiles={profiles.map((profile) => {
+            const publishedVersion = versions.find(
+              (item) => item.characterProfileId === profile.id,
+            );
+            return {
+              id: profile.id,
+              name: profile.name,
+              description: profile.description,
+              status: profile.status,
+              licenses: licenses
+                .filter((item) => item.characterProfileId === profile.id)
+                .map((item) => ({
+                  id: item.id,
+                  version: item.version,
+                  rightsHolder: item.rightsHolder,
+                })),
+              publishedVersion: publishedVersion
+                ? { id: publishedVersion.id, version: publishedVersion.version }
+                : null,
+              references: publishedVersion
+                ? referenceAssets
+                    .filter((item) => item.characterProfileVersionId === publishedVersion.id)
+                    .map((item) => ({
+                      id: item.id,
+                      originalFilename: item.originalFilename,
+                      mimeType: item.mimeType,
+                      sizeBytes: item.sizeBytes,
+                    }))
+                : [],
+            };
+          })}
         />
       </main>
     </PublicShell>

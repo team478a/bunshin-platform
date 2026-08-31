@@ -6,7 +6,13 @@ type Profile = {
   description: string;
   status: string;
   licenses: { id: string; version: number; rightsHolder: string }[];
-  publishedVersion: number | null;
+  publishedVersion: { id: string; version: number } | null;
+  references: {
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    sizeBytes: number;
+  }[];
 };
 export function CharacterAdminEditor({
   serviceSlug,
@@ -92,6 +98,33 @@ export function CharacterAdminEditor({
       '生成設定を公開しました。',
     );
   };
+  const uploadReference = async (event: FormEvent<HTMLFormElement>, versionId: string) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    if (!data.get('image') || !data.has('rightsConfirmed')) {
+      setMessage('画像を選び、利用できる権利を確認してください。');
+      return;
+    }
+    data.set('rightsConfirmed', 'true');
+    setSaving(true);
+    setMessage('画像を安全に保存しています…');
+    try {
+      const response = await fetch(
+        `/api/services/${serviceSlug}/ai-characters/versions/${versionId}/references`,
+        { method: 'POST', body: data },
+      );
+      const result = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(result.error?.message ?? '画像を保存できませんでした。');
+      }
+      setMessage('基準画像を保存しました。');
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '画像を保存できませんでした。');
+      setSaving(false);
+    }
+  };
   return (
     <>
       <p
@@ -136,7 +169,7 @@ export function CharacterAdminEditor({
           <p>
             生成設定：
             {profile.publishedVersion
-              ? `第${profile.publishedVersion}版を使用中`
+              ? `第${profile.publishedVersion.version}版を使用中`
               : 'まだありません'}
           </p>
           <h3>1. 利用できる権利を記録</h3>
@@ -227,6 +260,60 @@ export function CharacterAdminEditor({
                 この生成設定を公開
               </button>
             </form>
+          )}
+          <h3>3. 見た目の基準画像</h3>
+          {!profile.publishedVersion ? (
+            <p>先に生成設定を公開してください。</p>
+          ) : (
+            <>
+              <p>
+                AIが同じキャラクターを作りやすいように、正面など特徴が分かる画像を登録します。
+                JPEG、PNG、WebPを20MBまで登録できます。
+              </p>
+              <form
+                className="form-stack"
+                onSubmit={(event) => {
+                  void uploadReference(event, profile.publishedVersion!.id);
+                }}
+              >
+                <label className="field">
+                  <span className="field__label">基準にする画像</span>
+                  <input
+                    className="field__control"
+                    type="file"
+                    name="image"
+                    accept="image/jpeg,image/png,image/webp"
+                    required
+                  />
+                </label>
+                <label>
+                  <input type="checkbox" name="rightsConfirmed" required />
+                  この画像をAI生成に利用できる権利を確認しました
+                </label>
+                <button className="button button--primary" disabled={saving}>
+                  基準画像を保存
+                </button>
+              </form>
+              {profile.references.length === 0 ? (
+                <p>基準画像はまだありません。</p>
+              ) : (
+                <div className="form-stack">
+                  <h4>保存した基準画像</h4>
+                  {profile.references.map((asset) => (
+                    <figure key={asset.id}>
+                      <img
+                        src={`/api/services/${serviceSlug}/ai-characters/references/${asset.id}/image`}
+                        alt={`${profile.name}の基準画像 ${asset.originalFilename}`}
+                        style={{ maxWidth: '360px', width: '100%', height: 'auto' }}
+                      />
+                      <figcaption>
+                        {asset.originalFilename}（{Math.ceil(asset.sizeBytes / 1024)}KB）
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </section>
       ))}
