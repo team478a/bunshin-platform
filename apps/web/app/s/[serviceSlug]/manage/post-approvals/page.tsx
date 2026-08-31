@@ -168,6 +168,13 @@ export default async function ServicePostApprovalsPage({
                         : '見直しが必要'}
                   </p>
                   <p>作成：{request.requestedAt.toLocaleString('ja-JP')}</p>
+                  <details>
+                    <summary>この投稿案を確認する</summary>
+                    <p>商品・キャンペーン投稿の確認に必要な内容だけを表示しています。</p>
+                    <pre className="mission-content__code">
+                      {JSON.stringify(request.contentSnapshot, null, 2)}
+                    </pre>
+                  </details>
                   {request.status === 'PENDING' ? (
                     <form action={review} className="form-stack">
                       <input type="hidden" name="requestId" value={request.id} />

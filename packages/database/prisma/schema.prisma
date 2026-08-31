@@ -2346,6 +2346,7 @@ model CampaignPostingApprovalRequest {
   bunshinId         String                        @map("bunshin_id") @db.Uuid
   dailyMissionId    String                        @unique @map("daily_mission_id") @db.Uuid
   status            CampaignPostingApprovalStatus @default(PENDING)
+  contentSnapshot   Json                          @default("{}") @map("content_snapshot")
   requestNote       String?                       @map("request_note") @db.VarChar(1000)
   reviewNote        String?                       @map("review_note") @db.VarChar(1000)
   requestedByUserId String                        @map("requested_by_user_id") @db.Uuid
