@@ -65,10 +65,37 @@ describe('Creatomate video render adapter', () => {
     expect(JSON.stringify(script)).not.toContain('private/character-reference.png');
   });
 
-  it('rejects AI video scenes from the standard renderer', () => {
+  it('composes AI video scenes from short-lived source URLs', () => {
     const value = project();
     value.standardComposition = false;
     value.aiVideoSceneCount = 1;
+    value.scenes[0] = {
+      ...value.scenes[0]!,
+      visualType: 'AI_VIDEO',
+      aiProcessingTypes: ['VIDEO_GENERATION'],
+    };
+    const script = buildCreatomateRenderScript(value, [
+      {
+        videoSceneId: value.scenes[0]!.id,
+        url: 'https://storage.example/signed-scene.mp4?token=short',
+      },
+    ]);
+    expect(script.elements[0]).toMatchObject({
+      type: 'video',
+      source: 'https://storage.example/signed-scene.mp4?token=short',
+      volume: '0%',
+    });
+  });
+
+  it('fails closed when an AI scene has no generated source', () => {
+    const value = project();
+    value.standardComposition = false;
+    value.aiVideoSceneCount = 1;
+    value.scenes[0] = {
+      ...value.scenes[0]!,
+      visualType: 'AI_VIDEO',
+      aiProcessingTypes: ['VIDEO_GENERATION'],
+    };
     expect(() => buildCreatomateRenderScript(value)).toThrow(VideoRenderProviderError);
   });
 
@@ -92,6 +119,7 @@ describe('Creatomate video render adapter', () => {
       adapter.submit({
         renderId: '30000000-0000-4000-8000-000000000001',
         project: project(),
+        aiSceneSources: [],
         webhookUrl: 'https://app.example/api/video-renders/webhook?state=opaque',
       }),
     ).resolves.toEqual({ externalJobId: 'render-123' });

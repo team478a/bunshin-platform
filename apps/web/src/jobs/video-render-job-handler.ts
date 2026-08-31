@@ -13,6 +13,7 @@ import {
   VideoRenderProviderError,
 } from '../providers/creatomate-video-render';
 import { SupabaseVideoRenderOutputStorage } from '../video/video-render-output-storage';
+import { SupabaseFalVideoSceneOutputStorage } from '../video/fal-video-scene-output-storage';
 import { HkdfVideoRenderWebhookSigner } from '../video/video-render-webhook-signer';
 import { ActiveLineDeliveryConfigurationAdapter } from '../line/delivery-configuration';
 import { LineMessagingApiAdapter } from '../line/messaging-provider';
@@ -37,6 +38,7 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
           new CreatomateVideoRenderAdapter(configuration.apiKey),
           new SupabaseVideoRenderOutputStorage(),
           new HkdfVideoRenderWebhookSigner(),
+          new SupabaseFalVideoSceneOutputStorage(),
         ).execute(input);
         if (result.status !== 'SUCCEEDED') return result;
         const completedAt = result.render.completedAt ?? new Date();

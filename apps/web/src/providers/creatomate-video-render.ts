@@ -34,24 +34,45 @@ export function classifyCreatomateStatus(status: number) {
   return new VideoRenderProviderError('PROVIDER_ERROR', status >= 500, status);
 }
 
-export function buildCreatomateRenderScript(project: VideoProjectRecord) {
-  if (!project.standardComposition || project.aiVideoSceneCount > 0)
+export function buildCreatomateRenderScript(
+  project: VideoProjectRecord,
+  aiSceneSources: Array<{ videoSceneId: string; url: string }> = [],
+) {
+  if (project.standardComposition && (project.aiVideoSceneCount > 0 || aiSceneSources.length > 0))
+    throw new VideoRenderProviderError('INVALID_REQUEST', false);
+  const sources = new Map(aiSceneSources.map((source) => [source.videoSceneId, source.url]));
+  if (sources.size !== aiSceneSources.length)
     throw new VideoRenderProviderError('INVALID_REQUEST', false);
 
   let time = 0;
   const elements = project.scenes.flatMap((scene, index) => {
     const duration = scene.durationMs / 1000;
     const background = index % 2 === 0 ? '#fff9f5' : '#f3f6ff';
+    const requiresAiVideo =
+      scene.visualType === 'AI_VIDEO' || scene.aiProcessingTypes.includes('VIDEO_GENERATION');
+    const source = sources.get(scene.id);
+    if (requiresAiVideo && !source) throw new VideoRenderProviderError('INVALID_REQUEST', false);
+    const visualElement = source
+      ? {
+          type: 'video',
+          track: 1,
+          time,
+          duration,
+          source,
+          fit: 'cover',
+          volume: '0%',
+        }
+      : {
+          type: 'shape',
+          track: 1,
+          time,
+          duration,
+          width: '100%',
+          height: '100%',
+          fill_color: background,
+        };
     const sceneElements = [
-      {
-        type: 'shape',
-        track: 1,
-        time,
-        duration,
-        width: '100%',
-        height: '100%',
-        fill_color: background,
-      },
+      visualElement,
       {
         type: 'text',
         track: 2,
@@ -64,7 +85,8 @@ export function buildCreatomateRenderScript(project: VideoProjectRecord) {
         height: '48%',
         x_alignment: '50%',
         y_alignment: '50%',
-        fill_color: '#0b3470',
+        fill_color: source ? '#ffffff' : '#0b3470',
+        stroke_color: source ? '#0b3470' : undefined,
         font_family: 'Noto Sans JP',
         font_weight: '700',
         font_size: '7.2 vmin',
@@ -150,7 +172,7 @@ export class CreatomateVideoRenderAdapter implements VideoRenderProviderPort {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ...buildCreatomateRenderScript(input.project),
+        ...buildCreatomateRenderScript(input.project, input.aiSceneSources),
         metadata: input.renderId,
         webhook_url: input.webhookUrl,
       }),

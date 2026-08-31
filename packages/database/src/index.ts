@@ -13863,9 +13863,32 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
             },
           },
         },
-        select: { id: true, status: true, groupMembershipId: true },
+        include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       if (!project) return null;
+      const aiScenes = project.scenes.filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' ||
+          (scene.aiProcessingTypes as unknown as string[]).includes('VIDEO_GENERATION'),
+      );
+      if (!project.standardComposition && aiScenes.length > 0) {
+        const completedScenes = await tx.videoSceneGeneration.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            ownerUserId: input.actorUserId,
+            videoProjectId: project.id,
+            projectRevision: project.revision,
+            status: 'SUCCEEDED',
+            outputStorageKey: { not: null },
+          },
+          select: { videoSceneId: true, sceneRevision: true },
+        });
+        const completed = new Set(
+          completedScenes.map((scene) => `${scene.videoSceneId}:${scene.sceneRevision}`),
+        );
+        if (aiScenes.some((scene) => !completed.has(`${scene.id}:${scene.revision}`))) return null;
+      }
       const existing = await tx.videoRender.findUnique({
         where: {
           videoProjectId_projectRevision: {
@@ -13901,9 +13924,45 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       where: { id: input.renderId, workspaceId: input.workspaceId },
       include: { project: { include: { scenes: { orderBy: { sceneNo: 'asc' } } } } },
     });
-    return row
-      ? { render: videoRenderRecord(row), project: videoProjectRecord(row.project) }
-      : null;
+    if (!row) return null;
+    const aiSceneIds = row.project.scenes
+      .filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' ||
+          (scene.aiProcessingTypes as unknown as string[]).includes('VIDEO_GENERATION'),
+      )
+      .map((scene) => ({ id: scene.id, revision: scene.revision }));
+    const outputs =
+      aiSceneIds.length === 0
+        ? []
+        : await this.client.videoSceneGeneration.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: row.groupId,
+              ownerUserId: row.ownerUserId,
+              videoProjectId: row.videoProjectId,
+              projectRevision: row.projectRevision,
+              status: 'SUCCEEDED',
+              outputStorageKey: { not: null },
+              OR: aiSceneIds.map((scene) => ({
+                videoSceneId: scene.id,
+                sceneRevision: scene.revision,
+              })),
+            },
+            select: { videoSceneId: true, outputStorageKey: true },
+          });
+    const aiSceneSources = outputs.flatMap((output) =>
+      output.outputStorageKey
+        ? [{ videoSceneId: output.videoSceneId, storageKey: output.outputStorageKey }]
+        : [],
+    );
+    if (!row.project.standardComposition && aiSceneSources.length !== aiSceneIds.length)
+      return null;
+    return {
+      render: videoRenderRecord(row),
+      project: videoProjectRecord(row.project),
+      aiSceneSources,
+    };
   }
 
   async markSubmitted(input: Parameters<VideoRenderRepository['markSubmitted']>[0]) {
