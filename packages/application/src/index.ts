@@ -2395,3 +2395,4 @@ export * from './group-knowledge-extraction-job';
 export * from './badge-reward-operations';
 export * from './service-foundation';
 export * from './service-staff-role';
+export * from './program-core';

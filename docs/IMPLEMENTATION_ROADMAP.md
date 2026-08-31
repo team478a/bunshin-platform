@@ -468,10 +468,10 @@ FREE継続率を確認する前に作り込まない。
 
 ## Phase AV: AIキャラクター動画 登録獲得実証
 
-状態: AV-0設計文書作成済み・レビュー待ち。AI女性キャラクターダンス動画は、汎用実践Program基盤上の第一号Programとして扱う。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
+状態: AV-1 Program Core実装済み・レビュー待ち。AI女性キャラクターダンス動画は、汎用実践Program基盤上の第一号Programとして扱う。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
 
 - AV-0: 汎用Program、作り方／完成品、利用者別ゴール、販売責任、登録経路、KPI、停止条件 — 文書作成済み
-- AV-1: Program Template / Version / Service Program / Offering / Enrollment Core
+- AV-1: Program Template / Version / Service Program / Offering / Enrollment Core — 実装済み・レビュー待ち
 - AV-2: 公式Program作成、サービス採用、無料・招待限定参加API/UI
 - AV-3: Service Support Policy / Member Preference / Goal Definition / Member Goal Core/API/UI
 - AV-4: 汎用AI Character Profile、基準画像、Prompt、利用許諾、Version Core/API/UI
