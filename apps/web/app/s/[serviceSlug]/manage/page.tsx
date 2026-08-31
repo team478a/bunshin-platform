@@ -47,6 +47,11 @@ const sections = [
     href: 'programs',
   },
   {
+    title: '動画生成の状況',
+    description: 'このサービス内で作られている動画とAI場面の進み具合を確認します。',
+    href: 'video-operations',
+  },
+  {
     title: 'サービスの見た目・登録',
     description: '名前、ロゴ、色、参加方法など、利用者に見える内容を設定します。',
     href: 'settings',
