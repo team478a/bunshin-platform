@@ -26,6 +26,17 @@ describe('PrismaVideoPlanningContextRepository', () => {
     const client = {
       bunshin: { findFirst },
       campaign: { findFirst: vi.fn() },
+      videoProject: {
+        findFirst: vi.fn().mockResolvedValue({
+          characterProfileSnapshot: {
+            name: '案内役ミナ',
+            appearance: '赤いジャケットの案内役',
+            worldSetting: '明るいワークスペース',
+            safetyRules: ['実在人物に似せない'],
+          },
+          characterReferenceSnapshot: [{ storageKey: 'private/key.png' }],
+        }),
+      },
       videoAsset: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const result = await new PrismaVideoPlanningContextRepository(client as never).findAuthorized({
@@ -35,6 +46,13 @@ describe('PrismaVideoPlanningContextRepository', () => {
     expect(result).toMatchObject({
       objective: '商品の特徴を伝える',
       product: null,
+      character: {
+        name: '案内役ミナ',
+        appearance: '赤いジャケットの案内役',
+        worldSetting: '明るいワークスペース',
+        safetyRules: ['実在人物に似せない'],
+        referenceImageCount: 1,
+      },
       approvedAssets: [],
       userAssets: [],
     });
@@ -57,6 +75,12 @@ describe('PrismaVideoPlanningContextRepository', () => {
     const client = {
       bunshin: { findFirst: vi.fn().mockResolvedValue(bunshin) },
       campaign: { findFirst: campaignFindFirst },
+      videoProject: {
+        findFirst: vi.fn().mockResolvedValue({
+          characterProfileSnapshot: {},
+          characterReferenceSnapshot: [],
+        }),
+      },
       videoAsset: { findMany: vi.fn().mockResolvedValue([]) },
     };
     await expect(
