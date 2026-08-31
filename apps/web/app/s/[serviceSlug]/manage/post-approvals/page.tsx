@@ -78,9 +78,7 @@ export default async function ServicePostApprovalsPage({
           workspaceId: currentService.workspaceId,
           groupId: currentService.serviceId,
           action: 'POLICY_UPDATED',
-          beforeData: previous
-            ? { required: previous.required }
-            : { configured: false },
+          beforeData: previous ? { required: previous.required } : { configured: false },
           afterData: { required },
           performedByUserId: current.userId,
         },
