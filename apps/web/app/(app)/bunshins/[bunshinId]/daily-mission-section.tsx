@@ -505,13 +505,17 @@ export function DailyMissionSection({
       return;
     }
     const result = (await authorization.json()) as {
-      data?: { allowed?: boolean; reason?: string };
+      data?: { allowed?: boolean; reason?: string; reviewNote?: string | null };
     };
     if (!result.data?.allowed) {
       setError(
         result.data?.reason === 'LINK_CHANGED'
           ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
-          : 'この紹介URLは今は使えません。管理者へお問い合わせください。',
+          : result.data?.reason === 'APPROVAL_PENDING'
+            ? 'この投稿案は、運営者の確認待ちです。確認が終わるまでコピーできません。'
+            : result.data?.reason === 'APPROVAL_CHANGES_REQUESTED'
+              ? `この投稿案は見直しが必要です。${result.data.reviewNote ? `理由：${result.data.reviewNote}` : '管理者の案内を確認してください。'}`
+              : 'この紹介URLは今は使えません。管理者へお問い合わせください。',
       );
       setPendingAction(null);
       return;

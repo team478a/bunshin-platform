@@ -32,6 +32,11 @@ const sections = [
     href: 'external-tracking',
   },
   {
+    title: '商品投稿の確認',
+    description: '商品・キャンペーン投稿を、コピー前に確認するか設定します。',
+    href: 'post-approvals',
+  },
+  {
     title: '公式LINE',
     description: 'このサービス専用の公式LINE、通知時間、接続状態を設定します。',
     href: 'line',
