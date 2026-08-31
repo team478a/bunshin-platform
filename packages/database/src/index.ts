@@ -4252,6 +4252,24 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             },
           });
         }
+        if (eligibleCampaign) {
+          const approvalPolicy = await tx.campaignPostingApprovalPolicy.findUnique({
+            where: { groupId: eligibleCampaign.groupId },
+            select: { required: true },
+          });
+          if (approvalPolicy?.required) {
+            await tx.campaignPostingApprovalRequest.create({
+              data: {
+                workspaceId: input.workspaceId,
+                groupId: eligibleCampaign.groupId,
+                campaignId: eligibleCampaign.id,
+                bunshinId: input.bunshinId,
+                dailyMissionId: created.id,
+                requestedByUserId: input.actorUserId,
+              },
+            });
+          }
+        }
         if (trendCandidate) {
           const evidence = trendCandidate.evidenceLinks
             .map(({ evidence }) => evidence)
@@ -4340,6 +4358,22 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
     if (!(await this.authorized(this.client, input, false))) return null;
     const mission = await this.row(this.client, input);
     if (!mission) return null;
+    const approval = await this.client.campaignPostingApprovalRequest.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        dailyMissionId: input.dailyMissionId,
+      },
+      select: { status: true, reviewNote: true },
+    });
+    if (approval?.status === 'PENDING')
+      return { allowed: false, reason: 'APPROVAL_PENDING' as const };
+    if (approval?.status === 'CHANGES_REQUESTED')
+      return {
+        allowed: false,
+        reason: 'APPROVAL_CHANGES_REQUESTED' as const,
+        reviewNote: approval.reviewNote,
+      };
     const usage = mission.contentLinkUsage;
     if (!usage) return { allowed: true, reason: 'READY' } as const;
     if (!mission.content) return { allowed: false, reason: 'LINK_UNAVAILABLE' } as const;

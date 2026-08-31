@@ -1842,9 +1842,16 @@ export interface DailyMissionRepository {
   transition(
     input: DailyMissionScope & { dailyMissionId: string; status: DailyMissionStatus },
   ): Promise<DailyMission | null>;
-  authorizeCopy(
-    input: DailyMissionScope & { dailyMissionId: string; at: Date },
-  ): Promise<{ allowed: boolean; reason: 'READY' | 'LINK_CHANGED' | 'LINK_UNAVAILABLE' } | null>;
+  authorizeCopy(input: DailyMissionScope & { dailyMissionId: string; at: Date }): Promise<{
+    allowed: boolean;
+    reason:
+      | 'READY'
+      | 'LINK_CHANGED'
+      | 'LINK_UNAVAILABLE'
+      | 'APPROVAL_PENDING'
+      | 'APPROVAL_CHANGES_REQUESTED';
+    reviewNote?: string | null;
+  } | null>;
 }
 
 const missionString = (value: unknown, maximum: number, field: string) => {
