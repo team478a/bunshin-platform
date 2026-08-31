@@ -8,6 +8,8 @@ describe('service creation templates', () => {
       lineEnabled: true,
       referralEnabled: true,
     });
+    expect(SERVICE_CREATION_TEMPLATES.SIDE_HUSTLE_AFFILIATE.onboarding.questions).toHaveLength(5);
+    expect(SERVICE_CREATION_TEMPLATES.SIDE_HUSTLE_AFFILIATE.onboarding.welcomeTitle).not.toBe('');
   });
 
   it('keeps enterprise participation invitation-only by default', () => {
@@ -15,6 +17,15 @@ describe('service creation templates', () => {
       registrationMode: 'INVITATION_ONLY',
       inviteCodeEnabled: true,
       referralEnabled: false,
+    });
+    expect(SERVICE_CREATION_TEMPLATES.ENTERPRISE_PROGRAM.onboarding.questions).toHaveLength(6);
+  });
+
+  it('leaves onboarding empty when the administrator chooses custom settings', () => {
+    expect(SERVICE_CREATION_TEMPLATES.CUSTOM.onboarding).toEqual({
+      welcomeTitle: '',
+      welcomeMessage: '',
+      questions: [],
     });
   });
 });
