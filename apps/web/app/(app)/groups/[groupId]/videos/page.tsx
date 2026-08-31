@@ -57,40 +57,83 @@ export default async function VideosPage({
   });
   if (!membership) notFound();
 
-  const [bunshins, campaigns, projects] = await Promise.all([
-    db.prisma.bunshin.findMany({
-      where: {
-        workspaceId: membership.group.workspaceId,
-        ownerUserId: actor.userId,
-        status: { not: 'ARCHIVED' },
-      },
-      select: { id: true, name: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-    db.prisma.campaign.findMany({
-      where: {
-        workspaceId: membership.group.workspaceId,
-        groupId: membership.group.id,
-        status: 'OPEN',
-        startsAt: { lte: now },
-        endsAt: { gt: now },
-        participations: { some: { userId: actor.userId, status: 'ACCEPTED' } },
-      },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    db.prisma.videoProject.findMany({
-      where: {
-        workspaceId: membership.group.workspaceId,
-        groupId: membership.group.id,
-        groupMembershipId: membership.id,
-        ownerUserId: actor.userId,
-      },
-      select: { id: true, title: true, status: true, durationSeconds: true, updatedAt: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
-    }),
-  ]);
+  const [bunshins, campaigns, projects, characterVersions, characterReferences] = await Promise.all(
+    [
+      db.prisma.bunshin.findMany({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          ownerUserId: actor.userId,
+          status: { not: 'ARCHIVED' },
+        },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      db.prisma.campaign.findMany({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          status: 'OPEN',
+          startsAt: { lte: now },
+          endsAt: { gt: now },
+          participations: { some: { userId: actor.userId, status: 'ACCEPTED' } },
+        },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      db.prisma.videoProject.findMany({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          groupMembershipId: membership.id,
+          ownerUserId: actor.userId,
+        },
+        select: { id: true, title: true, status: true, durationSeconds: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      }),
+      db.prisma.aiCharacterProfileVersion.findMany({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          status: 'PUBLISHED',
+        },
+        select: { id: true, version: true, characterProfileId: true },
+        orderBy: { publishedAt: 'desc' },
+      }),
+      db.prisma.aiCharacterReferenceAsset.findMany({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          status: 'READY',
+        },
+        select: { characterProfileVersionId: true },
+      }),
+    ],
+  );
+  const characterProfileIds = [
+    ...new Set(characterVersions.map((item) => item.characterProfileId)),
+  ];
+  const characterProfiles = await db.prisma.aiCharacterProfile.findMany({
+    where: {
+      id: { in: characterProfileIds },
+      workspaceId: membership.group.workspaceId,
+      groupId: membership.group.id,
+      scope: 'SERVICE',
+      status: 'ACTIVE',
+    },
+    select: { id: true, name: true },
+  });
+  const characters = characterVersions
+    .map((version) => {
+      const profile = characterProfiles.find((item) => item.id === version.characterProfileId);
+      const referenceCount = characterReferences.filter(
+        (item) => item.characterProfileVersionId === version.id,
+      ).length;
+      return profile && referenceCount > 0
+        ? { id: version.id, name: profile.name, version: version.version, referenceCount }
+        : null;
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const serviceSlug = (await searchParams)?.service;
   const serviceBase = serviceSlug ? `/s/${serviceSlug}` : null;
@@ -118,6 +161,7 @@ export default async function VideosPage({
         groupMembershipId={membership.id}
         bunshins={bunshins}
         campaigns={campaigns}
+        characters={characters}
       />
       <section className="settings-card">
         <h2>作成中の動画</h2>

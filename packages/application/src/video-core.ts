@@ -49,6 +49,9 @@ export interface VideoProjectRecord {
   ownerUserId: string;
   bunshinId: string;
   campaignId: string | null;
+  characterProfileVersionId: string | null;
+  characterProfileSnapshot: Record<string, unknown>;
+  characterReferenceSnapshot: Array<Record<string, unknown>>;
   title: string;
   platform: VideoPlatform;
   type: VideoProjectType;
@@ -72,6 +75,7 @@ export interface VideoProjectRepository {
     actorUserId: string;
     bunshinId: string;
     campaignId: string | null;
+    characterProfileVersionId: string | null;
     title: string;
     platform: VideoPlatform;
     type: VideoProjectType;
@@ -309,6 +313,9 @@ export class CreateVideoProject {
       actorUserId: id(input.actorUserId, 'actorUserId'),
       bunshinId: id(input.bunshinId, 'bunshinId'),
       campaignId: input.campaignId ? id(input.campaignId, 'campaignId') : null,
+      characterProfileVersionId: input.characterProfileVersionId
+        ? id(input.characterProfileVersionId, 'characterProfileVersionId')
+        : null,
       title: text(input.title, 'title', 160),
       aiProcessingTypes: aiTypes(input.aiProcessingTypes),
     });

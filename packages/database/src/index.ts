@@ -13233,6 +13233,8 @@ const videoProjectRecord = (
   durationSeconds: row.durationSeconds as 30 | 60,
   aiProcessingTypes: row.aiProcessingTypes as unknown as VideoAiProcessingType[],
   disclosureSnapshot: row.disclosureSnapshot as Record<string, unknown>,
+  characterProfileSnapshot: row.characterProfileSnapshot as Record<string, unknown>,
+  characterReferenceSnapshot: row.characterReferenceSnapshot as Array<Record<string, unknown>>,
   scenes: row.scenes.map(videoSceneRecord),
 });
 
@@ -13296,6 +13298,69 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         });
         if (!campaign) return null;
       }
+      let characterProfileSnapshot: Prisma.InputJsonValue = {};
+      let characterReferenceSnapshot: Prisma.InputJsonValue = [];
+      if (input.characterProfileVersionId) {
+        const characterVersion = await tx.aiCharacterProfileVersion.findFirst({
+          where: {
+            id: input.characterProfileVersionId,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            status: 'PUBLISHED',
+          },
+        });
+        if (!characterVersion) return null;
+        const activeLicense = await tx.aiCharacterLicenseVersion.findFirst({
+          where: {
+            id: characterVersion.licenseVersionId,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            characterProfileId: characterVersion.characterProfileId,
+            commercialUseAllowed: true,
+            derivativeUseAllowed: true,
+            redistributionAllowed: true,
+            startsAt: { lte: now },
+            OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+          },
+          select: { id: true },
+        });
+        if (!activeLicense) return null;
+        const characterProfile = await tx.aiCharacterProfile.findFirst({
+          where: {
+            id: characterVersion.characterProfileId,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            scope: 'SERVICE',
+            status: 'ACTIVE',
+          },
+          select: { id: true, name: true },
+        });
+        if (!characterProfile) return null;
+        const references = await tx.aiCharacterReferenceAsset.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            characterProfileVersionId: characterVersion.id,
+            status: 'READY',
+          },
+          select: { id: true, storageKey: true, mimeType: true, sha256: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (references.length === 0) return null;
+        characterProfileSnapshot = {
+          characterProfileId: characterProfile.id,
+          name: characterProfile.name,
+          version: characterVersion.version,
+          appearance: characterVersion.appearance,
+          worldSetting: characterVersion.worldSetting,
+          basePrompt: characterVersion.basePrompt,
+          negativePrompt: characterVersion.negativePrompt,
+          safetyRules: characterVersion.safetyRules as Prisma.InputJsonValue,
+          licenseSnapshot: characterVersion.licenseSnapshot as Prisma.InputJsonValue,
+          publishedAt: characterVersion.publishedAt?.toISOString() ?? null,
+        };
+        characterReferenceSnapshot = references;
+      }
       const row = await tx.videoProject.create({
         data: {
           workspaceId: input.workspaceId,
@@ -13304,6 +13369,9 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           ownerUserId: input.actorUserId,
           bunshinId: input.bunshinId,
           campaignId: input.campaignId,
+          characterProfileVersionId: input.characterProfileVersionId,
+          characterProfileSnapshot,
+          characterReferenceSnapshot,
           title: input.title,
           platform: input.platform,
           type: input.type,

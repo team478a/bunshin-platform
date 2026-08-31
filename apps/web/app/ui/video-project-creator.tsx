@@ -9,12 +9,14 @@ export function VideoProjectCreator({
   groupMembershipId,
   bunshins,
   campaigns,
+  characters,
 }: {
   workspaceId: string;
   groupId: string;
   groupMembershipId: string;
   bunshins: Array<{ id: string; name: string }>;
   campaigns: Array<{ id: string; name: string }>;
+  characters: Array<{ id: string; name: string; version: number; referenceCount: number }>;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
@@ -37,6 +39,7 @@ export function VideoProjectCreator({
             groupMembershipId,
             bunshinId: values.get('bunshinId'),
             campaignId: typeof campaignId === 'string' && campaignId ? campaignId : null,
+            characterProfileVersionId: values.get('characterProfileVersionId') || null,
             title: values.get('title'),
             platform: values.get('platform'),
             type: values.get('type'),
@@ -82,6 +85,18 @@ export function VideoProjectCreator({
               </option>
             ))}
           </select>
+        </label>
+        <label className="field">
+          <span className="field__label">動画に出すAIキャラクター（任意）</span>
+          <select className="field__control" name="characterProfileVersionId" defaultValue="">
+            <option value="">選ばない</option>
+            {characters.map((character) => (
+              <option key={character.id} value={character.id}>
+                {character.name}（第{character.version}版・基準画像{character.referenceCount}枚）
+              </option>
+            ))}
+          </select>
+          <small>選ぶと、今の見た目と基準画像をこの動画だけに固定して使います。</small>
         </label>
         <label className="field">
           <span className="field__label">投稿する場所</span>

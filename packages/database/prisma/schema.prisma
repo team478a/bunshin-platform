@@ -3228,6 +3228,9 @@ model VideoProject {
   ownerUserId         String             @map("owner_user_id") @db.Uuid
   bunshinId           String             @map("bunshin_id") @db.Uuid
   campaignId          String?            @map("campaign_id") @db.Uuid
+  characterProfileVersionId String?      @map("character_profile_version_id") @db.Uuid
+  characterProfileSnapshot  Json         @default("{}") @map("character_profile_snapshot")
+  characterReferenceSnapshot Json        @default("[]") @map("character_reference_snapshot")
   title               String             @db.VarChar(160)
   platform            SocialPlatform
   type                VideoProjectType
@@ -3253,6 +3256,7 @@ model VideoProject {
   @@unique([workspaceId, id])
   @@index([workspaceId, ownerUserId, status, updatedAt])
   @@index([groupId, groupMembershipId, status])
+  @@index([workspaceId, groupId, characterProfileVersionId])
   @@index([campaignId])
   @@map("video_projects")
 }

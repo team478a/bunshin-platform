@@ -28,6 +28,9 @@ const project = (): VideoProjectRecord => ({
   ownerUserId: ids.actorUserId,
   bunshinId: ids.bunshinId,
   campaignId: null,
+  characterProfileVersionId: null,
+  characterProfileSnapshot: {},
+  characterReferenceSnapshot: [],
   title: '商品を30秒で紹介する動画',
   platform: 'INSTAGRAM',
   type: 'PRODUCT_INTRODUCTION',
@@ -80,6 +83,7 @@ describe('Video Core', () => {
       new CreateVideoProject(value).execute({
         ...ids,
         campaignId: null,
+        characterProfileVersionId: null,
         title: ' 商品を30秒で紹介する動画 ',
         platform: 'INSTAGRAM',
         type: 'PRODUCT_INTRODUCTION',

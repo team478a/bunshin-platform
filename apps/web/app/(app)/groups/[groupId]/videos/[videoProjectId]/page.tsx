@@ -27,6 +27,17 @@ function disclosureGuide(value: Record<string, unknown>) {
   };
 }
 
+function characterGuide(
+  value: Record<string, unknown>,
+  referenceAssets: Array<Record<string, unknown>>,
+) {
+  return {
+    name: typeof value.name === 'string' ? value.name : null,
+    version: typeof value.version === 'number' ? value.version : null,
+    referenceCount: referenceAssets.length,
+  };
+}
+
 export default async function VideoProjectPage({
   params,
   searchParams,
@@ -61,6 +72,10 @@ export default async function VideoProjectPage({
     notFound();
   }
   const disclosure = disclosureGuide(project.disclosureSnapshot);
+  const character = characterGuide(
+    project.characterProfileSnapshot,
+    project.characterReferenceSnapshot,
+  );
 
   const serviceSlug = (await searchParams)?.service;
   return (
@@ -91,6 +106,19 @@ export default async function VideoProjectPage({
         {disclosure.guidance ? <p>{disclosure.guidance}</p> : null}
         <p>動画は自動では投稿されません。完成後に内容を確認し、ご自身で投稿してください。</p>
       </section>
+
+      {character.name ? (
+        <section className="settings-card">
+          <h2>この動画に固定したAIキャラクター</h2>
+          <p>
+            {character.name}
+            {character.version ? `（第${character.version}版）` : ''}を使います。
+          </p>
+          <p>
+            基準画像{character.referenceCount}枚と、その時点の見た目・安全ルールを固定しています。
+          </p>
+        </section>
+      ) : null}
 
       {project.scenes.length === 0 ? (
         <section className="settings-card">
