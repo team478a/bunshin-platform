@@ -253,6 +253,8 @@ export class ExecuteVideoSceneGenerationStep {
     if (generation.status === 'FAILED' || generation.status === 'CANCELLED')
       return { status: 'FAILED', generation };
     if (generation.status === 'QUEUED') {
+      if (context.referenceStorageKeys.length === 0)
+        throw new ApplicationError('VALIDATION_ERROR', 'character reference image is required');
       const referenceImageUrls = await this.references.createTemporaryReadUrls({
         storageKeys: context.referenceStorageKeys,
       });

@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   AuthorizeVideoAiGenerationCost,
+  ExecuteVideoSceneGenerationStep,
   QueueVideoSceneGenerations,
   type VideoAiProviderCostPolicyRepository,
   type VideoSceneGenerationRepository,
@@ -103,5 +104,61 @@ describe('AuthorizeVideoAiGenerationCost', () => {
         estimatedSceneCostsUsdMicros: [112_000],
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT', message: 'daily video provider budget reached' });
+  });
+});
+
+describe('ExecuteVideoSceneGenerationStep', () => {
+  it('does not submit a paid provider request without a private character reference', async () => {
+    const repository: VideoSceneGenerationRepository = {
+      enqueueAiScenes: vi.fn(),
+      findForExecution: vi.fn().mockResolvedValue({
+        generation: {
+          id: 'scene-generation-1',
+          workspaceId,
+          groupId,
+          groupMembershipId: 'membership-1',
+          ownerUserId: userId,
+          videoProjectId: projectId,
+          videoSceneId: 'scene-1',
+          projectRevision: 3,
+          sceneRevision: 1,
+          provider: 'FAL',
+          model: 'fal-ai/kling-video/o1/reference-to-video',
+          status: 'QUEUED',
+          inputSnapshot: {},
+          estimatedCostUsdMicros: 112_000,
+          actualCostUsdMicros: null,
+          externalJobId: null,
+          outputStorageKey: null,
+          errorCode: null,
+          startedAt: null,
+          completedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        prompt: 'short video prompt',
+        durationSeconds: 5,
+        referenceStorageKeys: [],
+      }),
+      markSubmitted: vi.fn(),
+      markGenerating: vi.fn(),
+      markSucceeded: vi.fn(),
+      markFailed: vi.fn(),
+    };
+    const createTemporaryReadUrls = vi.fn();
+    const submit = vi.fn();
+    await expect(
+      new ExecuteVideoSceneGenerationStep(
+        repository,
+        { submit, inspect: vi.fn() },
+        { createTemporaryReadUrls },
+        { store: vi.fn() },
+      ).execute({ workspaceId, generationId: 'scene-generation-1' }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'character reference image is required',
+    });
+    expect(createTemporaryReadUrls).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
   });
 });
