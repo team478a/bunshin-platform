@@ -91,6 +91,14 @@ enum CampaignPostingApprovalStatus {
   CHANGES_REQUESTED
 }
 
+enum CampaignPostingApprovalAuditAction {
+  REQUESTED
+  APPROVED
+  CHANGES_REQUESTED
+  RESUBMITTED
+  POLICY_UPDATED
+}
+
 enum ServiceVisibility {
   PUBLIC
   PRIVATE
@@ -1447,6 +1455,7 @@ model User {
   campaignPostingApprovalsRequested CampaignPostingApprovalRequest[] @relation("CampaignPostingApprovalRequester")
   campaignPostingApprovalsReviewed  CampaignPostingApprovalRequest[] @relation("CampaignPostingApprovalReviewer")
   campaignPostingApprovalPolicies   CampaignPostingApprovalPolicy[] @relation("CampaignPostingApprovalPolicyEditor")
+  campaignPostingApprovalAudits     CampaignPostingApprovalAudit[] @relation("CampaignPostingApprovalAuditActor")
   accountDeletionRequests           AccountDeletionRequest[]
   accountDeletionAudits             AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
   lineConfigurationAudits           LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
@@ -1642,6 +1651,7 @@ model Workspace {
   serviceLegalConsents            ServiceLegalConsent[]
   campaignPostingApprovalPolicies CampaignPostingApprovalPolicy[]
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
+  campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
 
   @@index([status])
   @@map("workspaces")
@@ -1715,6 +1725,7 @@ model Group {
   serviceOnboardingResponses      ServiceOnboardingResponse[]
   campaignPostingApprovalPolicy   CampaignPostingApprovalPolicy?
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
+  campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
   bunshins                        Bunshin[]
 
   @@unique([workspaceId, name])
@@ -2362,11 +2373,33 @@ model CampaignPostingApprovalRequest {
   dailyMission      DailyMission                  @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade, map: "campaign_posting_approval_requests_daily_mission_fkey")
   requestedBy       User                          @relation("CampaignPostingApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
   reviewedBy        User?                         @relation("CampaignPostingApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  audits            CampaignPostingApprovalAudit[]
 
   @@unique([workspaceId, bunshinId, dailyMissionId])
   @@index([workspaceId, groupId, status, requestedAt])
   @@index([campaignId, status])
   @@map("campaign_posting_approval_requests")
+}
+
+model CampaignPostingApprovalAudit {
+  id             String                              @id @default(uuid()) @db.Uuid
+  workspaceId    String                              @map("workspace_id") @db.Uuid
+  groupId        String                              @map("group_id") @db.Uuid
+  requestId      String?                             @map("request_id") @db.Uuid
+  action         CampaignPostingApprovalAuditAction
+  beforeData     Json?                               @map("before_data")
+  afterData      Json                                @default("{}") @map("after_data")
+  note           String?                             @db.VarChar(1000)
+  performedByUserId String                           @map("performed_by_user_id") @db.Uuid
+  occurredAt     DateTime                            @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace      Workspace                           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group          Group                               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  request        CampaignPostingApprovalRequest?     @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  performedBy    User                                @relation("CampaignPostingApprovalAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, groupId, occurredAt])
+  @@index([requestId, occurredAt])
+  @@map("campaign_posting_approval_audits")
 }
 
 model PointAccount {
