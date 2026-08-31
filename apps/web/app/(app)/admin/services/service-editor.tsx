@@ -83,6 +83,48 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
         </select>
         <small>{template.description}</small>
       </label>
+      <div className="service-template-preview" aria-live="polite">
+        <h3>この種類で最初に入る設定</h3>
+        <dl>
+          <div>
+            <dt>参加方法</dt>
+            <dd>
+              {template.registrationMode === 'PUBLIC'
+                ? 'だれでも参加できます'
+                : '招待された人だけ参加できます'}
+            </dd>
+          </div>
+          <div>
+            <dt>ログイン</dt>
+            <dd>
+              {[template.emailEnabled && 'メール', template.lineEnabled && 'LINE']
+                .filter(Boolean)
+                .join('・') || 'あとで設定します'}
+            </dd>
+          </div>
+          <div>
+            <dt>初回の質問</dt>
+            <dd>
+              {template.onboarding.questions.length > 0
+                ? `${template.onboarding.questions.length}問が入ります`
+                : '質問は入りません'}
+            </dd>
+          </div>
+        </dl>
+        {template.onboarding.questions.length > 0 ? (
+          <details>
+            <summary>質問の内容を見る</summary>
+            <ol>
+              {template.onboarding.questions.map((question) => (
+                <li key={question}>{question}</li>
+              ))}
+            </ol>
+            <p>作成後、サービス管理画面で文章と質問を変更できます。</p>
+          </details>
+        ) : (
+          <p>初回案内と質問は、サービス作成後に必要なものだけ設定できます。</p>
+        )}
+      </div>
       <form key={templateKey} onSubmit={(event) => void submit(event)} className="admin-form-grid">
         <input type="hidden" name="templateKey" value={templateKey} />
         <label>
