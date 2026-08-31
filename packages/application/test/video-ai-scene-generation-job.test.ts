@@ -20,20 +20,22 @@ const job = (overrides: Partial<Job> = {}) =>
 
 describe('individual AI video scene job', () => {
   it('retries a provider request that is still generating without creating another request', async () => {
+    const execute = vi.fn().mockResolvedValue({ status: 'GENERATING' });
+    const markFailed = vi.fn();
+    const completeExecute = vi.fn();
+    const failExecute = vi.fn().mockResolvedValue({ status: 'RETRYABLE_FAILURE' });
     const handler: VideoAiSceneGenerationJobHandler = {
-      execute: vi.fn().mockResolvedValue({ status: 'GENERATING' }),
-      markFailed: vi.fn(),
+      execute,
+      markFailed,
     };
-    const complete = { execute: vi.fn() } as unknown as CompleteJob;
-    const fail = {
-      execute: vi.fn().mockResolvedValue({ status: 'RETRYABLE_FAILURE' }),
-    } as unknown as FailJob;
+    const complete = { execute: completeExecute } as unknown as CompleteJob;
+    const fail = { execute: failExecute } as unknown as FailJob;
 
     await new ExecuteVideoAiSceneGenerationJob(handler, complete, fail).execute(job(), 'worker');
 
-    expect(handler.execute).toHaveBeenCalledOnce();
-    expect(complete.execute).not.toHaveBeenCalled();
-    expect(fail.execute).toHaveBeenCalledWith(
+    expect(execute).toHaveBeenCalledOnce();
+    expect(completeExecute).not.toHaveBeenCalled();
+    expect(failExecute).toHaveBeenCalledWith(
       expect.anything(),
       'worker',
       expect.objectContaining({ errorCategory: 'VIDEO_AI_SCENE_PENDING', retryable: true }),
@@ -41,20 +43,24 @@ describe('individual AI video scene job', () => {
   });
 
   it('persists a terminal provider failure and completes the job', async () => {
+    const execute = vi.fn().mockResolvedValue({ status: 'FAILED', errorCode: 'CONTENT_POLICY' });
+    const markFailed = vi.fn();
+    const completeExecute = vi.fn();
+    const failExecute = vi.fn();
     const handler: VideoAiSceneGenerationJobHandler = {
-      execute: vi.fn().mockResolvedValue({ status: 'FAILED', errorCode: 'CONTENT_POLICY' }),
-      markFailed: vi.fn(),
+      execute,
+      markFailed,
     };
-    const complete = { execute: vi.fn() } as unknown as CompleteJob;
-    const fail = { execute: vi.fn() } as unknown as FailJob;
+    const complete = { execute: completeExecute } as unknown as CompleteJob;
+    const fail = { execute: failExecute } as unknown as FailJob;
 
     await new ExecuteVideoAiSceneGenerationJob(handler, complete, fail).execute(job(), 'worker');
 
-    expect(handler.markFailed).toHaveBeenCalledWith({
+    expect(markFailed).toHaveBeenCalledWith({
       workspaceId: id,
       generationId: id,
       errorCode: 'CONTENT_POLICY',
     });
-    expect(complete.execute).toHaveBeenCalledWith(id, 'worker');
+    expect(completeExecute).toHaveBeenCalledWith(id, 'worker');
   });
 });
