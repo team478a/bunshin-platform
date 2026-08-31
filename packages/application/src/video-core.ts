@@ -209,6 +209,13 @@ export interface VideoPlanningContext {
     preferredExpressions: string[];
     prohibitedExpressions: string[];
   };
+  character: null | {
+    name: string;
+    appearance: string;
+    worldSetting: string;
+    safetyRules: string[];
+    referenceImageCount: number;
+  };
   product: null | {
     name: string;
     facts: string[];

@@ -14002,6 +14002,42 @@ export class PrismaVideoPlanningContextRepository implements VideoPlanningContex
       include: { personality: true },
     });
     if (!bunshin) return null;
+    const project = await this.client.videoProject.findFirst({
+      where: {
+        id: input.videoProjectId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        ownerUserId: input.actorUserId,
+        bunshinId: input.bunshinId,
+        campaignId: input.campaignId,
+      },
+      select: { characterProfileSnapshot: true, characterReferenceSnapshot: true },
+    });
+    if (!project) return null;
+    const characterSnapshot =
+      project.characterProfileSnapshot !== null &&
+      typeof project.characterProfileSnapshot === 'object' &&
+      !Array.isArray(project.characterProfileSnapshot)
+        ? (project.characterProfileSnapshot as Record<string, unknown>)
+        : {};
+    const referenceSnapshot = Array.isArray(project.characterReferenceSnapshot)
+      ? project.characterReferenceSnapshot
+      : [];
+    const safetyRules = Array.isArray(characterSnapshot.safetyRules)
+      ? characterSnapshot.safetyRules.filter((item): item is string => typeof item === 'string')
+      : [];
+    const character =
+      typeof characterSnapshot.name === 'string' &&
+      typeof characterSnapshot.appearance === 'string' &&
+      typeof characterSnapshot.worldSetting === 'string'
+        ? {
+            name: characterSnapshot.name,
+            appearance: characterSnapshot.appearance,
+            worldSetting: characterSnapshot.worldSetting,
+            safetyRules,
+            referenceImageCount: referenceSnapshot.length,
+          }
+        : null;
 
     const now = new Date();
     const userAssets = await this.client.videoAsset.findMany({
@@ -14094,6 +14130,7 @@ export class PrismaVideoPlanningContextRepository implements VideoPlanningContex
         prohibitedExpressions:
           (bunshin.personality?.forbiddenExpressions as string[] | undefined) ?? [],
       },
+      character,
       product,
       approvedAssets,
       userAssets: userAssets.map((asset) => ({

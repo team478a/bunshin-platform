@@ -51,6 +51,7 @@ const contextRepository = (): VideoPlanningContextRepository => ({
       preferredExpressions: ['いっしょに'],
       prohibitedExpressions: ['絶対'],
     },
+    character: null,
     product: {
       name: '公式商品',
       facts: ['内容量100g'],

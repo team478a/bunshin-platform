@@ -1811,3 +1811,11 @@
 - History: 既存Video ProjectのSnapshotは、Character設定・画像の後続変更で更新しない。
 - Provider boundary: 現行標準Rendererは内部Prompt・Storage Keyを外部Providerへ渡さない。参照画像対応Providerは別Adapterとして後続導入する。
 - Source: `docs/VIDEO_CHARACTER_REFERENCE_SNAPSHOT_REPORT.md`
+
+# 2026-09-01: AIキャラクターの安全なSnapshotだけを動画企画へ反映する
+
+- Planning: 動画企画を作る際は、作成者が所有する対象Video ProjectのSnapshotから、キャラクター名・見た目・世界観・安全ルール・基準画像数だけを企画AIへ渡す。
+- Privacy: 基本Prompt、Negative Prompt、非公開Storage Key、画像データは企画AIにも外部Rendererにも渡さない。
+- Isolation: Video Projectを`workspaceId`、`groupId`、所有者、Bunshin、Campaignで再検証し、別Serviceや別利用者のSnapshotを企画に混入させない。
+- Rendering: 現行の標準動画は基準画像を使ったAI動画生成を行わない。参照画像対応Provider Adapterは外部チームの検証後に導入する。
+- Source: `docs/VIDEO_CHARACTER_REFERENCE_SNAPSHOT_REPORT.md`

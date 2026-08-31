@@ -112,10 +112,12 @@ export default async function VideoProjectPage({
           <h2>この動画に固定したAIキャラクター</h2>
           <p>
             {character.name}
-            {character.version ? `（第${character.version}版）` : ''}を使います。
+            {character.version ? `（第${character.version}版）` : ''}
+            の見た目と世界観を企画に反映します。
           </p>
           <p>
             基準画像{character.referenceCount}枚と、その時点の見た目・安全ルールを固定しています。
+            現在の標準動画は、基準画像を外部のAI動画サービスへ送信しません。
           </p>
         </section>
       ) : null}

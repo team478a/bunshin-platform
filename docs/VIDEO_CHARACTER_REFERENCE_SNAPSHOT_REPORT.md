@@ -24,6 +24,7 @@
 
 - 作成時にworkspaceId、groupId、公開済みVersion、ACTIVEなSERVICE Profile、READYな基準画像をDB Transaction内で再検証する。商用利用・改変・参加者への提供が有効期間内に許可されていることも確認する。
 - 同じキャラクターでも後から設定・画像を変更しても、既存動画のSnapshotは書き換えない。
+- 動画企画を作るAIには、固定済みSnapshotからキャラクター名・見た目・世界観・安全ルール・基準画像数だけを渡す。内部Prompt、Negative Prompt、Storage Key、画像データは渡さない。
 - 現在のCreatomate標準レンダリングは、キャラクターのStorage Keyや内部Promptを外部Providerへ送信しない。
 - 将来、参照画像対応Providerを追加する際は、SnapshotのSHA-256とStorage Keyを照合し、短期の専用URLまたはProvider Adapter経由でのみ渡す。
 
