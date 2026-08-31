@@ -14064,6 +14064,15 @@ const emptyVideoRenderCounts = () => ({
   CANCELLED: 0,
 });
 
+const emptyVideoSceneGenerationCounts = () => ({
+  QUEUED: 0,
+  SUBMITTED: 0,
+  GENERATING: 0,
+  SUCCEEDED: 0,
+  FAILED: 0,
+  CANCELLED: 0,
+});
+
 export class PrismaVideoRenderOperationsRepository implements VideoRenderOperationsRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -14074,7 +14083,10 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
     });
     if (!admin) return null;
     const jobs = await this.client.job.findMany({
-      where: { environment: input.environment, jobType: 'VIDEO_RENDER_PROCESS' },
+      where: {
+        environment: input.environment,
+        jobType: { in: ['VIDEO_RENDER_PROCESS', 'VIDEO_AI_SCENE_GENERATION_PROCESS'] },
+      },
       select: { payloadReference: true },
     });
     const renderIds = [
@@ -14086,6 +14098,16 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
           .filter((value): value is string => Boolean(value)),
       ),
     ];
+    const sceneGenerationIds = [
+      ...new Set(
+        jobs
+          .map(
+            ({ payloadReference }) =>
+              /^video-ai-scene:([0-9a-f-]{36})$/i.exec(payloadReference)?.[1],
+          )
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
     const rows = await this.client.videoRender.findMany({
       where: { id: { in: renderIds } },
       include: { project: { select: { title: true, group: { select: { name: true } } } } },
@@ -14093,12 +14115,30 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
       take: 100,
     });
     const counts = emptyVideoRenderCounts();
-    const groupedCounts = await this.client.videoRender.groupBy({
-      by: ['status'],
-      where: { id: { in: renderIds } },
-      _count: { _all: true },
-    });
+    const sceneCounts = emptyVideoSceneGenerationCounts();
+    const [groupedCounts, sceneGroupedCounts, sceneRows] = await Promise.all([
+      this.client.videoRender.groupBy({
+        by: ['status'],
+        where: { id: { in: renderIds } },
+        _count: { _all: true },
+      }),
+      this.client.videoSceneGeneration.groupBy({
+        by: ['status'],
+        where: { id: { in: sceneGenerationIds } },
+        _count: { _all: true },
+      }),
+      this.client.videoSceneGeneration.findMany({
+        where: { id: { in: sceneGenerationIds } },
+        include: {
+          scene: { select: { sceneNo: true } },
+          project: { select: { title: true, group: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+    ]);
     for (const row of groupedCounts) counts[row.status] = row._count._all;
+    for (const row of sceneGroupedCounts) sceneCounts[row.status] = row._count._all;
     return {
       counts,
       items: rows.map((row) => ({
@@ -14120,6 +14160,22 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
         usageCountedAt: row.usageCountedAt,
         notificationStatus: row.notificationStatus,
         notifiedAt: row.notifiedAt,
+      })),
+      sceneCounts,
+      sceneItems: sceneRows.map((row) => ({
+        id: row.id,
+        projectTitle: row.project.title,
+        groupName: row.project.group.name,
+        sceneNo: row.scene.sceneNo,
+        provider: row.provider,
+        model: row.model,
+        status: row.status,
+        errorCode: row.errorCode,
+        estimatedCostUsdMicros: row.estimatedCostUsdMicros,
+        actualCostUsdMicros: row.actualCostUsdMicros,
+        createdAt: row.createdAt,
+        startedAt: row.startedAt,
+        completedAt: row.completedAt,
       })),
     };
   }
