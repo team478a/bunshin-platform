@@ -260,6 +260,12 @@ export default async function ServiceMemberHome({
             <h2>サービスを管理する</h2>
             <p>参加者、公式資料、利用規約などをこのサービスの範囲だけで管理します。</p>
             <div className="service-home-actions">
+              <a
+                className="button button--primary"
+                href={`/s/${service.configuration.slug}/manage`}
+              >
+                開始準備を確認
+              </a>
               <a className="button" href={`/s/${service.configuration.slug}/manage/settings`}>
                 サービスの見た目・登録設定
               </a>
