@@ -44,7 +44,9 @@ export default async function ServiceVideoOperationsPage({
 
   const db = await import('@bunshin/database');
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
-  const [renders, scenes] = await Promise.all([
+  const now = new Date();
+  const warningUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const [renders, scenes, expiring] = await Promise.all([
     db.prisma.videoRender.findMany({
       where: scope,
       orderBy: { createdAt: 'desc' },
@@ -70,6 +72,24 @@ export default async function ServiceVideoOperationsPage({
         scene: { select: { sceneNo: true } },
       },
     }),
+    Promise.all([
+      db.prisma.videoAsset.count({
+        where: { ...scope, status: { not: 'DELETED' }, expiresAt: { gt: now, lte: warningUntil } },
+      }),
+      db.prisma.videoSceneGeneration.count({
+        where: { ...scope, status: 'SUCCEEDED', expiresAt: { gt: now, lte: warningUntil } },
+      }),
+      db.prisma.videoRender.count({
+        where: { ...scope, status: 'SUCCEEDED', expiresAt: { gt: now, lte: warningUntil } },
+      }),
+      db.prisma.socialImageGeneratedMedia.count({
+        where: {
+          ...scope,
+          status: { in: ['READY', 'ADOPTED', 'REJECTED'] },
+          expiresAt: { gt: now, lte: warningUntil },
+        },
+      }),
+    ]),
   ]);
   const renderCounts = countByStatus(renders);
   const sceneCounts = countByStatus(scenes);
@@ -95,6 +115,19 @@ export default async function ServiceVideoOperationsPage({
             {sceneCounts.FAILED ?? 0}件
           </p>
           <p>動画本文、生成指示、完成ファイルのURLはこの画面に表示しません。</p>
+        </section>
+        <section className="settings-card">
+          <h2>保存期限のお知らせ</h2>
+          {expiring[0] + expiring[1] + expiring[2] + expiring[3] === 0 ? (
+            <p>7日以内に保存期限を迎える画像・動画はありません。</p>
+          ) : (
+            <p>
+              7日以内に、素材 {expiring[0]}件・AI場面 {expiring[1]}件・最終動画 {expiring[2]}
+              件・SNS画像 {expiring[3]}
+              件の保存期限が来ます。必要なファイルは期限前に利用者自身で保存してください。
+            </p>
+          )}
+          <p>作成・アップロードから90日後に、非公開の保存先から自動で削除されます。</p>
         </section>
         <section className="settings-card">
           <h2>最近のAI場面</h2>

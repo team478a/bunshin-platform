@@ -13600,6 +13600,9 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
   }
 }
 
+const assetRetentionExpiry = (from = new Date()) =>
+  new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
+
 const videoRenderRecord = (row: Prisma.VideoRenderGetPayload<object>): VideoRenderRecord => row;
 
 const videoSceneGenerationRecord = (
@@ -13798,6 +13801,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
         status: 'SUCCEEDED',
         outputStorageKey: input.outputStorageKey,
         completedAt: new Date(),
+        expiresAt: assetRetentionExpiry(),
         errorCode: null,
       },
     });
@@ -14018,6 +14022,7 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
           status: 'SUCCEEDED',
           outputStorageKey: input.outputStorageKey,
           completedAt: new Date(),
+          expiresAt: assetRetentionExpiry(),
           errorCode: null,
         },
       });
@@ -15483,6 +15488,7 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           width: 1080,
           height: 1350,
           contentHash: input.contentHash,
+          expiresAt: assetRetentionExpiry(),
         },
       });
       return true;
@@ -15580,6 +15586,7 @@ export class PrismaVideoAssetRepository implements VideoAssetRepository {
           declaredSizeBytes: input.declaredSizeBytes,
           rightsConfirmedAt: now,
           usageTerms: input.usageTerms,
+          expiresAt: assetRetentionExpiry(now),
         },
       });
       return videoAssetRecord(row);
@@ -15640,6 +15647,7 @@ export class PrismaVideoAssetRepository implements VideoAssetRepository {
           height: input.height,
           durationMs: input.durationMs,
           failureCode: null,
+          expiresAt: assetRetentionExpiry(),
         },
       });
       if (updated.count !== 1) return null;
