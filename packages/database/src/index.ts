@@ -13713,7 +13713,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     });
   }
 
-  async findForExecution(input: Parameters<VideoSceneGenerationRepository['findForExecution']>) {
+  async findForExecution(input: Parameters<VideoSceneGenerationRepository['findForExecution']>[0]) {
     const row = await this.client.videoSceneGeneration.findFirst({
       where: { id: input.generationId, workspaceId: input.workspaceId },
       include: { project: { select: { characterReferenceSnapshot: true } } },
@@ -13751,7 +13751,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     } satisfies VideoSceneGenerationExecutionContext;
   }
 
-  async markSubmitted(input: Parameters<VideoSceneGenerationRepository['markSubmitted']>) {
+  async markSubmitted(input: Parameters<VideoSceneGenerationRepository['markSubmitted']>[0]) {
     const changed = await this.client.videoSceneGeneration.updateMany({
       where: { id: input.generationId, workspaceId: input.workspaceId, status: 'QUEUED' },
       data: {
@@ -13768,7 +13768,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     return videoSceneGenerationRecord(row);
   }
 
-  async markGenerating(input: Parameters<VideoSceneGenerationRepository['markGenerating']>) {
+  async markGenerating(input: Parameters<VideoSceneGenerationRepository['markGenerating']>[0]) {
     const changed = await this.client.videoSceneGeneration.updateMany({
       where: {
         id: input.generationId,
@@ -13784,7 +13784,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     return videoSceneGenerationRecord(row);
   }
 
-  async markSucceeded(input: Parameters<VideoSceneGenerationRepository['markSucceeded']>) {
+  async markSucceeded(input: Parameters<VideoSceneGenerationRepository['markSucceeded']>[0]) {
     const changed = await this.client.videoSceneGeneration.updateMany({
       where: {
         id: input.generationId,
@@ -13805,7 +13805,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
     return videoSceneGenerationRecord(row);
   }
 
-  async markFailed(input: Parameters<VideoSceneGenerationRepository['markFailed']>) {
+  async markFailed(input: Parameters<VideoSceneGenerationRepository['markFailed']>[0]) {
     const changed = await this.client.videoSceneGeneration.updateMany({
       where: {
         id: input.generationId,
