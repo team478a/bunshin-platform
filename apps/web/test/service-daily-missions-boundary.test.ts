@@ -42,6 +42,8 @@ describe('service daily mission boundary', () => {
   it('connects the service mission view and endpoint', () => {
     expect(detailPage).toContain('<ServiceDailyMissionSection');
     expect(detailPage).toContain('/daily-missions`}');
+    expect(detailPage).toContain('trendContext: mission.trendContext');
+    expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
   it('connects decisions, copies, posting and feedback through service routes', () => {
