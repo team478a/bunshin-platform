@@ -13605,6 +13605,8 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
           const estimatedCostUsdMicros = Math.round(
             (scene.durationMs / 1_000) * input.estimatedCostUsdMicrosPerSecond,
           );
+          const characterSnapshot = project.characterProfileSnapshot as Record<string, unknown>;
+          const characterName = characterSnapshot.name;
           const inputSnapshot: Prisma.InputJsonValue = {
             schemaVersion: 1,
             scene: {
@@ -13616,11 +13618,7 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
               keywords: scene.keywords as Prisma.InputJsonValue,
             },
             character: {
-              name:
-                typeof (project.characterProfileSnapshot as Record<string, unknown>).name ===
-                'string'
-                  ? (project.characterProfileSnapshot as Record<string, unknown>).name
-                  : null,
+              name: typeof characterName === 'string' ? characterName : null,
               referenceImageCount: Array.isArray(project.characterReferenceSnapshot)
                 ? project.characterReferenceSnapshot.length
                 : 0,
