@@ -16,6 +16,11 @@ describe('QueueVideoSceneGenerations', () => {
   it('passes a provider, model and per-second cost estimate to the scoped repository', async () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn().mockResolvedValue([{ id: 'scene-generation-1' }]),
+      findForExecution: vi.fn(),
+      markSubmitted: vi.fn(),
+      markGenerating: vi.fn(),
+      markSucceeded: vi.fn(),
+      markFailed: vi.fn(),
     };
     await expect(
       new QueueVideoSceneGenerations(repository).execute({
@@ -37,6 +42,11 @@ describe('QueueVideoSceneGenerations', () => {
   it('does not allow an empty scene queue to be treated as a successful video generation', async () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn().mockResolvedValue([]),
+      findForExecution: vi.fn(),
+      markSubmitted: vi.fn(),
+      markGenerating: vi.fn(),
+      markSucceeded: vi.fn(),
+      markFailed: vi.fn(),
     };
     await expect(
       new QueueVideoSceneGenerations(repository).execute({
