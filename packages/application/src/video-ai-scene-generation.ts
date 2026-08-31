@@ -68,6 +68,24 @@ export interface VideoSceneGenerationRepository {
   }): Promise<VideoSceneGenerationRecord[] | null>;
 }
 
+export interface VideoSceneGenerationProviderPort {
+  submit(input: {
+    generationId: string;
+    model: string;
+    prompt: string;
+    durationSeconds: 5 | 10;
+    referenceImageUrls: string[];
+  }): Promise<{ externalJobId: string }>;
+  inspect(input: {
+    model: string;
+    externalJobId: string;
+  }): Promise<
+    | { status: 'SUBMITTED' | 'GENERATING' }
+    | { status: 'SUCCEEDED'; outputUrl: string }
+    | { status: 'FAILED'; errorCode: string }
+  >;
+}
+
 const uuid = (value: string, name: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
     throw new ApplicationError('VALIDATION_ERROR', `invalid ${name}`);
