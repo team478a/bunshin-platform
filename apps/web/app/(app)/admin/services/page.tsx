@@ -31,6 +31,7 @@ export default async function ServicesAdminPage() {
         <p className="eyebrow">システム管理者</p>
         <h1>サービス管理</h1>
         <p>独立した名前・登録URL・ブランドを持つサービスを作成します。</p>
+        <Link href="/admin/programs">公式プログラムを管理する →</Link>
       </header>
       {workspaces.length > 0 ? (
         <ServiceEditor workspaces={workspaces} />

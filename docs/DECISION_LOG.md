@@ -1742,3 +1742,13 @@
 - Isolation: Service Program、Offering、Enrollmentは`workspaceId + groupId`の複合外部キーでGroup、Membership、相互Resourceを拘束する。
 - Initial scope: 永続化とCore権限制御のみを実装し、Checkout、請求、返金、売上分配、報酬、管理画面は含めない。
 - Source: `docs/PROGRAM_FOUNDATION_CORE_REPORT.md`
+
+# 2026-08-31: 公式Programの作成・採用・無料参加を管理画面へ接続する
+
+- Official program: ACTIVE SUPER_ADMINだけがACTIVE ORGANIZATION WorkspaceへPlatform共通Programと最初の公開版を作成できる。
+- Adoption: SERVICE_OWNER／SERVICE_ADMINは、自サービスから参照可能な公開版だけを採用できる。採用時に無料・招待限定・手動参加のOfferingを同一Transactionで作る。
+- Enrollment: サービス管理者は、自サービスのACTIVE PARTICIPANTだけをACTIVE Offeringへ参加させられる。参加条件と目標はEnrollmentへSnapshot保存する。
+- Isolation: 作成、採用、参加の各処理で`workspaceId + groupId`をサーバー側で再検証し、Client指定値だけを信用しない。
+- Atomicity: Programと初版、Service ProgramとOffering、EnrollmentとAuditをそれぞれ同一Transactionで保存し、中途半端な状態を残さない。
+- Initial scope: Checkout、請求、返金、売上分配、代理店報酬、動画Provider実行は含めない。
+- Source: `docs/PROGRAM_MANAGEMENT_AV2_REPORT.md`

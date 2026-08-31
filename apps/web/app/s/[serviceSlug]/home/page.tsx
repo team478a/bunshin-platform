@@ -275,6 +275,9 @@ export default async function ServiceMemberHome({
               <a className="button" href={`/s/${service.configuration.slug}/manage/members`}>
                 参加者と利用機能
               </a>
+              <a className="button" href={`/s/${service.configuration.slug}/manage/programs`}>
+                実践プログラム
+              </a>
               <a className="button" href={`/s/${service.configuration.slug}/manage/knowledge`}>
                 公式資料・FAQ
               </a>
