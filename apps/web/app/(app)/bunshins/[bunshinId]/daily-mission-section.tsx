@@ -143,6 +143,13 @@ export function MissionIdea({ mission }: { mission: DailyMissionView }) {
   );
 }
 
+function displayDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? ''
+    : new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(date);
+}
+
 export function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
   const context = mission.trendContext;
   if (!context) return null;
