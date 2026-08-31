@@ -80,6 +80,7 @@ export interface VideoProjectRepository {
     platform: VideoPlatform;
     type: VideoProjectType;
     durationSeconds: 30 | 60;
+    standardComposition: boolean;
     aiProcessingTypes: VideoAiProcessingType[];
     disclosureSnapshot: Record<string, unknown>;
   }): Promise<VideoProjectRecord | null>;
@@ -324,6 +325,7 @@ export class CreateVideoProject {
         ? id(input.characterProfileVersionId, 'characterProfileVersionId')
         : null,
       title: text(input.title, 'title', 160),
+      standardComposition: input.standardComposition,
       aiProcessingTypes: aiTypes(input.aiProcessingTypes),
     });
     if (!value) throw new ApplicationError('FORBIDDEN', 'video project unavailable');
@@ -382,11 +384,18 @@ export class ReplaceVideoPlan {
           'VALIDATION_ERROR',
           'standard composition cannot contain AI video',
         );
+      const visualPrompt = scene.visualPrompt?.trim() || null;
+      if (
+        !input.standardComposition &&
+        (scene.visualType === 'AI_VIDEO' || types.includes('VIDEO_GENERATION')) &&
+        (!visualPrompt || ![5_000, 10_000].includes(scene.durationMs))
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid AI video scene');
       return {
         ...scene,
         narration: text(scene.narration, 'narration', 2_000),
         caption: text(scene.caption, 'caption', 240),
-        visualPrompt: scene.visualPrompt?.trim() || null,
+        visualPrompt,
         keywords: [...new Set(scene.keywords.map((keyword) => text(keyword, 'keyword', 80)))].slice(
           0,
           20,
