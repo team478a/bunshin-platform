@@ -24,6 +24,7 @@ import type {
 import { isValidBunshinSlug, normalizeBunshinSlug } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 export * from './video-render-job';
+export * from './video-ai-scene-generation-job';
 export * from './video-render-completion';
 export * from './social-image-generation-job';
 export * from './social-image-pilot-evidence';
