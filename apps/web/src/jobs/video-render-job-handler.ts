@@ -33,12 +33,13 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
       try {
         const configuration = await resolveCreatomateRuntimeConfiguration();
         const db = await import('@bunshin/database');
+        const aiSceneStorage = new SupabaseFalVideoSceneOutputStorage();
         const result = await new ExecuteVideoRenderStep(
           new db.PrismaVideoRenderRepository(),
           new CreatomateVideoRenderAdapter(configuration.apiKey),
           new SupabaseVideoRenderOutputStorage(),
           new HkdfVideoRenderWebhookSigner(),
-          new SupabaseFalVideoSceneOutputStorage(),
+          { createUrl: (storageKey) => aiSceneStorage.createDownloadUrl(storageKey) },
         ).execute(input);
         if (result.status !== 'SUCCEEDED') return result;
         const completedAt = result.render.completedAt ?? new Date();
