@@ -242,25 +242,44 @@ export function resubmitCampaignPostingApprovalResponse(
       throw new ApplicationError('VALIDATION_ERROR', 'empty body required');
     const actor = await actorUserId();
     const db = await import('@bunshin/database');
-    const updated = await db.prisma.campaignPostingApprovalRequest.updateMany({
-      where: {
-        workspaceId: resourceId(workspaceId),
-        bunshinId: resourceId(bunshinId),
-        dailyMissionId: resourceId(dailyMissionId),
-        requestedByUserId: actor,
-        status: 'CHANGES_REQUESTED',
-        campaign: {
-          group: {
-            status: 'ACTIVE',
-            memberships: {
-              some: { userId: actor, status: 'ACTIVE', consentedAt: { not: null } },
+    const resubmitted = await db.prisma.$transaction(async (tx) => {
+      const previous = await tx.campaignPostingApprovalRequest.findFirst({
+        where: {
+          workspaceId: resourceId(workspaceId),
+          bunshinId: resourceId(bunshinId),
+          dailyMissionId: resourceId(dailyMissionId),
+          requestedByUserId: actor,
+          status: 'CHANGES_REQUESTED',
+          campaign: {
+            group: {
+              status: 'ACTIVE',
+              memberships: {
+                some: { userId: actor, status: 'ACTIVE', consentedAt: { not: null } },
+              },
             },
           },
         },
-      },
-      data: { status: 'PENDING', reviewNote: null, reviewedByUserId: null, reviewedAt: null },
+        select: { id: true, workspaceId: true, groupId: true, status: true },
+      });
+      if (!previous) return false;
+      await tx.campaignPostingApprovalRequest.update({
+        where: { id: previous.id },
+        data: { status: 'PENDING', reviewNote: null, reviewedByUserId: null, reviewedAt: null },
+      });
+      await tx.campaignPostingApprovalAudit.create({
+        data: {
+          workspaceId: previous.workspaceId,
+          groupId: previous.groupId,
+          requestId: previous.id,
+          action: 'RESUBMITTED',
+          beforeData: { status: previous.status },
+          afterData: { status: 'PENDING' },
+          performedByUserId: actor,
+        },
+      });
+      return true;
     });
-    if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'approval request not found');
+    if (!resubmitted) throw new ApplicationError('NOT_FOUND', 'approval request not found');
     return { status: 'PENDING' as const };
   });
 }

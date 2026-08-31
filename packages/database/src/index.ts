@@ -4258,7 +4258,7 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             select: { required: true },
           });
           if (approvalPolicy?.required) {
-            await tx.campaignPostingApprovalRequest.create({
+            const approvalRequest = await tx.campaignPostingApprovalRequest.create({
               data: {
                 workspaceId: input.workspaceId,
                 groupId: eligibleCampaign.groupId,
@@ -4267,6 +4267,16 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
                 dailyMissionId: created.id,
                 contentSnapshot: input.content as Prisma.InputJsonValue,
                 requestedByUserId: input.actorUserId,
+              },
+            });
+            await tx.campaignPostingApprovalAudit.create({
+              data: {
+                workspaceId: input.workspaceId,
+                groupId: eligibleCampaign.groupId,
+                requestId: approvalRequest.id,
+                action: 'REQUESTED',
+                afterData: { status: approvalRequest.status },
+                performedByUserId: input.actorUserId,
               },
             });
           }

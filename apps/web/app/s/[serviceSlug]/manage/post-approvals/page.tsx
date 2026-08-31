@@ -14,6 +14,13 @@ const reviewSchema = z.object({
   decision: z.enum(['APPROVED', 'CHANGES_REQUESTED']),
   reviewNote: z.string().trim().max(1000),
 });
+const auditActionLabel = {
+  REQUESTED: '確認を依頼',
+  APPROVED: '使用を許可',
+  CHANGES_REQUESTED: '見直しを依頼',
+  RESUBMITTED: 'もう一度確認を依頼',
+  POLICY_UPDATED: '確認ルールを変更',
+} as const;
 
 function path(serviceSlug: string) {
   return `/s/${serviceSlug}/manage/post-approvals` as Route;
@@ -50,15 +57,32 @@ export default async function ServicePostApprovalsPage({
     );
     if (!currentService) redirect('/');
     const database = await import('@bunshin/database');
-    await database.prisma.campaignPostingApprovalPolicy.upsert({
-      where: { groupId: currentService.serviceId },
-      create: {
-        workspaceId: currentService.workspaceId,
-        groupId: currentService.serviceId,
-        required: value.data.required === 'true',
-        updatedByUserId: current.userId,
-      },
-      update: { required: value.data.required === 'true', updatedByUserId: current.userId },
+    await database.prisma.$transaction(async (tx) => {
+      const previous = await tx.campaignPostingApprovalPolicy.findUnique({
+        where: { groupId: currentService.serviceId },
+        select: { required: true },
+      });
+      const required = value.data.required === 'true';
+      await tx.campaignPostingApprovalPolicy.upsert({
+        where: { groupId: currentService.serviceId },
+        create: {
+          workspaceId: currentService.workspaceId,
+          groupId: currentService.serviceId,
+          required,
+          updatedByUserId: current.userId,
+        },
+        update: { required, updatedByUserId: current.userId },
+      });
+      await tx.campaignPostingApprovalAudit.create({
+        data: {
+          workspaceId: currentService.workspaceId,
+          groupId: currentService.serviceId,
+          action: 'POLICY_UPDATED',
+          beforeData: previous ? { required: previous.required } : null,
+          afterData: { required },
+          performedByUserId: current.userId,
+        },
+      });
     });
     revalidatePath(path(serviceSlug));
     redirect(`${path(serviceSlug)}?saved=1` as Route);
@@ -75,21 +99,42 @@ export default async function ServicePostApprovalsPage({
     );
     if (!currentService) redirect('/');
     const database = await import('@bunshin/database');
-    const result = await database.prisma.campaignPostingApprovalRequest.updateMany({
-      where: {
-        id: value.data.requestId,
-        workspaceId: currentService.workspaceId,
-        groupId: currentService.serviceId,
-        status: 'PENDING',
-      },
-      data: {
-        status: value.data.decision,
-        reviewNote: value.data.reviewNote || null,
-        reviewedByUserId: current.userId,
-        reviewedAt: new Date(),
-      },
+    const reviewed = await database.prisma.$transaction(async (tx) => {
+      const previous = await tx.campaignPostingApprovalRequest.findFirst({
+        where: {
+          id: value.data.requestId,
+          workspaceId: currentService.workspaceId,
+          groupId: currentService.serviceId,
+          status: 'PENDING',
+        },
+        select: { id: true, status: true },
+      });
+      if (!previous) return false;
+      const reviewNote = value.data.reviewNote || null;
+      await tx.campaignPostingApprovalRequest.update({
+        where: { id: previous.id },
+        data: {
+          status: value.data.decision,
+          reviewNote,
+          reviewedByUserId: current.userId,
+          reviewedAt: new Date(),
+        },
+      });
+      await tx.campaignPostingApprovalAudit.create({
+        data: {
+          workspaceId: currentService.workspaceId,
+          groupId: currentService.serviceId,
+          requestId: previous.id,
+          action: value.data.decision,
+          beforeData: { status: previous.status },
+          afterData: { status: value.data.decision },
+          note: reviewNote,
+          performedByUserId: current.userId,
+        },
+      });
+      return true;
     });
-    if (result.count !== 1) redirect(`${path(serviceSlug)}?error=missing` as Route);
+    if (!reviewed) redirect(`${path(serviceSlug)}?error=missing` as Route);
     revalidatePath(path(serviceSlug));
     redirect(`${path(serviceSlug)}?reviewed=1` as Route);
   }
@@ -102,6 +147,11 @@ export default async function ServicePostApprovalsPage({
         campaign: { select: { name: true } },
         bunshin: { select: { name: true } },
         requestedBy: { select: { displayName: true } },
+        audits: {
+          select: { action: true, note: true, occurredAt: true },
+          orderBy: { occurredAt: 'desc' },
+          take: 10,
+        },
       },
       orderBy: [{ status: 'asc' }, { requestedAt: 'desc' }],
       take: 100,
@@ -175,6 +225,20 @@ export default async function ServicePostApprovalsPage({
                       {JSON.stringify(request.contentSnapshot, null, 2)}
                     </pre>
                   </details>
+                  {request.audits.length > 0 ? (
+                    <details>
+                      <summary>確認の履歴を見る</summary>
+                      <ul>
+                        {request.audits.map((audit) => (
+                          <li key={`${audit.occurredAt.toISOString()}:${audit.action}`}>
+                            {audit.occurredAt.toLocaleString('ja-JP')}：
+                            {auditActionLabel[audit.action]}
+                            {audit.note ? `（${audit.note}）` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                   {request.status === 'PENDING' ? (
                     <form action={review} className="form-stack">
                       <input type="hidden" name="requestId" value={request.id} />
