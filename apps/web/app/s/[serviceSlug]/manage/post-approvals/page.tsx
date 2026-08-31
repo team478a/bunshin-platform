@@ -102,7 +102,6 @@ export default async function ServicePostApprovalsPage({
         campaign: { select: { name: true } },
         bunshin: { select: { name: true } },
         requestedBy: { select: { displayName: true } },
-        contentSnapshot: true,
       },
       orderBy: [{ status: 'asc' }, { requestedAt: 'desc' }],
       take: 100,
