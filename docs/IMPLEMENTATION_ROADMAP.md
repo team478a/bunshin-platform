@@ -478,7 +478,8 @@ FREE継続率を確認する前に作り込まない。
 - AV-4A: 汎用AI Character Profile、基準画像、Prompt、利用許諾、Version Schema・Core — 完了
 - AV-4B: AI Character、利用許諾、Prompt Version管理API/UI — 完了
 - AV-4C1: 基準画像Private Storage Upload、認証済み表示、監査ログ — 実装済み・レビュー待ち
-- AV-4C2: 動画機能へ基準画像Snapshot接続
+- AV-4C2: 動画機能へ基準画像Snapshot接続 — 実装済み・レビュー待ち
+- AV-4D: 参照画像対応Video Provider Adapter（外部チーム検証後）
 - AV-5: 確認済み完成動画のDistribution / Assignment / 利用権Snapshot Core
 - AV-6: 管理者割当、利用者確認・採用・ダウンロード・投稿完了API/UI
 - AV-7: 媒体・動画・利用者別の登録経路とFunnel Event

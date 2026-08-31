@@ -15,6 +15,16 @@ const project = (): VideoProjectRecord => ({
   ownerUserId: '10000000-0000-4000-8000-000000000005',
   bunshinId: '10000000-0000-4000-8000-000000000006',
   campaignId: null,
+  characterProfileVersionId: '10000000-0000-4000-8000-000000000007',
+  characterProfileSnapshot: { name: '案内役ミナ', version: 1 },
+  characterReferenceSnapshot: [
+    {
+      id: '10000000-0000-4000-8000-000000000008',
+      storageKey: 'private/character-reference.png',
+      sha256: 'a'.repeat(64),
+      mimeType: 'image/png',
+    },
+  ],
   title: '動画',
   platform: 'INSTAGRAM',
   type: 'EXPLAINER',
@@ -52,6 +62,7 @@ describe('Creatomate video render adapter', () => {
     expect(script.elements).toHaveLength(10);
     expect(JSON.stringify(script)).not.toContain('ownerUserId');
     expect(JSON.stringify(script)).not.toContain('説明1');
+    expect(JSON.stringify(script)).not.toContain('private/character-reference.png');
   });
 
   it('rejects AI video scenes from the standard renderer', () => {
@@ -91,6 +102,7 @@ describe('Creatomate video render adapter', () => {
     expect(body.metadata).toBe('30000000-0000-4000-8000-000000000001');
     expect(body.webhook_url).toBe('https://app.example/api/video-renders/webhook?state=opaque');
     expect(serialized).not.toContain('10000000-0000-4000-8000-000000000005');
+    expect(serialized).not.toContain('private/character-reference.png');
   });
 
   it('maps provider progress and accepts only the Creatomate output host', async () => {

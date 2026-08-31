@@ -1802,3 +1802,12 @@
 - Audit: 保存成功時はSHA-256等のメタデータとUPLOADED監査ログを残し、DB保存失敗時はStorage上のファイルを削除する。
 - Scope: 削除・置換UI、顔照合、動画レンダリングへの参照画像固定は後続段階で実装する。
 - Source: `docs/AI_CHARACTER_REFERENCE_UPLOAD_REPORT.md`
+
+# 2026-09-01: 動画プロジェクトは選択時点のAIキャラクターをSnapshotで固定する
+
+- Selection: 動画作成者は、同一Serviceで有効・公開済み・基準画像ありのAI Characterだけを任意選択できる。
+- Snapshot: Character Versionの外見・Prompt・安全ルールと、READY Reference AssetのID・Storage Key・MIME・SHA-256をVideo Projectへ複製する。
+- Isolation: 作成TransactionでworkspaceId・groupId・SERVICE Scopeを再検証し、別ServiceのCharacterや画像を指定できない。
+- History: 既存Video ProjectのSnapshotは、Character設定・画像の後続変更で更新しない。
+- Provider boundary: 現行標準Rendererは内部Prompt・Storage Keyを外部Providerへ渡さない。参照画像対応Providerは別Adapterとして後続導入する。
+- Source: `docs/VIDEO_CHARACTER_REFERENCE_SNAPSHOT_REPORT.md`
