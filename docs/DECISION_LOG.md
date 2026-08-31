@@ -1732,3 +1732,13 @@
 - Measurement: PreferenceとOutcomeを分け、最低母数未達は`INSUFFICIENT_DATA`とする。確認できない因果関係をAIが断定しない。
 - Scope: SNS自動投稿、Kling等の自動生成、報酬計算・支払い、一般サービスへの自動開放は含めない。
 - Source: `docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`
+
+# 2026-08-31: 実践Programの原型・提供条件・参加条件を版管理する
+
+- Template authority: Platform共通TemplateはSUPER_ADMIN、サービス限定Templateは当該サービスのSERVICE_OWNER／SERVICE_ADMINだけが作成・版追加できる。
+- Adoption: サービスは公開済みのPlatform Template Versionまたは自サービス所有Versionだけを採用でき、原型の更新で採用中Versionを差し替えない。
+- Offering: 販売者、価格決定、売上受取、AI原価、サポート、コンテンツ、キャラクターの責任主体をPLATFORM／SERVICEで個別保存する。
+- Snapshot: Enrollmentへ参加時点のOffering条件とGoalを複製し、その後のOffering変更で過去条件を上書きしない。
+- Isolation: Service Program、Offering、Enrollmentは`workspaceId + groupId`の複合外部キーでGroup、Membership、相互Resourceを拘束する。
+- Initial scope: 永続化とCore権限制御のみを実装し、Checkout、請求、返金、売上分配、報酬、管理画面は含めない。
+- Source: `docs/PROGRAM_FOUNDATION_CORE_REPORT.md`

@@ -97,6 +97,177 @@ enum ServiceRegistrationMode {
   CLOSED
 }
 
+model ProgramTemplate {
+  id              String                    @id @default(uuid()) @db.Uuid
+  workspaceId     String                    @map("workspace_id") @db.Uuid
+  ownerGroupId    String?                   @map("owner_group_id") @db.Uuid
+  name            String                    @db.VarChar(160)
+  description     String                    @db.VarChar(2000)
+  category        String                    @db.VarChar(80)
+  targetAudience  String                    @map("target_audience") @db.VarChar(500)
+  status          ProgramTemplateStatus     @default(DRAFT)
+  visibility      ProgramTemplateVisibility @default(PRIVATE)
+  createdByUserId String                    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, ownerGroupId, status])
+  @@map("program_templates")
+}
+
+model ProgramTemplateVersion {
+  id                String               @id @default(uuid()) @db.Uuid
+  workspaceId       String               @map("workspace_id") @db.Uuid
+  programTemplateId String               @map("program_template_id") @db.Uuid
+  version           Int
+  status            ProgramVersionStatus @default(DRAFT)
+  definition        Json
+  createdByUserId   String               @map("created_by_user_id") @db.Uuid
+  publishedAt       DateTime?            @map("published_at") @db.Timestamptz(3)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([programTemplateId, version])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, programTemplateId, status])
+  @@map("program_template_versions")
+}
+
+model ServiceProgram {
+  id                       String               @id @default(uuid()) @db.Uuid
+  workspaceId              String               @map("workspace_id") @db.Uuid
+  groupId                  String               @map("group_id") @db.Uuid
+  programTemplateVersionId String               @map("program_template_version_id") @db.Uuid
+  displayName              String               @map("display_name") @db.VarChar(160)
+  description              String               @db.VarChar(2000)
+  status                   ServiceProgramStatus @default(DRAFT)
+  settings                 Json
+  createdByUserId          String               @map("created_by_user_id") @db.Uuid
+  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, status])
+  @@map("service_programs")
+}
+
+model ProgramOffering {
+  id               String                     @id @default(uuid()) @db.Uuid
+  workspaceId      String                     @map("workspace_id") @db.Uuid
+  groupId          String                     @map("group_id") @db.Uuid
+  serviceProgramId String                     @map("service_program_id") @db.Uuid
+  version          Int
+  status           ProgramOfferingStatus      @default(DRAFT)
+  isFree           Boolean                    @default(true) @map("is_free")
+  priceReference   String?                    @map("price_reference") @db.VarChar(160)
+  seller           ProgramResponsibilityOwner
+  priceOwner       ProgramResponsibilityOwner @map("price_owner")
+  paymentOwner     ProgramResponsibilityOwner @map("payment_owner")
+  apiCostOwner     ProgramResponsibilityOwner @map("api_cost_owner")
+  supportOwner     ProgramResponsibilityOwner @map("support_owner")
+  contentOwner     ProgramResponsibilityOwner @map("content_owner")
+  characterOwner   ProgramResponsibilityOwner @map("character_owner")
+  termsSnapshot    Json                       @map("terms_snapshot")
+  startsAt         DateTime?                  @map("starts_at") @db.Timestamptz(3)
+  endsAt           DateTime?                  @map("ends_at") @db.Timestamptz(3)
+  createdByUserId  String                     @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([serviceProgramId, version])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, status])
+  @@map("program_offerings")
+}
+
+model ProgramEnrollment {
+  id                String                  @id @default(uuid()) @db.Uuid
+  workspaceId       String                  @map("workspace_id") @db.Uuid
+  groupId           String                  @map("group_id") @db.Uuid
+  groupMembershipId String                  @map("group_membership_id") @db.Uuid
+  serviceProgramId  String                  @map("service_program_id") @db.Uuid
+  programOfferingId String                  @map("program_offering_id") @db.Uuid
+  status            ProgramEnrollmentStatus @default(INVITED)
+  supportMode       ProgramSupportMode      @map("support_mode")
+  goalSnapshot      Json                    @map("goal_snapshot")
+  offeringSnapshot  Json                    @map("offering_snapshot")
+  invitedByUserId   String                  @map("invited_by_user_id") @db.Uuid
+  startsAt          DateTime?               @map("starts_at") @db.Timestamptz(3)
+  endsAt            DateTime?               @map("ends_at") @db.Timestamptz(3)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([groupMembershipId, serviceProgramId])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, groupMembershipId, status])
+  @@map("program_enrollments")
+}
+
+model ProgramAuditLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String?  @map("group_id") @db.Uuid
+  resourceType      String   @map("resource_type") @db.VarChar(80)
+  resourceId        String   @map("resource_id") @db.Uuid
+  action            String   @db.VarChar(80)
+  beforeData        Json?    @map("before_data")
+  afterData         Json     @map("after_data")
+  performedByUserId String   @map("performed_by_user_id") @db.Uuid
+  performedAt       DateTime @default(now()) @map("performed_at") @db.Timestamptz(3)
+
+  @@index([workspaceId, groupId, resourceType, resourceId, performedAt])
+  @@map("program_audit_logs")
+}
+
+enum ProgramTemplateStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum ProgramTemplateVisibility {
+  PLATFORM
+  PRIVATE
+}
+
+enum ProgramVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum ServiceProgramStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ProgramOfferingStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  SUPERSEDED
+}
+
+enum ProgramEnrollmentStatus {
+  INVITED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum ProgramSupportMode {
+  IDEA_ONLY
+  GUIDED
+  READY_TO_USE
+}
+
+enum ProgramResponsibilityOwner {
+  PLATFORM
+  SERVICE
+}
+
 enum FeatureDefinitionStatus {
   ACTIVE
   RETIRED
