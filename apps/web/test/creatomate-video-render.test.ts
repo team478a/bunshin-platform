@@ -71,7 +71,7 @@ describe('Creatomate video render adapter', () => {
     value.aiVideoSceneCount = 1;
     const firstScene = value.scenes[0];
     if (!firstScene) throw new Error('AI scene fixture is required');
-    const aiScene = {
+    const aiScene: VideoProjectRecord['scenes'][number] = {
       ...firstScene,
       visualType: 'AI_VIDEO',
       aiProcessingTypes: ['VIDEO_GENERATION'],
