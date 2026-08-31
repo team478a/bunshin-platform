@@ -85,4 +85,11 @@ export class SupabaseFalVideoSceneOutputStorage implements VideoSceneGenerationO
       throw new ApplicationError('INTERNAL_ERROR', '生成動画を保存できませんでした');
     return { storageKey };
   }
+
+  async createDownloadUrl(storageKey: string) {
+    const signed = await this.storage.storage.from(BUCKET).createSignedUrl(storageKey, 5 * 60);
+    if (signed.error)
+      throw new ApplicationError('INTERNAL_ERROR', 'AI動画を開く準備ができませんでした');
+    return signed.data.signedUrl;
+  }
 }
