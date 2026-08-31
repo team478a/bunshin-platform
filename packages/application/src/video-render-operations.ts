@@ -1,5 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import type { JobEnvironment, VideoRenderStatus } from './index';
+import type { VideoSceneGenerationStatus } from './video-ai-scene-generation';
 import type { VideoCompletionNotificationStatus } from './video-render-completion';
 
 export const VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES = [
@@ -31,6 +32,24 @@ export interface VideoRenderOperationsItem {
 export interface VideoRenderOperationsSnapshot {
   counts: Record<VideoRenderStatus, number>;
   items: VideoRenderOperationsItem[];
+  sceneCounts: Record<VideoSceneGenerationStatus, number>;
+  sceneItems: VideoSceneGenerationOperationsItem[];
+}
+
+export interface VideoSceneGenerationOperationsItem {
+  id: string;
+  projectTitle: string;
+  groupName: string;
+  sceneNo: number;
+  provider: string;
+  model: string;
+  status: VideoSceneGenerationStatus;
+  errorCode: string | null;
+  estimatedCostUsdMicros: number | null;
+  actualCostUsdMicros: number | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
 }
 
 export interface VideoRenderOperationsRepository {
