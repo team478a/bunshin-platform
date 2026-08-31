@@ -475,7 +475,8 @@ FREE継続率を確認する前に作り込まない。
 - AV-2: 公式Program作成、サービス採用、無料・招待限定参加API/UI — 実装済み・レビュー待ち
 - AV-3A: Service Support Policy / Member Preference / Goal Definition / Member Goal Schema・Core — 完了
 - AV-3B: 支援方針・利用者希望・目標管理API/UI — 実装済み・レビュー待ち
-- AV-4: 汎用AI Character Profile、基準画像、Prompt、利用許諾、Version Core/API/UI
+- AV-4A: 汎用AI Character Profile、基準画像、Prompt、利用許諾、Version Schema・Core — 実装済み・レビュー待ち
+- AV-4B: AI Character管理API/UI、Private Storage Upload、動画機能接続
 - AV-5: 確認済み完成動画のDistribution / Assignment / 利用権Snapshot Core
 - AV-6: 管理者割当、利用者確認・採用・ダウンロード・投稿完了API/UI
 - AV-7: 媒体・動画・利用者別の登録経路とFunnel Event
