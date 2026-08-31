@@ -69,14 +69,17 @@ describe('Creatomate video render adapter', () => {
     const value = project();
     value.standardComposition = false;
     value.aiVideoSceneCount = 1;
-    value.scenes[0] = {
-      ...value.scenes[0],
+    const firstScene = value.scenes[0];
+    if (!firstScene) throw new Error('AI scene fixture is required');
+    const aiScene = {
+      ...firstScene,
       visualType: 'AI_VIDEO',
       aiProcessingTypes: ['VIDEO_GENERATION'],
     };
+    value.scenes[0] = aiScene;
     const script = buildCreatomateRenderScript(value, [
       {
-        videoSceneId: value.scenes[0].id,
+        videoSceneId: aiScene.id,
         url: 'https://storage.example/signed-scene.mp4?token=short',
       },
     ]);
@@ -91,8 +94,10 @@ describe('Creatomate video render adapter', () => {
     const value = project();
     value.standardComposition = false;
     value.aiVideoSceneCount = 1;
+    const firstScene = value.scenes[0];
+    if (!firstScene) throw new Error('AI scene fixture is required');
     value.scenes[0] = {
-      ...value.scenes[0],
+      ...firstScene,
       visualType: 'AI_VIDEO',
       aiProcessingTypes: ['VIDEO_GENERATION'],
     };
