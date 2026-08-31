@@ -66,6 +66,36 @@ export interface VideoSceneGenerationRepository {
     model: string;
     estimatedCostUsdMicrosPerSecond: number;
   }): Promise<VideoSceneGenerationRecord[] | null>;
+  findForExecution(input: {
+    workspaceId: string;
+    generationId: string;
+  }): Promise<VideoSceneGenerationExecutionContext | null>;
+  markSubmitted(input: {
+    workspaceId: string;
+    generationId: string;
+    externalJobId: string;
+  }): Promise<VideoSceneGenerationRecord | null>;
+  markGenerating(input: {
+    workspaceId: string;
+    generationId: string;
+  }): Promise<VideoSceneGenerationRecord | null>;
+  markSucceeded(input: {
+    workspaceId: string;
+    generationId: string;
+    outputStorageKey: string;
+  }): Promise<VideoSceneGenerationRecord | null>;
+  markFailed(input: {
+    workspaceId: string;
+    generationId: string;
+    errorCode: string;
+  }): Promise<VideoSceneGenerationRecord | null>;
+}
+
+export interface VideoSceneGenerationExecutionContext {
+  generation: VideoSceneGenerationRecord;
+  prompt: string;
+  durationSeconds: 5 | 10;
+  referenceStorageKeys: string[];
 }
 
 export interface VideoSceneGenerationProviderPort {
@@ -85,6 +115,25 @@ export interface VideoSceneGenerationProviderPort {
     | { status: 'FAILED'; errorCode: string }
   >;
 }
+
+export interface VideoSceneReferenceUrlPort {
+  createTemporaryReadUrls(input: { storageKeys: string[] }): Promise<string[]>;
+}
+
+export interface VideoSceneGenerationOutputStoragePort {
+  store(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    generationId: string;
+    sourceUrl: string;
+  }): Promise<{ storageKey: string }>;
+}
+
+export type VideoSceneGenerationExecutionResult =
+  | { status: 'PENDING'; generation: VideoSceneGenerationRecord }
+  | { status: 'SUCCEEDED'; generation: VideoSceneGenerationRecord }
+  | { status: 'FAILED'; generation: VideoSceneGenerationRecord };
 
 const uuid = (value: string, name: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
@@ -182,5 +231,83 @@ export class QueueVideoSceneGenerations {
     if (value.length === 0)
       throw new ApplicationError('VALIDATION_ERROR', 'video project has no AI video scenes');
     return value;
+  }
+}
+
+export class ExecuteVideoSceneGenerationStep {
+  constructor(
+    private readonly repository: VideoSceneGenerationRepository,
+    private readonly provider: VideoSceneGenerationProviderPort,
+    private readonly references: VideoSceneReferenceUrlPort,
+    private readonly storage: VideoSceneGenerationOutputStoragePort,
+  ) {}
+
+  async execute(input: {
+    workspaceId: string;
+    generationId: string;
+  }): Promise<VideoSceneGenerationExecutionResult> {
+    const context = await this.repository.findForExecution(input);
+    if (!context) throw new ApplicationError('NOT_FOUND', 'video scene generation not found');
+    const { generation } = context;
+    if (generation.status === 'SUCCEEDED') return { status: 'SUCCEEDED', generation };
+    if (generation.status === 'FAILED' || generation.status === 'CANCELLED')
+      return { status: 'FAILED', generation };
+    if (generation.status === 'QUEUED') {
+      const referenceImageUrls = await this.references.createTemporaryReadUrls({
+        storageKeys: context.referenceStorageKeys,
+      });
+      const submitted = await this.provider.submit({
+        generationId: generation.id,
+        model: generation.model,
+        prompt: context.prompt,
+        durationSeconds: context.durationSeconds,
+        referenceImageUrls,
+      });
+      const updated = await this.repository.markSubmitted({
+        ...input,
+        externalJobId: boundedText(submitted.externalJobId, 'externalJobId', 255),
+      });
+      if (!updated)
+        throw new ApplicationError('CONFLICT', 'video scene generation transition conflict');
+      return { status: 'PENDING', generation: updated };
+    }
+    if (!generation.externalJobId)
+      throw new ApplicationError('CONFLICT', 'video scene generation external job is missing');
+    const inspected = await this.provider.inspect({
+      model: generation.model,
+      externalJobId: generation.externalJobId,
+    });
+    if (inspected.status === 'SUBMITTED') return { status: 'PENDING', generation };
+    if (inspected.status === 'GENERATING') {
+      const updated = await this.repository.markGenerating(input);
+      if (!updated)
+        throw new ApplicationError('CONFLICT', 'video scene generation transition conflict');
+      return { status: 'PENDING', generation: updated };
+    }
+    if (inspected.status === 'FAILED') {
+      const updated = await this.repository.markFailed({
+        ...input,
+        errorCode: inspected.errorCode,
+      });
+      if (!updated)
+        throw new ApplicationError('CONFLICT', 'video scene generation transition conflict');
+      return { status: 'FAILED', generation: updated };
+    }
+    if (inspected.status !== 'SUCCEEDED')
+      throw new ApplicationError('INTERNAL_ERROR', 'invalid video scene provider status');
+    const stored = await this.storage.store({
+      workspaceId: generation.workspaceId,
+      groupId: generation.groupId,
+      ownerUserId: generation.ownerUserId,
+      generationId: generation.id,
+      sourceUrl: inspected.outputUrl,
+    });
+    const updated = await this.repository.markSucceeded({
+      ...input,
+      outputStorageKey: stored.storageKey,
+    });
+    if (!updated)
+      throw new ApplicationError('CONFLICT', 'video scene generation transition conflict');
+    return { status: 'SUCCEEDED', generation: updated };
   }
 }

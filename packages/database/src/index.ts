@@ -120,6 +120,7 @@ import type {
   VideoSceneRecord,
   VideoAiProcessingType,
   VideoSceneGenerationRecord,
+  VideoSceneGenerationExecutionContext,
   VideoSceneGenerationRepository,
   VideoAiProviderCostPolicyRepository,
   VideoPlatform,
@@ -13710,6 +13711,114 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
       );
       return rows.map(videoSceneGenerationRecord);
     });
+  }
+
+  async findForExecution(input: Parameters<VideoSceneGenerationRepository['findForExecution']>[0]) {
+    const row = await this.client.videoSceneGeneration.findFirst({
+      where: { id: input.generationId, workspaceId: input.workspaceId },
+      include: { project: { select: { characterReferenceSnapshot: true } } },
+    });
+    if (!row) return null;
+    const snapshot =
+      row.inputSnapshot !== null &&
+      typeof row.inputSnapshot === 'object' &&
+      !Array.isArray(row.inputSnapshot)
+        ? (row.inputSnapshot as Record<string, unknown>)
+        : {};
+    const scene =
+      snapshot.scene !== null &&
+      typeof snapshot.scene === 'object' &&
+      !Array.isArray(snapshot.scene)
+        ? (snapshot.scene as Record<string, unknown>)
+        : {};
+    const prompt = typeof scene.visualPrompt === 'string' ? scene.visualPrompt.trim() : '';
+    const durationMs = typeof scene.durationMs === 'number' ? scene.durationMs : 0;
+    if (!prompt || durationMs < 1 || durationMs > 10_000) return null;
+    const references = Array.isArray(row.project.characterReferenceSnapshot)
+      ? row.project.characterReferenceSnapshot
+          .map((value) =>
+            value !== null && typeof value === 'object' && !Array.isArray(value)
+              ? (value as Record<string, unknown>).storageKey
+              : null,
+          )
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : [];
+    return {
+      generation: videoSceneGenerationRecord(row),
+      prompt,
+      durationSeconds: durationMs <= 5_000 ? 5 : 10,
+      referenceStorageKeys: references.slice(0, 7),
+    } satisfies VideoSceneGenerationExecutionContext;
+  }
+
+  async markSubmitted(input: Parameters<VideoSceneGenerationRepository['markSubmitted']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: { id: input.generationId, workspaceId: input.workspaceId, status: 'QUEUED' },
+      data: {
+        status: 'SUBMITTED',
+        externalJobId: input.externalJobId,
+        startedAt: new Date(),
+        errorCode: null,
+      },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async markGenerating(input: Parameters<VideoSceneGenerationRepository['markGenerating']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        status: { in: ['SUBMITTED', 'GENERATING'] },
+      },
+      data: { status: 'GENERATING' },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async markSucceeded(input: Parameters<VideoSceneGenerationRepository['markSucceeded']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        status: { in: ['SUBMITTED', 'GENERATING'] },
+      },
+      data: {
+        status: 'SUCCEEDED',
+        outputStorageKey: input.outputStorageKey,
+        completedAt: new Date(),
+        errorCode: null,
+      },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async markFailed(input: Parameters<VideoSceneGenerationRepository['markFailed']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        status: { in: ['QUEUED', 'SUBMITTED', 'GENERATING'] },
+      },
+      data: { status: 'FAILED', errorCode: input.errorCode.slice(0, 80), completedAt: new Date() },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
   }
 }
 
