@@ -1718,3 +1718,17 @@
 - Boundary: ClientにgroupIdや別のserviceIdを生成・指定させず、既存Group IDをTransaction内でサービス境界として確定する。
 - Default: PRIVATE、INVITATION_ONLY、Email有効、LINE無効、Powered by表示から開始する。
 - Source: `docs/MULTI_SERVICE_ADMIN_REPORT.md`
+
+# 2026-08-31: AIキャラクター動画実証は支援方法と利用者別ゴールを分離する
+
+- Program: AI女性キャラクター、ダンス、副業を固定機能にせず、Program Template、Service Program、Offering、Enrollmentの汎用階層で扱う。第一号Programとして自社副業サービスで実証する。
+- Commerce roles: programOwner、seller、priceOwner、paymentOwner、apiCostOwner、supportOwner、contentOwner、characterOwnerを分離し、同一主体であることを前提にしない。
+- Initial sales: 初期実証は無料・招待限定・手動Enrollmentとし、Checkout、請求、返金、売上分配、代理店報酬は販売プランPhaseへ分離する。
+- Offering: 利用者は`IDEA_ONLY / GUIDED / READY_TO_USE`からサービスが許可した支援方法を選ぶ。GUIDEDは作り方・台本・Prompt、READY_TO_USEは運営確認済み完成動画を提供する。
+- Video: 初期実証では生成AI動画Providerを自動実行せず、既存Video Renderを基に運営が確認した完成動画を対象利用者へ明示的に割り当てる。
+- Goal: ゴールはサービスへ固定せず、サービス管理者の候補と利用者の目標値・期限・補足を組み合わせる。行動、集客、事業目標を分離する。
+- Context: ACTIVE Goalは同じService・Membershipの週間計画とDaily Missionだけへ入力データとして渡し、別サービスや別利用者へ共有しない。
+- Attribution: 外部成果計測URLとは別に、媒体・動画・投稿者別の登録経路Codeとサービス内Funnel Eventを記録する。URLへ個人情報を含めない。
+- Measurement: PreferenceとOutcomeを分け、最低母数未達は`INSUFFICIENT_DATA`とする。確認できない因果関係をAIが断定しない。
+- Scope: SNS自動投稿、Kling等の自動生成、報酬計算・支払い、一般サービスへの自動開放は含めない。
+- Source: `docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`
