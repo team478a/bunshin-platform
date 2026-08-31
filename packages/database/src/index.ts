@@ -121,6 +121,7 @@ import type {
   VideoAiProcessingType,
   VideoSceneGenerationRecord,
   VideoSceneGenerationRepository,
+  VideoAiProviderCostPolicyRepository,
   VideoPlatform,
   VideoPlanningContextRepository,
   VideoRenderRecord,
@@ -2274,6 +2275,58 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
       encryptedApiKey: row.encryptedApiKey,
       dailySpentUsdMicros: safeNumber(daily._sum.estimatedCostUsdMicros),
       monthlySpentUsdMicros: safeNumber(monthly._sum.estimatedCostUsdMicros),
+    };
+  }
+}
+
+/**
+ * Keeps video-generation budget reservation separate from general AI text usage.
+ * The estimated amount is deliberately retained for every queued request so a failed
+ * provider response cannot silently make the available budget look larger than it is.
+ */
+export class PrismaVideoAiProviderCostPolicyRepository implements VideoAiProviderCostPolicyRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async findActive(input: Parameters<VideoAiProviderCostPolicyRepository['findActive']>[0]) {
+    const configuration = await this.client.aiProviderConfiguration.findFirst({
+      where: {
+        environment: input.environment,
+        provider: input.provider,
+        model: input.model,
+        status: 'ACTIVE',
+        globallyPaused: false,
+        encryptedApiKey: { not: null },
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    });
+    if (!configuration) return null;
+    const total = async (from: Date) => {
+      const value = await this.client.videoSceneGeneration.aggregate({
+        where: {
+          provider: input.provider,
+          model: input.model,
+          createdAt: { gte: from, lt: input.now },
+        },
+        _sum: { estimatedCostUsdMicros: true },
+      });
+      return value._sum.estimatedCostUsdMicros ?? 0;
+    };
+    const [dailySpentUsdMicros, monthlySpentUsdMicros] = await Promise.all([
+      total(input.dailyFrom),
+      total(input.monthlyFrom),
+    ]);
+    return {
+      policy: {
+        provider: input.provider,
+        model: input.model,
+        globallyPaused: configuration.globallyPaused,
+        dailyBudgetUsdMicros: configuration.dailyBudgetUsdMicros,
+        monthlyBudgetUsdMicros: configuration.monthlyBudgetUsdMicros,
+        maxSceneCostUsdMicros: configuration.requestCostUsdMicros,
+      },
+      dailySpentUsdMicros,
+      monthlySpentUsdMicros,
     };
   }
 }
