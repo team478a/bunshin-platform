@@ -1762,3 +1762,13 @@
 - Isolation: 全Resourceを`workspaceId + groupId`の複合外部キーでProgram、Enrollment、Membershipへ拘束する。
 - History: 支援方針の旧版と終了済み目標を削除せず、監査・改善判断に利用できる状態で保持する。
 - Source: `docs/PROGRAM_GOALS_CORE_REPORT.md`
+
+# 2026-08-31: Program設定を管理者と参加者の別画面へ接続する
+
+- Manager: SERVICE_OWNER／SERVICE_ADMINは自サービスの支援方針と目標候補だけを管理する。
+- Member: ACTIVE Membership本人は、自分のACTIVE Enrollmentに対する希望と個別目標だけを更新する。
+- Choice: 利用者が支援方法を選べるのはACTIVE Policyで許可されている場合だけとする。
+- Goal history: 新しい個別目標を設定した場合、従来のACTIVE目標を削除せずCANCELLEDとして残す。
+- UX: 管理者には「支援方法と目標候補」、参加者には「参加中のプログラムと目標」と平易な名称で表示する。
+- Security: Same Origin、Session、Workspace、Service、Membership、Enrollmentをサーバー側で再検証する。
+- Source: `docs/PROGRAM_GOALS_UI_REPORT.md`

@@ -24,6 +24,7 @@ describe('service management role authorization', () => {
     'settings',
     'line',
     'programs',
+    'program-goals',
   ])('protects the %s management entry with the shared resolver', (section) => {
     const page = source(`app/s/[serviceSlug]/manage/${section}/page.tsx`);
     expect(page).toContain('resolveManagedServiceContext');
