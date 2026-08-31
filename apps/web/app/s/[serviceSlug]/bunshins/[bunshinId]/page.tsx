@@ -123,7 +123,21 @@ export default async function ServiceBunshinDetailPage({
       platform: socialProfiles.find(({ id }) => id === mission.socialProfileId)?.platform ?? null,
       postedAt: missionStates[index]!.post?.postedAt.toISOString() ?? null,
       feedback: missionStates[index]!.feedback?.rating ?? null,
-      trendContext: null,
+      trendContext: mission.trendContext
+        ? {
+            whyNow: mission.trendContext.snapshot.candidate.whyNow,
+            fitReason: mission.trendContext.snapshot.candidate.fitReason,
+            researchedAt: mission.trendContext.createdAt.toISOString(),
+            evidence: mission.trendContext.snapshot.evidence.map(
+              ({ sourceUrl, sourceTitle, publishedAt, retrievedAt }) => ({
+                sourceUrl,
+                sourceTitle,
+                publishedAt,
+                retrievedAt,
+              }),
+            ),
+          }
+        : null,
       externalLinkUsage: mission.linkUsage
         ? {
             linkName: mission.linkUsage.linkName,

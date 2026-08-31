@@ -157,7 +157,7 @@ function displayDate(value: string) {
     : new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(date);
 }
 
-function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
+export function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
   const context = mission.trendContext;
   if (!context) return null;
   return (
