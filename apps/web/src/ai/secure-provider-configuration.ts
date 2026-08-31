@@ -88,10 +88,12 @@ export class AesGcmAiProviderSecretCrypto implements AiProviderSecretCryptoPort 
 
 export class AiProviderConnectionTestAdapter {
   async validate(input: {
-    provider: 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE';
+    provider: 'OPENAI' | 'GROK' | 'EXA' | 'FIRECRAWL' | 'CREATOMATE' | 'FAL' | 'RUNWAY';
     apiKey: string;
     model: string | null;
   }) {
+    if (input.provider === 'FAL' || input.provider === 'RUNWAY')
+      return { success: false, errorCategory: 'VIDEO_PROVIDER_CONNECTION_NOT_IMPLEMENTED' };
     const request =
       input.provider === 'OPENAI' || input.provider === 'GROK'
         ? fetch(
