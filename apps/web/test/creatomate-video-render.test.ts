@@ -70,13 +70,13 @@ describe('Creatomate video render adapter', () => {
     value.standardComposition = false;
     value.aiVideoSceneCount = 1;
     value.scenes[0] = {
-      ...value.scenes[0]!,
+      ...value.scenes[0],
       visualType: 'AI_VIDEO',
       aiProcessingTypes: ['VIDEO_GENERATION'],
     };
     const script = buildCreatomateRenderScript(value, [
       {
-        videoSceneId: value.scenes[0]!.id,
+        videoSceneId: value.scenes[0].id,
         url: 'https://storage.example/signed-scene.mp4?token=short',
       },
     ]);
@@ -92,7 +92,7 @@ describe('Creatomate video render adapter', () => {
     value.standardComposition = false;
     value.aiVideoSceneCount = 1;
     value.scenes[0] = {
-      ...value.scenes[0]!,
+      ...value.scenes[0],
       visualType: 'AI_VIDEO',
       aiProcessingTypes: ['VIDEO_GENERATION'],
     };

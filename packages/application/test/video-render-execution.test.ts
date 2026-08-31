@@ -167,7 +167,7 @@ describe('video render execution', () => {
       project: aiProject,
       aiSceneSources: [
         {
-          videoSceneId: aiProject.scenes[0]!.id,
+          videoSceneId: aiProject.scenes[0].id,
           storageKey: 'private/scene.mp4',
         },
       ],
@@ -191,7 +191,7 @@ describe('video render execution', () => {
       expect.objectContaining({
         aiSceneSources: [
           {
-            videoSceneId: aiProject.scenes[0]!.id,
+            videoSceneId: aiProject.scenes[0].id,
             url: 'https://storage.example/private/scene.mp4?short=1',
           },
         ],
