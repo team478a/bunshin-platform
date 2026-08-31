@@ -1792,3 +1792,13 @@
 - Audit: Profile、License、Prompt Versionの作成・公開を専用Audit Logへ記録する。
 - UX: 法務用語だけを並べず、「仕事で使える」「加工できる」「参加者へ渡せる」と平易に表示する。
 - Source: `docs/AI_CHARACTER_ADMIN_REPORT.md`
+
+# 2026-09-01: AIキャラクターの基準画像は非公開保存し、権限確認後だけ表示する
+
+- Storage: 基準画像はPrivate Supabase Storageへ保存し、公開URL・共有URLをDBへ保存しない。
+- Validation: JPEG、PNG、WebPのみを受け付け、容量・安全なファイル名・実データの形式をサーバー側で検証する。
+- Authorization: アップロードはSame Origin、ログイン、サービス管理権限、公開済みCharacter Version、権利確認を必須とする。
+- Display: 画像はログイン済みで同一Serviceの管理権限を持つ利用者だけへ認証済みAPIから配信し、ブラウザキャッシュを禁止する。
+- Audit: 保存成功時はSHA-256等のメタデータとUPLOADED監査ログを残し、DB保存失敗時はStorage上のファイルを削除する。
+- Scope: 削除・置換UI、顔照合、動画レンダリングへの参照画像固定は後続段階で実装する。
+- Source: `docs/AI_CHARACTER_REFERENCE_UPLOAD_REPORT.md`
