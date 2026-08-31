@@ -30,13 +30,6 @@ export type DailyMissionView = {
   trendContext: {
     whyNow: string;
     fitReason: string;
-    researchedAt: string;
-    evidence: Array<{
-      sourceUrl: string;
-      sourceTitle: string;
-      publishedAt: string | null;
-      retrievedAt: string;
-    }>;
   } | null;
   externalLinkUsage?: {
     linkName: string;
@@ -150,13 +143,6 @@ export function MissionIdea({ mission }: { mission: DailyMissionView }) {
   );
 }
 
-function displayDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ''
-    : new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(date);
-}
-
 export function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
   const context = mission.trendContext;
   if (!context) return null;
@@ -174,23 +160,6 @@ export function MissionTrendContext({ mission }: { mission: DailyMissionView }) 
           <dd>{context.fitReason}</dd>
         </div>
       </dl>
-      <details>
-        <summary>参考にした情報を見る</summary>
-        <ul>
-          {context.evidence.map((item) => (
-            <li key={item.sourceUrl}>
-              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
-                {item.sourceTitle}
-              </a>
-              <small>
-                {item.publishedAt && `公開：${displayDate(item.publishedAt)} / `}
-                確認：{displayDate(item.retrievedAt)}
-              </small>
-            </li>
-          ))}
-        </ul>
-        <p>情報を確認した日：{displayDate(context.researchedAt)}</p>
-      </details>
     </aside>
   );
 }
