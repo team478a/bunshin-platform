@@ -466,6 +466,22 @@ FREE継続率を確認する前に作り込まない。
 
 標準動画は静止画・字幕・音声・BGM・文字の動きで構成し、AI動画生成を含めない。外部レンダリングから開始し、完成したRenderだけを将来の利用回数対象とする。課金・決済は本Phaseへ含めない。
 
+## Phase AV: AIキャラクター動画 登録獲得実証
+
+状態: AV-0設計文書作成済み・レビュー待ち。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
+
+- AV-0: 作り方／完成品の提供方式、利用者別ゴール、登録経路、KPI、権限、停止条件 — 文書作成済み
+- AV-1: Service Support Policy / Member Preference / Goal Definition / Member Goal Core
+- AV-2: サービス管理・利用者設定API/UI、週間計画・Daily Mission Context接続
+- AV-3: 確認済み完成動画のDistribution / Assignment / 利用権Snapshot Core
+- AV-4: 管理者割当、利用者確認・採用・ダウンロード・投稿完了API/UI
+- AV-5: 媒体・動画・利用者別の登録経路とFunnel Event
+- AV-6: 美女・共感・実演Variant、手動SNS実績、最低母数、7日・30日比較
+- AV-7: 確認を必須とする週次改善提案
+- AV-8: Feature Flagによる自社サービス・5〜10人限定検証
+
+初期実証ではKling等の生成AI動画Providerを自動実行せず、運営が確認した完成動画の配布から開始する。SNS投稿は本人が行い、成果報酬計算、支払い、顧客情報管理を含めない。
+
 ## Phase 7-K: 販売プラン・契約・利用権基盤
 
 状態: K0文書完了。テストグループ専用LINEの先行実装は完了し、CI・Migrationレビュー待ち。人間レビュー前にK1以降へ進まない。詳細は`docs/SALES_PLAN_REBASELINE.md`を正本候補とする。
