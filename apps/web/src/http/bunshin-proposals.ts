@@ -51,7 +51,7 @@ const labels = {
   },
 } as const;
 
-function fallback(input: BunshinProposalInput): BunshinProposal[] {
+export function fallbackBunshinProposals(input: BunshinProposalInput): BunshinProposal[] {
   return [
     {
       name: 'やさしい伴走者',
@@ -111,10 +111,10 @@ export async function bunshinProposalsResponse(
         }).generate(input);
         source = 'AI';
       } catch {
-        proposals = fallback(input);
+        proposals = fallbackBunshinProposals(input);
       }
     } catch {
-      proposals = fallback(input);
+      proposals = fallbackBunshinProposals(input);
     }
     return Response.json(
       { data: { proposals, source }, requestId },
