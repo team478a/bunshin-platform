@@ -77,6 +77,24 @@ export default async function VideoProjectPage({
     project.characterProfileSnapshot,
     project.characterReferenceSnapshot,
   );
+  const sceneGenerations = project.standardComposition
+    ? []
+    : await db.prisma.videoSceneGeneration.findMany({
+        where: {
+          workspaceId: project.workspaceId,
+          groupId: project.groupId,
+          videoProjectId: project.id,
+          ownerUserId: actor.userId,
+        },
+        select: {
+          id: true,
+          videoSceneId: true,
+          status: true,
+          errorCode: true,
+          outputStorageKey: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
 
   const serviceSlug = (await searchParams)?.service;
   return (
@@ -217,6 +235,37 @@ export default async function VideoProjectPage({
                   />
                 </>
               )}
+            </section>
+          ) : null}
+          {!project.standardComposition && sceneGenerations.length > 0 ? (
+            <section className="settings-card">
+              <h2>AI動画の場面</h2>
+              <p>作成中の場面は、少し時間をおいてこの画面を開き直してください。</p>
+              {sceneGenerations.map((generation) => {
+                const scene = project.scenes.find((item) => item.id === generation.videoSceneId);
+                const label =
+                  generation.status === 'SUCCEEDED'
+                    ? 'できました'
+                    : generation.status === 'FAILED'
+                      ? '作れませんでした'
+                      : '作っています';
+                return (
+                  <p key={generation.id}>
+                    {scene ? `${scene.sceneNo}番目` : '場面'}：{label}
+                    {generation.status === 'SUCCEEDED' && generation.outputStorageKey ? (
+                      <>
+                        {' '}
+                        <a
+                          href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/ai-scenes/${generation.id}/download`}
+                        >
+                          この場面を開く
+                        </a>
+                      </>
+                    ) : null}
+                    {generation.status === 'FAILED' ? ' 管理者が設定を確認します。' : null}
+                  </p>
+                );
+              })}
             </section>
           ) : null}
           {['QUEUED', 'RENDERING'].includes(project.status) ? (
