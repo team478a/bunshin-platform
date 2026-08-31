@@ -23,6 +23,7 @@ describe('service management role authorization', () => {
     'external-tracking',
     'settings',
     'line',
+    'programs',
   ])('protects the %s management entry with the shared resolver', (section) => {
     const page = source(`app/s/[serviceSlug]/manage/${section}/page.tsx`);
     expect(page).toContain('resolveManagedServiceContext');
