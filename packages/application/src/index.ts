@@ -2408,3 +2408,4 @@ export * from './service-staff-role';
 export * from './program-core';
 export * from './program-goals-core';
 export * from './ai-character-profile';
+export * from './service-line-broadcast';

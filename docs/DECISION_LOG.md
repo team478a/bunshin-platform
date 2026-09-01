@@ -1848,3 +1848,10 @@
 - Scheduling: サービス管理者は表示開始・終了を任意で設定でき、開始前・終了後のお知らせは参加者ホームに表示しない。
 - Timezone: 管理画面の日時入力は日本時間としてサーバーでISO日時へ変換して保存する。
 - Boundary: 任意の一斉LINE送信、配信予約、配信上限、同意、配信履歴は別の配信機能として扱う。今回のお知らせ予約では送信しない。
+
+# 2026-09-01: 任意のサービスLINE配信は投稿通知と別Resourceで管理する
+
+- Separation: 運営者の任意LINE配信はDaily MissionやReminderの通知テーブルを流用せず、下書き・予約・取消・完了を持つService Line Broadcastとして分離する。
+- Audience: 初期対象は同一サービスのACTIVE PARTICIPANTだけとし、任意ユーザーID・別サービス・外部リストの指定を許可しない。
+- Privacy: Broadcast本文、対象Membership、送信結果だけを保存し、LINEユーザーID、Access Token、顧客情報はBroadcastへ保存しない。
+- Safety: 実送信はこのCore PRの対象外とする。次段階で、同意、停止中設定、サービス別LINE設定、上限、配信結果を確認してからRecipientを作成・実行する。

@@ -1083,6 +1083,25 @@ enum LineMessageKind {
   REMINDER
 }
 
+enum ServiceLineBroadcastStatus {
+  DRAFT
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum ServiceLineBroadcastAudience {
+  ACTIVE_PARTICIPANTS
+}
+
+enum ServiceLineBroadcastRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
 enum LineConnectionStatus {
   ACTIVE
   DISCONNECTED
@@ -5163,6 +5182,65 @@ model LineMessageDeliveryAttempt {
   @@unique([deliveryId, attemptNumber])
   @@index([status, attemptedAt])
   @@map("line_message_delivery_attempts")
+}
+
+/// Service-managed LINE broadcasts are separate from mission reminders.
+/// The broadcast body never stores LINE access tokens or recipient LINE IDs.
+model ServiceLineBroadcast {
+  id                String                      @id @default(uuid()) @db.Uuid
+  workspaceId       String                      @map("workspace_id") @db.Uuid
+  groupId           String                      @map("group_id") @db.Uuid
+  title             String                      @db.VarChar(120)
+  message           String                      @db.Text
+  audience          ServiceLineBroadcastAudience @default(ACTIVE_PARTICIPANTS)
+  status            ServiceLineBroadcastStatus  @default(DRAFT)
+  scheduledAt       DateTime?                   @map("scheduled_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?                   @map("cancelled_at") @db.Timestamptz(6)
+  completedAt       DateTime?                   @map("completed_at") @db.Timestamptz(6)
+  createdByUserId   String                      @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String                      @map("updated_by_user_id") @db.Uuid
+  createdAt         DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, status, scheduledAt])
+  @@index([workspaceId, groupId, createdAt])
+  @@map("service_line_broadcasts")
+}
+
+model ServiceLineBroadcastRecipient {
+  id                String                              @id @default(uuid()) @db.Uuid
+  workspaceId       String                              @map("workspace_id") @db.Uuid
+  groupId           String                              @map("group_id") @db.Uuid
+  broadcastId       String                              @map("broadcast_id") @db.Uuid
+  groupMembershipId String                              @map("group_membership_id") @db.Uuid
+  userId            String                              @map("user_id") @db.Uuid
+  status            ServiceLineBroadcastRecipientStatus @default(PENDING)
+  deliveredAt       DateTime?                           @map("delivered_at") @db.Timestamptz(6)
+  errorCategory     String?                             @map("error_category") @db.VarChar(80)
+  createdAt         DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([broadcastId, groupMembershipId])
+  @@index([workspaceId, groupId, broadcastId, status])
+  @@index([workspaceId, groupId, userId, createdAt])
+  @@map("service_line_broadcast_recipients")
+}
+
+model ServiceLineBroadcastAuditLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  groupId           String   @map("group_id") @db.Uuid
+  broadcastId       String   @map("broadcast_id") @db.Uuid
+  action            String   @db.VarChar(40)
+  beforeData        Json?    @map("before_data")
+  afterData         Json     @map("after_data")
+  reason            String   @db.VarChar(1000)
+  performedByUserId String   @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@index([workspaceId, groupId, broadcastId, occurredAt])
+  @@map("service_line_broadcast_audit_logs")
 }
 
 model MissionDeepLinkState {
