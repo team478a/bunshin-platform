@@ -290,6 +290,14 @@ export function VideoDeliveryManager({
         <p>
           確認依頼：{deliveries.length}件 ／ LINE通知の確認が必要：{needsActionCount}件
         </p>
+        {deliveries.length > 0 ? (
+          <a
+            className="button button--secondary"
+            href={`/api/services/${encodeURIComponent(serviceSlug)}/video-deliveries/export`}
+          >
+            配布状況をCSVでダウンロード
+          </a>
+        ) : null}
         <section className="settings-card">
           <h3>いまの進み具合</h3>
           <p>
