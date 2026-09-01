@@ -1835,3 +1835,10 @@
 - Isolation: Video Projectを`workspaceId`、`groupId`、所有者、Bunshin、Campaignで再検証し、別Serviceや別利用者のSnapshotを企画に混入させない。
 - Rendering: 現行の標準動画は基準画像を使ったAI動画生成を行わない。参照画像対応Provider Adapterは外部チームの検証後に導入する。
 - Source: `docs/VIDEO_CHARACTER_REFERENCE_SNAPSHOT_REPORT.md`
+
+# 2026-09-01: サービス運営者のお知らせは参加者ホームだけへ表示する
+
+- Scope: サービス管理者はサービス設定から見出し・内容・表示の有無を管理できる。お知らせはログイン済み参加者の同一サービスホームだけへ表示する。
+- Storage: 軽量な運営案内として既存のサービス登録設定JSONへ保存し、個人情報・既読履歴・配信履歴は作らない。
+- Safety: 表示を有効にする場合は見出しと内容をサーバー側で必須とし、サービス設定更新の既存権限・監査理由をそのまま利用する。
+- Boundary: お知らせの表示・非表示はLINE送信、機能の有効・無効、参加受付の停止を行わない。これらは既存の専用設定で管理する。
