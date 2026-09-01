@@ -1565,7 +1565,6 @@ export class PrismaLineDeliveryRetryRepository implements LineDeliveryRetryRepos
           },
           select: { id: true },
         });
-        if (!admin) return null;
         const delivery = await tx.lineMessageDelivery.findFirst({
           where: {
             id: input.deliveryId,
@@ -1581,6 +1580,22 @@ export class PrismaLineDeliveryRetryRepository implements LineDeliveryRetryRepos
           },
         });
         if (!delivery) return null;
+        if (input.groupId !== undefined && delivery.groupId !== input.groupId) return null;
+        if (!admin) {
+          if (delivery.groupId === null) return null;
+          const manager = await tx.groupMembership.findFirst({
+            where: {
+              workspaceId: delivery.workspaceId,
+              groupId: delivery.groupId,
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { status: 'ACTIVE', serviceConfiguration: { isNot: null } },
+            },
+            select: { id: true },
+          });
+          if (!manager) return null;
+        }
         const job = await tx.job.create({
           data: {
             environment: input.environment,
