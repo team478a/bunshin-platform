@@ -33,10 +33,30 @@ const schema = z
     trendResearchEnabled: z.boolean().default(true),
     welcomeTitle: z.string().max(120).default(''),
     welcomeMessage: z.string().max(1000).default(''),
+    announcementEnabled: z.boolean().default(false),
+    announcementTitle: z.string().max(120).default(''),
+    announcementMessage: z.string().max(1000).default(''),
     onboardingQuestions: z.array(z.string().min(1).max(200)).max(7).default([]),
     reason: z.string().min(1).max(1000),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (!value.announcementEnabled) return;
+    if (!value.announcementTitle.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['announcementTitle'],
+        message: 'お知らせを表示する場合は見出しを入力してください。',
+      });
+    }
+    if (!value.announcementMessage.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['announcementMessage'],
+        message: 'お知らせを表示する場合は内容を入力してください。',
+      });
+    }
+  });
 
 export async function updateServiceSettingsResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
@@ -91,6 +111,9 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
               : {}),
             welcomeTitle: value.welcomeTitle.trim(),
             welcomeMessage: value.welcomeMessage.trim(),
+            announcementEnabled: value.announcementEnabled,
+            announcementTitle: value.announcementTitle.trim(),
+            announcementMessage: value.announcementMessage.trim(),
           },
           surveyConfig: { questions: value.onboardingQuestions.map((item) => item.trim()) },
         },

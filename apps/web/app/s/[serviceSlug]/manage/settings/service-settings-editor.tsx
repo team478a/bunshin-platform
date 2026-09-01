@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
+import {
+  readServiceAnnouncement,
+  readServiceOnboardingSettings,
+} from '../../../../../src/services/service-onboarding-settings';
 
 export interface ServiceSettingsValue {
   displayName: string;
@@ -43,6 +46,7 @@ export function ServiceSettingsEditor({
     value.registration.onboardingConfig,
     value.registration.surveyConfig,
   );
+  const announcement = readServiceAnnouncement(value.registration.onboardingConfig);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,6 +82,9 @@ export function ServiceSettingsEditor({
           trendResearchEnabled: data.has('trendResearchEnabled'),
           welcomeTitle: text('welcomeTitle'),
           welcomeMessage: text('welcomeMessage'),
+          announcementEnabled: data.has('announcementEnabled'),
+          announcementTitle: text('announcementTitle'),
+          announcementMessage: text('announcementMessage'),
           onboardingQuestions: text('onboardingQuestions')
             .split(/\r?\n/)
             .map((item) => item.trim())
@@ -244,6 +251,35 @@ export function ServiceSettingsEditor({
           オフにすると、このサービスの新しい話題調査と、話題を使った投稿案への反映を止めます。すでに作られた投稿案は消えません。
         </small>
         <small>調査サービスや費用の設定は、システム管理者が管理します。</small>
+      </fieldset>
+      <fieldset>
+        <legend>参加者へのお知らせ</legend>
+        <label>
+          <input name="announcementEnabled" type="checkbox" defaultChecked={announcement.enabled} />{' '}
+          サービスホームにお知らせを表示する
+        </label>
+        <label>
+          見出し
+          <input
+            name="announcementTitle"
+            maxLength={120}
+            defaultValue={announcement.title}
+            placeholder="例：今週の投稿テーマについて"
+          />
+        </label>
+        <label>
+          内容
+          <textarea
+            name="announcementMessage"
+            maxLength={1000}
+            rows={4}
+            defaultValue={announcement.message}
+            placeholder="参加者に伝えたいことを、やさしい言葉で書きます。"
+          />
+        </label>
+        <small>
+          メンテナンスや今週の案内に使えます。表示を止めると参加者のホームから非表示になります。LINE送信や機能停止は行いません。
+        </small>
       </fieldset>
       <fieldset>
         <legend>初めて参加する人への案内</legend>

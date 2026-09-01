@@ -13,7 +13,10 @@ import {
   weeklyCalendar,
 } from '../../../../src/activity-progress';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
-import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import {
+  readServiceAnnouncement,
+  readServiceOnboardingSettings,
+} from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -81,6 +84,7 @@ export default async function ServiceMemberHome({
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
   );
+  const announcement = readServiceAnnouncement(service.configuration.registration.onboardingConfig);
   if (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) {
     redirect(`/s/${service.configuration.slug}/onboarding` as Route);
   }
@@ -154,6 +158,14 @@ export default async function ServiceMemberHome({
           <h1>{service.configuration.displayName}</h1>
           <p>{membership.user.displayName}さん、今日も一緒に進めましょう。</p>
         </header>
+
+        {announcement.enabled && announcement.title && announcement.message && (
+          <section className="service-entry__card" aria-labelledby="service-announcement-title">
+            <p className="eyebrow">サービスからのお知らせ</p>
+            <h2 id="service-announcement-title">{announcement.title}</h2>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{announcement.message}</p>
+          </section>
+        )}
 
         <section className="service-entry__card">
           <h2>今週の進み具合</h2>
