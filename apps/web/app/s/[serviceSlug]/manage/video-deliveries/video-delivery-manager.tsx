@@ -10,6 +10,7 @@ export type VideoDeliveryCandidate = {
   title: string;
   completedAt: string | null;
   enrollments: Array<{ id: string; label: string }>;
+  replaceableDeliveries: Array<{ id: string; title: string; assignedAt: string }>;
 };
 
 export type VideoDeliveryStatusRow = {
@@ -26,6 +27,8 @@ export type VideoDeliveryStatusRow = {
   notificationErrorCode: string | null;
   notificationAttemptCount: number;
   notifiedAt: string | null;
+  replacesVideoDeliveryId: string | null;
+  replacementDeliveryId: string | null;
   auditEvents: Array<{ eventType: string; occurredAt: string; detail: string | null }>;
 };
 
@@ -121,6 +124,7 @@ export function VideoDeliveryManager({
             programEnrollmentId: data.get('programEnrollmentId') || null,
             videoProjectId: candidate.videoProjectId,
             videoRenderId: candidate.videoRenderId,
+            replacesVideoDeliveryId: data.get('replacesVideoDeliveryId') || null,
             usageMessage: data.get('usageMessage'),
             expiresAt,
           }),
@@ -141,8 +145,12 @@ export function VideoDeliveryManager({
         throw new Error(result.error?.message ?? '利用できる状態にできませんでした。');
       setMessage(
         result.notification === 'SENT'
-          ? '利用者が確認できる状態にし、公式LINEでお知らせしました。'
-          : '利用者が確認できる状態にしました。LINE通知は送られていないため、設定または本人のLINE連携を確認してください。',
+          ? data.get('replacesVideoDeliveryId')
+            ? '以前の動画を停止したまま、新しい動画へ差し替え、公式LINEでお知らせしました。'
+            : '利用者が確認できる状態にし、公式LINEでお知らせしました。'
+          : data.get('replacesVideoDeliveryId')
+            ? '以前の動画を停止したまま、新しい動画へ差し替えました。LINE通知は送られていないため、設定または本人のLINE連携を確認してください。'
+            : '利用者が確認できる状態にしました。LINE通知は送られていないため、設定または本人のLINE連携を確認してください。',
       );
       window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
@@ -246,6 +254,23 @@ export function VideoDeliveryManager({
                   ))}
                 </select>
               </label>
+              {candidate.replaceableDeliveries.length > 0 ? (
+                <label className="field">
+                  <span className="field__label">停止した動画の差し替え（任意）</span>
+                  <select className="field__control" name="replacesVideoDeliveryId">
+                    <option value="">新しい動画として配布する</option>
+                    {candidate.replaceableDeliveries.map((delivery) => (
+                      <option key={delivery.id} value={delivery.id}>
+                        {delivery.title}（
+                        {new Date(delivery.assignedAt).toLocaleDateString('ja-JP')}に停止）
+                      </option>
+                    ))}
+                  </select>
+                  <span className="field__hint">
+                    選ぶと、停止した動画を使えないまま、新しい動画へ差し替えた記録を残します。
+                  </span>
+                </label>
+              ) : null}
               <label className="field">
                 <span className="field__label">利用するときの案内</span>
                 <textarea
@@ -377,6 +402,10 @@ export function VideoDeliveryManager({
                   <p>
                     状態：<strong>{statusLabel[delivery.status]}</strong>
                   </p>
+                  {delivery.replacesVideoDeliveryId ? (
+                    <p>停止した動画から差し替えました。</p>
+                  ) : null}
+                  {delivery.replacementDeliveryId ? <p>新しい動画へ差し替え済みです。</p> : null}
                   <p>
                     LINE通知：<strong>{notificationLabel[delivery.notificationStatus]}</strong>
                     {delivery.notificationErrorCode

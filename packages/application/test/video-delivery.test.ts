@@ -27,6 +27,7 @@ const scope = {
   programEnrollmentId: 'enrollment-a',
   videoProjectId: 'project-a',
   videoRenderId: 'render-a',
+  replacesVideoDeliveryId: null,
 };
 
 describe('video delivery core', () => {
@@ -55,6 +56,25 @@ describe('video delivery core', () => {
     expect(mocks.assign).toHaveBeenCalledWith({
       ...scope,
       rightsSnapshot: { version: 1, source: 'program' },
+      expiresAt: null,
+    });
+  });
+
+  it('keeps a replacement linked to the stopped delivery', async () => {
+    const { repo, mocks } = repository();
+    mocks.assign.mockResolvedValue(null);
+    await expect(
+      new AssignVideoDelivery(repo).execute({
+        ...scope,
+        replacesVideoDeliveryId: 'stopped-delivery-a',
+        rightsSnapshot: { version: 1, source: 'replacement' },
+        expiresAt: null,
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: 'FORBIDDEN' }));
+    expect(mocks.assign).toHaveBeenCalledWith({
+      ...scope,
+      replacesVideoDeliveryId: 'stopped-delivery-a',
+      rightsSnapshot: { version: 1, source: 'replacement' },
       expiresAt: null,
     });
   });

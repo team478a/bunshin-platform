@@ -22,6 +22,7 @@ export interface VideoDeliveryRecord {
   programEnrollmentId: string | null;
   videoProjectId: string;
   videoRenderId: string;
+  replacesVideoDeliveryId: string | null;
   status: VideoDeliveryStatus;
   notificationStatus: VideoDeliveryNotificationStatus;
   notificationErrorCode: string | null;
@@ -47,6 +48,7 @@ export interface VideoDeliveryRepository {
     programEnrollmentId: string | null;
     videoProjectId: string;
     videoRenderId: string;
+    replacesVideoDeliveryId: string | null;
     rightsSnapshot: Record<string, unknown>;
     expiresAt: Date | null;
   }): Promise<VideoDeliveryRecord | null>;

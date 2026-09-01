@@ -14395,6 +14395,22 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
         select: { id: true },
       });
       if (existing !== null) return null;
+      if (input.replacesVideoDeliveryId !== null) {
+        const replaced = await tx.videoDelivery.findFirst({
+          where: {
+            id: input.replacesVideoDeliveryId,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: input.groupMembershipId,
+            ownerUserId: membership.userId,
+            status: 'REVOKED',
+            replacesVideoDeliveryId: null,
+          },
+          select: { id: true, programEnrollmentId: true },
+        });
+        if (replaced === null || replaced.programEnrollmentId !== input.programEnrollmentId)
+          return null;
+      }
       const row = await tx.videoDelivery.create({
         data: {
           workspaceId: input.workspaceId,
@@ -14404,6 +14420,7 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
           programEnrollmentId: input.programEnrollmentId,
           videoProjectId: project.id,
           videoRenderId: render.id,
+          replacesVideoDeliveryId: input.replacesVideoDeliveryId,
           rightsSnapshot: input.rightsSnapshot as Prisma.InputJsonValue,
           expiresAt: input.expiresAt,
           assignedByUserId: input.actorUserId,
@@ -14415,7 +14432,10 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
           groupId: input.groupId,
           videoDeliveryId: row.id,
           eventType: 'ASSIGNED',
-          eventData: {},
+          eventData:
+            input.replacesVideoDeliveryId === null
+              ? {}
+              : { replacesVideoDeliveryId: input.replacesVideoDeliveryId },
           performedByUserId: input.actorUserId,
         },
       });
