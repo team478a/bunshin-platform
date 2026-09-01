@@ -8,7 +8,9 @@ import {
   ListPointRewardCatalog,
   ReservePointReward,
   ConfirmPointRedemption,
+  ConsumeServiceCreditForSocialImage,
   RefundPointRedemption,
+  RefundServiceCreditForSocialImage,
   RefundBadgeEntitlementUsage,
   ReleasePointRedemption,
   SOCIAL_IMAGE_GENERATION_JOB_TYPE,
@@ -103,6 +105,7 @@ export async function createSocialImageResponse(
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
     const redemptions = new db.PrismaPointRedemptionRepository();
     const badgeEntitlements = new db.PrismaBadgeEntitlementConsumptionRepository(db.prisma);
+    const serviceCredits = new db.PrismaServiceCreditConsumptionRepository();
     let created = await new CreateSocialImageGenerationRequest(
       new db.PrismaSocialImageGenerationAuthorizationRepository(),
       requests,
@@ -120,19 +123,34 @@ export async function createSocialImageResponse(
       idempotencyKey: parsed.idempotencyKey,
     });
     const runtimeConfiguration = await resolveOpenAiRuntimeConfiguration();
-    const badgeUsage = await new TryConsumeBadgeEntitlement(badgeEntitlements).execute({
-      workspaceId,
-      userId: actor,
-      featureKey: 'SOCIAL.IMAGE_GENERATION',
-      resourceType: 'SOCIAL_IMAGE_REQUEST',
-      resourceId: created.id,
-      operationKey: `social-image:${created.id}`,
-      estimatedCostUsdMicros: runtimeConfiguration.requestCostUsdMicros,
-    });
+    const serviceCreditUsage = await new ConsumeServiceCreditForSocialImage(serviceCredits).execute(
+      {
+        workspaceId,
+        groupId,
+        groupMembershipId: parsed.groupMembershipId,
+        userId: actor,
+        imageRequestId: created.id,
+        idempotencyKey: `social-image:${created.id}`,
+      },
+    );
+    if (serviceCreditUsage.status === 'INSUFFICIENT')
+      throw new ApplicationError('FORBIDDEN', 'image credit is unavailable');
+    const badgeUsage =
+      serviceCreditUsage.status === 'NOT_CONFIGURED'
+        ? await new TryConsumeBadgeEntitlement(badgeEntitlements).execute({
+            workspaceId,
+            userId: actor,
+            featureKey: 'SOCIAL.IMAGE_GENERATION',
+            resourceType: 'SOCIAL_IMAGE_REQUEST',
+            resourceId: created.id,
+            operationKey: `social-image:${created.id}`,
+            estimatedCostUsdMicros: runtimeConfiguration.requestCostUsdMicros,
+          })
+        : null;
     if (badgeUsage?.status === 'REFUNDED')
       throw new ApplicationError('CONFLICT', 'image entitlement was already refunded');
     let reservation = null;
-    if (!badgeUsage) {
+    if (serviceCreditUsage.status === 'NOT_CONFIGURED' && !badgeUsage) {
       const catalog = await new ListPointRewardCatalog(redemptions).execute({
         workspaceId,
         actorUserId: actor,
@@ -208,6 +226,17 @@ export async function createSocialImageResponse(
             userId: actor,
             usageId: badgeUsage.id,
             reason: 'IMAGE_REQUEST_NOT_ENQUEUED',
+          })
+          .catch(() => undefined);
+      } else if (serviceCreditUsage.status === 'CONSUMED') {
+        await new RefundServiceCreditForSocialImage(serviceCredits)
+          .execute({
+            workspaceId,
+            groupId,
+            groupMembershipId: parsed.groupMembershipId,
+            userId: actor,
+            imageRequestId: created.id,
+            idempotencyKey: `refund:social-image:${created.id}`,
           })
           .catch(() => undefined);
       }
