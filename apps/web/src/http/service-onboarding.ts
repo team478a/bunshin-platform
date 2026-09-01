@@ -1,4 +1,5 @@
 import 'server-only';
+import { ServiceReferralRewardService } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -59,6 +60,14 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
         completedAt: new Date(),
       },
       select: { id: true, completedAt: true },
+    });
+    await new ServiceReferralRewardService(
+      new db.PrismaServiceReferralRewardRepository(),
+    ).completeMilestone({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      referredUserId: actor.userId,
+      milestone: 'ONBOARDING_COMPLETED',
     });
     return Response.json(
       { data: saved, requestId },
