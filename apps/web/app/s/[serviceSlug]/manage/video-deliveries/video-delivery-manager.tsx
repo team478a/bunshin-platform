@@ -116,7 +116,7 @@ export function VideoDeliveryManager({
         { method: 'POST' },
       );
       const result = (await response.json()) as {
-        data?: { notification?: 'SENT' | string };
+        data?: { notification?: string };
         error?: { message?: string };
       };
       if (!response.ok)
