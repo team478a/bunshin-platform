@@ -84,6 +84,7 @@ export default async function VideoDeliveryManagementPage({
         expiresAt: true,
         notificationStatus: true,
         notificationErrorCode: true,
+        notificationAttemptCount: true,
         notifiedAt: true,
       },
     }),
@@ -162,6 +163,7 @@ export default async function VideoDeliveryManagementPage({
         postedAt: delivery.postedAt?.toISOString() ?? null,
         notificationStatus: delivery.notificationStatus,
         notificationErrorCode: delivery.notificationErrorCode,
+        notificationAttemptCount: delivery.notificationAttemptCount,
         notifiedAt: delivery.notifiedAt?.toISOString() ?? null,
       },
     ];

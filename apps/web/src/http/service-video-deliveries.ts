@@ -171,6 +171,52 @@ export async function assignServiceVideoDeliveryResponse(request: Request, servi
   }
 }
 
+export async function retryServiceVideoDeliveryNotificationResponse(
+  request: Request,
+  serviceSlug: string,
+  deliveryId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const delivery = await db.prisma.videoDelivery.findFirst({
+      where: {
+        id: uuid.parse(deliveryId),
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        notificationStatus: { not: 'SENT' },
+      },
+      select: { id: true, ownerUserId: true, videoProjectId: true },
+    });
+    if (!delivery)
+      throw new ApplicationError('NOT_FOUND', 'video delivery notification unavailable');
+    const notification = await sendDeliveryNotice({
+      serviceSlug,
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      ownerUserId: delivery.ownerUserId,
+      videoProjectId: delivery.videoProjectId,
+    }).catch(() => 'FAILED' as const);
+    const outcome = notificationOutcome(notification);
+    await new RecordVideoDeliveryNotification(new db.PrismaVideoDeliveryRepository()).execute({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      videoDeliveryId: delivery.id,
+      status: outcome.status,
+      errorCode: outcome.errorCode,
+      attemptedAt: new Date(),
+    });
+    return Response.json({ data: { notification }, requestId });
+  } catch (error) {
+    return jsonError(error, requestId);
+  }
+}
+
 export async function recordServiceVideoDeliveryActionResponse(
   request: Request,
   serviceSlug: string,
