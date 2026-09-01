@@ -1464,6 +1464,27 @@ enum VideoRenderStatus {
   CANCELLED
 }
 
+// A delivery is always tied to a render owned by the recipient.  It is not a
+// shared-video catalogue: the membership and owner fields are deliberately
+// duplicated so every read can remain tenant and recipient scoped.
+enum VideoDeliveryStatus {
+  ASSIGNED
+  VIEWED
+  ACCEPTED
+  DECLINED
+  POSTED
+  EXPIRED
+}
+
+enum VideoDeliveryEventType {
+  ASSIGNED
+  VIEWED
+  ACCEPTED
+  DECLINED
+  DOWNLOADED
+  POSTED
+}
+
 enum VideoSceneGenerationStatus {
   QUEUED
   SUBMITTED
@@ -3524,6 +3545,47 @@ model VideoRender {
   @@index([notificationStatus, completedAt])
   @@index([status, expiresAt])
   @@map("video_renders")
+}
+
+model VideoDelivery {
+  id                  String              @id @default(uuid()) @db.Uuid
+  workspaceId         String              @map("workspace_id") @db.Uuid
+  groupId             String              @map("group_id") @db.Uuid
+  groupMembershipId   String              @map("group_membership_id") @db.Uuid
+  ownerUserId         String              @map("owner_user_id") @db.Uuid
+  programEnrollmentId String?             @map("program_enrollment_id") @db.Uuid
+  videoProjectId      String              @map("video_project_id") @db.Uuid
+  videoRenderId       String              @unique @map("video_render_id") @db.Uuid
+  status              VideoDeliveryStatus @default(ASSIGNED)
+  rightsSnapshot      Json                @map("rights_snapshot")
+  expiresAt           DateTime?           @map("expires_at") @db.Timestamptz(6)
+  viewedAt            DateTime?           @map("viewed_at") @db.Timestamptz(6)
+  acceptedAt          DateTime?           @map("accepted_at") @db.Timestamptz(6)
+  declinedAt          DateTime?           @map("declined_at") @db.Timestamptz(6)
+  postedAt            DateTime?           @map("posted_at") @db.Timestamptz(6)
+  assignedByUserId    String              @map("assigned_by_user_id") @db.Uuid
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([workspaceId, groupId, groupMembershipId, status, createdAt])
+  @@index([workspaceId, ownerUserId, status, createdAt])
+  @@index([workspaceId, groupId, programEnrollmentId])
+  @@index([status, expiresAt])
+  @@map("video_deliveries")
+}
+
+model VideoDeliveryEvent {
+  id                String                 @id @default(uuid()) @db.Uuid
+  workspaceId       String                 @map("workspace_id") @db.Uuid
+  groupId           String                 @map("group_id") @db.Uuid
+  videoDeliveryId   String                 @map("video_delivery_id") @db.Uuid
+  eventType         VideoDeliveryEventType @map("event_type")
+  eventData         Json                   @default("{}") @map("event_data")
+  performedByUserId String                 @map("performed_by_user_id") @db.Uuid
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([workspaceId, groupId, videoDeliveryId, createdAt])
+  @@map("video_delivery_events")
 }
 
 model VideoRenderRetryRequest {

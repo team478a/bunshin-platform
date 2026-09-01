@@ -2379,6 +2379,7 @@ export * from './advertising-safety';
 export * from './campaign-participation';
 export * from './campaign-safety-validation';
 export * from './video-core';
+export * from './video-delivery';
 export * from './video-ai-scene-generation';
 export * from './video-assets';
 export * from './video-render-operations';
