@@ -24,6 +24,7 @@ export type VideoDeliveryStatusRow = {
   postedAt: string | null;
   notificationStatus: 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED';
   notificationErrorCode: string | null;
+  notificationAttemptCount: number;
   notifiedAt: string | null;
 };
 
@@ -101,6 +102,33 @@ export function VideoDeliveryManager({
       window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '利用できる状態にできませんでした。');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function retryNotification(delivery: VideoDeliveryStatusRow) {
+    setSaving(delivery.id);
+    setMessage('LINE通知を再送しています…');
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/video-deliveries/${encodeURIComponent(delivery.id)}/line-notification/retry`,
+        { method: 'POST' },
+      );
+      const result = (await response.json()) as {
+        data?: { notification?: string };
+        error?: { message?: string };
+      };
+      if (!response.ok)
+        throw new Error(result.error?.message ?? 'LINE通知を再送できませんでした。');
+      setMessage(
+        result.data?.notification === 'SENT'
+          ? '公式LINEでお知らせしました。'
+          : 'LINE通知は送られていません。設定または本人のLINE連携を確認してください。',
+      );
+      window.setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'LINE通知を再送できませんでした。');
     } finally {
       setSaving(null);
     }
@@ -201,6 +229,17 @@ export function VideoDeliveryManager({
                 </p>
                 {delivery.notifiedAt ? (
                   <p>LINE通知の確認：{new Date(delivery.notifiedAt).toLocaleString('ja-JP')}</p>
+                ) : null}
+                <p>通知の試行回数：{delivery.notificationAttemptCount}回</p>
+                {delivery.notificationStatus !== 'SENT' ? (
+                  <button
+                    className="button button--secondary"
+                    disabled={saving === delivery.id}
+                    onClick={() => void retryNotification(delivery)}
+                    type="button"
+                  >
+                    {saving === delivery.id ? '再送しています…' : 'LINE通知を再送する'}
+                  </button>
                 ) : null}
                 <p>確認依頼：{new Date(delivery.assignedAt).toLocaleString('ja-JP')}</p>
                 {delivery.viewedAt ? (
