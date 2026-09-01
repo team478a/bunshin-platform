@@ -10,6 +10,7 @@ export interface ServiceSettingsValue {
   contactEmail: string | null;
   termsUrl: string | null;
   privacyUrl: string | null;
+  trendResearchEnabled?: boolean;
   brand: {
     logoUrl: string | null;
     iconUrl: string | null;
@@ -74,6 +75,7 @@ export function ServiceSettingsEditor({
           lineEnabled: data.has('lineEnabled'),
           inviteCodeEnabled: data.has('inviteCodeEnabled'),
           referralEnabled: data.has('referralEnabled'),
+          trendResearchEnabled: data.has('trendResearchEnabled'),
           welcomeTitle: text('welcomeTitle'),
           welcomeMessage: text('welcomeMessage'),
           onboardingQuestions: text('onboardingQuestions')
@@ -227,6 +229,21 @@ export function ServiceSettingsEditor({
           紹介元を記録する
         </label>
         <small>メールかLINEのどちらか一つは必ず選んでください。</small>
+      </fieldset>
+      <fieldset>
+        <legend>話題を使った投稿案</legend>
+        <label>
+          <input
+            name="trendResearchEnabled"
+            type="checkbox"
+            defaultChecked={value.trendResearchEnabled ?? true}
+          />{' '}
+          今話題になっていることを、投稿案づくりに使う
+        </label>
+        <small>
+          オフにすると、このサービスの新しい話題調査と、話題を使った投稿案への反映を止めます。すでに作られた投稿案は消えません。
+        </small>
+        <small>調査サービスや費用の設定は、システム管理者が管理します。</small>
       </fieldset>
       <fieldset>
         <legend>初めて参加する人への案内</legend>

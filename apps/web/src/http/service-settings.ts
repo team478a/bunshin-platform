@@ -30,6 +30,7 @@ const schema = z
     lineEnabled: z.boolean(),
     inviteCodeEnabled: z.boolean(),
     referralEnabled: z.boolean(),
+    trendResearchEnabled: z.boolean().default(true),
     welcomeTitle: z.string().max(120).default(''),
     welcomeMessage: z.string().max(1000).default(''),
     onboardingQuestions: z.array(z.string().min(1).max(200)).max(7).default([]),
@@ -66,6 +67,7 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
         contactEmail: value.contactEmail,
         termsUrl: value.termsUrl,
         privacyUrl: value.privacyUrl,
+        trendResearchEnabled: value.trendResearchEnabled,
         brand: {
           logoUrl: value.logoUrl,
           iconUrl: value.iconUrl,

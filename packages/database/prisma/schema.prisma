@@ -1745,6 +1745,7 @@ model ServiceConfiguration {
   contactEmail     String?                     @map("contact_email") @db.VarChar(320)
   visibility       ServiceVisibility           @default(PRIVATE)
   poweredByEnabled Boolean                     @default(true) @map("powered_by_enabled")
+  trendResearchEnabled Boolean                 @default(true) @map("trend_research_enabled")
   startsAt         DateTime?                   @map("starts_at") @db.Timestamptz(6)
   endsAt           DateTime?                   @map("ends_at") @db.Timestamptz(6)
   termsUrl         String?                     @map("terms_url") @db.VarChar(2048)

@@ -564,6 +564,12 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
           bunshinId: input.bunshinId,
           status: 'ACTIVE',
           accountStrategies: { some: { status: 'APPROVED' } },
+          bunshin: {
+            OR: [
+              { groupId: null },
+              { group: { serviceConfiguration: { trendResearchEnabled: true } } },
+            ],
+          },
         },
       })) > 0
     );
@@ -609,6 +615,10 @@ export class PrismaTrendResearchAutomationCandidateRepository implements TrendRe
           ownerUser: { status: 'ACTIVE' },
           workspace: { status: 'ACTIVE', memberships: { some: { status: 'ACTIVE' } } },
           capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
+          OR: [
+            { groupId: null },
+            { group: { serviceConfiguration: { trendResearchEnabled: true } } },
+          ],
         },
       },
       select: {
@@ -7868,6 +7878,12 @@ export class PrismaTrendResearchRepository implements TrendResearchRepository {
         id: input.socialProfileId,
         workspaceId: input.workspaceId,
         bunshinId: input.bunshinId,
+        bunshin: {
+          OR: [
+            { groupId: null },
+            { group: { serviceConfiguration: { trendResearchEnabled: true } } },
+          ],
+        },
       },
       select: { id: true },
     });
@@ -9447,6 +9463,7 @@ const serviceFoundationRecord = (
     contactEmail: row.contactEmail,
     visibility: row.visibility,
     poweredByEnabled: row.poweredByEnabled,
+    trendResearchEnabled: row.trendResearchEnabled,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
     termsUrl: row.termsUrl,
@@ -9949,6 +9966,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           contactEmail: value.contactEmail,
           visibility: value.visibility,
           poweredByEnabled: value.poweredByEnabled,
+          trendResearchEnabled: value.trendResearchEnabled ?? true,
           startsAt: value.startsAt,
           endsAt: value.endsAt,
           termsUrl: value.termsUrl,
@@ -10048,6 +10066,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           contactEmail: value.contactEmail,
           visibility: value.visibility,
           poweredByEnabled: value.poweredByEnabled,
+          trendResearchEnabled: value.trendResearchEnabled ?? true,
           startsAt: value.startsAt,
           endsAt: value.endsAt,
           termsUrl: value.termsUrl,
@@ -10063,6 +10082,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           contactEmail: value.contactEmail,
           visibility: value.visibility,
           poweredByEnabled: value.poweredByEnabled,
+          trendResearchEnabled: value.trendResearchEnabled ?? true,
           startsAt: value.startsAt,
           endsAt: value.endsAt,
           termsUrl: value.termsUrl,
