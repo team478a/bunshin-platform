@@ -8,6 +8,7 @@ import {
   ExecuteVideoAiSceneGenerationJob,
   ExecuteVideoRenderJob,
   ExecuteSocialImageGenerationJob,
+  ExpireServiceCredits,
   ExecuteGroupKnowledgeExtractionJob,
   FailJob,
   MissionAutomationHandlerRegistry,
@@ -34,6 +35,18 @@ export interface JobWorkerPort {
     workerId: string;
     batchSize: number;
   }): Promise<JobWorkerSummary>;
+}
+
+export interface ServiceCreditExpirationPort {
+  expire(): Promise<number>;
+}
+
+async function configuredServiceCreditExpiration(): Promise<ServiceCreditExpirationPort> {
+  const db = await import('@bunshin/database');
+  return {
+    expire: () =>
+      new ExpireServiceCredits(new db.PrismaServiceCreditExpirationRepository()).execute(),
+  };
 }
 
 async function configuredWorker(): Promise<JobWorkerPort> {
@@ -118,6 +131,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
 export async function jobWorkerResponse(
   request: Request,
   workerFactory: () => Promise<JobWorkerPort> = configuredWorker,
+  expirationFactory: () => Promise<ServiceCreditExpirationPort> = configuredServiceCreditExpiration,
 ): Promise<Response> {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   const started = Date.now();
@@ -130,6 +144,7 @@ export async function jobWorkerResponse(
       workerId: `http-${randomUUID()}`,
       batchSize: 5,
     });
+    const expiredServiceCredits = await (await expirationFactory()).expire();
     logger.info('job worker batch complete', {
       requestId,
       route: '/api/internal/jobs/run',
@@ -142,8 +157,9 @@ export async function jobWorkerResponse(
       dead: result.dead,
       infrastructureFailures: result.infrastructureFailures,
       drained: result.drained,
+      expiredServiceCredits,
     });
-    return Response.json({ ...result, requestId });
+    return Response.json({ ...result, expiredServiceCredits, requestId });
   } catch (error) {
     const mapped = toApiError(error, requestId);
     logger.error('job worker batch failed', {
