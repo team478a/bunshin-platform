@@ -46,7 +46,8 @@ export function ReferralRewardRuleEditor({
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const numeric = (name: string) => {
-      const value = String(data.get(name) ?? '').trim();
+      const raw = data.get(name);
+      const value = typeof raw === 'string' ? raw.trim() : '';
       return value ? Number(value) : null;
     };
     setSaving(true);
