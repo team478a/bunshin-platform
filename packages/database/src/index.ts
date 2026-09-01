@@ -14501,6 +14501,45 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
       return videoDeliveryRecord(row);
     });
   }
+
+  async recordNotification(input: Parameters<VideoDeliveryRepository['recordNotification']>[0]) {
+    if (!(await this.serviceManager(input.workspaceId, input.groupId, input.actorUserId)))
+      return null;
+    return this.client.$transaction(async (tx) => {
+      const delivery = await tx.videoDelivery.findFirst({
+        where: {
+          id: input.videoDeliveryId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+        },
+        select: { id: true, notificationStatus: true },
+      });
+      if (delivery === null || delivery.notificationStatus === 'SENT') return null;
+      const row = await tx.videoDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          notificationStatus: input.status,
+          notificationErrorCode: input.errorCode,
+          notificationAttemptCount: { increment: 1 },
+          notifiedAt: input.attemptedAt,
+        },
+      });
+      await tx.videoDeliveryEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          videoDeliveryId: delivery.id,
+          eventType: 'LINE_NOTIFICATION',
+          eventData: {
+            status: input.status,
+            errorCode: input.errorCode,
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return videoDeliveryRecord(row);
+    });
+  }
 }
 
 const videoSceneGenerationRecord = (

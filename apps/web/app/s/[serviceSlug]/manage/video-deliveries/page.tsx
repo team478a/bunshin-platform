@@ -82,6 +82,9 @@ export default async function VideoDeliveryManagementPage({
         declinedAt: true,
         postedAt: true,
         expiresAt: true,
+        notificationStatus: true,
+        notificationErrorCode: true,
+        notifiedAt: true,
       },
     }),
   ]);
@@ -157,6 +160,9 @@ export default async function VideoDeliveryManagementPage({
         acceptedAt: delivery.acceptedAt?.toISOString() ?? null,
         declinedAt: delivery.declinedAt?.toISOString() ?? null,
         postedAt: delivery.postedAt?.toISOString() ?? null,
+        notificationStatus: delivery.notificationStatus,
+        notificationErrorCode: delivery.notificationErrorCode,
+        notifiedAt: delivery.notifiedAt?.toISOString() ?? null,
       },
     ];
   });

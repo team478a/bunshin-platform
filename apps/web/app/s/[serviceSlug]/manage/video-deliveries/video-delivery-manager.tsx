@@ -22,6 +22,9 @@ export type VideoDeliveryStatusRow = {
   acceptedAt: string | null;
   declinedAt: string | null;
   postedAt: string | null;
+  notificationStatus: 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED';
+  notificationErrorCode: string | null;
+  notifiedAt: string | null;
 };
 
 const statusLabel: Record<VideoDeliveryStatusRow['status'], string> = {
@@ -31,6 +34,13 @@ const statusLabel: Record<VideoDeliveryStatusRow['status'], string> = {
   DECLINED: '今回は使わない',
   POSTED: '投稿完了',
   EXPIRED: '利用期限切れ',
+};
+
+const notificationLabel: Record<VideoDeliveryStatusRow['notificationStatus'], string> = {
+  PENDING: '未送信',
+  SENT: 'LINEでお知らせ済み',
+  FAILED: '送信に失敗',
+  CANCELLED: '送信していません',
 };
 
 export function VideoDeliveryManager({
@@ -183,6 +193,15 @@ export function VideoDeliveryManager({
                 <p>
                   状態：<strong>{statusLabel[delivery.status]}</strong>
                 </p>
+                <p>
+                  LINE通知：<strong>{notificationLabel[delivery.notificationStatus]}</strong>
+                  {delivery.notificationErrorCode
+                    ? `（理由：${delivery.notificationErrorCode}）`
+                    : ''}
+                </p>
+                {delivery.notifiedAt ? (
+                  <p>LINE通知の確認：{new Date(delivery.notifiedAt).toLocaleString('ja-JP')}</p>
+                ) : null}
                 <p>確認依頼：{new Date(delivery.assignedAt).toLocaleString('ja-JP')}</p>
                 {delivery.viewedAt ? (
                   <p>動画を確認：{new Date(delivery.viewedAt).toLocaleString('ja-JP')}</p>
