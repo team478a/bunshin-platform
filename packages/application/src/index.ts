@@ -2412,5 +2412,6 @@ export * from './service-line-broadcast';
 export * from './service-referral-credit';
 export * from './service-credit-consumption';
 export * from './service-credit-expiration';
+export * from './service-credit-adjustment';
 export * from './service-referral-reward';
 export * from './service-referral-reward-rules';

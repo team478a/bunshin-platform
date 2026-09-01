@@ -52,6 +52,11 @@ const sections = [
     href: 'referral-rewards',
   },
   {
+    title: '画像作成回数',
+    description: '参加者ごとに画像作成に使える回数を付与・減額し、理由を残します。',
+    href: 'credits',
+  },
+  {
     title: '実践プログラム',
     description: '参加者に提供するコースや、選べる支援内容を管理します。',
     href: 'programs',
