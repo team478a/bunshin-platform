@@ -1855,3 +1855,12 @@
 - Audience: 初期対象は同一サービスのACTIVE PARTICIPANTだけとし、任意ユーザーID・別サービス・外部リストの指定を許可しない。
 - Privacy: Broadcast本文、対象Membership、送信結果だけを保存し、LINEユーザーID、Access Token、顧客情報はBroadcastへ保存しない。
 - Safety: 実送信はこのCore PRの対象外とする。次段階で、同意、停止中設定、サービス別LINE設定、上限、配信結果を確認してからRecipientを作成・実行する。
+
+# 2026-09-01: 副業サービスの紹介特典はサービス別画像クレジットとして分離する
+
+- Referral boundary: サービス登録への紹介コード・流入・成果は、商品紹介向けの`ExternalTrackingLink`および`{{referral_url}}`と混在させない。後続の公式紹介投稿では専用の`{{service_referral_url}}`を使う。
+- Credit boundary: 既存Point残高は`workspaceId + userId`単位のため、紹介特典には流用しない。画像クレジット口座と台帳は`workspaceId + groupId + membership`単位で保存する。
+- Attribution: 被紹介Membershipごとの確定紹介者は最大1人とし、確定後に後続クリックで置き換えない。クリックは個人情報を含まない匿名の流入証跡だけを保存する。
+- Idempotency: 特典は紹介、ルール版、受益Membershipの組で一意にする。台帳の訂正は過去行の上書きではなく、返却または調整の追記で行う。
+- Scope: CoreではURL発行・公開流入処理・クレジット消費・公式キャンペーン配信・不正判定・現金報酬を実装しない。
+- Source: `docs/SERVICE_REFERRAL_CREDIT_CORE_REPORT.md`
