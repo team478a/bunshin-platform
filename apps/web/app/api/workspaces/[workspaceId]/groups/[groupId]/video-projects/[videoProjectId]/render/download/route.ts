@@ -27,9 +27,21 @@ export async function GET(
       outputStorageKey: { not: null },
     },
     orderBy: { completedAt: 'desc' },
-    select: { outputStorageKey: true },
+    select: { id: true, outputStorageKey: true },
   });
   if (!render?.outputStorageKey) return new Response(null, { status: 404 });
+  const delivery = await db.prisma.videoDelivery.findFirst({
+    where: {
+      workspaceId: parsed.data.workspaceId,
+      groupId: parsed.data.groupId,
+      videoProjectId: parsed.data.videoProjectId,
+      videoRenderId: render.id,
+      ownerUserId: actor.userId,
+    },
+    select: { status: true },
+  });
+  if (delivery && !['ACCEPTED', 'POSTED'].includes(delivery.status))
+    return new Response(null, { status: 403 });
   const url = await new SupabaseVideoRenderOutputStorage().createDownloadUrl(
     render.outputStorageKey,
   );
