@@ -12,12 +12,35 @@ export type VideoDeliveryCandidate = {
   enrollments: Array<{ id: string; label: string }>;
 };
 
+export type VideoDeliveryStatusRow = {
+  id: string;
+  memberName: string;
+  title: string;
+  status: 'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED';
+  assignedAt: string;
+  viewedAt: string | null;
+  acceptedAt: string | null;
+  declinedAt: string | null;
+  postedAt: string | null;
+};
+
+const statusLabel: Record<VideoDeliveryStatusRow['status'], string> = {
+  ASSIGNED: '未確認',
+  VIEWED: '確認中',
+  ACCEPTED: '採用済み',
+  DECLINED: '今回は使わない',
+  POSTED: '投稿完了',
+  EXPIRED: '利用期限切れ',
+};
+
 export function VideoDeliveryManager({
   serviceSlug,
   candidates,
+  deliveries,
 }: {
   serviceSlug: string;
   candidates: VideoDeliveryCandidate[];
+  deliveries: VideoDeliveryStatusRow[];
 }) {
   const [saving, setSaving] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -122,6 +145,38 @@ export function VideoDeliveryManager({
       >
         {message}
       </p>
+      <section className="settings-card">
+        <h2>確認依頼の状況</h2>
+        <p>利用者が動画を確認したか、採用したか、投稿したかを確認できます。</p>
+        {deliveries.length === 0 ? (
+          <p>確認依頼を送った動画はまだありません。</p>
+        ) : (
+          <div className="form-stack">
+            {deliveries.map((delivery) => (
+              <article className="settings-card" key={delivery.id}>
+                <h3>{delivery.title}</h3>
+                <p>対象の参加者：{delivery.memberName}</p>
+                <p>
+                  状態：<strong>{statusLabel[delivery.status]}</strong>
+                </p>
+                <p>確認依頼：{new Date(delivery.assignedAt).toLocaleString('ja-JP')}</p>
+                {delivery.viewedAt ? (
+                  <p>動画を確認：{new Date(delivery.viewedAt).toLocaleString('ja-JP')}</p>
+                ) : null}
+                {delivery.acceptedAt ? (
+                  <p>採用：{new Date(delivery.acceptedAt).toLocaleString('ja-JP')}</p>
+                ) : null}
+                {delivery.declinedAt ? (
+                  <p>今回は使わない：{new Date(delivery.declinedAt).toLocaleString('ja-JP')}</p>
+                ) : null}
+                {delivery.postedAt ? (
+                  <p>投稿完了：{new Date(delivery.postedAt).toLocaleString('ja-JP')}</p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </section>
   );
 }

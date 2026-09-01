@@ -2,7 +2,11 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
-import { VideoDeliveryManager, type VideoDeliveryCandidate } from './video-delivery-manager';
+import {
+  VideoDeliveryManager,
+  type VideoDeliveryCandidate,
+  type VideoDeliveryStatusRow,
+} from './video-delivery-manager';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,20 +70,55 @@ export default async function VideoDeliveryManagementPage({
     }),
     db.prisma.videoDelivery.findMany({
       where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-      select: { videoRenderId: true },
+      select: {
+        id: true,
+        groupMembershipId: true,
+        videoProjectId: true,
+        videoRenderId: true,
+        status: true,
+        createdAt: true,
+        viewedAt: true,
+        acceptedAt: true,
+        declinedAt: true,
+        postedAt: true,
+      },
     }),
   ]);
-  const deliveredRenderIds = new Set(
-    (existingDeliveries as Array<{ videoRenderId: string }>).map(
-      (delivery) => delivery.videoRenderId,
-    ),
-  );
+  const deliveredRenderIds = new Set(existingDeliveries.map((delivery) => delivery.videoRenderId));
   const enrollmentRows = enrollments as Array<{
     id: string;
     groupMembershipId: string;
     serviceProgramId: string;
   }>;
   const programRows = servicePrograms as Array<{ id: string; displayName: string }>;
+  const deliveryMembershipIds = [
+    ...new Set(existingDeliveries.map((delivery) => delivery.groupMembershipId)),
+  ];
+  const deliveryProjectIds = [
+    ...new Set(existingDeliveries.map((delivery) => delivery.videoProjectId)),
+  ];
+  const [deliveryMemberships, deliveryProjects] = await Promise.all([
+    db.prisma.groupMembership.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        id: { in: deliveryMembershipIds },
+      },
+      select: { id: true, user: { select: { displayName: true, email: true } } },
+    }),
+    db.prisma.videoProject.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        id: { in: deliveryProjectIds },
+      },
+      select: { id: true, title: true },
+    }),
+  ]);
+  const deliveryMembersById = new Map(
+    deliveryMemberships.map((membership) => [membership.id, membership]),
+  );
+  const deliveryProjectsById = new Map(deliveryProjects.map((project) => [project.id, project]));
   const candidates: VideoDeliveryCandidate[] = renders
     .filter((render) => !deliveredRenderIds.has(render.id))
     .map((render) => ({
@@ -99,6 +138,24 @@ export default async function VideoDeliveryManagementPage({
           return program ? [{ id: enrollment.id, label: program.displayName }] : [];
         }),
     }));
+  const deliveries: VideoDeliveryStatusRow[] = existingDeliveries.flatMap((delivery) => {
+    const membership = deliveryMembersById.get(delivery.groupMembershipId);
+    const project = deliveryProjectsById.get(delivery.videoProjectId);
+    if (!membership || !project) return [];
+    return [
+      {
+        id: delivery.id,
+        memberName: membership.user.displayName || membership.user.email || '参加者',
+        title: project.title,
+        status: delivery.status,
+        assignedAt: delivery.createdAt.toISOString(),
+        viewedAt: delivery.viewedAt?.toISOString() ?? null,
+        acceptedAt: delivery.acceptedAt?.toISOString() ?? null,
+        declinedAt: delivery.declinedAt?.toISOString() ?? null,
+        postedAt: delivery.postedAt?.toISOString() ?? null,
+      },
+    ];
+  });
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
@@ -108,7 +165,11 @@ export default async function VideoDeliveryManagementPage({
           <p>完成した個別動画を、対象の参加者だけが確認・採用できる状態にします。</p>
           <a href={`/s/${serviceSlug}/manage`}>← 管理メニューへ戻る</a>
         </header>
-        <VideoDeliveryManager serviceSlug={serviceSlug} candidates={candidates} />
+        <VideoDeliveryManager
+          candidates={candidates}
+          deliveries={deliveries}
+          serviceSlug={serviceSlug}
+        />
       </main>
     </PublicShell>
   );
