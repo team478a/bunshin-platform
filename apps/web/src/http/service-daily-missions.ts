@@ -1,4 +1,5 @@
 import 'server-only';
+import { ServiceReferralRewardService } from '@bunshin/application';
 import {
   DecideMission,
   ListDailyMissions,
@@ -243,14 +244,23 @@ export function recordServicePostResponse(
     const parsed = postSchema.safeParse(await body(request));
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
     const db = await import('@bunshin/database');
+    const value = await scope(serviceSlug, bunshinId);
     const result = await new RecordManualPost(
       new db.PrismaDailyMissionRepository(),
       new db.PrismaBunshinCapabilityAssignmentRepository(),
       new db.PrismaMissionOutcomeRepository(),
     ).execute({
-      ...(await scope(serviceSlug, bunshinId)),
+      ...value,
       dailyMissionId: uuidSchema.parse(dailyMissionId),
       ...parsed.data,
+    });
+    await new ServiceReferralRewardService(
+      new db.PrismaServiceReferralRewardRepository(),
+    ).completeMilestone({
+      workspaceId: value.workspaceId,
+      groupId: value.groupId,
+      referredUserId: value.actorUserId,
+      milestone: 'FIRST_POST_REPORTED',
     });
     return { post: postRecordDto(result.post), activity: missionActivityDto(result.activity) };
   });

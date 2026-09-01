@@ -30,6 +30,11 @@ describe('service referral credit persistence', () => {
     expect(migration).toContain('service_credit_ledger_idempotency_key');
   });
 
+  it('stores a grant once for each referral rule and beneficiary membership', () => {
+    expect(schema).toContain('@@unique([referralId, ruleId, beneficiaryMembershipId])');
+    expect(migration).toContain('service_referral_rewards_idempotency_key');
+  });
+
   it('does not add external conversion or cash-reward storage', () => {
     expect(schema).not.toContain('serviceReferralCashReward');
     expect(schema).not.toContain('serviceReferralConversionAmount');
