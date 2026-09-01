@@ -255,6 +255,9 @@ export default async function ServiceMemberHome({
             >
               投稿パートナーを作る・見る
             </Link>
+            <Link className="button" href={`/s/${service.configuration.slug}/credits` as Route}>
+              画像作成回数を見る
+            </Link>
             {imageAvailable && (
               <Link
                 className="button button--primary"
