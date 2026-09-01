@@ -4,24 +4,22 @@ import {
   type ServiceReferralRewardRuleRepository,
 } from '../src/service-referral-reward-rules';
 
-const repository = (): ServiceReferralRewardRuleRepository => ({
-  listCurrent: vi.fn(() => Promise.resolve([])),
-  saveVersion: vi.fn((input) =>
-    Promise.resolve({
-      id: 'rule-1',
-      version: 1,
-      status: input.status,
-      ...input.rule,
-      createdAt: input.now,
-    }),
-  ),
-});
+const listCurrent = vi.fn(() => Promise.resolve([]));
+
+const savedRule = (input: Parameters<ServiceReferralRewardRuleRepository['saveVersion']>[0]) =>
+  Promise.resolve({
+    id: 'rule-1',
+    version: 1,
+    status: input.status,
+    ...input.rule,
+    createdAt: input.now,
+  });
 
 describe('ServiceReferralRewardRuleService', () => {
   it('normalizes a rule before persisting a new version', async () => {
-    const saveVersion = vi.fn(repository().saveVersion);
+    const saveVersion = vi.fn(savedRule);
     await new ServiceReferralRewardRuleService(
-      { ...repository(), saveVersion },
+      { listCurrent, saveVersion },
       () => new Date(0),
     ).save({
       workspaceId: 'workspace-1',
@@ -45,10 +43,10 @@ describe('ServiceReferralRewardRuleService', () => {
     );
   });
 
-  it('rejects an invalid credit amount before it reaches persistence', async () => {
-    const saveVersion = vi.fn(repository().saveVersion);
+  it('rejects an invalid credit amount before it reaches persistence', () => {
+    const saveVersion = vi.fn(savedRule);
     expect(() =>
-      new ServiceReferralRewardRuleService({ ...repository(), saveVersion }).save({
+      new ServiceReferralRewardRuleService({ listCurrent, saveVersion }).save({
         workspaceId: 'workspace-1',
         groupId: 'service-1',
         actorUserId: 'user-1',
