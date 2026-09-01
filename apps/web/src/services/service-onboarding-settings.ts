@@ -8,6 +8,8 @@ export interface ServiceAnnouncement {
   enabled: boolean;
   title: string;
   message: string;
+  startsAt: string | null;
+  endsAt: string | null;
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -37,6 +39,11 @@ export function readServiceOnboardingSettings(
  */
 export function readServiceAnnouncement(onboardingConfig: unknown): ServiceAnnouncement {
   const onboarding = record(onboardingConfig);
+  const date = (value: unknown) => {
+    if (typeof value !== 'string') return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
   return {
     enabled: onboarding.announcementEnabled === true,
     title:
@@ -45,5 +52,13 @@ export function readServiceAnnouncement(onboardingConfig: unknown): ServiceAnnou
       typeof onboarding.announcementMessage === 'string'
         ? onboarding.announcementMessage.trim()
         : '',
+    startsAt: date(onboarding.announcementStartsAt),
+    endsAt: date(onboarding.announcementEndsAt),
   };
+}
+
+export function isServiceAnnouncementVisible(announcement: ServiceAnnouncement, now = new Date()) {
+  if (!announcement.enabled || !announcement.title || !announcement.message) return false;
+  if (announcement.startsAt && new Date(announcement.startsAt) > now) return false;
+  return !announcement.endsAt || new Date(announcement.endsAt) > now;
 }
