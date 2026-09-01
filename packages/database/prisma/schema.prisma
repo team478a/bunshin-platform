@@ -1474,6 +1474,7 @@ enum VideoDeliveryStatus {
   DECLINED
   POSTED
   EXPIRED
+  REVOKED
 }
 
 enum VideoDeliveryEventType {
@@ -1484,6 +1485,7 @@ enum VideoDeliveryEventType {
   DECLINED
   DOWNLOADED
   POSTED
+  REVOKED
 }
 
 enum VideoDeliveryNotificationStatus {
@@ -3575,6 +3577,7 @@ model VideoDelivery {
   acceptedAt          DateTime?           @map("accepted_at") @db.Timestamptz(6)
   declinedAt          DateTime?           @map("declined_at") @db.Timestamptz(6)
   postedAt            DateTime?           @map("posted_at") @db.Timestamptz(6)
+  revokedAt           DateTime?           @map("revoked_at") @db.Timestamptz(6)
   assignedByUserId    String              @map("assigned_by_user_id") @db.Uuid
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)

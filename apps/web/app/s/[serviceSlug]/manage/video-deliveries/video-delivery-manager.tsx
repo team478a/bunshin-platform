@@ -16,7 +16,7 @@ export type VideoDeliveryStatusRow = {
   id: string;
   memberName: string;
   title: string;
-  status: 'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED';
+  status: 'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED' | 'REVOKED';
   assignedAt: string;
   viewedAt: string | null;
   acceptedAt: string | null;
@@ -35,6 +35,7 @@ const statusLabel: Record<VideoDeliveryStatusRow['status'], string> = {
   DECLINED: '今回は使わない',
   POSTED: '投稿完了',
   EXPIRED: '利用期限切れ',
+  REVOKED: '利用停止',
 };
 
 const notificationLabel: Record<VideoDeliveryStatusRow['notificationStatus'], string> = {
@@ -151,6 +152,38 @@ export function VideoDeliveryManager({
       window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'LINE通知を再送できませんでした。');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function revokeDelivery(delivery: VideoDeliveryStatusRow) {
+    const reason = window.prompt(
+      '利用停止の理由を入力してください。利用者には表示されません。',
+      '内容を確認するため',
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setMessage('利用停止の理由を入力してください。');
+      return;
+    }
+    setSaving(delivery.id);
+    setMessage('この動画の利用を停止しています…');
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/video-deliveries/${encodeURIComponent(delivery.id)}/revoke`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        },
+      );
+      const result = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(result.error?.message ?? '利用を停止できませんでした。');
+      setMessage('この動画の利用を停止しました。利用者は動画を開けません。');
+      window.setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '利用を停止できませんでした。');
     } finally {
       setSaving(null);
     }
@@ -315,6 +348,16 @@ export function VideoDeliveryManager({
                       type="button"
                     >
                       {saving === delivery.id ? '再送しています…' : 'LINE通知を再送する'}
+                    </button>
+                  ) : null}
+                  {delivery.status !== 'REVOKED' ? (
+                    <button
+                      className="button button--secondary"
+                      disabled={saving === delivery.id}
+                      onClick={() => void revokeDelivery(delivery)}
+                      type="button"
+                    >
+                      {saving === delivery.id ? '停止しています…' : 'この動画の利用を停止する'}
                     </button>
                   ) : null}
                   <p>確認依頼：{new Date(delivery.assignedAt).toLocaleString('ja-JP')}</p>

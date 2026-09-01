@@ -5,6 +5,7 @@ import {
   GetMyVideoDelivery,
   RecordVideoDeliveryAction,
   RecordVideoDeliveryNotification,
+  RevokeVideoDelivery,
   type VideoDeliveryAction,
 } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -33,6 +34,7 @@ const assignBody = z
   })
   .strict();
 const actions = ['VIEWED', 'ACCEPTED', 'DECLINED', 'POSTED'] as const;
+const revokeBody = z.object({ reason: z.string().trim().min(1).max(500) }).strict();
 
 type DeliveryNoticeResult =
   | 'SENT'
@@ -188,6 +190,7 @@ export async function retryServiceVideoDeliveryNotificationResponse(
         id: uuid.parse(deliveryId),
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
+        status: { not: 'REVOKED' },
         notificationStatus: { not: 'SENT' },
       },
       select: { id: true, ownerUserId: true, videoProjectId: true },
@@ -212,6 +215,36 @@ export async function retryServiceVideoDeliveryNotificationResponse(
       attemptedAt: new Date(),
     });
     return Response.json({ data: { notification }, requestId });
+  } catch (error) {
+    return jsonError(error, requestId);
+  }
+}
+
+export async function revokeServiceVideoDeliveryResponse(
+  request: Request,
+  serviceSlug: string,
+  deliveryId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, input] = await Promise.all([
+      resolveManagedServiceContext(serviceSlug, actor.userId),
+      revokeBody.parseAsync(await request.json()),
+    ]);
+    const db = await import('@bunshin/database');
+    const delivery = await new RevokeVideoDelivery(new db.PrismaVideoDeliveryRepository()).execute({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      videoDeliveryId: uuid.parse(deliveryId),
+      reason: input.reason,
+    });
+    return Response.json({ data: delivery, requestId });
   } catch (error) {
     return jsonError(error, requestId);
   }
