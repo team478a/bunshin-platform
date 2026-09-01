@@ -78,6 +78,16 @@ export function VideoDeliveryManager({
   const needsActionCount = deliveries.filter(
     (delivery) => delivery.notificationStatus !== 'SENT',
   ).length;
+  const deliverySummary = {
+    unviewed: deliveries.filter((delivery) => delivery.status === 'ASSIGNED').length,
+    reviewing: deliveries.filter((delivery) => delivery.status === 'VIEWED').length,
+    accepted: deliveries.filter((delivery) => delivery.status === 'ACCEPTED').length,
+    posted: deliveries.filter((delivery) => delivery.status === 'POSTED').length,
+    declined: deliveries.filter((delivery) => delivery.status === 'DECLINED').length,
+    unavailable: deliveries.filter(
+      (delivery) => delivery.status === 'EXPIRED' || delivery.status === 'REVOKED',
+    ).length,
+  };
 
   async function submit(event: FormEvent<HTMLFormElement>, candidate: VideoDeliveryCandidate) {
     event.preventDefault();
@@ -268,6 +278,23 @@ export function VideoDeliveryManager({
         <p>
           確認依頼：{deliveries.length}件 ／ LINE通知の確認が必要：{needsActionCount}件
         </p>
+        <section className="settings-card">
+          <h3>いまの進み具合</h3>
+          <p>
+            まだ確認されていない：{deliverySummary.unviewed}件 ／ 確認中：
+            {deliverySummary.reviewing}件
+          </p>
+          <p>
+            採用済み：{deliverySummary.accepted}件 ／ 投稿完了：{deliverySummary.posted}件
+          </p>
+          <p>
+            今回は使わない：{deliverySummary.declined}件 ／ 利用できない：
+            {deliverySummary.unavailable}件
+          </p>
+          <p className="field__hint">
+            「LINE通知の確認が必要」を選ぶと、通知が届かなかった参加者だけを確認できます。
+          </p>
+        </section>
         {deliveries.length === 0 ? (
           <p>確認依頼を送った動画はまだありません。</p>
         ) : (
