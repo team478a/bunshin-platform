@@ -25,7 +25,13 @@ export default async function VideoDeliveryManagementPage({
         groupId: service.serviceId,
         status: 'SUCCEEDED',
         outputStorageKey: { not: null },
-        groupMembership: { status: 'ACTIVE', serviceRole: 'PARTICIPANT' },
+        project: {
+          is: {
+            groupMembership: {
+              is: { status: 'ACTIVE', serviceRole: 'PARTICIPANT' },
+            },
+          },
+        },
       },
       select: {
         id: true,
@@ -68,23 +74,13 @@ export default async function VideoDeliveryManagementPage({
       (delivery) => delivery.videoRenderId,
     ),
   );
-  const renderedRows = renders as Array<{
-    id: string;
-    groupMembershipId: string;
-    completedAt: Date | null;
-    project: {
-      id: string;
-      title: string;
-      groupMembership: { user: { displayName: string; email: string | null } };
-    };
-  }>;
   const enrollmentRows = enrollments as Array<{
     id: string;
     groupMembershipId: string;
     serviceProgramId: string;
   }>;
   const programRows = servicePrograms as Array<{ id: string; displayName: string }>;
-  const candidates: VideoDeliveryCandidate[] = renderedRows
+  const candidates: VideoDeliveryCandidate[] = renders
     .filter((render) => !deliveredRenderIds.has(render.id))
     .map((render) => ({
       membershipId: render.groupMembershipId,
