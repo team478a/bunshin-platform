@@ -5630,6 +5630,8 @@ model ServiceLineBroadcast {
   updatedByUserId String                       @map("updated_by_user_id") @db.Uuid
   createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  recipients      ServiceLineBroadcastRecipient[]
+  audits          ServiceLineBroadcastAuditLog[]
 
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status, scheduledAt])
@@ -5649,6 +5651,7 @@ model ServiceLineBroadcastRecipient {
   errorCategory     String?                             @map("error_category") @db.VarChar(80)
   createdAt         DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  broadcast         ServiceLineBroadcast                @relation(fields: [workspaceId, groupId, broadcastId], references: [workspaceId, groupId, id], onDelete: Cascade)
 
   @@unique([broadcastId, groupMembershipId])
   @@index([workspaceId, groupId, broadcastId, status])
@@ -5667,6 +5670,7 @@ model ServiceLineBroadcastAuditLog {
   reason            String   @db.VarChar(1000)
   performedByUserId String   @map("performed_by_user_id") @db.Uuid
   occurredAt        DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  broadcast         ServiceLineBroadcast @relation(fields: [workspaceId, groupId, broadcastId], references: [workspaceId, groupId, id], onDelete: Cascade)
 
   @@index([workspaceId, groupId, broadcastId, occurredAt])
   @@map("service_line_broadcast_audit_logs")

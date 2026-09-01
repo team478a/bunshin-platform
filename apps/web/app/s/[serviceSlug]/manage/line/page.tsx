@@ -9,6 +9,7 @@ import {
 } from '../../../../../src/line/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
+import { ServiceLineBroadcastEditor } from './service-line-broadcast-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,6 +110,7 @@ export default async function ServiceLinePage({
           endpoint={endpoint}
           scopeLabel="サービス"
         />
+        <ServiceLineBroadcastEditor serviceSlug={service.configuration.slug} />
         <section className="settings-card">
           <LineDeliveryRetryPanel
             failures={retryableFailures}
