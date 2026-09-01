@@ -72,6 +72,11 @@ const sections = [
     href: 'video-operations',
   },
   {
+    title: '個別動画の確認依頼',
+    description: '完成した個別動画を、対象の参加者だけが確認・採用できる状態にします。',
+    href: 'video-deliveries',
+  },
+  {
     title: 'サービスの見た目・登録',
     description: '名前、ロゴ、色、参加方法など、利用者に見える内容を設定します。',
     href: 'settings',

@@ -6,6 +6,7 @@ import { VideoPlanGenerator } from '../../../../../ui/video-plan-generator';
 import { VideoPlanApprover } from '../../../../../ui/video-plan-approver';
 import { VideoRenderRequester } from '../../../../../ui/video-render-requester';
 import { VideoAiSceneRequester } from '../../../../../ui/video-ai-scene-requester';
+import { VideoDeliveryActions } from '../../../../../ui/video-delivery-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +124,26 @@ export default async function VideoProjectPage({
     !aiSceneGenerationFailed;
 
   const serviceSlug = (await searchParams)?.service;
+  const delivery =
+    serviceSlug && row.renderAttempts[0]?.status === 'SUCCEEDED'
+      ? await db.prisma.videoDelivery.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            groupId: project.groupId,
+            videoProjectId: project.id,
+            videoRenderId: row.renderAttempts[0].id,
+            ownerUserId: actor.userId,
+          },
+          select: { id: true, status: true, rightsSnapshot: true },
+        })
+      : null;
+  const deliveryMessage =
+    delivery?.rightsSnapshot &&
+    typeof delivery.rightsSnapshot === 'object' &&
+    !Array.isArray(delivery.rightsSnapshot) &&
+    typeof delivery.rightsSnapshot.usageMessage === 'string'
+      ? delivery.rightsSnapshot.usageMessage
+      : 'この動画の内容を確認し、ご自身でSNSへ投稿してください。';
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -321,12 +342,21 @@ export default async function VideoProjectPage({
             <section className="settings-card">
               <h2>動画ができました</h2>
               <p>内容を確認してください。動画は一般公開されていません。</p>
-              <a
-                className="button button--primary"
-                href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/render/download`}
-              >
-                動画を確認する
-              </a>
+              {delivery && serviceSlug ? (
+                <VideoDeliveryActions
+                  deliveryId={delivery.id}
+                  serviceSlug={serviceSlug}
+                  status={delivery.status}
+                  usageMessage={deliveryMessage}
+                />
+              ) : (
+                <a
+                  className="button button--primary"
+                  href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/render/download`}
+                >
+                  動画を確認する
+                </a>
+              )}
             </section>
           ) : null}
           {project.status === 'FAILED' ? (
