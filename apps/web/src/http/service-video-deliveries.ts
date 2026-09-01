@@ -30,6 +30,7 @@ const assignBody = z
     programEnrollmentId: z.string().uuid().nullable(),
     videoProjectId: z.string().uuid(),
     videoRenderId: z.string().uuid(),
+    replacesVideoDeliveryId: z.string().uuid().nullable(),
     usageMessage: z.string().trim().min(1).max(500),
     expiresAt: z.string().datetime().nullable(),
   })
@@ -285,6 +286,7 @@ export async function assignServiceVideoDeliveryResponse(request: Request, servi
       programEnrollmentId: input.programEnrollmentId,
       videoProjectId: input.videoProjectId,
       videoRenderId: input.videoRenderId,
+      replacesVideoDeliveryId: input.replacesVideoDeliveryId,
       rightsSnapshot: { schemaVersion: 1, usageMessage: input.usageMessage },
       expiresAt: input.expiresAt === null ? null : new Date(input.expiresAt),
     });

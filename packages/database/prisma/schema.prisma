@@ -3566,6 +3566,7 @@ model VideoDelivery {
   programEnrollmentId String?             @map("program_enrollment_id") @db.Uuid
   videoProjectId      String              @map("video_project_id") @db.Uuid
   videoRenderId       String              @unique @map("video_render_id") @db.Uuid
+  replacesVideoDeliveryId String?         @unique @map("replaces_video_delivery_id") @db.Uuid
   status              VideoDeliveryStatus @default(ASSIGNED)
   notificationStatus  VideoDeliveryNotificationStatus @default(PENDING) @map("notification_status")
   notificationErrorCode String?           @map("notification_error_code") @db.VarChar(80)
@@ -3585,6 +3586,7 @@ model VideoDelivery {
   @@index([workspaceId, groupId, groupMembershipId, status, createdAt])
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([workspaceId, groupId, programEnrollmentId])
+  @@index([workspaceId, groupId, replacesVideoDeliveryId])
   @@index([notificationStatus, createdAt])
   @@index([status, expiresAt])
   @@map("video_deliveries")

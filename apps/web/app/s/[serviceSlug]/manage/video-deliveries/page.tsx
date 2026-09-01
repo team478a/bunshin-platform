@@ -85,6 +85,8 @@ export default async function VideoDeliveryManagementPage({
           groupMembershipId: true,
           videoProjectId: true,
           videoRenderId: true,
+          programEnrollmentId: true,
+          replacesVideoDeliveryId: true,
           status: true,
           createdAt: true,
           viewedAt: true,
@@ -106,6 +108,13 @@ export default async function VideoDeliveryManagementPage({
       }),
     ]);
   const deliveredRenderIds = new Set(existingDeliveries.map((delivery) => delivery.videoRenderId));
+  const replacementDeliveryByOriginalId = new Map(
+    existingDeliveries.flatMap((delivery) =>
+      delivery.replacesVideoDeliveryId === null
+        ? []
+        : [[delivery.replacesVideoDeliveryId, delivery.id] as const],
+    ),
+  );
   const enrollmentRows = enrollments as Array<{
     id: string;
     groupMembershipId: string;
@@ -169,6 +178,19 @@ export default async function VideoDeliveryManagementPage({
           const program = programRows.find((item) => item.id === enrollment.serviceProgramId);
           return program ? [{ id: enrollment.id, label: program.displayName }] : [];
         }),
+      replaceableDeliveries: existingDeliveries
+        .filter(
+          (delivery) =>
+            delivery.groupMembershipId === render.groupMembershipId &&
+            delivery.status === 'REVOKED' &&
+            delivery.replacesVideoDeliveryId === null &&
+            !replacementDeliveryByOriginalId.has(delivery.id),
+        )
+        .map((delivery) => ({
+          id: delivery.id,
+          title: deliveryProjectsById.get(delivery.videoProjectId)?.title ?? '以前の動画',
+          assignedAt: delivery.createdAt.toISOString(),
+        })),
     }));
   const deliveries: VideoDeliveryStatusRow[] = existingDeliveries.flatMap((delivery) => {
     const membership = deliveryMembersById.get(delivery.groupMembershipId);
@@ -192,6 +214,8 @@ export default async function VideoDeliveryManagementPage({
         notificationErrorCode: delivery.notificationErrorCode,
         notificationAttemptCount: delivery.notificationAttemptCount,
         notifiedAt: delivery.notifiedAt?.toISOString() ?? null,
+        replacesVideoDeliveryId: delivery.replacesVideoDeliveryId,
+        replacementDeliveryId: replacementDeliveryByOriginalId.get(delivery.id) ?? null,
         auditEvents: deliveryEventsById.get(delivery.id) ?? [],
       },
     ];
