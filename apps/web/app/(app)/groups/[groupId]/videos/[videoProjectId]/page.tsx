@@ -134,7 +134,7 @@ export default async function VideoProjectPage({
             videoRenderId: row.renderAttempts[0].id,
             ownerUserId: actor.userId,
           },
-          select: { id: true, status: true, rightsSnapshot: true },
+          select: { id: true, status: true, rightsSnapshot: true, expiresAt: true },
         })
       : null;
   const deliveryMessage =
@@ -144,6 +144,12 @@ export default async function VideoProjectPage({
     typeof delivery.rightsSnapshot.usageMessage === 'string'
       ? delivery.rightsSnapshot.usageMessage
       : 'この動画の内容を確認し、ご自身でSNSへ投稿してください。';
+  const deliveryStatus =
+    delivery?.expiresAt !== null &&
+    delivery?.expiresAt !== undefined &&
+    delivery.expiresAt <= new Date()
+      ? 'EXPIRED'
+      : delivery?.status;
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -346,7 +352,7 @@ export default async function VideoProjectPage({
                 <VideoDeliveryActions
                   deliveryId={delivery.id}
                   serviceSlug={serviceSlug}
-                  status={delivery.status}
+                  status={deliveryStatus ?? delivery.status}
                   usageMessage={deliveryMessage}
                 />
               ) : (
