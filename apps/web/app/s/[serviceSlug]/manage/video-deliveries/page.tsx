@@ -8,6 +8,15 @@ import {
   type VideoDeliveryStatusRow,
 } from './video-delivery-manager';
 
+function auditEventDetail(eventType: string, eventData: unknown) {
+  if (!eventData || typeof eventData !== 'object' || Array.isArray(eventData)) return null;
+  const data = eventData as Record<string, unknown>;
+  if (eventType === 'REVOKED' && typeof data.reason === 'string') return `停止理由：${data.reason}`;
+  if (eventType !== 'LINE_NOTIFICATION' || typeof data.status !== 'string') return null;
+  if (data.status === 'SENT') return '送信できました';
+  return '送信できませんでした';
+}
+
 export const dynamic = 'force-dynamic';
 
 export default async function VideoDeliveryManagementPage({
@@ -22,73 +31,80 @@ export default async function VideoDeliveryManagementPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [renders, enrollments, servicePrograms, existingDeliveries] = await Promise.all([
-    db.prisma.videoRender.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        status: 'SUCCEEDED',
-        outputStorageKey: { not: null },
-        project: {
-          is: {
-            groupMembership: {
-              is: { status: 'ACTIVE', serviceRole: 'PARTICIPANT' },
+  const [renders, enrollments, servicePrograms, existingDeliveries, deliveryEvents] =
+    await Promise.all([
+      db.prisma.videoRender.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          status: 'SUCCEEDED',
+          outputStorageKey: { not: null },
+          project: {
+            is: {
+              groupMembership: {
+                is: { status: 'ACTIVE', serviceRole: 'PARTICIPANT' },
+              },
             },
           },
         },
-      },
-      select: {
-        id: true,
-        groupMembershipId: true,
-        completedAt: true,
-        project: {
-          select: {
-            id: true,
-            title: true,
-            groupMembership: { select: { user: { select: { displayName: true, email: true } } } },
+        select: {
+          id: true,
+          groupMembershipId: true,
+          completedAt: true,
+          project: {
+            select: {
+              id: true,
+              title: true,
+              groupMembership: { select: { user: { select: { displayName: true, email: true } } } },
+            },
           },
         },
-      },
-      orderBy: { completedAt: 'desc' },
-      take: 100,
-    }),
-    db.prisma.programEnrollment.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        status: { in: ['INVITED', 'ACTIVE'] },
-      },
-      select: {
-        id: true,
-        groupMembershipId: true,
-        serviceProgramId: true,
-      },
-    }),
-    db.prisma.serviceProgram.findMany({
-      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-      select: { id: true, displayName: true },
-    }),
-    db.prisma.videoDelivery.findMany({
-      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-      select: {
-        id: true,
-        groupMembershipId: true,
-        videoProjectId: true,
-        videoRenderId: true,
-        status: true,
-        createdAt: true,
-        viewedAt: true,
-        acceptedAt: true,
-        declinedAt: true,
-        postedAt: true,
-        expiresAt: true,
-        notificationStatus: true,
-        notificationErrorCode: true,
-        notificationAttemptCount: true,
-        notifiedAt: true,
-      },
-    }),
-  ]);
+        orderBy: { completedAt: 'desc' },
+        take: 100,
+      }),
+      db.prisma.programEnrollment.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          status: { in: ['INVITED', 'ACTIVE'] },
+        },
+        select: {
+          id: true,
+          groupMembershipId: true,
+          serviceProgramId: true,
+        },
+      }),
+      db.prisma.serviceProgram.findMany({
+        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+        select: { id: true, displayName: true },
+      }),
+      db.prisma.videoDelivery.findMany({
+        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+        select: {
+          id: true,
+          groupMembershipId: true,
+          videoProjectId: true,
+          videoRenderId: true,
+          status: true,
+          createdAt: true,
+          viewedAt: true,
+          acceptedAt: true,
+          declinedAt: true,
+          postedAt: true,
+          expiresAt: true,
+          notificationStatus: true,
+          notificationErrorCode: true,
+          notificationAttemptCount: true,
+          notifiedAt: true,
+        },
+      }),
+      db.prisma.videoDeliveryEvent.findMany({
+        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+        select: { videoDeliveryId: true, eventType: true, eventData: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+      }),
+    ]);
   const deliveredRenderIds = new Set(existingDeliveries.map((delivery) => delivery.videoRenderId));
   const enrollmentRows = enrollments as Array<{
     id: string;
@@ -124,6 +140,17 @@ export default async function VideoDeliveryManagementPage({
     deliveryMemberships.map((membership) => [membership.id, membership]),
   );
   const deliveryProjectsById = new Map(deliveryProjects.map((project) => [project.id, project]));
+  const deliveryEventsById = new Map<string, VideoDeliveryStatusRow['auditEvents']>();
+  for (const event of deliveryEvents) {
+    const current = deliveryEventsById.get(event.videoDeliveryId) ?? [];
+    if (current.length >= 10) continue;
+    current.push({
+      eventType: event.eventType,
+      occurredAt: event.createdAt.toISOString(),
+      detail: auditEventDetail(event.eventType, event.eventData),
+    });
+    deliveryEventsById.set(event.videoDeliveryId, current);
+  }
   const candidates: VideoDeliveryCandidate[] = renders
     .filter((render) => !deliveredRenderIds.has(render.id))
     .map((render) => ({
@@ -165,6 +192,7 @@ export default async function VideoDeliveryManagementPage({
         notificationErrorCode: delivery.notificationErrorCode,
         notificationAttemptCount: delivery.notificationAttemptCount,
         notifiedAt: delivery.notifiedAt?.toISOString() ?? null,
+        auditEvents: deliveryEventsById.get(delivery.id) ?? [],
       },
     ];
   });

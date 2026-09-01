@@ -26,6 +26,7 @@ export type VideoDeliveryStatusRow = {
   notificationErrorCode: string | null;
   notificationAttemptCount: number;
   notifiedAt: string | null;
+  auditEvents: Array<{ eventType: string; occurredAt: string; detail: string | null }>;
 };
 
 const statusLabel: Record<VideoDeliveryStatusRow['status'], string> = {
@@ -43,6 +44,17 @@ const notificationLabel: Record<VideoDeliveryStatusRow['notificationStatus'], st
   SENT: 'LINEでお知らせ済み',
   FAILED: '送信に失敗',
   CANCELLED: '送信していません',
+};
+
+const auditEventLabel: Record<string, string> = {
+  ASSIGNED: '利用できる状態にしました',
+  LINE_NOTIFICATION: 'LINE通知を試しました',
+  VIEWED: '動画を確認しました',
+  ACCEPTED: '動画を使うことにしました',
+  DECLINED: '今回は使わないことにしました',
+  DOWNLOADED: '動画を開きました',
+  POSTED: '投稿完了を記録しました',
+  REVOKED: '利用を停止しました',
 };
 
 export function VideoDeliveryManager({
@@ -400,6 +412,22 @@ export function VideoDeliveryManager({
                   {delivery.postedAt ? (
                     <p>投稿完了：{new Date(delivery.postedAt).toLocaleString('ja-JP')}</p>
                   ) : null}
+                  <details>
+                    <summary>この動画の記録を見る（{delivery.auditEvents.length}件）</summary>
+                    {delivery.auditEvents.length === 0 ? (
+                      <p>記録はまだありません。</p>
+                    ) : (
+                      <ul>
+                        {delivery.auditEvents.map((event, index) => (
+                          <li key={`${event.eventType}-${event.occurredAt}-${index}`}>
+                            {new Date(event.occurredAt).toLocaleString('ja-JP')}：
+                            {auditEventLabel[event.eventType] ?? '操作を記録しました'}
+                            {event.detail ? `（${event.detail}）` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </details>
                 </article>
               ))}
             </div>
