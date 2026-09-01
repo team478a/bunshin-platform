@@ -125,6 +125,9 @@ export default async function ServiceManagementHome({
     trendMissions,
     successfulAiCalls,
     failedAiCalls,
+    knowledgeReviewCount,
+    knowledgeFailedCount,
+    failedVideoRenders,
   ] = await Promise.all([
     db.prisma.campaignPostingApprovalRequest.count({
       where: {
@@ -190,6 +193,27 @@ export default async function ServiceManagementHome({
         bunshin: { is: { groupId: service.serviceId } },
       },
     }),
+    db.prisma.groupKnowledgeSource.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'REVIEW_REQUIRED',
+      },
+    }),
+    db.prisma.groupKnowledgeSource.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'FAILED',
+      },
+    }),
+    db.prisma.videoRender.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'FAILED',
+      },
+    }),
   ]);
   const configuration = service.configuration;
   const onboarding = readServiceOnboardingSettings(
@@ -212,6 +236,61 @@ export default async function ServiceManagementHome({
     lineConfigurationReady: Boolean(line?.lastVerifiedAt && !line.globallyPaused),
   });
   const readyCount = readiness.filter((item) => item.ready).length;
+  const operationActions: Array<{
+    title: string;
+    detail: string;
+    href?: string;
+    label?: string;
+  }> = [
+    ...(pendingPostApprovalCount > 0
+      ? [
+          {
+            title: '商品投稿の確認待ち',
+            detail: `${pendingPostApprovalCount}件の投稿案が、参加者のコピー前の確認を待っています。`,
+            href: `/s/${configuration.slug}/manage/post-approvals`,
+            label: '投稿案を確認する',
+          },
+        ]
+      : []),
+    ...(knowledgeReviewCount > 0
+      ? [
+          {
+            title: '公式情報の確認待ち',
+            detail: `${knowledgeReviewCount}件の公式情報が、投稿づくりに使う前の確認を待っています。`,
+            href: `/s/${configuration.slug}/manage/knowledge`,
+            label: '公式情報を確認する',
+          },
+        ]
+      : []),
+    ...(knowledgeFailedCount > 0
+      ? [
+          {
+            title: '読み込めなかった公式情報',
+            detail: `${knowledgeFailedCount}件の公式情報を読み込めませんでした。内容を確認して、もう一度試してください。`,
+            href: `/s/${configuration.slug}/manage/knowledge`,
+            label: '公式情報を確認する',
+          },
+        ]
+      : []),
+    ...(failedVideoRenders > 0
+      ? [
+          {
+            title: '作成に失敗した動画',
+            detail: `${failedVideoRenders}件の動画作成が止まっています。原因を確認して、必要な場合だけ作り直してください。`,
+            href: `/s/${configuration.slug}/manage/video-operations`,
+            label: '動画の状況を確認する',
+          },
+        ]
+      : []),
+    ...(failedAiCalls > 0
+      ? [
+          {
+            title: 'AIの処理で確認が必要',
+            detail: `直近7日間に${failedAiCalls}回の失敗がありました。続く場合は、システム管理者へ連絡してください。`,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -256,6 +335,27 @@ export default async function ServiceManagementHome({
             話題の調査設定と原価はシステム管理者が管理します。エラーが続く場合は管理者へ連絡してください。
           </p>
         </section>
+        {operationActions.length > 0 ? (
+          <section className="settings-card">
+            <h2>いま確認すること</h2>
+            <p>止まっている作業や、確認が必要なものだけを表示しています。</p>
+            <ul className="settings-status-list">
+              {operationActions.map((item) => (
+                <li className="settings-status-item" key={item.title}>
+                  <div>
+                    <h3>{item.title}</h3>
+                    <p>{item.detail}</p>
+                  </div>
+                  {item.href && item.label ? (
+                    <Link className="button button--secondary" href={item.href as Route}>
+                      {item.label}
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <section className="settings-card">
           <h2>
             {readyCount} / {readiness.length} 項目が準備できています
@@ -266,18 +366,6 @@ export default async function ServiceManagementHome({
               : '「設定する」と表示されている項目を確認してください。'}
           </p>
         </section>
-        {pendingPostApprovalCount > 0 ? (
-          <section className="settings-card">
-            <h2>確認を待っている商品投稿があります</h2>
-            <p>{pendingPostApprovalCount}件の投稿案が、参加者のコピー前の確認を待っています。</p>
-            <Link
-              className="button"
-              href={`/s/${configuration.slug}/manage/post-approvals` as Route}
-            >
-              投稿案を確認する
-            </Link>
-          </section>
-        ) : null}
         <section className="settings-card">
           <h2>開始準備</h2>
           <div className="settings-status-list">
