@@ -1102,6 +1102,63 @@ enum ServiceLineBroadcastRecipientStatus {
   CANCELLED
 }
 
+/// サービスへの紹介URLを利用できる状態。外部アフィリエイトURLの状態とは分離する。
+enum ServiceReferralCodeStatus {
+  ACTIVE
+  DISABLED
+  REPLACED
+}
+
+/// 紹介された利用者の到達段階。紹介報酬の確定条件はRule側で選択する。
+enum ServiceReferralStatus {
+  CLICKED
+  REGISTERED
+  ONBOARDING_COMPLETED
+  FIRST_CONTENT_VIEWED
+  FIRST_POST_REPORTED
+  REJECTED
+}
+
+enum ServiceReferralRewardRuleStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+  SUSPENDED
+}
+
+enum ServiceReferralMilestone {
+  ONBOARDING_COMPLETED
+  FIRST_POST_REPORTED
+}
+
+enum ServiceReferralRewardRecipient {
+  REFERRER
+  REFERRED
+}
+
+enum ServiceReferralRewardStatus {
+  PENDING
+  GRANTED
+  REVOKED
+}
+
+/// サービスごとに分離する無料の画像生成利用枠。既存Point残高とは混ぜない。
+enum ServiceCreditTransactionType {
+  GRANT
+  CONSUME
+  REFUND
+  EXPIRE
+  ADJUST
+}
+
+enum ServiceCreditSourceType {
+  REFERRAL
+  CAMPAIGN
+  PURCHASE
+  ADMIN
+  SYSTEM
+}
+
 enum LineConnectionStatus {
   ACTIVE
   DISCONNECTED
@@ -1471,10 +1528,10 @@ model User {
   serviceLegalDocumentsCreated      ServiceLegalDocument[]              @relation("ServiceLegalDocumentAuthor")
   serviceLegalConsents              ServiceLegalConsent[]
   serviceOnboardingResponses        ServiceOnboardingResponse[]
-  campaignPostingApprovalsRequested CampaignPostingApprovalRequest[] @relation("CampaignPostingApprovalRequester")
-  campaignPostingApprovalsReviewed  CampaignPostingApprovalRequest[] @relation("CampaignPostingApprovalReviewer")
-  campaignPostingApprovalPolicies   CampaignPostingApprovalPolicy[] @relation("CampaignPostingApprovalPolicyEditor")
-  campaignPostingApprovalAudits     CampaignPostingApprovalAudit[] @relation("CampaignPostingApprovalAuditActor")
+  campaignPostingApprovalsRequested CampaignPostingApprovalRequest[]    @relation("CampaignPostingApprovalRequester")
+  campaignPostingApprovalsReviewed  CampaignPostingApprovalRequest[]    @relation("CampaignPostingApprovalReviewer")
+  campaignPostingApprovalPolicies   CampaignPostingApprovalPolicy[]     @relation("CampaignPostingApprovalPolicyEditor")
+  campaignPostingApprovalAudits     CampaignPostingApprovalAudit[]      @relation("CampaignPostingApprovalAuditActor")
   accountDeletionRequests           AccountDeletionRequest[]
   accountDeletionAudits             AccountDeletionOperationAudit[]     @relation("AccountDeletionAuditActor")
   lineConfigurationAudits           LineConfigurationAudit[]            @relation("LineConfigurationAuditActor")
@@ -1558,6 +1615,7 @@ model User {
   serviceConfigurationsCreated      ServiceConfiguration[]              @relation("ServiceConfigurationCreator")
   serviceConfigurationsUpdated      ServiceConfiguration[]              @relation("ServiceConfigurationUpdater")
   serviceConfigurationAudits        ServiceConfigurationAudit[]         @relation("ServiceConfigurationAuditActor")
+  serviceReferralRewardRulesCreated ServiceReferralRewardRule[]         @relation("ServiceReferralRewardRuleCreator")
 
   @@index([status])
   @@map("users")
@@ -1668,6 +1726,13 @@ model Workspace {
   serviceConfigurationAudits      ServiceConfigurationAudit[]
   serviceLegalDocuments           ServiceLegalDocument[]
   serviceLegalConsents            ServiceLegalConsent[]
+  serviceReferralCodes            ServiceReferralCode[]
+  serviceReferralClicks           ServiceReferralClick[]
+  serviceReferrals                ServiceReferral[]
+  serviceReferralRewardRules      ServiceReferralRewardRule[]
+  serviceCreditAccounts           ServiceCreditAccount[]
+  serviceCreditLedgers            ServiceCreditLedger[]
+  serviceReferralRewards          ServiceReferralReward[]
   campaignPostingApprovalPolicies CampaignPostingApprovalPolicy[]
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
@@ -1725,6 +1790,13 @@ model Group {
   lineConfigurationAudits         GroupLineConfigurationAudit[]
   lineConnections                 GroupLineConnection[]
   lineWebhookEvents               GroupLineWebhookEvent[]
+  serviceReferralCodes            ServiceReferralCode[]
+  serviceReferralClicks           ServiceReferralClick[]
+  serviceReferrals                ServiceReferral[]
+  serviceReferralRewardRules      ServiceReferralRewardRule[]
+  serviceCreditAccounts           ServiceCreditAccount[]
+  serviceCreditLedgers            ServiceCreditLedger[]
+  serviceReferralRewards          ServiceReferralReward[]
   pointRuleVersions               PointRuleVersion[]
   pointTransactions               PointTransaction[]
   badgeDefinitions                BadgeDefinition[]
@@ -1754,33 +1826,33 @@ model Group {
 }
 
 model ServiceConfiguration {
-  id               String                      @id @default(uuid()) @db.Uuid
-  workspaceId      String                      @map("workspace_id") @db.Uuid
-  groupId          String                      @unique @map("group_id") @db.Uuid
-  slug             String                      @unique @db.VarChar(80)
-  displayName      String                      @map("display_name") @db.VarChar(120)
-  description      String                      @db.VarChar(1000)
-  operatorName     String                      @map("operator_name") @db.VarChar(160)
-  contactEmail     String?                     @map("contact_email") @db.VarChar(320)
-  visibility       ServiceVisibility           @default(PRIVATE)
-  poweredByEnabled Boolean                     @default(true) @map("powered_by_enabled")
-  trendResearchEnabled Boolean                 @default(true) @map("trend_research_enabled")
-  startsAt         DateTime?                   @map("starts_at") @db.Timestamptz(6)
-  endsAt           DateTime?                   @map("ends_at") @db.Timestamptz(6)
-  termsUrl         String?                     @map("terms_url") @db.VarChar(2048)
-  privacyUrl       String?                     @map("privacy_url") @db.VarChar(2048)
-  createdByUserId  String                      @map("created_by_user_id") @db.Uuid
-  updatedByUserId  String                      @map("updated_by_user_id") @db.Uuid
-  createdAt        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace        Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group            Group                       @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
-  createdBy        User                        @relation("ServiceConfigurationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  updatedBy        User                        @relation("ServiceConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
-  brand            ServiceBrand?
-  registration     ServiceRegistrationPolicy?
-  audits           ServiceConfigurationAudit[]
-  legalDocuments   ServiceLegalDocument[]
+  id                   String                      @id @default(uuid()) @db.Uuid
+  workspaceId          String                      @map("workspace_id") @db.Uuid
+  groupId              String                      @unique @map("group_id") @db.Uuid
+  slug                 String                      @unique @db.VarChar(80)
+  displayName          String                      @map("display_name") @db.VarChar(120)
+  description          String                      @db.VarChar(1000)
+  operatorName         String                      @map("operator_name") @db.VarChar(160)
+  contactEmail         String?                     @map("contact_email") @db.VarChar(320)
+  visibility           ServiceVisibility           @default(PRIVATE)
+  poweredByEnabled     Boolean                     @default(true) @map("powered_by_enabled")
+  trendResearchEnabled Boolean                     @default(true) @map("trend_research_enabled")
+  startsAt             DateTime?                   @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime?                   @map("ends_at") @db.Timestamptz(6)
+  termsUrl             String?                     @map("terms_url") @db.VarChar(2048)
+  privacyUrl           String?                     @map("privacy_url") @db.VarChar(2048)
+  createdByUserId      String                      @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String                      @map("updated_by_user_id") @db.Uuid
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace            Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                Group                       @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy            User                        @relation("ServiceConfigurationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy            User                        @relation("ServiceConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  brand                ServiceBrand?
+  registration         ServiceRegistrationPolicy?
+  audits               ServiceConfigurationAudit[]
+  legalDocuments       ServiceLegalDocument[]
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId])
@@ -1950,6 +2022,10 @@ model GroupMembership {
   lineConnections            GroupLineConnection[]
   serviceLegalConsents       ServiceLegalConsent[]
   serviceOnboardingResponse  ServiceOnboardingResponse?
+  serviceReferralCode        ServiceReferralCode?
+  referredServiceReferrals   ServiceReferral[]                @relation("ServiceReferralReferredMembership")
+  serviceCreditAccount       ServiceCreditAccount?
+  serviceReferralRewards     ServiceReferralReward[]          @relation("ServiceReferralRewardMembership")
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -2308,32 +2384,32 @@ model GroupKnowledgeAuditLog {
 }
 
 model Campaign {
-  id                             String                     @id @default(uuid()) @db.Uuid
-  workspaceId                    String                     @map("workspace_id") @db.Uuid
-  groupId                        String                     @map("group_id") @db.Uuid
-  productPackVersionId           String                     @map("product_pack_version_id") @db.Uuid
-  name                           String                     @db.VarChar(160)
-  theme                          String                     @db.VarChar(1000)
-  targetSummary                  String                     @map("target_summary") @db.VarChar(1000)
-  participationLimit             Int                        @map("participation_limit")
-  maxRelatedPerWeek              Int                        @default(2) @map("max_related_per_week")
-  maxAdsPerWeek                  Int                        @default(1) @map("max_ads_per_week")
-  cooldownDays                   Int                        @default(2) @map("cooldown_days")
-  generationLimitPerParticipant  Int                        @default(60) @map("generation_limit_per_participant")
-  similarityThresholdBasisPoints Int                        @default(8500) @map("similarity_threshold_basis_points")
-  startsAt                       DateTime                   @map("starts_at") @db.Timestamptz(6)
-  endsAt                         DateTime                   @map("ends_at") @db.Timestamptz(6)
-  status                         CampaignStatus             @default(DRAFT)
-  createdByUserId                String                     @map("created_by_user_id") @db.Uuid
-  openedAt                       DateTime?                  @map("opened_at") @db.Timestamptz(6)
-  closedAt                       DateTime?                  @map("closed_at") @db.Timestamptz(6)
-  cancelledAt                    DateTime?                  @map("cancelled_at") @db.Timestamptz(6)
-  createdAt                      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                      Workspace                  @relation("CampaignOwnerWorkspace", fields: [workspaceId], references: [id], onDelete: Cascade)
-  group                          Group                      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  productPackVersion             ProductPackVersion         @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
-  createdBy                      User                       @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                             String                           @id @default(uuid()) @db.Uuid
+  workspaceId                    String                           @map("workspace_id") @db.Uuid
+  groupId                        String                           @map("group_id") @db.Uuid
+  productPackVersionId           String                           @map("product_pack_version_id") @db.Uuid
+  name                           String                           @db.VarChar(160)
+  theme                          String                           @db.VarChar(1000)
+  targetSummary                  String                           @map("target_summary") @db.VarChar(1000)
+  participationLimit             Int                              @map("participation_limit")
+  maxRelatedPerWeek              Int                              @default(2) @map("max_related_per_week")
+  maxAdsPerWeek                  Int                              @default(1) @map("max_ads_per_week")
+  cooldownDays                   Int                              @default(2) @map("cooldown_days")
+  generationLimitPerParticipant  Int                              @default(60) @map("generation_limit_per_participant")
+  similarityThresholdBasisPoints Int                              @default(8500) @map("similarity_threshold_basis_points")
+  startsAt                       DateTime                         @map("starts_at") @db.Timestamptz(6)
+  endsAt                         DateTime                         @map("ends_at") @db.Timestamptz(6)
+  status                         CampaignStatus                   @default(DRAFT)
+  createdByUserId                String                           @map("created_by_user_id") @db.Uuid
+  openedAt                       DateTime?                        @map("opened_at") @db.Timestamptz(6)
+  closedAt                       DateTime?                        @map("closed_at") @db.Timestamptz(6)
+  cancelledAt                    DateTime?                        @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                      DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                      Workspace                        @relation("CampaignOwnerWorkspace", fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                          Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  productPackVersion             ProductPackVersion               @relation(fields: [productPackVersionId], references: [id], onDelete: Restrict)
+  createdBy                      User                             @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   assets                         CampaignAsset[]
   participations                 CampaignParticipation[]
   activities                     CampaignActivity[]
@@ -2370,29 +2446,29 @@ model CampaignPostingApprovalPolicy {
 }
 
 model CampaignPostingApprovalRequest {
-  id                String                        @id @default(uuid()) @db.Uuid
-  workspaceId       String                        @map("workspace_id") @db.Uuid
-  groupId           String                        @map("group_id") @db.Uuid
-  campaignId        String                        @map("campaign_id") @db.Uuid
-  bunshinId         String                        @map("bunshin_id") @db.Uuid
-  dailyMissionId    String                        @unique @map("daily_mission_id") @db.Uuid
-  status            CampaignPostingApprovalStatus @default(PENDING)
-  contentSnapshot   Json                          @default("{}") @map("content_snapshot")
-  requestNote       String?                       @map("request_note") @db.VarChar(1000)
-  reviewNote        String?                       @map("review_note") @db.VarChar(1000)
-  requestedByUserId String                        @map("requested_by_user_id") @db.Uuid
-  reviewedByUserId  String?                       @map("reviewed_by_user_id") @db.Uuid
-  requestedAt       DateTime                      @default(now()) @map("requested_at") @db.Timestamptz(6)
-  reviewedAt        DateTime?                     @map("reviewed_at") @db.Timestamptz(6)
-  createdAt         DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace         Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group             Group                         @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  campaign          Campaign                      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  bunshin           Bunshin                       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade, map: "campaign_posting_approval_requests_bunshin_fkey")
-  dailyMission      DailyMission                  @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade, map: "campaign_posting_approval_requests_daily_mission_fkey")
-  requestedBy       User                          @relation("CampaignPostingApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
-  reviewedBy        User?                         @relation("CampaignPostingApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  id                String                         @id @default(uuid()) @db.Uuid
+  workspaceId       String                         @map("workspace_id") @db.Uuid
+  groupId           String                         @map("group_id") @db.Uuid
+  campaignId        String                         @map("campaign_id") @db.Uuid
+  bunshinId         String                         @map("bunshin_id") @db.Uuid
+  dailyMissionId    String                         @unique @map("daily_mission_id") @db.Uuid
+  status            CampaignPostingApprovalStatus  @default(PENDING)
+  contentSnapshot   Json                           @default("{}") @map("content_snapshot")
+  requestNote       String?                        @map("request_note") @db.VarChar(1000)
+  reviewNote        String?                        @map("review_note") @db.VarChar(1000)
+  requestedByUserId String                         @map("requested_by_user_id") @db.Uuid
+  reviewedByUserId  String?                        @map("reviewed_by_user_id") @db.Uuid
+  requestedAt       DateTime                       @default(now()) @map("requested_at") @db.Timestamptz(6)
+  reviewedAt        DateTime?                      @map("reviewed_at") @db.Timestamptz(6)
+  createdAt         DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  campaign          Campaign                       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  bunshin           Bunshin                        @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade, map: "campaign_posting_approval_requests_bunshin_fkey")
+  dailyMission      DailyMission                   @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade, map: "campaign_posting_approval_requests_daily_mission_fkey")
+  requestedBy       User                           @relation("CampaignPostingApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy        User?                          @relation("CampaignPostingApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
   audits            CampaignPostingApprovalAudit[]
 
   @@unique([workspaceId, bunshinId, dailyMissionId])
@@ -2402,20 +2478,20 @@ model CampaignPostingApprovalRequest {
 }
 
 model CampaignPostingApprovalAudit {
-  id             String                              @id @default(uuid()) @db.Uuid
-  workspaceId    String                              @map("workspace_id") @db.Uuid
-  groupId        String                              @map("group_id") @db.Uuid
-  requestId      String?                             @map("request_id") @db.Uuid
-  action         CampaignPostingApprovalAuditAction
-  beforeData     Json?                               @map("before_data")
-  afterData      Json                                @default("{}") @map("after_data")
-  note           String?                             @db.VarChar(1000)
-  performedByUserId String                           @map("performed_by_user_id") @db.Uuid
-  occurredAt     DateTime                            @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  workspace      Workspace                           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group          Group                               @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  request        CampaignPostingApprovalRequest?     @relation(fields: [requestId], references: [id], onDelete: SetNull)
-  performedBy    User                                @relation("CampaignPostingApprovalAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+  id                String                             @id @default(uuid()) @db.Uuid
+  workspaceId       String                             @map("workspace_id") @db.Uuid
+  groupId           String                             @map("group_id") @db.Uuid
+  requestId         String?                            @map("request_id") @db.Uuid
+  action            CampaignPostingApprovalAuditAction
+  beforeData        Json?                              @map("before_data")
+  afterData         Json                               @default("{}") @map("after_data")
+  note              String?                            @db.VarChar(1000)
+  performedByUserId String                             @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime                           @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace                          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  request           CampaignPostingApprovalRequest?    @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  performedBy       User                               @relation("CampaignPostingApprovalAuditActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
 
   @@index([workspaceId, groupId, occurredAt])
   @@index([requestId, occurredAt])
@@ -3347,38 +3423,38 @@ model ActivityContinuityRule {
 }
 
 model VideoProject {
-  id                  String             @id @default(uuid()) @db.Uuid
-  workspaceId         String             @map("workspace_id") @db.Uuid
-  groupId             String             @map("group_id") @db.Uuid
-  groupMembershipId   String             @map("group_membership_id") @db.Uuid
-  ownerUserId         String             @map("owner_user_id") @db.Uuid
-  bunshinId           String             @map("bunshin_id") @db.Uuid
-  campaignId          String?            @map("campaign_id") @db.Uuid
-  characterProfileVersionId String?      @map("character_profile_version_id") @db.Uuid
-  characterProfileSnapshot  Json         @default("{}") @map("character_profile_snapshot")
-  characterReferenceSnapshot Json        @default("[]") @map("character_reference_snapshot")
-  title               String             @db.VarChar(160)
-  platform            SocialPlatform
-  type                VideoProjectType
-  durationSeconds     Int                @map("duration_seconds")
-  status              VideoProjectStatus @default(DRAFT)
-  revision            Int                @default(1)
-  aiProcessingTypes   Json               @default("[]") @map("ai_processing_types")
-  disclosureSnapshot  Json               @default("{}") @map("disclosure_snapshot")
-  standardComposition Boolean            @default(true) @map("standard_composition")
-  aiVideoSceneCount   Int                @default(0) @map("ai_video_scene_count")
-  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group               Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  groupMembership     GroupMembership    @relation(fields: [workspaceId, groupId, groupMembershipId], references: [workspaceId, groupId, id], onDelete: Cascade)
-  ownerUser           User               @relation("VideoProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  bunshin             Bunshin            @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
-  campaign            Campaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  scenes              VideoScene[]
-  assets              VideoAsset[]
-  renderAttempts      VideoRender[]
-  sceneGenerations    VideoSceneGeneration[]
+  id                         String                 @id @default(uuid()) @db.Uuid
+  workspaceId                String                 @map("workspace_id") @db.Uuid
+  groupId                    String                 @map("group_id") @db.Uuid
+  groupMembershipId          String                 @map("group_membership_id") @db.Uuid
+  ownerUserId                String                 @map("owner_user_id") @db.Uuid
+  bunshinId                  String                 @map("bunshin_id") @db.Uuid
+  campaignId                 String?                @map("campaign_id") @db.Uuid
+  characterProfileVersionId  String?                @map("character_profile_version_id") @db.Uuid
+  characterProfileSnapshot   Json                   @default("{}") @map("character_profile_snapshot")
+  characterReferenceSnapshot Json                   @default("[]") @map("character_reference_snapshot")
+  title                      String                 @db.VarChar(160)
+  platform                   SocialPlatform
+  type                       VideoProjectType
+  durationSeconds            Int                    @map("duration_seconds")
+  status                     VideoProjectStatus     @default(DRAFT)
+  revision                   Int                    @default(1)
+  aiProcessingTypes          Json                   @default("[]") @map("ai_processing_types")
+  disclosureSnapshot         Json                   @default("{}") @map("disclosure_snapshot")
+  standardComposition        Boolean                @default(true) @map("standard_composition")
+  aiVideoSceneCount          Int                    @default(0) @map("ai_video_scene_count")
+  createdAt                  DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                  Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                      Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership            GroupMembership        @relation(fields: [workspaceId, groupId, groupMembershipId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  ownerUser                  User                   @relation("VideoProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  bunshin                    Bunshin                @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+  campaign                   Campaign?              @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  scenes                     VideoScene[]
+  assets                     VideoAsset[]
+  renderAttempts             VideoRender[]
+  sceneGenerations           VideoSceneGeneration[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, ownerUserId, status, updatedAt])
@@ -3470,32 +3546,32 @@ model VideoRenderRetryRequest {
 }
 
 model VideoSceneGeneration {
-  id                     String                     @id @default(uuid()) @db.Uuid
-  workspaceId            String                     @map("workspace_id") @db.Uuid
-  groupId                String                     @map("group_id") @db.Uuid
-  groupMembershipId      String                     @map("group_membership_id") @db.Uuid
-  ownerUserId            String                     @map("owner_user_id") @db.Uuid
-  videoProjectId         String                     @map("video_project_id") @db.Uuid
-  videoSceneId           String                     @map("video_scene_id") @db.Uuid
-  projectRevision        Int                        @map("project_revision")
-  sceneRevision          Int                        @map("scene_revision")
-  provider               String                     @db.VarChar(80)
-  model                  String                     @db.VarChar(120)
-  status                 VideoSceneGenerationStatus @default(QUEUED)
-  inputSnapshot          Json                       @default("{}") @map("input_snapshot")
-  estimatedCostUsdMicros Int?                       @map("estimated_cost_usd_micros")
-  actualCostUsdMicros    Int?                       @map("actual_cost_usd_micros")
-  externalJobId          String?                    @map("external_job_id") @db.VarChar(255)
-  outputStorageKey       String?                    @map("output_storage_key") @db.VarChar(512)
-  errorCode              String?                    @map("error_code") @db.VarChar(80)
-  startedAt              DateTime?                  @map("started_at") @db.Timestamptz(6)
-  completedAt            DateTime?                  @map("completed_at") @db.Timestamptz(6)
-  expiresAt              DateTime?                  @map("expires_at") @db.Timestamptz(6)
-  deletedAt              DateTime?                  @map("deleted_at") @db.Timestamptz(6)
-  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  project                VideoProject               @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
-  scene                  VideoScene                 @relation(fields: [videoSceneId], references: [id], onDelete: Cascade)
+  id                     String                             @id @default(uuid()) @db.Uuid
+  workspaceId            String                             @map("workspace_id") @db.Uuid
+  groupId                String                             @map("group_id") @db.Uuid
+  groupMembershipId      String                             @map("group_membership_id") @db.Uuid
+  ownerUserId            String                             @map("owner_user_id") @db.Uuid
+  videoProjectId         String                             @map("video_project_id") @db.Uuid
+  videoSceneId           String                             @map("video_scene_id") @db.Uuid
+  projectRevision        Int                                @map("project_revision")
+  sceneRevision          Int                                @map("scene_revision")
+  provider               String                             @db.VarChar(80)
+  model                  String                             @db.VarChar(120)
+  status                 VideoSceneGenerationStatus         @default(QUEUED)
+  inputSnapshot          Json                               @default("{}") @map("input_snapshot")
+  estimatedCostUsdMicros Int?                               @map("estimated_cost_usd_micros")
+  actualCostUsdMicros    Int?                               @map("actual_cost_usd_micros")
+  externalJobId          String?                            @map("external_job_id") @db.VarChar(255)
+  outputStorageKey       String?                            @map("output_storage_key") @db.VarChar(512)
+  errorCode              String?                            @map("error_code") @db.VarChar(80)
+  startedAt              DateTime?                          @map("started_at") @db.Timestamptz(6)
+  completedAt            DateTime?                          @map("completed_at") @db.Timestamptz(6)
+  expiresAt              DateTime?                          @map("expires_at") @db.Timestamptz(6)
+  deletedAt              DateTime?                          @map("deleted_at") @db.Timestamptz(6)
+  createdAt              DateTime                           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  project                VideoProject                       @relation(fields: [workspaceId, videoProjectId], references: [workspaceId, id], onDelete: Cascade)
+  scene                  VideoScene                         @relation(fields: [videoSceneId], references: [id], onDelete: Cascade)
   retryRequests          VideoSceneGenerationRetryRequest[]
 
   @@unique([videoProjectId, projectRevision, videoSceneId, sceneRevision, provider, model])
@@ -3507,17 +3583,17 @@ model VideoSceneGeneration {
 }
 
 model VideoSceneGenerationRetryRequest {
-  id                     String               @id @db.Uuid
+  id                     String                       @id @db.Uuid
   environment            LineConfigurationEnvironment
-  videoSceneGenerationId String               @map("video_scene_generation_id") @db.Uuid
-  failedAtSnapshot       DateTime             @map("failed_at_snapshot") @db.Timestamptz(6)
-  actorUserId            String               @map("actor_user_id") @db.Uuid
-  reason                 String               @db.VarChar(500)
-  jobId                  String               @unique @map("job_id") @db.Uuid
-  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  generation             VideoSceneGeneration @relation(fields: [videoSceneGenerationId], references: [id], onDelete: Restrict)
-  actor                  User                 @relation("VideoSceneGenerationRetryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
-  job                    Job                  @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  videoSceneGenerationId String                       @map("video_scene_generation_id") @db.Uuid
+  failedAtSnapshot       DateTime                     @map("failed_at_snapshot") @db.Timestamptz(6)
+  actorUserId            String                       @map("actor_user_id") @db.Uuid
+  reason                 String                       @db.VarChar(500)
+  jobId                  String                       @unique @map("job_id") @db.Uuid
+  createdAt              DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  generation             VideoSceneGeneration         @relation(fields: [videoSceneGenerationId], references: [id], onDelete: Restrict)
+  actor                  User                         @relation("VideoSceneGenerationRetryActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  job                    Job                          @relation(fields: [jobId], references: [id], onDelete: Restrict)
 
   @@unique([videoSceneGenerationId, failedAtSnapshot])
   @@index([environment, createdAt])
@@ -3693,21 +3769,21 @@ model SocialImageGeneratedMedia {
 }
 
 model VideoScene {
-  id                String               @id @default(uuid()) @db.Uuid
-  videoProjectId    String               @map("video_project_id") @db.Uuid
-  sceneNo           Int                  @map("scene_no")
-  durationMs        Int                  @map("duration_ms")
-  narration         String               @db.Text
-  caption           String               @db.VarChar(240)
-  visualType        VideoSceneVisualType @map("visual_type")
-  visualPrompt      String?              @map("visual_prompt") @db.Text
-  keywords          Json                 @default("[]")
-  aiProcessingTypes Json                 @default("[]") @map("ai_processing_types")
-  locked            Boolean              @default(false)
-  revision          Int                  @default(1)
-  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
-  videoProject      VideoProject         @relation(fields: [videoProjectId], references: [id], onDelete: Cascade)
+  id                String                 @id @default(uuid()) @db.Uuid
+  videoProjectId    String                 @map("video_project_id") @db.Uuid
+  sceneNo           Int                    @map("scene_no")
+  durationMs        Int                    @map("duration_ms")
+  narration         String                 @db.Text
+  caption           String                 @db.VarChar(240)
+  visualType        VideoSceneVisualType   @map("visual_type")
+  visualPrompt      String?                @map("visual_prompt") @db.Text
+  keywords          Json                   @default("[]")
+  aiProcessingTypes Json                   @default("[]") @map("ai_processing_types")
+  locked            Boolean                @default(false)
+  revision          Int                    @default(1)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  videoProject      VideoProject           @relation(fields: [videoProjectId], references: [id], onDelete: Cascade)
   generations       VideoSceneGeneration[]
 
   @@unique([videoProjectId, sceneNo])
@@ -4283,62 +4359,62 @@ model AccountDeletionOperationAudit {
 }
 
 model Bunshin {
-  id                          String                        @id @default(uuid()) @db.Uuid
-  workspaceId                 String                        @map("workspace_id") @db.Uuid
-  groupId                     String?                       @map("group_id") @db.Uuid
-  ownerUserId                 String                        @map("owner_user_id") @db.Uuid
-  name                        String                        @db.VarChar(100)
-  slug                        String                        @db.VarChar(80)
-  type                        BunshinType
-  status                      BunshinStatus                 @default(DRAFT)
-  objectiveSummary            String                        @map("objective_summary") @db.VarChar(500)
-  audienceSummary             String                        @map("audience_summary") @db.VarChar(500)
-  personalitySummary          String                        @map("personality_summary") @db.VarChar(500)
-  avatarUrl                   String?                       @map("avatar_url") @db.VarChar(2048)
-  archivedAt                  DateTime?                     @map("archived_at") @db.Timestamptz(6)
-  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                   Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  group                       Group?                        @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
-  ownerUser                   User                          @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
-  objectives                  BunshinObjective[]
-  audiences                   BunshinAudience[]
-  personality                 BunshinPersonality?
-  knowledgeGrants             BunshinKnowledgeGrant[]
-  memories                    BunshinMemory[]
-  capabilityAssignments       BunshinCapabilityAssignment[]
-  socialProfiles              SocialProfile[]
-  socialAccountStrategies     SocialAccountStrategy[]
-  contentPillars              ContentPillar[]
-  weeklyPlans                 WeeklyPlan[]
-  weeklyPlanItems             WeeklyPlanItem[]
-  dailyMissions               DailyMission[]
-  missionContents             MissionContent[]
-  missionDecisions            MissionDecision[]
-  missionActivities           MissionActivity[]
-  postRecords                 PostRecord[]
-  missionFeedback             MissionFeedback[]
-  aiUsageEvents               AiUsageEvent[]
-  lineNotificationPreferences LineNotificationPreference[]
-  jobs                        Job[]
-  lineMessageDeliveries       LineMessageDelivery[]
-  missionDeepLinkStates       MissionDeepLinkState[]
-  trendResearchRuns           TrendResearchRun[]
-  trendEvidence               TrendEvidence[]
-  trendIdeaCandidates         TrendIdeaCandidate[]
-  missionTrendContexts        MissionTrendContext[]
-  generationContextSnapshots  GenerationContextSnapshot[]
-  personalityVersions         BunshinPersonalityVersion[]
-  productPackAssignments      ProductPackAssignment[]
-  userEvidence                UserEvidence[]
-  advertisingSafetyReviews    AdvertisingSafetyReview[]
-  contentLinkUsages           ContentLinkUsage[]
-  campaignParticipations      CampaignParticipation[]
-  campaignSimilarityReviews   CampaignSimilarityReview[]
+  id                              String                           @id @default(uuid()) @db.Uuid
+  workspaceId                     String                           @map("workspace_id") @db.Uuid
+  groupId                         String?                          @map("group_id") @db.Uuid
+  ownerUserId                     String                           @map("owner_user_id") @db.Uuid
+  name                            String                           @db.VarChar(100)
+  slug                            String                           @db.VarChar(80)
+  type                            BunshinType
+  status                          BunshinStatus                    @default(DRAFT)
+  objectiveSummary                String                           @map("objective_summary") @db.VarChar(500)
+  audienceSummary                 String                           @map("audience_summary") @db.VarChar(500)
+  personalitySummary              String                           @map("personality_summary") @db.VarChar(500)
+  avatarUrl                       String?                          @map("avatar_url") @db.VarChar(2048)
+  archivedAt                      DateTime?                        @map("archived_at") @db.Timestamptz(6)
+  createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group                           Group?                           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  ownerUser                       User                             @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  objectives                      BunshinObjective[]
+  audiences                       BunshinAudience[]
+  personality                     BunshinPersonality?
+  knowledgeGrants                 BunshinKnowledgeGrant[]
+  memories                        BunshinMemory[]
+  capabilityAssignments           BunshinCapabilityAssignment[]
+  socialProfiles                  SocialProfile[]
+  socialAccountStrategies         SocialAccountStrategy[]
+  contentPillars                  ContentPillar[]
+  weeklyPlans                     WeeklyPlan[]
+  weeklyPlanItems                 WeeklyPlanItem[]
+  dailyMissions                   DailyMission[]
+  missionContents                 MissionContent[]
+  missionDecisions                MissionDecision[]
+  missionActivities               MissionActivity[]
+  postRecords                     PostRecord[]
+  missionFeedback                 MissionFeedback[]
+  aiUsageEvents                   AiUsageEvent[]
+  lineNotificationPreferences     LineNotificationPreference[]
+  jobs                            Job[]
+  lineMessageDeliveries           LineMessageDelivery[]
+  missionDeepLinkStates           MissionDeepLinkState[]
+  trendResearchRuns               TrendResearchRun[]
+  trendEvidence                   TrendEvidence[]
+  trendIdeaCandidates             TrendIdeaCandidate[]
+  missionTrendContexts            MissionTrendContext[]
+  generationContextSnapshots      GenerationContextSnapshot[]
+  personalityVersions             BunshinPersonalityVersion[]
+  productPackAssignments          ProductPackAssignment[]
+  userEvidence                    UserEvidence[]
+  advertisingSafetyReviews        AdvertisingSafetyReview[]
+  contentLinkUsages               ContentLinkUsage[]
+  campaignParticipations          CampaignParticipation[]
+  campaignSimilarityReviews       CampaignSimilarityReview[]
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
-  achievementBadges           AchievementBadge[]
-  badgeAwards                 BadgeAward[]                  @relation("BadgeAwardSourceBunshin")
-  videoProjects               VideoProject[]
+  achievementBadges               AchievementBadge[]
+  badgeAwards                     BadgeAward[]                     @relation("BadgeAwardSourceBunshin")
+  videoProjects                   VideoProject[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -4378,35 +4454,35 @@ model AiUsageEvent {
 }
 
 model Job {
-  id                            String                         @id @default(uuid()) @db.Uuid
-  environment                   LineConfigurationEnvironment
-  workspaceId                   String                         @map("workspace_id") @db.Uuid
-  bunshinId                     String?                        @map("bunshin_id") @db.Uuid
-  capabilityType                CapabilityType?                @map("capability_type")
-  jobType                       String                         @map("job_type") @db.VarChar(80)
-  payloadReference              String                         @map("payload_reference") @db.VarChar(500)
-  idempotencyKey                String                         @map("idempotency_key") @db.VarChar(200)
-  correlationId                 String                         @map("correlation_id") @db.VarChar(120)
-  requestedBy                   String                         @map("requested_by") @db.Uuid
-  status                        JobStatus                      @default(PENDING)
-  priority                      Int                            @default(100)
-  scheduledAt                   DateTime                       @default(now()) @map("scheduled_at") @db.Timestamptz(6)
-  attemptCount                  Int                            @default(0) @map("attempt_count")
-  maxAttempts                   Int                            @default(5) @map("max_attempts")
-  leaseOwner                    String?                        @map("lease_owner") @db.VarChar(120)
-  leaseExpiresAt                DateTime?                      @map("lease_expires_at") @db.Timestamptz(6)
-  nextRetryAt                   DateTime?                      @map("next_retry_at") @db.Timestamptz(6)
-  lastErrorCategory             String?                        @map("last_error_category") @db.VarChar(80)
-  completedAt                   DateTime?                      @map("completed_at") @db.Timestamptz(6)
-  cancelledAt                   DateTime?                      @map("cancelled_at") @db.Timestamptz(6)
-  createdAt                     DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                     DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                     Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin                       Bunshin?                       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  requester                     User                           @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
-  lineDeliveryRetryRequest      LineDeliveryRetryRequest?
-  badgeLineDeliveryRetryRequest BadgeLineDeliveryRetryRequest?
-  videoRenderRetryRequest       VideoRenderRetryRequest?
+  id                               String                            @id @default(uuid()) @db.Uuid
+  environment                      LineConfigurationEnvironment
+  workspaceId                      String                            @map("workspace_id") @db.Uuid
+  bunshinId                        String?                           @map("bunshin_id") @db.Uuid
+  capabilityType                   CapabilityType?                   @map("capability_type")
+  jobType                          String                            @map("job_type") @db.VarChar(80)
+  payloadReference                 String                            @map("payload_reference") @db.VarChar(500)
+  idempotencyKey                   String                            @map("idempotency_key") @db.VarChar(200)
+  correlationId                    String                            @map("correlation_id") @db.VarChar(120)
+  requestedBy                      String                            @map("requested_by") @db.Uuid
+  status                           JobStatus                         @default(PENDING)
+  priority                         Int                               @default(100)
+  scheduledAt                      DateTime                          @default(now()) @map("scheduled_at") @db.Timestamptz(6)
+  attemptCount                     Int                               @default(0) @map("attempt_count")
+  maxAttempts                      Int                               @default(5) @map("max_attempts")
+  leaseOwner                       String?                           @map("lease_owner") @db.VarChar(120)
+  leaseExpiresAt                   DateTime?                         @map("lease_expires_at") @db.Timestamptz(6)
+  nextRetryAt                      DateTime?                         @map("next_retry_at") @db.Timestamptz(6)
+  lastErrorCategory                String?                           @map("last_error_category") @db.VarChar(80)
+  completedAt                      DateTime?                         @map("completed_at") @db.Timestamptz(6)
+  cancelledAt                      DateTime?                         @map("cancelled_at") @db.Timestamptz(6)
+  createdAt                        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                        DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                        Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                          Bunshin?                          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  requester                        User                              @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  lineDeliveryRetryRequest         LineDeliveryRetryRequest?
+  badgeLineDeliveryRetryRequest    BadgeLineDeliveryRetryRequest?
+  videoRenderRetryRequest          VideoRenderRetryRequest?
   videoSceneGenerationRetryRequest VideoSceneGenerationRetryRequest?
 
   @@unique([environment, idempotencyKey])
@@ -4729,47 +4805,47 @@ model WeeklyPlanItem {
 }
 
 model DailyMission {
-  id                       String                     @id @default(uuid()) @db.Uuid
-  workspaceId              String                     @map("workspace_id") @db.Uuid
-  bunshinId                String                     @map("bunshin_id") @db.Uuid
-  socialProfileId          String?                    @map("social_profile_id") @db.Uuid
-  weeklyPlanItemId         String?                    @map("weekly_plan_item_id") @db.Uuid
-  campaignId               String?                    @map("campaign_id") @db.Uuid
-  classification           AdvertisingClassification  @default(ORGANIC)
-  missionDate              DateTime                   @map("mission_date") @db.Date
-  status                   DailyMissionStatus         @default(GENERATED)
-  format                   SocialPreferredFormat
-  assistanceLevel          ContentAssistanceLevel     @default(READY_TO_USE) @map("assistance_level")
-  estimatedMinutes         Int                        @map("estimated_minutes")
-  topic                    String                     @db.VarChar(200)
-  angle                    String                     @db.VarChar(500)
-  reason                   String                     @db.VarChar(1000)
-  qualityScore             Int?                       @map("quality_score")
-  viewedAt                 DateTime?                  @map("viewed_at") @db.Timestamptz(6)
-  startedAt                DateTime?                  @map("started_at") @db.Timestamptz(6)
-  completedAt              DateTime?                  @map("completed_at") @db.Timestamptz(6)
-  skippedAt                DateTime?                  @map("skipped_at") @db.Timestamptz(6)
-  expiredAt                DateTime?                  @map("expired_at") @db.Timestamptz(6)
-  createdAt                DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin                  Bunshin                    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  socialProfile            SocialProfile?             @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  weeklyPlanItem           WeeklyPlanItem?            @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
-  content                  MissionContent?
-  decision                 MissionDecision?
-  activities               MissionActivity[]
-  postRecord               PostRecord?
-  feedback                 MissionFeedback?
-  lineMessageDeliveries    LineMessageDelivery[]
-  deepLinkStates           MissionDeepLinkState[]
-  trendContext             MissionTrendContext?
-  generationContext        GenerationContextSnapshot?
-  safetyReviews            AdvertisingSafetyReview[]
-  campaignSimilarityReview CampaignSimilarityReview?
+  id                             String                          @id @default(uuid()) @db.Uuid
+  workspaceId                    String                          @map("workspace_id") @db.Uuid
+  bunshinId                      String                          @map("bunshin_id") @db.Uuid
+  socialProfileId                String?                         @map("social_profile_id") @db.Uuid
+  weeklyPlanItemId               String?                         @map("weekly_plan_item_id") @db.Uuid
+  campaignId                     String?                         @map("campaign_id") @db.Uuid
+  classification                 AdvertisingClassification       @default(ORGANIC)
+  missionDate                    DateTime                        @map("mission_date") @db.Date
+  status                         DailyMissionStatus              @default(GENERATED)
+  format                         SocialPreferredFormat
+  assistanceLevel                ContentAssistanceLevel          @default(READY_TO_USE) @map("assistance_level")
+  estimatedMinutes               Int                             @map("estimated_minutes")
+  topic                          String                          @db.VarChar(200)
+  angle                          String                          @db.VarChar(500)
+  reason                         String                          @db.VarChar(1000)
+  qualityScore                   Int?                            @map("quality_score")
+  viewedAt                       DateTime?                       @map("viewed_at") @db.Timestamptz(6)
+  startedAt                      DateTime?                       @map("started_at") @db.Timestamptz(6)
+  completedAt                    DateTime?                       @map("completed_at") @db.Timestamptz(6)
+  skippedAt                      DateTime?                       @map("skipped_at") @db.Timestamptz(6)
+  expiredAt                      DateTime?                       @map("expired_at") @db.Timestamptz(6)
+  createdAt                      DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                      Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                        Bunshin                         @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  socialProfile                  SocialProfile?                  @relation(fields: [workspaceId, bunshinId, socialProfileId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  weeklyPlanItem                 WeeklyPlanItem?                 @relation(fields: [workspaceId, bunshinId, weeklyPlanItemId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
+  content                        MissionContent?
+  decision                       MissionDecision?
+  activities                     MissionActivity[]
+  postRecord                     PostRecord?
+  feedback                       MissionFeedback?
+  lineMessageDeliveries          LineMessageDelivery[]
+  deepLinkStates                 MissionDeepLinkState[]
+  trendContext                   MissionTrendContext?
+  generationContext              GenerationContextSnapshot?
+  safetyReviews                  AdvertisingSafetyReview[]
+  campaignSimilarityReview       CampaignSimilarityReview?
   campaignPostingApprovalRequest CampaignPostingApprovalRequest?
-  campaign                 Campaign?                  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  contentLinkUsage         ContentLinkUsage?
+  campaign                       Campaign?                       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  contentLinkUsage               ContentLinkUsage?
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -5184,23 +5260,213 @@ model LineMessageDeliveryAttempt {
   @@map("line_message_delivery_attempts")
 }
 
+/// A stable, service-scoped referral code. It is intentionally separate from
+/// ExternalTrackingLink, which is used for outbound affiliate/product URLs.
+model ServiceReferralCode {
+  id                String                    @id @default(uuid()) @db.Uuid
+  workspaceId       String                    @map("workspace_id") @db.Uuid
+  groupId           String                    @map("group_id") @db.Uuid
+  groupMembershipId String                    @map("group_membership_id") @db.Uuid
+  userId            String                    @map("user_id") @db.Uuid
+  code              String                    @db.VarChar(80)
+  status            ServiceReferralCodeStatus @default(ACTIVE)
+  disabledAt        DateTime?                 @map("disabled_at") @db.Timestamptz(6)
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                     @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership           @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  clicks            ServiceReferralClick[]
+  referrals         ServiceReferral[]
+
+  @@unique([workspaceId, groupId, groupMembershipId], map: "service_referral_codes_membership_key")
+  @@unique([workspaceId, groupId, groupMembershipId, userId], map: "service_referral_codes_membership_scope_user_key")
+  @@unique([workspaceId, groupId, code])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, status])
+  @@map("service_referral_codes")
+}
+
+/// Anonymous inbound referral evidence. No raw IP address, user agent, or
+/// contact detail is stored here.
+model ServiceReferralClick {
+  id             String              @id @default(uuid()) @db.Uuid
+  workspaceId    String              @map("workspace_id") @db.Uuid
+  groupId        String              @map("group_id") @db.Uuid
+  referralCodeId String              @map("referral_code_id") @db.Uuid
+  source         String?             @db.VarChar(80)
+  campaignKey    String?             @map("campaign_key") @db.VarChar(120)
+  contentKey     String?             @map("content_key") @db.VarChar(120)
+  landingVariant String?             @map("landing_variant") @db.VarChar(120)
+  expiresAt      DateTime            @map("expires_at") @db.Timestamptz(6)
+  clickedAt      DateTime            @default(now()) @map("clicked_at") @db.Timestamptz(6)
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group          Group               @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  referralCode   ServiceReferralCode @relation(fields: [workspaceId, groupId, referralCodeId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  referral       ServiceReferral?
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, referralCodeId, clickedAt])
+  @@index([expiresAt])
+  @@map("service_referral_clicks")
+}
+
+/// One confirmed referrer per referred service membership. The selected click
+/// is snapshotted so later clicks cannot silently replace an established link.
+model ServiceReferral {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  workspaceId           String                  @map("workspace_id") @db.Uuid
+  groupId               String                  @map("group_id") @db.Uuid
+  referralCodeId        String                  @map("referral_code_id") @db.Uuid
+  referralClickId       String?                 @unique @map("referral_click_id") @db.Uuid
+  referredMembershipId  String                  @map("referred_membership_id") @db.Uuid
+  referredUserId        String                  @map("referred_user_id") @db.Uuid
+  status                ServiceReferralStatus   @default(REGISTERED)
+  registeredAt          DateTime?               @map("registered_at") @db.Timestamptz(6)
+  onboardingCompletedAt DateTime?               @map("onboarding_completed_at") @db.Timestamptz(6)
+  firstContentViewedAt  DateTime?               @map("first_content_viewed_at") @db.Timestamptz(6)
+  firstPostReportedAt   DateTime?               @map("first_post_reported_at") @db.Timestamptz(6)
+  rejectedAt            DateTime?               @map("rejected_at") @db.Timestamptz(6)
+  rejectionReason       String?                 @map("rejection_reason") @db.VarChar(500)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace             Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                 Group                   @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  referralCode          ServiceReferralCode     @relation(fields: [workspaceId, groupId, referralCodeId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  referralClick         ServiceReferralClick?   @relation(fields: [workspaceId, groupId, referralClickId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  referredMembership    GroupMembership         @relation("ServiceReferralReferredMembership", fields: [workspaceId, groupId, referredMembershipId, referredUserId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  rewards               ServiceReferralReward[]
+
+  @@unique([workspaceId, groupId, referredMembershipId])
+  @@unique([workspaceId, groupId, referralClickId])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, status, createdAt])
+  @@index([referralCodeId, status])
+  @@map("service_referrals")
+}
+
+model ServiceReferralRewardRule {
+  id                String                          @id @default(uuid()) @db.Uuid
+  workspaceId       String                          @map("workspace_id") @db.Uuid
+  groupId           String                          @map("group_id") @db.Uuid
+  ruleKey           String                          @map("rule_key") @db.VarChar(100)
+  version           Int
+  status            ServiceReferralRewardRuleStatus @default(DRAFT)
+  milestone         ServiceReferralMilestone
+  recipient         ServiceReferralRewardRecipient
+  creditAmount      Int                             @map("credit_amount")
+  expiresAfterDays  Int?                            @map("expires_after_days")
+  monthlyGrantLimit Int?                            @map("monthly_grant_limit")
+  createdByUserId   String                          @map("created_by_user_id") @db.Uuid
+  createdAt         DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  supersededAt      DateTime?                       @map("superseded_at") @db.Timestamptz(6)
+  workspace         Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  createdBy         User                            @relation("ServiceReferralRewardRuleCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  rewards           ServiceReferralReward[]
+
+  @@unique([workspaceId, groupId, ruleKey, version])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, status, milestone])
+  @@map("service_referral_reward_rules")
+}
+
+/// A separate balance per service prevents a user's free image credits from
+/// crossing into another service in the same workspace.
+model ServiceCreditAccount {
+  id                String                  @id @default(uuid()) @db.Uuid
+  workspaceId       String                  @map("workspace_id") @db.Uuid
+  groupId           String                  @map("group_id") @db.Uuid
+  groupMembershipId String                  @map("group_membership_id") @db.Uuid
+  userId            String                  @map("user_id") @db.Uuid
+  availableCredits  Int                     @default(0) @map("available_credits")
+  revision          Int                     @default(0)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                   @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership         @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  ledgerEntries     ServiceCreditLedger[]
+  referralRewards   ServiceReferralReward[] @relation("ServiceReferralRewardAccount")
+
+  @@unique([workspaceId, groupId, groupMembershipId], map: "service_credit_accounts_membership_key")
+  @@unique([workspaceId, groupId, groupMembershipId, userId], map: "service_credit_accounts_membership_scope_user_key")
+  @@unique([workspaceId, groupId, id, userId])
+  @@index([workspaceId, groupId, userId])
+  @@map("service_credit_accounts")
+}
+
+/// Append-only history. Corrections use a compensating entry rather than
+/// rewriting a previously granted or consumed credit.
+model ServiceCreditLedger {
+  id             String                       @id @default(uuid()) @db.Uuid
+  workspaceId    String                       @map("workspace_id") @db.Uuid
+  groupId        String                       @map("group_id") @db.Uuid
+  accountId      String                       @map("account_id") @db.Uuid
+  userId         String                       @map("user_id") @db.Uuid
+  type           ServiceCreditTransactionType
+  amount         Int
+  balanceAfter   Int                          @map("balance_after")
+  sourceType     ServiceCreditSourceType      @map("source_type")
+  sourceId       String?                      @map("source_id") @db.VarChar(200)
+  idempotencyKey String                       @map("idempotency_key") @db.VarChar(200)
+  expiresAt      DateTime?                    @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace      Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group          Group                        @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  account        ServiceCreditAccount         @relation(fields: [workspaceId, groupId, accountId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+
+  @@unique([accountId, idempotencyKey])
+  @@index([workspaceId, groupId, userId, createdAt])
+  @@index([expiresAt])
+  @@map("service_credit_ledger")
+}
+
+model ServiceReferralReward {
+  id                      String                      @id @default(uuid()) @db.Uuid
+  workspaceId             String                      @map("workspace_id") @db.Uuid
+  groupId                 String                      @map("group_id") @db.Uuid
+  referralId              String                      @map("referral_id") @db.Uuid
+  ruleId                  String                      @map("rule_id") @db.Uuid
+  beneficiaryAccountId    String                      @map("beneficiary_account_id") @db.Uuid
+  beneficiaryUserId       String                      @map("beneficiary_user_id") @db.Uuid
+  beneficiaryMembershipId String                      @map("beneficiary_membership_id") @db.Uuid
+  status                  ServiceReferralRewardStatus @default(PENDING)
+  creditAmount            Int                         @map("credit_amount")
+  grantedAt               DateTime?                   @map("granted_at") @db.Timestamptz(6)
+  revokedAt               DateTime?                   @map("revoked_at") @db.Timestamptz(6)
+  revocationReason        String?                     @map("revocation_reason") @db.VarChar(500)
+  createdAt               DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace               Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                   Group                       @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  referral                ServiceReferral             @relation(fields: [workspaceId, groupId, referralId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  rule                    ServiceReferralRewardRule   @relation(fields: [workspaceId, groupId, ruleId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  beneficiaryAccount      ServiceCreditAccount        @relation("ServiceReferralRewardAccount", fields: [workspaceId, groupId, beneficiaryAccountId, beneficiaryUserId], references: [workspaceId, groupId, id, userId], onDelete: Restrict, map: "service_referral_rewards_account_fkey")
+  beneficiaryMembership   GroupMembership             @relation("ServiceReferralRewardMembership", fields: [workspaceId, groupId, beneficiaryMembershipId, beneficiaryUserId], references: [workspaceId, groupId, id, userId], onDelete: Restrict, map: "service_referral_rewards_membership_fkey")
+
+  @@unique([referralId, ruleId, beneficiaryMembershipId])
+  @@index([workspaceId, groupId, status, createdAt])
+  @@map("service_referral_rewards")
+}
+
 /// Service-managed LINE broadcasts are separate from mission reminders.
 /// The broadcast body never stores LINE access tokens or recipient LINE IDs.
 model ServiceLineBroadcast {
-  id                String                      @id @default(uuid()) @db.Uuid
-  workspaceId       String                      @map("workspace_id") @db.Uuid
-  groupId           String                      @map("group_id") @db.Uuid
-  title             String                      @db.VarChar(120)
-  message           String                      @db.Text
-  audience          ServiceLineBroadcastAudience @default(ACTIVE_PARTICIPANTS)
-  status            ServiceLineBroadcastStatus  @default(DRAFT)
-  scheduledAt       DateTime?                   @map("scheduled_at") @db.Timestamptz(6)
-  cancelledAt       DateTime?                   @map("cancelled_at") @db.Timestamptz(6)
-  completedAt       DateTime?                   @map("completed_at") @db.Timestamptz(6)
-  createdByUserId   String                      @map("created_by_user_id") @db.Uuid
-  updatedByUserId   String                      @map("updated_by_user_id") @db.Uuid
-  createdAt         DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String                       @id @default(uuid()) @db.Uuid
+  workspaceId     String                       @map("workspace_id") @db.Uuid
+  groupId         String                       @map("group_id") @db.Uuid
+  title           String                       @db.VarChar(120)
+  message         String                       @db.Text
+  audience        ServiceLineBroadcastAudience @default(ACTIVE_PARTICIPANTS)
+  status          ServiceLineBroadcastStatus   @default(DRAFT)
+  scheduledAt     DateTime?                    @map("scheduled_at") @db.Timestamptz(6)
+  cancelledAt     DateTime?                    @map("cancelled_at") @db.Timestamptz(6)
+  completedAt     DateTime?                    @map("completed_at") @db.Timestamptz(6)
+  createdByUserId String                       @map("created_by_user_id") @db.Uuid
+  updatedByUserId String                       @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status, scheduledAt])
