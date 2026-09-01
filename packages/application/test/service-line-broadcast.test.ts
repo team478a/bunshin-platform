@@ -23,18 +23,17 @@ const base = {
 };
 
 function repository(overrides: Partial<ServiceLineBroadcastRepository> = {}) {
-  return {
-    create: vi.fn().mockResolvedValue(base),
-    schedule: vi.fn().mockResolvedValue({ ...base, status: 'SCHEDULED' as const }),
-    cancel: vi.fn().mockResolvedValue({ ...base, status: 'CANCELLED' as const }),
-    ...overrides,
-  } as ServiceLineBroadcastRepository;
+  const create = vi.fn().mockResolvedValue(base);
+  const schedule = vi.fn().mockResolvedValue({ ...base, status: 'SCHEDULED' as const });
+  const cancel = vi.fn().mockResolvedValue({ ...base, status: 'CANCELLED' as const });
+  const value: ServiceLineBroadcastRepository = { create, schedule, cancel, ...overrides };
+  return { value, create };
 }
 
 describe('ServiceLineBroadcastService', () => {
   it('creates a draft for active participants only', async () => {
     const store = repository();
-    const service = new ServiceLineBroadcastService(store, () => now);
+    const service = new ServiceLineBroadcastService(store.value, () => now);
 
     await expect(
       service.create({
@@ -54,7 +53,7 @@ describe('ServiceLineBroadcastService', () => {
   });
 
   it('does not schedule a broadcast in the past', async () => {
-    const service = new ServiceLineBroadcastService(repository(), () => now);
+    const service = new ServiceLineBroadcastService(repository().value, () => now);
 
     await expect(
       service.schedule({
@@ -70,7 +69,7 @@ describe('ServiceLineBroadcastService', () => {
 
   it('does not treat an already completed broadcast as cancellable', async () => {
     const service = new ServiceLineBroadcastService(
-      repository({ cancel: vi.fn().mockResolvedValue(null) }),
+      repository({ cancel: vi.fn().mockResolvedValue(null) }).value,
       () => now,
     );
 
