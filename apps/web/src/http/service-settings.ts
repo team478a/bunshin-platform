@@ -11,6 +11,11 @@ const optionalUrl = z
   .union([z.literal(''), z.string().url().max(2048)])
   .transform((value) => value || null);
 
+const scheduledDateTime = z
+  .union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)])
+  .optional()
+  .transform((value) => (value ? new Date(`${value}:00+09:00`).toISOString() : null));
+
 const schema = z
   .object({
     displayName: z.string().min(1).max(120),
@@ -36,6 +41,8 @@ const schema = z
     announcementEnabled: z.boolean().default(false),
     announcementTitle: z.string().max(120).default(''),
     announcementMessage: z.string().max(1000).default(''),
+    announcementStartsAt: scheduledDateTime,
+    announcementEndsAt: scheduledDateTime,
     onboardingQuestions: z.array(z.string().min(1).max(200)).max(7).default([]),
     reason: z.string().min(1).max(1000),
   })
@@ -54,6 +61,17 @@ const schema = z
         code: z.ZodIssueCode.custom,
         path: ['announcementMessage'],
         message: 'お知らせを表示する場合は内容を入力してください。',
+      });
+    }
+    if (
+      value.announcementStartsAt &&
+      value.announcementEndsAt &&
+      new Date(value.announcementEndsAt) <= new Date(value.announcementStartsAt)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['announcementEndsAt'],
+        message: '表示終了は表示開始より後の日時にしてください。',
       });
     }
   });
@@ -114,6 +132,8 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
             announcementEnabled: value.announcementEnabled,
             announcementTitle: value.announcementTitle.trim(),
             announcementMessage: value.announcementMessage.trim(),
+            announcementStartsAt: value.announcementStartsAt,
+            announcementEndsAt: value.announcementEndsAt,
           },
           surveyConfig: { questions: value.onboardingQuestions.map((item) => item.trim()) },
         },

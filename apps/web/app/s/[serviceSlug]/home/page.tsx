@@ -14,6 +14,7 @@ import {
 } from '../../../../src/activity-progress';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
 import {
+  isServiceAnnouncementVisible,
   readServiceAnnouncement,
   readServiceOnboardingSettings,
 } from '../../../../src/services/service-onboarding-settings';
@@ -159,7 +160,7 @@ export default async function ServiceMemberHome({
           <p>{membership.user.displayName}さん、今日も一緒に進めましょう。</p>
         </header>
 
-        {announcement.enabled && announcement.title && announcement.message && (
+        {isServiceAnnouncementVisible(announcement, now) && (
           <section className="service-entry__card" aria-labelledby="service-announcement-title">
             <p className="eyebrow">サービスからのお知らせ</p>
             <h2 id="service-announcement-title">{announcement.title}</h2>

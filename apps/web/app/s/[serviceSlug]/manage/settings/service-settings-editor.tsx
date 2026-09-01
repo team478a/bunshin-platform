@@ -6,6 +6,14 @@ import {
   readServiceOnboardingSettings,
 } from '../../../../../src/services/service-onboarding-settings';
 
+function dateTimeInputValue(value: string | null) {
+  if (!value) return '';
+  return new Date(value)
+    .toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo', hour12: false })
+    .replace(' ', 'T')
+    .slice(0, 16);
+}
+
 export interface ServiceSettingsValue {
   displayName: string;
   description: string;
@@ -85,6 +93,8 @@ export function ServiceSettingsEditor({
           announcementEnabled: data.has('announcementEnabled'),
           announcementTitle: text('announcementTitle'),
           announcementMessage: text('announcementMessage'),
+          announcementStartsAt: text('announcementStartsAt'),
+          announcementEndsAt: text('announcementEndsAt'),
           onboardingQuestions: text('onboardingQuestions')
             .split(/\r?\n/)
             .map((item) => item.trim())
@@ -277,8 +287,24 @@ export function ServiceSettingsEditor({
             placeholder="参加者に伝えたいことを、やさしい言葉で書きます。"
           />
         </label>
+        <label>
+          表示を始める日時（空欄ならすぐ表示）
+          <input
+            name="announcementStartsAt"
+            type="datetime-local"
+            defaultValue={dateTimeInputValue(announcement.startsAt)}
+          />
+        </label>
+        <label>
+          表示を終える日時（空欄なら表示を続ける）
+          <input
+            name="announcementEndsAt"
+            type="datetime-local"
+            defaultValue={dateTimeInputValue(announcement.endsAt)}
+          />
+        </label>
         <small>
-          メンテナンスや今週の案内に使えます。表示を止めると参加者のホームから非表示になります。LINE送信や機能停止は行いません。
+          日本時間で予約できます。メンテナンスや今週の案内に使えます。表示を止めると参加者のホームから非表示になります。LINE送信や機能停止は行いません。
         </small>
       </fieldset>
       <fieldset>
