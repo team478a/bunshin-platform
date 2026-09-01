@@ -110,7 +110,8 @@ export default async function ServiceManagementHome({
     },
   });
   if (!group) notFound();
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const missionScope = {
     workspaceId: service.workspaceId,
     bunshin: { is: { groupId: service.serviceId } },
@@ -128,6 +129,9 @@ export default async function ServiceManagementHome({
     knowledgeReviewCount,
     knowledgeFailedCount,
     failedVideoRenders,
+    sentLineDeliveries,
+    failedLineDeliveries,
+    overdueLineDeliveries,
   ] = await Promise.all([
     db.prisma.campaignPostingApprovalRequest.count({
       where: {
@@ -214,6 +218,33 @@ export default async function ServiceManagementHome({
         status: 'FAILED',
       },
     }),
+    db.prisma.lineMessageDelivery.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        environment: currentLineEnvironment(),
+        status: 'SENT',
+        sentAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.lineMessageDelivery.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        environment: currentLineEnvironment(),
+        status: 'FAILED',
+        updatedAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.lineMessageDelivery.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        environment: currentLineEnvironment(),
+        status: 'PENDING',
+        scheduledAt: { lt: now },
+      },
+    }),
   ]);
   const configuration = service.configuration;
   const onboarding = readServiceOnboardingSettings(
@@ -236,12 +267,58 @@ export default async function ServiceManagementHome({
     lineConfigurationReady: Boolean(line?.lastVerifiedAt && !line.globallyPaused),
   });
   const readyCount = readiness.filter((item) => item.ready).length;
-  const operationActions: Array<{
+  type OperationAction = {
     title: string;
     detail: string;
     href?: string;
     label?: string;
-  }> = [
+  };
+  const lineOperationActions: OperationAction[] = [];
+  if (line === undefined) {
+    lineOperationActions.push({
+      title: '公式LINEの準備ができていません',
+      detail:
+        '参加者へのLINE通知はまだ利用できません。サービス専用の公式LINEを登録して接続確認してください。',
+      href: `/s/${configuration.slug}/manage/line`,
+      label: '公式LINEを設定する',
+    });
+  } else if (line.globallyPaused) {
+    lineOperationActions.push({
+      title: '公式LINEの通知が停止中です',
+      detail:
+        '安全のため、このサービスのLINE通知は止まっています。設定内容を確認してから再開してください。',
+      href: `/s/${configuration.slug}/manage/line`,
+      label: '公式LINEを確認する',
+    });
+  } else if (!line.lastVerifiedAt) {
+    lineOperationActions.push({
+      title: '公式LINEの接続確認が必要です',
+      detail:
+        '登録した公式LINEが使えるか、まだ確認できていません。接続確認後に通知を開始してください。',
+      href: `/s/${configuration.slug}/manage/line`,
+      label: '公式LINEを確認する',
+    });
+  }
+  const operationActions: OperationAction[] = [
+    ...lineOperationActions,
+    ...(failedLineDeliveries > 0
+      ? [
+          {
+            title: 'LINE通知で確認が必要',
+            detail: `直近7日間に${failedLineDeliveries}件のLINE通知が送れませんでした。公式LINEの接続状態を確認してください。`,
+            href: `/s/${configuration.slug}/manage/line`,
+            label: '公式LINEを確認する',
+          },
+        ]
+      : []),
+    ...(overdueLineDeliveries > 0
+      ? [
+          {
+            title: '送信予定時刻を過ぎたLINE通知',
+            detail: `${overdueLineDeliveries}件のLINE通知が送信待ちです。続く場合はシステム管理者へ連絡してください。`,
+          },
+        ]
+      : []),
     ...(pendingPostApprovalCount > 0
       ? [
           {
@@ -330,9 +407,15 @@ export default async function ServiceManagementHome({
                 成功 {successfulAiCalls}回 / 要確認 {failedAiCalls}回
               </dd>
             </div>
+            <div className="settings-status-item">
+              <dt>公式LINEの通知</dt>
+              <dd>
+                送信 {sentLineDeliveries}件 / 要確認 {failedLineDeliveries}件
+              </dd>
+            </div>
           </dl>
           <p>
-            話題の調査設定と原価はシステム管理者が管理します。エラーが続く場合は管理者へ連絡してください。
+            話題の調査を使うかは「サービスの見た目・登録」で設定できます。調査サービス・原価・APIキーはシステム管理者が管理します。
           </p>
           <a
             className="button button--secondary"
