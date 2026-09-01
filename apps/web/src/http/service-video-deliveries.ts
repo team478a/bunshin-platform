@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   AssignVideoDelivery,
+  evaluateLineQuota,
   GetMyVideoDelivery,
   RecordVideoDeliveryAction,
   type VideoDeliveryAction,
@@ -15,6 +16,9 @@ import {
   resolvePublicServiceContext,
 } from '../services/public-service';
 import { SupabaseVideoRenderOutputStorage } from '../video/video-render-output-storage';
+import { ActiveLineDeliveryConfigurationAdapter } from '../line/delivery-configuration';
+import { LineMessagingApiAdapter } from '../line/messaging-provider';
+import { currentLineEnvironment, lineEndpointUrls } from '../line/secure-configuration';
 
 const uuid = z.string().uuid();
 const assignBody = z
@@ -28,6 +32,82 @@ const assignBody = z
   })
   .strict();
 const actions = ['VIEWED', 'ACCEPTED', 'DECLINED', 'POSTED'] as const;
+
+type DeliveryNoticeResult =
+  | 'SENT'
+  | 'NOT_CONFIGURED'
+  | 'PAUSED'
+  | 'NOT_ALLOWED'
+  | 'RECIPIENT_UNAVAILABLE'
+  | 'QUOTA_UNAVAILABLE'
+  | 'FAILED';
+
+async function sendDeliveryNotice(input: {
+  serviceSlug: string;
+  workspaceId: string;
+  groupId: string;
+  ownerUserId: string;
+  videoProjectId: string;
+}): Promise<DeliveryNoticeResult> {
+  const db = await import('@bunshin/database');
+  const project = await db.prisma.videoProject.findFirst({
+    where: {
+      id: input.videoProjectId,
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      ownerUserId: input.ownerUserId,
+    },
+    select: { bunshinId: true, title: true },
+  });
+  if (!project) return 'FAILED';
+  const environment = currentLineEnvironment();
+  const configuration = await new ActiveLineDeliveryConfigurationAdapter().getActive(environment, {
+    workspaceId: input.workspaceId,
+    groupId: input.groupId,
+    userId: input.ownerUserId,
+  });
+  if (!configuration) return 'NOT_CONFIGURED';
+  if (configuration.globallyPaused) return 'PAUSED';
+  const preference = new db.PrismaLineDeliveryPreferenceRepository();
+  if (
+    !(await preference.isAllowed({
+      workspaceId: input.workspaceId,
+      bunshinId: project.bunshinId,
+      userId: input.ownerUserId,
+      at: new Date(),
+    }))
+  )
+    return 'NOT_ALLOWED';
+  const recipientId = await new db.PrismaLineConnectionRepository().resolve({
+    environment,
+    workspaceId: input.workspaceId,
+    groupId: input.groupId,
+    bunshinId: project.bunshinId,
+    userId: input.ownerUserId,
+  });
+  if (!recipientId) return 'RECIPIENT_UNAVAILABLE';
+  const messaging = new LineMessagingApiAdapter();
+  const quota = await messaging.getQuota(configuration.accessToken);
+  if (!quota.ok) return 'QUOTA_UNAVAILABLE';
+  const quotaPolicy = evaluateLineQuota({
+    kind: 'DAILY_MISSION',
+    limit: quota.limit,
+    consumption: quota.consumption,
+    warningPercent: configuration.quotaWarningPercent,
+    lowPriorityStopPercent: configuration.quotaLowPriorityStop,
+  });
+  if (!quotaPolicy.allowed) return 'QUOTA_UNAVAILABLE';
+  const reviewUrl = new URL(lineEndpointUrls().missionDeepLinkBaseUrl);
+  reviewUrl.pathname = `/groups/${input.groupId}/videos/${input.videoProjectId}`;
+  reviewUrl.search = `service=${encodeURIComponent(input.serviceSlug)}`;
+  const result = await messaging.pushVideoCompletion({
+    accessToken: configuration.accessToken,
+    recipientId,
+    projectTitle: project.title,
+    reviewUrl: reviewUrl.toString(),
+  });
+  return result.ok ? 'SENT' : 'FAILED';
+}
 
 function jsonError(error: unknown, requestId: string) {
   const mapped = toApiError(error, requestId);
@@ -61,7 +141,14 @@ export async function assignServiceVideoDeliveryResponse(request: Request, servi
       rightsSnapshot: { schemaVersion: 1, usageMessage: input.usageMessage },
       expiresAt: input.expiresAt === null ? null : new Date(input.expiresAt),
     });
-    return Response.json({ data: delivery, requestId }, { status: 201 });
+    const notification = await sendDeliveryNotice({
+      serviceSlug,
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      ownerUserId: delivery.ownerUserId,
+      videoProjectId: delivery.videoProjectId,
+    }).catch(() => 'FAILED' as const);
+    return Response.json({ data: delivery, notification, requestId }, { status: 201 });
   } catch (error) {
     return jsonError(error, requestId);
   }
