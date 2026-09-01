@@ -334,6 +334,12 @@ export default async function ServiceManagementHome({
           <p>
             話題の調査設定と原価はシステム管理者が管理します。エラーが続く場合は管理者へ連絡してください。
           </p>
+          <a
+            className="button button--secondary"
+            href={`/api/services/${configuration.slug}/operations-report`}
+          >
+            この集計をCSVでダウンロード
+          </a>
         </section>
         {operationActions.length > 0 ? (
           <section className="settings-card">
