@@ -57,6 +57,11 @@ const sections = [
     href: 'credits',
   },
   {
+    title: '画像生成の利用状況',
+    description: '画像生成の完成・採用・失敗の件数を、参加者ごとに確認します。',
+    href: 'image-operations',
+  },
+  {
     title: '実践プログラム',
     description: '参加者に提供するコースや、選べる支援内容を管理します。',
     href: 'programs',
