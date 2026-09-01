@@ -26,6 +26,15 @@ describe('LINE authentication return path', () => {
     expect(safeLineAuthReturnPath('/s/Bad-Slug')).toBeNull();
   });
 
+  it('keeps only a bounded referral code and click ID on a service entry path', () => {
+    const clickId = '11111111-1111-4111-8111-111111111111';
+    expect(safeLineAuthReturnPath(`/s/side-job-support?ref=FRIEND2026&rc=${clickId}`)).toBe(
+      `/s/side-job-support?ref=FRIEND2026&rc=${clickId}`,
+    );
+    expect(safeLineAuthReturnPath('/s/side-job-support?ref=bad-code')).toBeNull();
+    expect(safeLineAuthReturnPath('/s/side-job-support?ref=FRIEND2026&next=/admin')).toBeNull();
+  });
+
   it('accepts only an exact service invitation path', () => {
     const token = 'a'.repeat(43);
     expect(safeLineAuthReturnPath(`/s/side-job-support/join/${token}`)).toBe(

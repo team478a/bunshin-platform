@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertNotSelfServiceReferral,
   normalizeServiceReferralAttribution,
+  normalizeServiceReferralCode,
   normalizeServiceReferralRewardRule,
 } from '../src/service-referral-credit';
 
@@ -43,5 +44,12 @@ describe('service referral credit core', () => {
         referredUserId: 'user-1',
       }),
     ).toThrow('self referral');
+  });
+
+  it('accepts only a canonical fixed referral code', () => {
+    expect(normalizeServiceReferralCode(' friend2026 ')).toBe('FRIEND2026');
+    expect(() => normalizeServiceReferralCode('friend-link')).toThrow(
+      'invalid service referral code',
+    );
   });
 });

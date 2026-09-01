@@ -5282,6 +5282,7 @@ model ServiceReferralCode {
   @@unique([workspaceId, groupId, groupMembershipId], map: "service_referral_codes_membership_key")
   @@unique([workspaceId, groupId, groupMembershipId, userId], map: "service_referral_codes_membership_scope_user_key")
   @@unique([workspaceId, groupId, code])
+  @@unique([code], map: "service_referral_codes_code_global_key")
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status])
   @@map("service_referral_codes")

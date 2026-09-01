@@ -55,6 +55,7 @@ export default async function LoginPage({
           <span>または</span>
         </div>
         <form className="form-stack" action="/auth/email" method="post">
+          {returnTo && <input name="returnTo" type="hidden" value={returnTo} />}
           <label className="field" htmlFor="email">
             <span className="field__label">メールアドレス</span>
             <input

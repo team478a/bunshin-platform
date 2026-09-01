@@ -15,10 +15,14 @@ export function ParticipationForm({
   serviceSlug,
   documents,
   requiresApproval,
+  referralCode,
+  referralClickId,
 }: {
   serviceSlug: string;
   documents: LegalDocument[];
   requiresApproval: boolean;
+  referralCode: string | null;
+  referralClickId: string | null;
 }) {
   const router = useRouter();
   const [accepted, setAccepted] = useState<string[]>([]);
@@ -30,7 +34,11 @@ export function ParticipationForm({
     const response = await fetch(`/api/services/${encodeURIComponent(serviceSlug)}/participation`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ legalDocumentIds: documents.map(({ id }) => id) }),
+      body: JSON.stringify({
+        legalDocumentIds: documents.map(({ id }) => id),
+        referralCode,
+        referralClickId,
+      }),
     });
     if (!response.ok) {
       setStatus('error');

@@ -10339,6 +10339,73 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
         },
         update: { status, consentedAt: input.now, declinedAt: null, revokedAt: null },
       });
+      if (configuration.registration.referralEnabled && input.referralCode !== null) {
+        const referralCode = await tx.serviceReferralCode.findFirst({
+          where: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            code: input.referralCode,
+            status: 'ACTIVE',
+            groupMembership: { status: 'ACTIVE' },
+          },
+          select: { id: true, groupMembershipId: true, userId: true },
+        });
+        if (
+          referralCode !== null &&
+          referralCode.groupMembershipId !== membership.id &&
+          referralCode.userId !== input.actorUserId
+        ) {
+          const existingReferral = await tx.serviceReferral.findFirst({
+            where: {
+              workspaceId: configuration.workspaceId,
+              groupId: configuration.groupId,
+              referredMembershipId: membership.id,
+            },
+            select: { id: true },
+          });
+          if (existingReferral === null) {
+            const click =
+              input.referralClickId === null
+                ? null
+                : await tx.serviceReferralClick.findFirst({
+                    where: {
+                      id: input.referralClickId,
+                      workspaceId: configuration.workspaceId,
+                      groupId: configuration.groupId,
+                      referralCodeId: referralCode.id,
+                      expiresAt: { gt: input.now },
+                    },
+                    select: { id: true },
+                  });
+            const referralClick =
+              click ??
+              (await tx.serviceReferralClick.create({
+                data: {
+                  workspaceId: configuration.workspaceId,
+                  groupId: configuration.groupId,
+                  referralCodeId: referralCode.id,
+                  expiresAt: new Date(input.now.getTime() + 30 * 24 * 60 * 60 * 1000),
+                },
+                select: { id: true },
+              }));
+            await tx.serviceReferral.createMany({
+              data: [
+                {
+                  workspaceId: configuration.workspaceId,
+                  groupId: configuration.groupId,
+                  referralCodeId: referralCode.id,
+                  referralClickId: referralClick.id,
+                  referredMembershipId: membership.id,
+                  referredUserId: input.actorUserId,
+                  status: 'REGISTERED',
+                  registeredAt: input.now,
+                },
+              ],
+              skipDuplicates: true,
+            });
+          }
+        }
+      }
       if (latest.length > 0)
         await tx.serviceLegalConsent.createMany({
           data: latest.map(({ id }) => ({

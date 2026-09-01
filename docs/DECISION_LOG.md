@@ -1864,3 +1864,10 @@
 - Idempotency: 特典は紹介、ルール版、受益Membershipの組で一意にする。台帳の訂正は過去行の上書きではなく、返却または調整の追記で行う。
 - Scope: CoreではURL発行・公開流入処理・クレジット消費・公式キャンペーン配信・不正判定・現金報酬を実装しない。
 - Source: `docs/SERVICE_REFERRAL_CREDIT_CORE_REPORT.md`
+
+# 2026-09-01: 紹介URLはログイン前後をまたいでサービス境界を再検証する
+
+- Entry: 共有URLは `/r/{code}` とし、公開中かつ紹介を許可したサービスだけへサーバー側で遷移する。外部アフィリエイトURLの `{{referral_url}}` は使わない。
+- Authentication: LINEとメールのログイン中は、固定形式の紹介コードとクリックIDだけを10分間保持する。任意URL、フラグメント、他のクエリは復元しない。
+- Attribution: 登録時にコード、クリック、サービス、紹介者Membershipを再検証する。無効・期限切れ・別サービス・自己紹介は特典対象にしないが、通常の登録は妨げない。
+- Source: `docs/SERVICE_REFERRAL_REGISTRATION_FLOW_REPORT.md`

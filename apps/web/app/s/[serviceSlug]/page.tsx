@@ -59,10 +59,13 @@ export async function generateMetadata({
 
 export default async function ServiceEntryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams: Promise<{ ref?: string | string[]; rc?: string | string[] }>;
 }) {
   const { serviceSlug } = await params;
+  const query = await searchParams;
   const { configuration } = await service(serviceSlug);
   const currentUser = await (await currentUserProvider()).getCurrentUser();
   const db = await import('@bunshin/database');
@@ -71,7 +74,13 @@ export default async function ServiceEntryPage({
     new db.PrismaServiceParticipationRepository(),
   ).findView({ slug: serviceSlug, actorUserId: currentUser?.userId ?? null });
   const copy = registrationCopy[configuration.registration.mode];
-  const returnTo = `/s/${configuration.slug}`;
+  const referralCode =
+    configuration.registration.referralEnabled && typeof query.ref === 'string' ? query.ref : null;
+  const referralClickId = referralCode !== null && typeof query.rc === 'string' ? query.rc : null;
+  const returnToQuery = new URLSearchParams();
+  if (referralCode !== null) returnToQuery.set('ref', referralCode);
+  if (referralClickId !== null) returnToQuery.set('rc', referralClickId);
+  const returnTo = `/s/${configuration.slug}${returnToQuery.size ? `?${returnToQuery}` : ''}`;
   const style = {
     '--service-primary': configuration.brand.primaryColor,
     '--service-secondary': configuration.brand.secondaryColor,
@@ -120,6 +129,8 @@ export default async function ServiceEntryPage({
               <ParticipationForm
                 documents={participation.legalDocuments}
                 requiresApproval={participation.registrationMode === 'APPROVAL_REQUIRED'}
+                referralCode={referralCode}
+                referralClickId={referralClickId}
                 serviceSlug={serviceSlug}
               />
             </>
