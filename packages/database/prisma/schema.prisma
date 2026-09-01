@@ -111,6 +111,19 @@ enum ServiceRegistrationMode {
   CLOSED
 }
 
+enum ServiceBillingMode {
+  FREE
+  MANUAL_INVOICE
+  EXTERNAL_BILLING
+}
+
+enum ServiceCommercialStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  ENDED
+}
+
 model ProgramTemplate {
   id              String                    @id @default(uuid()) @db.Uuid
   workspaceId     String                    @map("workspace_id") @db.Uuid
@@ -1645,6 +1658,7 @@ model User {
   groupKnowledgeAudits              GroupKnowledgeAuditLog[]            @relation("GroupKnowledgeAuditActor")
   serviceConfigurationsCreated      ServiceConfiguration[]              @relation("ServiceConfigurationCreator")
   serviceConfigurationsUpdated      ServiceConfiguration[]              @relation("ServiceConfigurationUpdater")
+  serviceCommercialSettingsUpdated  ServiceCommercialSetting[]          @relation("ServiceCommercialSettingUpdater")
   serviceConfigurationAudits        ServiceConfigurationAudit[]         @relation("ServiceConfigurationAuditActor")
   serviceReferralRewardRulesCreated ServiceReferralRewardRule[]         @relation("ServiceReferralRewardRuleCreator")
 
@@ -1752,6 +1766,7 @@ model Workspace {
   badgeApprovalRequests           BadgeApprovalRequest[]
   badgeAwardCandidates            BadgeAwardCandidate[]
   serviceConfigurations           ServiceConfiguration[]
+  serviceCommercialSettings       ServiceCommercialSetting[]
   serviceBrands                   ServiceBrand[]
   serviceRegistrationPolicies     ServiceRegistrationPolicy[]
   serviceConfigurationAudits      ServiceConfigurationAudit[]
@@ -1839,6 +1854,7 @@ model Group {
   badgeAwardCandidates            BadgeAwardCandidate[]
   badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
   serviceConfiguration            ServiceConfiguration?
+  serviceCommercialSetting        ServiceCommercialSetting?
   serviceBrand                    ServiceBrand?
   serviceRegistrationPolicy       ServiceRegistrationPolicy?
   serviceConfigurationAudits      ServiceConfigurationAudit[]
@@ -1884,11 +1900,43 @@ model ServiceConfiguration {
   registration         ServiceRegistrationPolicy?
   audits               ServiceConfigurationAudit[]
   legalDocuments       ServiceLegalDocument[]
+  commercialSetting    ServiceCommercialSetting?
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId])
   @@index([workspaceId, visibility, startsAt, endsAt])
   @@map("service_configurations")
+}
+
+/// 決済事業者に依存しない、サービス契約・販売プランの現在設定。
+/// 実際の決済・請求書発行は外部会計／決済サービスの責務とする。
+model ServiceCommercialSetting {
+  id                            String                  @id @default(uuid()) @db.Uuid
+  workspaceId                   String                  @map("workspace_id") @db.Uuid
+  groupId                       String                  @unique @map("group_id") @db.Uuid
+  configurationId               String                  @unique @map("configuration_id") @db.Uuid
+  planName                      String                  @map("plan_name") @db.VarChar(120)
+  billingMode                   ServiceBillingMode      @default(FREE) @map("billing_mode")
+  status                        ServiceCommercialStatus @default(DRAFT)
+  monthlyPriceYen               Int?                    @map("monthly_price_yen")
+  includedMemberLimit           Int?                    @map("included_member_limit")
+  monthlyAiGenerationLimit      Int?                    @map("monthly_ai_generation_limit")
+  monthlyImageGenerationLimit   Int?                    @map("monthly_image_generation_limit")
+  monthlyVideoGenerationLimit   Int?                    @map("monthly_video_generation_limit")
+  startsAt                      DateTime?               @map("starts_at") @db.Timestamptz(6)
+  endsAt                        DateTime?               @map("ends_at") @db.Timestamptz(6)
+  updatedByUserId               String                  @map("updated_by_user_id") @db.Uuid
+  createdAt                     DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                         Group                   @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration                 ServiceConfiguration    @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  updatedBy                     User                    @relation("ServiceCommercialSettingUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId])
+  @@unique([workspaceId, groupId, configurationId])
+  @@index([status, startsAt, endsAt])
+  @@map("service_commercial_settings")
 }
 
 model ServiceBrand {
