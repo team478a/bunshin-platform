@@ -14468,7 +14468,11 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
           ownerUserId: input.actorUserId,
         },
       });
-      if (delivery === null || (delivery.expiresAt !== null && delivery.expiresAt <= now))
+      if (
+        delivery === null ||
+        delivery.status === 'REVOKED' ||
+        (delivery.expiresAt !== null && delivery.expiresAt <= now)
+      )
         return null;
       const permitted =
         input.action === 'VIEWED'
@@ -14534,6 +14538,38 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
             status: input.status,
             errorCode: input.errorCode,
           },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return videoDeliveryRecord(row);
+    });
+  }
+
+  async revoke(input: Parameters<VideoDeliveryRepository['revoke']>[0]) {
+    if (!(await this.serviceManager(input.workspaceId, input.groupId, input.actorUserId)))
+      return null;
+    return this.client.$transaction(async (tx) => {
+      const delivery = await tx.videoDelivery.findFirst({
+        where: {
+          id: input.videoDeliveryId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: { not: 'REVOKED' },
+        },
+      });
+      if (delivery === null) return null;
+      const now = new Date();
+      const row = await tx.videoDelivery.update({
+        where: { id: delivery.id },
+        data: { status: 'REVOKED', revokedAt: now },
+      });
+      await tx.videoDeliveryEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          videoDeliveryId: delivery.id,
+          eventType: 'REVOKED',
+          eventData: { reason: input.reason },
           performedByUserId: input.actorUserId,
         },
       });

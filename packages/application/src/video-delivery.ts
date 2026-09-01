@@ -10,7 +10,7 @@ export const VIDEO_DELIVERY_ACTIONS = [
 
 export type VideoDeliveryAction = (typeof VIDEO_DELIVERY_ACTIONS)[number];
 export type VideoDeliveryStatus =
-  'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED';
+  'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED' | 'REVOKED';
 export type VideoDeliveryNotificationStatus = 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED';
 
 export interface VideoDeliveryRecord {
@@ -73,6 +73,13 @@ export interface VideoDeliveryRepository {
     errorCode: string | null;
     attemptedAt: Date;
   }): Promise<VideoDeliveryRecord | null>;
+  revoke(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    videoDeliveryId: string;
+    reason: string;
+  }): Promise<VideoDeliveryRecord | null>;
 }
 
 const object = (value: Record<string, unknown>) =>
@@ -130,6 +137,19 @@ export class RecordVideoDeliveryNotification {
     const result = await this.repository.recordNotification(input);
     if (result === null)
       throw new ApplicationError('FORBIDDEN', 'video delivery notification unavailable');
+    return result;
+  }
+}
+
+export class RevokeVideoDelivery {
+  constructor(private readonly repository: VideoDeliveryRepository) {}
+
+  async execute(input: Parameters<VideoDeliveryRepository['revoke']>[0]) {
+    if (input.reason.trim().length < 1 || input.reason.trim().length > 500)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid video delivery revoke reason');
+    const result = await this.repository.revoke({ ...input, reason: input.reason.trim() });
+    if (result === null)
+      throw new ApplicationError('FORBIDDEN', 'video delivery cannot be revoked');
     return result;
   }
 }

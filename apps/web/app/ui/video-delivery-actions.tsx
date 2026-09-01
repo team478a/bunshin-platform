@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
-type DeliveryStatus = 'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED';
+type DeliveryStatus =
+  'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED' | 'REVOKED';
 
 export function VideoDeliveryActions({
   serviceSlug,
@@ -73,6 +74,15 @@ export function VideoDeliveryActions({
       <section className="settings-card">
         <h2>この動画の利用期限が過ぎました</h2>
         <p>動画は開けません。もう一度使いたい場合は、サービスの管理者へお問い合わせください。</p>
+      </section>
+    );
+  }
+
+  if (status === 'REVOKED') {
+    return (
+      <section className="settings-card">
+        <h2>この動画の利用は停止されました</h2>
+        <p>動画は開けません。内容の確認が必要な場合は、サービスの管理者へお問い合わせください。</p>
       </section>
     );
   }

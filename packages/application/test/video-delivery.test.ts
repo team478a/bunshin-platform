@@ -4,6 +4,7 @@ import {
   GetMyVideoDelivery,
   RecordVideoDeliveryAction,
   RecordVideoDeliveryNotification,
+  RevokeVideoDelivery,
   type VideoDeliveryRepository,
 } from '../src/video-delivery';
 
@@ -13,6 +14,7 @@ const repository = () => {
     findForRecipient: vi.fn<VideoDeliveryRepository['findForRecipient']>(),
     recordAction: vi.fn<VideoDeliveryRepository['recordAction']>(),
     recordNotification: vi.fn<VideoDeliveryRepository['recordNotification']>(),
+    revoke: vi.fn<VideoDeliveryRepository['revoke']>(),
   };
   return { repo: mocks satisfies VideoDeliveryRepository, mocks };
 };
@@ -105,5 +107,26 @@ describe('video delivery core', () => {
       }),
     ).rejects.toEqual(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
     expect(mocks.recordNotification).not.toHaveBeenCalled();
+  });
+
+  it('records a manager-only revoke with its reason', async () => {
+    const { repo, mocks } = repository();
+    mocks.revoke.mockResolvedValue(null);
+    await expect(
+      new RevokeVideoDelivery(repo).execute({
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        actorUserId: 'manager-a',
+        videoDeliveryId: 'delivery-a',
+        reason: ' 内容を差し替えるため ',
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: 'FORBIDDEN' }));
+    expect(mocks.revoke).toHaveBeenCalledWith({
+      workspaceId: 'workspace-a',
+      groupId: 'service-a',
+      actorUserId: 'manager-a',
+      videoDeliveryId: 'delivery-a',
+      reason: '内容を差し替えるため',
+    });
   });
 });
