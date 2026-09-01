@@ -10,7 +10,13 @@ type Failure = {
   failedAt: string;
 };
 
-export function LineDeliveryRetryPanel({ failures }: { failures: Failure[] }) {
+export function LineDeliveryRetryPanel({
+  failures,
+  endpointPrefix = '/api/admin',
+}: {
+  failures: Failure[];
+  endpointPrefix?: string;
+}) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -26,7 +32,7 @@ export function LineDeliveryRetryPanel({ failures }: { failures: Failure[] }) {
     const endpoint =
       kind === 'BADGE'
         ? `/api/admin/badge-line-deliveries/${deliveryId}/retry`
-        : `/api/admin/line-deliveries/${deliveryId}/retry`;
+        : `${endpointPrefix}/line-deliveries/${deliveryId}/retry`;
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -45,9 +51,9 @@ export function LineDeliveryRetryPanel({ failures }: { failures: Failure[] }) {
   return (
     <section aria-labelledby="line-retry-heading">
       <h2 id="line-retry-heading">再送可能な失敗</h2>
-      <p>同じ失敗回は一度だけ再送できます。理由は環境別の監査履歴へ保存されます。</p>
+      <p>同じ失敗回は一度だけ再送できます。理由は監査履歴へ保存されます。</p>
       {failures.length === 0 ? (
-        <p>現在、管理者が再送できる失敗はありません。</p>
+        <p>現在、再送できる失敗はありません。</p>
       ) : (
         <ul>
           {failures.map((failure) => (
