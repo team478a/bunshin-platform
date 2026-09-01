@@ -49,6 +49,9 @@ export function VideoDeliveryManager({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const expiryValue = data.get('expiresAt');
+    const expiresAt =
+      typeof expiryValue === 'string' && expiryValue ? new Date(expiryValue).toISOString() : null;
     setSaving(candidate.videoRenderId);
     setMessage('利用できる状態にしています…');
     try {
@@ -63,7 +66,7 @@ export function VideoDeliveryManager({
             videoProjectId: candidate.videoProjectId,
             videoRenderId: candidate.videoRenderId,
             usageMessage: data.get('usageMessage'),
-            expiresAt: null,
+            expiresAt,
           }),
         },
       );
@@ -123,6 +126,13 @@ export function VideoDeliveryManager({
                   name="usageMessage"
                   required
                 />
+              </label>
+              <label className="field">
+                <span className="field__label">利用期限（任意）</span>
+                <input className="field__control" name="expiresAt" type="datetime-local" />
+                <span className="field__hint">
+                  期限を過ぎると、利用者は動画を開いたり投稿完了を記録したりできません。
+                </span>
               </label>
               <button
                 className="button button--primary"
