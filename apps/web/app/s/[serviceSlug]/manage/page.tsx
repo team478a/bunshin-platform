@@ -47,6 +47,11 @@ const sections = [
     href: 'badges',
   },
   {
+    title: '紹介特典',
+    description: '紹介で参加した人の行動に応じて、画像作成回数を渡す条件を設定します。',
+    href: 'referral-rewards',
+  },
+  {
     title: '実践プログラム',
     description: '参加者に提供するコースや、選べる支援内容を管理します。',
     href: 'programs',
