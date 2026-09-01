@@ -70,6 +70,13 @@ const positiveInteger = (value: number, field: string, maximum: number) => {
   return value;
 };
 
+export function normalizeServiceReferralCode(value: string) {
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{6,80}$/.test(code))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid service referral code');
+  return code;
+}
+
 /**
  * Keeps public referral parameters bounded and free of a URL or personal data.
  * The route chooses the service and code server-side; clients only supply labels.

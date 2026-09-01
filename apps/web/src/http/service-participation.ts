@@ -6,7 +6,13 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 
-const requestSchema = z.object({ legalDocumentIds: z.array(z.string().uuid()).max(2) }).strict();
+const requestSchema = z
+  .object({
+    legalDocumentIds: z.array(z.string().uuid()).max(2),
+    referralCode: z.string().max(80).nullable().optional(),
+    referralClickId: z.string().uuid().nullable().optional(),
+  })
+  .strict();
 const approvalSchema = z.object({ reason: z.string().min(5).max(1000) }).strict();
 const slugSchema = z
   .string()
@@ -34,6 +40,8 @@ export async function requestServiceParticipationResponse(request: Request, slug
       slug: slugSchema.parse(slug),
       actorUserId: actor.userId,
       legalDocumentIds: value.legalDocumentIds,
+      referralCode: value.referralCode ?? null,
+      referralClickId: value.referralClickId ?? null,
     });
     return Response.json(
       { data: membership, requestId },
