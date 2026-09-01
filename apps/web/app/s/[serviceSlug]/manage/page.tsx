@@ -110,13 +110,87 @@ export default async function ServiceManagementHome({
     },
   });
   if (!group) notFound();
-  const pendingPostApprovalCount = await db.prisma.campaignPostingApprovalRequest.count({
-    where: {
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-      status: 'PENDING',
-    },
-  });
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const missionScope = {
+    workspaceId: service.workspaceId,
+    bunshin: { is: { groupId: service.serviceId } },
+  };
+  const [
+    pendingPostApprovalCount,
+    missionsCreated,
+    acceptedMissions,
+    rejectedMissions,
+    copiedMissions,
+    postedMissions,
+    trendMissions,
+    successfulAiCalls,
+    failedAiCalls,
+  ] = await Promise.all([
+    db.prisma.campaignPostingApprovalRequest.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'PENDING',
+      },
+    }),
+    db.prisma.dailyMission.count({
+      where: { ...missionScope, createdAt: { gte: sevenDaysAgo } },
+    }),
+    db.prisma.missionDecision.count({
+      where: {
+        ...missionScope,
+        decision: 'ACCEPTED',
+        decidedAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.missionDecision.count({
+      where: {
+        ...missionScope,
+        decision: 'REJECTED',
+        decidedAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.missionActivity.count({
+      where: {
+        ...missionScope,
+        occurredAt: { gte: sevenDaysAgo },
+        type: {
+          in: [
+            'COPIED_TEXT',
+            'COPIED_SLIDE',
+            'COPIED_IMAGE_INSTRUCTION',
+            'COPIED_VIDEO_PROMPT',
+            'COPIED_SCRIPT',
+          ],
+        },
+      },
+    }),
+    db.prisma.postRecord.count({
+      where: { ...missionScope, postedAt: { gte: sevenDaysAgo } },
+    }),
+    db.prisma.missionTrendContext.count({
+      where: {
+        createdAt: { gte: sevenDaysAgo },
+        dailyMission: { is: missionScope },
+      },
+    }),
+    db.prisma.aiUsageEvent.count({
+      where: {
+        workspaceId: service.workspaceId,
+        occurredAt: { gte: sevenDaysAgo },
+        status: 'SUCCESS',
+        bunshin: { is: { groupId: service.serviceId } },
+      },
+    }),
+    db.prisma.aiUsageEvent.count({
+      where: {
+        workspaceId: service.workspaceId,
+        occurredAt: { gte: sevenDaysAgo },
+        status: 'FAILED',
+        bunshin: { is: { groupId: service.serviceId } },
+      },
+    }),
+  ]);
   const configuration = service.configuration;
   const onboarding = readServiceOnboardingSettings(
     configuration.registration.onboardingConfig,
@@ -147,6 +221,41 @@ export default async function ServiceManagementHome({
           <h1>{configuration.displayName}の開始準備と運営</h1>
           <p>開始準備の確認と、日々の運営に必要な設定をまとめました。</p>
         </header>
+        <section className="settings-card">
+          <h2>直近7日間の活動</h2>
+          <p>参加者の本文や個別の利用履歴は表示せず、サービス全体の件数だけを確認できます。</p>
+          <dl className="settings-status-list">
+            <div className="settings-status-item">
+              <dt>作られた投稿案</dt>
+              <dd>{missionsCreated}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>採用 / 今回は使わない</dt>
+              <dd>
+                {acceptedMissions}件 / {rejectedMissions}件
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>コピー / 投稿完了</dt>
+              <dd>
+                {copiedMissions}回 / {postedMissions}件
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>話題を使った投稿案</dt>
+              <dd>{trendMissions}件</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>AIの処理</dt>
+              <dd>
+                成功 {successfulAiCalls}回 / 要確認 {failedAiCalls}回
+              </dd>
+            </div>
+          </dl>
+          <p>
+            話題の調査設定と原価はシステム管理者が管理します。エラーが続く場合は管理者へ連絡してください。
+          </p>
+        </section>
         <section className="settings-card">
           <h2>
             {readyCount} / {readiness.length} 項目が準備できています
