@@ -3,6 +3,7 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { ServiceEditor } from './service-editor';
 import Link from 'next/link';
 import { ServiceLifecycleEditor } from './service-lifecycle-editor';
+import { ServiceCommercialSettingEditor } from './service-commercial-setting-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export default async function ServicesAdminPage() {
       orderBy: { name: 'asc' },
     }),
     db.prisma.serviceConfiguration.findMany({
-      include: { group: { select: { status: true } }, registration: true },
+      include: { group: { select: { status: true } }, registration: true, commercialSetting: true },
       orderBy: { createdAt: 'desc' },
     }),
   ]);
@@ -58,6 +59,28 @@ export default async function ServicesAdminPage() {
                     startsAt: service.startsAt?.toISOString() ?? null,
                     endsAt: service.endsAt?.toISOString() ?? null,
                   }}
+                />
+                <ServiceCommercialSettingEditor
+                  serviceId={service.id}
+                  setting={
+                    service.commercialSetting
+                      ? {
+                          planName: service.commercialSetting.planName,
+                          billingMode: service.commercialSetting.billingMode,
+                          status: service.commercialSetting.status,
+                          monthlyPriceYen: service.commercialSetting.monthlyPriceYen,
+                          includedMemberLimit: service.commercialSetting.includedMemberLimit,
+                          monthlyAiGenerationLimit:
+                            service.commercialSetting.monthlyAiGenerationLimit,
+                          monthlyImageGenerationLimit:
+                            service.commercialSetting.monthlyImageGenerationLimit,
+                          monthlyVideoGenerationLimit:
+                            service.commercialSetting.monthlyVideoGenerationLimit,
+                          startsAt: service.commercialSetting.startsAt?.toISOString() ?? null,
+                          endsAt: service.commercialSetting.endsAt?.toISOString() ?? null,
+                        }
+                      : null
+                  }
                 />
                 <p>
                   専用URL：<code>/s/{service.slug}</code> ／ 登録方法：
