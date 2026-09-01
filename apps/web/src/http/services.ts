@@ -69,6 +69,21 @@ const commercialSettingsSchema = z
   })
   .strict();
 
+const customDomainSchema = z
+  .object({
+    hostname: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .min(3)
+      .max(253)
+      .regex(/^(?=.{3,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/),
+    status: z.enum(['DRAFT', 'VERIFIED', 'ACTIVE', 'DISABLED']),
+    verificationNote: z.union([z.literal(''), z.string().trim().max(1000)]),
+    reason: z.string().trim().min(1).max(1000),
+  })
+  .strict();
+
 export async function createServiceResponse(request: Request) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
@@ -340,6 +355,106 @@ export async function updateServiceCommercialSettingsResponse(
         },
       });
       return afterData;
+    });
+    return Response.json(
+      { data: saved, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function updateServiceCustomDomainResponse(request: Request, configurationId: string) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const user = await (await currentUserProvider()).getCurrentUser();
+    if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    if (!uuid.safeParse(configurationId).success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid service id');
+    const value = customDomainSchema.parse(await request.json());
+    if (
+      ['localhost', 'vercel.app'].some(
+        (suffix) => value.hostname === suffix || value.hostname.endsWith(`.${suffix}`),
+      )
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid custom domain');
+
+    const db = await import('@bunshin/database');
+    const saved = await db.prisma.$transaction(async (tx) => {
+      const admin = await tx.platformAdmin.findFirst({
+        where: { userId: user.userId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        select: { id: true },
+      });
+      if (admin === null)
+        throw new ApplicationError('FORBIDDEN', 'platform administrator required');
+      const configuration = await tx.serviceConfiguration.findUnique({
+        where: { id: configurationId },
+        include: { customDomain: true },
+      });
+      if (configuration === null) throw new ApplicationError('NOT_FOUND', 'service not found');
+      if (value.status === 'ACTIVE' && configuration.customDomain?.status !== 'VERIFIED')
+        throw new ApplicationError('VALIDATION_ERROR', 'domain must be verified before activation');
+      const now = new Date();
+      const customDomain = await tx.serviceCustomDomain.upsert({
+        where: { groupId: configuration.groupId },
+        create: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          configurationId: configuration.id,
+          hostname: value.hostname,
+          status: value.status,
+          verificationNote: value.verificationNote || null,
+          verifiedAt: value.status === 'VERIFIED' ? now : null,
+          activatedAt: null,
+        },
+        update: {
+          hostname: value.hostname,
+          status: value.status,
+          verificationNote: value.verificationNote || null,
+          verifiedAt:
+            value.status === 'VERIFIED' && configuration.customDomain?.verifiedAt === null
+              ? now
+              : (configuration.customDomain?.verifiedAt ?? null),
+          activatedAt: value.status === 'ACTIVE' ? now : null,
+        },
+      });
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          configurationId: configuration.id,
+          action: 'CUSTOM_DOMAIN_UPDATED',
+          beforeData: configuration.customDomain
+            ? {
+                hostname: configuration.customDomain.hostname,
+                status: configuration.customDomain.status,
+                verificationNote: configuration.customDomain.verificationNote,
+              }
+            : {},
+          afterData: {
+            hostname: customDomain.hostname,
+            status: customDomain.status,
+            verificationNote: customDomain.verificationNote,
+          },
+          reason: value.reason,
+          performedByUserId: user.userId,
+        },
+      });
+      return {
+        hostname: customDomain.hostname,
+        status: customDomain.status,
+        verificationNote: customDomain.verificationNote,
+        verifiedAt: customDomain.verifiedAt?.toISOString() ?? null,
+        activatedAt: customDomain.activatedAt?.toISOString() ?? null,
+      };
     });
     return Response.json(
       { data: saved, requestId },

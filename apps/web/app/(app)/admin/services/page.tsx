@@ -4,6 +4,7 @@ import { ServiceEditor } from './service-editor';
 import Link from 'next/link';
 import { ServiceLifecycleEditor } from './service-lifecycle-editor';
 import { ServiceCommercialSettingEditor } from './service-commercial-setting-editor';
+import { ServiceCustomDomainEditor } from './service-custom-domain-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,12 @@ export default async function ServicesAdminPage() {
       orderBy: { name: 'asc' },
     }),
     db.prisma.serviceConfiguration.findMany({
-      include: { group: { select: { status: true } }, registration: true, commercialSetting: true },
+      include: {
+        group: { select: { status: true } },
+        registration: true,
+        commercialSetting: true,
+        customDomain: true,
+      },
       orderBy: { createdAt: 'desc' },
     }),
   ]);
@@ -78,6 +84,18 @@ export default async function ServicesAdminPage() {
                             service.commercialSetting.monthlyVideoGenerationLimit,
                           startsAt: service.commercialSetting.startsAt?.toISOString() ?? null,
                           endsAt: service.commercialSetting.endsAt?.toISOString() ?? null,
+                        }
+                      : null
+                  }
+                />
+                <ServiceCustomDomainEditor
+                  serviceId={service.id}
+                  domain={
+                    service.customDomain
+                      ? {
+                          hostname: service.customDomain.hostname,
+                          status: service.customDomain.status,
+                          verificationNote: service.customDomain.verificationNote,
                         }
                       : null
                   }

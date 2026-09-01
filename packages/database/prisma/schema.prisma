@@ -124,6 +124,14 @@ enum ServiceCommercialStatus {
   ENDED
 }
 
+/// 独自ドメインは、DNS・ホスティングの確認が完了するまで有効化しない。
+enum ServiceCustomDomainStatus {
+  DRAFT
+  VERIFIED
+  ACTIVE
+  DISABLED
+}
+
 model ProgramTemplate {
   id              String                    @id @default(uuid()) @db.Uuid
   workspaceId     String                    @map("workspace_id") @db.Uuid
@@ -1766,6 +1774,7 @@ model Workspace {
   badgeApprovalRequests           BadgeApprovalRequest[]
   badgeAwardCandidates            BadgeAwardCandidate[]
   serviceConfigurations           ServiceConfiguration[]
+  serviceCustomDomains            ServiceCustomDomain[]
   serviceCommercialSettings       ServiceCommercialSetting[]
   serviceBrands                   ServiceBrand[]
   serviceRegistrationPolicies     ServiceRegistrationPolicy[]
@@ -1854,6 +1863,7 @@ model Group {
   badgeAwardCandidates            BadgeAwardCandidate[]
   badgeLineNotificationDeliveries BadgeLineNotificationDelivery[]
   serviceConfiguration            ServiceConfiguration?
+  serviceCustomDomain             ServiceCustomDomain?
   serviceCommercialSetting        ServiceCommercialSetting?
   serviceBrand                    ServiceBrand?
   serviceRegistrationPolicy       ServiceRegistrationPolicy?
@@ -1901,6 +1911,7 @@ model ServiceConfiguration {
   audits               ServiceConfigurationAudit[]
   legalDocuments       ServiceLegalDocument[]
   commercialSetting    ServiceCommercialSetting?
+  customDomain         ServiceCustomDomain?
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId])
@@ -1937,6 +1948,29 @@ model ServiceCommercialSetting {
   @@unique([workspaceId, groupId, configurationId])
   @@index([status, startsAt, endsAt])
   @@map("service_commercial_settings")
+}
+
+/// サービス固有ドメインの申請・確認状態。DNS／Vercel の接続操作そのものは保存しない。
+model ServiceCustomDomain {
+  id              String                    @id @default(uuid()) @db.Uuid
+  workspaceId     String                    @map("workspace_id") @db.Uuid
+  groupId         String                    @unique @map("group_id") @db.Uuid
+  configurationId String                    @unique @map("configuration_id") @db.Uuid
+  hostname        String                    @unique @db.VarChar(253)
+  status          ServiceCustomDomainStatus @default(DRAFT)
+  verificationNote String?                  @map("verification_note") @db.VarChar(1000)
+  verifiedAt      DateTime?                 @map("verified_at") @db.Timestamptz(6)
+  activatedAt     DateTime?                 @map("activated_at") @db.Timestamptz(6)
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group                     @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration   ServiceConfiguration      @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId])
+  @@unique([workspaceId, groupId, configurationId])
+  @@index([status, hostname])
+  @@map("service_custom_domains")
 }
 
 model ServiceBrand {
