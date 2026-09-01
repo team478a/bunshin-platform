@@ -3,6 +3,7 @@ import {
   AssignVideoDelivery,
   GetMyVideoDelivery,
   RecordVideoDeliveryAction,
+  RecordVideoDeliveryNotification,
   type VideoDeliveryRepository,
 } from '../src/video-delivery';
 
@@ -11,6 +12,7 @@ const repository = () => {
     assign: vi.fn<VideoDeliveryRepository['assign']>(),
     findForRecipient: vi.fn<VideoDeliveryRepository['findForRecipient']>(),
     recordAction: vi.fn<VideoDeliveryRepository['recordAction']>(),
+    recordNotification: vi.fn<VideoDeliveryRepository['recordNotification']>(),
   };
   return { repo: mocks satisfies VideoDeliveryRepository, mocks };
 };
@@ -87,5 +89,21 @@ describe('video delivery core', () => {
       actorUserId: 'member-a',
       videoDeliveryId: 'delivery-a',
     });
+  });
+
+  it('does not record a successful notification with an error code', async () => {
+    const { repo, mocks } = repository();
+    await expect(
+      new RecordVideoDeliveryNotification(repo).execute({
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        actorUserId: 'manager-a',
+        videoDeliveryId: 'delivery-a',
+        status: 'SENT',
+        errorCode: 'FAILED',
+        attemptedAt: new Date(),
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(mocks.recordNotification).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ export const VIDEO_DELIVERY_ACTIONS = [
 export type VideoDeliveryAction = (typeof VIDEO_DELIVERY_ACTIONS)[number];
 export type VideoDeliveryStatus =
   'ASSIGNED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'POSTED' | 'EXPIRED';
+export type VideoDeliveryNotificationStatus = 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED';
 
 export interface VideoDeliveryRecord {
   id: string;
@@ -22,6 +23,10 @@ export interface VideoDeliveryRecord {
   videoProjectId: string;
   videoRenderId: string;
   status: VideoDeliveryStatus;
+  notificationStatus: VideoDeliveryNotificationStatus;
+  notificationErrorCode: string | null;
+  notificationAttemptCount: number;
+  notifiedAt: Date | null;
   rightsSnapshot: Record<string, unknown>;
   expiresAt: Date | null;
   viewedAt: Date | null;
@@ -58,6 +63,15 @@ export interface VideoDeliveryRepository {
     videoDeliveryId: string;
     action: VideoDeliveryAction;
     eventData: Record<string, unknown>;
+  }): Promise<VideoDeliveryRecord | null>;
+  recordNotification(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    videoDeliveryId: string;
+    status: Exclude<VideoDeliveryNotificationStatus, 'PENDING'>;
+    errorCode: string | null;
+    attemptedAt: Date;
   }): Promise<VideoDeliveryRecord | null>;
 }
 
@@ -99,6 +113,23 @@ export class RecordVideoDeliveryAction {
     const result = await this.repository.recordAction(input);
     if (result === null)
       throw new ApplicationError('FORBIDDEN', 'video delivery action unavailable');
+    return result;
+  }
+}
+
+export class RecordVideoDeliveryNotification {
+  constructor(private readonly repository: VideoDeliveryRepository) {}
+
+  async execute(input: Parameters<VideoDeliveryRepository['recordNotification']>[0]) {
+    if (
+      !['SENT', 'FAILED', 'CANCELLED'].includes(input.status) ||
+      (input.status === 'SENT' && input.errorCode !== null) ||
+      Number.isNaN(input.attemptedAt.getTime())
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid video delivery notification');
+    const result = await this.repository.recordNotification(input);
+    if (result === null)
+      throw new ApplicationError('FORBIDDEN', 'video delivery notification unavailable');
     return result;
   }
 }

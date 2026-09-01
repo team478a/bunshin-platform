@@ -4,6 +4,7 @@ import {
   evaluateLineQuota,
   GetMyVideoDelivery,
   RecordVideoDeliveryAction,
+  RecordVideoDeliveryNotification,
   type VideoDeliveryAction,
 } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -41,6 +42,12 @@ type DeliveryNoticeResult =
   | 'RECIPIENT_UNAVAILABLE'
   | 'QUOTA_UNAVAILABLE'
   | 'FAILED';
+
+function notificationOutcome(value: DeliveryNoticeResult) {
+  if (value === 'SENT') return { status: 'SENT' as const, errorCode: null };
+  if (value === 'FAILED') return { status: 'FAILED' as const, errorCode: value };
+  return { status: 'CANCELLED' as const, errorCode: value };
+}
 
 async function sendDeliveryNotice(input: {
   serviceSlug: string;
@@ -148,6 +155,16 @@ export async function assignServiceVideoDeliveryResponse(request: Request, servi
       ownerUserId: delivery.ownerUserId,
       videoProjectId: delivery.videoProjectId,
     }).catch(() => 'FAILED' as const);
+    const outcome = notificationOutcome(notification);
+    await new RecordVideoDeliveryNotification(new db.PrismaVideoDeliveryRepository()).execute({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      videoDeliveryId: delivery.id,
+      status: outcome.status,
+      errorCode: outcome.errorCode,
+      attemptedAt: new Date(),
+    });
     return Response.json({ data: delivery, notification, requestId }, { status: 201 });
   } catch (error) {
     return jsonError(error, requestId);

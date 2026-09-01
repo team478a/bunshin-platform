@@ -1478,11 +1478,19 @@ enum VideoDeliveryStatus {
 
 enum VideoDeliveryEventType {
   ASSIGNED
+  LINE_NOTIFICATION
   VIEWED
   ACCEPTED
   DECLINED
   DOWNLOADED
   POSTED
+}
+
+enum VideoDeliveryNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
 }
 
 enum VideoSceneGenerationStatus {
@@ -3557,6 +3565,10 @@ model VideoDelivery {
   videoProjectId      String              @map("video_project_id") @db.Uuid
   videoRenderId       String              @unique @map("video_render_id") @db.Uuid
   status              VideoDeliveryStatus @default(ASSIGNED)
+  notificationStatus  VideoDeliveryNotificationStatus @default(PENDING) @map("notification_status")
+  notificationErrorCode String?           @map("notification_error_code") @db.VarChar(80)
+  notificationAttemptCount Int             @default(0) @map("notification_attempt_count")
+  notifiedAt          DateTime?           @map("notified_at") @db.Timestamptz(6)
   rightsSnapshot      Json                @map("rights_snapshot")
   expiresAt           DateTime?           @map("expires_at") @db.Timestamptz(6)
   viewedAt            DateTime?           @map("viewed_at") @db.Timestamptz(6)
@@ -3570,6 +3582,7 @@ model VideoDelivery {
   @@index([workspaceId, groupId, groupMembershipId, status, createdAt])
   @@index([workspaceId, ownerUserId, status, createdAt])
   @@index([workspaceId, groupId, programEnrollmentId])
+  @@index([notificationStatus, createdAt])
   @@index([status, expiresAt])
   @@map("video_deliveries")
 }
