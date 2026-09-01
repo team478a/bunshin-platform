@@ -68,6 +68,15 @@ export function VideoDeliveryActions({
     );
   }
 
+  if (status === 'EXPIRED') {
+    return (
+      <section className="settings-card">
+        <h2>この動画の利用期限が過ぎました</h2>
+        <p>動画は開けません。もう一度使いたい場合は、サービスの管理者へお問い合わせください。</p>
+      </section>
+    );
+  }
+
   return (
     <section className="settings-card">
       <h2>この動画を使いますか？</h2>

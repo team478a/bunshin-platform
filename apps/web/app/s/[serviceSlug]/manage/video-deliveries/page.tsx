@@ -81,6 +81,7 @@ export default async function VideoDeliveryManagementPage({
         acceptedAt: true,
         declinedAt: true,
         postedAt: true,
+        expiresAt: true,
       },
     }),
   ]);
@@ -147,7 +148,10 @@ export default async function VideoDeliveryManagementPage({
         id: delivery.id,
         memberName: membership.user.displayName || membership.user.email || '参加者',
         title: project.title,
-        status: delivery.status,
+        status:
+          delivery.expiresAt !== null && delivery.expiresAt <= new Date()
+            ? 'EXPIRED'
+            : delivery.status,
         assignedAt: delivery.createdAt.toISOString(),
         viewedAt: delivery.viewedAt?.toISOString() ?? null,
         acceptedAt: delivery.acceptedAt?.toISOString() ?? null,
