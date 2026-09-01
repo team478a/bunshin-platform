@@ -55,6 +55,28 @@ export function VideoDeliveryManager({
 }) {
   const [saving, setSaving] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | VideoDeliveryStatusRow['status']>('ALL');
+  const [notificationFilter, setNotificationFilter] = useState<
+    'ALL' | VideoDeliveryStatusRow['notificationStatus']
+  >('ALL');
+
+  const normalizedSearch = search.trim().toLocaleLowerCase('ja-JP');
+  const visibleDeliveries = deliveries.filter((delivery) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      `${delivery.memberName} ${delivery.title}`
+        .toLocaleLowerCase('ja-JP')
+        .includes(normalizedSearch);
+    return (
+      matchesSearch &&
+      (statusFilter === 'ALL' || delivery.status === statusFilter) &&
+      (notificationFilter === 'ALL' || delivery.notificationStatus === notificationFilter)
+    );
+  });
+  const needsActionCount = deliveries.filter(
+    (delivery) => delivery.notificationStatus !== 'SENT',
+  ).length;
 
   async function submit(event: FormEvent<HTMLFormElement>, candidate: VideoDeliveryCandidate) {
     event.preventDefault();
@@ -210,53 +232,108 @@ export function VideoDeliveryManager({
       <section className="settings-card">
         <h2>確認依頼の状況</h2>
         <p>利用者が動画を確認したか、採用したか、投稿したかを確認できます。</p>
+        <p>
+          確認依頼：{deliveries.length}件 ／ LINE通知の確認が必要：{needsActionCount}件
+        </p>
         {deliveries.length === 0 ? (
           <p>確認依頼を送った動画はまだありません。</p>
         ) : (
-          <div className="form-stack">
-            {deliveries.map((delivery) => (
-              <article className="settings-card" key={delivery.id}>
-                <h3>{delivery.title}</h3>
-                <p>対象の参加者：{delivery.memberName}</p>
-                <p>
-                  状態：<strong>{statusLabel[delivery.status]}</strong>
-                </p>
-                <p>
-                  LINE通知：<strong>{notificationLabel[delivery.notificationStatus]}</strong>
-                  {delivery.notificationErrorCode
-                    ? `（理由：${delivery.notificationErrorCode}）`
-                    : ''}
-                </p>
-                {delivery.notifiedAt ? (
-                  <p>LINE通知の確認：{new Date(delivery.notifiedAt).toLocaleString('ja-JP')}</p>
-                ) : null}
-                <p>通知の試行回数：{delivery.notificationAttemptCount}回</p>
-                {delivery.notificationStatus !== 'SENT' ? (
-                  <button
-                    className="button button--secondary"
-                    disabled={saving === delivery.id}
-                    onClick={() => void retryNotification(delivery)}
-                    type="button"
-                  >
-                    {saving === delivery.id ? '再送しています…' : 'LINE通知を再送する'}
-                  </button>
-                ) : null}
-                <p>確認依頼：{new Date(delivery.assignedAt).toLocaleString('ja-JP')}</p>
-                {delivery.viewedAt ? (
-                  <p>動画を確認：{new Date(delivery.viewedAt).toLocaleString('ja-JP')}</p>
-                ) : null}
-                {delivery.acceptedAt ? (
-                  <p>採用：{new Date(delivery.acceptedAt).toLocaleString('ja-JP')}</p>
-                ) : null}
-                {delivery.declinedAt ? (
-                  <p>今回は使わない：{new Date(delivery.declinedAt).toLocaleString('ja-JP')}</p>
-                ) : null}
-                {delivery.postedAt ? (
-                  <p>投稿完了：{new Date(delivery.postedAt).toLocaleString('ja-JP')}</p>
-                ) : null}
-              </article>
-            ))}
-          </div>
+          <>
+            <div className="form-stack">
+              <label className="field">
+                <span className="field__label">参加者または動画名で探す</span>
+                <input
+                  className="field__control"
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="例：山田、ダンス動画"
+                  type="search"
+                  value={search}
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">利用者の状態で絞る</span>
+                <select
+                  className="field__control"
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as 'ALL' | VideoDeliveryStatusRow['status'])
+                  }
+                  value={statusFilter}
+                >
+                  <option value="ALL">すべて</option>
+                  {Object.entries(statusLabel).map(([status, label]) => (
+                    <option key={status} value={status}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">LINE通知の状態で絞る</span>
+                <select
+                  className="field__control"
+                  onChange={(event) =>
+                    setNotificationFilter(
+                      event.target.value as 'ALL' | VideoDeliveryStatusRow['notificationStatus'],
+                    )
+                  }
+                  value={notificationFilter}
+                >
+                  <option value="ALL">すべて</option>
+                  {Object.entries(notificationLabel).map(([status, label]) => (
+                    <option key={status} value={status}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p>表示中：{visibleDeliveries.length}件</p>
+            {visibleDeliveries.length === 0 ? <p>条件に合う確認依頼はありません。</p> : null}
+            <div className="form-stack">
+              {visibleDeliveries.map((delivery) => (
+                <article className="settings-card" key={delivery.id}>
+                  <h3>{delivery.title}</h3>
+                  <p>対象の参加者：{delivery.memberName}</p>
+                  <p>
+                    状態：<strong>{statusLabel[delivery.status]}</strong>
+                  </p>
+                  <p>
+                    LINE通知：<strong>{notificationLabel[delivery.notificationStatus]}</strong>
+                    {delivery.notificationErrorCode
+                      ? `（理由：${delivery.notificationErrorCode}）`
+                      : ''}
+                  </p>
+                  {delivery.notifiedAt ? (
+                    <p>LINE通知の確認：{new Date(delivery.notifiedAt).toLocaleString('ja-JP')}</p>
+                  ) : null}
+                  <p>通知の試行回数：{delivery.notificationAttemptCount}回</p>
+                  {delivery.notificationStatus !== 'SENT' ? (
+                    <button
+                      className="button button--secondary"
+                      disabled={saving === delivery.id}
+                      onClick={() => void retryNotification(delivery)}
+                      type="button"
+                    >
+                      {saving === delivery.id ? '再送しています…' : 'LINE通知を再送する'}
+                    </button>
+                  ) : null}
+                  <p>確認依頼：{new Date(delivery.assignedAt).toLocaleString('ja-JP')}</p>
+                  {delivery.viewedAt ? (
+                    <p>動画を確認：{new Date(delivery.viewedAt).toLocaleString('ja-JP')}</p>
+                  ) : null}
+                  {delivery.acceptedAt ? (
+                    <p>採用：{new Date(delivery.acceptedAt).toLocaleString('ja-JP')}</p>
+                  ) : null}
+                  {delivery.declinedAt ? (
+                    <p>今回は使わない：{new Date(delivery.declinedAt).toLocaleString('ja-JP')}</p>
+                  ) : null}
+                  {delivery.postedAt ? (
+                    <p>投稿完了：{new Date(delivery.postedAt).toLocaleString('ja-JP')}</p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </section>
     </section>
