@@ -70,10 +70,24 @@ export function VideoDeliveryManager({
           }),
         },
       );
-      const result = (await response.json()) as { error?: { message?: string } };
+      const result = (await response.json()) as {
+        notification?:
+          | 'SENT'
+          | 'NOT_CONFIGURED'
+          | 'PAUSED'
+          | 'NOT_ALLOWED'
+          | 'RECIPIENT_UNAVAILABLE'
+          | 'QUOTA_UNAVAILABLE'
+          | 'FAILED';
+        error?: { message?: string };
+      };
       if (!response.ok)
         throw new Error(result.error?.message ?? '利用できる状態にできませんでした。');
-      setMessage('利用者が確認できる状態にしました。');
+      setMessage(
+        result.notification === 'SENT'
+          ? '利用者が確認できる状態にし、公式LINEでお知らせしました。'
+          : '利用者が確認できる状態にしました。LINE通知は送られていないため、設定または本人のLINE連携を確認してください。',
+      );
       window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '利用できる状態にできませんでした。');
