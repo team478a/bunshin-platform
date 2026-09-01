@@ -3,6 +3,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { CreditAdjustmentEditor } from './credit-adjustment-editor';
+import { CreditBulkGrantEditor } from './credit-bulk-grant-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,14 @@ export default async function ServiceCreditManagementPage({
           </p>
           <p>残高より多い回数を減らすことはできません。参加者の投稿内容はここでは表示しません。</p>
         </section>
+        <CreditBulkGrantEditor
+          serviceSlug={serviceSlug}
+          memberships={memberships.map((membership) => ({
+            id: membership.id,
+            label: membership.user.displayName || membership.user.email || membership.id,
+            availableCredits: membership.serviceCreditAccount?.availableCredits ?? 0,
+          }))}
+        />
         <CreditAdjustmentEditor
           serviceSlug={serviceSlug}
           memberships={memberships.map((membership) => ({
