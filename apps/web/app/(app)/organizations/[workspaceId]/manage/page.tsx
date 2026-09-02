@@ -320,6 +320,27 @@ export default async function OrganizationManagePage({
         <h1>{organization.name}</h1>
         <p>クライアント企業・団体の基本情報、運営者、利用するグループを管理します。</p>
       </header>
+      <section className="operations-overview" aria-label="団体の設定状況">
+        <div>
+          <span>運営者</span>
+          <strong>{organization.memberships.length}人</strong>
+        </div>
+        <div>
+          <span>招待中</span>
+          <strong>
+            {
+              organization.invitations.filter(
+                (invitation) => invitation.status === 'ACTIVE' && invitation.expiresAt > new Date(),
+              ).length
+            }
+            件
+          </strong>
+        </div>
+        <div>
+          <span>運用グループ</span>
+          <strong>{organization.groups.length}件</strong>
+        </div>
+      </section>
       {query.saved === 'profile' ? (
         <p className="notice notice--success">団体情報を保存しました。</p>
       ) : null}
@@ -348,7 +369,13 @@ export default async function OrganizationManagePage({
         </p>
       ) : null}
       <section className="settings-card">
-        <h2>団体の情報</h2>
+        <div className="management-section__heading">
+          <div>
+            <p className="management-section__eyebrow">1. 基本情報</p>
+            <h2>団体の情報</h2>
+          </div>
+          <span>あとから変更できます</span>
+        </div>
         <p>請求・連絡・サービス設定の基準になる情報です。あとからいつでも変更できます。</p>
         <form className="form-stack" action={saveProfile}>
           <input type="hidden" name="workspaceId" value={organization.id} />
@@ -446,7 +473,13 @@ export default async function OrganizationManagePage({
         </form>
       </section>
       <section className="settings-card">
-        <h2>運営者を招待する</h2>
+        <div className="management-section__heading">
+          <div>
+            <p className="management-section__eyebrow">2. 運営する人</p>
+            <h2>運営者を招待する</h2>
+          </div>
+          <span>{organization.memberships.length}人が参加中</span>
+        </div>
         <p>運営管理者は、団体内のグループを作成し、参加者・LINE・利用機能を管理できます。</p>
         <form className="form-stack" action={createOperatorInvitation}>
           <input type="hidden" name="workspaceId" value={organization.id} />
@@ -476,7 +509,7 @@ export default async function OrganizationManagePage({
           メール配信が未設定の場合も、招待リンクを表示して手動で渡せます。リンクは7日間・1回だけ有効です。
         </p>
         <h3>現在の運営者</h3>
-        <ul>
+        <ul className="operator-list">
           {organization.memberships.map((member) => (
             <li key={member.id}>
               <strong>{member.user.displayName}</strong>（
@@ -531,7 +564,13 @@ export default async function OrganizationManagePage({
         )}
       </section>
       <section className="settings-card">
-        <h2>グループを作る</h2>
+        <div className="management-section__heading">
+          <div>
+            <p className="management-section__eyebrow">3. 日々の運用</p>
+            <h2>グループを作る</h2>
+          </div>
+          <span>{organization.groups.length}件を運用中</span>
+        </div>
         <p>
           参加者・商品・LINE・投稿運用をまとめる単位です。作成した人は、そのグループのサービス所有者になります。
         </p>
@@ -552,10 +591,16 @@ export default async function OrganizationManagePage({
           </button>
         </form>
         {organization.groups.length ? (
-          <ul>
+          <ul className="organization-group-list">
             {organization.groups.map((group) => (
               <li key={group.id}>
-                <Link href={`/groups/${group.id}/members`}>{group.name}を管理する</Link>
+                <div>
+                  <strong>{group.name}</strong>
+                  <span>参加者・公式情報・LINE設定を管理</span>
+                </div>
+                <Link className="button button--secondary" href={`/groups/${group.id}/members`}>
+                  開く
+                </Link>
               </li>
             ))}
           </ul>
