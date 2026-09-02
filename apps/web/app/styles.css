@@ -2941,6 +2941,106 @@ body:has(.app-shell) > .site-footer {
   font-size: 0.8125rem;
 }
 
+.group-dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.group-dashboard-summary > div {
+  display: grid;
+  gap: 6px;
+  padding: 15px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.group-dashboard-summary span,
+.group-dashboard-card__meta,
+.group-dashboard-card__hint {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.group-dashboard-summary strong {
+  color: var(--color-primary-strong);
+  font-size: 1.4rem;
+}
+
+.group-dashboard-card {
+  margin-bottom: 16px;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.group-dashboard-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-dashboard-card__heading p {
+  margin: 0 0 5px;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.group-dashboard-card__heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.group-dashboard-card__heading > span {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--color-primary-strong);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.group-dashboard-card__meta {
+  margin: 12px 0;
+}
+
+.group-dashboard-card__availability,
+.group-dashboard-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-dashboard-card__availability span {
+  padding: 5px 8px;
+  color: #667085;
+  border-radius: 999px;
+  background: #f1f3f8;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.group-dashboard-card__availability .is-available {
+  color: #146c43;
+  background: #effaf3;
+}
+
+.group-dashboard-card__actions {
+  margin-top: 16px;
+}
+
+.group-dashboard-card__hint {
+  width: 100%;
+  margin: 0;
+}
+
 @media (max-width: 560px) {
   .operations-overview {
     grid-template-columns: 1fr;
@@ -2949,6 +3049,10 @@ body:has(.app-shell) > .site-footer {
   .organization-group-list li {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .group-dashboard-card {
+    padding: 16px;
   }
 }
 
