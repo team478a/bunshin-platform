@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { parseProductPackAssets, parseProductPackFacts, parseProductPackRules } from './view-model';
 
 type Group = { id: string; name: string };
@@ -116,7 +117,12 @@ export function ProductPackAdminEditor({
       <section className="settings-card" aria-labelledby="create-pack-title">
         <h2 id="create-pack-title">新しい商品パックを作る</h2>
         {groups.length === 0 ? (
-          <p>先に対象グループを作成してください。</p>
+          <>
+            <p>先に対象グループを作成してください。</p>
+            <Link className="button" href="/admin/groups">
+              グループを作成する
+            </Link>
+          </>
         ) : (
           <form onSubmit={createPack}>
             <label>

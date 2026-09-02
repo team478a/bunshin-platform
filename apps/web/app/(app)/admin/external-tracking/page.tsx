@@ -1,4 +1,5 @@
 import { ExternalTrackingLinkService } from '@bunshin/application';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { ExternalTrackingOperations } from './external-tracking-operations';
@@ -32,6 +33,10 @@ export default async function ExternalTrackingPage({
       <main className="app-page">
         <h1>専用URL管理</h1>
         <p>管理できる団体がありません。</p>
+        <p>専用URLを管理する前に、運営団体を作成してください。</p>
+        <Link className="button" href="/admin/organizations">
+          運営団体を作成する
+        </Link>
       </main>
     );
   const groups = await db.prisma.group.findMany({
@@ -88,6 +93,9 @@ export default async function ExternalTrackingPage({
       ) : (
         <section className="settings-card">
           <p>先にグループを作成してください。</p>
+          <Link className="button" href="/admin/groups">
+            グループを作成する
+          </Link>
         </section>
       )}
     </main>

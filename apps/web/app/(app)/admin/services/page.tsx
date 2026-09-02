@@ -45,6 +45,10 @@ export default async function ServicesAdminPage() {
       ) : (
         <section className="settings-card">
           <h2>先に運営団体を作成してください</h2>
+          <p>サービスは、運営団体に所属させてから作成します。</p>
+          <Link className="button" href="/admin/organizations">
+            運営団体を作成する
+          </Link>
         </section>
       )}
       <section className="settings-card">
