@@ -3128,6 +3128,88 @@ body:has(.app-shell) > .site-footer {
   background: var(--color-primary-strong);
 }
 
+.service-settings-url-card > .eyebrow {
+  margin: 0 0 6px;
+}
+
+.service-settings-form {
+  gap: 20px;
+}
+
+.service-settings-form > label {
+  display: grid;
+  gap: 8px;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.service-settings-form > label > input,
+.service-settings-form > label > textarea,
+.service-settings-form > label > select {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 13px;
+  color: var(--color-text);
+  border: 1px solid #b8c0cc;
+  border-radius: 10px;
+  background: var(--color-surface);
+  font: inherit;
+  font-weight: 400;
+}
+
+.service-settings-form > fieldset {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: #fcfcfd;
+}
+
+.service-settings-form > fieldset legend {
+  padding: 0 6px;
+  color: var(--color-primary-strong);
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+
+.service-settings-form > fieldset label {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.service-settings-form > fieldset label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-settings-form > fieldset input:not([type='checkbox']),
+.service-settings-form > fieldset textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #b8c0cc;
+  border-radius: 10px;
+  background: var(--color-surface);
+  font: inherit;
+  font-weight: 400;
+}
+
+.service-settings-form > fieldset small {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.service-settings-form > .button {
+  width: 100%;
+}
+
 .campaign-heading {
   display: flex;
   align-items: flex-start;
