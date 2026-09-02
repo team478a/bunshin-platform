@@ -2894,7 +2894,13 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
           userId: actorUserId,
           workspaceId,
           groupId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
         },
@@ -11101,7 +11107,13 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
           workspaceId,
           groupId,
           userId: actorUserId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           group: { workspaceId, status: 'ACTIVE' },
           workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
@@ -11492,7 +11504,13 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           group: { status: 'ACTIVE' },
           workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },

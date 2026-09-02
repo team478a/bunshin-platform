@@ -664,6 +664,11 @@ export default async function GroupMemberFeaturesPage({
                     {assignment ? statusLabel[assignment.status] : '未設定（利用できない）'}
                   </strong>
                 </p>
+                {query.service ? (
+                  <p>
+                    運営者は、システム管理者がこのサービスに許可した範囲で、参加者ごとの利用可否を変更できます。
+                  </p>
+                ) : null}
                 <form className="form-stack" action={saveMemberFeatureAssignment}>
                   {query.service && (
                     <input type="hidden" name="serviceSlug" value={query.service} />
@@ -734,9 +739,22 @@ export default async function GroupMemberFeaturesPage({
                       placeholder="例：画像作成を担当してもらうため"
                     />
                   </label>
-                  <button className="button" type="submit">
-                    この参加者の設定を保存
-                  </button>
+                  <div className="form-actions">
+                    <button className="button" type="submit" name="status" value="ENABLED">
+                      この参加者に利用を許可する
+                    </button>
+                    <button
+                      className="button button--secondary"
+                      type="submit"
+                      name="status"
+                      value="DISABLED"
+                    >
+                      この参加者の利用を停止する
+                    </button>
+                    <button className="button button--secondary" type="submit">
+                      上限などを保存する
+                    </button>
+                  </div>
                 </form>
               </section>
             );
