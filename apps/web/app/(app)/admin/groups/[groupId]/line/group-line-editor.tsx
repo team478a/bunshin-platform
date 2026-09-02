@@ -84,13 +84,15 @@ export function GroupLineEditor(props: {
   }
   return (
     <>
-      <section className="settings-card">
+      <section className="settings-card line-settings-card">
+        <p className="eyebrow">1. 使い方を選ぶ</p>
         <h2>どのLINEを使いますか</h2>
         <p>
           「この{scopeLabel}
           専用」を選ぶと、共通LINEと分けて運用できます。初めて専用LINEを設定する場合は、先にこれを選んで保存してください。
         </p>
         <form
+          className="form-stack"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -105,8 +107,9 @@ export function GroupLineEditor(props: {
             });
           }}
         >
-          <label>
+          <label className="field">
             <select
+              className="field__control"
               name="mode"
               value={mode}
               onChange={(e) => setMode(e.target.value as typeof mode)}
@@ -116,21 +119,31 @@ export function GroupLineEditor(props: {
               <option value="DISABLED">LINEを使わない</option>
             </select>
           </label>{' '}
-          <label>
-            変更理由{' '}
-            <input name="reason" required minLength={3} placeholder="例：テスト運用を開始" />
-          </label>{' '}
-          <button disabled={busy}>使い方を保存</button>
+          <label className="field">
+            <span className="field__label">変更理由</span>
+            <input
+              className="field__control"
+              name="reason"
+              required
+              minLength={3}
+              placeholder="例：テスト運用を開始"
+            />
+          </label>
+          <button className="button button--primary" disabled={busy}>
+            使い方を保存
+          </button>
         </form>
       </section>
       {mode === 'DEDICATED' && (
-        <section className="settings-card">
+        <section className="settings-card line-settings-card">
+          <p className="eyebrow">2. 専用LINEの値を保存する</p>
           <h2>新しい専用LINE設定</h2>
           <p>
             LINE
             Developersで発行された値を入力します。Secretとアクセストークンは保存後にもう一度表示できません。
           </p>
           <form
+            className="form-stack"
             onSubmit={(event) => {
               event.preventDefault();
               const f = new FormData(event.currentTarget);
@@ -154,47 +167,71 @@ export function GroupLineEditor(props: {
               });
             }}
           >
-            <label>
-              変更理由
-              <input name="reason" required minLength={3} />
+            <label className="field">
+              <span className="field__label">変更理由</span>
+              <input
+                className="field__control"
+                name="reason"
+                required
+                minLength={3}
+                placeholder="例：公式LINEを新しく接続"
+              />
             </label>
-            <label>
-              LINEログイン用チャネルID
-              <input name="loginChannelId" required />
+            <label className="field">
+              <span className="field__label">LINEログイン用チャネルID</span>
+              <input className="field__control" name="loginChannelId" required />
             </label>
-            <label>
-              LINEログイン用チャネルシークレット
-              <input name="loginChannelSecret" type="password" required />
+            <label className="field">
+              <span className="field__label">LINEログイン用チャネルシークレット</span>
+              <input
+                className="field__control"
+                name="loginChannelSecret"
+                type="password"
+                required
+              />
             </label>
-            <label>
-              通知用チャネルID（Messaging API）
-              <input name="messagingChannelId" required />
+            <label className="field">
+              <span className="field__label">通知用チャネルID（Messaging API）</span>
+              <input className="field__control" name="messagingChannelId" required />
             </label>
-            <label>
-              通知用チャネルシークレット（Messaging API）
-              <input name="messagingChannelSecret" type="password" required />
+            <label className="field">
+              <span className="field__label">通知用チャネルシークレット（Messaging API）</span>
+              <input
+                className="field__control"
+                name="messagingChannelSecret"
+                type="password"
+                required
+              />
             </label>
-            <label>
-              通知用アクセストークン
-              <input name="channelAccessToken" type="password" required />
+            <label className="field">
+              <span className="field__label">通知用アクセストークン</span>
+              <input
+                className="field__control"
+                name="channelAccessToken"
+                type="password"
+                required
+              />
             </label>
-            <label>
-              LIFF ID（LINE内画面を使う場合のみ）
-              <input name="liffId" />
+            <label className="field">
+              <span className="field__label">LIFF ID（LINE内画面を使う場合のみ）</span>
+              <input className="field__control" name="liffId" />
             </label>
-            <button disabled={busy}>停止中の設定として保存</button>
+            <button className="button button--primary" disabled={busy}>
+              停止中の設定として保存
+            </button>
           </form>
         </section>
       )}
-      <section className="settings-card">
+      <section className="settings-card line-settings-card">
+        <p className="eyebrow">3. 接続を確認して運用を始める</p>
         <h2>保存した設定</h2>
         {items.length === 0 ? (
           <p>まだ設定はありません。</p>
         ) : (
-          <ul>
+          <ul className="plain-list line-settings-list">
             {items.map((item) => (
               <li key={item.id}>
-                <strong>
+                <strong className="line-settings-list__status">
                   第{item.version}版：
                   {item.status === 'ACTIVE'
                     ? '使用中'
@@ -212,6 +249,7 @@ export function GroupLineEditor(props: {
                   <code>{`${props.webhookOrigin}/api/line/groups/${item.webhookRoutingKey}/webhook`}</code>
                 </p>
                 <button
+                  className="button button--secondary"
                   disabled={busy}
                   onClick={() => {
                     void call(`${endpoint}/${item.id}/test`, 'POST', {
@@ -222,6 +260,7 @@ export function GroupLineEditor(props: {
                   接続できるか確認
                 </button>{' '}
                 <button
+                  className="button button--primary"
                   disabled={busy || !item.lastVerifiedAt || item.lastErrorCategory !== null}
                   onClick={() => {
                     const reason = window.prompt('使用を開始する理由を入力してください');
@@ -239,7 +278,11 @@ export function GroupLineEditor(props: {
             ))}
           </ul>
         )}
-        <p role="status">{message}</p>
+        {message ? (
+          <p className="notice notice--success" role="status">
+            {message}
+          </p>
+        ) : null}
       </section>
     </>
   );
