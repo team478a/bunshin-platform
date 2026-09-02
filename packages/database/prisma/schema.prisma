@@ -36,6 +36,12 @@ enum WorkspaceRole {
   MEMBER
 }
 
+enum WorkspaceInvitationStatus {
+  ACTIVE
+  EXHAUSTED
+  REVOKED
+}
+
 enum MembershipStatus {
   ACTIVE
   SUSPENDED
@@ -1562,6 +1568,7 @@ model User {
   updatedAt                         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
   identities                        AuthIdentity[]
   memberships                       WorkspaceMembership[]
+  workspaceInvitationsCreated       WorkspaceInvitation[]               @relation("WorkspaceInvitationCreator")
   groupMemberships                  GroupMembership[]
   groupInvitationsCreated           GroupInvitation[]                   @relation("GroupInvitationCreator")
   platformAdmin                     PlatformAdmin?
@@ -1693,9 +1700,17 @@ model Workspace {
   type                            WorkspaceType
   name                            String                           @db.VarChar(120)
   status                          WorkspaceStatus                  @default(ACTIVE)
+  legalName                       String?                          @map("legal_name") @db.VarChar(200)
+  description                     String?                          @db.VarChar(2000)
+  contactName                     String?                          @map("contact_name") @db.VarChar(120)
+  contactEmail                    String?                          @map("contact_email") @db.VarChar(320)
+  contactPhone                    String?                          @map("contact_phone") @db.VarChar(40)
+  websiteUrl                      String?                          @map("website_url") @db.VarChar(2048)
+  address                         String?                          @db.VarChar(500)
   createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
   memberships                     WorkspaceMembership[]
+  invitations                     WorkspaceInvitation[]
   groups                          Group[]
   groupMemberships                GroupMembership[]
   serviceOnboardingResponses      ServiceOnboardingResponse[]
@@ -1810,6 +1825,26 @@ model WorkspaceMembership {
   @@unique([workspaceId, userId])
   @@index([userId, status])
   @@map("workspace_memberships")
+}
+
+model WorkspaceInvitation {
+  id              String                    @id @default(uuid()) @db.Uuid
+  workspaceId     String                    @map("workspace_id") @db.Uuid
+  tokenHash       String                    @unique @map("token_hash") @db.Char(64)
+  role            WorkspaceRole             @default(ADMIN)
+  status          WorkspaceInvitationStatus @default(ACTIVE)
+  expiresAt       DateTime                  @map("expires_at") @db.Timestamptz(6)
+  maxUses         Int                       @default(1) @map("max_uses")
+  usedCount       Int                       @default(0) @map("used_count")
+  createdByUserId String                    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User                      @relation("WorkspaceInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, status])
+  @@index([expiresAt, status])
+  @@map("workspace_invitations")
 }
 
 model Group {
