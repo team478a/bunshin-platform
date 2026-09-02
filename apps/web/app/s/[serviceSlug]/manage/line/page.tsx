@@ -79,7 +79,8 @@ export default async function ServiceLinePage({
           <h1>{service.configuration.displayName}の公式LINE</h1>
           <p>このサービス専用の公式LINEを登録し、接続確認後に利用を開始できます。</p>
         </header>
-        <section className="settings-card">
+        <section className="settings-card line-url-guide">
+          <p className="eyebrow">LINE Developersで入力する値</p>
           <h2>LINE Developersへ登録するURL</h2>
           <p>次のURLは自動生成されています。内容を変更せずにコピーしてください。</p>
           <dl>
