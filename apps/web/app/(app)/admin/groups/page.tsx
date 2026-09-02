@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function GroupAdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ workspaceId?: string }>;
+  searchParams: Promise<{ workspaceId?: string; createdOrganization?: string }>;
 }) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
@@ -26,7 +26,8 @@ export default async function GroupAdminPage({
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   });
-  const requested = (await searchParams).workspaceId;
+  const query = await searchParams;
+  const requested = query.workspaceId;
   const workspace = workspaces.find((item) => item.id === requested) ?? workspaces[0];
 
   if (!workspace)
@@ -34,6 +35,10 @@ export default async function GroupAdminPage({
       <main className="app-page">
         <h1>グループ管理</h1>
         <p>管理できる団体がありません。</p>
+        <p>グループを作る前に、運営団体を作成してください。</p>
+        <Link className="button" href="/admin/organizations">
+          運営団体を作成する
+        </Link>
       </main>
     );
 
@@ -56,6 +61,11 @@ export default async function GroupAdminPage({
         <h1>グループ管理</h1>
         <p>テストや共同運用に使うグループを、管理画面から作成・確認できます。</p>
       </header>
+      {query.createdOrganization === '1' ? (
+        <p className="notice notice--success">
+          運営団体を作成しました。次に、この団体で利用するグループを作成してください。
+        </p>
+      ) : null}
       <form method="get" className="settings-card">
         <label>
           管理する団体

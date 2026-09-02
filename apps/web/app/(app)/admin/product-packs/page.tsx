@@ -1,4 +1,5 @@
 import { ProductPackService } from '@bunshin/application';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { ProductPackAdminEditor } from './product-pack-admin-editor';
@@ -37,6 +38,10 @@ export default async function ProductPackAdminPage({
       <main className="app-page">
         <h1>公式商品パック</h1>
         <p>管理できる団体の作業場所がありません。</p>
+        <p>商品情報を登録する前に、運営団体を作成してください。</p>
+        <Link className="button" href="/admin/organizations">
+          運営団体を作成する
+        </Link>
       </main>
     );
   }
