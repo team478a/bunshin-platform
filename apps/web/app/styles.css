@@ -3101,6 +3101,59 @@ body:has(.app-shell) > .site-footer {
   font-size: 0.875rem;
 }
 
+.campaign-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.campaign-heading h2 {
+  margin: 0;
+  padding: 0;
+}
+.campaign-heading .eyebrow {
+  margin: 0 0 4px;
+}
+.campaign-assets-fieldset {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.campaign-assets-fieldset label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.campaign-status {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 750;
+  background: #eef0f4;
+  color: #667085;
+}
+.campaign-status--open {
+  background: var(--color-success-soft);
+  color: #0c6045;
+}
+.campaign-status--draft {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+}
+.campaign-status--cancelled {
+  background: var(--color-danger-soft);
+  color: #8c1d14;
+}
+.campaign-card__theme {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8f8fb;
+  color: var(--color-text-muted);
+}
+
 @media (max-width: 620px) {
   .knowledge-status-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
