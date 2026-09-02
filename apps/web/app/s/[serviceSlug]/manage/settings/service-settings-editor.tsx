@@ -113,7 +113,10 @@ export function ServiceSettingsEditor({
   }
 
   return (
-    <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
+    <form
+      className="admin-form-grid service-settings-form"
+      onSubmit={(event) => void submit(event)}
+    >
       <label>
         サービス名
         <input name="displayName" required maxLength={120} defaultValue={value.displayName} />
@@ -343,12 +346,14 @@ export function ServiceSettingsEditor({
         変更した理由
         <input name="reason" required maxLength={1000} placeholder="例：新しいロゴへ変更" />
       </label>
-      <button type="submit" disabled={saving}>
+      <button className="button button--primary" type="submit" disabled={saving}>
         {saving ? '保存中…' : '設定を保存する'}
       </button>
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {message ? (
+        <p className="notice notice--success" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </form>
   );
 }
