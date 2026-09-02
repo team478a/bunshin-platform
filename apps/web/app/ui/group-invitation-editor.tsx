@@ -55,9 +55,22 @@ export function GroupInvitationEditor({
   }
 
   return (
-    <section className="settings-card">
-      <h2>人を招待する</h2>
-      <p>役割を選び、1人だけが使える7日間有効の招待リンクを作ります。</p>
+    <section className="settings-card invitation-card">
+      <div className="invitation-card__heading">
+        <div>
+          <p className="eyebrow">最初に行うこと</p>
+          <h2>参加者・運営者を招待する</h2>
+        </div>
+        <span className="invitation-card__badge">1人ずつ安全に招待</span>
+      </div>
+      <p>
+        役割を選んで招待リンクを作り、その人だけに送ります。リンクは7日間だけ、1人だけが使えます。
+      </p>
+      <ol className="invitation-card__steps">
+        <li>招待する人の役割を選ぶ</li>
+        <li>招待リンクを作る</li>
+        <li>LINEやメールで本人に送る</li>
+      </ol>
       <form className="form-stack" onSubmit={(event) => void createInvitation(event)}>
         <label className="field">
           <span className="field__label">招待する人の役割</span>
@@ -66,15 +79,17 @@ export function GroupInvitationEditor({
             <option value="MANAGER">{serviceSlug ? 'サービス管理者' : 'グループ管理者'}</option>
           </select>
         </label>
-        <button className="button" type="submit" disabled={saving}>
+        <button className="button button--primary" type="submit" disabled={saving}>
           {saving ? '作成中…' : '招待リンクを作る'}
         </button>
       </form>
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {message ? (
+        <p className="notice notice--success" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
       {invitationUrl ? (
-        <div className="form-stack">
+        <div className="form-stack invitation-card__result">
           <label className="field">
             <span className="field__label">今回だけ表示される招待リンク</span>
             <input className="field__control" value={invitationUrl} readOnly />
@@ -86,7 +101,7 @@ export function GroupInvitationEditor({
           >
             招待リンクをコピー
           </button>
-          <p>このリンクを管理画面や公開ページへ貼らないでください。</p>
+          <p>このリンクは公開ページや管理画面には貼らず、招待する本人だけに送ってください。</p>
         </div>
       ) : null}
     </section>
