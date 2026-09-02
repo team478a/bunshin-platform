@@ -373,11 +373,73 @@ a {
 }
 
 .capability-section {
-  margin: 40px 0;
+  margin: 0;
 }
 
 .social-profile-section {
-  margin: 40px 0;
+  margin: 0;
+}
+
+.social-setup__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.social-setup__heading h2,
+.capability-section > h2 {
+  margin: 0 0 8px;
+}
+
+.social-setup__heading p:last-child,
+.social-setup__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+.social-setup__eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-primary-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.social-setup__count,
+.status-pill {
+  display: inline-block;
+  flex: none;
+  padding: 5px 8px;
+  color: #667085;
+  border-radius: 999px;
+  background: #f1f3f8;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.status-pill--active {
+  color: #146c43;
+  background: #effaf3;
+}
+
+.social-setup__count {
+  color: var(--color-primary-strong);
+  background: var(--color-primary-soft);
+}
+
+.social-setup__note,
+.social-setup__notice {
+  margin-top: 12px;
+}
+
+.social-setup__notice {
+  padding: 12px 14px;
+  color: #7a4c00;
+  border: 1px solid #ecd59d;
+  border-radius: 12px;
+  background: #fff9e8;
+  font-weight: 700;
 }
 
 .content-pillar-section {
@@ -538,7 +600,7 @@ a {
   display: flex;
   gap: 10px;
 }
-.social-profile-section button {
+.social-profile-section button:not(.button) {
   min-height: 44px;
   padding: 8px 14px;
   border: 1px solid #aab4c0;
@@ -558,7 +620,19 @@ a {
   background: white;
 }
 
-.capability-card button {
+.capability-card__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.capability-card__status span {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.capability-card button:not(.button) {
   min-height: 44px;
   padding: 8px 14px;
   border: 1px solid #aab4c0;
