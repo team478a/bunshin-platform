@@ -198,6 +198,9 @@ async function reissueOperatorInvitation(formData: FormData) {
   });
   if (!original || original.inviteeEmail.endsWith('@invitation.local'))
     redirect(`/organizations/${input.data.workspaceId}/manage?invitationAction=manual-link`);
+  // 招待で付与できるのは運営管理者または参加者だけです。古いレコードに
+  // OWNER が残っていても、再発行時に所有者権限を配布しないようにします。
+  const reissuedRole = original.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
   const token = randomBytes(32).toString('base64url');
   const invitation = await db.prisma.$transaction(async (tx) => {
     await tx.workspaceInvitation.updateMany({
@@ -209,7 +212,7 @@ async function reissueOperatorInvitation(formData: FormData) {
         workspaceId: input.data.workspaceId,
         inviteeEmail: original.inviteeEmail,
         tokenHash: createHash('sha256').update(token, 'utf8').digest('hex'),
-        role: original.role,
+        role: reissuedRole,
         expiresAt: new Date(Date.now() + invitationLifetimeMilliseconds),
         maxUses: 1,
         createdByUserId: user.userId,
@@ -225,7 +228,7 @@ async function reissueOperatorInvitation(formData: FormData) {
     email: original.inviteeEmail,
     organizationName: original.workspace.name,
     invitationUrl,
-    role: original.role,
+    role: reissuedRole,
   });
   if (delivery === 'sent')
     await db.prisma.workspaceInvitation.update({
