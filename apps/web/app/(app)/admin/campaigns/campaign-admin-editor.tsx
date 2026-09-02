@@ -117,15 +117,27 @@ export function CampaignAdminEditor({
     );
   return (
     <>
-      <section className="settings-card">
-        <h2>新しい募集を下書きする</h2>
+      <section className="settings-card campaign-create-card">
+        <div className="campaign-heading">
+          <div>
+            <p className="eyebrow">1. 参加者へ案内する企画を作る</p>
+            <h2>新しい募集を下書きする</h2>
+          </div>
+        </div>
+        <p>
+          商品情報を選び、参加者へ案内する企画を作ります。保存後に内容を確認して募集を開始します。
+        </p>
         {versions.length === 0 ? (
-          <p>先に公式商品パックを公開してください。</p>
+          <p className="notice notice--danger">先に公式商品情報を公開してください。</p>
         ) : (
-          <form onSubmit={create}>
-            <label>
-              使用する公式商品情報
-              <select value={versionId} onChange={(event) => setVersionId(event.target.value)}>
+          <form className="form-stack campaign-form" onSubmit={create}>
+            <label className="field">
+              <span className="field__label">使用する公式商品情報</span>
+              <select
+                className="field__control"
+                value={versionId}
+                onChange={(event) => setVersionId(event.target.value)}
+              >
                 {versions.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.label}
@@ -133,25 +145,53 @@ export function CampaignAdminEditor({
                 ))}
               </select>
             </label>
-            <label>
-              募集名
-              <input name="name" required maxLength={160} />
-            </label>
-            <label>
-              発信テーマ
-              <textarea name="theme" required maxLength={1000} />
-            </label>
-            <label>
-              参加してほしい人
-              <textarea name="targetSummary" required maxLength={1000} />
-            </label>
-            <label>
-              参加できる人数
-              <input name="participationLimit" type="number" min="1" max="10000" required />
-            </label>
-            <label>
-              1週間の商品周辺投稿（最大）
+            <label className="field">
+              <span className="field__label">募集名</span>
               <input
+                className="field__control"
+                name="name"
+                required
+                maxLength={160}
+                placeholder="例：9月のSNS発信チャレンジ"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">発信テーマ</span>
+              <textarea
+                className="field__control"
+                name="theme"
+                required
+                maxLength={1000}
+                rows={3}
+                placeholder="例：初心者でも続けやすいSNS発信のコツ"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">参加してほしい人</span>
+              <textarea
+                className="field__control"
+                name="targetSummary"
+                required
+                maxLength={1000}
+                rows={3}
+                placeholder="例：週に2回以上、SNS投稿に取り組める人"
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">参加できる人数</span>
+              <input
+                className="field__control"
+                name="participationLimit"
+                type="number"
+                min="1"
+                max="10000"
+                required
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">1週間の関連投稿（最大）</span>
+              <input
+                className="field__control"
                 name="maxRelatedPerWeek"
                 type="number"
                 min="0"
@@ -160,17 +200,34 @@ export function CampaignAdminEditor({
                 required
               />
             </label>
-            <label>
-              1週間の商品紹介投稿（最大）
-              <input name="maxAdsPerWeek" type="number" min="0" max="7" defaultValue="1" required />
-            </label>
-            <label>
-              商品投稿を続けない日数
-              <input name="cooldownDays" type="number" min="0" max="30" defaultValue="2" required />
-            </label>
-            <label>
-              1人が作れる企画の上限
+            <label className="field">
+              <span className="field__label">1週間の商品紹介投稿（最大）</span>
               <input
+                className="field__control"
+                name="maxAdsPerWeek"
+                type="number"
+                min="0"
+                max="7"
+                defaultValue="1"
+                required
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">商品投稿を続けない日数</span>
+              <input
+                className="field__control"
+                name="cooldownDays"
+                type="number"
+                min="0"
+                max="30"
+                defaultValue="2"
+                required
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">1人が作れる企画の上限</span>
+              <input
+                className="field__control"
                 name="generationLimitPerParticipant"
                 type="number"
                 min="1"
@@ -179,9 +236,10 @@ export function CampaignAdminEditor({
                 required
               />
             </label>
-            <label>
-              重複とみなす近さ（70〜100％）
+            <label className="field">
+              <span className="field__label">重複とみなす近さ（70〜100％）</span>
               <input
+                className="field__control"
                 name="similarityThresholdBasisPoints"
                 type="number"
                 min="7000"
@@ -191,15 +249,15 @@ export function CampaignAdminEditor({
                 required
               />
             </label>
-            <label>
-              開始日時
-              <input name="startsAt" type="datetime-local" required />
+            <label className="field">
+              <span className="field__label">開始日時</span>
+              <input className="field__control" name="startsAt" type="datetime-local" required />
             </label>
-            <label>
-              終了日時
-              <input name="endsAt" type="datetime-local" required />
+            <label className="field">
+              <span className="field__label">終了日時</span>
+              <input className="field__control" name="endsAt" type="datetime-local" required />
             </label>
-            <fieldset>
+            <fieldset className="campaign-assets-fieldset">
               <legend>参加者が使える公式素材</legend>
               {selected?.assets.length ? (
                 selected.assets.map((asset) => (
@@ -212,13 +270,17 @@ export function CampaignAdminEditor({
                 <p>この版には素材がありません。</p>
               )}
             </fieldset>
-            <button type="submit">下書きを保存する</button>
+            <button className="button button--primary" type="submit">
+              募集の下書きを保存する
+            </button>
           </form>
         )}
       </section>
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {message ? (
+        <p className="notice notice--success" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
       {campaigns.map((campaign) => {
         const accepted = campaign.participations.filter(
           (item) => item.status === 'ACCEPTED',
@@ -229,13 +291,27 @@ export function CampaignAdminEditor({
         const pilotReady =
           accepted >= 10 && accepted <= 22 && durationDays >= 30 && durationDays <= 60;
         return (
-          <section className="settings-card" key={campaign.id}>
-            <h2>{campaign.name}</h2>
+          <section className="settings-card campaign-card" key={campaign.id}>
+            <div className="campaign-heading">
+              <div>
+                <p className="eyebrow">{campaign.group.name}</p>
+                <h2>{campaign.name}</h2>
+              </div>
+              <span className={`campaign-status campaign-status--${campaign.status.toLowerCase()}`}>
+                {campaign.status === 'DRAFT'
+                  ? '下書き'
+                  : campaign.status === 'OPEN'
+                    ? '募集中'
+                    : campaign.status === 'CLOSED'
+                      ? '締切'
+                      : '中止'}
+              </span>
+            </div>
             <p>
               {campaign.group.name} ／ {campaign.productPackVersion.productPack.name} 第
               {campaign.productPackVersion.version}版
             </p>
-            <p>{campaign.theme}</p>
+            <p className="campaign-card__theme">{campaign.theme}</p>
             <p>
               参加：{accepted} / {campaign.participationLimit}人 ／ 状態：{campaign.status}
             </p>
@@ -268,16 +344,25 @@ export function CampaignAdminEditor({
               {accepted}人・{durationDays}日間）
             </p>
             {campaign.status === 'DRAFT' ? (
-              <button type="button" onClick={() => void transition(campaign, 'OPEN')}>
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => void transition(campaign, 'OPEN')}
+              >
                 募集を開始する
               </button>
             ) : null}
             {campaign.status === 'OPEN' ? (
               <>
-                <button type="button" onClick={() => void transition(campaign, 'CLOSED')}>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={() => void transition(campaign, 'CLOSED')}
+                >
                   募集を締め切る
                 </button>
                 <button
+                  className="button button--danger"
                   type="button"
                   onClick={() =>
                     window.confirm('募集を中止しますか？') && void transition(campaign, 'CANCELLED')
