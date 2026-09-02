@@ -443,7 +443,61 @@ a {
 }
 
 .content-pillar-section {
-  margin-block: 2rem;
+  margin: 0;
+}
+
+.content-planning__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.content-planning__heading h2 {
+  margin: 0 0 8px;
+}
+
+.content-planning__heading p:last-child {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+.content-planning__eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-primary-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.content-planning__count {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--color-primary-strong);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.content-planning__notice,
+.content-planning__empty {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  line-height: 1.65;
+}
+
+.content-planning__notice {
+  color: #7a4c00;
+  border: 1px solid #ecd59d;
+  background: #fff9e8;
+  font-weight: 700;
+}
+
+.content-planning__empty {
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
 }
 
 .content-pillar-list {
@@ -476,7 +530,7 @@ a {
 }
 
 .weekly-plan-section {
-  margin-block: 2rem;
+  margin: 0;
 }
 
 .weekly-plan-card,

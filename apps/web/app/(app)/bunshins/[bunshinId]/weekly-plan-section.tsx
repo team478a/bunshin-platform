@@ -252,11 +252,29 @@ export function WeeklyPlanSection({
 
   return (
     <section className="weekly-plan-section">
-      <h2>1週間の投稿予定</h2>
-      <p>BUNSHINが、決めたSNSと投稿テーマを使って、1週間分の予定を考えます。</p>
-      {capabilityStatus === null ? <p>先に「SNSのお手伝いをはじめる」を押してください。</p> : null}
-      {readonly ? <p>今は予定を見ることだけできます。内容を変えることはできません。</p> : null}
-      {plans.length === 0 ? <p>1週間の投稿予定はまだありません。</p> : null}
+      <div className="content-planning__heading">
+        <div>
+          <p className="content-planning__eyebrow">今週の準備</p>
+          <h2>1週間の投稿予定</h2>
+          <p>BUNSHINが、決めたSNSと投稿テーマを使って、1週間分の予定を考えます。</p>
+        </div>
+        <span className="content-planning__count">予定 {plans.length}件</span>
+      </div>
+      {capabilityStatus === null ? (
+        <p className="content-planning__notice">
+          先に「SNSのお手伝いをはじめる」を押してください。
+        </p>
+      ) : null}
+      {readonly ? (
+        <p className="content-planning__notice">
+          今は予定を見ることだけできます。内容を変えることはできません。
+        </p>
+      ) : null}
+      {plans.length === 0 ? (
+        <p className="content-planning__empty">
+          1週間の投稿予定はまだありません。SNSと投稿テーマを登録すると、ここから予定を作れます。
+        </p>
+      ) : null}
       {capabilityStatus === 'ACTIVE' ? (
         <form
           className="weekly-plan-form"
@@ -512,7 +530,11 @@ export function WeeklyPlanSection({
         </form>
       ) : null}
       <p>1週間に作れる予定は1つです。同じ日に登録できる投稿は1つです。</p>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="form-feedback" role="status">
+          {message}
+        </p>
+      ) : null}
     </section>
   );
 }
