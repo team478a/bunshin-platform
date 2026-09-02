@@ -56,10 +56,25 @@ export default async function GroupsPage({
   return (
     <main className="app-page">
       <header className="app-page__heading">
-        <p className="eyebrow">グループ</p>
-        <h1>参加しているグループ</h1>
-        <p>参加中のグループと、自分の役割を確認できます。</p>
+        <p className="eyebrow">参加中のサービス</p>
+        <h1>あなたの活動プログラム</h1>
+        <p>参加中の活動プログラムと、今日使える機能を確認できます。</p>
       </header>
+
+      {memberships.length > 0 ? (
+        <section className="group-dashboard-summary" aria-label="参加状況のまとめ">
+          <div>
+            <span>参加中</span>
+            <strong>{memberships.length}件</strong>
+          </div>
+          <div>
+            <span>運営できるもの</span>
+            <strong>
+              {memberships.filter((membership) => membership.role === 'MANAGER').length}件
+            </strong>
+          </div>
+        </section>
+      ) : null}
 
       {query.joined === '1' ? (
         <p className="notice notice--success" role="status">
@@ -103,57 +118,73 @@ export default async function GroupsPage({
             (item) => item.featureKey === 'SOCIAL.IMAGE_GENERATION' && active(item),
           );
         return (
-          <section className="settings-card" key={membership.id}>
-            <h2>{membership.group.name}</h2>
-            <p>団体：{membership.group.workspace.name}</p>
-            <p>
-              あなたの役割：{roleLabel[membership.role]} ／ 参加者：
-              {membership.group._count.memberships}人
+          <section className="group-dashboard-card" key={membership.id}>
+            <div className="group-dashboard-card__heading">
+              <div>
+                <p>{membership.group.workspace.name}</p>
+                <h2>{membership.group.name}</h2>
+              </div>
+              <span>{roleLabel[membership.role]}</span>
+            </div>
+            <p className="group-dashboard-card__meta">
+              参加者 {membership.group._count.memberships}人
             </p>
-            {videoAvailable ? (
-              <>
-                <Link className="button" href={`/groups/${membership.group.id}/videos`}>
-                  動画を作る
-                </Link>
-                <Link
-                  className="button button--secondary"
-                  href={`/groups/${membership.group.id}/video-assets`}
-                >
-                  動画に使う素材を管理
-                </Link>
-              </>
-            ) : null}
-            {imageAvailable ? (
-              <Link className="button" href={`/groups/${membership.group.id}/images`}>
-                投稿に使う画像を作る
-              </Link>
-            ) : null}
-            {membership.role === 'MANAGER' ? (
-              <>
-                <Link className="button" href={`/groups/${membership.group.id}/knowledge`}>
-                  公式資料・FAQを登録
-                </Link>
-                <Link className="button" href={`/groups/${membership.group.id}/members`}>
-                  参加者が使える機能を設定
-                </Link>
-                <Link
-                  className="button button--secondary"
-                  href={`/groups/${membership.group.id}/badges`}
-                >
-                  グループのバッジを管理
-                </Link>
-                {imageAvailable ? (
+            <div className="group-dashboard-card__availability">
+              <span className={videoAvailable ? 'is-available' : ''}>
+                動画 {videoAvailable ? '利用可' : '未設定'}
+              </span>
+              <span className={imageAvailable ? 'is-available' : ''}>
+                画像 {imageAvailable ? '利用可' : '未設定'}
+              </span>
+            </div>
+            <div className="group-dashboard-card__actions">
+              {videoAvailable ? (
+                <>
+                  <Link className="button" href={`/groups/${membership.group.id}/videos`}>
+                    動画を作る
+                  </Link>
                   <Link
                     className="button button--secondary"
-                    href={`/groups/${membership.group.id}/image-operations`}
+                    href={`/groups/${membership.group.id}/video-assets`}
                   >
-                    画像生成の利用状況
+                    動画に使う素材を管理
                   </Link>
-                ) : null}
-              </>
-            ) : (
-              <p>使える機能はグループ管理者が設定します。</p>
-            )}
+                </>
+              ) : null}
+              {imageAvailable ? (
+                <Link className="button" href={`/groups/${membership.group.id}/images`}>
+                  投稿に使う画像を作る
+                </Link>
+              ) : null}
+              {membership.role === 'MANAGER' ? (
+                <>
+                  <Link className="button" href={`/groups/${membership.group.id}/knowledge`}>
+                    公式資料・FAQを登録
+                  </Link>
+                  <Link className="button" href={`/groups/${membership.group.id}/members`}>
+                    参加者が使える機能を設定
+                  </Link>
+                  <Link
+                    className="button button--secondary"
+                    href={`/groups/${membership.group.id}/badges`}
+                  >
+                    グループのバッジを管理
+                  </Link>
+                  {imageAvailable ? (
+                    <Link
+                      className="button button--secondary"
+                      href={`/groups/${membership.group.id}/image-operations`}
+                    >
+                      画像生成の利用状況
+                    </Link>
+                  ) : null}
+                </>
+              ) : (
+                <p className="group-dashboard-card__hint">
+                  使える機能はグループ管理者が設定します。
+                </p>
+              )}
+            </div>
           </section>
         );
       })}
