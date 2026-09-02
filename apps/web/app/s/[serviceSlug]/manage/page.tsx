@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
 
 const sections = [
   {
-    title: '参加者と担当者',
-    description: '参加者の招待、利用できる機能、運営担当者の役割を管理します。',
+    title: '参加者・運営者と利用権限',
+    description: '参加者の招待、運営担当者の役割、参加者ごとの「利用する・停止する」を管理します。',
     href: 'members',
   },
   {
