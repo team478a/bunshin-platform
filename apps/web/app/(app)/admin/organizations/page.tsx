@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 
@@ -84,15 +85,17 @@ export default async function OrganizationsAdminPage({
         <h2>最初の設定の順番</h2>
         <ol>
           <li>この画面で、運営する会社・団体・プロジェクトの名前を登録します。</li>
-          <li>次に「グループ管理」で、参加者をまとめるグループを作成します。</li>
-          <li>グループごとに、参加者、使える機能、公式情報、専用LINEを設定します。</li>
+          <li>
+            作成後の「団体情報・運営者を設定する」で、担当者・連絡先を登録し、運営者を招待します。
+          </li>
+          <li>運営者がグループを作成し、参加者、使える機能、公式情報、専用LINEを設定します。</li>
           <li>独立したブランドで提供する場合は、最後に「サービス管理」でサービスを作成します。</li>
         </ol>
       </section>
       <section className="settings-card">
         <h2>新しい運営団体を作る</h2>
         <p>
-          作成した人は、この団体の管理者として追加されます。次にグループ、サービスの順で設定します。
+          作成した人は、この団体の所有者として追加されます。作成後に団体情報を編集し、クライアント側の運営者を招待できます。
         </p>
         <form className="form-stack" action={createOrganization}>
           <label className="field">
@@ -119,7 +122,10 @@ export default async function OrganizationsAdminPage({
             {organizations.map((organization) => (
               <li key={organization.id}>
                 <strong>{organization.name}</strong> — 状態：{organization.status}／グループ：
-                {organization._count.groups}件
+                {organization._count.groups}件 ／{' '}
+                <Link href={`/organizations/${organization.id}/manage`}>
+                  団体情報・運営者を設定する
+                </Link>
               </li>
             ))}
           </ul>
