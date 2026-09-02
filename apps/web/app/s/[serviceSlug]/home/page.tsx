@@ -278,15 +278,18 @@ export default async function ServiceMemberHome({
         </section>
 
         {['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole) && (
-          <section className="service-entry__card">
+          <section className="service-entry__card service-management-card">
+            <p className="eyebrow">運営者用メニュー</p>
             <h2>サービスを管理する</h2>
-            <p>参加者、公式資料、利用規約などをこのサービスの範囲だけで管理します。</p>
+            <p>
+              最初は「開始準備」を開き、設定漏れを確認してください。以降は目的にあわせて下のメニューを使います。
+            </p>
             <div className="service-home-actions">
               <a
                 className="button button--primary"
                 href={`/s/${service.configuration.slug}/manage`}
               >
-                開始準備を確認
+                開始準備・設定漏れを確認する
               </a>
               <a className="button" href={`/s/${service.configuration.slug}/manage/settings`}>
                 サービスの見た目・登録設定

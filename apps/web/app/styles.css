@@ -3101,6 +3101,33 @@ body:has(.app-shell) > .site-footer {
   font-size: 0.875rem;
 }
 
+.service-management-card > .eyebrow {
+  margin: 0 0 5px;
+}
+
+.service-management-card .service-home-actions .button {
+  min-height: 54px;
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: #fcfcfd;
+}
+
+.service-management-card .service-home-actions .button--primary {
+  color: white;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.service-management-card .service-home-actions .button:hover {
+  border-color: #aeb7c6;
+  background: #f8f8fb;
+}
+
+.service-management-card .service-home-actions .button--primary:hover {
+  border-color: var(--color-primary-strong);
+  background: var(--color-primary-strong);
+}
+
 .campaign-heading {
   display: flex;
   align-items: flex-start;
