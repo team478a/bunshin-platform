@@ -17,6 +17,7 @@ const createSchema = z.object({
 });
 
 const retrySchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+const cancelSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
 
 async function enqueueBroadcastJob(input: {
   workspaceId: string;
@@ -238,6 +239,127 @@ export async function retryServiceLineBroadcastResponse(
       attempt: Date.now(),
     });
     return Response.json({ data: { broadcastId, retried: reset.count }, requestId });
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, { status: mapped.status });
+  }
+}
+
+export async function cancelServiceLineBroadcastResponse(
+  request: Request,
+  serviceSlug: string,
+  broadcastId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const value = cancelSchema.parse(await request.json());
+    const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const broadcast = await db.prisma.serviceLineBroadcast.findFirst({
+      where: {
+        id: broadcastId,
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'SCHEDULED',
+      },
+      select: { id: true },
+    });
+    if (!broadcast) throw new ApplicationError('CONFLICT', 'broadcast cannot be cancelled');
+    const now = new Date();
+    await db.prisma.$transaction([
+      db.prisma.serviceLineBroadcast.update({
+        where: { id: broadcastId },
+        data: { status: 'CANCELLED', cancelledAt: now, updatedByUserId: actor.userId },
+      }),
+      db.prisma.serviceLineBroadcastRecipient.updateMany({
+        where: { broadcastId, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      }),
+      db.prisma.job.updateMany({
+        where: {
+          workspaceId: service.workspaceId,
+          environment: currentLineEnvironment(),
+          jobType: 'SERVICE_LINE_BROADCAST_DELIVER',
+          payloadReference: `service-line-broadcast:${broadcastId}`,
+          status: { in: ['PENDING', 'RETRY_SCHEDULED'] },
+        },
+        data: { status: 'CANCELLED', cancelledAt: now },
+      }),
+      db.prisma.serviceLineBroadcastAuditLog.create({
+        data: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          broadcastId,
+          action: 'CANCELLED',
+          beforeData: { status: 'SCHEDULED' },
+          afterData: { cancelledAt: now.toISOString() },
+          reason: value.reason,
+          performedByUserId: actor.userId,
+        },
+      }),
+    ]);
+    return Response.json({ data: { broadcastId, cancelledAt: now.toISOString() }, requestId });
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, { status: mapped.status });
+  }
+}
+
+export async function exportServiceLineBroadcastsResponse(request: Request, serviceSlug: string) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const broadcasts = await db.prisma.serviceLineBroadcast.findMany({
+      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+      include: { recipients: { select: { status: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 5_000,
+    });
+    const cell = (value: string | number | null) =>
+      `"${String(value ?? '').replaceAll('"', '""')}"`;
+    const rows = [
+      [
+        '件名',
+        '状態',
+        '予約日時',
+        '作成日時',
+        '完了日時',
+        '送信成功',
+        '送信失敗',
+        '対象外',
+        '取消',
+      ],
+      ...broadcasts.map((broadcast) => {
+        const count = broadcast.recipients.reduce<Record<string, number>>((result, recipient) => {
+          result[recipient.status] = (result[recipient.status] ?? 0) + 1;
+          return result;
+        }, {});
+        return [
+          broadcast.title,
+          broadcast.status,
+          broadcast.scheduledAt?.toISOString() ?? null,
+          broadcast.createdAt.toISOString(),
+          broadcast.completedAt?.toISOString() ?? null,
+          count.SENT ?? 0,
+          count.FAILED ?? 0,
+          count.SKIPPED ?? 0,
+          count.CANCELLED ?? 0,
+        ];
+      }),
+    ];
+    return new Response(`\uFEFF${rows.map((row) => row.map(cell).join(',')).join('\r\n')}`, {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': 'attachment; filename="line-broadcasts.csv"',
+        'x-request-id': requestId,
+      },
+    });
   } catch (error) {
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, { status: mapped.status });
