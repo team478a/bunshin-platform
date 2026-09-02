@@ -261,7 +261,7 @@ a {
 .memory-section input,
 .memory-section textarea,
 .memory-section select,
-.memory-section button {
+.memory-section button:not(.button) {
   font: inherit;
 }
 
@@ -592,7 +592,42 @@ a {
 }
 
 .memory-section {
-  margin: 40px 0;
+  margin: 0;
+}
+
+.memory-section__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.memory-section__heading h2 {
+  margin: 0 0 8px;
+}
+
+.memory-section__heading p:last-child {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+.memory-section__eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-primary-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.memory-section__count {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--color-primary-strong);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .memory-form,
@@ -611,6 +646,34 @@ a {
   display: flex;
   gap: 10px;
   margin: 18px 0;
+}
+
+.memory-tabs {
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f3f8;
+}
+
+.memory-tabs button {
+  min-width: 84px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.memory-tabs button.is-active {
+  color: var(--color-primary-strong);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 2px 6px rgb(22 34 48 / 8%);
+}
+
+.memory-empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  line-height: 1.65;
 }
 
 .memory-numbers > label {

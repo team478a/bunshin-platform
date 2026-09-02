@@ -117,17 +117,28 @@ export function MemorySection({
 
   return (
     <section className="memory-section">
-      <h2>BUNSHINが覚えていること</h2>
-      <p>あなたの経験や考え、好きなことを教えると、BUNSHINが回答や投稿作りに使います。</p>
+      <div className="memory-section__heading">
+        <div>
+          <p className="memory-section__eyebrow">分身に教えること</p>
+          <h2>BUNSHINが覚えていること</h2>
+          <p>
+            経験や考えを教えると、投稿づくりや回答に使います。いつでも直したり、お休みにしたりできます。
+          </p>
+        </div>
+        <span className="memory-section__count">
+          利用中 {memories.filter((memory) => memory.active).length}件
+        </span>
+      </div>
       <form
-        className="memory-form"
+        className="memory-form form-stack"
         onSubmit={(event) => {
           void create(event);
         }}
       >
-        <label>
-          種類
+        <label className="field">
+          <span className="field__label">何について教えますか</span>
           <select
+            className="field__control"
             value={form.type}
             onChange={(event) =>
               setForm({ ...form, type: event.target.value as BunshinMemoryType })
@@ -140,26 +151,29 @@ export function MemorySection({
             ))}
           </select>
         </label>
-        <label>
-          内容
+        <label className="field">
+          <span className="field__label">内容</span>
           <textarea
+            className="field__control"
             required
             maxLength={20000}
             value={form.content}
             onChange={(event) => setForm({ ...form, content: event.target.value })}
           />
         </label>
-        <label>
-          要約（任意）
+        <label className="field">
+          <span className="field__label">短いまとめ（書かなくても大丈夫）</span>
           <input
+            className="field__control"
             maxLength={1000}
             value={form.summary}
             onChange={(event) => setForm({ ...form, summary: event.target.value })}
           />
         </label>
-        <label>
-          どのくらい確かな内容ですか？（0〜1）
+        <label className="field">
+          <span className="field__label">どのくらい確かな内容ですか？</span>
           <input
+            className="field__control"
             type="number"
             min="0"
             max="1"
@@ -168,9 +182,10 @@ export function MemorySection({
             onChange={(event) => setForm({ ...form, confidence: Number(event.target.value) })}
           />
         </label>
-        <label>
-          重要度（1〜5）
+        <label className="field">
+          <span className="field__label">どれくらい大切ですか？</span>
           <input
+            className="field__control"
             type="number"
             min="1"
             max="5"
@@ -179,20 +194,40 @@ export function MemorySection({
             onChange={(event) => setForm({ ...form, importance: Number(event.target.value) })}
           />
         </label>
-        <button type="submit">BUNSHINに覚えてもらう</button>
+        <button className="button button--primary button--full" type="submit">
+          BUNSHINに覚えてもらう
+        </button>
       </form>
 
-      <div className="memory-tabs">
-        <button type="button" aria-pressed={!showInactive} onClick={() => setShowInactive(false)}>
+      <div className="memory-tabs" aria-label="覚えている内容の表示切り替え">
+        <button
+          className={!showInactive ? 'is-active' : ''}
+          type="button"
+          aria-pressed={!showInactive}
+          onClick={() => setShowInactive(false)}
+        >
           有効
         </button>
-        <button type="button" aria-pressed={showInactive} onClick={() => setShowInactive(true)}>
+        <button
+          className={showInactive ? 'is-active' : ''}
+          type="button"
+          aria-pressed={showInactive}
+          onClick={() => setShowInactive(true)}
+        >
           無効
         </button>
       </div>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="form-feedback" role="status">
+          {message}
+        </p>
+      ) : null}
       {visible.length === 0 ? (
-        <p>{showInactive ? 'お休み中の内容はありません。' : '覚えている内容はまだありません。'}</p>
+        <p className="memory-empty">
+          {showInactive
+            ? 'お休み中の内容はありません。'
+            : 'まだ覚えている内容はありません。上の入力欄から、経験や伝えたいことを教えてください。'}
+        </p>
       ) : (
         <ul className="memory-list">
           {visible.map((memory) => (
@@ -224,9 +259,10 @@ function MemoryItem({
   const [memory, setMemory] = useState(initial);
   return (
     <li className="memory-card">
-      <label>
-        種類
+      <label className="field">
+        <span className="field__label">種類</span>
         <select
+          className="field__control"
           value={memory.type}
           onChange={(event) =>
             setMemory({ ...memory, type: event.target.value as BunshinMemoryType })
@@ -239,26 +275,29 @@ function MemoryItem({
           ))}
         </select>
       </label>
-      <label>
-        内容
+      <label className="field">
+        <span className="field__label">内容</span>
         <textarea
+          className="field__control"
           maxLength={20000}
           value={memory.content}
           onChange={(event) => setMemory({ ...memory, content: event.target.value })}
         />
       </label>
-      <label>
-        要約
+      <label className="field">
+        <span className="field__label">短いまとめ</span>
         <input
+          className="field__control"
           maxLength={1000}
           value={memory.summary ?? ''}
           onChange={(event) => setMemory({ ...memory, summary: event.target.value })}
         />
       </label>
       <div className="memory-numbers">
-        <label>
-          確信度
+        <label className="field">
+          <span className="field__label">確かさ</span>
           <input
+            className="field__control"
             type="number"
             min="0"
             max="1"
@@ -267,9 +306,10 @@ function MemoryItem({
             onChange={(event) => setMemory({ ...memory, confidence: Number(event.target.value) })}
           />
         </label>
-        <label>
-          重要度
+        <label className="field">
+          <span className="field__label">大切さ</span>
           <input
+            className="field__control"
             type="number"
             min="1"
             max="5"
@@ -280,13 +320,25 @@ function MemoryItem({
         </label>
       </div>
       <div className="memory-actions">
-        <button type="button" onClick={() => void onUpdate(memory)}>
+        <button
+          className="button button--primary"
+          type="button"
+          onClick={() => void onUpdate(memory)}
+        >
           保存
         </button>
-        <button type="button" onClick={() => void onSetActive(memory)}>
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={() => void onSetActive(memory)}
+        >
           {memory.active ? '無効にする' : '有効にする'}
         </button>
-        <button type="button" className="danger" onClick={() => void onDelete(memory)}>
+        <button
+          className="button button--danger"
+          type="button"
+          onClick={() => void onDelete(memory)}
+        >
           削除
         </button>
       </div>
