@@ -134,9 +134,38 @@ async function createOperatorInvitation(formData: FormData) {
   const db = await requireOrganizationManager(input.data.workspaceId, user.userId);
   const organization = await db.prisma.workspace.findFirst({
     where: { id: input.data.workspaceId, type: 'ORGANIZATION', status: 'ACTIVE' },
-    select: { id: true, name: true },
+    select: { id: true, name: true, organizationEntitlement: true },
   });
   if (!organization) notFound();
+  const now = new Date();
+  const entitlement = organization.organizationEntitlement;
+  if (
+    entitlement?.suspended ||
+    (entitlement?.startsAt && entitlement.startsAt > now) ||
+    (entitlement?.endsAt && entitlement.endsAt <= now)
+  )
+    redirect(`/organizations/${organization.id}/manage?error=organization-suspended`);
+  if (input.data.role === 'ADMIN' && entitlement?.maxOperators) {
+    const [operatorCount, pendingCount] = await Promise.all([
+      db.prisma.workspaceMembership.count({
+        where: {
+          workspaceId: organization.id,
+          status: 'ACTIVE',
+          role: { in: ['OWNER', 'ADMIN'] },
+        },
+      }),
+      db.prisma.workspaceInvitation.count({
+        where: {
+          workspaceId: organization.id,
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          expiresAt: { gt: now },
+        },
+      }),
+    ]);
+    if (operatorCount + pendingCount >= entitlement.maxOperators)
+      redirect(`/organizations/${organization.id}/manage?error=operator-limit`);
+  }
   const token = randomBytes(32).toString('base64url');
   const invitation = await db.prisma.workspaceInvitation.create({
     data: {
@@ -252,7 +281,7 @@ async function createGroup(formData: FormData) {
     actorUserId: user.userId,
     name: input.data.name,
   });
-  if (!group) notFound();
+  if (!group) redirect(`/organizations/${input.data.workspaceId}/manage?error=group-limit`);
   redirect(`/groups/${group.id}/members?serviceSlug=`);
 }
 
@@ -266,6 +295,7 @@ export default async function OrganizationManagePage({
     invitation?: string;
     delivery?: string;
     invitationAction?: string;
+    error?: string;
   }>;
 }) {
   const user = await (await currentUserProvider()).getCurrentUser();
@@ -366,6 +396,15 @@ export default async function OrganizationManagePage({
       {query.invitationAction === 'manual-link' ? (
         <p className="notice">
           以前の手動招待リンクは再送できません。新しい招待を作成してください。
+        </p>
+      ) : null}
+      {query.error ? (
+        <p className="notice notice--danger" role="alert">
+          {query.error === 'operator-limit'
+            ? '契約で許可された運営者数の上限に達しています。システム管理者へお問い合わせください。'
+            : query.error === 'group-limit'
+              ? '契約で許可されたグループ数の上限に達しているか、団体が利用期間外です。システム管理者へお問い合わせください。'
+              : '団体の新規設定は現在停止されています。システム管理者へお問い合わせください。'}
         </p>
       ) : null}
       <section className="settings-card">

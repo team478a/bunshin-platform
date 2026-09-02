@@ -1569,6 +1569,8 @@ model User {
   identities                        AuthIdentity[]
   memberships                       WorkspaceMembership[]
   workspaceInvitationsCreated       WorkspaceInvitation[]               @relation("WorkspaceInvitationCreator")
+  organizationEntitlementsUpdated   OrganizationEntitlement[]           @relation("OrganizationEntitlementUpdater")
+  organizationEntitlementAudits     OrganizationEntitlementAudit[]      @relation("OrganizationEntitlementAuditActor")
   groupMemberships                  GroupMembership[]
   groupInvitationsCreated           GroupInvitation[]                   @relation("GroupInvitationCreator")
   platformAdmin                     PlatformAdmin?
@@ -1789,6 +1791,8 @@ model Workspace {
   badgeApprovalRequests           BadgeApprovalRequest[]
   badgeAwardCandidates            BadgeAwardCandidate[]
   serviceConfigurations           ServiceConfiguration[]
+  organizationEntitlement         OrganizationEntitlement?
+  organizationEntitlementAudits   OrganizationEntitlementAudit[]
   serviceCustomDomains            ServiceCustomDomain[]
   serviceCommercialSettings       ServiceCommercialSetting[]
   serviceBrands                   ServiceBrand[]
@@ -1850,6 +1854,49 @@ model WorkspaceInvitation {
   @@index([workspaceId, inviteeEmail, status])
   @@index([expiresAt, status])
   @@map("workspace_invitations")
+}
+
+/// システム管理者が運営団体へ許可する契約範囲。null の数値は上限なしを表す。
+model OrganizationEntitlement {
+  id                          String    @id @default(uuid()) @db.Uuid
+  workspaceId                 String    @unique @map("workspace_id") @db.Uuid
+  maxGroups                   Int?      @map("max_groups")
+  maxOperators                Int?      @map("max_operators")
+  maxMembers                  Int?      @map("max_members")
+  maxServices                 Int?      @map("max_services")
+  monthlyAiGenerationLimit    Int?      @map("monthly_ai_generation_limit")
+  monthlyImageGenerationLimit Int?      @map("monthly_image_generation_limit")
+  monthlyVideoGenerationLimit Int?      @map("monthly_video_generation_limit")
+  dedicatedLineEnabled        Boolean   @default(false) @map("dedicated_line_enabled")
+  oemEnabled                  Boolean   @default(false) @map("oem_enabled")
+  customDomainEnabled         Boolean   @default(false) @map("custom_domain_enabled")
+  suspended                   Boolean   @default(false)
+  startsAt                    DateTime? @map("starts_at") @db.Timestamptz(6)
+  endsAt                      DateTime? @map("ends_at") @db.Timestamptz(6)
+  updatedByUserId             String    @map("updated_by_user_id") @db.Uuid
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updatedBy                   User      @relation("OrganizationEntitlementUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([suspended, startsAt, endsAt])
+  @@map("organization_entitlements")
+}
+
+model OrganizationEntitlementAudit {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  actorUserId String    @map("actor_user_id") @db.Uuid
+  beforeData  Json?     @map("before_data")
+  afterData   Json      @map("after_data")
+  reason      String    @db.VarChar(1000)
+  occurredAt  DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor       User      @relation("OrganizationEntitlementAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("organization_entitlement_audits")
 }
 
 model Group {
