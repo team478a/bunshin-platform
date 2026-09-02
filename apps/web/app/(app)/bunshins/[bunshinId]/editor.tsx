@@ -62,14 +62,21 @@ export function BunshinEditor({
     audienceSummary: bunshin.audienceSummary,
     personalitySummary: bunshin.personalitySummary,
   });
+  const [overviewMessage, setOverviewMessage] = useState<string | null>(null);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshin.id)}`;
   async function save(event: FormEvent) {
     event.preventDefault();
+    setOverviewMessage(null);
     const response = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(form),
     });
+    setOverviewMessage(
+      response.ok
+        ? '基本情報を保存しました。'
+        : '保存できませんでした。入力内容を確認して、もう一度お試しください。',
+    );
     if (response.ok) router.refresh();
   }
   async function archive() {
@@ -125,34 +132,37 @@ export function BunshinEditor({
         </header>
         <details className="settings-disclosure">
           <summary>基本情報を編集</summary>
+          <p className="settings-disclosure__intro">
+            分身の名前と、何のために・誰へ向けて発信するかを短い言葉で設定します。
+          </p>
           <form
             onSubmit={(event) => {
               void save(event);
             }}
           >
             <label>
-              名前
+              <span>分身の名前</span>
               <input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </label>
             <label>
-              目的
+              <span>発信の目的</span>
               <textarea
                 value={form.objectiveSummary}
                 onChange={(e) => setForm({ ...form, objectiveSummary: e.target.value })}
               />
             </label>
             <label>
-              対象者
+              <span>届けたい相手</span>
               <textarea
                 value={form.audienceSummary}
                 onChange={(e) => setForm({ ...form, audienceSummary: e.target.value })}
               />
             </label>
             <label>
-              人格
+              <span>ひとことで表す話し方</span>
               <textarea
                 value={form.personalitySummary}
                 onChange={(e) => setForm({ ...form, personalitySummary: e.target.value })}
@@ -162,6 +172,11 @@ export function BunshinEditor({
               変更を保存
             </button>
           </form>
+          {overviewMessage ? (
+            <p className="form-feedback" role="status">
+              {overviewMessage}
+            </p>
+          ) : null}
         </details>
         <details className="settings-disclosure">
           <summary>話し方をくわしく決める</summary>
