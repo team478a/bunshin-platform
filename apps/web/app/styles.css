@@ -3147,6 +3147,114 @@ body:has(.app-shell) > .site-footer {
   color: #5f6678;
   font-size: 0.88rem;
 }
+
+/* Account strategy wizard */
+.strategy-section {
+  display: grid;
+  gap: 18px;
+  padding: clamp(20px, 4vw, 30px);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.strategy-section__header h2,
+.strategy-section__header p {
+  margin: 0;
+}
+.strategy-section__header h2 {
+  margin-top: 4px;
+  font-size: 1.25rem;
+}
+.strategy-section__header > p:last-child {
+  margin-top: 7px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+.strategy-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #fafaff;
+}
+.strategy-form__wide {
+  grid-column: 1 / -1;
+}
+.strategy-section__empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f5f5f7;
+  color: var(--color-text-muted);
+}
+.strategy-section__list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+.strategy-section__list-heading h3 {
+  margin: 10px 0 0;
+  font-size: 1rem;
+}
+.strategy-section__list-heading span {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #f0f1f5;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+.strategy-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.strategy-list li {
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+}
+.strategy-list__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.strategy-list__title span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-size: 0.78rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.strategy-list p,
+.strategy-list small {
+  margin: 0;
+  line-height: 1.55;
+}
+.strategy-list small {
+  color: var(--color-text-muted);
+}
+.strategy-list .button {
+  justify-self: start;
+  margin-top: 2px;
+}
+.strategy-section__message {
+  margin: 0;
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
 @media (max-width: 520px) {
   .badge-card {
     grid-template-columns: 3rem 1fr;
@@ -3155,5 +3263,16 @@ body:has(.app-shell) > .site-footer {
   .badge-mark {
     width: 3rem;
     height: 3rem;
+  }
+  .strategy-form {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+  .strategy-form__wide {
+    grid-column: auto;
+  }
+  .strategy-form .button,
+  .strategy-list .button {
+    width: 100%;
   }
 }
