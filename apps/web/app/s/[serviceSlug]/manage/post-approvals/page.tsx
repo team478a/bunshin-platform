@@ -177,7 +177,13 @@ export default async function ServicePostApprovalsPage({
             操作を完了できませんでした。画面を更新してもう一度お試しください。
           </p>
         ) : null}
-        <section className="settings-card">
+        <nav aria-label="投稿確認の項目" className="settings-anchor-nav">
+          <a href="#approval-policy">確認のルール</a>
+          <a href="#approval-requests">
+            確認を待つ投稿案（{requests.filter((item) => item.status === 'PENDING').length}件）
+          </a>
+        </nav>
+        <section className="settings-card" id="approval-policy">
           <h2>確認のルール</h2>
           <p>通常の投稿は止めません。商品またはキャンペーンを含む投稿だけが対象です。</p>
           <form action={savePolicy} className="form-stack">
@@ -197,7 +203,7 @@ export default async function ServicePostApprovalsPage({
             </button>
           </form>
         </section>
-        <section className="settings-card">
+        <section className="settings-card" id="approval-requests">
           <h2>確認を待っている投稿案</h2>
           {requests.length === 0 ? (
             <p>まだ投稿案はありません。</p>
