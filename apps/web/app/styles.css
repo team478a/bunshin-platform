@@ -987,10 +987,47 @@ a {
 }
 .admin-sidebar nav {
   display: grid;
-  gap: 5px;
+  gap: 8px;
+}
+.admin-sidebar__group {
+  overflow: hidden;
+  border-radius: 10px;
+}
+.admin-sidebar__group summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  color: var(--color-text);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 800;
+  list-style: none;
+}
+.admin-sidebar__group summary::-webkit-details-marker {
+  display: none;
+}
+.admin-sidebar__group summary::after {
+  content: '⌄';
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  transition: transform 160ms ease;
+}
+.admin-sidebar__group[open] summary {
+  color: var(--color-primary-strong);
+  background: #ebecfa;
+}
+.admin-sidebar__group[open] summary::after {
+  transform: rotate(180deg);
+}
+.admin-sidebar__links {
+  display: grid;
+  gap: 3px;
+  padding: 5px 0 2px;
 }
 .admin-sidebar nav a {
-  padding: 11px 12px;
+  padding: 9px 12px 9px 20px;
   color: var(--color-text-muted);
   border-radius: 10px;
   font-size: 0.875rem;
@@ -1185,6 +1222,12 @@ a {
   .admin-layout {
     grid-template-columns: 220px minmax(0, 1fr);
   }
+  .admin-sidebar {
+    position: sticky;
+    top: 64px;
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
+  }
   .app-shell--admin .app-header {
     padding-inline: 24px;
   }
@@ -1198,8 +1241,9 @@ a {
     top: 64px;
     z-index: 15;
     display: block;
-    padding: 10px 16px;
-    overflow-x: auto;
+    max-height: min(52dvh, 430px);
+    padding: 8px 12px;
+    overflow-y: auto;
     border-right: 0;
     border-bottom: 1px solid var(--color-border);
   }
@@ -1207,13 +1251,15 @@ a {
     display: none;
   }
   .admin-sidebar nav {
-    display: flex;
-    width: max-content;
-    gap: 6px;
+    display: grid;
+    gap: 4px;
+  }
+  .admin-sidebar__group summary {
+    padding: 9px 11px;
   }
   .admin-sidebar nav a {
-    padding: 8px 11px;
-    white-space: nowrap;
+    padding: 8px 11px 8px 18px;
+    white-space: normal;
   }
   .admin-sidebar__back {
     display: none;
