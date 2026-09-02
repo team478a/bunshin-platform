@@ -86,7 +86,10 @@ export function GroupLineEditor(props: {
     <>
       <section className="settings-card">
         <h2>どのLINEを使いますか</h2>
-        <p>「この{scopeLabel}専用」を選ぶと、共通LINEと分けて運用できます。</p>
+        <p>
+          「この{scopeLabel}
+          専用」を選ぶと、共通LINEと分けて運用できます。初めて専用LINEを設定する場合は、先にこれを選んで保存してください。
+        </p>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -123,7 +126,10 @@ export function GroupLineEditor(props: {
       {mode === 'DEDICATED' && (
         <section className="settings-card">
           <h2>新しい専用LINE設定</h2>
-          <p>保存しただけでは送信されません。接続確認後に「使用を開始」を押します。</p>
+          <p>
+            LINE
+            Developersで発行された値を入力します。Secretとアクセストークンは保存後にもう一度表示できません。
+          </p>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -153,27 +159,27 @@ export function GroupLineEditor(props: {
               <input name="reason" required minLength={3} />
             </label>
             <label>
-              LINE Login Channel ID
+              LINEログイン用チャネルID
               <input name="loginChannelId" required />
             </label>
             <label>
-              LINE Login Channel Secret
+              LINEログイン用チャネルシークレット
               <input name="loginChannelSecret" type="password" required />
             </label>
             <label>
-              Messaging API Channel ID
+              通知用チャネルID（Messaging API）
               <input name="messagingChannelId" required />
             </label>
             <label>
-              Messaging API Channel Secret
+              通知用チャネルシークレット（Messaging API）
               <input name="messagingChannelSecret" type="password" required />
             </label>
             <label>
-              Channel Access Token
+              通知用アクセストークン
               <input name="channelAccessToken" type="password" required />
             </label>
             <label>
-              LIFF ID（任意）
+              LIFF ID（LINE内画面を使う場合のみ）
               <input name="liffId" />
             </label>
             <button disabled={busy}>停止中の設定として保存</button>

@@ -81,6 +81,15 @@ export default async function OrganizationsAdminPage({
         <p className="notice notice--danger">団体名を1〜120文字で入力してください。</p>
       ) : null}
       <section className="settings-card">
+        <h2>最初の設定の順番</h2>
+        <ol>
+          <li>この画面で、運営する会社・団体・プロジェクトの名前を登録します。</li>
+          <li>次に「グループ管理」で、参加者をまとめるグループを作成します。</li>
+          <li>グループごとに、参加者、使える機能、公式情報、専用LINEを設定します。</li>
+          <li>独立したブランドで提供する場合は、最後に「サービス管理」でサービスを作成します。</li>
+        </ol>
+      </section>
+      <section className="settings-card">
         <h2>新しい運営団体を作る</h2>
         <p>
           作成した人は、この団体の管理者として追加されます。次にグループ、サービスの順で設定します。
