@@ -96,17 +96,21 @@ export function ProgramManagementEditor({
       >
         {message}
       </p>
-      <section className="settings-card">
+      <section className="settings-card program-management-card">
+        <p className="eyebrow">1. サービスで使う内容を選ぶ</p>
         <h2>利用できる公式プログラム</h2>
         <p>「このサービスで使う」を押すまでは、参加者には表示されません。</p>
         {available.length === 0 ? <p>追加できる公式プログラムはありません。</p> : null}
-        <div className="settings-stack">
+        <div className="settings-stack program-management-card__list">
           {available.map((item) => (
             <article key={item.versionId}>
               <h3>{item.name}</h3>
               <p>{item.description}</p>
               <p>渡せる内容：{item.supportModes.map((mode) => labels[mode]).join('・')}</p>
-              <form onSubmit={(event) => adopt(event, item)}>
+              <form
+                className="program-management-card__action"
+                onSubmit={(event) => adopt(event, item)}
+              >
                 <button className="button button--primary" type="submit" disabled={saving}>
                   このサービスで使う
                 </button>
@@ -115,10 +119,11 @@ export function ProgramManagementEditor({
           ))}
         </div>
       </section>
-      <section className="settings-card">
+      <section className="settings-card program-management-card">
+        <p className="eyebrow">2. 参加者に割り当てる</p>
         <h2>サービスで提供中のプログラム</h2>
         {programs.length === 0 ? <p>提供中のプログラムはありません。</p> : null}
-        <div className="settings-stack">
+        <div className="settings-stack program-management-card__list">
           {programs.map((program) => {
             const eligible = members.filter(
               (member) => !program.enrolledMembershipIds.includes(member.id),
@@ -162,7 +167,7 @@ export function ProgramManagementEditor({
                         placeholder="例：週3回投稿を30日続ける"
                       />
                     </label>
-                    <button className="button" type="submit" disabled={saving}>
+                    <button className="button button--primary" type="submit" disabled={saving}>
                       この人を無料で参加登録する
                     </button>
                   </form>
