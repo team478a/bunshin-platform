@@ -2852,6 +2852,133 @@ body:has(.app-shell) > .site-footer {
   font-size: 0.875rem;
 }
 
+.knowledge-page-guide {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 15px 16px;
+  border: 1px solid #d9d9f7;
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+  color: #26305e;
+  font-size: 0.875rem;
+}
+
+.knowledge-page-guide ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.knowledge-section-heading,
+.knowledge-source-list__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.knowledge-section-heading h2 {
+  margin: 0;
+  padding: 0;
+}
+
+.knowledge-section-heading .eyebrow {
+  margin: 0 0 4px;
+}
+
+.knowledge-type-badge,
+.knowledge-status {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f0f1f4;
+  color: #475467;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.knowledge-status-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.knowledge-status-summary span {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.knowledge-status-summary strong {
+  color: var(--color-text);
+  font-size: 1.15rem;
+}
+
+.knowledge-source-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.knowledge-source-list > li {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: #fcfcfd;
+}
+
+.knowledge-source-list__heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.knowledge-source-list__heading span,
+.knowledge-source-list__detail {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.knowledge-source-list__detail {
+  margin: 0;
+}
+
+.knowledge-status--active {
+  background: var(--color-success-soft);
+  color: #0c6045;
+}
+.knowledge-status--review_required {
+  background: #fff4df;
+  color: #8a4b00;
+}
+.knowledge-status--draft,
+.knowledge-status--processing {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+}
+.knowledge-status--failed {
+  background: var(--color-danger-soft);
+  color: #8c1d14;
+}
+.knowledge-status--archived {
+  background: #eef0f4;
+  color: #667085;
+}
+
+@media (max-width: 620px) {
+  .knowledge-status-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .operations-overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

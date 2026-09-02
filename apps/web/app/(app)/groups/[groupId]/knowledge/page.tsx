@@ -128,9 +128,16 @@ export default async function GroupKnowledgePage({
     <main className="app-page">
       <header className="app-page__heading">
         <p className="eyebrow">サービスの公式情報</p>
-        <h1>投稿づくりで使うナレッジ</h1>
-        <p>{membership.group.name}の商品資料、FAQ、研修動画、公式Webページを登録します。</p>
-        <p>保存しただけでは投稿に使いません。読み取った内容を管理者が確認してから利用します。</p>
+        <h1>公式資料・FAQを投稿づくりに使う</h1>
+        <p>{membership.group.name}の商品資料、FAQ、研修動画、公式Webページを登録できます。</p>
+        <div className="knowledge-page-guide">
+          <strong>登録から利用までの3ステップ</strong>
+          <ol>
+            <li>資料・URL・文章を追加します。</li>
+            <li>ワタシワークスが内容を読み取ります。</li>
+            <li>内容を確認して承認すると、投稿づくりに使われます。</li>
+          </ol>
+        </div>
         {serviceSlug ? (
           <a href={`/s/${serviceSlug}/home`}>← サービスのホームへ戻る</a>
         ) : (
@@ -162,7 +169,7 @@ export default async function GroupKnowledgePage({
           };
         })}
       />
-      <section className="settings-card">
+      <section className="settings-card knowledge-audit-card">
         <h2>資料の変更履歴</h2>
         <p>グループの共有資料に対して行われた操作を、新しい順に50件まで表示します。</p>
         {audits.length === 0 ? <p>変更履歴はまだありません。</p> : null}

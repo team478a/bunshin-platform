@@ -508,9 +508,15 @@ export function GroupKnowledgeManager({
 
   return (
     <>
-      <section className="settings-card">
-        <h2>資料をアップロード</h2>
-        <p>PDFや動画をまとめて選べます。種類と資料名はファイルから自動で判定します。</p>
+      <section className="settings-card knowledge-upload-card">
+        <div className="knowledge-section-heading">
+          <div>
+            <p className="eyebrow">いちばん簡単な方法</p>
+            <h2>資料をアップロード</h2>
+          </div>
+          <span className="knowledge-type-badge">PDF・動画</span>
+        </div>
+        <p>PDFや動画をまとめて選べます。資料名はファイル名から自動で入ります。</p>
         <form ref={fileForm} className="form-stack" onSubmit={(event) => void saveFile(event)}>
           <label className="field">
             <span className="field__label">ファイルを選ぶ</span>
@@ -540,14 +546,17 @@ export function GroupKnowledgeManager({
               この資料をワタシワークスで使っても大丈夫です
             </span>
           </label>
-          <button className="button" type="submit" disabled={saving}>
+          <button className="button button--primary" type="submit" disabled={saving}>
             選んだ資料をまとめて追加する
           </button>
         </form>
       </section>
 
-      <section className="settings-card">
-        <h2>公式Webページを追加</h2>
+      <section className="settings-card knowledge-add-card">
+        <div className="knowledge-section-heading">
+          <h2>公式Webページを追加</h2>
+          <span className="knowledge-type-badge">URL</span>
+        </div>
         <p>商品ページや公開FAQのURLを登録できます。</p>
         <form
           ref={urlForm}
@@ -570,14 +579,17 @@ export function GroupKnowledgeManager({
             />
           </label>
           <ProductScopeField productVersions={productVersions} />
-          <button className="button" type="submit" disabled={saving}>
+          <button className="button button--primary" type="submit" disabled={saving}>
             Webページを保存する
           </button>
         </form>
       </section>
 
-      <section className="settings-card">
-        <h2>文章を直接追加</h2>
+      <section className="settings-card knowledge-add-card">
+        <div className="knowledge-section-heading">
+          <h2>文章を直接追加</h2>
+          <span className="knowledge-type-badge">FAQ・説明文</span>
+        </div>
         <p>短いFAQや社内で決めた説明文は、そのまま入力できます。</p>
         <form
           ref={textForm}
@@ -600,15 +612,17 @@ export function GroupKnowledgeManager({
             />
           </label>
           <ProductScopeField productVersions={productVersions} />
-          <button className="button" type="submit" disabled={saving}>
+          <button className="button button--primary" type="submit" disabled={saving}>
             文章を保存する
           </button>
         </form>
       </section>
 
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {message ? (
+        <p className="notice notice--success" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
 
       {review ? (
         <section className="settings-card">
@@ -728,14 +742,31 @@ export function GroupKnowledgeManager({
         </section>
       ) : null}
 
-      <section className="settings-card">
+      <section className="settings-card knowledge-library-card">
         <h2>保存したナレッジ</h2>
-        <p>
-          全{sources.length}件 ／ 利用中{statusCounts.active}件 ／ 内容の確認待ち
-          {statusCounts.review}件 ／ 読み取り中{statusCounts.processing}件 ／ 失敗
-          {statusCounts.failed}件
-        </p>
-        <button type="button" disabled={saving} onClick={() => void refreshSources(true)}>
+        <div className="knowledge-status-summary" aria-label="登録した資料の状態">
+          <span>
+            すべて<strong>{sources.length}</strong>
+          </span>
+          <span>
+            利用中<strong>{statusCounts.active}</strong>
+          </span>
+          <span>
+            確認待ち<strong>{statusCounts.review}</strong>
+          </span>
+          <span>
+            読み取り中<strong>{statusCounts.processing}</strong>
+          </span>
+          <span>
+            失敗<strong>{statusCounts.failed}</strong>
+          </span>
+        </div>
+        <button
+          className="button button--secondary"
+          type="button"
+          disabled={saving}
+          onClick={() => void refreshSources(true)}
+        >
           最新の状態に更新する
         </button>
         {hasPendingSources ? (
@@ -815,25 +846,37 @@ export function GroupKnowledgeManager({
         {sources.length > 0 && visibleSources.length === 0 ? (
           <p>条件に合う資料はありません。検索や絞り込みを変えてください。</p>
         ) : null}
-        <ul className="plain-list">
+        <ul className="plain-list knowledge-source-list">
           {visibleSources.map((source) => (
             <li key={source.id}>
-              <strong>{source.title}</strong>
-              <br />
-              {typeLabel[source.type]} ／ {statusLabel[source.status]} ／ 第{source.version}版
-              <br />
-              投稿案での利用：
-              {source.generationCount > 0 && source.lastUsedAt
-                ? `${source.generationCount}回（最後：${usageDateTime(source.lastUsedAt)}）`
-                : 'まだありません'}
-              <br />
-              使う範囲：
-              {source.productPackVersionId
-                ? `商品「${
-                    productVersions.find((item) => item.id === source.productPackVersionId)
-                      ?.label ?? '登録済みの商品'
-                  }」の投稿だけ`
-                : 'グループのすべての投稿'}
+              <div className="knowledge-source-list__heading">
+                <div>
+                  <strong>{source.title}</strong>
+                  <span>
+                    {typeLabel[source.type]} ／ 第{source.version}版
+                  </span>
+                </div>
+                <span
+                  className={`knowledge-status knowledge-status--${source.status.toLowerCase()}`}
+                >
+                  {statusLabel[source.status]}
+                </span>
+              </div>
+              <p className="knowledge-source-list__detail">
+                投稿案での利用：
+                {source.generationCount > 0 && source.lastUsedAt
+                  ? `${source.generationCount}回（最後：${usageDateTime(source.lastUsedAt)}）`
+                  : 'まだありません'}
+              </p>
+              <p className="knowledge-source-list__detail">
+                使う範囲：
+                {source.productPackVersionId
+                  ? `商品「${
+                      productVersions.find((item) => item.id === source.productPackVersionId)
+                        ?.label ?? '登録済みの商品'
+                    }」の投稿だけ`
+                  : 'グループのすべての投稿'}
+              </p>
               {source.status !== 'ARCHIVED' ? (
                 <form
                   key={`${source.id}-${source.productPackVersionId ?? 'common'}`}
