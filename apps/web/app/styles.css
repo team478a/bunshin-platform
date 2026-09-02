@@ -307,6 +307,71 @@ a {
   color: #667085;
 }
 
+.personality-section {
+  margin: 0;
+}
+
+.personality-section__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.personality-section__heading h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.personality-section__eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-primary-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.personality-section__version {
+  flex: none;
+  padding: 5px 8px;
+  color: var(--color-primary-strong);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.personality-section__lead {
+  margin: 12px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+.personality-form {
+  margin-top: 20px;
+}
+
+.personality-history-disclosure {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.personality-history-disclosure summary {
+  color: var(--color-primary-strong);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.form-feedback {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  color: #146c43;
+  border: 1px solid #9fd6b5;
+  border-radius: 12px;
+  background: #effaf3;
+  font-weight: 700;
+}
+
 .capability-section {
   margin: 40px 0;
 }
@@ -1380,6 +1445,13 @@ a {
   gap: 22px;
   padding: 4px 18px 20px;
   border-top: 1px solid var(--color-border);
+}
+.settings-disclosure__intro {
+  margin: 0;
+  padding: 18px 18px 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.65;
 }
 .settings-disclosure > form {
   padding-top: 18px;
