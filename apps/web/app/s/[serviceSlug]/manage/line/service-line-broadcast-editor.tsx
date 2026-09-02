@@ -1,14 +1,32 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+
+type Broadcast = {
+  id: string;
+  title: string;
+  status: string;
+  scheduledAt: string | null;
+  recipients: Record<string, number>;
+};
 
 export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: string }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const load = async () => {
+    const response = await fetch(
+      `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts`,
+    );
+    if (response.ok) setBroadcasts(((await response.json()) as { data: Broadcast[] }).data);
+  };
+  useEffect(() => {
+    void load();
+  }, [serviceSlug]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    if (!window.confirm('対象者と本文を確認しましたか？ この操作でLINEを一斉送信します。')) return;
+    if (!window.confirm('対象者と本文を確認しましたか？ 指定時刻にLINEを一斉送信します。')) return;
     setSending(true);
     setMessage('LINEを送信しています…');
     try {
@@ -21,19 +39,21 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
             title: formData.get('title'),
             message: formData.get('message'),
             reason: formData.get('reason'),
+            scheduledAt: formData.get('scheduledAt') || undefined,
             confirmed: true,
           }),
         },
       );
       const result = (await response.json()) as {
-        data?: { requested: number; sent: number; failed: number };
+        data?: { requested: number; scheduledAt: string };
         error?: { message?: string };
       };
       if (!response.ok) throw new Error(result.error?.message ?? 'LINEを送信できませんでした。');
       setMessage(
-        `送信しました。対象 ${result.data?.requested ?? 0}人／成功 ${result.data?.sent ?? 0}人／失敗 ${result.data?.failed ?? 0}人`,
+        `送信を予約しました。対象 ${result.data?.requested ?? 0}人／予定時刻 ${result.data?.scheduledAt ?? ''}`,
       );
       event.currentTarget.reset();
+      await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'LINEを送信できませんでした。');
     } finally {
@@ -63,13 +83,45 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
           送信理由
           <input name="reason" required maxLength={1000} placeholder="例：公式のお知らせ" />
         </label>
+        <label>
+          送信予定（空欄なら今すぐ）
+          <input name="scheduledAt" type="datetime-local" />
+        </label>
         <button disabled={sending} type="submit">
-          {sending ? '送信中…' : '内容を確認して一斉送信する'}
+          {sending ? '予約中…' : '内容を確認して送信を予約する'}
         </button>
       </form>
       <p aria-live="polite" role="status">
         {message}
       </p>
+      <h3>最近の配信</h3>
+      <ul>
+        {broadcasts.map((broadcast) => (
+          <li key={broadcast.id}>
+            {broadcast.title}（{broadcast.status}／送信 {broadcast.recipients.SENT ?? 0}件／失敗{' '}
+            {broadcast.recipients.FAILED ?? 0}件）
+            {(broadcast.recipients.FAILED ?? 0) > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const reason = window.prompt('再送する理由を入力してください');
+                  if (!reason) return;
+                  void fetch(
+                    `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/${broadcast.id}/retry`,
+                    {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ reason }),
+                    },
+                  ).then(() => load());
+                }}
+              >
+                失敗分を再送する
+              </button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
