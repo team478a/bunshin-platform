@@ -127,13 +127,31 @@ export function ContentPillarSection({
 
   return (
     <section className="content-pillar-section">
-      <h2>投稿するテーマ</h2>
-      <p>よく投稿したい話題を登録します。数字が大きいテーマほど、たくさん使います。</p>
+      <div className="content-planning__heading">
+        <div>
+          <p className="content-planning__eyebrow">投稿の土台</p>
+          <h2>投稿するテーマ</h2>
+          <p>よく投稿したい話題を登録します。数字が大きいテーマほど、たくさん使います。</p>
+        </div>
+        <span className="content-planning__count">
+          利用中 {pillars.filter((pillar) => pillar.active).length}件
+        </span>
+      </div>
       {capabilityStatus === null && !autoStart ? (
-        <p>先に「SNSのお手伝いをはじめる」を押してください。</p>
+        <p className="content-planning__notice">
+          先に「SNSのお手伝いをはじめる」を押してください。
+        </p>
       ) : null}
-      {readonly ? <p>今はテーマを見ることだけできます。内容を変えることはできません。</p> : null}
-      {pillars.length === 0 ? <p>投稿するテーマはまだありません。</p> : null}
+      {readonly ? (
+        <p className="content-planning__notice">
+          今はテーマを見ることだけできます。内容を変えることはできません。
+        </p>
+      ) : null}
+      {pillars.length === 0 ? (
+        <p className="content-planning__empty">
+          投稿するテーマはまだありません。最初に、よく発信したい内容を1つ追加してください。
+        </p>
+      ) : null}
       <ul className="content-pillar-list">
         {pillars.map((pillar) => (
           <li className="content-pillar-card" key={pillar.id}>
@@ -147,16 +165,27 @@ export function ContentPillarSection({
             ) : (
               <>
                 <h3>
-                  {pillar.title} <small>{pillar.active ? '有効' : '停止'}</small>
+                  {pillar.title}{' '}
+                  <small
+                    className={pillar.active ? 'status-pill status-pill--active' : 'status-pill'}
+                  >
+                    {pillar.active ? '利用中' : 'お休み中'}
+                  </small>
                 </h3>
                 {pillar.description ? <p>{pillar.description}</p> : null}
                 <p>使う多さ：{pillar.weight}</p>
                 {!readonly && effectiveStatus === 'ACTIVE' ? (
                   <div className="content-pillar-actions">
-                    <button disabled={pending} type="button" onClick={() => setEditing(pillar.id)}>
+                    <button
+                      className="button button--primary"
+                      disabled={pending}
+                      type="button"
+                      onClick={() => setEditing(pillar.id)}
+                    >
                       編集
                     </button>
                     <button
+                      className="button button--secondary"
                       disabled={pending}
                       type="button"
                       onClick={() =>
@@ -170,6 +199,7 @@ export function ContentPillarSection({
                       {pillar.active ? 'お休みにする' : 'もう一度使う'}
                     </button>
                     <button
+                      className="button button--danger"
                       disabled={pending}
                       type="button"
                       onClick={() => {
@@ -187,7 +217,12 @@ export function ContentPillarSection({
         ))}
       </ul>
       {effectiveStatus === 'ACTIVE' && editing === null ? (
-        <button type="button" disabled={pending} onClick={() => setEditing('NEW')}>
+        <button
+          className="button button--primary"
+          type="button"
+          disabled={pending}
+          onClick={() => setEditing('NEW')}
+        >
           投稿テーマを追加
         </button>
       ) : null}
@@ -199,7 +234,11 @@ export function ContentPillarSection({
           onSubmit={(value) => mutation(endpoint, 'POST', value)}
         />
       ) : null}
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="form-feedback" role="status">
+          {message}
+        </p>
+      ) : null}
     </section>
   );
 }
