@@ -40,6 +40,15 @@ export default async function ServicesAdminPage() {
         <p>独立した名前・登録URL・ブランドを持つサービスを作成します。</p>
         <Link href="/admin/programs">公式プログラムを管理する →</Link>
       </header>
+      <section className="settings-card">
+        <h2>サービスを公開するまでの順番</h2>
+        <ol>
+          <li>「運営団体」を作成します。</li>
+          <li>「グループ管理」で対象となる参加者グループを作ります。</li>
+          <li>この画面でサービス名、登録URL、ブランドを設定します。</li>
+          <li>利用規約、プライバシーポリシー、登録方法、LINEなどを設定してから公開します。</li>
+        </ol>
+      </section>
       {workspaces.length > 0 ? (
         <ServiceEditor workspaces={workspaces} />
       ) : (

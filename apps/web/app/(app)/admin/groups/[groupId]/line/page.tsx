@@ -42,16 +42,38 @@ export default async function GroupLinePage({ params }: { params: Promise<{ grou
         </p>
       </header>
       <section className="settings-card">
+        <h2>設定する順番</h2>
+        <ol>
+          <li>このグループ専用の公式LINEを使うか、ワタシワークス共通LINEを使うかを選びます。</li>
+          <li>
+            専用LINEを使う場合は、LINE Developersで同じProvider内に「LINEログイン用」と「Messaging
+            API（通知用）」の2つのチャネルを用意します。
+          </li>
+          <li>
+            下のURLをLINE Developersへ登録し、発行された番号・秘密の値をこの画面へ入力します。
+          </li>
+          <li>「停止中の設定として保存」を押し、「接続できるか確認」で確認します。</li>
+          <li>
+            確認に成功したら「使用を開始」を押します。最後に自分のLINEアカウントで受信を確認します。
+          </li>
+        </ol>
+        <p>
+          保存だけでは通知は送信されません。確認に成功してから、明示的に使用を開始する仕組みです。
+        </p>
+      </section>
+      <section className="settings-card">
         <h2>LINE Developersへ登録するURL</h2>
-        <p>URLはサーバーが作ります。変更せずコピーして登録してください。</p>
+        <p>
+          URLはサーバーが作ります。変更せず、LINE Developersの該当する入力欄へコピーしてください。
+        </p>
         <dl>
-          <dt>ログイン後の戻り先</dt>
+          <dt>LINEログインのコールバックURL</dt>
           <dd>
             <code>{base.callbackUrl}</code>
           </dd>
-          <dt>グループ用Webhook</dt>
-          <dd>専用設定を保存すると個別URLが表示されます。</dd>
-          <dt>LINE内で開く画面</dt>
+          <dt>Messaging APIのWebhook URL</dt>
+          <dd>専用設定を保存すると、下の「保存した設定」に個別URLが表示されます。</dd>
+          <dt>LIFFのエンドポイントURL（LIFFを使う場合のみ）</dt>
           <dd>
             <code>{base.liffEndpointUrl}</code>
           </dd>

@@ -66,6 +66,15 @@ export default async function GroupAdminPage({
           運営団体を作成しました。次に、この団体で利用するグループを作成してください。
         </p>
       ) : null}
+      <section className="settings-card">
+        <h2>グループを作った後にすること</h2>
+        <ol>
+          <li>グループ名を入力して作成します。</li>
+          <li>「このグループで使える機能を設定」で、利用を許可する機能と上限を決めます。</li>
+          <li>「参加者と管理者を設定」で、運営する人と利用する人を追加します。</li>
+          <li>必要に応じて商品情報・公式情報・専用LINEを設定し、参加者へ案内します。</li>
+        </ol>
+      </section>
       <form method="get" className="settings-card">
         <label>
           管理する団体
