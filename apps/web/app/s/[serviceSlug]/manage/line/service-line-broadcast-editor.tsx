@@ -95,6 +95,11 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
         {message}
       </p>
       <h3>最近の配信</h3>
+      <p>
+        <a href={`/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/export`}>
+          配信結果をCSVでダウンロード
+        </a>
+      </p>
       <ul>
         {broadcasts.map((broadcast) => (
           <li key={broadcast.id}>
@@ -117,6 +122,33 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
                 }}
               >
                 失敗分を再送する
+              </button>
+            ) : null}
+            {broadcast.status === 'SCHEDULED' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const reason = window.prompt('取り消す理由を入力してください');
+                  if (!reason || !window.confirm('まだ送っていない相手への配信を取り消します。'))
+                    return;
+                  void fetch(
+                    `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/${broadcast.id}/cancel`,
+                    {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ reason }),
+                    },
+                  ).then(async (response) => {
+                    setMessage(
+                      response.ok
+                        ? '予約した配信を取り消しました。'
+                        : '配信を取り消せませんでした。',
+                    );
+                    await load();
+                  });
+                }}
+              >
+                配信を取り消す
               </button>
             ) : null}
           </li>
