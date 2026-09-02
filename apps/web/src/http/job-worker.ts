@@ -10,6 +10,7 @@ import {
   ExecuteSocialImageGenerationJob,
   ExpireServiceCredits,
   ExecuteGroupKnowledgeExtractionJob,
+  ExecuteServiceLineBroadcastJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -60,6 +61,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createVideoAiSceneGenerationJobHandler },
     { createSocialImageGenerationJobHandler },
     { createGroupKnowledgeExtractionJobHandler },
+    { createServiceLineBroadcastJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
@@ -70,6 +72,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/video-ai-scene-generation-job-handler'),
     import('../jobs/social-image-generation-job-handler'),
     import('../jobs/group-knowledge-extraction-job-handler'),
+    import('../jobs/service-line-broadcast-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -107,6 +110,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
+  const serviceLineBroadcastExecutor = new ExecuteServiceLineBroadcastJob(
+    createServiceLineBroadcastJobHandler(),
+    complete,
+    fail,
+  );
   // PDF / video extraction can legitimately wait up to 120 seconds on the provider.
   // Keep the lease longer than every configured provider timeout so another cron
   // invocation cannot claim and charge for the same extraction concurrently.
@@ -124,7 +132,9 @@ async function configuredWorker(): Promise<JobWorkerPort> {
                 ? socialImageExecutor.execute(job, workerId)
                 : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
                   ? groupKnowledgeExecutor.execute(job, workerId)
-                  : missionExecutor.execute(job, workerId),
+                  : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
+                    ? serviceLineBroadcastExecutor.execute(job, workerId)
+                    : missionExecutor.execute(job, workerId),
   });
 }
 

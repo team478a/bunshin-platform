@@ -2410,6 +2410,7 @@ export * from './program-core';
 export * from './program-goals-core';
 export * from './ai-character-profile';
 export * from './service-line-broadcast';
+export * from './service-line-broadcast-job';
 export * from './service-referral-credit';
 export * from './service-credit-consumption';
 export * from './service-credit-expiration';
