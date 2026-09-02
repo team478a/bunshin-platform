@@ -2973,6 +2973,51 @@ body:has(.app-shell) > .site-footer {
   color: #667085;
 }
 
+.invitation-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.invitation-card__heading h2 {
+  margin: 0;
+  padding: 0;
+}
+
+.invitation-card__heading .eyebrow {
+  margin: 0 0 4px;
+}
+
+.invitation-card__badge {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.invitation-card__steps {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0 20px;
+  padding: 14px 16px 14px 34px;
+  border-radius: 12px;
+  background: #f8f8fb;
+  color: #475467;
+  font-size: 0.875rem;
+}
+
+.invitation-card__result {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #b7e5d5;
+  border-radius: 14px;
+  background: var(--color-success-soft);
+}
+
 @media (max-width: 620px) {
   .knowledge-status-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
