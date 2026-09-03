@@ -1,4 +1,5 @@
 'use client';
+import type { Route } from 'next';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -80,7 +81,7 @@ export function RegistrationWizard({
         }),
       });
       if (!response.ok) throw new Error();
-      const result = (await response.json()) as { destination?: string };
+      const result = (await response.json()) as { destination?: Route };
       if (complete) {
         router.push(result.destination ?? '/bunshins');
         router.refresh();
