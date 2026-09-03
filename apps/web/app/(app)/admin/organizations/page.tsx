@@ -125,6 +125,10 @@ export default async function OrganizationsAdminPage({
                 {organization._count.groups}件 ／{' '}
                 <Link href={`/organizations/${organization.id}/manage`}>
                   団体情報・運営者を設定する
+                </Link>{' '}
+                ／{' '}
+                <Link href={`/admin/organizations/${organization.id}/limits`}>
+                  契約・利用上限を設定する
                 </Link>
               </li>
             ))}

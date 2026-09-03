@@ -14,6 +14,11 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const scheduledCount = broadcasts.filter((broadcast) => broadcast.status === 'SCHEDULED').length;
+  const failedCount = broadcasts.reduce(
+    (total, broadcast) => total + (broadcast.recipients.FAILED ?? 0),
+    0,
+  );
   const load = async () => {
     const response = await fetch(
       `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts`,
@@ -62,8 +67,20 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
   }
   return (
     <section className="settings-card">
+      <p className="eyebrow">参加者へのお知らせ</p>
       <h2>任意のお知らせを一斉配信</h2>
       <p>LINE連携・通知同意・友だち追加が確認できた、このサービスの参加者だけに送ります。</p>
+      <div className="line-broadcast-summary" aria-label="配信の状況">
+        <span>
+          予約中 <strong>{scheduledCount}件</strong>
+        </span>
+        <span>
+          再送確認 <strong>{failedCount}件</strong>
+        </span>
+        <span>
+          履歴 <strong>{broadcasts.length}件</strong>
+        </span>
+      </div>
       <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
         <label>
           件名
@@ -87,7 +104,7 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
           送信予定（空欄なら今すぐ）
           <input name="scheduledAt" type="datetime-local" />
         </label>
-        <button disabled={sending} type="submit">
+        <button className="button" disabled={sending} type="submit">
           {sending ? '予約中…' : '内容を確認して送信を予約する'}
         </button>
       </form>
@@ -100,13 +117,14 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
           配信結果をCSVでダウンロード
         </a>
       </p>
-      <ul>
+      <ul className="line-broadcast-list">
         {broadcasts.map((broadcast) => (
           <li key={broadcast.id}>
             {broadcast.title}（{broadcast.status}／送信 {broadcast.recipients.SENT ?? 0}件／失敗{' '}
             {broadcast.recipients.FAILED ?? 0}件）
             {(broadcast.recipients.FAILED ?? 0) > 0 ? (
               <button
+                className="button button--secondary"
                 type="button"
                 onClick={() => {
                   const reason = window.prompt('再送する理由を入力してください');
@@ -126,6 +144,7 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
             ) : null}
             {broadcast.status === 'SCHEDULED' ? (
               <button
+                className="button button--secondary"
                 type="button"
                 onClick={() => {
                   const reason = window.prompt('取り消す理由を入力してください');

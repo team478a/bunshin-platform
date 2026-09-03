@@ -123,14 +123,18 @@ export function AccountStrategySection({
     if (response.ok) router.refresh();
   }
   return (
-    <section>
-      <h2>SNSで何を伝えるか決める</h2>
-      <p>短い質問に答えると、BUNSHINがあなたに合う発信の進め方を考えます。</p>
+    <section className="strategy-section">
+      <header className="strategy-section__header">
+        <p className="eyebrow">発信の準備</p>
+        <h2>SNSで何を伝えるか決める</h2>
+        <p>短い質問に答えると、あなたに合う発信の進め方を考えます。</p>
+      </header>
       {active && profiles.length ? (
-        <form onSubmit={(e) => void create(e)}>
-          <label>
-            SNS
+        <form className="strategy-form" onSubmit={(e) => void create(e)}>
+          <label className="field">
+            <span className="field__label">使うSNS</span>
             <select
+              className="field__control"
               value={form.socialProfileId}
               onChange={(e) => setForm({ ...form, socialProfileId: e.target.value })}
             >
@@ -141,25 +145,30 @@ export function AccountStrategySection({
               ))}
             </select>
           </label>
-          <label>
-            何について発信しますか？
+          <label className="field">
+            <span className="field__label">何について発信しますか？</span>
             <input
+              className="field__control"
               required
+              placeholder="例：副業を始めたい人への情報"
               value={form.topic}
               onChange={(e) => setForm({ ...form, topic: e.target.value })}
             />
           </label>
-          <label>
-            誰に見てほしいですか？
+          <label className="field">
+            <span className="field__label">誰に見てほしいですか？</span>
             <input
+              className="field__control"
               required
+              placeholder="例：仕事や家事で忙しい30代の人"
               value={form.audience}
               onChange={(e) => setForm({ ...form, audience: e.target.value })}
             />
           </label>
-          <label>
-            目的
+          <label className="field">
+            <span className="field__label">SNSを使う目的</span>
             <select
+              className="field__control"
               value={form.goal}
               onChange={(e) =>
                 setForm({ ...form, goal: e.target.value as SocialAccountStrategyGoal })
@@ -172,9 +181,10 @@ export function AccountStrategySection({
               ))}
             </select>
           </label>
-          <label>
-            1日に使える時間
+          <label className="field">
+            <span className="field__label">1日に使える時間</span>
             <select
+              className="field__control"
               value={form.availableMinutes}
               onChange={(e) =>
                 setForm({ ...form, availableMinutes: Number(e.target.value) as 3 | 5 | 10 | 20 })
@@ -187,9 +197,10 @@ export function AccountStrategySection({
               ))}
             </select>
           </label>
-          <label>
-            投稿を見た人に、次にどこへ行ってほしいですか？
+          <label className="field strategy-form__wide">
+            <span className="field__label">投稿を見た人に、次にどこへ行ってほしいですか？</span>
             <select
+              className="field__control"
               value={form.destinationType}
               onChange={(e) =>
                 setForm({
@@ -205,29 +216,45 @@ export function AccountStrategySection({
               ))}
             </select>
           </label>
-          <button disabled={pending}>発信の進め方を考えてもらう</button>
+          <button className="button strategy-form__wide" disabled={pending}>
+            {pending ? '発信の進め方を考えています…' : '発信の進め方を考えてもらう'}
+          </button>
         </form>
       ) : (
-        <p>先に「SNSのお手伝い」を始めて、使いたいSNSを決めてください。</p>
+        <p className="strategy-section__empty">
+          先に「SNSのお手伝い」を始めて、使いたいSNSを決めてください。
+        </p>
       )}
-      <ul>
+      <div className="strategy-section__list-heading">
+        <h3>作成した発信の進め方</h3>
+        <span>{strategies.length}件</span>
+      </div>
+      <ul className="strategy-list">
         {strategies.map((s) => (
           <li key={s.id}>
-            <strong>
-              {platformLabels[s.platform]}・第{s.version}案・{strategyStatusLabels[s.status]}
-            </strong>
-            <p>
-              {s.concept} — {s.targetSummary}
-            </p>
+            <div className="strategy-list__title">
+              <strong>{platformLabels[s.platform]}の発信案</strong>
+              <span>{strategyStatusLabels[s.status]}</span>
+            </div>
+            <p>{s.concept}</p>
+            <small>届けたい人：{s.targetSummary}</small>
             {s.status !== 'APPROVED' && s.status !== 'SUPERSEDED' && active ? (
-              <button disabled={pending} onClick={() => void approve(s.id)}>
+              <button
+                className="button button--secondary"
+                disabled={pending}
+                onClick={() => void approve(s.id)}
+              >
                 この進め方に決める
               </button>
             ) : null}
           </li>
         ))}
       </ul>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="strategy-section__message" role="status">
+          {message}
+        </p>
+      ) : null}
     </section>
   );
 }

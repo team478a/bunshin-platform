@@ -24,7 +24,7 @@ async function acceptInvitation(formData: FormData) {
     if (!found || found.usedCount >= found.maxUses) return null;
     const consumed = await tx.workspaceInvitation.updateMany({
       where: { id: found.id, status: 'ACTIVE', usedCount: found.usedCount },
-      data: { usedCount: { increment: 1 }, status: 'EXHAUSTED' },
+      data: { usedCount: { increment: 1 }, status: 'EXHAUSTED', acceptedAt: new Date() },
     });
     if (consumed.count !== 1) return null;
     await tx.workspaceMembership.upsert({

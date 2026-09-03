@@ -14,6 +14,8 @@ const fakes = vi.hoisted(() => ({
   refundBadgeEntitlement: vi.fn(),
   consumeServiceCredit: vi.fn(),
   refundServiceCredit: vi.fn(),
+  organizationEntitlement: vi.fn(),
+  imageUsageCount: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -37,7 +39,10 @@ vi.mock('../src/ai/runtime-provider-configuration', () => ({
   }),
 }));
 vi.mock('@bunshin/database', () => ({
-  prisma: {},
+  prisma: {
+    organizationEntitlement: { findUnique: fakes.organizationEntitlement },
+    socialImageGenerationRequest: { count: fakes.imageUsageCount },
+  },
   PrismaSocialImageGenerationAuthorizationRepository: class {
     authorize = fakes.authorize;
   },
@@ -149,6 +154,8 @@ beforeEach(() => {
   );
   fakes.consumeServiceCredit.mockResolvedValue({ status: 'NOT_CONFIGURED' });
   fakes.refundServiceCredit.mockResolvedValue(undefined);
+  fakes.organizationEntitlement.mockResolvedValue(null);
+  fakes.imageUsageCount.mockResolvedValue(0);
 });
 
 describe('social image HTTP', () => {

@@ -29,6 +29,7 @@ import type {
   ValidationMetricsSnapshot,
   AiUsageEventRepository,
   RecordAiUsageInput,
+  OrganizationAiGenerationReservationRepository,
   LegalDocumentRepository,
   LegalDocument,
   LegalDocumentType,
@@ -2941,6 +2942,12 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
     const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
     if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { dedicatedLineEnabled: true, suspended: true },
+      });
+      if (entitlement && (!entitlement.dedicatedLineEnabled || entitlement.suspended))
+        throw new ApplicationError('FORBIDDEN', 'dedicated LINE is not included in the contract');
       const policy = await tx.groupLineRoutingPolicy.findUnique({
         where: {
           workspaceId_groupId_environment: {
@@ -3067,6 +3074,11 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
     const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
     if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { dedicatedLineEnabled: true, suspended: true },
+      });
+      if (entitlement && (!entitlement.dedicatedLineEnabled || entitlement.suspended)) return null;
       const target = await tx.groupLineChannelConfiguration.findFirst({
         where: {
           id: input.configurationId,
@@ -3112,6 +3124,16 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
     const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
     if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { dedicatedLineEnabled: true, suspended: true },
+      });
+      if (
+        input.mode === 'DEDICATED' &&
+        entitlement &&
+        (!entitlement.dedicatedLineEnabled || entitlement.suspended)
+      )
+        return null;
       const group = await tx.group.findFirst({
         where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
         select: { id: true },
@@ -8338,6 +8360,99 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
   }
 }
 
+export class PrismaOrganizationAiGenerationReservationRepository implements OrganizationAiGenerationReservationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async reserve(input: Parameters<OrganizationAiGenerationReservationRepository['reserve']>[0]) {
+    const monthKey = `${input.now.getUTCFullYear()}-${String(input.now.getUTCMonth() + 1).padStart(2, '0')}`;
+    return this.client.$transaction(
+      async (tx) => {
+        const entitlement = await tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: {
+            monthlyAiGenerationLimit: true,
+            suspended: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        });
+        if (!entitlement || entitlement.monthlyAiGenerationLimit === null)
+          return { status: 'UNLIMITED' as const, reservationId: null };
+        if (
+          entitlement.suspended ||
+          (entitlement.startsAt && entitlement.startsAt > input.now) ||
+          (entitlement.endsAt && entitlement.endsAt <= input.now)
+        )
+          return { status: 'EXHAUSTED' as const, reservationId: null };
+
+        const existing = await tx.organizationAiGenerationReservation.findUnique({
+          where: {
+            workspaceId_operationKey: {
+              workspaceId: input.workspaceId,
+              operationKey: input.operationKey,
+            },
+          },
+        });
+        if (
+          existing?.status === 'CONSUMED' ||
+          (existing?.status === 'RESERVED' && existing.expiresAt > input.now)
+        )
+          return { status: 'ALREADY_RESERVED' as const, reservationId: existing.id };
+
+        const used = await tx.organizationAiGenerationReservation.count({
+          where: {
+            workspaceId: input.workspaceId,
+            monthKey,
+            OR: [{ status: 'CONSUMED' }, { status: 'RESERVED', expiresAt: { gt: input.now } }],
+          },
+        });
+        if (used >= entitlement.monthlyAiGenerationLimit)
+          return { status: 'EXHAUSTED' as const, reservationId: null };
+
+        const reserved = await tx.organizationAiGenerationReservation.upsert({
+          where: {
+            workspaceId_operationKey: {
+              workspaceId: input.workspaceId,
+              operationKey: input.operationKey,
+            },
+          },
+          create: {
+            workspaceId: input.workspaceId,
+            monthKey,
+            operationKey: input.operationKey,
+            expiresAt: input.expiresAt,
+          },
+          update: {
+            monthKey,
+            status: 'RESERVED',
+            expiresAt: input.expiresAt,
+            consumedAt: null,
+            releasedAt: null,
+          },
+          select: { id: true },
+        });
+        return { status: 'RESERVED' as const, reservationId: reserved.id };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  }
+
+  async finish(input: Parameters<OrganizationAiGenerationReservationRepository['finish']>[0]) {
+    const changed = await this.client.organizationAiGenerationReservation.updateMany({
+      where: {
+        workspaceId: input.workspaceId,
+        operationKey: input.operationKey,
+        status: 'RESERVED',
+      },
+      data:
+        input.outcome === 'CONSUMED'
+          ? { status: 'CONSUMED', consumedAt: input.now }
+          : { status: 'RELEASED', releasedAt: input.now },
+    });
+    return changed.count === 1;
+  }
+}
+
 function activityContinuityRule(
   row: Prisma.ActivityContinuityRuleGetPayload<object>,
 ): ActivityContinuityRule {
@@ -9969,7 +10084,36 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
         }),
       ]);
       if (admin === null || workspace === null) return null;
+      const now = new Date();
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: {
+          maxGroups: true,
+          maxServices: true,
+          oemEnabled: true,
+          suspended: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      });
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= now)
+      )
+        return null;
+      const [groupCount, serviceCount] = await Promise.all([
+        entitlement?.maxGroups
+          ? tx.group.count({ where: { workspaceId: input.workspaceId, status: 'ACTIVE' } })
+          : Promise.resolve(0),
+        entitlement?.maxServices
+          ? tx.serviceConfiguration.count({ where: { workspaceId: input.workspaceId } })
+          : Promise.resolve(0),
+      ]);
+      if (entitlement?.maxGroups && groupCount >= entitlement.maxGroups) return null;
+      if (entitlement?.maxServices && serviceCount >= entitlement.maxServices) return null;
       const value = input.configuration;
+      if (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled) return null;
       const group = await tx.group.create({
         data: {
           workspaceId: input.workspaceId,
@@ -10048,7 +10192,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
 
   async save(input: Parameters<ServiceFoundationRepository['save']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const [admin, group, manager, existing] = await Promise.all([
+      const [admin, group, manager, existing, entitlement] = await Promise.all([
         tx.platformAdmin.findFirst({
           where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
           select: { id: true },
@@ -10072,9 +10216,21 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           where: { groupId: input.groupId },
           include: { brand: true, registration: true },
         }),
+        tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: { oemEnabled: true, suspended: true, startsAt: true, endsAt: true },
+        }),
       ]);
       if ((admin === null && manager === null) || group === null) return null;
       const value = input.configuration;
+      const now = new Date();
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= now) ||
+        (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled)
+      )
+        return null;
       if (
         admin === null &&
         (existing === null ||
@@ -11125,24 +11281,44 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
 
   async createGroup(input: Parameters<GroupParticipationRepository['createGroup']>[0]) {
     if ((await this.canManageWorkspace(input.workspaceId, input.actorUserId)) === null) return null;
-    const created = await this.client.$transaction(async (tx) => {
-      const group = await tx.group.create({
-        data: { workspaceId: input.workspaceId, name: input.name },
-      });
-      await tx.groupMembership.create({
-        data: {
-          workspaceId: input.workspaceId,
-          groupId: group.id,
-          userId: input.actorUserId,
-          role: 'MANAGER',
-          serviceRole: 'SERVICE_OWNER',
-          status: 'ACTIVE',
-          consentedAt: new Date(),
-        },
-      });
-      return group;
-    });
-    return groupRecord(created);
+    const created = await this.client.$transaction(
+      async (tx) => {
+        const now = new Date();
+        const entitlement = await tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: { maxGroups: true, suspended: true, startsAt: true, endsAt: true },
+        });
+        if (
+          entitlement?.suspended ||
+          (entitlement?.startsAt && entitlement.startsAt > now) ||
+          (entitlement?.endsAt && entitlement.endsAt <= now)
+        )
+          return null;
+        if (entitlement?.maxGroups !== null && entitlement?.maxGroups !== undefined) {
+          const count = await tx.group.count({
+            where: { workspaceId: input.workspaceId, status: 'ACTIVE' },
+          });
+          if (count >= entitlement.maxGroups) return null;
+        }
+        const group = await tx.group.create({
+          data: { workspaceId: input.workspaceId, name: input.name },
+        });
+        await tx.groupMembership.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            serviceRole: 'SERVICE_OWNER',
+            status: 'ACTIVE',
+            consentedAt: new Date(),
+          },
+        });
+        return group;
+      },
+      { isolationLevel: 'Serializable' },
+    );
+    return created ? groupRecord(created) : null;
   }
 
   async createInvitation(input: Parameters<GroupParticipationRepository['createInvitation']>[0]) {
@@ -11179,6 +11355,32 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
         },
       });
       if (invitation === null || invitation.usedCount >= invitation.maxUses) return null;
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { maxMembers: true, suspended: true, startsAt: true, endsAt: true },
+      });
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > input.now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= input.now)
+      )
+        return null;
+      const existingActiveGroupMembership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      });
+      if (entitlement?.maxMembers && existingActiveGroupMembership === null) {
+        const activeMembers = await tx.groupMembership.findMany({
+          where: { workspaceId: input.workspaceId, status: 'ACTIVE' },
+          distinct: ['userId'],
+          select: { userId: true },
+        });
+        if (activeMembers.length >= entitlement.maxMembers) return null;
+      }
       const existingWorkspaceMembership = await tx.workspaceMembership.findUnique({
         where: {
           workspaceId_userId: {

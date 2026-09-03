@@ -607,18 +607,23 @@ export function DailyMissionSection({
       </section>
       {active && (
         <div className="mission-generator">
-          <h3>今日の案を準備する</h3>
-          <label>
-            日付
+          <div className="mission-generator__heading">
+            <h3>今日の案を準備する</h3>
+            <p>投稿先を選んで、今日やることを1つ作ります。</p>
+          </div>
+          <label className="field">
+            <span className="field__label">日付</span>
             <input
+              className="field__control"
               type="date"
               value={missionDate}
               onChange={(event) => setMissionDate(event.target.value)}
             />
           </label>{' '}
-          <label>
-            SNS
+          <label className="field">
+            <span className="field__label">投稿するSNS</span>
             <select
+              className="field__control"
               value={socialProfileId}
               onChange={(event) => setSocialProfileId(event.target.value)}
             >
@@ -630,6 +635,7 @@ export function DailyMissionSection({
             </select>
           </label>{' '}
           <button
+            className="button button--primary button--full"
             type="button"
             disabled={
               busy ||
@@ -641,7 +647,9 @@ export function DailyMissionSection({
           >
             {generating ? '考えています…' : '今日の投稿案を作る'}
           </button>
-          {activeProfiles.length === 0 && <p>先に、使いたいSNSを登録してください。</p>}
+          {activeProfiles.length === 0 && (
+            <p className="mission-generator__notice">先に、使いたいSNSを登録してください。</p>
+          )}
         </div>
       )}
       {pendingAction && (

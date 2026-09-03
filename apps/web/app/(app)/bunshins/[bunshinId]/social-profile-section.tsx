@@ -282,19 +282,39 @@ export function SocialProfileSection({
   const readonly = effectiveStatus === 'SUSPENDED' || effectiveStatus === 'LOCKED';
   return (
     <section className="social-profile-section">
-      <h2>使いたいSNSを決める</h2>
-      <p>インスタグラムやXなど、どのSNSで、だれに、何を伝えたいかを決めます。</p>
-      <p>BUNSHINが投稿案を作ります。SNSへの投稿は、あなたが自分で行います。</p>
+      <div className="social-setup__heading">
+        <div>
+          <p className="social-setup__eyebrow">投稿先の設定</p>
+          <h2>使いたいSNSを決める</h2>
+          <p>インスタグラムやXなど、どのSNSで、だれに、何を伝えたいかを決めます。</p>
+        </div>
+        <span className="social-setup__count">設定済み {profiles.length}件</span>
+      </div>
+      <p className="social-setup__note">
+        BUNSHINが投稿案を作ります。SNSへの投稿は、あなたが自分で行います。
+      </p>
       {capabilityStatus === null && !autoStart ? (
-        <p>まず、上の「SNSのお手伝いをはじめる」を押してください。</p>
+        <p className="social-setup__notice">
+          まず、上の「SNSのお手伝いをはじめる」を押してください。
+        </p>
       ) : null}
-      {readonly ? <p>今は設定を見ることだけできます。内容を変えることはできません。</p> : null}
+      {readonly ? (
+        <p className="social-setup__notice">
+          今は設定を見ることだけできます。内容を変えることはできません。
+        </p>
+      ) : null}
       <ul className="social-profile-list">
         {profiles.map((profile) => (
           <li className="social-profile-card" key={profile.platform}>
             <h3>
-              {platformLabels[profile.platform]}{' '}
-              <small>{profile.status === 'ACTIVE' ? '使用中' : 'お休み中'}</small>
+              {platformLabels[profile.platform]}
+              <small
+                className={
+                  profile.status === 'ACTIVE' ? 'status-pill status-pill--active' : 'status-pill'
+                }
+              >
+                {profile.status === 'ACTIVE' ? '使用中' : 'お休み中'}
+              </small>
             </h3>
             {editing === profile.platform ? (
               <ProfileForm
@@ -325,6 +345,7 @@ export function SocialProfileSection({
                 {!readonly && effectiveStatus === 'ACTIVE' ? (
                   <div className="social-profile-actions">
                     <button
+                      className="button button--primary"
                       type="button"
                       disabled={pending}
                       onClick={() => setEditing(profile.platform)}
@@ -332,6 +353,7 @@ export function SocialProfileSection({
                       編集
                     </button>
                     <button
+                      className="button button--secondary"
                       type="button"
                       disabled={pending}
                       onClick={() =>
@@ -352,7 +374,7 @@ export function SocialProfileSection({
         ))}
       </ul>
       {effectiveStatus === 'ACTIVE' && available.length > 0 && editing === null ? (
-        <button type="button" onClick={() => setEditing('NEW')}>
+        <button className="button button--primary" type="button" onClick={() => setEditing('NEW')}>
           使うSNSを追加
         </button>
       ) : null}
@@ -365,7 +387,11 @@ export function SocialProfileSection({
           onSubmit={(value) => mutation(endpoint, 'POST', value)}
         />
       ) : null}
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="form-feedback" role="status">
+          {message}
+        </p>
+      ) : null}
     </section>
   );
 }
