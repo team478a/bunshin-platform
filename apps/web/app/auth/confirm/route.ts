@@ -34,14 +34,24 @@ export async function POST(request: Request): Promise<Response> {
     if (error !== null) throw error;
     const currentUser = await (await currentUserProvider()).getCurrentUser();
     if (currentUser === null) throw new Error('user unavailable');
-    const { PrismaLegalConsentRepository } = await import('@bunshin/database');
-    const required = await new PrismaLegalConsentRepository().findRequiredForUser(
+    const db = await import('@bunshin/database');
+    const required = await new db.PrismaLegalConsentRepository().findRequiredForUser(
       currentUser.userId,
     );
     if (required.some((item) => !item.consentedAt))
       return NextResponse.redirect(new URL('/consent', request.url), 303);
     const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
-    const response = NextResponse.redirect(new URL(returnTo ?? '/bunshins', request.url), 303);
+    const registration = await db.prisma.userRegistrationProfile.findUnique({
+      where: { userId: currentUser.userId },
+      select: { status: true },
+    });
+    const destination =
+      registration?.status === 'COMPLETED'
+        ? new URL(returnTo ?? '/bunshins', request.url)
+        : new URL('/onboarding', request.url);
+    if (registration?.status !== 'COMPLETED' && returnTo)
+      destination.searchParams.set('returnTo', returnTo);
+    const response = NextResponse.redirect(destination, 303);
     response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
     return response;
   } catch {
