@@ -1109,6 +1109,30 @@ a {
 .landing-hero__copy > small {
   color: var(--color-text-muted);
 }
+.landing-line-qr {
+  display: grid;
+  width: fit-content;
+  justify-items: center;
+  gap: 8px;
+  margin: 20px 0 0;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.landing-line-qr img {
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+}
+.landing-line-qr figcaption {
+  max-width: 190px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: center;
+}
 .landing-visual {
   position: relative;
   display: grid;
@@ -1203,6 +1227,9 @@ a {
   }
   .landing-actions .button {
     width: 100%;
+  }
+  .landing-line-qr {
+    display: none;
   }
   .landing-visual {
     min-height: 270px;
