@@ -17,6 +17,7 @@ import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-config
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
 
@@ -184,26 +185,31 @@ export function generateServiceAccountStrategyResponse(
         throw new ApplicationError('NOT_FOUND', 'social profile not found');
       const { OpenAIStrategyGenerator } = await import('../providers/openai-strategy-generator');
       try {
-        const result = await new GenerateSocialAccountStrategy(
-          new OpenAIStrategyGenerator({ apiKey, model }),
-        ).execute({
-          wizardTopic: parsed.data.wizardTopic,
-          wizardAudience: parsed.data.wizardAudience,
-          platform: parsed.data.platform,
-          goal: parsed.data.goal,
-          availableMinutes: parsed.data.availableMinutes,
-          destinationType: parsed.data.destinationType,
-          destinationDetail: parsed.data.destinationDetail ?? null,
-          bunshin: {
-            name: bunshin.name,
-            objectiveSummary: bunshin.objectiveSummary,
-            audienceSummary: bunshin.audienceSummary,
-            personalitySummary: bunshin.personalitySummary,
-            objectives: bunshin.objectives,
-            audiences: bunshin.audiences,
-            personality: bunshin.personality,
-          },
-          grantedKnowledge: serviceKnowledge.officialKnowledge,
+        const result = await withOrganizationAiGenerationQuota({
+          workspaceId: input.workspaceId,
+          operationKey: `${requestId}:service-strategy`,
+          generate: () =>
+            new GenerateSocialAccountStrategy(
+              new OpenAIStrategyGenerator({ apiKey, model }),
+            ).execute({
+              wizardTopic: parsed.data.wizardTopic,
+              wizardAudience: parsed.data.wizardAudience,
+              platform: parsed.data.platform,
+              goal: parsed.data.goal,
+              availableMinutes: parsed.data.availableMinutes,
+              destinationType: parsed.data.destinationType,
+              destinationDetail: parsed.data.destinationDetail ?? null,
+              bunshin: {
+                name: bunshin.name,
+                objectiveSummary: bunshin.objectiveSummary,
+                audienceSummary: bunshin.audienceSummary,
+                personalitySummary: bunshin.personalitySummary,
+                objectives: bunshin.objectives,
+                audiences: bunshin.audiences,
+                personality: bunshin.personality,
+              },
+              grantedKnowledge: serviceKnowledge.officialKnowledge,
+            }),
         });
         logger.info('service strategy generation complete', {
           status: 'success',

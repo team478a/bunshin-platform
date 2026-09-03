@@ -25,6 +25,7 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   OpenAIWeeklyPlanner,
   WEEKLY_PLANNER_PROMPT_VERSION,
@@ -66,6 +67,11 @@ export interface WeeklyPlanGenerationDependencies {
   providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
   recordUsage(event: UsageEvent): Promise<void>;
+  runWithQuota<T>(input: {
+    workspaceId: string;
+    operationKey: string;
+    generate(): Promise<T>;
+  }): Promise<T>;
   now(): number;
 }
 
@@ -136,35 +142,40 @@ export class WeeklyPlanGenerationService {
             })
           : [];
       providerAttempted = true;
-      const result = await new GenerateWeeklyPlan(this.dependencies.planner).execute({
-        weekStartDate: input.weekStartDate,
-        timezone,
-        platform: profile.platform,
-        availableMinutes: strategy.availableMinutes,
-        bunshin: {
-          name: bunshin.name,
-          objectiveSummary: bunshin.objectiveSummary,
-          audienceSummary: bunshin.audienceSummary,
-          personalitySummary: bunshin.personalitySummary,
-        },
-        approvedStrategy: {
-          concept: strategy.concept,
-          positioning: strategy.positioning,
-          targetSummary: strategy.targetSummary,
-          ctaStrategy: strategy.ctaStrategy,
-          postingPolicy: strategy.postingPolicy,
-        },
-        contentPillars: activePillars.map(({ id, title, description, weight }) => ({
-          id,
-          title,
-          description,
-          weight,
-        })),
-        grantedKnowledge: [
-          ...granted.map(({ type, title, content }) => ({ type, title, content })),
-          ...(input.additionalKnowledge ?? []),
-        ],
-        campaigns,
+      const result = await this.dependencies.runWithQuota({
+        workspaceId: input.workspaceId,
+        operationKey: input.usageIdempotencyKey,
+        generate: () =>
+          new GenerateWeeklyPlan(this.dependencies.planner).execute({
+            weekStartDate: input.weekStartDate,
+            timezone,
+            platform: profile.platform,
+            availableMinutes: strategy.availableMinutes,
+            bunshin: {
+              name: bunshin.name,
+              objectiveSummary: bunshin.objectiveSummary,
+              audienceSummary: bunshin.audienceSummary,
+              personalitySummary: bunshin.personalitySummary,
+            },
+            approvedStrategy: {
+              concept: strategy.concept,
+              positioning: strategy.positioning,
+              targetSummary: strategy.targetSummary,
+              ctaStrategy: strategy.ctaStrategy,
+              postingPolicy: strategy.postingPolicy,
+            },
+            contentPillars: activePillars.map(({ id, title, description, weight }) => ({
+              id,
+              title,
+              description,
+              weight,
+            })),
+            grantedKnowledge: [
+              ...granted.map(({ type, title, content }) => ({ type, title, content })),
+              ...(input.additionalKnowledge ?? []),
+            ],
+            campaigns,
+          }),
       });
       const plan = await new CreateGeneratedWeeklyPlan(
         this.dependencies.plans,
@@ -233,6 +244,7 @@ export async function createWeeklyPlanGenerationService() {
       return value.preference?.timezone ?? 'Asia/Tokyo';
     },
     recordUsage: recordAiUsageSafely,
+    runWithQuota: withOrganizationAiGenerationQuota,
     now: Date.now,
   });
 }

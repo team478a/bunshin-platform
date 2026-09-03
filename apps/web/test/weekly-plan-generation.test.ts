@@ -131,6 +131,7 @@ describe('WeeklyPlanGenerationService', () => {
       providerModel: 'gpt-test',
       resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
       recordUsage,
+      runWithQuota: (input) => input.generate(),
       now: () => now.valueOf(),
     });
 
