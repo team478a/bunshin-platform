@@ -137,6 +137,64 @@ export class RecordAiUsage {
   }
 }
 
+export type OrganizationAiReservationResult =
+  | { status: 'RESERVED'; reservationId: string }
+  | { status: 'ALREADY_RESERVED'; reservationId: string }
+  | { status: 'UNLIMITED'; reservationId: null }
+  | { status: 'EXHAUSTED'; reservationId: null };
+
+export interface OrganizationAiGenerationReservationRepository {
+  reserve(input: {
+    workspaceId: string;
+    operationKey: string;
+    now: Date;
+    expiresAt: Date;
+  }): Promise<OrganizationAiReservationResult>;
+  finish(input: {
+    workspaceId: string;
+    operationKey: string;
+    outcome: 'CONSUMED' | 'RELEASED';
+    now: Date;
+  }): Promise<boolean>;
+}
+
+export class ReserveOrganizationAiGeneration {
+  constructor(private readonly repository: OrganizationAiGenerationReservationRepository) {}
+
+  async execute(input: {
+    workspaceId: string;
+    operationKey: string;
+    now?: Date;
+    reservationTtlMs?: number;
+  }) {
+    if (!input.operationKey.trim() || input.operationKey.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI generation operation key');
+    const now = input.now ?? new Date();
+    const ttl = input.reservationTtlMs ?? 15 * 60 * 1_000;
+    if (!Number.isInteger(ttl) || ttl < 60_000 || ttl > 60 * 60 * 1_000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI reservation TTL');
+    return this.repository.reserve({
+      workspaceId: input.workspaceId,
+      operationKey: input.operationKey,
+      now,
+      expiresAt: new Date(now.getTime() + ttl),
+    });
+  }
+}
+
+export class FinishOrganizationAiGeneration {
+  constructor(private readonly repository: OrganizationAiGenerationReservationRepository) {}
+
+  execute(input: {
+    workspaceId: string;
+    operationKey: string;
+    outcome: 'CONSUMED' | 'RELEASED';
+    now?: Date;
+  }) {
+    return this.repository.finish({ ...input, now: input.now ?? new Date() });
+  }
+}
+
 export interface ValidationMetricsRepository {
   summarize(input: {
     workspaceId: string;
