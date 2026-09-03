@@ -27,6 +27,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
+import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
 
 const uuid = z.string().uuid();
 const createSchema = z
@@ -122,6 +123,7 @@ export async function createSocialImageResponse(
       layout: parsed.layout,
       idempotencyKey: parsed.idempotencyKey,
     });
+    await assertOrganizationGenerationQuota({ workspaceId, kind: 'IMAGE' });
     const runtimeConfiguration = await resolveOpenAiRuntimeConfiguration();
     const serviceCreditUsage = await new ConsumeServiceCreditForSocialImage(serviceCredits).execute(
       {
