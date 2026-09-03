@@ -25,6 +25,7 @@ import {
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import {
   OpenAIVideoPlanGenerator,
@@ -361,6 +362,11 @@ export async function queueVideoAiScenesResponse(
     if (!project) throw new ApplicationError('NOT_FOUND', 'video project not found');
     if (project.revision !== input.expectedRevision)
       throw new ApplicationError('CONFLICT', 'video project revision conflict');
+    await assertOrganizationGenerationQuota({
+      workspaceId: parsedWorkspaceId,
+      kind: 'VIDEO',
+      resourceId: parsedVideoProjectId,
+    });
     const runtime = await resolveVideoAiRuntimeConfiguration({ provider: input.provider });
     const estimatedSceneCostsUsdMicros = project.scenes
       .filter(isAiVideoScene)
