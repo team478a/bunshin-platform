@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { createSupabaseServerClient } from '../../../../src/auth/supabase';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
+import { recordAuthenticatedRegistrationEvent } from '../../../../src/registration/funnel';
 import {
   LINE_AUTH_RETURN_COOKIE,
   lineAuthReturnFromCookie,
@@ -108,6 +109,11 @@ export async function GET(request: Request): Promise<Response> {
         },
       });
     }
+    await recordAuthenticatedRegistrationEvent({
+      eventType: 'LINE_AUTHENTICATED',
+      userId: currentUser.userId,
+      source: 'LINE_OAUTH',
+    });
     const required = await new db.PrismaLegalConsentRepository().findRequiredForUser(
       currentUser.userId,
     );

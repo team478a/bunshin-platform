@@ -9,11 +9,24 @@ type Broadcast = {
   scheduledAt: string | null;
   recipients: Record<string, number>;
 };
+type Industry = { id: string; name: string };
+const purposeOptions = [
+  ['ATTRACT', '集客'],
+  ['RESERVATION', '予約'],
+  ['SALES', '販売'],
+  ['RECRUITING', '採用'],
+  ['AWARENESS', '認知'],
+  ['RETENTION', '継続'],
+] as const;
 
 export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: string }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [industries, setIndustries] = useState<Industry[]>([]);
+  const [industryId, setIndustryId] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [previewCount, setPreviewCount] = useState<number | null>(null);
   const scheduledCount = broadcasts.filter((broadcast) => broadcast.status === 'SCHEDULED').length;
   const failedCount = broadcasts.reduce(
     (total, broadcast) => total + (broadcast.recipients.FAILED ?? 0),
@@ -23,15 +36,55 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
     const response = await fetch(
       `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts`,
     );
-    if (response.ok) setBroadcasts(((await response.json()) as { data: Broadcast[] }).data);
+    if (response.ok) {
+      const result = (await response.json()) as {
+        data: Broadcast[];
+        options?: { industries?: Industry[] };
+      };
+      setBroadcasts(result.data);
+      setIndustries(result.options?.industries ?? []);
+    }
   };
   useEffect(() => {
     void load();
   }, [serviceSlug]);
+  const segment = {
+    industryIds: industryId ? [industryId] : [],
+    purposes: purpose ? [purpose] : [],
+  };
+  async function preview() {
+    setMessage('対象者を確認しています…');
+    const response = await fetch(
+      `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/preview`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(segment),
+      },
+    );
+    const result = (await response.json()) as {
+      data?: { eligibleRecipientCount: number; capped: boolean };
+      error?: { message?: string };
+    };
+    if (!response.ok || !result.data) {
+      setPreviewCount(null);
+      setMessage(result.error?.message ?? '対象者を確認できませんでした。');
+      return;
+    }
+    setPreviewCount(result.data.eligibleRecipientCount);
+    setMessage(
+      `現在の送信対象は${result.data.eligibleRecipientCount}人です。${result.data.capped ? '上限500人まで表示しています。' : ''}`,
+    );
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (previewCount === null || previewCount < 1) {
+      setMessage('先に送信対象を確認してください。');
+      return;
+    }
     const formData = new FormData(event.currentTarget);
-    if (!window.confirm('対象者と本文を確認しましたか？ 指定時刻にLINEを一斉送信します。')) return;
+    if (!window.confirm(`対象${previewCount}人と本文を確認しましたか？ LINEを一斉送信します。`))
+      return;
     setSending(true);
     setMessage('LINEを送信しています…');
     try {
@@ -45,6 +98,8 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
             message: formData.get('message'),
             reason: formData.get('reason'),
             scheduledAt: formData.get('scheduledAt') || undefined,
+            segment,
+            expectedRecipientCount: previewCount,
             confirmed: true,
           }),
         },
@@ -58,6 +113,9 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
         `送信を予約しました。対象 ${result.data?.requested ?? 0}人／予定時刻 ${result.data?.scheduledAt ?? ''}`,
       );
       event.currentTarget.reset();
+      setIndustryId('');
+      setPurpose('');
+      setPreviewCount(null);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'LINEを送信できませんでした。');
@@ -82,6 +140,48 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
         </span>
       </div>
       <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
+        <fieldset>
+          <legend>送信対象</legend>
+          <p>業種と目的を両方選ぶと、両方に一致する参加者だけが対象になります。</p>
+          <label>
+            業種
+            <select
+              value={industryId}
+              onChange={(event) => {
+                setIndustryId(event.target.value);
+                setPreviewCount(null);
+              }}
+            >
+              <option value="">すべての業種</option>
+              {industries.map((industry) => (
+                <option key={industry.id} value={industry.id}>
+                  {industry.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            主な目的
+            <select
+              value={purpose}
+              onChange={(event) => {
+                setPurpose(event.target.value);
+                setPreviewCount(null);
+              }}
+            >
+              <option value="">すべての目的</option>
+              {purposeOptions.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="button button--secondary" type="button" onClick={() => void preview()}>
+            送信対象を確認する
+          </button>
+          <strong>{previewCount === null ? '対象確認前' : `送信対象 ${previewCount}人`}</strong>
+        </fieldset>
         <label>
           件名
           <input name="title" required maxLength={120} placeholder="例：今週のお知らせ" />
@@ -104,7 +204,11 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
           送信予定（空欄なら今すぐ）
           <input name="scheduledAt" type="datetime-local" />
         </label>
-        <button className="button" disabled={sending} type="submit">
+        <button
+          className="button"
+          disabled={sending || previewCount === null || previewCount < 1}
+          type="submit"
+        >
           {sending ? '予約中…' : '内容を確認して送信を予約する'}
         </button>
       </form>

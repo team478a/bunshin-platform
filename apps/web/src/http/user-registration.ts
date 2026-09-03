@@ -15,6 +15,38 @@ const purposes = [
   'AWARENESS',
   'RETENTION',
 ] as const;
+type Purpose = (typeof purposes)[number];
+
+const purposeCallsToAction: Record<Purpose, string> = {
+  ATTRACT: '気になることがあれば、ぜひコメントやメッセージで教えてください。',
+  RESERVATION: '詳しい内容やご予約については、プロフィールの案内をご確認ください。',
+  SALES: '商品・サービスについて知りたい方は、お気軽にお問い合わせください。',
+  RECRUITING: '私たちの活動に興味を持っていただけたら、ぜひご連絡ください。',
+  AWARENESS: 'これから役立つ情報をお届けします。よければフォローしてください。',
+  RETENTION: 'これからも役立つ情報をお届けしますので、ぜひご覧ください。',
+};
+
+export function createFirstPostSuggestion(input: {
+  activityName: string;
+  businessName: string | null;
+  productService: string | null;
+  primaryPurpose: Purpose;
+}) {
+  const subject = input.businessName || input.activityName;
+  const offering = input.productService
+    ? `私たちは「${input.productService}」を通じて、皆さまのお役に立つ活動をしています。`
+    : 'このアカウントでは、日々の活動や役立つ情報を分かりやすくお届けします。';
+  return {
+    version: 'registration-first-post-v1',
+    title: `${subject}から、はじめまして`,
+    body: `はじめまして、${subject}です。\n\n${offering}\n\n${purposeCallsToAction[input.primaryPurpose]}`,
+    generatedFrom: {
+      purpose: input.primaryPurpose,
+      hasBusinessName: Boolean(input.businessName),
+      hasProductService: Boolean(input.productService),
+    },
+  };
+}
 const updateSchema = z
   .object({
     currentStep: z.number().int().min(1).max(4),
@@ -76,6 +108,15 @@ export async function userRegistrationResponse(request: Request) {
     }
     const now = new Date();
     const { complete, notificationConsent, returnTo, ...fields } = value;
+    const firstPostSuggestion =
+      complete && fields.activityName && fields.primaryPurpose
+        ? createFirstPostSuggestion({
+            activityName: fields.activityName,
+            businessName: fields.businessName ?? null,
+            productService: fields.productService ?? null,
+            primaryPurpose: fields.primaryPurpose,
+          })
+        : null;
     const registrationFields = {
       currentStep: fields.currentStep,
       primaryIndustryId: fields.primaryIndustryId ?? null,
@@ -97,11 +138,13 @@ export async function userRegistrationResponse(request: Request) {
           status: complete ? 'COMPLETED' : 'IN_PROGRESS',
           startedAt: now,
           completedAt: complete ? now : null,
+          ...(firstPostSuggestion ? { firstPostSuggestion, firstPostGeneratedAt: now } : {}),
         },
         update: {
           ...registrationFields,
           status: complete ? 'COMPLETED' : 'IN_PROGRESS',
           completedAt: complete ? now : null,
+          ...(firstPostSuggestion ? { firstPostSuggestion, firstPostGeneratedAt: now } : {}),
         },
       });
       if (complete && notificationConsent !== undefined)
@@ -109,10 +152,25 @@ export async function userRegistrationResponse(request: Request) {
           where: { userId: actor.userId, environment: currentLineEnvironment(), status: 'ACTIVE' },
           data: { notificationConsentAt: notificationConsent ? now : null },
         });
+      const eventType = complete ? 'ONBOARDING_COMPLETED' : 'ONBOARDING_STARTED';
+      await tx.registrationFunnelEvent.upsert({
+        where: { idempotencyKey: `${eventType}:${actor.userId}:once` },
+        create: {
+          eventType,
+          userId: actor.userId,
+          source: 'ONBOARDING',
+          idempotencyKey: `${eventType}:${actor.userId}:once`,
+        },
+        update: {},
+      });
       return saved;
     });
     return Response.json(
-      { data: profile, destination: safeLineAuthReturnPath(returnTo) ?? '/bunshins', requestId },
+      {
+        data: profile,
+        destination: safeLineAuthReturnPath(returnTo) ?? '/onboarding/complete',
+        requestId,
+      },
       { status: 200, headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {

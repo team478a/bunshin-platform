@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { toDataURL } from 'qrcode';
 import { getOfficialLineAccountUrl } from '@bunshin/config';
 import { PublicShell } from '../ui/public-shell';
+import { LandingFunnelTracker } from './landing-funnel-tracker';
 
 export default async function HomePage() {
   const lineUrl = getOfficialLineAccountUrl();
@@ -11,6 +12,7 @@ export default async function HomePage() {
     : null;
   return (
     <PublicShell>
+      <LandingFunnelTracker />
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__copy">
           <p className="eyebrow">あなたのための企画担当</p>

@@ -26,6 +26,17 @@ enum IndustryStatus {
   INACTIVE
 }
 
+enum RegistrationFunnelEventType {
+  LANDING_VIEWED
+  LINE_AUTHENTICATED
+  ONBOARDING_STARTED
+  ONBOARDING_COMPLETED
+  FIRST_POST_VIEWED
+  FIRST_POST_COPIED
+  ORGANIZATION_JOINED
+  GROUP_JOINED
+}
+
 enum AuthProvider {
   LINE
   EMAIL
@@ -1579,7 +1590,8 @@ model User {
   createdAt                         DateTime                            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
   identities                        AuthIdentity[]
-  registrationProfile              UserRegistrationProfile?
+  registrationProfile               UserRegistrationProfile?
+  registrationFunnelEvents          RegistrationFunnelEvent[]
   memberships                       WorkspaceMembership[]
   workspaceInvitationsCreated       WorkspaceInvitation[]               @relation("WorkspaceInvitationCreator")
   organizationEntitlementsUpdated   OrganizationEntitlement[]           @relation("OrganizationEntitlementUpdater")
@@ -1712,31 +1724,50 @@ model Industry {
 }
 
 model UserRegistrationProfile {
-  id                String                 @id @default(uuid()) @db.Uuid
-  userId            String                 @unique @map("user_id") @db.Uuid
-  status            UserRegistrationStatus @default(NOT_STARTED)
-  currentStep       Int                    @default(1) @map("current_step")
-  primaryIndustryId String?                @map("primary_industry_id") @db.Uuid
-  otherIndustryText String?                @map("other_industry_text") @db.VarChar(160)
-  primaryPurpose    String?                @map("primary_purpose") @db.VarChar(80)
-  secondaryPurposes Json                   @default("[]") @map("secondary_purposes")
-  activityName      String?                @map("activity_name") @db.VarChar(120)
-  businessName      String?                @map("business_name") @db.VarChar(200)
-  region            String?                @db.VarChar(160)
-  productService    String?                @map("product_service") @db.VarChar(1000)
-  socialProfiles    Json                   @default("[]") @map("social_profiles")
-  sourceContext     Json                   @default("{}") @map("source_context")
-  startedAt         DateTime?              @map("started_at") @db.Timestamptz(6)
-  completedAt       DateTime?              @map("completed_at") @db.Timestamptz(6)
-  suspendedAt       DateTime?              @map("suspended_at") @db.Timestamptz(6)
-  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  primaryIndustry   Industry?              @relation(fields: [primaryIndustryId], references: [id], onDelete: Restrict)
+  id                   String                 @id @default(uuid()) @db.Uuid
+  userId               String                 @unique @map("user_id") @db.Uuid
+  status               UserRegistrationStatus @default(NOT_STARTED)
+  currentStep          Int                    @default(1) @map("current_step")
+  primaryIndustryId    String?                @map("primary_industry_id") @db.Uuid
+  otherIndustryText    String?                @map("other_industry_text") @db.VarChar(160)
+  primaryPurpose       String?                @map("primary_purpose") @db.VarChar(80)
+  secondaryPurposes    Json                   @default("[]") @map("secondary_purposes")
+  activityName         String?                @map("activity_name") @db.VarChar(120)
+  businessName         String?                @map("business_name") @db.VarChar(200)
+  region               String?                @db.VarChar(160)
+  productService       String?                @map("product_service") @db.VarChar(1000)
+  socialProfiles       Json                   @default("[]") @map("social_profiles")
+  sourceContext        Json                   @default("{}") @map("source_context")
+  firstPostSuggestion  Json?                  @map("first_post_suggestion")
+  firstPostGeneratedAt DateTime?              @map("first_post_generated_at") @db.Timestamptz(6)
+  startedAt            DateTime?              @map("started_at") @db.Timestamptz(6)
+  completedAt          DateTime?              @map("completed_at") @db.Timestamptz(6)
+  suspendedAt          DateTime?              @map("suspended_at") @db.Timestamptz(6)
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryIndustry      Industry?              @relation(fields: [primaryIndustryId], references: [id], onDelete: Restrict)
 
   @@index([status, updatedAt])
   @@index([primaryIndustryId, status])
   @@map("user_registration_profiles")
+}
+
+model RegistrationFunnelEvent {
+  id             String                      @id @default(uuid()) @db.Uuid
+  eventType      RegistrationFunnelEventType @map("event_type")
+  userId         String?                     @map("user_id") @db.Uuid
+  visitorKeyHash String?                     @map("visitor_key_hash") @db.Char(64)
+  source         String                      @default("WEB") @db.VarChar(40)
+  metadata       Json                        @default("{}")
+  idempotencyKey String                      @unique @map("idempotency_key") @db.VarChar(200)
+  occurredAt     DateTime                    @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  user           User?                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventType, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([visitorKeyHash, occurredAt])
+  @@map("registration_funnel_events")
 }
 
 model AuthIdentity {
@@ -5791,6 +5822,7 @@ model ServiceLineBroadcast {
   title           String                          @db.VarChar(120)
   message         String                          @db.Text
   audience        ServiceLineBroadcastAudience    @default(ACTIVE_PARTICIPANTS)
+  segmentCriteria Json                            @default("{}") @map("segment_criteria")
   status          ServiceLineBroadcastStatus      @default(DRAFT)
   scheduledAt     DateTime?                       @map("scheduled_at") @db.Timestamptz(6)
   cancelledAt     DateTime?                       @map("cancelled_at") @db.Timestamptz(6)

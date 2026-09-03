@@ -46,6 +46,9 @@ vi.mock('@bunshin/database', () => ({
           state.registrationStatus === null ? null : { status: state.registrationStatus },
         ),
     },
+    registrationFunnelEvent: {
+      upsert: () => Promise.resolve({ id: 'event-1' }),
+    },
   },
   listActiveWorkspacesForUser: () => Promise.resolve([{ id: 'workspace-1', name: 'Personal' }]),
   PrismaLineConnectionRepository: class {},
