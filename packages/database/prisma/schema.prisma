@@ -1698,19 +1698,19 @@ model AuthIdentity {
 }
 
 model Workspace {
-  id                              String                           @id @default(uuid()) @db.Uuid
+  id                              String                                @id @default(uuid()) @db.Uuid
   type                            WorkspaceType
-  name                            String                           @db.VarChar(120)
-  status                          WorkspaceStatus                  @default(ACTIVE)
-  legalName                       String?                          @map("legal_name") @db.VarChar(200)
-  description                     String?                          @db.VarChar(2000)
-  contactName                     String?                          @map("contact_name") @db.VarChar(120)
-  contactEmail                    String?                          @map("contact_email") @db.VarChar(320)
-  contactPhone                    String?                          @map("contact_phone") @db.VarChar(40)
-  websiteUrl                      String?                          @map("website_url") @db.VarChar(2048)
-  address                         String?                          @db.VarChar(500)
-  createdAt                       DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  name                            String                                @db.VarChar(120)
+  status                          WorkspaceStatus                       @default(ACTIVE)
+  legalName                       String?                               @map("legal_name") @db.VarChar(200)
+  description                     String?                               @db.VarChar(2000)
+  contactName                     String?                               @map("contact_name") @db.VarChar(120)
+  contactEmail                    String?                               @map("contact_email") @db.VarChar(320)
+  contactPhone                    String?                               @map("contact_phone") @db.VarChar(40)
+  websiteUrl                      String?                               @map("website_url") @db.VarChar(2048)
+  address                         String?                               @db.VarChar(500)
+  createdAt                       DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
   memberships                     WorkspaceMembership[]
   invitations                     WorkspaceInvitation[]
   groups                          Group[]
@@ -1757,8 +1757,8 @@ model Workspace {
   personalityVersions             BunshinPersonalityVersion[]
   userEvidence                    UserEvidence[]
   advertisingSafetyReviews        AdvertisingSafetyReview[]
-  campaignsOwned                  Campaign[]                       @relation("CampaignOwnerWorkspace")
-  campaignParticipations          CampaignParticipation[]          @relation("CampaignParticipantWorkspace")
+  campaignsOwned                  Campaign[]                            @relation("CampaignOwnerWorkspace")
+  campaignParticipations          CampaignParticipation[]               @relation("CampaignParticipantWorkspace")
   campaignSimilarityReviews       CampaignSimilarityReview[]
   externalTrackingSystems         ExternalTrackingSystem[]
   externalTrackingDomains         ExternalTrackingAllowedDomain[]
@@ -1793,6 +1793,7 @@ model Workspace {
   serviceConfigurations           ServiceConfiguration[]
   organizationEntitlement         OrganizationEntitlement?
   organizationEntitlementAudits   OrganizationEntitlementAudit[]
+  organizationAiReservations      OrganizationAiGenerationReservation[]
   serviceCustomDomains            ServiceCustomDomain[]
   serviceCommercialSettings       ServiceCommercialSetting[]
   serviceBrands                   ServiceBrand[]
@@ -1881,6 +1882,31 @@ model OrganizationEntitlement {
 
   @@index([suspended, startsAt, endsAt])
   @@map("organization_entitlements")
+}
+
+enum OrganizationAiReservationStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+}
+
+/// AI文章生成の月間枠を外部API呼び出し前に確保するための冪等な台帳。
+model OrganizationAiGenerationReservation {
+  id           String                          @id @default(uuid()) @db.Uuid
+  workspaceId  String                          @map("workspace_id") @db.Uuid
+  monthKey     String                          @map("month_key") @db.Char(7)
+  operationKey String                          @map("operation_key") @db.VarChar(200)
+  status       OrganizationAiReservationStatus @default(RESERVED)
+  expiresAt    DateTime                        @map("expires_at") @db.Timestamptz(6)
+  consumedAt   DateTime?                       @map("consumed_at") @db.Timestamptz(6)
+  releasedAt   DateTime?                       @map("released_at") @db.Timestamptz(6)
+  createdAt    DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace    Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, operationKey])
+  @@index([workspaceId, monthKey, status, expiresAt])
+  @@map("organization_ai_generation_reservations")
 }
 
 model OrganizationEntitlementAudit {

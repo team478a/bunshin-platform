@@ -29,6 +29,7 @@ import type {
   ValidationMetricsSnapshot,
   AiUsageEventRepository,
   RecordAiUsageInput,
+  OrganizationAiGenerationReservationRepository,
   LegalDocumentRepository,
   LegalDocument,
   LegalDocumentType,
@@ -8356,6 +8357,99 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
       },
       update: {},
     });
+  }
+}
+
+export class PrismaOrganizationAiGenerationReservationRepository implements OrganizationAiGenerationReservationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async reserve(input: Parameters<OrganizationAiGenerationReservationRepository['reserve']>[0]) {
+    const monthKey = `${input.now.getUTCFullYear()}-${String(input.now.getUTCMonth() + 1).padStart(2, '0')}`;
+    return this.client.$transaction(
+      async (tx) => {
+        const entitlement = await tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: {
+            monthlyAiGenerationLimit: true,
+            suspended: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        });
+        if (!entitlement || entitlement.monthlyAiGenerationLimit === null)
+          return { status: 'UNLIMITED' as const, reservationId: null };
+        if (
+          entitlement.suspended ||
+          (entitlement.startsAt && entitlement.startsAt > input.now) ||
+          (entitlement.endsAt && entitlement.endsAt <= input.now)
+        )
+          return { status: 'EXHAUSTED' as const, reservationId: null };
+
+        const existing = await tx.organizationAiGenerationReservation.findUnique({
+          where: {
+            workspaceId_operationKey: {
+              workspaceId: input.workspaceId,
+              operationKey: input.operationKey,
+            },
+          },
+        });
+        if (
+          existing?.status === 'CONSUMED' ||
+          (existing?.status === 'RESERVED' && existing.expiresAt > input.now)
+        )
+          return { status: 'ALREADY_RESERVED' as const, reservationId: existing.id };
+
+        const used = await tx.organizationAiGenerationReservation.count({
+          where: {
+            workspaceId: input.workspaceId,
+            monthKey,
+            OR: [{ status: 'CONSUMED' }, { status: 'RESERVED', expiresAt: { gt: input.now } }],
+          },
+        });
+        if (used >= entitlement.monthlyAiGenerationLimit)
+          return { status: 'EXHAUSTED' as const, reservationId: null };
+
+        const reserved = await tx.organizationAiGenerationReservation.upsert({
+          where: {
+            workspaceId_operationKey: {
+              workspaceId: input.workspaceId,
+              operationKey: input.operationKey,
+            },
+          },
+          create: {
+            workspaceId: input.workspaceId,
+            monthKey,
+            operationKey: input.operationKey,
+            expiresAt: input.expiresAt,
+          },
+          update: {
+            monthKey,
+            status: 'RESERVED',
+            expiresAt: input.expiresAt,
+            consumedAt: null,
+            releasedAt: null,
+          },
+          select: { id: true },
+        });
+        return { status: 'RESERVED' as const, reservationId: reserved.id };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  }
+
+  async finish(input: Parameters<OrganizationAiGenerationReservationRepository['finish']>[0]) {
+    const changed = await this.client.organizationAiGenerationReservation.updateMany({
+      where: {
+        workspaceId: input.workspaceId,
+        operationKey: input.operationKey,
+        status: 'RESERVED',
+      },
+      data:
+        input.outcome === 'CONSUMED'
+          ? { status: 'CONSUMED', consumedAt: input.now }
+          : { status: 'RELEASED', releasedAt: input.now },
+    });
+    return changed.count === 1;
   }
 }
 
