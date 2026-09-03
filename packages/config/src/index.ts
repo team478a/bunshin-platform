@@ -20,6 +20,7 @@ const serverSchema = z
     AI_PROVIDER_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     ADMIN_EMAIL_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
+    LINE_OFFICIAL_ACCOUNT_URL: z.url().optional(),
     VIDEO_RENDER_WEBHOOK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
     LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
@@ -84,6 +85,21 @@ const serverSchema = z
           code: 'custom',
           path: ['SUPABASE_AUTH_ADMIN_URL'],
           message: 'Supabase Auth administration URL cannot use localhost outside development',
+        });
+      }
+    }
+    if (value.LINE_OFFICIAL_ACCOUNT_URL !== undefined) {
+      const url = new URL(value.LINE_OFFICIAL_ACCOUNT_URL);
+      if (
+        url.protocol !== 'https:' ||
+        !['lin.ee', 'line.me'].some(
+          (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+        )
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['LINE_OFFICIAL_ACCOUNT_URL'],
+          message: 'Official LINE account URL must use an approved LINE HTTPS host',
         });
       }
     }

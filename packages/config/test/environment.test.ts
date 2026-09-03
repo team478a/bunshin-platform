@@ -19,6 +19,19 @@ describe('environment validation', () => {
     });
   });
 
+  it('accepts only official HTTPS LINE hosts for the friend-add destination', () => {
+    expect(
+      parseServerEnvironment({ ...valid, LINE_OFFICIAL_ACCOUNT_URL: 'https://lin.ee/example' })
+        .LINE_OFFICIAL_ACCOUNT_URL,
+    ).toBe('https://lin.ee/example');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        LINE_OFFICIAL_ACCOUNT_URL: 'https://example.com/fake-line',
+      }),
+    ).toThrow('LINE_OFFICIAL_ACCOUNT_URL');
+  });
+
   it('reports variable names without secret values', () => {
     expect(() => parseServerEnvironment({ ...valid, SESSION_SECRET: 'secret' })).toThrow(
       'SESSION_SECRET',

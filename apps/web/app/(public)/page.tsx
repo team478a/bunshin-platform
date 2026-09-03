@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { getServerEnvironment } from '@bunshin/config';
 import { PublicShell } from '../ui/public-shell';
 
 export default function HomePage() {
+  const lineUrl = getServerEnvironment().LINE_OFFICIAL_ACCOUNT_URL;
   return (
     <PublicShell>
       <section className="landing-hero" aria-labelledby="landing-title">
@@ -12,14 +14,24 @@ export default function HomePage() {
             あなた専用のSNS戦略を考え、今日やることと投稿案を届けます。内容を選んでコピーし、投稿するだけです。
           </p>
           <div className="landing-actions">
-            <Link className="button button--primary" href="/login">
-              ワタシワークスをはじめる
-            </Link>
+            {lineUrl ? (
+              <a className="button button--primary" href={lineUrl} rel="noreferrer">
+                公式LINEを友だち追加してはじめる
+              </a>
+            ) : (
+              <Link className="button button--primary" href="/login">
+                ワタシワークスをはじめる
+              </Link>
+            )}
             <a className="button button--secondary" href="#how-it-works">
               使い方を見る
             </a>
           </div>
-          <small>メールリンクでログイン・パスワード不要</small>
+          <small>
+            {lineUrl
+              ? '友だち追加後、LINEの案内から登録できます'
+              : 'メールリンクでログイン・パスワード不要'}
+          </small>
         </div>
         <div className="landing-visual" aria-hidden="true">
           <span className="landing-visual__circle landing-visual__circle--one" />
