@@ -16,6 +16,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { LineRichMenuApiAdapter } from '../line/rich-menu-provider';
 import { LineRichMenuStorage } from '../line/rich-menu-storage';
+import { DEFAULT_LINE_RICH_MENU, renderDefaultLineRichMenu } from '../line/default-rich-menu';
 
 const uuid = z.string().uuid();
 const text = z.object({ reason: z.string().min(3).max(500) }).strict();
@@ -151,6 +152,43 @@ export function createLineRichMenuResponse(request: Request) {
             imageWidth: stored.width,
             imageHeight: stored.height,
             areas: areas(parsed.data.template, stored.height),
+          }),
+        );
+      } catch (error) {
+        await storage.remove(stored.objectKey);
+        throw error;
+      }
+    },
+    201,
+  );
+}
+
+export function createDefaultLineRichMenuResponse(request: Request) {
+  return respond(
+    request,
+    async () => {
+      requireSameOrigin(request);
+      const parsed = text.safeParse(await body(request));
+      if (!parsed.success)
+        throw new ApplicationError('VALIDATION_ERROR', '作る理由を3文字以上で入力してください');
+      const environment = currentLineEnvironment();
+      const storage = new LineRichMenuStorage();
+      const image = await renderDefaultLineRichMenu();
+      const stored = await storage.uploadBytes(environment, image, 'image/png');
+      try {
+        return dto(
+          await new CreateLineRichMenuDraft(await repository()).execute({
+            actorUserId: await actor(),
+            environment,
+            reason: parsed.data.reason,
+            name: DEFAULT_LINE_RICH_MENU.name,
+            description: DEFAULT_LINE_RICH_MENU.description,
+            imageObjectKey: stored.objectKey,
+            imageSha256: stored.sha256,
+            imageContentType: stored.contentType,
+            imageWidth: stored.width,
+            imageHeight: stored.height,
+            areas: [...DEFAULT_LINE_RICH_MENU.areas],
           }),
         );
       } catch (error) {
