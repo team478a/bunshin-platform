@@ -1,6 +1,14 @@
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 
+const officialLineAccountUrlSchema = z.url().refine((value) => {
+  const url = new URL(value);
+  return (
+    url.protocol === 'https:' &&
+    ['lin.ee', 'line.me'].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+  );
+});
+
 const serverSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -20,7 +28,7 @@ const serverSchema = z
     AI_PROVIDER_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     ADMIN_EMAIL_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
-    LINE_OFFICIAL_ACCOUNT_URL: z.url().optional(),
+    LINE_OFFICIAL_ACCOUNT_URL: officialLineAccountUrlSchema.optional(),
     VIDEO_RENDER_WEBHOOK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_ADMIN_ALERT_WEBHOOK_URL: z.url().optional(),
     LINE_ADMIN_ALERT_WEBHOOK_TOKEN: z.string().min(16).optional(),
@@ -85,21 +93,6 @@ const serverSchema = z
           code: 'custom',
           path: ['SUPABASE_AUTH_ADMIN_URL'],
           message: 'Supabase Auth administration URL cannot use localhost outside development',
-        });
-      }
-    }
-    if (value.LINE_OFFICIAL_ACCOUNT_URL !== undefined) {
-      const url = new URL(value.LINE_OFFICIAL_ACCOUNT_URL);
-      if (
-        url.protocol !== 'https:' ||
-        !['lin.ee', 'line.me'].some(
-          (host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
-        )
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['LINE_OFFICIAL_ACCOUNT_URL'],
-          message: 'Official LINE account URL must use an approved LINE HTTPS host',
         });
       }
     }
@@ -169,4 +162,14 @@ export function parseServerEnvironment(
 
 export function getServerEnvironment(): ServerEnvironment {
   return parseServerEnvironment(process.env);
+}
+
+export function getOfficialLineAccountUrl(
+  value: string | undefined = process.env.LINE_OFFICIAL_ACCOUNT_URL,
+): string | undefined {
+  if (!value) return undefined;
+  const result = officialLineAccountUrlSchema.safeParse(value);
+  if (!result.success)
+    throw new ApplicationError('CONFIGURATION_ERROR', 'Invalid LINE_OFFICIAL_ACCOUNT_URL');
+  return result.data;
 }

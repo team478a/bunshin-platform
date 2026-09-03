@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import { getServerEnvironment } from '@bunshin/config';
+import { getOfficialLineAccountUrl } from '@bunshin/config';
 import { PublicShell } from '../ui/public-shell';
 
 export default function HomePage() {
-  const lineUrl = getServerEnvironment().LINE_OFFICIAL_ACCOUNT_URL;
+  const lineUrl = getOfficialLineAccountUrl();
   return (
     <PublicShell>
       <section className="landing-hero" aria-labelledby="landing-title">
