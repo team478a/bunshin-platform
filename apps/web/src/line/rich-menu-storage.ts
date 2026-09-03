@@ -80,14 +80,28 @@ export class LineRichMenuStorage {
     )
       throw new ApplicationError('VALIDATION_ERROR', 'PNGまたはJPEGを1MB以内で選んでください');
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const size = imageSize(bytes, file.type);
+    return this.uploadBytes(environment, bytes, file.type);
+  }
+
+  async uploadBytes(
+    environment: LineConfigurationEnvironment,
+    bytes: Uint8Array,
+    contentType: string,
+  ) {
+    if (
+      !['image/png', 'image/jpeg'].includes(contentType) ||
+      bytes.length < 1 ||
+      bytes.length > MAX_IMAGE_BYTES
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'PNGまたはJPEGを1MB以内で選んでください');
+    const size = imageSize(bytes, contentType);
     if (size.width !== 2500 || ![843, 1686].includes(size.height))
       throw new ApplicationError('VALIDATION_ERROR', '画像サイズは2500×843または2500×1686です');
     await this.ensureBucket();
-    const extension = file.type === 'image/png' ? 'png' : 'jpg';
+    const extension = contentType === 'image/png' ? 'png' : 'jpg';
     const objectKey = `${environment.toLowerCase()}/line-rich-menus/${randomUUID()}.${extension}`;
     const uploaded = await this.storage.storage.from(BUCKET).upload(objectKey, bytes, {
-      contentType: file.type,
+      contentType,
       upsert: false,
       cacheControl: '3600',
     });
@@ -95,7 +109,7 @@ export class LineRichMenuStorage {
     return {
       objectKey,
       sha256: createHash('sha256').update(bytes).digest('hex'),
-      contentType: file.type,
+      contentType,
       width: size.width,
       height: size.height,
     };
