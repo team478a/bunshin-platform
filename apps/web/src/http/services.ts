@@ -178,6 +178,14 @@ export async function updateServiceLifecycleResponse(request: Request, configura
         include: { group: { select: { status: true } } },
       });
       if (existing === null) throw new ApplicationError('NOT_FOUND', 'service not found');
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: existing.workspaceId },
+        select: { oemEnabled: true, suspended: true },
+      });
+      if (entitlement?.suspended)
+        throw new ApplicationError('FORBIDDEN', 'organization operations are suspended');
+      if (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled)
+        throw new ApplicationError('FORBIDDEN', 'OEM is not included in the organization contract');
 
       const [configuration, group] = await Promise.all([
         tx.serviceConfiguration.update({
@@ -400,6 +408,17 @@ export async function updateServiceCustomDomainResponse(request: Request, config
         include: { customDomain: true },
       });
       if (configuration === null) throw new ApplicationError('NOT_FOUND', 'service not found');
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: configuration.workspaceId },
+        select: { customDomainEnabled: true, suspended: true },
+      });
+      if (entitlement?.suspended)
+        throw new ApplicationError('FORBIDDEN', 'organization operations are suspended');
+      if (entitlement && !entitlement.customDomainEnabled && value.status !== 'DISABLED')
+        throw new ApplicationError(
+          'FORBIDDEN',
+          'custom domain is not included in the organization contract',
+        );
       if (value.status === 'ACTIVE' && configuration.customDomain?.status !== 'VERIFIED')
         throw new ApplicationError('VALIDATION_ERROR', 'domain must be verified before activation');
       const now = new Date();

@@ -9996,6 +9996,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
         select: {
           maxGroups: true,
           maxServices: true,
+          oemEnabled: true,
           suspended: true,
           startsAt: true,
           endsAt: true,
@@ -10018,6 +10019,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
       if (entitlement?.maxGroups && groupCount >= entitlement.maxGroups) return null;
       if (entitlement?.maxServices && serviceCount >= entitlement.maxServices) return null;
       const value = input.configuration;
+      if (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled) return null;
       const group = await tx.group.create({
         data: {
           workspaceId: input.workspaceId,
@@ -10096,7 +10098,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
 
   async save(input: Parameters<ServiceFoundationRepository['save']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const [admin, group, manager, existing] = await Promise.all([
+      const [admin, group, manager, existing, entitlement] = await Promise.all([
         tx.platformAdmin.findFirst({
           where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
           select: { id: true },
@@ -10120,9 +10122,21 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           where: { groupId: input.groupId },
           include: { brand: true, registration: true },
         }),
+        tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: { oemEnabled: true, suspended: true, startsAt: true, endsAt: true },
+        }),
       ]);
       if ((admin === null && manager === null) || group === null) return null;
       const value = input.configuration;
+      const now = new Date();
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= now) ||
+        (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled)
+      )
+        return null;
       if (
         admin === null &&
         (existing === null ||

@@ -11,6 +11,8 @@ const state = vi.hoisted(
     updateGroup: ReturnType<typeof vi.fn>;
     upsertCommercialSetting: ReturnType<typeof vi.fn>;
     createAudit: ReturnType<typeof vi.fn>;
+    organizationEntitlement: ReturnType<typeof vi.fn>;
+    upsertCustomDomain: ReturnType<typeof vi.fn>;
   } => ({
     user: { userId: 'admin-1' },
     create: vi.fn(),
@@ -20,6 +22,8 @@ const state = vi.hoisted(
     updateGroup: vi.fn(),
     upsertCommercialSetting: vi.fn(),
     createAudit: vi.fn(),
+    organizationEntitlement: vi.fn(),
+    upsertCustomDomain: vi.fn(),
   }),
 );
 
@@ -39,6 +43,8 @@ vi.mock('@bunshin/database', () => ({
           update: state.updateService,
         },
         serviceCommercialSetting: { upsert: state.upsertCommercialSetting },
+        organizationEntitlement: { findUnique: state.organizationEntitlement },
+        serviceCustomDomain: { upsert: state.upsertCustomDomain },
         group: { update: state.updateGroup },
         serviceConfigurationAudit: { create: state.createAudit },
       }),
@@ -48,6 +54,7 @@ vi.mock('@bunshin/database', () => ({
 import {
   createServiceResponse,
   updateServiceCommercialSettingsResponse,
+  updateServiceCustomDomainResponse,
   updateServiceLifecycleResponse,
 } from '../src/http/services';
 
@@ -127,6 +134,14 @@ describe('service admin HTTP', () => {
       endsAt: null,
     });
     state.createAudit.mockResolvedValue({ id: 'audit-1' });
+    state.organizationEntitlement.mockResolvedValue(null);
+    state.upsertCustomDomain.mockResolvedValue({
+      hostname: 'service.example.com',
+      status: 'DRAFT',
+      verificationNote: null,
+      verifiedAt: null,
+      activatedAt: null,
+    });
   });
 
   it('requires authentication and same-origin mutation', async () => {
@@ -249,6 +264,27 @@ describe('service admin HTTP', () => {
     expect(state.updateService).not.toHaveBeenCalled();
   });
 
+  it('rejects hiding the platform brand when OEM is not included in the contract', async () => {
+    state.organizationEntitlement.mockResolvedValue({ oemEnabled: false, suspended: false });
+    const response = await updateServiceLifecycleResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}`, {
+        method: 'PATCH',
+        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          visibility: 'PRIVATE',
+          status: 'ACTIVE',
+          poweredByEnabled: false,
+          startsAt: null,
+          endsAt: null,
+          reason: 'OEM表示へ切り替えるため',
+        }),
+      }),
+      configurationId,
+    );
+    expect(response.status).toBe(403);
+    expect(state.updateService).not.toHaveBeenCalled();
+  });
+
   it('stores a provider-independent commercial plan and audit reason', async () => {
     const response = await updateServiceCommercialSettingsResponse(
       new Request(
@@ -282,5 +318,33 @@ describe('service admin HTTP', () => {
         data: expect.objectContaining({ action: 'COMMERCIAL_SETTINGS_UPDATED' }),
       }),
     );
+  });
+
+  it('rejects a custom domain when it is not included in the organization contract', async () => {
+    state.findService.mockResolvedValue({
+      id: configurationId,
+      workspaceId,
+      groupId: 'group-1',
+      customDomain: null,
+    });
+    state.organizationEntitlement.mockResolvedValue({
+      customDomainEnabled: false,
+      suspended: false,
+    });
+    const response = await updateServiceCustomDomainResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}/custom-domain`, {
+        method: 'PUT',
+        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          hostname: 'service.example.com',
+          status: 'DRAFT',
+          verificationNote: '',
+          reason: '独自ドメインを設定するため',
+        }),
+      }),
+      configurationId,
+    );
+    expect(response.status).toBe(403);
+    expect(state.upsertCustomDomain).not.toHaveBeenCalled();
   });
 });
