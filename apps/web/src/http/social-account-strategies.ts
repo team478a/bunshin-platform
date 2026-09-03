@@ -17,6 +17,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 
 const createSchema = z
   .object({
@@ -219,29 +220,35 @@ export function generateSocialAccountStrategyResponse(
         });
         const { OpenAIStrategyGenerator } = await import('../providers/openai-strategy-generator');
         providerAttempted = true;
-        const result = await new GenerateSocialAccountStrategy(
-          new OpenAIStrategyGenerator({
-            apiKey,
-            model,
-          }),
-        ).execute({
-          wizardTopic: parsed.data.wizardTopic,
-          wizardAudience: parsed.data.wizardAudience,
-          platform: parsed.data.platform,
-          goal: parsed.data.goal,
-          availableMinutes: parsed.data.availableMinutes,
-          destinationType: parsed.data.destinationType,
-          destinationDetail: parsed.data.destinationDetail ?? null,
-          bunshin: {
-            name: bunshin.name,
-            objectiveSummary: bunshin.objectiveSummary,
-            audienceSummary: bunshin.audienceSummary,
-            personalitySummary: bunshin.personalitySummary,
-            objectives: bunshin.objectives,
-            audiences: bunshin.audiences,
-            personality: bunshin.personality,
-          },
-          grantedKnowledge: granted.map(({ type, title, content }) => ({ type, title, content })),
+        const result = await withOrganizationAiGenerationQuota({
+          workspaceId,
+          operationKey: `${requestId}:strategy`,
+          generate: () =>
+            new GenerateSocialAccountStrategy(
+              new OpenAIStrategyGenerator({ apiKey, model }),
+            ).execute({
+              wizardTopic: parsed.data.wizardTopic,
+              wizardAudience: parsed.data.wizardAudience,
+              platform: parsed.data.platform,
+              goal: parsed.data.goal,
+              availableMinutes: parsed.data.availableMinutes,
+              destinationType: parsed.data.destinationType,
+              destinationDetail: parsed.data.destinationDetail ?? null,
+              bunshin: {
+                name: bunshin.name,
+                objectiveSummary: bunshin.objectiveSummary,
+                audienceSummary: bunshin.audienceSummary,
+                personalitySummary: bunshin.personalitySummary,
+                objectives: bunshin.objectives,
+                audiences: bunshin.audiences,
+                personality: bunshin.personality,
+              },
+              grantedKnowledge: granted.map(({ type, title, content }) => ({
+                type,
+                title,
+                content,
+              })),
+            }),
         });
         logger.info('strategy generation complete', {
           status: 'success',

@@ -32,6 +32,7 @@ import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
@@ -294,26 +295,29 @@ export class DailyMissionGenerationService {
           latencyMs: result.latencyMs,
           idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
         });
-      const brief = await new GenerateDailyMissionBrief(
-        new OpenAIDailyMissionPlanner({
-          apiKey,
-          model,
+      const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
+        withOrganizationAiGenerationQuota({
+          workspaceId: input.workspaceId,
+          operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
+          generate,
+        });
+      const brief = await generateWithQuota('daily-brief', () =>
+        new GenerateDailyMissionBrief(new OpenAIDailyMissionPlanner({ apiKey, model })).execute({
+          ...scope,
+          missionDate: input.missionDate,
+          timezone,
+          socialProfile: profile,
+          facePolicy: bunshin.personality?.facePolicy ?? 'FULL_ANONYMOUS',
+          recentFormats,
+          bunshin: bunshinContext,
+          approvedStrategy: strategy,
+          weeklyPlan,
+          contentPillars: pillars,
+          grantedKnowledge: knowledge,
+          trendIdeas,
+          campaign,
         }),
-      ).execute({
-        ...scope,
-        missionDate: input.missionDate,
-        timezone,
-        socialProfile: profile,
-        facePolicy: bunshin.personality?.facePolicy ?? 'FULL_ANONYMOUS',
-        recentFormats,
-        bunshin: bunshinContext,
-        approvedStrategy: strategy,
-        weeklyPlan,
-        contentPillars: pillars,
-        grantedKnowledge: knowledge,
-        trendIdeas,
-        campaign,
-      });
+      );
       await usage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
@@ -352,7 +356,7 @@ export class DailyMissionGenerationService {
         selectedMemories,
         campaign,
       };
-      let content = await generator.execute(contentInput);
+      let content = await generateWithQuota('content:0', () => generator.execute(contentInput));
       await usage('content:0', 'CONTENT_GENERATOR', content);
       const checker = new CheckMissionQuality(
         new OpenAIMissionQualityChecker({
@@ -371,19 +375,21 @@ export class DailyMissionGenerationService {
       });
       let repairCount = 0;
       const qualityIssueCodes = new Set<string>();
-      let quality = await checker.execute(qualityInput());
+      let quality = await generateWithQuota('quality:0', () => checker.execute(qualityInput()));
       for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
       await usage('quality:0', 'QUALITY_CHECKER', quality);
       if (quality.output.verdict === 'REVISE') {
         repairCount = 1;
-        content = await generator.execute({
-          ...contentInput,
-          repairInstructions: quality.output.issues.map(
-            ({ repairInstruction }) => repairInstruction,
-          ),
-        });
+        content = await generateWithQuota('content:1', () =>
+          generator.execute({
+            ...contentInput,
+            repairInstructions: quality.output.issues.map(
+              ({ repairInstruction }) => repairInstruction,
+            ),
+          }),
+        );
         await usage('content:1', 'CONTENT_REPAIR', content);
-        quality = await checker.execute(qualityInput());
+        quality = await generateWithQuota('quality:1', () => checker.execute(qualityInput()));
         for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
         await usage('quality:1', 'QUALITY_CHECKER', quality);
       }
