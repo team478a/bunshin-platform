@@ -5,6 +5,7 @@ import {
   calculateFirstWeekThreePostKpi,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
+  VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES,
   VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
   isLineNotificationSuppressed,
@@ -28,6 +29,7 @@ import type {
   ValidationMetricsSnapshot,
   AiUsageEventRepository,
   RecordAiUsageInput,
+  OrganizationAiGenerationReservationRepository,
   LegalDocumentRepository,
   LegalDocument,
   LegalDocumentType,
@@ -119,10 +121,16 @@ import type {
   VideoProjectRepository,
   VideoSceneRecord,
   VideoAiProcessingType,
+  VideoSceneGenerationRecord,
+  VideoSceneGenerationExecutionContext,
+  VideoSceneGenerationRepository,
+  VideoAiProviderCostPolicyRepository,
   VideoPlatform,
   VideoPlanningContextRepository,
   VideoRenderRecord,
   VideoRenderRepository,
+  VideoDeliveryRecord,
+  VideoDeliveryRepository,
   VideoRenderOperationsRepository,
   VideoRenderCompletionRepository,
   VideoAssetRecord,
@@ -140,6 +148,14 @@ import type {
   ServiceFoundationRepository,
   ServiceStaffRoleRepository,
   ServiceParticipationRepository,
+  ServiceReferralRewardRepository,
+  ServiceReferralRewardGrant,
+  ServiceReferralRewardRuleRepository,
+  ServiceReferralRewardRuleRecord,
+  ServiceCreditConsumptionRepository,
+  ServiceCreditConsumptionResult,
+  ServiceCreditExpirationRepository,
+  ServiceCreditAdjustmentRepository,
   ProgramCoreRepository,
   PointLedgerRepository,
   PointAccountSnapshot,
@@ -559,6 +575,12 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
           bunshinId: input.bunshinId,
           status: 'ACTIVE',
           accountStrategies: { some: { status: 'APPROVED' } },
+          bunshin: {
+            OR: [
+              { groupId: null },
+              { group: { serviceConfiguration: { trendResearchEnabled: true } } },
+            ],
+          },
         },
       })) > 0
     );
@@ -604,6 +626,10 @@ export class PrismaTrendResearchAutomationCandidateRepository implements TrendRe
           ownerUser: { status: 'ACTIVE' },
           workspace: { status: 'ACTIVE', memberships: { some: { status: 'ACTIVE' } } },
           capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
+          OR: [
+            { groupId: null },
+            { group: { serviceConfiguration: { trendResearchEnabled: true } } },
+          ],
         },
       },
       select: {
@@ -1550,7 +1576,6 @@ export class PrismaLineDeliveryRetryRepository implements LineDeliveryRetryRepos
           },
           select: { id: true },
         });
-        if (!admin) return null;
         const delivery = await tx.lineMessageDelivery.findFirst({
           where: {
             id: input.deliveryId,
@@ -1566,6 +1591,22 @@ export class PrismaLineDeliveryRetryRepository implements LineDeliveryRetryRepos
           },
         });
         if (!delivery) return null;
+        if (input.groupId !== undefined && delivery.groupId !== input.groupId) return null;
+        if (!admin) {
+          if (delivery.groupId === null) return null;
+          const manager = await tx.groupMembership.findFirst({
+            where: {
+              workspaceId: delivery.workspaceId,
+              groupId: delivery.groupId,
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { status: 'ACTIVE', serviceConfiguration: { isNot: null } },
+            },
+            select: { id: true },
+          });
+          if (!manager) return null;
+        }
         const job = await tx.job.create({
           data: {
             environment: input.environment,
@@ -2276,6 +2317,58 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
   }
 }
 
+/**
+ * Keeps video-generation budget reservation separate from general AI text usage.
+ * The estimated amount is deliberately retained for every queued request so a failed
+ * provider response cannot silently make the available budget look larger than it is.
+ */
+export class PrismaVideoAiProviderCostPolicyRepository implements VideoAiProviderCostPolicyRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async findActive(input: Parameters<VideoAiProviderCostPolicyRepository['findActive']>[0]) {
+    const configuration = await this.client.aiProviderConfiguration.findFirst({
+      where: {
+        environment: input.environment,
+        provider: input.provider,
+        model: input.model,
+        status: 'ACTIVE',
+        globallyPaused: false,
+        encryptedApiKey: { not: null },
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    });
+    if (!configuration) return null;
+    const total = async (from: Date) => {
+      const value = await this.client.videoSceneGeneration.aggregate({
+        where: {
+          provider: input.provider,
+          model: input.model,
+          createdAt: { gte: from, lt: input.now },
+        },
+        _sum: { estimatedCostUsdMicros: true },
+      });
+      return value._sum.estimatedCostUsdMicros ?? 0;
+    };
+    const [dailySpentUsdMicros, monthlySpentUsdMicros] = await Promise.all([
+      total(input.dailyFrom),
+      total(input.monthlyFrom),
+    ]);
+    return {
+      policy: {
+        provider: input.provider,
+        model: input.model,
+        globallyPaused: configuration.globallyPaused,
+        dailyBudgetUsdMicros: configuration.dailyBudgetUsdMicros,
+        monthlyBudgetUsdMicros: configuration.monthlyBudgetUsdMicros,
+        maxSceneCostUsdMicros: configuration.requestCostUsdMicros,
+      },
+      dailySpentUsdMicros,
+      monthlySpentUsdMicros,
+    };
+  }
+}
+
 export class PrismaAdminEmailConfigurationRepository implements AdminEmailConfigurationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
   private admin(userId: string) {
@@ -2802,7 +2895,13 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
           userId: actorUserId,
           workspaceId,
           groupId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
         },
@@ -2843,6 +2942,12 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
     const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
     if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { dedicatedLineEnabled: true, suspended: true },
+      });
+      if (entitlement && (!entitlement.dedicatedLineEnabled || entitlement.suspended))
+        throw new ApplicationError('FORBIDDEN', 'dedicated LINE is not included in the contract');
       const policy = await tx.groupLineRoutingPolicy.findUnique({
         where: {
           workspaceId_groupId_environment: {
@@ -2969,6 +3074,11 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
     const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
     if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { dedicatedLineEnabled: true, suspended: true },
+      });
+      if (entitlement && (!entitlement.dedicatedLineEnabled || entitlement.suspended)) return null;
       const target = await tx.groupLineChannelConfiguration.findFirst({
         where: {
           id: input.configurationId,
@@ -3014,6 +3124,16 @@ export class PrismaGroupLineConfigurationRepository implements GroupLineConfigur
     const access = await this.access(input.actorUserId, input.workspaceId, input.groupId);
     if (access.admin?.role !== 'SUPER_ADMIN' && !access.manager) return null;
     return this.client.$transaction(async (tx) => {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { dedicatedLineEnabled: true, suspended: true },
+      });
+      if (
+        input.mode === 'DEDICATED' &&
+        entitlement &&
+        (!entitlement.dedicatedLineEnabled || entitlement.suspended)
+      )
+        return null;
       const group = await tx.group.findFirst({
         where: { id: input.groupId, workspaceId: input.workspaceId, status: 'ACTIVE' },
         select: { id: true },
@@ -4195,6 +4315,35 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
             },
           });
         }
+        if (eligibleCampaign) {
+          const approvalPolicy = await tx.campaignPostingApprovalPolicy.findUnique({
+            where: { groupId: eligibleCampaign.groupId },
+            select: { required: true },
+          });
+          if (approvalPolicy?.required) {
+            const approvalRequest = await tx.campaignPostingApprovalRequest.create({
+              data: {
+                workspaceId: input.workspaceId,
+                groupId: eligibleCampaign.groupId,
+                campaignId: eligibleCampaign.id,
+                bunshinId: input.bunshinId,
+                dailyMissionId: created.id,
+                contentSnapshot: input.content as Prisma.InputJsonValue,
+                requestedByUserId: input.actorUserId,
+              },
+            });
+            await tx.campaignPostingApprovalAudit.create({
+              data: {
+                workspaceId: input.workspaceId,
+                groupId: eligibleCampaign.groupId,
+                requestId: approvalRequest.id,
+                action: 'REQUESTED',
+                afterData: { status: approvalRequest.status },
+                performedByUserId: input.actorUserId,
+              },
+            });
+          }
+        }
         if (trendCandidate) {
           const evidence = trendCandidate.evidenceLinks
             .map(({ evidence }) => evidence)
@@ -4283,6 +4432,22 @@ export class PrismaDailyMissionRepository implements DailyMissionRepository {
     if (!(await this.authorized(this.client, input, false))) return null;
     const mission = await this.row(this.client, input);
     if (!mission) return null;
+    const approval = await this.client.campaignPostingApprovalRequest.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        dailyMissionId: input.dailyMissionId,
+      },
+      select: { status: true, reviewNote: true },
+    });
+    if (approval?.status === 'PENDING')
+      return { allowed: false, reason: 'APPROVAL_PENDING' as const };
+    if (approval?.status === 'CHANGES_REQUESTED')
+      return {
+        allowed: false,
+        reason: 'APPROVAL_CHANGES_REQUESTED' as const,
+        reviewNote: approval.reviewNote,
+      };
     const usage = mission.contentLinkUsage;
     if (!usage) return { allowed: true, reason: 'READY' } as const;
     if (!mission.content) return { allowed: false, reason: 'LINK_UNAVAILABLE' } as const;
@@ -7766,6 +7931,12 @@ export class PrismaTrendResearchRepository implements TrendResearchRepository {
         id: input.socialProfileId,
         workspaceId: input.workspaceId,
         bunshinId: input.bunshinId,
+        bunshin: {
+          OR: [
+            { groupId: null },
+            { group: { serviceConfiguration: { trendResearchEnabled: true } } },
+          ],
+        },
       },
       select: { id: true },
     });
@@ -8186,6 +8357,99 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
       },
       update: {},
     });
+  }
+}
+
+export class PrismaOrganizationAiGenerationReservationRepository implements OrganizationAiGenerationReservationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async reserve(input: Parameters<OrganizationAiGenerationReservationRepository['reserve']>[0]) {
+    const monthKey = `${input.now.getUTCFullYear()}-${String(input.now.getUTCMonth() + 1).padStart(2, '0')}`;
+    return this.client.$transaction(
+      async (tx) => {
+        const entitlement = await tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: {
+            monthlyAiGenerationLimit: true,
+            suspended: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        });
+        if (!entitlement || entitlement.monthlyAiGenerationLimit === null)
+          return { status: 'UNLIMITED' as const, reservationId: null };
+        if (
+          entitlement.suspended ||
+          (entitlement.startsAt && entitlement.startsAt > input.now) ||
+          (entitlement.endsAt && entitlement.endsAt <= input.now)
+        )
+          return { status: 'EXHAUSTED' as const, reservationId: null };
+
+        const existing = await tx.organizationAiGenerationReservation.findUnique({
+          where: {
+            workspaceId_operationKey: {
+              workspaceId: input.workspaceId,
+              operationKey: input.operationKey,
+            },
+          },
+        });
+        if (
+          existing?.status === 'CONSUMED' ||
+          (existing?.status === 'RESERVED' && existing.expiresAt > input.now)
+        )
+          return { status: 'ALREADY_RESERVED' as const, reservationId: existing.id };
+
+        const used = await tx.organizationAiGenerationReservation.count({
+          where: {
+            workspaceId: input.workspaceId,
+            monthKey,
+            OR: [{ status: 'CONSUMED' }, { status: 'RESERVED', expiresAt: { gt: input.now } }],
+          },
+        });
+        if (used >= entitlement.monthlyAiGenerationLimit)
+          return { status: 'EXHAUSTED' as const, reservationId: null };
+
+        const reserved = await tx.organizationAiGenerationReservation.upsert({
+          where: {
+            workspaceId_operationKey: {
+              workspaceId: input.workspaceId,
+              operationKey: input.operationKey,
+            },
+          },
+          create: {
+            workspaceId: input.workspaceId,
+            monthKey,
+            operationKey: input.operationKey,
+            expiresAt: input.expiresAt,
+          },
+          update: {
+            monthKey,
+            status: 'RESERVED',
+            expiresAt: input.expiresAt,
+            consumedAt: null,
+            releasedAt: null,
+          },
+          select: { id: true },
+        });
+        return { status: 'RESERVED' as const, reservationId: reserved.id };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  }
+
+  async finish(input: Parameters<OrganizationAiGenerationReservationRepository['finish']>[0]) {
+    const changed = await this.client.organizationAiGenerationReservation.updateMany({
+      where: {
+        workspaceId: input.workspaceId,
+        operationKey: input.operationKey,
+        status: 'RESERVED',
+      },
+      data:
+        input.outcome === 'CONSUMED'
+          ? { status: 'CONSUMED', consumedAt: input.now }
+          : { status: 'RELEASED', releasedAt: input.now },
+    });
+    return changed.count === 1;
   }
 }
 
@@ -9345,6 +9609,7 @@ const serviceFoundationRecord = (
     contactEmail: row.contactEmail,
     visibility: row.visibility,
     poweredByEnabled: row.poweredByEnabled,
+    trendResearchEnabled: row.trendResearchEnabled,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
     termsUrl: row.termsUrl,
@@ -9819,7 +10084,36 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
         }),
       ]);
       if (admin === null || workspace === null) return null;
+      const now = new Date();
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: {
+          maxGroups: true,
+          maxServices: true,
+          oemEnabled: true,
+          suspended: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      });
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= now)
+      )
+        return null;
+      const [groupCount, serviceCount] = await Promise.all([
+        entitlement?.maxGroups
+          ? tx.group.count({ where: { workspaceId: input.workspaceId, status: 'ACTIVE' } })
+          : Promise.resolve(0),
+        entitlement?.maxServices
+          ? tx.serviceConfiguration.count({ where: { workspaceId: input.workspaceId } })
+          : Promise.resolve(0),
+      ]);
+      if (entitlement?.maxGroups && groupCount >= entitlement.maxGroups) return null;
+      if (entitlement?.maxServices && serviceCount >= entitlement.maxServices) return null;
       const value = input.configuration;
+      if (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled) return null;
       const group = await tx.group.create({
         data: {
           workspaceId: input.workspaceId,
@@ -9847,6 +10141,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           contactEmail: value.contactEmail,
           visibility: value.visibility,
           poweredByEnabled: value.poweredByEnabled,
+          trendResearchEnabled: value.trendResearchEnabled ?? true,
           startsAt: value.startsAt,
           endsAt: value.endsAt,
           termsUrl: value.termsUrl,
@@ -9897,7 +10192,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
 
   async save(input: Parameters<ServiceFoundationRepository['save']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const [admin, group, manager, existing] = await Promise.all([
+      const [admin, group, manager, existing, entitlement] = await Promise.all([
         tx.platformAdmin.findFirst({
           where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
           select: { id: true },
@@ -9921,9 +10216,21 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           where: { groupId: input.groupId },
           include: { brand: true, registration: true },
         }),
+        tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: { oemEnabled: true, suspended: true, startsAt: true, endsAt: true },
+        }),
       ]);
       if ((admin === null && manager === null) || group === null) return null;
       const value = input.configuration;
+      const now = new Date();
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= now) ||
+        (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled)
+      )
+        return null;
       if (
         admin === null &&
         (existing === null ||
@@ -9946,6 +10253,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           contactEmail: value.contactEmail,
           visibility: value.visibility,
           poweredByEnabled: value.poweredByEnabled,
+          trendResearchEnabled: value.trendResearchEnabled ?? true,
           startsAt: value.startsAt,
           endsAt: value.endsAt,
           termsUrl: value.termsUrl,
@@ -9961,6 +10269,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           contactEmail: value.contactEmail,
           visibility: value.visibility,
           poweredByEnabled: value.poweredByEnabled,
+          trendResearchEnabled: value.trendResearchEnabled ?? true,
           startsAt: value.startsAt,
           endsAt: value.endsAt,
           termsUrl: value.termsUrl,
@@ -10202,6 +10511,73 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
         },
         update: { status, consentedAt: input.now, declinedAt: null, revokedAt: null },
       });
+      if (configuration.registration.referralEnabled && input.referralCode !== null) {
+        const referralCode = await tx.serviceReferralCode.findFirst({
+          where: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            code: input.referralCode,
+            status: 'ACTIVE',
+            groupMembership: { status: 'ACTIVE' },
+          },
+          select: { id: true, groupMembershipId: true, userId: true },
+        });
+        if (
+          referralCode !== null &&
+          referralCode.groupMembershipId !== membership.id &&
+          referralCode.userId !== input.actorUserId
+        ) {
+          const existingReferral = await tx.serviceReferral.findFirst({
+            where: {
+              workspaceId: configuration.workspaceId,
+              groupId: configuration.groupId,
+              referredMembershipId: membership.id,
+            },
+            select: { id: true },
+          });
+          if (existingReferral === null) {
+            const click =
+              input.referralClickId === null
+                ? null
+                : await tx.serviceReferralClick.findFirst({
+                    where: {
+                      id: input.referralClickId,
+                      workspaceId: configuration.workspaceId,
+                      groupId: configuration.groupId,
+                      referralCodeId: referralCode.id,
+                      expiresAt: { gt: input.now },
+                    },
+                    select: { id: true },
+                  });
+            const referralClick =
+              click ??
+              (await tx.serviceReferralClick.create({
+                data: {
+                  workspaceId: configuration.workspaceId,
+                  groupId: configuration.groupId,
+                  referralCodeId: referralCode.id,
+                  expiresAt: new Date(input.now.getTime() + 30 * 24 * 60 * 60 * 1000),
+                },
+                select: { id: true },
+              }));
+            await tx.serviceReferral.createMany({
+              data: [
+                {
+                  workspaceId: configuration.workspaceId,
+                  groupId: configuration.groupId,
+                  referralCodeId: referralCode.id,
+                  referralClickId: referralClick.id,
+                  referredMembershipId: membership.id,
+                  referredUserId: input.actorUserId,
+                  status: 'REGISTERED',
+                  registeredAt: input.now,
+                },
+              ],
+              skipDuplicates: true,
+            });
+          }
+        }
+      }
       if (latest.length > 0)
         await tx.serviceLegalConsent.createMany({
           data: latest.map(({ id }) => ({
@@ -10297,6 +10673,561 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
   }
 }
 
+export class PrismaServiceReferralRewardRepository implements ServiceReferralRewardRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async completeMilestone(
+    input: Parameters<ServiceReferralRewardRepository['completeMilestone']>[0],
+  ): Promise<ServiceReferralRewardGrant[]> {
+    return this.client.$transaction(async (tx) => {
+      const referredMembership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.referredUserId,
+          status: 'ACTIVE',
+          group: { status: 'ACTIVE' },
+        },
+        select: { id: true, userId: true },
+      });
+      if (referredMembership === null) return [];
+      const referral = await tx.serviceReferral.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          referredMembershipId: referredMembership.id,
+          status: { not: 'REJECTED' },
+        },
+        include: { referralCode: { select: { groupMembershipId: true, userId: true } } },
+      });
+      if (referral === null) return [];
+
+      await tx.serviceReferral.update({
+        where: { id: referral.id },
+        data:
+          input.milestone === 'ONBOARDING_COMPLETED'
+            ? {
+                status:
+                  referral.firstPostReportedAt === null
+                    ? 'ONBOARDING_COMPLETED'
+                    : 'FIRST_POST_REPORTED',
+                onboardingCompletedAt: referral.onboardingCompletedAt ?? input.now,
+              }
+            : {
+                status: 'FIRST_POST_REPORTED',
+                firstPostReportedAt: referral.firstPostReportedAt ?? input.now,
+              },
+      });
+
+      const rules = await tx.serviceReferralRewardRule.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: 'ACTIVE',
+          milestone: input.milestone,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      const grants: ServiceReferralRewardGrant[] = [];
+      const monthStart = new Date(Date.UTC(input.now.getUTCFullYear(), input.now.getUTCMonth(), 1));
+
+      for (const rule of rules) {
+        const beneficiary =
+          rule.recipient === 'REFERRED'
+            ? referredMembership
+            : await tx.groupMembership.findFirst({
+                where: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  id: referral.referralCode.groupMembershipId,
+                  userId: referral.referralCode.userId,
+                  status: 'ACTIVE',
+                },
+                select: { id: true, userId: true },
+              });
+        if (beneficiary === null) continue;
+        if (rule.monthlyGrantLimit !== null) {
+          const alreadyGranted = await tx.serviceReferralReward.count({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              ruleId: rule.id,
+              beneficiaryMembershipId: beneficiary.id,
+              status: 'GRANTED',
+              grantedAt: { gte: monthStart },
+            },
+          });
+          if (alreadyGranted >= rule.monthlyGrantLimit) continue;
+        }
+
+        const account = await tx.serviceCreditAccount.upsert({
+          where: {
+            workspaceId_groupId_groupMembershipId: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: beneficiary.id,
+            },
+          },
+          create: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: beneficiary.id,
+            userId: beneficiary.userId,
+          },
+          update: {},
+          select: { id: true },
+        });
+        const reward = await tx.serviceReferralReward.createMany({
+          data: [
+            {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              referralId: referral.id,
+              ruleId: rule.id,
+              beneficiaryAccountId: account.id,
+              beneficiaryUserId: beneficiary.userId,
+              beneficiaryMembershipId: beneficiary.id,
+              status: 'GRANTED',
+              creditAmount: rule.creditAmount,
+              grantedAt: input.now,
+            },
+          ],
+          skipDuplicates: true,
+        });
+        if (reward.count === 0) continue;
+        const updatedAccount = await tx.serviceCreditAccount.update({
+          where: { id: account.id },
+          data: { availableCredits: { increment: rule.creditAmount }, revision: { increment: 1 } },
+          select: { availableCredits: true },
+        });
+        await tx.serviceCreditLedger.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            accountId: account.id,
+            userId: beneficiary.userId,
+            type: 'GRANT',
+            amount: rule.creditAmount,
+            balanceAfter: updatedAccount.availableCredits,
+            sourceType: 'REFERRAL',
+            sourceId: referral.id,
+            idempotencyKey: `referral:${referral.id}:rule:${rule.id}:membership:${beneficiary.id}`,
+            expiresAt:
+              rule.expiresAfterDays === null
+                ? null
+                : new Date(input.now.getTime() + rule.expiresAfterDays * 24 * 60 * 60 * 1000),
+          },
+        });
+        grants.push({
+          ruleId: rule.id,
+          beneficiaryMembershipId: beneficiary.id,
+          creditAmount: rule.creditAmount,
+        });
+      }
+      return grants;
+    });
+  }
+}
+
+/**
+ * The account is optional so legacy services can keep their point or badge
+ * entitlement flow. Once a member has a service credit account, a social
+ * image request consumes exactly one credit under a request-specific key.
+ */
+export class PrismaServiceCreditConsumptionRepository implements ServiceCreditConsumptionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async consumeForSocialImage(
+    input: Parameters<ServiceCreditConsumptionRepository['consumeForSocialImage']>[0],
+  ): Promise<ServiceCreditConsumptionResult> {
+    return this.client.$transaction(async (tx) => {
+      const account = await tx.serviceCreditAccount.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          userId: input.userId,
+        },
+        select: { id: true, availableCredits: true },
+      });
+      if (account === null) return { status: 'NOT_CONFIGURED' };
+
+      const existing = await tx.serviceCreditLedger.findUnique({
+        where: {
+          accountId_idempotencyKey: { accountId: account.id, idempotencyKey: input.idempotencyKey },
+        },
+        select: { type: true, balanceAfter: true },
+      });
+      if (existing?.type === 'CONSUME')
+        return { status: 'CONSUMED', availableCredits: existing.balanceAfter };
+      if (existing !== null) throw new Error('service credit idempotency key conflict');
+
+      const consumed = await tx.serviceCreditAccount.updateMany({
+        where: {
+          id: account.id,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          userId: input.userId,
+          availableCredits: { gte: 1 },
+        },
+        data: { availableCredits: { decrement: 1 }, revision: { increment: 1 } },
+      });
+      if (consumed.count === 0) return { status: 'INSUFFICIENT' };
+      const updated = await tx.serviceCreditAccount.findUniqueOrThrow({
+        where: { id: account.id },
+        select: { availableCredits: true },
+      });
+      await tx.serviceCreditLedger.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          accountId: account.id,
+          userId: input.userId,
+          type: 'CONSUME',
+          amount: -1,
+          balanceAfter: updated.availableCredits,
+          sourceType: 'SYSTEM',
+          sourceId: input.imageRequestId,
+          idempotencyKey: input.idempotencyKey,
+          expiresAt: null,
+          createdAt: input.now,
+        },
+      });
+      return { status: 'CONSUMED', availableCredits: updated.availableCredits };
+    });
+  }
+
+  async refundSocialImage(
+    input: Parameters<ServiceCreditConsumptionRepository['refundSocialImage']>[0],
+  ): Promise<void> {
+    await this.client.$transaction(async (tx) => {
+      const account = await tx.serviceCreditAccount.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          userId: input.userId,
+        },
+        select: { id: true },
+      });
+      if (account === null) return;
+      const alreadyRefunded = await tx.serviceCreditLedger.findUnique({
+        where: {
+          accountId_idempotencyKey: { accountId: account.id, idempotencyKey: input.idempotencyKey },
+        },
+        select: { id: true },
+      });
+      if (alreadyRefunded !== null) return;
+      const sourceConsumption = await tx.serviceCreditLedger.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          accountId: account.id,
+          userId: input.userId,
+          type: 'CONSUME',
+          sourceId: input.imageRequestId,
+        },
+        select: { id: true },
+      });
+      if (sourceConsumption === null) return;
+      const updated = await tx.serviceCreditAccount.update({
+        where: { id: account.id },
+        data: { availableCredits: { increment: 1 }, revision: { increment: 1 } },
+        select: { availableCredits: true },
+      });
+      await tx.serviceCreditLedger.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          accountId: account.id,
+          userId: input.userId,
+          type: 'REFUND',
+          amount: 1,
+          balanceAfter: updated.availableCredits,
+          sourceType: 'SYSTEM',
+          sourceId: input.imageRequestId,
+          idempotencyKey: input.idempotencyKey,
+          expiresAt: null,
+          createdAt: input.now,
+        },
+      });
+    });
+  }
+}
+
+/** Expiry is derived from append-only entries so a spent grant is never expired twice. */
+export class PrismaServiceCreditExpirationRepository implements ServiceCreditExpirationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async expire(input: Parameters<ServiceCreditExpirationRepository['expire']>[0]) {
+    const accounts = await this.client.serviceCreditAccount.findMany({
+      where: {
+        ledgerEntries: { some: { type: 'GRANT', expiresAt: { lte: input.now } } },
+      },
+      select: { id: true, workspaceId: true, groupId: true, groupMembershipId: true, userId: true },
+      take: input.limit,
+    });
+    let expired = 0;
+    for (const account of accounts) {
+      expired += await this.client.$transaction(
+        async (tx) => {
+          const entries = await tx.serviceCreditLedger.findMany({
+            where: {
+              accountId: account.id,
+              workspaceId: account.workspaceId,
+              groupId: account.groupId,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: { id: true, type: true, amount: true, expiresAt: true, sourceId: true },
+          });
+          const lots = new Map<string, { remaining: number; expiresAt: Date | null }>();
+          const consume = (amount: number) => {
+            let remaining = amount;
+            const candidates = [...lots.entries()]
+              .filter(([, lot]) => lot.remaining > 0)
+              .sort(([, left], [, right]) => {
+                if (left.expiresAt === null) return right.expiresAt === null ? 0 : 1;
+                if (right.expiresAt === null) return -1;
+                return left.expiresAt.getTime() - right.expiresAt.getTime();
+              });
+            for (const [, lot] of candidates) {
+              const used = Math.min(lot.remaining, remaining);
+              lot.remaining -= used;
+              remaining -= used;
+              if (remaining === 0) break;
+            }
+          };
+          for (const entry of entries) {
+            if (entry.type === 'GRANT')
+              lots.set(entry.id, { remaining: entry.amount, expiresAt: entry.expiresAt });
+            else if (entry.type === 'CONSUME' || (entry.type === 'ADJUST' && entry.amount < 0))
+              consume(-entry.amount);
+            else if (entry.type === 'REFUND' || (entry.type === 'ADJUST' && entry.amount > 0))
+              lots.set(entry.id, { remaining: entry.amount, expiresAt: null });
+            else if (entry.type === 'EXPIRE' && entry.sourceId?.startsWith('grant:')) {
+              const grant = lots.get(entry.sourceId.slice('grant:'.length));
+              if (grant) grant.remaining = Math.max(0, grant.remaining + entry.amount);
+            }
+          }
+          const expiredLots = [...lots.entries()].filter(
+            ([, lot]) => lot.remaining > 0 && lot.expiresAt !== null && lot.expiresAt <= input.now,
+          );
+          const amount = expiredLots.reduce((sum, [, lot]) => sum + lot.remaining, 0);
+          if (amount === 0) return 0;
+          const updated = await tx.serviceCreditAccount.update({
+            where: { id: account.id },
+            data: { availableCredits: { decrement: amount }, revision: { increment: 1 } },
+            select: { availableCredits: true },
+          });
+          for (const [grantId, lot] of expiredLots) {
+            await tx.serviceCreditLedger.create({
+              data: {
+                workspaceId: account.workspaceId,
+                groupId: account.groupId,
+                accountId: account.id,
+                userId: account.userId,
+                type: 'EXPIRE',
+                amount: -lot.remaining,
+                balanceAfter: updated.availableCredits,
+                sourceType: 'SYSTEM',
+                sourceId: `grant:${grantId}`,
+                idempotencyKey: `expire:grant:${grantId}`,
+                expiresAt: null,
+                createdAt: input.now,
+              },
+            });
+          }
+          return amount;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    }
+    return expired;
+  }
+}
+
+export class PrismaServiceCreditAdjustmentRepository implements ServiceCreditAdjustmentRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  async adjust(input: Parameters<ServiceCreditAdjustmentRepository['adjust']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const actor = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        },
+        select: { id: true },
+      });
+      const member = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          id: input.membershipId,
+          status: 'ACTIVE',
+          serviceRole: 'PARTICIPANT',
+        },
+        select: { id: true, userId: true },
+      });
+      if (!actor || !member) return null;
+      let account = await tx.serviceCreditAccount.findUnique({
+        where: {
+          workspaceId_groupId_groupMembershipId: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: member.id,
+          },
+        },
+        select: { id: true, availableCredits: true },
+      });
+      if (!account && input.amount < 0) return null;
+      if (!account) {
+        account = await tx.serviceCreditAccount.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: member.id,
+            userId: member.userId,
+          },
+          select: { id: true, availableCredits: true },
+        });
+      }
+      if (account.availableCredits + input.amount < 0) return null;
+      const existing = await tx.serviceCreditLedger.findUnique({
+        where: {
+          accountId_idempotencyKey: { accountId: account.id, idempotencyKey: input.idempotencyKey },
+        },
+        select: { balanceAfter: true },
+      });
+      if (existing) return { availableCredits: existing.balanceAfter };
+      const updated = await tx.serviceCreditAccount.update({
+        where: { id: account.id },
+        data: { availableCredits: { increment: input.amount }, revision: { increment: 1 } },
+        select: { availableCredits: true },
+      });
+      await tx.serviceCreditLedger.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          accountId: account.id,
+          userId: member.userId,
+          type: 'ADJUST',
+          amount: input.amount,
+          balanceAfter: updated.availableCredits,
+          sourceType: 'ADMIN',
+          sourceId: input.actorUserId,
+          idempotencyKey: input.idempotencyKey,
+          expiresAt: null,
+          createdAt: input.now,
+        },
+      });
+      const configuration = await tx.serviceConfiguration.findFirst({
+        where: { workspaceId: input.workspaceId, groupId: input.groupId },
+        select: { id: true },
+      });
+      if (configuration)
+        await tx.serviceConfigurationAudit.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            configurationId: configuration.id,
+            action: 'SERVICE_CREDIT_ADJUSTED',
+            beforeData: { availableCredits: account.availableCredits },
+            afterData: {
+              membershipId: member.id,
+              amount: input.amount,
+              availableCredits: updated.availableCredits,
+            },
+            reason: input.reason,
+            performedByUserId: input.actorUserId,
+            occurredAt: input.now,
+          },
+        });
+      return updated;
+    });
+  }
+}
+
+export class PrismaServiceReferralRewardRuleRepository implements ServiceReferralRewardRuleRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async listCurrent(input: { workspaceId: string; groupId: string }) {
+    const rows = await this.client.serviceReferralRewardRule.findMany({
+      where: { workspaceId: input.workspaceId, groupId: input.groupId },
+      orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
+    });
+    const current = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (!current.has(row.ruleKey)) current.set(row.ruleKey, row);
+    }
+    return [...current.values()].map((row) => ({
+      id: row.id,
+      ruleKey: row.ruleKey,
+      version: row.version,
+      status: row.status as ServiceReferralRewardRuleRecord['status'],
+      milestone: row.milestone,
+      recipient: row.recipient,
+      creditAmount: row.creditAmount,
+      expiresAfterDays: row.expiresAfterDays,
+      monthlyGrantLimit: row.monthlyGrantLimit,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async saveVersion(
+    input: Parameters<ServiceReferralRewardRuleRepository['saveVersion']>[0],
+  ): Promise<ServiceReferralRewardRuleRecord> {
+    return this.client.$transaction(async (tx) => {
+      const latest = await tx.serviceReferralRewardRule.aggregate({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ruleKey: input.rule.ruleKey,
+        },
+        _max: { version: true },
+      });
+      await tx.serviceReferralRewardRule.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ruleKey: input.rule.ruleKey,
+          status: { in: ['DRAFT', 'ACTIVE', 'SUSPENDED'] },
+        },
+        data: { status: 'SUPERSEDED', supersededAt: input.now },
+      });
+      const created = await tx.serviceReferralRewardRule.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ruleKey: input.rule.ruleKey,
+          version: (latest._max.version ?? 0) + 1,
+          status: input.status,
+          milestone: input.rule.milestone,
+          recipient: input.rule.recipient,
+          creditAmount: input.rule.creditAmount,
+          expiresAfterDays: input.rule.expiresAfterDays ?? null,
+          monthlyGrantLimit: input.rule.monthlyGrantLimit ?? null,
+          createdByUserId: input.actorUserId,
+        },
+      });
+      return {
+        id: created.id,
+        ruleKey: created.ruleKey,
+        version: created.version,
+        status: created.status as ServiceReferralRewardRuleRecord['status'],
+        milestone: created.milestone,
+        recipient: created.recipient,
+        creditAmount: created.creditAmount,
+        expiresAfterDays: created.expiresAfterDays,
+        monthlyGrantLimit: created.monthlyGrantLimit,
+        createdAt: created.createdAt,
+      };
+    });
+  }
+}
+
 export class PrismaGroupParticipationRepository implements GroupParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -10332,7 +11263,13 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
           workspaceId,
           groupId,
           userId: actorUserId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           group: { workspaceId, status: 'ACTIVE' },
           workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
@@ -10344,24 +11281,44 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
 
   async createGroup(input: Parameters<GroupParticipationRepository['createGroup']>[0]) {
     if ((await this.canManageWorkspace(input.workspaceId, input.actorUserId)) === null) return null;
-    const created = await this.client.$transaction(async (tx) => {
-      const group = await tx.group.create({
-        data: { workspaceId: input.workspaceId, name: input.name },
-      });
-      await tx.groupMembership.create({
-        data: {
-          workspaceId: input.workspaceId,
-          groupId: group.id,
-          userId: input.actorUserId,
-          role: 'MANAGER',
-          serviceRole: 'SERVICE_OWNER',
-          status: 'ACTIVE',
-          consentedAt: new Date(),
-        },
-      });
-      return group;
-    });
-    return groupRecord(created);
+    const created = await this.client.$transaction(
+      async (tx) => {
+        const now = new Date();
+        const entitlement = await tx.organizationEntitlement.findUnique({
+          where: { workspaceId: input.workspaceId },
+          select: { maxGroups: true, suspended: true, startsAt: true, endsAt: true },
+        });
+        if (
+          entitlement?.suspended ||
+          (entitlement?.startsAt && entitlement.startsAt > now) ||
+          (entitlement?.endsAt && entitlement.endsAt <= now)
+        )
+          return null;
+        if (entitlement?.maxGroups !== null && entitlement?.maxGroups !== undefined) {
+          const count = await tx.group.count({
+            where: { workspaceId: input.workspaceId, status: 'ACTIVE' },
+          });
+          if (count >= entitlement.maxGroups) return null;
+        }
+        const group = await tx.group.create({
+          data: { workspaceId: input.workspaceId, name: input.name },
+        });
+        await tx.groupMembership.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            serviceRole: 'SERVICE_OWNER',
+            status: 'ACTIVE',
+            consentedAt: new Date(),
+          },
+        });
+        return group;
+      },
+      { isolationLevel: 'Serializable' },
+    );
+    return created ? groupRecord(created) : null;
   }
 
   async createInvitation(input: Parameters<GroupParticipationRepository['createInvitation']>[0]) {
@@ -10398,6 +11355,32 @@ export class PrismaGroupParticipationRepository implements GroupParticipationRep
         },
       });
       if (invitation === null || invitation.usedCount >= invitation.maxUses) return null;
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: input.workspaceId },
+        select: { maxMembers: true, suspended: true, startsAt: true, endsAt: true },
+      });
+      if (
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > input.now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= input.now)
+      )
+        return null;
+      const existingActiveGroupMembership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      });
+      if (entitlement?.maxMembers && existingActiveGroupMembership === null) {
+        const activeMembers = await tx.groupMembership.findMany({
+          where: { workspaceId: input.workspaceId, status: 'ACTIVE' },
+          distinct: ['userId'],
+          select: { userId: true },
+        });
+        if (activeMembers.length >= entitlement.maxMembers) return null;
+      }
       const existingWorkspaceMembership = await tx.workspaceMembership.findUnique({
         where: {
           workspaceId_userId: {
@@ -10723,7 +11706,13 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
-          role: 'MANAGER',
+          OR: [
+            { role: 'MANAGER' },
+            {
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+              group: { serviceConfiguration: { isNot: null } },
+            },
+          ],
           status: 'ACTIVE',
           group: { status: 'ACTIVE' },
           workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
@@ -13300,6 +14289,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
       }
       let characterProfileSnapshot: Prisma.InputJsonValue = {};
       let characterReferenceSnapshot: Prisma.InputJsonValue = [];
+      if (!input.standardComposition && !input.characterProfileVersionId) return null;
       if (input.characterProfileVersionId) {
         const characterVersion = await tx.aiCharacterProfileVersion.findFirst({
           where: {
@@ -13376,6 +14366,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           platform: input.platform,
           type: input.type,
           durationSeconds: input.durationSeconds,
+          standardComposition: input.standardComposition,
           aiProcessingTypes: input.aiProcessingTypes,
           disclosureSnapshot: input.disclosureSnapshot as Prisma.InputJsonValue,
         },
@@ -13541,7 +14532,515 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
   }
 }
 
+const assetRetentionExpiry = (from = new Date()) =>
+  new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
+
 const videoRenderRecord = (row: Prisma.VideoRenderGetPayload<object>): VideoRenderRecord => row;
+
+const videoDeliveryRecord = (row: Prisma.VideoDeliveryGetPayload<object>): VideoDeliveryRecord => ({
+  ...row,
+  rightsSnapshot: row.rightsSnapshot as Record<string, unknown>,
+});
+
+export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async serviceManager(workspaceId: string, groupId: string, actorUserId: string) {
+    return (
+      (await this.client.groupMembership.findFirst({
+        where: {
+          workspaceId,
+          groupId,
+          userId: actorUserId,
+          status: 'ACTIVE',
+          serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+          group: { status: 'ACTIVE', serviceConfiguration: { isNot: null } },
+        },
+        select: { id: true },
+      })) !== null
+    );
+  }
+
+  async assign(input: Parameters<VideoDeliveryRepository['assign']>[0]) {
+    if (!(await this.serviceManager(input.workspaceId, input.groupId, input.actorUserId)))
+      return null;
+    return this.client.$transaction(async (tx) => {
+      const render = await tx.videoRender.findFirst({
+        where: {
+          id: input.videoRenderId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          videoProjectId: input.videoProjectId,
+          status: 'SUCCEEDED',
+          outputStorageKey: { not: null },
+        },
+      });
+      if (render === null) return null;
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          id: input.groupMembershipId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: 'ACTIVE',
+          userId: render.ownerUserId,
+        },
+      });
+      if (membership === null) return null;
+      const project = await tx.videoProject.findFirst({
+        where: {
+          id: input.videoProjectId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          ownerUserId: membership.userId,
+        },
+      });
+      if (project === null) return null;
+      if (input.programEnrollmentId !== null) {
+        const enrollment = await tx.programEnrollment.findFirst({
+          where: {
+            id: input.programEnrollmentId,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: input.groupMembershipId,
+            status: { in: ['INVITED', 'ACTIVE'] },
+          },
+          select: { id: true },
+        });
+        if (enrollment === null) return null;
+      }
+      const existing = await tx.videoDelivery.findUnique({
+        where: { videoRenderId: input.videoRenderId },
+        select: { id: true },
+      });
+      if (existing !== null) return null;
+      if (input.replacesVideoDeliveryId !== null) {
+        const replaced = await tx.videoDelivery.findFirst({
+          where: {
+            id: input.replacesVideoDeliveryId,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: input.groupMembershipId,
+            ownerUserId: membership.userId,
+            status: 'REVOKED',
+            replacesVideoDeliveryId: null,
+          },
+          select: { id: true, programEnrollmentId: true },
+        });
+        if (replaced === null || replaced.programEnrollmentId !== input.programEnrollmentId)
+          return null;
+      }
+      const row = await tx.videoDelivery.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          ownerUserId: membership.userId,
+          programEnrollmentId: input.programEnrollmentId,
+          videoProjectId: project.id,
+          videoRenderId: render.id,
+          replacesVideoDeliveryId: input.replacesVideoDeliveryId,
+          rightsSnapshot: input.rightsSnapshot as Prisma.InputJsonValue,
+          expiresAt: input.expiresAt,
+          assignedByUserId: input.actorUserId,
+        },
+      });
+      await tx.videoDeliveryEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          videoDeliveryId: row.id,
+          eventType: 'ASSIGNED',
+          eventData:
+            input.replacesVideoDeliveryId === null
+              ? {}
+              : { replacesVideoDeliveryId: input.replacesVideoDeliveryId },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return videoDeliveryRecord(row);
+    });
+  }
+
+  async findForRecipient(input: Parameters<VideoDeliveryRepository['findForRecipient']>[0]) {
+    const membership = await this.client.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    if (membership === null) return null;
+    const row = await this.client.videoDelivery.findFirst({
+      where: {
+        id: input.videoDeliveryId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membership.id,
+        ownerUserId: input.actorUserId,
+      },
+    });
+    return row === null ? null : videoDeliveryRecord(row);
+  }
+
+  async recordAction(input: Parameters<VideoDeliveryRepository['recordAction']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const now = new Date();
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      });
+      if (membership === null) return null;
+      const delivery = await tx.videoDelivery.findFirst({
+        where: {
+          id: input.videoDeliveryId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: membership.id,
+          ownerUserId: input.actorUserId,
+        },
+      });
+      if (
+        delivery === null ||
+        delivery.status === 'REVOKED' ||
+        (delivery.expiresAt !== null && delivery.expiresAt <= now)
+      )
+        return null;
+      const permitted =
+        input.action === 'VIEWED'
+          ? delivery.status !== 'DECLINED'
+          : input.action === 'ACCEPTED' || input.action === 'DECLINED'
+            ? ['ASSIGNED', 'VIEWED'].includes(delivery.status)
+            : ['ACCEPTED', 'POSTED'].includes(delivery.status);
+      if (!permitted) return null;
+      const data =
+        input.action === 'VIEWED'
+          ? { status: delivery.status === 'ASSIGNED' ? 'VIEWED' : delivery.status, viewedAt: now }
+          : input.action === 'ACCEPTED'
+            ? { status: 'ACCEPTED' as const, acceptedAt: now }
+            : input.action === 'DECLINED'
+              ? { status: 'DECLINED' as const, declinedAt: now }
+              : input.action === 'POSTED'
+                ? { status: 'POSTED' as const, postedAt: now }
+                : {};
+      const row = await tx.videoDelivery.update({ where: { id: delivery.id }, data });
+      await tx.videoDeliveryEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          videoDeliveryId: delivery.id,
+          eventType: input.action,
+          eventData: input.eventData as Prisma.InputJsonValue,
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return videoDeliveryRecord(row);
+    });
+  }
+
+  async recordNotification(input: Parameters<VideoDeliveryRepository['recordNotification']>[0]) {
+    if (!(await this.serviceManager(input.workspaceId, input.groupId, input.actorUserId)))
+      return null;
+    return this.client.$transaction(async (tx) => {
+      const delivery = await tx.videoDelivery.findFirst({
+        where: {
+          id: input.videoDeliveryId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+        },
+        select: { id: true, notificationStatus: true },
+      });
+      if (delivery === null || delivery.notificationStatus === 'SENT') return null;
+      const row = await tx.videoDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          notificationStatus: input.status,
+          notificationErrorCode: input.errorCode,
+          notificationAttemptCount: { increment: 1 },
+          notifiedAt: input.attemptedAt,
+        },
+      });
+      await tx.videoDeliveryEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          videoDeliveryId: delivery.id,
+          eventType: 'LINE_NOTIFICATION',
+          eventData: {
+            status: input.status,
+            errorCode: input.errorCode,
+          },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return videoDeliveryRecord(row);
+    });
+  }
+
+  async revoke(input: Parameters<VideoDeliveryRepository['revoke']>[0]) {
+    if (!(await this.serviceManager(input.workspaceId, input.groupId, input.actorUserId)))
+      return null;
+    return this.client.$transaction(async (tx) => {
+      const delivery = await tx.videoDelivery.findFirst({
+        where: {
+          id: input.videoDeliveryId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: { not: 'REVOKED' },
+        },
+      });
+      if (delivery === null) return null;
+      const now = new Date();
+      const row = await tx.videoDelivery.update({
+        where: { id: delivery.id },
+        data: { status: 'REVOKED', revokedAt: now },
+      });
+      await tx.videoDeliveryEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          videoDeliveryId: delivery.id,
+          eventType: 'REVOKED',
+          eventData: { reason: input.reason },
+          performedByUserId: input.actorUserId,
+        },
+      });
+      return videoDeliveryRecord(row);
+    });
+  }
+}
+
+const videoSceneGenerationRecord = (
+  row: Prisma.VideoSceneGenerationGetPayload<object>,
+): VideoSceneGenerationRecord => ({
+  ...row,
+  inputSnapshot: row.inputSnapshot as Record<string, unknown>,
+});
+
+export class PrismaVideoSceneGenerationRepository implements VideoSceneGenerationRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async enqueueAiScenes(input: Parameters<VideoSceneGenerationRepository['enqueueAiScenes']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const now = new Date();
+      const project = await tx.videoProject.findFirst({
+        where: {
+          id: input.videoProjectId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          revision: input.expectedRevision,
+          status: { in: ['APPROVED', 'QUEUED'] },
+          group: {
+            status: 'ACTIVE',
+            featurePolicies: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+          groupMembership: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+            featureAssignments: {
+              some: {
+                featureKey: 'VIDEO_GENERATION',
+                status: 'ENABLED',
+                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+              },
+            },
+          },
+        },
+        include: { scenes: { orderBy: { sceneNo: 'asc' } } },
+      });
+      if (!project) return null;
+      const scenes = project.scenes.filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' ||
+          (scene.aiProcessingTypes as unknown as string[]).includes('VIDEO_GENERATION'),
+      );
+      if (scenes.length === 0) return [];
+      const rows = await Promise.all(
+        scenes.map(async (scene) => {
+          const estimatedCostUsdMicros = Math.round(
+            (scene.durationMs / 1_000) * input.estimatedCostUsdMicrosPerSecond,
+          );
+          const characterSnapshot = project.characterProfileSnapshot as Record<string, unknown>;
+          const characterName = characterSnapshot.name;
+          const inputSnapshot: Prisma.InputJsonValue = {
+            schemaVersion: 1,
+            scene: {
+              sceneNo: scene.sceneNo,
+              durationMs: scene.durationMs,
+              narration: scene.narration,
+              caption: scene.caption,
+              visualPrompt: scene.visualPrompt,
+              keywords: scene.keywords as Prisma.InputJsonValue,
+            },
+            character: {
+              name: typeof characterName === 'string' ? characterName : null,
+              referenceImageCount: Array.isArray(project.characterReferenceSnapshot)
+                ? project.characterReferenceSnapshot.length
+                : 0,
+            },
+          };
+          const existing = await tx.videoSceneGeneration.findUnique({
+            where: {
+              videoProjectId_projectRevision_videoSceneId_sceneRevision_provider_model: {
+                videoProjectId: project.id,
+                projectRevision: project.revision,
+                videoSceneId: scene.id,
+                sceneRevision: scene.revision,
+                provider: input.provider,
+                model: input.model,
+              },
+            },
+          });
+          if (existing) return existing;
+          return tx.videoSceneGeneration.create({
+            data: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: project.groupMembershipId,
+              ownerUserId: input.actorUserId,
+              videoProjectId: project.id,
+              videoSceneId: scene.id,
+              projectRevision: project.revision,
+              sceneRevision: scene.revision,
+              provider: input.provider,
+              model: input.model,
+              inputSnapshot,
+              estimatedCostUsdMicros,
+            },
+          });
+        }),
+      );
+      return rows.map(videoSceneGenerationRecord);
+    });
+  }
+
+  async findForExecution(input: Parameters<VideoSceneGenerationRepository['findForExecution']>[0]) {
+    const row = await this.client.videoSceneGeneration.findFirst({
+      where: { id: input.generationId, workspaceId: input.workspaceId },
+      include: { project: { select: { characterReferenceSnapshot: true } } },
+    });
+    if (!row) return null;
+    const snapshot =
+      row.inputSnapshot !== null &&
+      typeof row.inputSnapshot === 'object' &&
+      !Array.isArray(row.inputSnapshot)
+        ? (row.inputSnapshot as Record<string, unknown>)
+        : {};
+    const scene =
+      snapshot.scene !== null &&
+      typeof snapshot.scene === 'object' &&
+      !Array.isArray(snapshot.scene)
+        ? (snapshot.scene as Record<string, unknown>)
+        : {};
+    const prompt = typeof scene.visualPrompt === 'string' ? scene.visualPrompt.trim() : '';
+    const durationMs = typeof scene.durationMs === 'number' ? scene.durationMs : 0;
+    if (!prompt || durationMs < 1 || durationMs > 10_000) return null;
+    const references = Array.isArray(row.project.characterReferenceSnapshot)
+      ? row.project.characterReferenceSnapshot
+          .map((value) =>
+            value !== null && typeof value === 'object' && !Array.isArray(value)
+              ? (value as Record<string, unknown>).storageKey
+              : null,
+          )
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : [];
+    return {
+      generation: videoSceneGenerationRecord(row),
+      prompt,
+      durationSeconds: durationMs <= 5_000 ? 5 : 10,
+      referenceStorageKeys: references.slice(0, 7),
+    } satisfies VideoSceneGenerationExecutionContext;
+  }
+
+  async markSubmitted(input: Parameters<VideoSceneGenerationRepository['markSubmitted']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: { id: input.generationId, workspaceId: input.workspaceId, status: 'QUEUED' },
+      data: {
+        status: 'SUBMITTED',
+        externalJobId: input.externalJobId,
+        startedAt: new Date(),
+        errorCode: null,
+      },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async markGenerating(input: Parameters<VideoSceneGenerationRepository['markGenerating']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        status: { in: ['SUBMITTED', 'GENERATING'] },
+      },
+      data: { status: 'GENERATING' },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async markSucceeded(input: Parameters<VideoSceneGenerationRepository['markSucceeded']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        status: { in: ['SUBMITTED', 'GENERATING'] },
+      },
+      data: {
+        status: 'SUCCEEDED',
+        outputStorageKey: input.outputStorageKey,
+        completedAt: new Date(),
+        expiresAt: assetRetentionExpiry(),
+        errorCode: null,
+      },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async markFailed(input: Parameters<VideoSceneGenerationRepository['markFailed']>[0]) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        status: { in: ['QUEUED', 'SUBMITTED', 'GENERATING'] },
+      },
+      data: { status: 'FAILED', errorCode: input.errorCode.slice(0, 80), completedAt: new Date() },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+}
 
 export class PrismaVideoRenderRepository implements VideoRenderRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -13582,9 +15081,32 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
             },
           },
         },
-        select: { id: true, status: true, groupMembershipId: true },
+        include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       if (!project) return null;
+      const aiScenes = project.scenes.filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' ||
+          (scene.aiProcessingTypes as unknown as string[]).includes('VIDEO_GENERATION'),
+      );
+      if (!project.standardComposition && aiScenes.length > 0) {
+        const completedScenes = await tx.videoSceneGeneration.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            ownerUserId: input.actorUserId,
+            videoProjectId: project.id,
+            projectRevision: project.revision,
+            status: 'SUCCEEDED',
+            outputStorageKey: { not: null },
+          },
+          select: { videoSceneId: true, sceneRevision: true },
+        });
+        const completed = new Set(
+          completedScenes.map((scene) => `${scene.videoSceneId}:${scene.sceneRevision}`),
+        );
+        if (aiScenes.some((scene) => !completed.has(`${scene.id}:${scene.revision}`))) return null;
+      }
       const existing = await tx.videoRender.findUnique({
         where: {
           videoProjectId_projectRevision: {
@@ -13620,9 +15142,45 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       where: { id: input.renderId, workspaceId: input.workspaceId },
       include: { project: { include: { scenes: { orderBy: { sceneNo: 'asc' } } } } },
     });
-    return row
-      ? { render: videoRenderRecord(row), project: videoProjectRecord(row.project) }
-      : null;
+    if (!row) return null;
+    const aiSceneIds = row.project.scenes
+      .filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' ||
+          (scene.aiProcessingTypes as unknown as string[]).includes('VIDEO_GENERATION'),
+      )
+      .map((scene) => ({ id: scene.id, revision: scene.revision }));
+    const outputs =
+      aiSceneIds.length === 0
+        ? []
+        : await this.client.videoSceneGeneration.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: row.groupId,
+              ownerUserId: row.ownerUserId,
+              videoProjectId: row.videoProjectId,
+              projectRevision: row.projectRevision,
+              status: 'SUCCEEDED',
+              outputStorageKey: { not: null },
+              OR: aiSceneIds.map((scene) => ({
+                videoSceneId: scene.id,
+                sceneRevision: scene.revision,
+              })),
+            },
+            select: { videoSceneId: true, outputStorageKey: true },
+          });
+    const aiSceneSources = outputs.flatMap((output) =>
+      output.outputStorageKey
+        ? [{ videoSceneId: output.videoSceneId, storageKey: output.outputStorageKey }]
+        : [],
+    );
+    if (!row.project.standardComposition && aiSceneSources.length !== aiSceneIds.length)
+      return null;
+    return {
+      render: videoRenderRecord(row),
+      project: videoProjectRecord(row.project),
+      aiSceneSources,
+    };
   }
 
   async markSubmitted(input: Parameters<VideoRenderRepository['markSubmitted']>[0]) {
@@ -13677,6 +15235,7 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
           status: 'SUCCEEDED',
           outputStorageKey: input.outputStorageKey,
           completedAt: new Date(),
+          expiresAt: assetRetentionExpiry(),
           errorCode: null,
         },
       });
@@ -13724,6 +15283,15 @@ const emptyVideoRenderCounts = () => ({
   CANCELLED: 0,
 });
 
+const emptyVideoSceneGenerationCounts = () => ({
+  QUEUED: 0,
+  SUBMITTED: 0,
+  GENERATING: 0,
+  SUCCEEDED: 0,
+  FAILED: 0,
+  CANCELLED: 0,
+});
+
 export class PrismaVideoRenderOperationsRepository implements VideoRenderOperationsRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -13734,7 +15302,10 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
     });
     if (!admin) return null;
     const jobs = await this.client.job.findMany({
-      where: { environment: input.environment, jobType: 'VIDEO_RENDER_PROCESS' },
+      where: {
+        environment: input.environment,
+        jobType: { in: ['VIDEO_RENDER_PROCESS', 'VIDEO_AI_SCENE_GENERATION_PROCESS'] },
+      },
       select: { payloadReference: true },
     });
     const renderIds = [
@@ -13746,6 +15317,16 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
           .filter((value): value is string => Boolean(value)),
       ),
     ];
+    const sceneGenerationIds = [
+      ...new Set(
+        jobs
+          .map(
+            ({ payloadReference }) =>
+              /^video-ai-scene:([0-9a-f-]{36})$/i.exec(payloadReference)?.[1],
+          )
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
     const rows = await this.client.videoRender.findMany({
       where: { id: { in: renderIds } },
       include: { project: { select: { title: true, group: { select: { name: true } } } } },
@@ -13753,12 +15334,30 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
       take: 100,
     });
     const counts = emptyVideoRenderCounts();
-    const groupedCounts = await this.client.videoRender.groupBy({
-      by: ['status'],
-      where: { id: { in: renderIds } },
-      _count: { _all: true },
-    });
+    const sceneCounts = emptyVideoSceneGenerationCounts();
+    const [groupedCounts, sceneGroupedCounts, sceneRows] = await Promise.all([
+      this.client.videoRender.groupBy({
+        by: ['status'],
+        where: { id: { in: renderIds } },
+        _count: { _all: true },
+      }),
+      this.client.videoSceneGeneration.groupBy({
+        by: ['status'],
+        where: { id: { in: sceneGenerationIds } },
+        _count: { _all: true },
+      }),
+      this.client.videoSceneGeneration.findMany({
+        where: { id: { in: sceneGenerationIds } },
+        include: {
+          scene: { select: { sceneNo: true } },
+          project: { select: { title: true, group: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+    ]);
     for (const row of groupedCounts) counts[row.status] = row._count._all;
+    for (const row of sceneGroupedCounts) sceneCounts[row.status] = row._count._all;
     return {
       counts,
       items: rows.map((row) => ({
@@ -13780,6 +15379,27 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
         usageCountedAt: row.usageCountedAt,
         notificationStatus: row.notificationStatus,
         notifiedAt: row.notifiedAt,
+      })),
+      sceneCounts,
+      sceneItems: sceneRows.map((row) => ({
+        id: row.id,
+        projectTitle: row.project.title,
+        groupName: row.project.group.name,
+        sceneNo: row.scene.sceneNo,
+        provider: row.provider,
+        model: row.model,
+        status: row.status,
+        errorCode: row.errorCode,
+        estimatedCostUsdMicros: row.estimatedCostUsdMicros,
+        actualCostUsdMicros: row.actualCostUsdMicros,
+        retryable:
+          row.status === 'FAILED' &&
+          VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES.includes(
+            row.errorCode as (typeof VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES)[number],
+          ),
+        createdAt: row.createdAt,
+        startedAt: row.startedAt,
+        completedAt: row.completedAt,
       })),
     };
   }
@@ -13884,6 +15504,122 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
         throw new ApplicationError('CONFLICT', 'this video render failure already has a retry job');
+      throw error;
+    }
+  }
+
+  async requestSceneRetry(
+    input: Parameters<VideoRenderOperationsRepository['requestSceneRetry']>[0],
+  ) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        const now = new Date();
+        const admin = await tx.platformAdmin.findFirst({
+          where: {
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+          },
+          select: { id: true },
+        });
+        if (!admin) return null;
+        const generation = await tx.videoSceneGeneration.findFirst({
+          where: {
+            id: input.generationId,
+            status: 'FAILED',
+            errorCode: { in: [...VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES] },
+            completedAt: { not: null },
+            project: {
+              status: 'FAILED',
+              group: {
+                status: 'ACTIVE',
+                featurePolicies: {
+                  some: {
+                    featureKey: 'VIDEO_GENERATION',
+                    status: 'ENABLED',
+                    OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+                  },
+                },
+              },
+              groupMembership: {
+                status: 'ACTIVE',
+                consentedAt: { not: null },
+                featureAssignments: {
+                  some: {
+                    featureKey: 'VIDEO_GENERATION',
+                    status: 'ENABLED',
+                    OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+                    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+                  },
+                },
+              },
+              ownerUser: { status: 'ACTIVE' },
+              workspace: { status: 'ACTIVE' },
+            },
+          },
+          include: { project: { select: { bunshinId: true } } },
+        });
+        if (!generation?.completedAt) return null;
+        const originalJob = await tx.job.findFirst({
+          where: {
+            environment: input.environment,
+            jobType: 'VIDEO_AI_SCENE_GENERATION_PROCESS',
+            payloadReference: `video-ai-scene:${generation.id}`,
+          },
+          select: { id: true },
+        });
+        if (!originalJob) return null;
+        const changed = await tx.videoSceneGeneration.updateMany({
+          where: { id: generation.id, status: 'FAILED', completedAt: generation.completedAt },
+          data: {
+            status: 'QUEUED',
+            externalJobId: null,
+            outputStorageKey: null,
+            errorCode: null,
+            startedAt: null,
+            completedAt: null,
+            actualCostUsdMicros: null,
+          },
+        });
+        if (changed.count !== 1) return null;
+        await tx.videoProject.update({
+          where: { id: generation.videoProjectId },
+          data: { status: 'QUEUED' },
+        });
+        const job = await tx.job.create({
+          data: {
+            environment: input.environment,
+            workspaceId: generation.workspaceId,
+            bunshinId: generation.project.bunshinId,
+            jobType: 'VIDEO_AI_SCENE_GENERATION_PROCESS',
+            payloadReference: `video-ai-scene:${generation.id}`,
+            idempotencyKey: `video-ai-scene-admin-retry:${generation.id}:${generation.completedAt.toISOString()}`,
+            correlationId: input.requestId,
+            requestedBy: generation.ownerUserId,
+            priority: 40,
+            maxAttempts: 12,
+          },
+        });
+        return tx.videoSceneGenerationRetryRequest.create({
+          data: {
+            id: input.requestId,
+            environment: input.environment,
+            videoSceneGenerationId: generation.id,
+            failedAtSnapshot: generation.completedAt,
+            actorUserId: input.actorUserId,
+            reason: input.reason,
+            jobId: job.id,
+          },
+          select: { id: true, jobId: true, createdAt: true },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError(
+          'CONFLICT',
+          'this video scene generation failure already has a retry job',
+        );
       throw error;
     }
   }
@@ -14965,6 +16701,7 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           width: 1080,
           height: 1350,
           contentHash: input.contentHash,
+          expiresAt: assetRetentionExpiry(),
         },
       });
       return true;
@@ -15062,6 +16799,7 @@ export class PrismaVideoAssetRepository implements VideoAssetRepository {
           declaredSizeBytes: input.declaredSizeBytes,
           rightsConfirmedAt: now,
           usageTerms: input.usageTerms,
+          expiresAt: assetRetentionExpiry(now),
         },
       });
       return videoAssetRecord(row);
@@ -15122,6 +16860,7 @@ export class PrismaVideoAssetRepository implements VideoAssetRepository {
           height: input.height,
           durationMs: input.durationMs,
           failureCode: null,
+          expiresAt: assetRetentionExpiry(),
         },
       });
       if (updated.count !== 1) return null;

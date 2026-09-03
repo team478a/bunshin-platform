@@ -44,12 +44,13 @@ export function CapabilitySection({
 
   return (
     <section className="capability-section">
+      <p className="social-setup__eyebrow">SNS投稿の準備</p>
       <h2>SNSのお手伝い</h2>
       <div className="capability-card">
         <div>
           <h3>SNSの投稿をいっしょに考える</h3>
-          <p>
-            今の状態：
+          <p className="capability-card__status">
+            <span>今の状態</span>
             <strong>{socialStatus === null ? 'まだ始めていません' : labels[socialStatus]}</strong>
           </p>
           <p>
@@ -57,20 +58,39 @@ export function CapabilitySection({
           </p>
         </div>
         {socialStatus === null ? (
-          <button type="button" disabled={pending} onClick={() => void mutate('assign')}>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={pending}
+            onClick={() => void mutate('assign')}
+          >
             SNSのお手伝いをはじめる
           </button>
         ) : socialStatus === 'ACTIVE' ? (
-          <button type="button" disabled={pending} onClick={() => void mutate('suspend')}>
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={pending}
+            onClick={() => void mutate('suspend')}
+          >
             停止する
           </button>
         ) : socialStatus === 'SUSPENDED' ? (
-          <button type="button" disabled={pending} onClick={() => void mutate('activate')}>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={pending}
+            onClick={() => void mutate('activate')}
+          >
             もう一度はじめる
           </button>
         ) : null}
       </div>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="form-feedback" role="status">
+          {message}
+        </p>
+      ) : null}
     </section>
   );
 }

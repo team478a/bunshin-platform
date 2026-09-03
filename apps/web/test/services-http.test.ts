@@ -9,7 +9,10 @@ const state = vi.hoisted(
     findService: ReturnType<typeof vi.fn>;
     updateService: ReturnType<typeof vi.fn>;
     updateGroup: ReturnType<typeof vi.fn>;
+    upsertCommercialSetting: ReturnType<typeof vi.fn>;
     createAudit: ReturnType<typeof vi.fn>;
+    organizationEntitlement: ReturnType<typeof vi.fn>;
+    upsertCustomDomain: ReturnType<typeof vi.fn>;
   } => ({
     user: { userId: 'admin-1' },
     create: vi.fn(),
@@ -17,7 +20,10 @@ const state = vi.hoisted(
     findService: vi.fn(),
     updateService: vi.fn(),
     updateGroup: vi.fn(),
+    upsertCommercialSetting: vi.fn(),
     createAudit: vi.fn(),
+    organizationEntitlement: vi.fn(),
+    upsertCustomDomain: vi.fn(),
   }),
 );
 
@@ -36,13 +42,21 @@ vi.mock('@bunshin/database', () => ({
           findUnique: state.findService,
           update: state.updateService,
         },
+        serviceCommercialSetting: { upsert: state.upsertCommercialSetting },
+        organizationEntitlement: { findUnique: state.organizationEntitlement },
+        serviceCustomDomain: { upsert: state.upsertCustomDomain },
         group: { update: state.updateGroup },
         serviceConfigurationAudit: { create: state.createAudit },
       }),
   },
 }));
 
-import { createServiceResponse, updateServiceLifecycleResponse } from '../src/http/services';
+import {
+  createServiceResponse,
+  updateServiceCommercialSettingsResponse,
+  updateServiceCustomDomainResponse,
+  updateServiceLifecycleResponse,
+} from '../src/http/services';
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const configurationId = '22222222-2222-4222-8222-222222222222';
@@ -98,6 +112,7 @@ describe('service admin HTTP', () => {
       startsAt: null,
       endsAt: null,
       group: { status: 'ACTIVE' },
+      commercialSetting: null,
     });
     state.updateService.mockResolvedValue({
       visibility: 'PUBLIC',
@@ -106,7 +121,27 @@ describe('service admin HTTP', () => {
       endsAt: null,
     });
     state.updateGroup.mockResolvedValue({ status: 'ACTIVE' });
+    state.upsertCommercialSetting.mockResolvedValue({
+      planName: '法人プラン',
+      billingMode: 'MANUAL_INVOICE',
+      status: 'ACTIVE',
+      monthlyPriceYen: 10000,
+      includedMemberLimit: 30,
+      monthlyAiGenerationLimit: 100,
+      monthlyImageGenerationLimit: 30,
+      monthlyVideoGenerationLimit: 10,
+      startsAt: null,
+      endsAt: null,
+    });
     state.createAudit.mockResolvedValue({ id: 'audit-1' });
+    state.organizationEntitlement.mockResolvedValue(null);
+    state.upsertCustomDomain.mockResolvedValue({
+      hostname: 'service.example.com',
+      status: 'DRAFT',
+      verificationNote: null,
+      verifiedAt: null,
+      activatedAt: null,
+    });
   });
 
   it('requires authentication and same-origin mutation', async () => {
@@ -227,5 +262,89 @@ describe('service admin HTTP', () => {
     );
     expect(response.status).toBe(403);
     expect(state.updateService).not.toHaveBeenCalled();
+  });
+
+  it('rejects hiding the platform brand when OEM is not included in the contract', async () => {
+    state.organizationEntitlement.mockResolvedValue({ oemEnabled: false, suspended: false });
+    const response = await updateServiceLifecycleResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}`, {
+        method: 'PATCH',
+        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          visibility: 'PRIVATE',
+          status: 'ACTIVE',
+          poweredByEnabled: false,
+          startsAt: null,
+          endsAt: null,
+          reason: 'OEM表示へ切り替えるため',
+        }),
+      }),
+      configurationId,
+    );
+    expect(response.status).toBe(403);
+    expect(state.updateService).not.toHaveBeenCalled();
+  });
+
+  it('stores a provider-independent commercial plan and audit reason', async () => {
+    const response = await updateServiceCommercialSettingsResponse(
+      new Request(
+        `http://localhost:3000/api/admin/services/${configurationId}/commercial-settings`,
+        {
+          method: 'PUT',
+          headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+          body: JSON.stringify({
+            planName: '法人プラン',
+            billingMode: 'MANUAL_INVOICE',
+            status: 'ACTIVE',
+            monthlyPriceYen: 10000,
+            includedMemberLimit: 30,
+            monthlyAiGenerationLimit: 100,
+            monthlyImageGenerationLimit: 30,
+            monthlyVideoGenerationLimit: 10,
+            startsAt: null,
+            endsAt: null,
+            reason: 'テストサービスの契約条件を登録',
+          }),
+        },
+      ),
+      configurationId,
+    );
+    expect(response.status).toBe(200);
+    expect(state.upsertCommercialSetting).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { groupId: 'group-1' } }),
+    );
+    expect(state.createAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'COMMERCIAL_SETTINGS_UPDATED' }),
+      }),
+    );
+  });
+
+  it('rejects a custom domain when it is not included in the organization contract', async () => {
+    state.findService.mockResolvedValue({
+      id: configurationId,
+      workspaceId,
+      groupId: 'group-1',
+      customDomain: null,
+    });
+    state.organizationEntitlement.mockResolvedValue({
+      customDomainEnabled: false,
+      suspended: false,
+    });
+    const response = await updateServiceCustomDomainResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}/custom-domain`, {
+        method: 'PUT',
+        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          hostname: 'service.example.com',
+          status: 'DRAFT',
+          verificationNote: '',
+          reason: '独自ドメインを設定するため',
+        }),
+      }),
+      configurationId,
+    );
+    expect(response.status).toBe(403);
+    expect(state.upsertCustomDomain).not.toHaveBeenCalled();
   });
 });

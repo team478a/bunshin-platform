@@ -11,9 +11,10 @@ describe('service manager dedicated LINE boundary', () => {
     expect(route).toContain("url.searchParams.set('workspaceId', service.workspaceId)");
   });
 
-  it('allows only the scoped manager or platform operations staff in the repository', () => {
+  it('allows the scoped service operator, group manager, or platform operations staff', () => {
     const repository = source('../../packages/database/src/index.ts');
     expect(repository).toContain("role: 'MANAGER'");
+    expect(repository).toContain("serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] }");
     expect(repository).toContain("group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } }");
     expect(repository).toContain("access.admin?.role !== 'SUPER_ADMIN' && !access.manager");
   });

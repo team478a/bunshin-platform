@@ -52,6 +52,8 @@ describe('ServiceParticipationService', () => {
         slug: 'side-job-support',
         actorUserId: 'user-1',
         legalDocumentIds: ['terms-1', 'privacy-1'],
+        referralCode: null,
+        referralClickId: null,
         now: expect.any(Date),
       }),
     );
@@ -65,6 +67,19 @@ describe('ServiceParticipationService', () => {
         legalDocumentIds: ['terms-1', 'terms-1'],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('normalizes a referral code before sending it to the repository', async () => {
+    const request = vi.fn(() => Promise.resolve(membership));
+    await new ServiceParticipationService({ ...repository(), request }).request({
+      slug: 'service',
+      actorUserId: 'user-1',
+      legalDocumentIds: [],
+      referralCode: ' friend2026 ',
+    });
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ referralCode: 'FRIEND2026', referralClickId: null }),
+    );
   });
 
   it('requires an auditable approval reason', async () => {

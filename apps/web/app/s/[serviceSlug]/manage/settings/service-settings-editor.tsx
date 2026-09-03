@@ -1,7 +1,18 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
+import {
+  readServiceAnnouncement,
+  readServiceOnboardingSettings,
+} from '../../../../../src/services/service-onboarding-settings';
+
+function dateTimeInputValue(value: string | null) {
+  if (!value) return '';
+  return new Date(value)
+    .toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo', hour12: false })
+    .replace(' ', 'T')
+    .slice(0, 16);
+}
 
 export interface ServiceSettingsValue {
   displayName: string;
@@ -10,6 +21,7 @@ export interface ServiceSettingsValue {
   contactEmail: string | null;
   termsUrl: string | null;
   privacyUrl: string | null;
+  trendResearchEnabled?: boolean;
   brand: {
     logoUrl: string | null;
     iconUrl: string | null;
@@ -42,6 +54,7 @@ export function ServiceSettingsEditor({
     value.registration.onboardingConfig,
     value.registration.surveyConfig,
   );
+  const announcement = readServiceAnnouncement(value.registration.onboardingConfig);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,8 +87,14 @@ export function ServiceSettingsEditor({
           lineEnabled: data.has('lineEnabled'),
           inviteCodeEnabled: data.has('inviteCodeEnabled'),
           referralEnabled: data.has('referralEnabled'),
+          trendResearchEnabled: data.has('trendResearchEnabled'),
           welcomeTitle: text('welcomeTitle'),
           welcomeMessage: text('welcomeMessage'),
+          announcementEnabled: data.has('announcementEnabled'),
+          announcementTitle: text('announcementTitle'),
+          announcementMessage: text('announcementMessage'),
+          announcementStartsAt: text('announcementStartsAt'),
+          announcementEndsAt: text('announcementEndsAt'),
           onboardingQuestions: text('onboardingQuestions')
             .split(/\r?\n/)
             .map((item) => item.trim())
@@ -94,7 +113,10 @@ export function ServiceSettingsEditor({
   }
 
   return (
-    <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
+    <form
+      className="admin-form-grid service-settings-form"
+      onSubmit={(event) => void submit(event)}
+    >
       <label>
         サービス名
         <input name="displayName" required maxLength={120} defaultValue={value.displayName} />
@@ -229,6 +251,66 @@ export function ServiceSettingsEditor({
         <small>メールかLINEのどちらか一つは必ず選んでください。</small>
       </fieldset>
       <fieldset>
+        <legend>話題を使った投稿案</legend>
+        <label>
+          <input
+            name="trendResearchEnabled"
+            type="checkbox"
+            defaultChecked={value.trendResearchEnabled ?? true}
+          />{' '}
+          今話題になっていることを、投稿案づくりに使う
+        </label>
+        <small>
+          オフにすると、このサービスの新しい話題調査と、話題を使った投稿案への反映を止めます。すでに作られた投稿案は消えません。
+        </small>
+        <small>調査サービスや費用の設定は、システム管理者が管理します。</small>
+      </fieldset>
+      <fieldset>
+        <legend>参加者へのお知らせ</legend>
+        <label>
+          <input name="announcementEnabled" type="checkbox" defaultChecked={announcement.enabled} />{' '}
+          サービスホームにお知らせを表示する
+        </label>
+        <label>
+          見出し
+          <input
+            name="announcementTitle"
+            maxLength={120}
+            defaultValue={announcement.title}
+            placeholder="例：今週の投稿テーマについて"
+          />
+        </label>
+        <label>
+          内容
+          <textarea
+            name="announcementMessage"
+            maxLength={1000}
+            rows={4}
+            defaultValue={announcement.message}
+            placeholder="参加者に伝えたいことを、やさしい言葉で書きます。"
+          />
+        </label>
+        <label>
+          表示を始める日時（空欄ならすぐ表示）
+          <input
+            name="announcementStartsAt"
+            type="datetime-local"
+            defaultValue={dateTimeInputValue(announcement.startsAt)}
+          />
+        </label>
+        <label>
+          表示を終える日時（空欄なら表示を続ける）
+          <input
+            name="announcementEndsAt"
+            type="datetime-local"
+            defaultValue={dateTimeInputValue(announcement.endsAt)}
+          />
+        </label>
+        <small>
+          日本時間で予約できます。メンテナンスや今週の案内に使えます。表示を止めると参加者のホームから非表示になります。LINE送信や機能停止は行いません。
+        </small>
+      </fieldset>
+      <fieldset>
         <legend>初めて参加する人への案内</legend>
         <label>
           最初に表示する見出し
@@ -264,12 +346,14 @@ export function ServiceSettingsEditor({
         変更した理由
         <input name="reason" required maxLength={1000} placeholder="例：新しいロゴへ変更" />
       </label>
-      <button type="submit" disabled={saving}>
+      <button className="button button--primary" type="submit" disabled={saving}>
         {saving ? '保存中…' : '設定を保存する'}
       </button>
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {message ? (
+        <p className="notice notice--success" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </form>
   );
 }

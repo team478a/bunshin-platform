@@ -27,13 +27,14 @@ export default async function ServiceSettingsPage({
             利用者に見える名前、ロゴ、色、参加方法を設定します。秘密のAPIキーはこの画面では扱いません。
           </p>
         </header>
-        <section className="settings-card">
+        <section className="settings-card service-settings-url-card">
+          <p className="eyebrow">このサービスの案内先</p>
           <p>
             <strong>専用URL：</strong> /s/{value.slug}
           </p>
           <p>専用URL、公開状態、利用期間、「Powered by」の表示はシステム管理者が管理します。</p>
         </section>
-        <section className="settings-card">
+        <section className="settings-card service-settings-card">
           <ServiceSettingsEditor serviceSlug={value.slug} value={value} />
         </section>
         <a href={`/s/${value.slug}/home`}>サービスホームへ戻る</a>

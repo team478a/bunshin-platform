@@ -1,5 +1,12 @@
 # Documentation Index
 
+## 運用マニュアル
+
+- [マニュアル一覧](OPERATIONS_MANUALS.md)
+- [利用者マニュアル](USER_GUIDE.md)
+- [サービス管理者マニュアル](SERVICE_ADMIN_GUIDE.md)
+- [プラットフォーム管理者マニュアル](PLATFORM_ADMIN_GUIDE.md)
+
 ## 正本
 
 - [BUNSHIN Platform Codex実装仕様書 v1.0](BUNSHIN_PLATFORM_CODEX_SPEC_V1.md)

@@ -11,30 +11,58 @@ const navigation = [
   { href: '/account', label: 'アカウント', icon: 'account' },
 ] as const;
 
-const adminNavigation = [
-  { href: '/admin', label: '運用設定' },
-  { href: '/admin/alerts', label: '運用通知' },
-  { href: '/admin/connections', label: 'APIキーと接続確認' },
-  { href: '/admin/users', label: 'ユーザーと利用状況' },
-  { href: '/admin/reports', label: '運用レポート' },
-  { href: '/admin/audits', label: '変更履歴' },
-  { href: '/admin/support', label: '問い合わせ対応' },
-  { href: '/admin/access', label: '管理者と権限' },
-  { href: '/admin/groups', label: 'グループ管理' },
-  { href: '/admin/services', label: 'サービス管理' },
-  { href: '/admin/badges', label: 'グループバッジ確認' },
-  { href: '/admin/badges/rewards', label: 'バッジ特典運用' },
-  { href: '/admin/trends', label: 'トレンド企画' },
-  { href: '/admin/videos', label: '動画生成の状況' },
-  { href: '/admin/images', label: '画像生成の試験運用' },
-  { href: '/admin/activity-rules', label: '続けやすさのルール' },
-  { href: '/admin/line', label: 'LINE運用' },
-  { href: '/admin/legal', label: '法務文書' },
-  { href: '/admin/deletions', label: '退会要求' },
+const adminNavigationGroups = [
+  {
+    label: '日々の運用',
+    items: [
+      { href: '/admin', label: '運用設定' },
+      { href: '/admin/alerts', label: '運用通知' },
+      { href: '/admin/users', label: 'ユーザーと利用状況' },
+      { href: '/admin/reports', label: '運用レポート' },
+      { href: '/admin/support', label: '問い合わせ対応' },
+    ],
+  },
+  {
+    label: 'サービスを作る・管理する',
+    items: [
+      { href: '/admin/organizations', label: '運営団体' },
+      { href: '/admin/groups', label: 'グループ管理' },
+      { href: '/admin/services', label: 'サービス管理' },
+      { href: '/admin/activity-rules', label: '続けやすさのルール' },
+      { href: '/admin/badges', label: 'グループバッジ確認' },
+      { href: '/admin/badges/rewards', label: 'バッジ特典運用' },
+    ],
+  },
+  {
+    label: '企画・コンテンツ',
+    items: [
+      { href: '/admin/trends', label: 'トレンド企画' },
+      { href: '/admin/images', label: '画像生成の試験運用' },
+      { href: '/admin/videos', label: '動画生成の状況' },
+    ],
+  },
+  {
+    label: '接続・システム設定',
+    items: [
+      { href: '/admin/connections', label: 'APIキーと接続確認' },
+      { href: '/admin/line', label: 'LINE運用' },
+      { href: '/admin/access', label: '管理者と権限' },
+      { href: '/admin/audits', label: '変更履歴' },
+      { href: '/admin/legal', label: '法務文書' },
+      { href: '/admin/deletions', label: '退会要求' },
+    ],
+  },
 ] as const;
 
 export function isNavigationItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function isAdminNavigationGroupActive(
+  pathname: string,
+  group: (typeof adminNavigationGroups)[number],
+): boolean {
+  return group.items.some((item) => isNavigationItemActive(pathname, item.href));
 }
 
 function NavigationIcon({ name }: { name: (typeof navigation)[number]['icon'] }) {
@@ -90,20 +118,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <aside className="admin-sidebar">
             <div className="admin-sidebar__heading">
               <strong>運用管理</strong>
-              <span>管理者専用</span>
+              <span>管理メニュー</span>
             </div>
             <nav aria-label="管理画面ナビゲーション">
-              {adminNavigation.map((item) => {
-                const active = isNavigationItemActive(pathname, item.href);
+              {adminNavigationGroups.map((group) => {
+                const groupActive = isAdminNavigationGroupActive(pathname, group);
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={active ? 'is-active' : ''}
-                    aria-current={active ? 'page' : undefined}
-                  >
-                    {item.label}
-                  </Link>
+                  <details key={group.label} className="admin-sidebar__group" open={groupActive}>
+                    <summary>{group.label}</summary>
+                    <div className="admin-sidebar__links">
+                      {group.items.map((item) => {
+                        const active = isNavigationItemActive(pathname, item.href);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={active ? 'is-active' : ''}
+                            aria-current={active ? 'page' : undefined}
+                          >
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </details>
                 );
               })}
             </nav>

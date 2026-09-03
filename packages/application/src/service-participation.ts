@@ -1,5 +1,6 @@
 import type { GroupMembership } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
+import { normalizeServiceReferralCode } from './service-referral-credit';
 
 export interface ServiceParticipationView {
   registrationMode: 'PUBLIC' | 'INVITATION_ONLY' | 'APPROVAL_REQUIRED' | 'CLOSED';
@@ -23,6 +24,8 @@ export interface ServiceParticipationRepository {
     slug: string;
     actorUserId: string;
     legalDocumentIds: string[];
+    referralCode: string | null;
+    referralClickId: string | null;
     now: Date;
   }): Promise<GroupMembership | null>;
   approve(input: {
@@ -50,6 +53,8 @@ export class ServiceParticipationService {
     slug: string;
     actorUserId: string;
     legalDocumentIds: string[];
+    referralCode?: string | null;
+    referralClickId?: string | null;
     now?: Date;
   }) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) || input.slug.length > 80)
@@ -59,7 +64,22 @@ export class ServiceParticipationService {
       new Set(input.legalDocumentIds).size !== input.legalDocumentIds.length
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid service legal consents');
-    const result = await this.repository.request({ ...input, now: input.now ?? new Date() });
+    const referralCode =
+      input.referralCode === undefined || input.referralCode === null
+        ? null
+        : normalizeServiceReferralCode(input.referralCode);
+    const referralClickId = input.referralClickId ?? null;
+    if (
+      referralClickId !== null &&
+      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(referralClickId)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid service referral click');
+    const result = await this.repository.request({
+      ...input,
+      referralCode,
+      referralClickId,
+      now: input.now ?? new Date(),
+    });
     if (result === null)
       throw new ApplicationError('NOT_FOUND', 'service registration unavailable');
     return result;

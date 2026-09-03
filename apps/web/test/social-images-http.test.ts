@@ -12,6 +12,10 @@ const fakes = vi.hoisted(() => ({
   transitionPoint: vi.fn(),
   consumeBadgeEntitlement: vi.fn(),
   refundBadgeEntitlement: vi.fn(),
+  consumeServiceCredit: vi.fn(),
+  refundServiceCredit: vi.fn(),
+  organizationEntitlement: vi.fn(),
+  imageUsageCount: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -35,7 +39,10 @@ vi.mock('../src/ai/runtime-provider-configuration', () => ({
   }),
 }));
 vi.mock('@bunshin/database', () => ({
-  prisma: {},
+  prisma: {
+    organizationEntitlement: { findUnique: fakes.organizationEntitlement },
+    socialImageGenerationRequest: { count: fakes.imageUsageCount },
+  },
   PrismaSocialImageGenerationAuthorizationRepository: class {
     authorize = fakes.authorize;
   },
@@ -56,6 +63,10 @@ vi.mock('@bunshin/database', () => ({
   PrismaBadgeEntitlementConsumptionRepository: class {
     consume = fakes.consumeBadgeEntitlement;
     refund = fakes.refundBadgeEntitlement;
+  },
+  PrismaServiceCreditConsumptionRepository: class {
+    consumeForSocialImage = fakes.consumeServiceCredit;
+    refundSocialImage = fakes.refundServiceCredit;
   },
 }));
 
@@ -141,6 +152,10 @@ beforeEach(() => {
   fakes.refundBadgeEntitlement.mockImplementation(({ usageId, reason }) =>
     Promise.resolve({ id: usageId, status: 'REFUNDED', refundReason: reason }),
   );
+  fakes.consumeServiceCredit.mockResolvedValue({ status: 'NOT_CONFIGURED' });
+  fakes.refundServiceCredit.mockResolvedValue(undefined);
+  fakes.organizationEntitlement.mockResolvedValue(null);
+  fakes.imageUsageCount.mockResolvedValue(0);
 });
 
 describe('social image HTTP', () => {
@@ -233,6 +248,55 @@ describe('social image HTTP', () => {
     expect(fakes.reservePoint).not.toHaveBeenCalled();
     expect(fakes.refundBadgeEntitlement).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'IMAGE_REQUEST_NOT_ENQUEUED' }),
+    );
+  });
+
+  it('uses a service image credit before the legacy point and badge flows', async () => {
+    fakes.consumeServiceCredit.mockResolvedValueOnce({ status: 'CONSUMED', availableCredits: 2 });
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-credit',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(202);
+    expect(fakes.consumeServiceCredit).toHaveBeenCalledWith(
+      expect.objectContaining({ imageRequestId: ids.requestId }),
+    );
+    expect(fakes.consumeBadgeEntitlement).not.toHaveBeenCalled();
+    expect(fakes.reservePoint).not.toHaveBeenCalled();
+  });
+
+  it('returns a service image credit when queueing fails', async () => {
+    fakes.consumeServiceCredit.mockResolvedValueOnce({ status: 'CONSUMED', availableCredits: 2 });
+    fakes.enqueue.mockRejectedValueOnce(new Error('queue unavailable'));
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-credit-refund',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(500);
+    expect(fakes.refundServiceCredit).toHaveBeenCalledWith(
+      expect.objectContaining({ imageRequestId: ids.requestId }),
     );
   });
 

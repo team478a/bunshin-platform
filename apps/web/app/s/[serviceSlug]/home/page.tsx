@@ -13,7 +13,11 @@ import {
   weeklyCalendar,
 } from '../../../../src/activity-progress';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
-import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import {
+  isServiceAnnouncementVisible,
+  readServiceAnnouncement,
+  readServiceOnboardingSettings,
+} from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -81,6 +85,7 @@ export default async function ServiceMemberHome({
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
   );
+  const announcement = readServiceAnnouncement(service.configuration.registration.onboardingConfig);
   if (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) {
     redirect(`/s/${service.configuration.slug}/onboarding` as Route);
   }
@@ -154,6 +159,14 @@ export default async function ServiceMemberHome({
           <h1>{service.configuration.displayName}</h1>
           <p>{membership.user.displayName}さん、今日も一緒に進めましょう。</p>
         </header>
+
+        {isServiceAnnouncementVisible(announcement, now) && (
+          <section className="service-entry__card" aria-labelledby="service-announcement-title">
+            <p className="eyebrow">サービスからのお知らせ</p>
+            <h2 id="service-announcement-title">{announcement.title}</h2>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{announcement.message}</p>
+          </section>
+        )}
 
         <section className="service-entry__card">
           <h2>今週の進み具合</h2>
@@ -242,6 +255,9 @@ export default async function ServiceMemberHome({
             >
               投稿パートナーを作る・見る
             </Link>
+            <Link className="button" href={`/s/${service.configuration.slug}/credits` as Route}>
+              画像作成回数を見る
+            </Link>
             {imageAvailable && (
               <Link
                 className="button button--primary"
@@ -262,15 +278,18 @@ export default async function ServiceMemberHome({
         </section>
 
         {['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole) && (
-          <section className="service-entry__card">
+          <section className="service-entry__card service-management-card">
+            <p className="eyebrow">運営者用メニュー</p>
             <h2>サービスを管理する</h2>
-            <p>参加者、公式資料、利用規約などをこのサービスの範囲だけで管理します。</p>
+            <p>
+              最初は「開始準備」を開き、設定漏れを確認してください。以降は目的にあわせて下のメニューを使います。
+            </p>
             <div className="service-home-actions">
               <a
                 className="button button--primary"
                 href={`/s/${service.configuration.slug}/manage`}
               >
-                開始準備を確認
+                開始準備・設定漏れを確認する
               </a>
               <a className="button" href={`/s/${service.configuration.slug}/manage/settings`}>
                 サービスの見た目・登録設定

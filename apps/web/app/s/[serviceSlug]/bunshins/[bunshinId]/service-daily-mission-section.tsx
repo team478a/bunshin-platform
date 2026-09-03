@@ -6,6 +6,7 @@ import {
   MissionContent,
   MissionGuide,
   MissionIdea,
+  MissionTrendContext,
   copyOptions,
   rejectionReasons,
   type DailyMissionView,
@@ -207,6 +208,7 @@ export function ServiceDailyMissionSection({
             {expanded === mission.id ? (
               <div className="mission-detail">
                 <MissionIdea mission={mission} />
+                <MissionTrendContext mission={mission} />
                 <MissionGuide mission={mission} />
                 <MissionContent mission={mission} />
                 {active && mission.decision !== 'ACCEPTED' ? (

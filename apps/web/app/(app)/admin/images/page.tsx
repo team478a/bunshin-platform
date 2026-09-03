@@ -292,7 +292,8 @@ export default async function ImagePilotAdminPage({
           </form>
         ) : (
           <p>
-            画像生成を許可したグループがありません。先に「グループ管理」で利用機能を設定してください。
+            画像生成を許可したグループがありません。先に{' '}
+            <Link href="/admin/groups">グループ管理</Link>で利用機能を設定してください。
           </p>
         )}
       </section>

@@ -5,9 +5,12 @@ import {
   ExecuteMissionAutomationJob,
   ExecuteLineDeliveryJob,
   ExecuteBadgeLineDeliveryJob,
+  ExecuteVideoAiSceneGenerationJob,
   ExecuteVideoRenderJob,
   ExecuteSocialImageGenerationJob,
+  ExpireServiceCredits,
   ExecuteGroupKnowledgeExtractionJob,
+  ExecuteServiceLineBroadcastJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -35,6 +38,18 @@ export interface JobWorkerPort {
   }): Promise<JobWorkerSummary>;
 }
 
+export interface ServiceCreditExpirationPort {
+  expire(): Promise<number>;
+}
+
+async function configuredServiceCreditExpiration(): Promise<ServiceCreditExpirationPort> {
+  const db = await import('@bunshin/database');
+  return {
+    expire: () =>
+      new ExpireServiceCredits(new db.PrismaServiceCreditExpirationRepository()).execute(),
+  };
+}
+
 async function configuredWorker(): Promise<JobWorkerPort> {
   const [
     { createWeeklyPlanJobHandler },
@@ -43,8 +58,10 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createBadgeLineDeliveryJobHandler },
     { createTrendResearchJobHandler },
     { createVideoRenderJobHandler },
+    { createVideoAiSceneGenerationJobHandler },
     { createSocialImageGenerationJobHandler },
     { createGroupKnowledgeExtractionJobHandler },
+    { createServiceLineBroadcastJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
@@ -52,8 +69,10 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/badge-line-delivery-job-handler'),
     import('../jobs/trend-research-job-handler'),
     import('../jobs/video-render-job-handler'),
+    import('../jobs/video-ai-scene-generation-job-handler'),
     import('../jobs/social-image-generation-job-handler'),
     import('../jobs/group-knowledge-extraction-job-handler'),
+    import('../jobs/service-line-broadcast-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -76,6 +95,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     fail,
   );
   const videoExecutor = new ExecuteVideoRenderJob(createVideoRenderJobHandler(), complete, fail);
+  const videoAiSceneExecutor = new ExecuteVideoAiSceneGenerationJob(
+    createVideoAiSceneGenerationJobHandler(),
+    complete,
+    fail,
+  );
   const socialImageExecutor = new ExecuteSocialImageGenerationJob(
     createSocialImageGenerationJobHandler(),
     complete,
@@ -83,6 +107,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
   );
   const groupKnowledgeExecutor = new ExecuteGroupKnowledgeExtractionJob(
     createGroupKnowledgeExtractionJobHandler(),
+    complete,
+    fail,
+  );
+  const serviceLineBroadcastExecutor = new ExecuteServiceLineBroadcastJob(
+    createServiceLineBroadcastJobHandler(),
     complete,
     fail,
   );
@@ -97,17 +126,22 @@ async function configuredWorker(): Promise<JobWorkerPort> {
           ? badgeLineExecutor.execute(job, workerId)
           : job.jobType === 'VIDEO_RENDER_PROCESS'
             ? videoExecutor.execute(job, workerId)
-            : job.jobType === 'SOCIAL_IMAGE_GENERATE'
-              ? socialImageExecutor.execute(job, workerId)
-              : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
-                ? groupKnowledgeExecutor.execute(job, workerId)
-                : missionExecutor.execute(job, workerId),
+            : job.jobType === 'VIDEO_AI_SCENE_GENERATION_PROCESS'
+              ? videoAiSceneExecutor.execute(job, workerId)
+              : job.jobType === 'SOCIAL_IMAGE_GENERATE'
+                ? socialImageExecutor.execute(job, workerId)
+                : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
+                  ? groupKnowledgeExecutor.execute(job, workerId)
+                  : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
+                    ? serviceLineBroadcastExecutor.execute(job, workerId)
+                    : missionExecutor.execute(job, workerId),
   });
 }
 
 export async function jobWorkerResponse(
   request: Request,
   workerFactory: () => Promise<JobWorkerPort> = configuredWorker,
+  expirationFactory: () => Promise<ServiceCreditExpirationPort> = configuredServiceCreditExpiration,
 ): Promise<Response> {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   const started = Date.now();
@@ -120,6 +154,7 @@ export async function jobWorkerResponse(
       workerId: `http-${randomUUID()}`,
       batchSize: 5,
     });
+    const expiredServiceCredits = await (await expirationFactory()).expire();
     logger.info('job worker batch complete', {
       requestId,
       route: '/api/internal/jobs/run',
@@ -132,8 +167,9 @@ export async function jobWorkerResponse(
       dead: result.dead,
       infrastructureFailures: result.infrastructureFailures,
       drained: result.drained,
+      expiredServiceCredits,
     });
-    return Response.json({ ...result, requestId });
+    return Response.json({ ...result, expiredServiceCredits, requestId });
   } catch (error) {
     const mapped = toApiError(error, requestId);
     logger.error('job worker batch failed', {

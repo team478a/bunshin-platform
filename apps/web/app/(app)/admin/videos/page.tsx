@@ -8,6 +8,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { VideoRenderRetryForm } from './video-render-retry-form';
+import { VideoSceneGenerationRetryForm } from './video-scene-generation-retry-form';
 import { buildVideoReadiness } from './readiness-view-model';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,18 @@ const statusText: Record<string, string> = {
   FAILED: '失敗',
   CANCELLED: '中止',
 };
+
+const sceneStatusText: Record<string, string> = {
+  QUEUED: '順番待ち',
+  SUBMITTED: '外部サービスへ依頼済み',
+  GENERATING: '場面を作成中',
+  SUCCEEDED: '完成',
+  FAILED: '失敗',
+  CANCELLED: '中止',
+};
+
+const usd = (value: number | null) =>
+  value === null ? '未確定' : `$${(value / 1_000_000).toFixed(2)}`;
 
 export default async function VideoRenderOperationsPage() {
   const user = await (await currentUserProvider()).getCurrentUser();
@@ -78,6 +91,40 @@ export default async function VideoRenderOperationsPage() {
           {snapshot.counts.RENDERING}件 ／ 完成 {snapshot.counts.SUCCEEDED}件 ／ 失敗{' '}
           {snapshot.counts.FAILED}件
         </p>
+        <p>
+          場面の生成：待機 {snapshot.sceneCounts.QUEUED + snapshot.sceneCounts.SUBMITTED}件 ／
+          作成中 {snapshot.sceneCounts.GENERATING}件 ／ 完成 {snapshot.sceneCounts.SUCCEEDED}件 ／
+          失敗 {snapshot.sceneCounts.FAILED}件
+        </p>
+      </section>
+      <section className="settings-card">
+        <h2>AIで作る場面の状況</h2>
+        <p>最終動画を作る前の、一つひとつの場面の進み具合です。</p>
+        {snapshot.sceneItems.length === 0 ? (
+          <p>この環境で受け付けたAI場面の生成はありません。</p>
+        ) : (
+          <ul className="settings-status-list">
+            {snapshot.sceneItems.map((item) => (
+              <li key={item.id} className="settings-status-item">
+                <h3>
+                  {item.projectTitle}：{item.sceneNo}場面目
+                </h3>
+                <p>グループ：{item.groupName}</p>
+                <p>状態：{sceneStatusText[item.status] ?? item.status}</p>
+                <p>
+                  使用サービス：{item.provider} ／ モデル：{item.model}
+                </p>
+                <p>
+                  費用：見込み {usd(item.estimatedCostUsdMicros)} ／ 実績{' '}
+                  {usd(item.actualCostUsdMicros)}
+                </p>
+                <p>受付日時：{item.createdAt.toLocaleString('ja-JP')}</p>
+                {item.errorCode ? <p>停止理由：{item.errorCode}</p> : null}
+                {item.retryable ? <VideoSceneGenerationRetryForm generationId={item.id} /> : null}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <section className="settings-card">
         <h2>最近の動画</h2>

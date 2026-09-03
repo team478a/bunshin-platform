@@ -230,6 +230,60 @@ export function authorizeDailyMissionCopyResponse(
   });
 }
 
+export function resubmitCampaignPostingApprovalResponse(
+  request: Request,
+  workspaceId: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    if (!emptySchema.safeParse(await jsonBody(request)).success)
+      throw new ApplicationError('VALIDATION_ERROR', 'empty body required');
+    const actor = await actorUserId();
+    const db = await import('@bunshin/database');
+    const resubmitted = await db.prisma.$transaction(async (tx) => {
+      const previous = await tx.campaignPostingApprovalRequest.findFirst({
+        where: {
+          workspaceId: resourceId(workspaceId),
+          bunshinId: resourceId(bunshinId),
+          dailyMissionId: resourceId(dailyMissionId),
+          requestedByUserId: actor,
+          status: 'CHANGES_REQUESTED',
+          campaign: {
+            group: {
+              status: 'ACTIVE',
+              memberships: {
+                some: { userId: actor, status: 'ACTIVE', consentedAt: { not: null } },
+              },
+            },
+          },
+        },
+        select: { id: true, workspaceId: true, groupId: true, status: true },
+      });
+      if (!previous) return false;
+      await tx.campaignPostingApprovalRequest.update({
+        where: { id: previous.id },
+        data: { status: 'PENDING', reviewNote: null, reviewedByUserId: null, reviewedAt: null },
+      });
+      await tx.campaignPostingApprovalAudit.create({
+        data: {
+          workspaceId: previous.workspaceId,
+          groupId: previous.groupId,
+          requestId: previous.id,
+          action: 'RESUBMITTED',
+          beforeData: { status: previous.status },
+          afterData: { status: 'PENDING' },
+          performedByUserId: actor,
+        },
+      });
+      return true;
+    });
+    if (!resubmitted) throw new ApplicationError('NOT_FOUND', 'approval request not found');
+    return { status: 'PENDING' as const };
+  });
+}
+
 export function transitionDailyMissionResponse(
   request: Request,
   workspaceId: string,

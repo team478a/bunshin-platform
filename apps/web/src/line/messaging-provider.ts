@@ -141,6 +141,29 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     }
   }
 
+  async pushText(input: { accessToken: string; recipientId: string; text: string }) {
+    if (!input.accessToken.trim()) return httpFailure(401);
+    if (!input.recipientId.trim() || !input.text.trim()) return httpFailure(400);
+    try {
+      const response = await this.request(`${endpoint}/v2/bot/message/push`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${input.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: input.recipientId,
+          messages: [{ type: 'text', text: input.text.slice(0, 5000) }],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) return httpFailure(response.status);
+      return { ok: true } as const;
+    } catch (error) {
+      return networkFailure(error);
+    }
+  }
+
   async pushBadgeNotification(input: {
     accessToken: string;
     recipientId: string;

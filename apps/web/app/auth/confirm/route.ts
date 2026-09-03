@@ -2,6 +2,7 @@ import type { EmailOtpType } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { requireSameOrigin } from '../../../src/auth/request-security';
+import { LINE_AUTH_RETURN_COOKIE, lineAuthReturnFromCookie } from '../../../src/auth/line-return';
 import { createSupabaseServerClient } from '../../../src/auth/supabase';
 
 export function GET(request: Request): Response {
@@ -39,7 +40,10 @@ export async function POST(request: Request): Promise<Response> {
     );
     if (required.some((item) => !item.consentedAt))
       return NextResponse.redirect(new URL('/consent', request.url), 303);
-    return NextResponse.redirect(new URL('/bunshins', request.url), 303);
+    const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
+    const response = NextResponse.redirect(new URL(returnTo ?? '/bunshins', request.url), 303);
+    response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
+    return response;
   } catch {
     return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
   }

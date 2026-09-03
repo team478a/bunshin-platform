@@ -25,6 +25,7 @@ export interface VideoAssetRecord {
   usageTerms: string | null;
   failureCode: string | null;
   expiresAt: Date | null;
+  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

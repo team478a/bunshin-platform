@@ -24,6 +24,7 @@ export interface LineDeliveryRetryRepository {
     actorUserId: string;
     environment: LineConfigurationEnvironment;
     deliveryId: string;
+    groupId?: string;
     reason: string;
   }): Promise<LineDeliveryRetryRequest | null>;
 }
@@ -38,10 +39,15 @@ export class RequestLineDeliveryRetry {
     actorUserId: string;
     environment: LineConfigurationEnvironment;
     deliveryId: string;
+    groupId?: string;
     reason: string;
   }) {
     const reason = input.reason.trim();
-    if (!uuidPattern.test(input.requestId) || !uuidPattern.test(input.deliveryId))
+    if (
+      !uuidPattern.test(input.requestId) ||
+      !uuidPattern.test(input.deliveryId) ||
+      (input.groupId !== undefined && !uuidPattern.test(input.groupId))
+    )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE delivery retry request');
     if (reason.length < 3 || reason.length > 500)
       throw new ApplicationError('VALIDATION_ERROR', 'retry reason must be 3 to 500 characters');

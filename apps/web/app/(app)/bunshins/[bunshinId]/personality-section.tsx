@@ -106,13 +106,22 @@ export function PersonalitySection({
   if (!current) return <p>くわしい話し方は、まだ決まっていません。</p>;
 
   return (
-    <section className="personality-section">
-      <h2>BUNSHINの話し方</h2>
-      <p>むずかしい言葉を使わず、「どんなふうに話してほしいか」を書いてください。</p>
-      <form onSubmit={(event) => void save(event)}>
-        <label>
-          話す雰囲気
+    <section className="personality-section settings-card">
+      <div className="personality-section__heading">
+        <div>
+          <p className="personality-section__eyebrow">分身らしさの設定</p>
+          <h2>BUNSHINの話し方</h2>
+        </div>
+        <span className="personality-section__version">いまは第{current.version}版</span>
+      </div>
+      <p className="personality-section__lead">
+        むずかしい言葉は不要です。「友だちに話すように」「短く元気に」など、理想の話し方を書いてください。
+      </p>
+      <form className="form-stack personality-form" onSubmit={(event) => void save(event)}>
+        <label className="field">
+          <span className="field__label">話す雰囲気</span>
           <input
+            className="field__control"
             required
             maxLength={100}
             value={form.tone}
@@ -120,9 +129,10 @@ export function PersonalitySection({
             placeholder="例：やさしく親しみやすい"
           />
         </label>
-        <label>
-          ていねいさ
+        <label className="field">
+          <span className="field__label">ていねいさ</span>
           <input
+            className="field__control"
             required
             maxLength={100}
             value={form.formality}
@@ -130,9 +140,10 @@ export function PersonalitySection({
             placeholder="例：友だちに話すくらい"
           />
         </label>
-        <label>
-          元気さ
+        <label className="field">
+          <span className="field__label">元気さ</span>
           <input
+            className="field__control"
             required
             maxLength={100}
             value={form.energyLevel}
@@ -140,9 +151,10 @@ export function PersonalitySection({
             placeholder="例：落ち着いている"
           />
         </label>
-        <label>
-          知識の伝え方
+        <label className="field">
+          <span className="field__label">知識の伝え方</span>
           <input
+            className="field__control"
             required
             maxLength={100}
             value={form.expertiseLevel}
@@ -150,9 +162,10 @@ export function PersonalitySection({
             placeholder="例：初心者にもわかる"
           />
         </label>
-        <label>
-          文章の形
+        <label className="field">
+          <span className="field__label">文章の形</span>
           <textarea
+            className="field__control"
             required
             maxLength={500}
             value={form.sentenceStyle}
@@ -160,9 +173,10 @@ export function PersonalitySection({
             placeholder="例：一文を短くする"
           />
         </label>
-        <label>
-          自分の呼び方
+        <label className="field">
+          <span className="field__label">自分の呼び方</span>
           <input
+            className="field__control"
             required
             maxLength={50}
             value={form.firstPerson}
@@ -170,31 +184,35 @@ export function PersonalitySection({
             placeholder="例：わたし"
           />
         </label>
-        <label>
-          使ってほしい言葉（1行に1つ）
+        <label className="field">
+          <span className="field__label">使ってほしい言葉（1行に1つ）</span>
           <textarea
+            className="field__control"
             value={form.preferredExpressions}
             onChange={(event) => setForm({ ...form, preferredExpressions: event.target.value })}
           />
         </label>
-        <label>
-          使ってほしくない言葉（1行に1つ）
+        <label className="field">
+          <span className="field__label">使ってほしくない言葉（1行に1つ）</span>
           <textarea
+            className="field__control"
             value={form.forbiddenExpressions}
             onChange={(event) => setForm({ ...form, forbiddenExpressions: event.target.value })}
           />
         </label>
-        <label>
-          見た目のイメージ（書かなくても大丈夫）
+        <label className="field">
+          <span className="field__label">見た目のイメージ（書かなくても大丈夫）</span>
           <textarea
+            className="field__control"
             maxLength={500}
             value={form.visualDirection}
             onChange={(event) => setForm({ ...form, visualDirection: event.target.value })}
           />
         </label>
-        <label>
-          顔と声の使い方
+        <label className="field">
+          <span className="field__label">顔と声の使い方</span>
           <select
+            className="field__control"
             value={form.facePolicy}
             onChange={(event) => setForm({ ...form, facePolicy: event.target.value as FacePolicy })}
           >
@@ -205,9 +223,10 @@ export function PersonalitySection({
             ))}
           </select>
         </label>
-        <label>
-          変えた理由
+        <label className="field">
+          <span className="field__label">変えた理由</span>
           <input
+            className="field__control"
             required
             maxLength={500}
             value={form.changeReason}
@@ -215,10 +234,16 @@ export function PersonalitySection({
             placeholder="例：もっとやさしい話し方にしたい"
           />
         </label>
-        <button type="submit">この話し方を保存する</button>
+        <button className="button button--primary button--full" type="submit">
+          この話し方を保存する
+        </button>
       </form>
-      {message ? <p role="status">{message}</p> : null}
-      <details>
+      {message ? (
+        <p className="form-feedback" role="status">
+          {message}
+        </p>
+      ) : null}
+      <details className="personality-history-disclosure">
         <summary>前の話し方を見る</summary>
         <ol className="personality-history">
           {versions.map((version, index) => (
@@ -232,7 +257,11 @@ export function PersonalitySection({
               </span>
               <p>{version.changeReason}</p>
               {index > 0 ? (
-                <button type="button" onClick={() => void restore(version)}>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={() => void restore(version)}
+                >
                   この話し方に戻す
                 </button>
               ) : null}

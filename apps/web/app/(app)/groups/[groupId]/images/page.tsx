@@ -75,6 +75,15 @@ export default async function GroupImagesPage({
     select: { id: true, status: true, dailyMissionId: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   });
+  const creditAccount = await db.prisma.serviceCreditAccount.findFirst({
+    where: {
+      workspaceId: membership.group.workspaceId,
+      groupId: membership.group.id,
+      groupMembershipId: membership.id,
+      userId: actor.userId,
+    },
+    select: { availableCredits: true },
+  });
   const redemptions = new db.PrismaPointRedemptionRepository();
   let imagePointCost: number | null = null;
   let availablePoints = 0;
@@ -114,6 +123,7 @@ export default async function GroupImagesPage({
         workspaceId={membership.group.workspaceId}
         groupId={membership.group.id}
         groupMembershipId={membership.id}
+        imageCreditAvailable={creditAccount?.availableCredits ?? null}
         pointCost={imagePointCost}
         initialAvailablePoints={availablePoints}
         initialMissionId={z.uuid().safeParse(query.mission).data}

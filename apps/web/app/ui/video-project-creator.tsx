@@ -21,6 +21,7 @@ export function VideoProjectCreator({
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [compositionMode, setCompositionMode] = useState<'STANDARD' | 'AI_SCENES'>('STANDARD');
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,6 +45,7 @@ export function VideoProjectCreator({
             platform: values.get('platform'),
             type: values.get('type'),
             durationSeconds,
+            compositionMode,
           }),
         },
       );
@@ -120,6 +122,24 @@ export function VideoProjectCreator({
             <option value="30">30秒</option>
             <option value="60">60秒</option>
           </select>
+        </label>
+        <label className="field">
+          <span className="field__label">動画の作り方</span>
+          <select
+            className="field__control"
+            value={compositionMode}
+            onChange={(event) => setCompositionMode(event.target.value as 'STANDARD' | 'AI_SCENES')}
+          >
+            <option value="STANDARD">標準動画（画像・文字・音声で作る）</option>
+            <option value="AI_SCENES" disabled={characters.length === 0}>
+              AI動画を使う（場面ごとにAIで動画を作る）
+            </option>
+          </select>
+          {compositionMode === 'AI_SCENES' ? (
+            <small>
+              AIキャラクターと基準画像を選びます。生成は承認後に始まり、設定した上限内だけで実行されます。
+            </small>
+          ) : null}
         </label>
         <label className="field">
           <span className="field__label">紹介する企画（任意）</span>

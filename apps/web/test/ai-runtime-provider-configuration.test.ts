@@ -4,7 +4,10 @@ import type {
   AiProviderConfiguration,
   AiProviderConfigurationRepository,
 } from '@bunshin/application';
-import { resolveOpenAiRuntimeConfiguration } from '../src/ai/runtime-provider-configuration';
+import {
+  resolveOpenAiRuntimeConfiguration,
+  resolveVideoAiRuntimeConfiguration,
+} from '../src/ai/runtime-provider-configuration';
 
 const active: AiProviderConfiguration = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -98,5 +101,47 @@ describe('OpenAI runtime configuration', () => {
         legacyApiKey: 'legacy-key',
       }),
     ).rejects.toMatchObject({ code: 'CONFIGURATION_ERROR', message: 'provider is paused' });
+  });
+});
+
+describe('video AI runtime configuration', () => {
+  it('uses only the active, verified configuration for the current environment', async () => {
+    await expect(
+      resolveVideoAiRuntimeConfiguration({
+        provider: 'FAL',
+        repository: repository({
+          configuration: {
+            ...active,
+            provider: 'FAL',
+            model: 'fal-ai/kling-video/o1/reference-to-video',
+            requestCostUsdMicros: 112_000,
+          },
+          encryptedApiKey: 'sealed',
+          dailySpentUsdMicros: 0,
+          monthlySpentUsdMicros: 0,
+        }),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn().mockReturnValue('plain-fal-key') },
+      }),
+    ).resolves.toEqual({
+      provider: 'FAL',
+      apiKey: 'plain-fal-key',
+      model: 'fal-ai/kling-video/o1/reference-to-video',
+      dailyBudgetUsdMicros: 1_000_000,
+      monthlyBudgetUsdMicros: 10_000_000,
+      estimatedCostUsdMicrosPerSecond: 112_000,
+    });
+  });
+
+  it('does not support an environment-variable fallback for paid video generation', async () => {
+    await expect(
+      resolveVideoAiRuntimeConfiguration({
+        provider: 'FAL',
+        repository: repository(null),
+        crypto: { encrypt: vi.fn(), decrypt: vi.fn() },
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFIGURATION_ERROR',
+      message: 'active provider configuration required',
+    });
   });
 });

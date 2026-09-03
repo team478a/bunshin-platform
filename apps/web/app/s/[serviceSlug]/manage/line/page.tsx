@@ -1,6 +1,7 @@
-import { ListGroupLineConfigurations } from '@bunshin/application';
+import { LINE_ADMIN_RETRYABLE_FAILURES, ListGroupLineConfigurations } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { GroupLineEditor } from '../../../../(app)/admin/groups/[groupId]/line/group-line-editor';
+import { LineDeliveryRetryPanel } from '../../../../(app)/admin/line/line-delivery-retry-panel';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import {
   currentLineEnvironment,
@@ -8,6 +9,7 @@ import {
 } from '../../../../../src/line/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
+import { ServiceLineBroadcastEditor } from './service-line-broadcast-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,14 +24,51 @@ export default async function ServiceLinePage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
+  const environment = currentLineEnvironment();
   const result = await new ListGroupLineConfigurations(
     new db.PrismaGroupLineConfigurationRepository(),
   ).execute({
     actorUserId: actor.userId,
     workspaceId: service.workspaceId,
     groupId: service.serviceId,
-    environment: currentLineEnvironment(),
+    environment,
   });
+  const failedDeliveries = await db.prisma.lineMessageDelivery.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      environment,
+      status: 'FAILED',
+      sentAt: null,
+      cancelledAt: null,
+      attemptCount: { gt: 0 },
+      lastErrorCategory: { in: [...LINE_ADMIN_RETRYABLE_FAILURES] },
+    },
+    select: {
+      id: true,
+      kind: true,
+      lastErrorCategory: true,
+      attemptCount: true,
+      updatedAt: true,
+      retryRequests: { select: { deliveryAttemptCount: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 50,
+  });
+  const retryableFailures = failedDeliveries
+    .filter(
+      (delivery) =>
+        !delivery.retryRequests.some(
+          (retry) => retry.deliveryAttemptCount === delivery.attemptCount,
+        ),
+    )
+    .map((delivery) => ({
+      deliveryId: delivery.id,
+      kind: 'MISSION' as const,
+      category: delivery.lastErrorCategory ?? 'UNKNOWN',
+      attemptCount: delivery.attemptCount,
+      failedAt: delivery.updatedAt.toISOString(),
+    }));
   const urls = lineEndpointUrls();
   const endpoint = `/api/services/${encodeURIComponent(service.configuration.slug)}/line-configurations`;
   return (
@@ -40,7 +79,8 @@ export default async function ServiceLinePage({
           <h1>{service.configuration.displayName}の公式LINE</h1>
           <p>このサービス専用の公式LINEを登録し、接続確認後に利用を開始できます。</p>
         </header>
-        <section className="settings-card">
+        <section className="settings-card line-url-guide">
+          <p className="eyebrow">LINE Developersで入力する値</p>
           <h2>LINE Developersへ登録するURL</h2>
           <p>次のURLは自動生成されています。内容を変更せずにコピーしてください。</p>
           <dl>
@@ -59,7 +99,7 @@ export default async function ServiceLinePage({
         <GroupLineEditor
           workspaceId={service.workspaceId}
           groupId={service.serviceId}
-          environment={currentLineEnvironment()}
+          environment={environment}
           webhookOrigin={new URL(urls.webhookUrl).origin}
           initialMode={result.mode}
           initialConfigurations={result.configurations.map((item) => ({
@@ -71,6 +111,13 @@ export default async function ServiceLinePage({
           endpoint={endpoint}
           scopeLabel="サービス"
         />
+        <ServiceLineBroadcastEditor serviceSlug={service.configuration.slug} />
+        <section className="settings-card">
+          <LineDeliveryRetryPanel
+            failures={retryableFailures}
+            endpointPrefix={`/api/services/${encodeURIComponent(service.configuration.slug)}`}
+          />
+        </section>
         <a href={`/s/${service.configuration.slug}/home`}>サービスホームへ戻る</a>
       </main>
     </PublicShell>

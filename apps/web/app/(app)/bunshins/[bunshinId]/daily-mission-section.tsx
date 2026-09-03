@@ -30,13 +30,6 @@ export type DailyMissionView = {
   trendContext: {
     whyNow: string;
     fitReason: string;
-    researchedAt: string;
-    evidence: Array<{
-      sourceUrl: string;
-      sourceTitle: string;
-      publishedAt: string | null;
-      retrievedAt: string;
-    }>;
   } | null;
   externalLinkUsage?: {
     linkName: string;
@@ -157,7 +150,7 @@ function displayDate(value: string) {
     : new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(date);
 }
 
-function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
+export function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
   const context = mission.trendContext;
   if (!context) return null;
   return (
@@ -174,23 +167,6 @@ function MissionTrendContext({ mission }: { mission: DailyMissionView }) {
           <dd>{context.fitReason}</dd>
         </div>
       </dl>
-      <details>
-        <summary>参考にした情報を見る</summary>
-        <ul>
-          {context.evidence.map((item) => (
-            <li key={item.sourceUrl}>
-              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
-                {item.sourceTitle}
-              </a>
-              <small>
-                {item.publishedAt && `公開：${displayDate(item.publishedAt)} / `}
-                確認：{displayDate(item.retrievedAt)}
-              </small>
-            </li>
-          ))}
-        </ul>
-        <p>情報を確認した日：{displayDate(context.researchedAt)}</p>
-      </details>
     </aside>
   );
 }
@@ -358,6 +334,7 @@ export function DailyMissionSection({
     Record<string, ContentAssistanceLevel>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [resubmitMissionId, setResubmitMissionId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -505,17 +482,23 @@ export function DailyMissionSection({
       return;
     }
     const result = (await authorization.json()) as {
-      data?: { allowed?: boolean; reason?: string };
+      data?: { allowed?: boolean; reason?: string; reviewNote?: string | null };
     };
     if (!result.data?.allowed) {
+      setResubmitMissionId(result.data?.reason === 'APPROVAL_CHANGES_REQUESTED' ? id : null);
       setError(
         result.data?.reason === 'LINK_CHANGED'
           ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
-          : 'この紹介URLは今は使えません。管理者へお問い合わせください。',
+          : result.data?.reason === 'APPROVAL_PENDING'
+            ? 'この投稿案は、運営者の確認待ちです。確認が終わるまでコピーできません。'
+            : result.data?.reason === 'APPROVAL_CHANGES_REQUESTED'
+              ? `この投稿案は見直しが必要です。${result.data.reviewNote ? `理由：${result.data.reviewNote}` : '管理者の案内を確認してください。'}`
+              : 'この紹介URLは今は使えません。管理者へお問い合わせください。',
       );
       setPendingAction(null);
       return;
     }
+    setResubmitMissionId(null);
     try {
       await navigator.clipboard.writeText(value);
     } catch {
@@ -525,6 +508,30 @@ export function DailyMissionSection({
     }
     setPendingAction(null);
     await activity(id, type, metadata);
+  }
+  async function resubmitForApproval(id: string) {
+    if (pendingAction !== null) return;
+    setError(null);
+    setPendingAction(`${id}:resubmit`);
+    try {
+      const response = await fetch(
+        `${endpoint}/${encodeURIComponent(id)}/posting-approval/resubmit`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      if (!response.ok) {
+        setError('確認をもう一度お願いできませんでした。画面を更新してお試しください。');
+        return;
+      }
+      setResubmitMissionId(null);
+      setError('運営者へ、もう一度確認をお願いしました。');
+      router.refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }
   async function markPosted(mission: DailyMissionView) {
     if (!mission.platform) {
@@ -600,18 +607,23 @@ export function DailyMissionSection({
       </section>
       {active && (
         <div className="mission-generator">
-          <h3>今日の案を準備する</h3>
-          <label>
-            日付
+          <div className="mission-generator__heading">
+            <h3>今日の案を準備する</h3>
+            <p>投稿先を選んで、今日やることを1つ作ります。</p>
+          </div>
+          <label className="field">
+            <span className="field__label">日付</span>
             <input
+              className="field__control"
               type="date"
               value={missionDate}
               onChange={(event) => setMissionDate(event.target.value)}
             />
           </label>{' '}
-          <label>
-            SNS
+          <label className="field">
+            <span className="field__label">投稿するSNS</span>
             <select
+              className="field__control"
               value={socialProfileId}
               onChange={(event) => setSocialProfileId(event.target.value)}
             >
@@ -623,6 +635,7 @@ export function DailyMissionSection({
             </select>
           </label>{' '}
           <button
+            className="button button--primary button--full"
             type="button"
             disabled={
               busy ||
@@ -634,7 +647,9 @@ export function DailyMissionSection({
           >
             {generating ? '考えています…' : '今日の投稿案を作る'}
           </button>
-          {activeProfiles.length === 0 && <p>先に、使いたいSNSを登録してください。</p>}
+          {activeProfiles.length === 0 && (
+            <p className="mission-generator__notice">先に、使いたいSNSを登録してください。</p>
+          )}
         </div>
       )}
       {pendingAction && (
@@ -645,6 +660,19 @@ export function DailyMissionSection({
       {error && (
         <div className="notice notice--danger" role="alert">
           {error}
+        </div>
+      )}
+      {resubmitMissionId && (
+        <div className="notice">
+          <p>案内を確認したら、運営者へもう一度確認をお願いできます。</p>
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => void resubmitForApproval(resubmitMissionId)}
+          >
+            もう一度確認をお願いする
+          </button>
         </div>
       )}
       {missions.length === 0 ? (

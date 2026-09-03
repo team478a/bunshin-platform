@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   GetVideoRenderOperations,
+  RequestVideoSceneGenerationRetry,
   RequestVideoRenderRetry,
   type VideoRenderOperationsRepository,
 } from '../src/index';
@@ -8,11 +9,17 @@ import {
 const repository = (): VideoRenderOperationsRepository => ({
   getSnapshot: vi.fn(),
   requestRetry: vi.fn(),
+  requestSceneRetry: vi.fn(),
 });
 
 describe('video render operations', () => {
   it('returns the current-environment snapshot', async () => {
-    const snapshot = { counts: { QUEUED: 1 } as never, items: [] };
+    const snapshot = {
+      counts: { QUEUED: 1 } as never,
+      items: [],
+      sceneCounts: { QUEUED: 2, FAILED: 1 } as never,
+      sceneItems: [],
+    };
     const getSnapshot = vi.fn(() => Promise.resolve(snapshot));
     const result = await new GetVideoRenderOperations({
       ...repository(),
@@ -20,6 +27,7 @@ describe('video render operations', () => {
     }).execute({ actorUserId: 'admin', environment: 'PRODUCTION' });
 
     expect(result).toBe(snapshot);
+    expect(result.sceneCounts).toMatchObject({ QUEUED: 2, FAILED: 1 });
     expect(getSnapshot).toHaveBeenCalledWith({
       actorUserId: 'admin',
       environment: 'PRODUCTION',
@@ -60,5 +68,17 @@ describe('video render operations', () => {
     expect(requestRetry).toHaveBeenCalledWith(
       expect.objectContaining({ reason: '通信障害の復旧後に再実行' }),
     );
+  });
+
+  it('requires a reason when retrying a failed AI scene', async () => {
+    await expect(
+      new RequestVideoSceneGenerationRetry(repository()).execute({
+        requestId: '11111111-1111-4111-8111-111111111111',
+        actorUserId: 'admin',
+        environment: 'PRODUCTION',
+        generationId: '22222222-2222-4222-8222-222222222222',
+        reason: '  ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

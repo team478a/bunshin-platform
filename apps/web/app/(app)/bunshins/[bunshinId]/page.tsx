@@ -397,15 +397,6 @@ export default async function BunshinPage({
                 ? {
                     whyNow: trendContext.snapshot.candidate.whyNow,
                     fitReason: trendContext.snapshot.candidate.fitReason,
-                    researchedAt: trendContext.createdAt.toISOString(),
-                    evidence: trendContext.snapshot.evidence.map(
-                      ({ sourceUrl, sourceTitle, publishedAt, retrievedAt }) => ({
-                        sourceUrl,
-                        sourceTitle,
-                        publishedAt,
-                        retrievedAt,
-                      }),
-                    ),
                   }
                 : null,
               externalLinkUsage: linkUsage

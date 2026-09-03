@@ -42,6 +42,7 @@ export function SocialImageWorkspace({
   workspaceId,
   groupId,
   groupMembershipId,
+  imageCreditAvailable,
   pointCost,
   initialAvailablePoints,
   missions,
@@ -50,6 +51,7 @@ export function SocialImageWorkspace({
   workspaceId: string;
   groupId: string;
   groupMembershipId: string;
+  imageCreditAvailable: number | null;
   pointCost: number | null;
   initialAvailablePoints: number;
   missions: Mission[];
@@ -69,6 +71,8 @@ export function SocialImageWorkspace({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
+  const [availableCredits, setAvailableCredits] = useState(imageCreditAvailable);
+  const usesImageCredits = availableCredits !== null;
 
   const endpoint = selected
     ? `/api/workspaces/${workspaceId}/groups/${groupId}/bunshins/${selected.bunshinId}/daily-missions/${selected.id}/images`
@@ -126,14 +130,17 @@ export function SocialImageWorkspace({
       error?: { code?: string };
     } | null;
     if (response.ok && payload?.data?.id) {
-      if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
+      if (usesImageCredits) setAvailableCredits((value) => Math.max(0, (value ?? 0) - 1));
+      else if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
       setRequestId(payload.data.id);
       setRequestView(null);
       setMessage('画像づくりを始めました。このまま少しお待ちください。');
     } else {
       setMessage(
         payload?.error?.code === 'FORBIDDEN'
-          ? 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
+          ? usesImageCredits
+            ? '画像作成回数が足りないか、この機能を利用できません。画像作成回数の画面をご確認ください。'
+            : 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
           : '画像づくりを始められませんでした。少し待ってから、もう一度お試しください。',
       );
     }
@@ -176,6 +183,9 @@ export function SocialImageWorkspace({
   }
 
   const ready = requestView?.status === 'READY_FOR_REVIEW' && requestView.media;
+  const canCreate = usesImageCredits
+    ? (availableCredits ?? 0) >= 1
+    : pointCost !== null && availablePoints >= pointCost;
   return (
     <div className="social-image-workspace">
       <section className="settings-card">
@@ -198,10 +208,14 @@ export function SocialImageWorkspace({
 
       <section className="settings-card social-image-review" aria-live="polite">
         <h2>{ready ? 'できあがった画像を確認' : '画像を作る'}</h2>
-        <p>
-          必要なポイント：{pointCost === null ? '現在利用できません' : `${pointCost} WP`} ／
-          いま使えるポイント：{availablePoints} WP
-        </p>
+        {usesImageCredits ? (
+          <p>必要な画像作成回数：1回 ／ いま使える回数：{availableCredits}回</p>
+        ) : (
+          <p>
+            必要なポイント：{pointCost === null ? '現在利用できません' : `${pointCost} WP`} ／
+            いま使えるポイント：{availablePoints} WP
+          </p>
+        )}
         {message ? <p className="notice">{message}</p> : null}
         {requestView && !ready && requestView.status !== 'READY_FOR_REVIEW' ? (
           <div className="social-image-progress">
@@ -258,7 +272,7 @@ export function SocialImageWorkspace({
           <button
             className="button"
             type="button"
-            disabled={busy || pointCost === null || availablePoints < pointCost}
+            disabled={busy || !canCreate}
             onClick={() => void create()}
           >
             {requestView?.status === 'FAILED' ? '別の画像を作る' : '画像を作る'}
@@ -268,14 +282,19 @@ export function SocialImageWorkspace({
           <button
             className="button button--secondary"
             type="button"
-            disabled={busy || pointCost === null || availablePoints < pointCost}
+            disabled={busy || !canCreate}
             onClick={() => void create()}
           >
             別の画像を作る
           </button>
         ) : null}
         <p className="form-help">画像を作る操作は、この画面で本人が押したときだけ始まります。</p>
-        {pointCost !== null && availablePoints < pointCost ? (
+        {usesImageCredits && (availableCredits ?? 0) < 1 ? (
+          <p className="form-help">
+            画像作成回数が足りません。紹介特典や運営からの付与をお待ちください。
+          </p>
+        ) : null}
+        {!usesImageCredits && pointCost !== null && availablePoints < pointCost ? (
           <p className="form-help">
             ポイントが足りません。今日の企画確認や投稿完了でためられます。
           </p>

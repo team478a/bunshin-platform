@@ -8,9 +8,19 @@ export default async function AccountPage() {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
-  const request = await new GetAccountDeletionRequest(
-    new db.PrismaAccountDeletionRequestRepository(),
-  ).execute(user.userId);
+  const [request, managedOrganizationCount] = await Promise.all([
+    new GetAccountDeletionRequest(new db.PrismaAccountDeletionRequestRepository()).execute(
+      user.userId,
+    ),
+    db.prisma.workspaceMembership.count({
+      where: {
+        userId: user.userId,
+        status: 'ACTIVE',
+        role: { in: ['OWNER', 'ADMIN'] },
+        workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+      },
+    }),
+  ]);
   return (
     <main className="app-page account-page">
       <header className="app-page__heading">
@@ -18,6 +28,21 @@ export default async function AccountPage() {
         <h1>アカウント</h1>
         <p>利用情報や通知、セキュリティに関する設定を確認できます。</p>
       </header>
+
+      {managedOrganizationCount > 0 ? (
+        <section className="settings-card" aria-labelledby="operator-settings-title">
+          <h2 id="operator-settings-title">運営者メニュー</h2>
+          <nav className="settings-list" aria-label="運営者メニュー">
+            <Link href="/organizations" className="settings-row">
+              <span>
+                <strong>運営団体・サービスを管理</strong>
+                <small>{managedOrganizationCount}件の運営団体を管理できます</small>
+              </span>
+              <span aria-hidden="true">›</span>
+            </Link>
+          </nav>
+        </section>
+      ) : null}
 
       <section className="settings-card" aria-labelledby="content-settings-title">
         <h2 id="content-settings-title">BUNSHINの設定</h2>

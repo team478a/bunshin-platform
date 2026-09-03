@@ -5,6 +5,8 @@ import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { VideoPlanGenerator } from '../../../../../ui/video-plan-generator';
 import { VideoPlanApprover } from '../../../../../ui/video-plan-approver';
 import { VideoRenderRequester } from '../../../../../ui/video-render-requester';
+import { VideoAiSceneRequester } from '../../../../../ui/video-ai-scene-requester';
+import { VideoDeliveryActions } from '../../../../../ui/video-delivery-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,8 +78,78 @@ export default async function VideoProjectPage({
     project.characterProfileSnapshot,
     project.characterReferenceSnapshot,
   );
+  const sceneGenerations = project.standardComposition
+    ? []
+    : await db.prisma.videoSceneGeneration.findMany({
+        where: {
+          workspaceId: project.workspaceId,
+          groupId: project.groupId,
+          videoProjectId: project.id,
+          ownerUserId: actor.userId,
+        },
+        select: {
+          id: true,
+          videoSceneId: true,
+          status: true,
+          errorCode: true,
+          outputStorageKey: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+  const aiSceneIds = new Set(
+    project.scenes
+      .filter(
+        (scene) =>
+          scene.visualType === 'AI_VIDEO' || scene.aiProcessingTypes.includes('VIDEO_GENERATION'),
+      )
+      .map((scene) => scene.id),
+  );
+  const completedAiSceneIds = new Set(
+    sceneGenerations
+      .filter(
+        (generation) =>
+          generation.status === 'SUCCEEDED' &&
+          generation.outputStorageKey &&
+          aiSceneIds.has(generation.videoSceneId),
+      )
+      .map((generation) => generation.videoSceneId),
+  );
+  const aiSceneGenerationFailed = sceneGenerations.some(
+    (generation) => aiSceneIds.has(generation.videoSceneId) && generation.status === 'FAILED',
+  );
+  const canComposeAiVideo =
+    !project.standardComposition &&
+    aiSceneIds.size > 0 &&
+    completedAiSceneIds.size === aiSceneIds.size &&
+    !aiSceneGenerationFailed;
 
   const serviceSlug = (await searchParams)?.service;
+  const delivery =
+    serviceSlug && row.renderAttempts[0]?.status === 'SUCCEEDED'
+      ? await db.prisma.videoDelivery.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            groupId: project.groupId,
+            videoProjectId: project.id,
+            videoRenderId: row.renderAttempts[0].id,
+            ownerUserId: actor.userId,
+          },
+          select: { id: true, status: true, rightsSnapshot: true, expiresAt: true },
+        })
+      : null;
+  const deliveryMessage =
+    delivery?.rightsSnapshot &&
+    typeof delivery.rightsSnapshot === 'object' &&
+    !Array.isArray(delivery.rightsSnapshot) &&
+    typeof delivery.rightsSnapshot.usageMessage === 'string'
+      ? delivery.rightsSnapshot.usageMessage
+      : 'この動画の内容を確認し、ご自身でSNSへ投稿してください。';
+  const deliveryStatus =
+    delivery?.expiresAt !== null &&
+    delivery?.expiresAt !== undefined &&
+    delivery.expiresAt <= new Date()
+      ? 'EXPIRED'
+      : delivery?.status;
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -193,13 +265,76 @@ export default async function VideoProjectPage({
           {project.status === 'APPROVED' ? (
             <section className="settings-card">
               <h2>台本を確認しました</h2>
-              <p>この内容から動画を作ります。受付後は画面を閉じても大丈夫です。</p>
-              <VideoRenderRequester
-                workspaceId={project.workspaceId}
-                groupId={project.groupId}
-                projectId={project.id}
-                revision={project.revision}
-              />
+              {project.standardComposition ? (
+                <>
+                  <p>この内容から動画を作ります。受付後は画面を閉じても大丈夫です。</p>
+                  <VideoRenderRequester
+                    workspaceId={project.workspaceId}
+                    groupId={project.groupId}
+                    projectId={project.id}
+                    revision={project.revision}
+                  />
+                </>
+              ) : (
+                <>
+                  {canComposeAiVideo ? (
+                    <>
+                      <p>すべてのAI動画の場面ができました。場面をつないで完成動画を作ります。</p>
+                      <VideoRenderRequester
+                        workspaceId={project.workspaceId}
+                        groupId={project.groupId}
+                        projectId={project.id}
+                        revision={project.revision}
+                      />
+                    </>
+                  ) : aiSceneGenerationFailed ? (
+                    <p>作れなかった場面があります。管理者が設定を確認します。</p>
+                  ) : (
+                    <>
+                      <p>
+                        AI動画を使う場面を一つずつ作ります。設定と予算を確認できる場合だけ開始します。
+                      </p>
+                      <VideoAiSceneRequester
+                        workspaceId={project.workspaceId}
+                        groupId={project.groupId}
+                        projectId={project.id}
+                        revision={project.revision}
+                      />
+                    </>
+                  )}
+                </>
+              )}
+            </section>
+          ) : null}
+          {!project.standardComposition && sceneGenerations.length > 0 ? (
+            <section className="settings-card">
+              <h2>AI動画の場面</h2>
+              <p>作成中の場面は、少し時間をおいてこの画面を開き直してください。</p>
+              {sceneGenerations.map((generation) => {
+                const scene = project.scenes.find((item) => item.id === generation.videoSceneId);
+                const label =
+                  generation.status === 'SUCCEEDED'
+                    ? 'できました'
+                    : generation.status === 'FAILED'
+                      ? '作れませんでした'
+                      : '作っています';
+                return (
+                  <p key={generation.id}>
+                    {scene ? `${scene.sceneNo}番目` : '場面'}：{label}
+                    {generation.status === 'SUCCEEDED' && generation.outputStorageKey ? (
+                      <>
+                        {' '}
+                        <a
+                          href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/ai-scenes/${generation.id}/download`}
+                        >
+                          この場面を開く
+                        </a>
+                      </>
+                    ) : null}
+                    {generation.status === 'FAILED' ? ' 管理者が設定を確認します。' : null}
+                  </p>
+                );
+              })}
             </section>
           ) : null}
           {['QUEUED', 'RENDERING'].includes(project.status) ? (
@@ -213,12 +348,21 @@ export default async function VideoProjectPage({
             <section className="settings-card">
               <h2>動画ができました</h2>
               <p>内容を確認してください。動画は一般公開されていません。</p>
-              <a
-                className="button button--primary"
-                href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/render/download`}
-              >
-                動画を確認する
-              </a>
+              {delivery && serviceSlug ? (
+                <VideoDeliveryActions
+                  deliveryId={delivery.id}
+                  serviceSlug={serviceSlug}
+                  status={deliveryStatus ?? delivery.status}
+                  usageMessage={deliveryMessage}
+                />
+              ) : (
+                <a
+                  className="button button--primary"
+                  href={`/api/workspaces/${project.workspaceId}/groups/${project.groupId}/video-projects/${project.id}/render/download`}
+                >
+                  動画を確認する
+                </a>
+              )}
             </section>
           ) : null}
           {project.status === 'FAILED' ? (

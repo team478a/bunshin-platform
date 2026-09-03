@@ -137,7 +137,7 @@ export function ExternalTrackingOperations({
     }
   }
   return (
-    <>
+    <div className="external-tracking-operations">
       {message && (
         <div className="notice" role="status">
           {message}
@@ -172,9 +172,26 @@ export function ExternalTrackingOperations({
           使用履歴をCSVで保存
         </a>
       </section>
-      <section className="settings-card">
+      <section className="settings-card external-tracking-operations__guide">
+        <p className="eyebrow">最初の設定は4ステップです</p>
+        <h2>紹介URLを投稿案へ入れるまで</h2>
+        <ol>
+          <li>利用する外部サービスを登録します。</li>
+          <li>登録を許可するURLのドメインを指定します。</li>
+          <li>参加者・商品・企画に合う紹介URLを登録します。</li>
+          <li>下書きを確認して「使用を始める」を押します。</li>
+        </ol>
+        <nav aria-label="専用URL設定の項目" className="settings-anchor-nav">
+          <a href="#tracking-system">1. 外部サービス</a>
+          <a href="#tracking-domain">2. 許可ドメイン</a>
+          <a href="#tracking-link">3. 専用URL</a>
+          <a href="#tracking-list">4. 設定一覧</a>
+        </nav>
+      </section>
+      <section className="settings-card" id="tracking-system">
         <h2>外部サービスを登録</h2>
         <form
+          className="admin-form-grid"
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
@@ -201,10 +218,11 @@ export function ExternalTrackingOperations({
           <button disabled={busy}>登録する</button>
         </form>
       </section>
-      <section className="settings-card">
+      <section className="settings-card" id="tracking-domain">
         <h2>使ってよいドメインを登録</h2>
         {systems.length ? (
           <form
+            className="admin-form-grid"
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
@@ -239,10 +257,11 @@ export function ExternalTrackingOperations({
           <p>先に外部サービスを登録してください。</p>
         )}
       </section>
-      <section className="settings-card">
+      <section className="settings-card" id="tracking-link">
         <h2>専用URLを登録</h2>
         {domains.length ? (
           <form
+            className="admin-form-grid"
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
@@ -327,6 +346,7 @@ export function ExternalTrackingOperations({
         </p>
         {domains.length ? (
           <form
+            className="admin-form-grid"
             onSubmit={(event) => {
               event.preventDefault();
               void importCsv(event.currentTarget);
@@ -384,7 +404,7 @@ export function ExternalTrackingOperations({
           </div>
         )}
       </section>
-      <section className="settings-card">
+      <section className="settings-card" id="tracking-list">
         <h2>専用URL一覧</h2>
         {initialConfiguration.links.length ? (
           <div className="table-scroll">
@@ -526,6 +546,6 @@ export function ExternalTrackingOperations({
           ))}
         </ul>
       </section>
-    </>
+    </div>
   );
 }

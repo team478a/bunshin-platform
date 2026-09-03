@@ -24,6 +24,7 @@ import type {
 import { isValidBunshinSlug, normalizeBunshinSlug } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 export * from './video-render-job';
+export * from './video-ai-scene-generation-job';
 export * from './video-render-completion';
 export * from './social-image-generation-job';
 export * from './social-image-pilot-evidence';
@@ -133,6 +134,64 @@ export class RecordAiUsage {
     if (input.status === 'SUCCESS' && input.errorCode)
       throw new ApplicationError('VALIDATION_ERROR', 'successful AI usage cannot have errorCode');
     await this.repository.record(input);
+  }
+}
+
+export type OrganizationAiReservationResult =
+  | { status: 'RESERVED'; reservationId: string }
+  | { status: 'ALREADY_RESERVED'; reservationId: string }
+  | { status: 'UNLIMITED'; reservationId: null }
+  | { status: 'EXHAUSTED'; reservationId: null };
+
+export interface OrganizationAiGenerationReservationRepository {
+  reserve(input: {
+    workspaceId: string;
+    operationKey: string;
+    now: Date;
+    expiresAt: Date;
+  }): Promise<OrganizationAiReservationResult>;
+  finish(input: {
+    workspaceId: string;
+    operationKey: string;
+    outcome: 'CONSUMED' | 'RELEASED';
+    now: Date;
+  }): Promise<boolean>;
+}
+
+export class ReserveOrganizationAiGeneration {
+  constructor(private readonly repository: OrganizationAiGenerationReservationRepository) {}
+
+  async execute(input: {
+    workspaceId: string;
+    operationKey: string;
+    now?: Date;
+    reservationTtlMs?: number;
+  }) {
+    if (!input.operationKey.trim() || input.operationKey.length > 200)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI generation operation key');
+    const now = input.now ?? new Date();
+    const ttl = input.reservationTtlMs ?? 15 * 60 * 1_000;
+    if (!Number.isInteger(ttl) || ttl < 60_000 || ttl > 60 * 60 * 1_000)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI reservation TTL');
+    return this.repository.reserve({
+      workspaceId: input.workspaceId,
+      operationKey: input.operationKey,
+      now,
+      expiresAt: new Date(now.getTime() + ttl),
+    });
+  }
+}
+
+export class FinishOrganizationAiGeneration {
+  constructor(private readonly repository: OrganizationAiGenerationReservationRepository) {}
+
+  execute(input: {
+    workspaceId: string;
+    operationKey: string;
+    outcome: 'CONSUMED' | 'RELEASED';
+    now?: Date;
+  }) {
+    return this.repository.finish({ ...input, now: input.now ?? new Date() });
   }
 }
 
@@ -259,7 +318,15 @@ export interface PlatformAdminRepository {
   findActivePlatformAdminByUserId(userId: string): Promise<PlatformAdmin | null>;
 }
 
-export const AI_PROVIDER_KEYS = ['OPENAI', 'GROK', 'EXA', 'FIRECRAWL', 'CREATOMATE'] as const;
+export const AI_PROVIDER_KEYS = [
+  'OPENAI',
+  'GROK',
+  'EXA',
+  'FIRECRAWL',
+  'CREATOMATE',
+  'FAL',
+  'RUNWAY',
+] as const;
 export type AiProviderKey = (typeof AI_PROVIDER_KEYS)[number];
 export type AiProviderConfigurationStatus = 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ERROR';
 export interface AiProviderConfiguration {
@@ -383,9 +450,9 @@ export class CreateAiProviderConfigurationVersion {
     if (reason.length < 3 || reason.length > 500)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
     const model = input.model?.trim() || null;
-    if (['OPENAI', 'GROK'].includes(input.provider) && model === null)
+    if (['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model === null)
       throw new ApplicationError('VALIDATION_ERROR', 'AI model is required');
-    if (!['OPENAI', 'GROK'].includes(input.provider) && model !== null)
+    if (!['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(input.provider) && model !== null)
       throw new ApplicationError('VALIDATION_ERROR', 'model is not supported for this provider');
     if (
       !Number.isSafeInteger(input.dailyBudgetUsdMicros) ||
@@ -2370,6 +2437,8 @@ export * from './advertising-safety';
 export * from './campaign-participation';
 export * from './campaign-safety-validation';
 export * from './video-core';
+export * from './video-delivery';
+export * from './video-ai-scene-generation';
 export * from './video-assets';
 export * from './video-render-operations';
 export * from './video-disclosure-policy';
@@ -2398,3 +2467,11 @@ export * from './service-staff-role';
 export * from './program-core';
 export * from './program-goals-core';
 export * from './ai-character-profile';
+export * from './service-line-broadcast';
+export * from './service-line-broadcast-job';
+export * from './service-referral-credit';
+export * from './service-credit-consumption';
+export * from './service-credit-expiration';
+export * from './service-credit-adjustment';
+export * from './service-referral-reward';
+export * from './service-referral-reward-rules';

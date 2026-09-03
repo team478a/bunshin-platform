@@ -22,6 +22,8 @@ export interface ServiceFoundationRecord {
   contactEmail: string | null;
   visibility: ServiceVisibility;
   poweredByEnabled: boolean;
+  /** サービス運営者が管理する、外部の話題を投稿案に使うかどうかの設定。 */
+  trendResearchEnabled?: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
   termsUrl: string | null;

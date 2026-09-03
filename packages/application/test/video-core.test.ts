@@ -88,6 +88,7 @@ describe('Video Core', () => {
         platform: 'INSTAGRAM',
         type: 'PRODUCT_INTRODUCTION',
         durationSeconds: 30,
+        standardComposition: true,
         aiProcessingTypes: ['SCRIPT_GENERATION'],
         disclosureSnapshot: {},
       }),

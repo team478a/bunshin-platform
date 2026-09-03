@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import { jobWorkerResponse, type JobWorkerPort } from '../src/http/job-worker';
+import {
+  jobWorkerResponse,
+  type JobWorkerPort,
+  type ServiceCreditExpirationPort,
+} from '../src/http/job-worker';
 
 const secret = 'cron-secret-at-least-thirty-two-bytes';
 const worker = (): JobWorkerPort => ({
@@ -16,6 +20,10 @@ const worker = (): JobWorkerPort => ({
       drained: true,
     }),
   ),
+});
+
+const expiration = (expired = 0): ServiceCreditExpirationPort => ({
+  expire: vi.fn(() => Promise.resolve(expired)),
 });
 
 beforeEach(() => {
@@ -34,6 +42,7 @@ describe('job worker HTTP boundary', () => {
     const missing = await jobWorkerResponse(
       new Request('http://localhost/api/internal/jobs/run', { method: 'POST' }),
       factory,
+      () => Promise.resolve(expiration()),
     );
     expect(missing.status).toBe(401);
     const wrong = await jobWorkerResponse(
@@ -42,6 +51,7 @@ describe('job worker HTTP boundary', () => {
         headers: { authorization: 'Bearer wrong-secret' },
       }),
       factory,
+      () => Promise.resolve(expiration()),
     );
     expect(wrong.status).toBe(401);
     expect(factory).not.toHaveBeenCalled();
@@ -55,6 +65,7 @@ describe('job worker HTTP boundary', () => {
         headers: { authorization: `Bearer ${secret}` },
       }),
       () => Promise.resolve(value),
+      () => Promise.resolve(expiration(3)),
     );
     expect(response.status).toBe(200);
     expect(value.execute).toHaveBeenCalledWith({
@@ -62,7 +73,11 @@ describe('job worker HTTP boundary', () => {
       workerId: expect.stringMatching(/^http-/),
       batchSize: 5,
     });
-    await expect(response.json()).resolves.toMatchObject({ claimed: 2, drained: true });
+    await expect(response.json()).resolves.toMatchObject({
+      claimed: 2,
+      drained: true,
+      expiredServiceCredits: 3,
+    });
   });
 
   it('maps worker failures without exposing authorization secrets', async () => {
@@ -75,6 +90,7 @@ describe('job worker HTTP boundary', () => {
         Promise.resolve({
           execute: () => Promise.reject(new Error(`database failed ${secret}`)),
         }),
+      () => Promise.resolve(expiration()),
     );
     expect(response.status).toBe(500);
     const body = await response.text();
