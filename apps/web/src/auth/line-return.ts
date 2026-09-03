@@ -24,6 +24,8 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
     if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
     if (/^\/groups\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
       return url.pathname;
+    if (/^\/organizations\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
+      return url.pathname;
     if (
       /^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*\/join\/[A-Za-z0-9_-]{43}$/.test(url.pathname) &&
       url.search === ''

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { ensureUserWorkspaceLineConnection } from '../../../../../src/line/ensure-user-workspace-connection';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,31 +17,92 @@ async function acceptInvitation(formData: FormData) {
   const input = actionSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) notFound();
   const db = await import('@bunshin/database');
-  const invitation = await db.prisma.$transaction(async (tx) => {
-    const found = await tx.workspaceInvitation.findFirst({
-      where: { tokenHash: hash(input.data.token), status: 'ACTIVE', expiresAt: { gt: new Date() } },
-      select: { id: true, workspaceId: true, role: true, usedCount: true, maxUses: true },
-    });
-    if (!found || found.usedCount >= found.maxUses) return null;
-    const consumed = await tx.workspaceInvitation.updateMany({
-      where: { id: found.id, status: 'ACTIVE', usedCount: found.usedCount },
-      data: { usedCount: { increment: 1 }, status: 'EXHAUSTED', acceptedAt: new Date() },
-    });
-    if (consumed.count !== 1) return null;
-    await tx.workspaceMembership.upsert({
-      where: { workspaceId_userId: { workspaceId: found.workspaceId, userId: user.userId } },
-      create: {
-        workspaceId: found.workspaceId,
-        userId: user.userId,
-        role: found.role,
-        status: 'ACTIVE',
-      },
-      update: { role: found.role, status: 'ACTIVE' },
-    });
-    return found;
-  });
-  if (!invitation) redirect('/groups?error=invitation');
-  redirect(`/organizations/${invitation.workspaceId}/manage?joined=1`);
+  const now = new Date();
+  const result = await db.prisma.$transaction(
+    async (tx) => {
+      const found = await tx.workspaceInvitation.findFirst({
+        where: { tokenHash: hash(input.data.token), status: 'ACTIVE', expiresAt: { gt: now } },
+        select: {
+          id: true,
+          workspaceId: true,
+          inviteeEmail: true,
+          role: true,
+          usedCount: true,
+          maxUses: true,
+          workspace: { select: { status: true, organizationEntitlement: true } },
+        },
+      });
+      if (!found || found.usedCount >= found.maxUses) return { error: 'invitation' } as const;
+      const account = await tx.user.findUnique({
+        where: { id: user.userId },
+        select: { email: true },
+      });
+      const manualInvitation = found.inviteeEmail.endsWith('@invitation.local');
+      if (
+        !manualInvitation &&
+        account?.email &&
+        account.email.toLowerCase() !== found.inviteeEmail.toLowerCase()
+      )
+        return { error: 'email-mismatch' } as const;
+      const entitlement = found.workspace.organizationEntitlement;
+      if (
+        found.workspace.status !== 'ACTIVE' ||
+        entitlement?.suspended ||
+        (entitlement?.startsAt && entitlement.startsAt > now) ||
+        (entitlement?.endsAt && entitlement.endsAt <= now)
+      )
+        return { error: 'organization-suspended' } as const;
+
+      const currentMembership = await tx.workspaceMembership.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: found.workspaceId, userId: user.userId },
+        },
+        select: { role: true, status: true },
+      });
+      const grantedRole = found.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+      const addsOperator =
+        grantedRole === 'ADMIN' &&
+        !(
+          currentMembership?.status === 'ACTIVE' &&
+          (currentMembership.role === 'OWNER' || currentMembership.role === 'ADMIN')
+        );
+      if (addsOperator && entitlement?.maxOperators) {
+        const operators = await tx.workspaceMembership.count({
+          where: {
+            workspaceId: found.workspaceId,
+            status: 'ACTIVE',
+            role: { in: ['OWNER', 'ADMIN'] },
+          },
+        });
+        if (operators >= entitlement.maxOperators) return { error: 'operator-limit' } as const;
+      }
+
+      const consumed = await tx.workspaceInvitation.updateMany({
+        where: { id: found.id, status: 'ACTIVE', usedCount: found.usedCount },
+        data: {
+          usedCount: { increment: 1 },
+          status: found.usedCount + 1 >= found.maxUses ? 'EXHAUSTED' : 'ACTIVE',
+          acceptedAt: now,
+        },
+      });
+      if (consumed.count !== 1) return { error: 'invitation' } as const;
+      await tx.workspaceMembership.upsert({
+        where: { workspaceId_userId: { workspaceId: found.workspaceId, userId: user.userId } },
+        create: {
+          workspaceId: found.workspaceId,
+          userId: user.userId,
+          role: grantedRole,
+          status: 'ACTIVE',
+        },
+        update: { role: grantedRole, status: 'ACTIVE' },
+      });
+      return { workspaceId: found.workspaceId } as const;
+    },
+    { isolationLevel: 'Serializable' },
+  );
+  if ('error' in result) redirect(`/groups?error=${result.error}`);
+  await ensureUserWorkspaceLineConnection(user.userId, result.workspaceId);
+  redirect(`/organizations/${result.workspaceId}/manage?joined=1`);
 }
 
 export default async function OrganizationInvitationPage({

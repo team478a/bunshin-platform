@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { groupInvitationTokenHash } from '../../../../../src/http/group-invitations';
+import { ensureUserWorkspaceLineConnection } from '../../../../../src/line/ensure-user-workspace-connection';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +70,7 @@ async function acceptInvitation(formData: FormData) {
   } catch {
     redirect(serviceReturn?.declined ?? '/groups?error=invitation');
   }
+  await ensureUserWorkspaceLineConnection(actor.userId, input.data.workspaceId);
   redirect(serviceReturn?.accepted ?? '/groups?joined=1');
 }
 
