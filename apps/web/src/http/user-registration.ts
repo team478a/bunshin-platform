@@ -152,6 +152,17 @@ export async function userRegistrationResponse(request: Request) {
           where: { userId: actor.userId, environment: currentLineEnvironment(), status: 'ACTIVE' },
           data: { notificationConsentAt: notificationConsent ? now : null },
         });
+      const eventType = complete ? 'ONBOARDING_COMPLETED' : 'ONBOARDING_STARTED';
+      await tx.registrationFunnelEvent.upsert({
+        where: { idempotencyKey: `${eventType}:${actor.userId}:once` },
+        create: {
+          eventType,
+          userId: actor.userId,
+          source: 'ONBOARDING',
+          idempotencyKey: `${eventType}:${actor.userId}:once`,
+        },
+        update: {},
+      });
       return saved;
     });
     return Response.json(

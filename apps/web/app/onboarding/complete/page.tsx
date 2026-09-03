@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { FirstPostCard } from './first-post-card';
+import { recordAuthenticatedRegistrationEvent } from '../../../src/registration/funnel';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,11 @@ export default async function OnboardingCompletePage() {
     select: { status: true, firstPostSuggestion: true },
   });
   if (profile?.status !== 'COMPLETED') redirect('/onboarding');
+  await recordAuthenticatedRegistrationEvent({
+    eventType: 'FIRST_POST_VIEWED',
+    userId: actor.userId,
+    source: 'ONBOARDING_COMPLETE',
+  });
   const suggestion = suggestionFrom(profile.firstPostSuggestion);
   return (
     <main className="app-page onboarding-page">

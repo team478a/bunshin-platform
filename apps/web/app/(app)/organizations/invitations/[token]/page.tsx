@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { ensureUserWorkspaceLineConnection } from '../../../../../src/line/ensure-user-workspace-connection';
+import { recordAuthenticatedRegistrationEvent } from '../../../../../src/registration/funnel';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,13 @@ async function acceptInvitation(formData: FormData) {
   );
   if ('error' in result) redirect(`/groups?error=${result.error}`);
   await ensureUserWorkspaceLineConnection(user.userId, result.workspaceId);
+  await recordAuthenticatedRegistrationEvent({
+    eventType: 'ORGANIZATION_JOINED',
+    userId: user.userId,
+    keySuffix: result.workspaceId,
+    source: 'ORGANIZATION_INVITATION',
+    metadata: { workspaceId: result.workspaceId },
+  });
   redirect(`/organizations/${result.workspaceId}/manage?joined=1`);
 }
 

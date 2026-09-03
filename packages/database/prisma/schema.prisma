@@ -26,6 +26,17 @@ enum IndustryStatus {
   INACTIVE
 }
 
+enum RegistrationFunnelEventType {
+  LANDING_VIEWED
+  LINE_AUTHENTICATED
+  ONBOARDING_STARTED
+  ONBOARDING_COMPLETED
+  FIRST_POST_VIEWED
+  FIRST_POST_COPIED
+  ORGANIZATION_JOINED
+  GROUP_JOINED
+}
+
 enum AuthProvider {
   LINE
   EMAIL
@@ -1580,6 +1591,7 @@ model User {
   updatedAt                         DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(6)
   identities                        AuthIdentity[]
   registrationProfile               UserRegistrationProfile?
+  registrationFunnelEvents          RegistrationFunnelEvent[]
   memberships                       WorkspaceMembership[]
   workspaceInvitationsCreated       WorkspaceInvitation[]               @relation("WorkspaceInvitationCreator")
   organizationEntitlementsUpdated   OrganizationEntitlement[]           @relation("OrganizationEntitlementUpdater")
@@ -1739,6 +1751,23 @@ model UserRegistrationProfile {
   @@index([status, updatedAt])
   @@index([primaryIndustryId, status])
   @@map("user_registration_profiles")
+}
+
+model RegistrationFunnelEvent {
+  id             String                      @id @default(uuid()) @db.Uuid
+  eventType      RegistrationFunnelEventType @map("event_type")
+  userId         String?                     @map("user_id") @db.Uuid
+  visitorKeyHash String?                     @map("visitor_key_hash") @db.Char(64)
+  source         String                      @default("WEB") @db.VarChar(40)
+  metadata       Json                        @default("{}")
+  idempotencyKey String                      @unique @map("idempotency_key") @db.VarChar(200)
+  occurredAt     DateTime                    @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  user           User?                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventType, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([visitorKeyHash, occurredAt])
+  @@map("registration_funnel_events")
 }
 
 model AuthIdentity {
