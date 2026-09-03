@@ -26,7 +26,15 @@ export function FirstPostCard({
           onClick={() => {
             void navigator.clipboard
               .writeText(body.current?.value ?? suggestion.body)
-              .then(() => setCopied(true));
+              .then(() => {
+                setCopied(true);
+                return fetch('/api/registration-funnel', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ eventType: 'FIRST_POST_COPIED' }),
+                });
+              })
+              .catch(() => undefined);
           }}
         >
           {copied ? 'コピーしました' : '投稿案をコピー'}

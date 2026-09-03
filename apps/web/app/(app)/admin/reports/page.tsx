@@ -12,6 +12,17 @@ import { percentage, resolvePeriod, stageLabels, usd } from '../users/view-model
 
 export const dynamic = 'force-dynamic';
 
+const registrationStageLabels = {
+  LANDING_VIEWED: '共通LPを表示',
+  LINE_AUTHENTICATED: 'LINE本人認証',
+  ONBOARDING_STARTED: '初期設定を開始',
+  ONBOARDING_COMPLETED: '初期設定を完了',
+  FIRST_POST_VIEWED: '初回投稿案を表示',
+  FIRST_POST_COPIED: '初回投稿案をコピー',
+  ORGANIZATION_JOINED: '運営団体へ参加',
+  GROUP_JOINED: 'グループへ参加',
+} as const;
+
 export default async function AdminReportsPage({
   searchParams,
 }: {
@@ -45,6 +56,22 @@ export default async function AdminReportsPage({
     if (error instanceof ApplicationError && error.code === 'NOT_FOUND') notFound();
     throw error;
   }
+  const registrationEvents = await db.prisma.registrationFunnelEvent.findMany({
+    where: { occurredAt: { gte: period.from, lt: period.to } },
+    select: { eventType: true, userId: true, visitorKeyHash: true },
+    take: 50_001,
+  });
+  const registrationFunnel = Object.fromEntries(
+    Object.keys(registrationStageLabels).map((eventType) => [
+      eventType,
+      new Set(
+        registrationEvents
+          .filter((event) => event.eventType === eventType)
+          .map((event) => event.userId ?? event.visitorKeyHash)
+          .filter((value): value is string => value !== null),
+      ).size,
+    ]),
+  ) as Record<keyof typeof registrationStageLabels, number>;
   const query = `from=${period.fromInput}&to=${period.toInput}`;
   return (
     <main className="app-page validation-dashboard">
@@ -249,6 +276,40 @@ export default async function AdminReportsPage({
                   <th>{stageLabels[stage]}</th>
                   <td>{snapshot.funnel[stage]}人</td>
                   <td>{percentage(snapshot.funnel[stage], snapshot.funnel.REGISTERED)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section aria-labelledby="registration-funnel">
+        <h2 id="registration-funnel">共通LPから初回投稿案まで</h2>
+        <p>
+          個人を特定できるアクセス情報は保存せず、LP表示はブラウザで生成した匿名IDのハッシュを集計します。
+        </p>
+        {registrationEvents.length > 50_000 ? (
+          <p className="notice notice--warning">集計上限を超えています。期間を短くしてください。</p>
+        ) : null}
+        <div className="validation-table-wrap">
+          <table className="validation-table">
+            <thead>
+              <tr>
+                <th>段階</th>
+                <th>人数・ブラウザ数</th>
+                <th>LP表示からの割合</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(registrationStageLabels).map(([eventType, label]) => (
+                <tr key={eventType}>
+                  <th>{label}</th>
+                  <td>{registrationFunnel[eventType as keyof typeof registrationStageLabels]}</td>
+                  <td>
+                    {percentage(
+                      registrationFunnel[eventType as keyof typeof registrationStageLabels],
+                      registrationFunnel.LANDING_VIEWED,
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
