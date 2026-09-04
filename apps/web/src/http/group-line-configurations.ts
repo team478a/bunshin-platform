@@ -9,6 +9,7 @@ import {
 } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
+import { getServerEnvironment } from '@bunshin/config';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
@@ -18,6 +19,8 @@ import {
   lineEndpointUrls,
   LineConnectionTestAdapter,
 } from '../line/secure-configuration';
+import { renderDefaultLineRichMenu } from '../line/default-rich-menu';
+import { publishDefaultGroupRichMenu } from '../line/group-rich-menu-provider';
 
 const uuid = z.string().uuid();
 const createSchema = z
@@ -190,5 +193,74 @@ export function activateGroupLineConfigurationResponse(
         ...input,
       }),
     );
+  });
+}
+
+export function publishDefaultGroupRichMenuResponse(request: Request, groupIdValue: string) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const groupId = uuid.parse(groupIdValue);
+    const input = actionSchema.parse(await body(request));
+    const reason = input.reason.trim();
+    if (reason.length < 3)
+      throw new ApplicationError('VALIDATION_ERROR', '公開理由を3文字以上で入力してください');
+    const actorUserId = await actor();
+    const environment = currentLineEnvironment();
+    const repo = await repository();
+    const available = await new ListGroupLineConfigurations(repo).execute({
+      actorUserId,
+      workspaceId: input.workspaceId,
+      groupId,
+      environment,
+    });
+    if (available.mode !== 'DEDICATED')
+      throw new ApplicationError('CONFLICT', 'このグループは専用LINEを使用していません');
+    const active = available.configurations.find(
+      (item) => item.status === 'ACTIVE' && item.lastVerifiedAt && !item.lastErrorCategory,
+    );
+    if (!active)
+      throw new ApplicationError('CONFLICT', '先に専用LINEの接続確認と使用開始を完了してください');
+    const db = await import('@bunshin/database');
+    const stored = await db.prisma.groupLineChannelConfiguration.findFirst({
+      where: {
+        id: active.id,
+        workspaceId: input.workspaceId,
+        groupId,
+        environment,
+        status: 'ACTIVE',
+      },
+      select: {
+        id: true,
+        encryptedAccessToken: true,
+        group: {
+          select: {
+            name: true,
+            serviceConfiguration: { select: { slug: true } },
+          },
+        },
+      },
+    });
+    if (!stored) throw new ApplicationError('CONFLICT', '使用中の専用LINE設定が見つかりません');
+    const published = await publishDefaultGroupRichMenu({
+      accessToken: new AesGcmLineSecretCrypto().decrypt(stored.encryptedAccessToken),
+      groupId,
+      groupName: stored.group.name,
+      appUrl: getServerEnvironment().APP_URL,
+      serviceSlug: stored.group.serviceConfiguration?.slug ?? null,
+      image: await renderDefaultLineRichMenu(),
+    });
+    await db.prisma.groupLineConfigurationAudit.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId,
+        configurationId: stored.id,
+        environment,
+        actorUserId,
+        action: 'RICH_MENU_PUBLISH',
+        reason,
+        afterData: { lineRichMenuId: published.lineRichMenuId, template: 'DEFAULT_V1' },
+      },
+    });
+    return { ...published, name: '標準リッチメニュー' };
   });
 }
