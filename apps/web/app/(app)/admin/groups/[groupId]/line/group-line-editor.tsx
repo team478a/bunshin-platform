@@ -44,12 +44,14 @@ export function GroupLineEditor(props: {
   const [mode, setMode] = useState(props.initialMode);
   const [items, setItems] = useState(props.initialConfigurations);
   const [message, setMessage] = useState('');
+  const [messageKind, setMessageKind] = useState<'success' | 'error'>('success');
   const [busy, setBusy] = useState(false);
   const endpoint = props.endpoint ?? `/api/admin/groups/${props.groupId}/line-configurations`;
   const scopeLabel = props.scopeLabel ?? 'グループ';
   async function call(url: string, method: string, data: unknown) {
     setBusy(true);
     setMessage('処理しています…');
+    setMessageKind('success');
     try {
       const response = await fetch(url, {
         method,
@@ -63,9 +65,11 @@ export function GroupLineEditor(props: {
           typeof error?.['message'] === 'string' ? error['message'] : '操作できませんでした',
         );
       setMessage('保存しました。');
+      setMessageKind('success');
       return payload['data'] ?? null;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '操作できませんでした');
+      setMessageKind('error');
       return null;
     } finally {
       setBusy(false);
@@ -279,7 +283,10 @@ export function GroupLineEditor(props: {
           </ul>
         )}
         {message ? (
-          <p className="notice notice--success" role="status">
+          <p
+            className={`notice ${messageKind === 'error' ? 'notice--danger' : 'notice--success'}`}
+            role={messageKind === 'error' ? 'alert' : 'status'}
+          >
             {message}
           </p>
         ) : null}

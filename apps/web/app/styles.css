@@ -3371,6 +3371,15 @@ body:has(.app-shell) > .site-footer {
 .line-settings-list__status {
   color: var(--color-primary-strong);
 }
+.line-settings-card .button--primary:not(:disabled) {
+  color: #ffffff;
+  border-color: #5b5ce2;
+  background-color: #5b5ce2;
+}
+.line-settings-card .button--primary:not(:disabled):hover {
+  border-color: #4546c8;
+  background-color: #4546c8;
+}
 .line-settings-list code {
   display: block;
   margin-top: 4px;
