@@ -61,6 +61,15 @@ const snapshot = {
       goodFeedbackRate: 1,
     },
   ],
+  personalityLearning: {
+    proposed: 3,
+    approved: 1,
+    rejected: 1,
+    revoked: 0,
+    decided: 2,
+    adoptionRate: 0.5,
+    repeatedCorrectionCount: 1,
+  },
 } satisfies ValidationMetricsSnapshot;
 
 vi.mock('../src/auth/current-user', () => ({

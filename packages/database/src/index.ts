@@ -8443,6 +8443,36 @@ export function summarizeAssistanceLevels(input: {
   });
 }
 
+export function summarizePersonalityLearning(
+  proposals: Array<{
+    bunshinId: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+    reason: string;
+  }>,
+): ValidationMetricsSnapshot['personalityLearning'] {
+  const approved = proposals.filter(({ status }) => status === 'APPROVED').length;
+  const rejected = proposals.filter(({ status }) => status === 'REJECTED').length;
+  const revoked = proposals.filter(({ status }) => status === 'REVOKED').length;
+  const decided = approved + rejected + revoked;
+  const correctionKeys = new Map<string, number>();
+  for (const proposal of proposals) {
+    const key = `${proposal.bunshinId}:${proposal.reason.trim().toLocaleLowerCase('ja-JP')}`;
+    correctionKeys.set(key, (correctionKeys.get(key) ?? 0) + 1);
+  }
+  return {
+    proposed: proposals.length,
+    approved,
+    rejected,
+    revoked,
+    decided,
+    adoptionRate: rate(approved, decided),
+    repeatedCorrectionCount: [...correctionKeys.values()].reduce(
+      (sum, count) => sum + Math.max(0, count - 1),
+      0,
+    ),
+  };
+}
+
 export class PrismaValidationMetricsRepository implements ValidationMetricsRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -8481,6 +8511,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       posts,
       feedback,
       aiUsage,
+      learningProposals,
     ] = await Promise.all([
       this.client.workspaceMembership.findMany({
         where: {
@@ -8549,6 +8580,10 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
           outputTokens: true,
           estimatedCostUsdMicros: true,
         },
+      }),
+      this.client.personalityLearningProposal.findMany({
+        where: { workspaceId: input.workspaceId, createdAt: occurred },
+        select: { bunshinId: true, status: true, reason: true },
       }),
     ]);
 
@@ -8624,6 +8659,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       ({ estimatedCostUsdMicros }) => estimatedCostUsdMicros !== null,
     );
     const assistanceLevels = summarizeAssistanceLevels({ missions, activities, posts, feedback });
+    const personalityLearning = summarizePersonalityLearning(learningProposals);
 
     return {
       period: input.period,
@@ -8667,6 +8703,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
               ),
       },
       assistanceLevels,
+      personalityLearning,
     };
   }
 }

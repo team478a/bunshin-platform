@@ -124,6 +124,32 @@ export default async function ValidationPage({
         </div>
       </section>
 
+      <section aria-labelledby="learning-kpi">
+        <h2 id="learning-kpi">人格学習の確認</h2>
+        <p>AIの提案は自動反映せず、本人が承認した割合と同じ修正の繰り返しを確認します。</p>
+        <div className="validation-kpi-grid" aria-labelledby="learning-kpi">
+          <article>
+            <strong>{metrics.personalityLearning.proposed}</strong>
+            <span>学習提案</span>
+          </article>
+          <article>
+            <strong>{percentage(metrics.personalityLearning.adoptionRate)}</strong>
+            <span>提案の採用率</span>
+            <small>
+              {metrics.personalityLearning.approved}/{metrics.personalityLearning.decided}件
+            </small>
+          </article>
+          <article>
+            <strong>{metrics.personalityLearning.revoked}</strong>
+            <span>承認後の取消</span>
+          </article>
+          <article>
+            <strong>{metrics.personalityLearning.repeatedCorrectionCount}</strong>
+            <span>同じ修正の繰り返し</span>
+          </article>
+        </div>
+      </section>
+
       <section aria-labelledby="funnel-heading">
         <h2 id="funnel-heading">登録してから投稿するまで</h2>
         <div className="validation-table-wrap">

@@ -84,6 +84,15 @@ export interface ValidationMetricsSnapshot {
     postRate: number | null;
     goodFeedbackRate: number | null;
   }>;
+  personalityLearning: {
+    proposed: number;
+    approved: number;
+    rejected: number;
+    revoked: number;
+    decided: number;
+    adoptionRate: number | null;
+    repeatedCorrectionCount: number;
+  };
 }
 
 export interface RecordAiUsageInput {
