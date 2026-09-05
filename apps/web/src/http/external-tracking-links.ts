@@ -9,6 +9,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { queueMemberTrackingLinkResultNotification } from '../services/member-tracking-link-notification';
 import {
   EXTERNAL_TRACKING_CSV_MAX_BYTES,
   parseExternalTrackingCsv,
@@ -521,12 +522,26 @@ export function transitionExternalTrackingLinkResponse(
   linkId: string,
   action: 'activate' | 'suspend',
   serviceId?: string,
+  notification?: { serviceSlug: string; serviceName: string },
 ) {
   return respond(request, async () => {
     requireSameOrigin(request);
     const { scope, value } = await service(workspaceId, serviceId);
     const input = { ...scope, linkId: uuid.parse(linkId) };
-    return action === 'activate' ? value.activateLink(input) : value.suspendLink(input);
+    const link = await (action === 'activate'
+      ? value.activateLink(input)
+      : value.suspendLink(input));
+    if (serviceId && notification)
+      await queueMemberTrackingLinkResultNotification({
+        workspaceId,
+        groupId: serviceId,
+        linkId: input.linkId,
+        actorUserId: scope.actorUserId,
+        serviceSlug: notification.serviceSlug,
+        serviceName: notification.serviceName,
+        result: action === 'activate' ? 'ACTIVATED' : 'REVISION_REQUESTED',
+      });
+    return link;
   });
 }
 

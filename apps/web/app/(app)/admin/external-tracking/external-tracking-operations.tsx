@@ -439,12 +439,20 @@ export function ExternalTrackingOperations({
                     </td>
                     <td>
                       {link.effectiveStatus === 'DRAFT' && (
-                        <button
-                          disabled={busy}
-                          onClick={() => void send(`/links/${link.id}/activate`, {})}
-                        >
-                          使用を始める
-                        </button>
+                        <div className="table-actions">
+                          <button
+                            disabled={busy}
+                            onClick={() => void send(`/links/${link.id}/activate`, {})}
+                          >
+                            使用を始める
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => void send(`/links/${link.id}/suspend`, {})}
+                          >
+                            修正をお願いする
+                          </button>
+                        </div>
                       )}
                       {link.effectiveStatus === 'ACTIVE' && (
                         <button

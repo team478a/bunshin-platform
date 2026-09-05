@@ -57,6 +57,10 @@ export async function POST(request: Request, context: Context) {
       path[1]!,
       path[2],
       service.serviceId,
+      {
+        serviceSlug: service.configuration.slug,
+        serviceName: service.configuration.displayName,
+      },
     );
   throw new ApplicationError('NOT_FOUND', 'route unavailable');
 }
