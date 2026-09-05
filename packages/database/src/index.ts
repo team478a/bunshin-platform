@@ -10584,7 +10584,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
 
   async create(input: Parameters<ServiceFoundationRepository['create']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const [admin, workspace] = await Promise.all([
+      const [admin, workspace, existingGroup] = await Promise.all([
         tx.platformAdmin.findFirst({
           where: { userId: input.actorUserId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
           select: { id: true },
@@ -10593,8 +10593,20 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           where: { id: input.workspaceId, type: 'ORGANIZATION', status: 'ACTIVE' },
           select: { id: true },
         }),
+        input.groupId
+          ? tx.group.findFirst({
+              where: {
+                id: input.groupId,
+                workspaceId: input.workspaceId,
+                status: 'ACTIVE',
+                serviceConfiguration: { is: null },
+              },
+              select: { id: true },
+            })
+          : Promise.resolve(null),
       ]);
-      if (admin === null || workspace === null) return null;
+      if (admin === null || workspace === null || (input.groupId && existingGroup === null))
+        return null;
       const now = new Date();
       const entitlement = await tx.organizationEntitlement.findUnique({
         where: { workspaceId: input.workspaceId },
@@ -10621,26 +10633,51 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           ? tx.serviceConfiguration.count({ where: { workspaceId: input.workspaceId } })
           : Promise.resolve(0),
       ]);
-      if (entitlement?.maxGroups && groupCount >= entitlement.maxGroups) return null;
+      if (!input.groupId && entitlement?.maxGroups && groupCount >= entitlement.maxGroups)
+        return null;
       if (entitlement?.maxServices && serviceCount >= entitlement.maxServices) return null;
       const value = input.configuration;
       if (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled) return null;
-      const group = await tx.group.create({
-        data: {
-          workspaceId: input.workspaceId,
-          name: value.displayName,
-          memberships: {
-            create: {
+      const group = existingGroup
+        ? existingGroup
+        : await tx.group.create({
+            data: {
               workspaceId: input.workspaceId,
-              userId: input.actorUserId,
-              role: 'MANAGER',
-              serviceRole: 'SERVICE_OWNER',
-              status: 'ACTIVE',
-              consentedAt: new Date(),
+              name: value.displayName,
+              memberships: {
+                create: {
+                  workspaceId: input.workspaceId,
+                  userId: input.actorUserId,
+                  role: 'MANAGER',
+                  serviceRole: 'SERVICE_OWNER',
+                  status: 'ACTIVE',
+                  consentedAt: new Date(),
+                },
+              },
             },
+          });
+      if (existingGroup) {
+        await tx.groupMembership.upsert({
+          where: { groupId_userId: { groupId: group.id, userId: input.actorUserId } },
+          create: {
+            workspaceId: input.workspaceId,
+            groupId: group.id,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            serviceRole: 'SERVICE_OWNER',
+            status: 'ACTIVE',
+            consentedAt: now,
           },
-        },
-      });
+          update: {
+            role: 'MANAGER',
+            serviceRole: 'SERVICE_OWNER',
+            status: 'ACTIVE',
+            consentedAt: now,
+            declinedAt: null,
+            revokedAt: null,
+          },
+        });
+      }
       const configuration = await tx.serviceConfiguration.create({
         data: {
           workspaceId: input.workspaceId,

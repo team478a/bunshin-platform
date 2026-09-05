@@ -50,6 +50,7 @@ export interface ServiceFoundationRecord {
 export interface ServiceFoundationRepository {
   create(input: {
     workspaceId: string;
+    groupId?: string;
     actorUserId: string;
     reason: string;
     configuration: Omit<ServiceFoundationRecord, 'id' | 'workspaceId' | 'groupId'>;

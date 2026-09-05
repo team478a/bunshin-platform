@@ -16,11 +16,16 @@ export default async function ServicesAdminPage() {
     user.userId,
   );
   if (!admin || admin.role !== 'SUPER_ADMIN') notFound();
-  const [workspaces, services] = await Promise.all([
+  const [workspaces, groups, services] = await Promise.all([
     db.prisma.workspace.findMany({
       where: { type: 'ORGANIZATION', status: 'ACTIVE' },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
+    }),
+    db.prisma.group.findMany({
+      where: { status: 'ACTIVE', serviceConfiguration: { is: null } },
+      select: { id: true, workspaceId: true, name: true },
+      orderBy: { createdAt: 'asc' },
     }),
     db.prisma.serviceConfiguration.findMany({
       include: {
@@ -50,7 +55,7 @@ export default async function ServicesAdminPage() {
         </ol>
       </section>
       {workspaces.length > 0 ? (
-        <ServiceEditor workspaces={workspaces} />
+        <ServiceEditor workspaces={workspaces} groups={groups} />
       ) : (
         <section className="settings-card">
           <h2>先に運営団体を作成してください</h2>

@@ -62,6 +62,7 @@ const workspaceId = '11111111-1111-4111-8111-111111111111';
 const configurationId = '22222222-2222-4222-8222-222222222222';
 const body = {
   workspaceId,
+  groupId: '',
   slug: 'side-job-support',
   displayName: '投稿副業サポート',
   description: 'SNS初心者向けの投稿支援',
@@ -101,7 +102,7 @@ describe('service admin HTTP', () => {
     vi.stubEnv('DIRECT_URL', 'postgresql://local');
     vi.stubEnv('SESSION_SECRET', '12345678901234567890123456789012');
     state.user = { userId: 'admin-1' };
-    state.create.mockResolvedValue({ id: 'service-1', groupId: 'group-1', ...body });
+    state.create.mockResolvedValue({ ...body, id: 'service-1', groupId: 'group-1' });
     state.platformAdmin.mockResolvedValue({ id: 'platform-admin-1' });
     state.findService.mockResolvedValue({
       id: configurationId,
@@ -168,6 +169,15 @@ describe('service admin HTTP', () => {
           registration: expect.objectContaining({ mode: 'INVITATION_ONLY' }),
         }),
       }),
+    );
+  });
+
+  it('accepts an existing group in the same workspace', async () => {
+    const groupId = '33333333-3333-4333-8333-333333333333';
+    const response = await createServiceResponse(request({ ...body, groupId }));
+    expect(response.status).toBe(201);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId, groupId, actorUserId: 'admin-1' }),
     );
   });
 

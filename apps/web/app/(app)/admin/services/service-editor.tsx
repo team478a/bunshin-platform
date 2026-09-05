@@ -6,11 +6,18 @@ import {
   type ServiceCreationTemplateKey,
 } from '../../../../src/services/service-creation-templates';
 
-export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: string }[] }) {
+export function ServiceEditor({
+  workspaces,
+  groups,
+}: {
+  workspaces: { id: string; name: string }[];
+  groups: { id: string; workspaceId: string; name: string }[];
+}) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [templateKey, setTemplateKey] =
     useState<ServiceCreationTemplateKey>('SIDE_HUSTLE_AFFILIATE');
+  const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? '');
   const template = SERVICE_CREATION_TEMPLATES[templateKey];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -29,6 +36,7 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           workspaceId: string('workspaceId'),
+          groupId: string('groupId'),
           templateKey: string('templateKey'),
           slug: string('slug'),
           displayName: string('displayName'),
@@ -129,13 +137,32 @@ export function ServiceEditor({ workspaces }: { workspaces: { id: string; name: 
         <input type="hidden" name="templateKey" value={templateKey} />
         <label>
           運営する団体
-          <select name="workspaceId" required>
+          <select
+            name="workspaceId"
+            required
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.target.value)}
+          >
             {workspaces.map((workspace) => (
               <option key={workspace.id} value={workspace.id}>
                 {workspace.name}
               </option>
             ))}
           </select>
+        </label>
+        <label>
+          利用するグループ
+          <select key={workspaceId} name="groupId" defaultValue="">
+            <option value="">新しいグループを自動作成する</option>
+            {groups
+              .filter((group) => group.workspaceId === workspaceId)
+              .map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}（既存）
+                </option>
+              ))}
+          </select>
+          <small>先に作成したグループがある場合は、ここで選ぶと設定を引き継げます。</small>
         </label>
         <label>
           サービス名
