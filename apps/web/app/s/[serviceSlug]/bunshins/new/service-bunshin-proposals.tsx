@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type Proposal = {
   name: string;
@@ -15,25 +15,36 @@ export function ServiceBunshinProposals({ serviceSlug }: { serviceSlug: string }
   const router = useRouter();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
+  const requested = useRef(false);
 
-  async function propose() {
+  const propose = useCallback(async () => {
     setBusy(true);
     setError('');
-    const response = await fetch(
-      `/api/services/${encodeURIComponent(serviceSlug)}/bunshins/proposals`,
-      { method: 'POST' },
-    );
-    setBusy(false);
-    if (!response.ok) {
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/bunshins/proposals`,
+        { method: 'POST' },
+      );
+      if (!response.ok) throw new Error('proposal request failed');
+      const result = (await response.json()) as { data?: { proposals?: Proposal[] } };
+      const proposed = result.data?.proposals;
+      if (!proposed?.length) throw new Error('proposal response was empty');
+      setProposals(proposed);
+      setSelected(null);
+    } catch {
       setError('3つの案を作れませんでした。もう一度お試しください。');
-      return;
+    } finally {
+      setBusy(false);
     }
-    const result = (await response.json()) as { data: { proposals: Proposal[] } };
-    setProposals(result.data.proposals);
-    setSelected(null);
-  }
+  }, [serviceSlug]);
+
+  useEffect(() => {
+    if (requested.current) return;
+    requested.current = true;
+    void propose();
+  }, [propose]);
 
   async function create() {
     const proposal = selected === null ? undefined : proposals[selected];
@@ -55,22 +66,39 @@ export function ServiceBunshinProposals({ serviceSlug }: { serviceSlug: string }
       setError('投稿パートナーを作れませんでした。もう一度お試しください。');
       return;
     }
-    router.push(`/s/${serviceSlug}/bunshins`);
+    const result = (await response.json()) as { data?: { id?: string } };
+    const bunshinId = result.data?.id;
+    if (!bunshinId) {
+      setBusy(false);
+      setError('投稿パートナーは作成されましたが、次の画面を開けませんでした。');
+      return;
+    }
+    router.push(
+      `/s/${encodeURIComponent(serviceSlug)}/bunshins/${encodeURIComponent(bunshinId)}?setup=1`,
+    );
     router.refresh();
   }
 
   if (proposals.length === 0) {
     return (
-      <div className="form-stack">
-        <p>最初に答えた内容をもとに、あなた向けの案を3つ作ります。</p>
-        <button
-          className="button button--primary button--full"
-          disabled={busy}
-          onClick={() => void propose()}
-        >
-          {busy ? '3つの案を考えています…' : '3つの案を見る'}
-        </button>
-        {error && <p role="alert">{error}</p>}
+      <div className="form-stack" aria-live="polite">
+        <p>
+          {busy
+            ? '回答をもとに、あなた向けの投稿パートナーを準備しています…'
+            : '投稿パートナーの候補を準備できませんでした。'}
+        </p>
+        {error && (
+          <>
+            <p role="alert">{error}</p>
+            <button
+              type="button"
+              className="button button--primary button--full"
+              onClick={() => void propose()}
+            >
+              もう一度準備する
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -99,10 +127,16 @@ export function ServiceBunshinProposals({ serviceSlug }: { serviceSlug: string }
       </div>
       {error && <p role="alert">{error}</p>}
       <div className="wizard-actions">
-        <button className="button button--secondary" disabled={busy} onClick={() => void propose()}>
+        <button
+          type="button"
+          className="button button--secondary"
+          disabled={busy}
+          onClick={() => void propose()}
+        >
           作り直す
         </button>
         <button
+          type="button"
           className="button button--primary"
           disabled={selected === null || busy}
           onClick={() => void create()}

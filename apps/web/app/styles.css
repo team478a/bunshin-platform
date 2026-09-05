@@ -2343,6 +2343,72 @@ a {
   line-height: 1.75;
 }
 
+.service-setup-guide {
+  text-align: left;
+}
+
+.service-setup-guide__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.service-setup-guide__heading h2 {
+  margin: 4px 0 0;
+  font-size: clamp(1.35rem, 5vw, 1.75rem);
+}
+
+.service-setup-guide__heading > strong {
+  flex: none;
+  padding: 10px 14px;
+  color: var(--service-primary);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--service-primary) 10%, white);
+  font-size: 1.05rem;
+}
+
+.service-setup-guide__steps {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.service-setup-guide__steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--service-primary) 16%, white);
+  border-radius: 14px;
+  background: #fff;
+  font-weight: 700;
+}
+
+.service-setup-guide__steps li > span {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: #fff;
+  border-radius: 50%;
+  background: var(--service-primary);
+}
+
+.service-setup-guide__steps li.is-complete {
+  color: #34755c;
+  border-color: #b8e1d1;
+  background: #f2fbf7;
+}
+
+.service-setup-guide__steps li.is-complete > span {
+  background: #3f9b76;
+}
+
 .service-entry__login-link {
   color: var(--service-primary);
   font-weight: 700;
