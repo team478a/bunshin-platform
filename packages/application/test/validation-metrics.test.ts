@@ -58,6 +58,24 @@ const snapshot = {
     decided: 0,
     adoptionRate: null,
     repeatedCorrectionCount: 0,
+    applications: 0,
+    cohortTruncated: false,
+    before: {
+      missions: 0,
+      posted: 0,
+      postRate: null,
+      feedback: 0,
+      goodFeedback: 0,
+      goodFeedbackRate: null,
+    },
+    after: {
+      missions: 0,
+      posted: 0,
+      postRate: null,
+      feedback: 0,
+      goodFeedback: 0,
+      goodFeedbackRate: null,
+    },
   },
 };
 

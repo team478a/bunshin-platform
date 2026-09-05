@@ -92,7 +92,20 @@ export interface ValidationMetricsSnapshot {
     decided: number;
     adoptionRate: number | null;
     repeatedCorrectionCount: number;
+    applications: number;
+    cohortTruncated: boolean;
+    before: PersonalityLearningOutcomeMetrics;
+    after: PersonalityLearningOutcomeMetrics;
   };
+}
+
+export interface PersonalityLearningOutcomeMetrics {
+  missions: number;
+  posted: number;
+  postRate: number | null;
+  feedback: number;
+  goodFeedback: number;
+  goodFeedbackRate: number | null;
 }
 
 export interface RecordAiUsageInput {
