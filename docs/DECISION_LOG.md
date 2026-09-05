@@ -1923,3 +1923,11 @@
 - Validation: ブラウザーの入力だけを信頼せず、登録完了時に対象サービスの保存済み設定を再取得し、そのサービスで必須の質問をサーバー側で検証する。
 - Boundary: 共通プロフィールをサービス間で暗黙補完せず、サービス独自の自由記述質問は既存のサービスオンボーディング回答として分離する。
 - Source: `docs/SERVICE_CREDIT_IMAGE_CONSUMPTION_REPORT.md`
+
+# 2026-09-06: 利用者本人の代理店URL登録は確認待ちのMEMBER URLとして保存する
+
+- Responsibility: 運営者は外部サービス、許可ドメイン、有効化、停止を管理し、利用者は本人へ発行されたURLだけを登録・変更する。
+- Ownership: API入力にMembership IDを含めず、認証Userと対象ServiceからACTIVE・同意済みMembershipをRepositoryで決定する。
+- Review: 利用者入力は即時有効化せずDRAFTで保存する。使用中URLの変更も既存ACTIVE URLを確認前に置換しない。
+- Validation: 既存のHTTPS、許可Domain、個人情報Query Key検証を再利用し、利用者によるDomain・商品・Campaign・状態の指定を許可しない。
+- Audit: 本人による登録・変更も既存の外部URL監査履歴へ記録する。

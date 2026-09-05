@@ -100,6 +100,15 @@ export default async function ServiceMemberHome({
     membership.featureAssignments.some((item) => item.featureKey === featureKey && active(item));
   const imageAvailable = available('SOCIAL.IMAGE_GENERATION');
   const videoAvailable = available('VIDEO_GENERATION');
+  const trackingLinkAvailable =
+    (await db.prisma.externalTrackingSystem.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        allowedDomains: { some: { status: 'ACTIVE' } },
+      },
+    })) > 0;
   const bunshins = await new ListServiceBunshins(new db.PrismaBunshinRepository()).execute({
     workspaceId: service.workspaceId,
     groupId: service.serviceId,
@@ -258,6 +267,14 @@ export default async function ServiceMemberHome({
             <Link className="button" href={`/s/${service.configuration.slug}/credits` as Route}>
               画像作成回数を見る
             </Link>
+            {trackingLinkAvailable && (
+              <Link
+                className="button"
+                href={`/s/${service.configuration.slug}/tracking-link` as Route}
+              >
+                自分の代理店URLを登録する
+              </Link>
+            )}
             {imageAvailable && (
               <Link
                 className="button button--primary"

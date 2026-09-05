@@ -115,6 +115,40 @@ export interface ExternalTrackingLinkRepository {
   } | null>;
 }
 
+export interface MemberTrackingLinkSettings {
+  systems: Array<{
+    id: string;
+    name: string;
+    domains: AllowedTrackingDomain[];
+  }>;
+  links: Array<{
+    id: string;
+    systemId: string;
+    systemName: string;
+    allowedDomainId: string;
+    url: string;
+    status: ExternalTrackingLinkStatus;
+    updatedAt: Date;
+  }>;
+}
+
+export interface ExternalTrackingMemberLinkRepository {
+  listMemberSettings(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }): Promise<MemberTrackingLinkSettings | null>;
+  saveMemberDraft(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    systemId: string;
+    allowedDomainId: string;
+    url: string;
+    now: Date;
+  }): Promise<object | null>;
+}
+
 const requiredText = (value: string, field: string, max: number) => {
   const normalized = value.trim();
   if (!normalized || normalized.length > max)
@@ -458,5 +492,35 @@ export class ExternalTrackingLinkService {
       at,
       links: resolution.links,
     });
+  }
+}
+
+export class ExternalTrackingMemberLinkService {
+  constructor(private readonly repository: ExternalTrackingMemberLinkRepository) {}
+
+  list(input: { workspaceId: string; groupId: string; actorUserId: string }) {
+    return this.repository.listMemberSettings(input).then((value) => {
+      if (!value) throw new ApplicationError('NOT_FOUND', 'service membership unavailable');
+      return value;
+    });
+  }
+
+  async saveDraft(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    systemId: string;
+    allowedDomainId: string;
+    url: string;
+  }) {
+    const settings = await this.list(input);
+    const system = settings.systems.find((item) => item.id === input.systemId);
+    const domain = system?.domains.find((item) => item.id === input.allowedDomainId);
+    if (!system || !domain)
+      throw new ApplicationError('NOT_FOUND', 'allowed tracking domain unavailable');
+    const url = validateExternalTrackingUrl(input.url, domain);
+    const saved = await this.repository.saveMemberDraft({ ...input, url, now: new Date() });
+    if (!saved) throw new ApplicationError('NOT_FOUND', 'service membership unavailable');
+    return saved;
   }
 }
