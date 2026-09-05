@@ -42,6 +42,31 @@ export function LineRichMenuEditor(props: { environment: string; initialMenus: M
     setBusy(false);
   }
 
+  async function createDefault() {
+    const reason = window.prompt(
+      '標準メニューを作る理由を入力してください。',
+      '標準メニューを利用する',
+    );
+    if (!reason) return;
+    setBusy(true);
+    setMessage('標準メニューを作成しています。');
+    const response = await fetch('/api/admin/line-rich-menus/default', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    const result = (await response.json()) as { data?: Menu; error?: { message?: string } };
+    if (!response.ok || !result.data)
+      setMessage(result.error?.message ?? '標準メニューを作成できませんでした。');
+    else {
+      setMenus((current) => [result.data!, ...current]);
+      setMessage(
+        '標準メニューの下書きを作成しました。画像を確認して「確認済みにする」を押してください。',
+      );
+    }
+    setBusy(false);
+  }
+
   async function action(menu: Menu, name: 'verify' | 'publish' | 'disable') {
     const labels = { verify: '確認済みにする', publish: '公開する', disable: '停止する' };
     const reason = window.prompt(`${labels[name]}理由を入力してください。`);
@@ -95,6 +120,14 @@ export function LineRichMenuEditor(props: { environment: string; initialMenus: M
       </ol>
       <p>4つのボタン：今日やること／分身を見る／お知らせ設定／アカウント</p>
       {message ? <p role="status">{message}</p> : null}
+      <div>
+        <h3>かんたん設定</h3>
+        <p>画像を用意できない場合は、システム標準の画像とボタン配置を自動で作成します。</p>
+        <button type="button" disabled={busy} onClick={() => void createDefault()}>
+          標準メニューを作成
+        </button>
+      </div>
+      <h3>画像を自分で設定</h3>
       <form onSubmit={(event) => void create(event)}>
         <label>
           メニューの名前

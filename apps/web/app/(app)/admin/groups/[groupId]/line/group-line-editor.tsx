@@ -44,12 +44,14 @@ export function GroupLineEditor(props: {
   const [mode, setMode] = useState(props.initialMode);
   const [items, setItems] = useState(props.initialConfigurations);
   const [message, setMessage] = useState('');
+  const [messageKind, setMessageKind] = useState<'success' | 'error'>('success');
   const [busy, setBusy] = useState(false);
   const endpoint = props.endpoint ?? `/api/admin/groups/${props.groupId}/line-configurations`;
   const scopeLabel = props.scopeLabel ?? 'グループ';
   async function call(url: string, method: string, data: unknown) {
     setBusy(true);
     setMessage('処理しています…');
+    setMessageKind('success');
     try {
       const response = await fetch(url, {
         method,
@@ -63,9 +65,11 @@ export function GroupLineEditor(props: {
           typeof error?.['message'] === 'string' ? error['message'] : '操作できませんでした',
         );
       setMessage('保存しました。');
+      setMessageKind('success');
       return payload['data'] ?? null;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '操作できませんでした');
+      setMessageKind('error');
       return null;
     } finally {
       setBusy(false);
@@ -82,6 +86,24 @@ export function GroupLineEditor(props: {
       if (data && isMode(data['mode'])) setMode(data['mode']);
     }
   }
+  async function publishDefaultRichMenu() {
+    if (!window.confirm(`この${scopeLabel}専用LINEへ標準リッチメニューを公開します。`)) return;
+    const reason = window.prompt('公開する理由を入力してください', '標準リッチメニューを公開');
+    if (!reason) return;
+    const result = await call(`/api/admin/groups/${props.groupId}/line-rich-menu/default`, 'POST', {
+      workspaceId: props.workspaceId,
+      reason,
+    });
+    if (result) {
+      setMessage('専用LINEへ標準リッチメニューを公開しました。');
+      setMessageKind('success');
+    }
+  }
+  const activeDedicated =
+    mode === 'DEDICATED' &&
+    items.some(
+      (item) => item.status === 'ACTIVE' && item.lastVerifiedAt && item.lastErrorCategory === null,
+    );
   return (
     <>
       <section className="settings-card line-settings-card">
@@ -279,10 +301,30 @@ export function GroupLineEditor(props: {
           </ul>
         )}
         {message ? (
-          <p className="notice notice--success" role="status">
+          <p
+            className={`notice ${messageKind === 'error' ? 'notice--danger' : 'notice--success'}`}
+            role={messageKind === 'error' ? 'alert' : 'status'}
+          >
             {message}
           </p>
         ) : null}
+      </section>
+      <section className="settings-card line-settings-card">
+        <p className="eyebrow">4. LINEのメニューを公開する</p>
+        <h2>標準リッチメニュー</h2>
+        <p>
+          今日やること、分身を見る、お知らせ設定、アカウントの4ボタンを、この{scopeLabel}
+          専用LINEへ自動で設定します。
+        </p>
+        <button
+          className="button button--primary"
+          type="button"
+          disabled={busy || !activeDedicated}
+          onClick={() => void publishDefaultRichMenu()}
+        >
+          標準リッチメニューを公開
+        </button>
+        {!activeDedicated ? <p>先に専用LINEの接続確認と使用開始を完了してください。</p> : null}
       </section>
     </>
   );

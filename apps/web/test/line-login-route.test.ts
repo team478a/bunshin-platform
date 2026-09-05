@@ -4,11 +4,19 @@ const state = vi.hoisted(() => ({
   signInWithOAuth: vi.fn(),
   exchangeCodeForSession: vi.fn(),
   requiredConsents: [] as Array<{ consentedAt: Date | null }>,
+  registrationStatus: 'COMPLETED',
+  connect: vi.fn(),
+  identityCreate: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/config', () => ({
-  getServerEnvironment: () => ({ APP_URL: 'https://bunshin.example' }),
+  getServerEnvironment: () => ({ APP_URL: 'https://bunshin.example', APP_ENV: 'development' }),
+}));
+vi.mock('@bunshin/application', () => ({
+  ConnectLineMessagingAccount: class {
+    execute = state.connect;
+  },
 }));
 vi.mock('../src/auth/supabase', () => ({
   createSupabaseServerClient: () =>
@@ -24,6 +32,26 @@ vi.mock('../src/auth/current-user', () => ({
     Promise.resolve({ getCurrentUser: () => Promise.resolve({ userId: 'user-1' }) }),
 }));
 vi.mock('@bunshin/database', () => ({
+  prisma: {
+    $transaction: (operation: (tx: object) => Promise<unknown>) =>
+      operation({
+        authIdentity: {
+          findUnique: () => Promise.resolve(null),
+          create: state.identityCreate,
+        },
+      }),
+    userRegistrationProfile: {
+      findUnique: () =>
+        Promise.resolve(
+          state.registrationStatus === null ? null : { status: state.registrationStatus },
+        ),
+    },
+    registrationFunnelEvent: {
+      upsert: () => Promise.resolve({ id: 'event-1' }),
+    },
+  },
+  listActiveWorkspacesForUser: () => Promise.resolve([{ id: 'workspace-1', name: 'Personal' }]),
+  PrismaLineConnectionRepository: class {},
   PrismaLegalConsentRepository: class {
     findRequiredForUser() {
       return Promise.resolve(state.requiredConsents);
@@ -38,11 +66,27 @@ describe('LINE login routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.requiredConsents = [];
+    state.registrationStatus = 'COMPLETED';
+    state.connect.mockResolvedValue({ id: 'connection-1' });
+    state.identityCreate.mockResolvedValue({ id: 'identity-1' });
     state.signInWithOAuth.mockResolvedValue({
       data: { url: 'https://access.line.me/oauth2/v2.1/authorize?state=opaque' },
       error: null,
     });
-    state.exchangeCodeForSession.mockResolvedValue({ error: null });
+    state.exchangeCodeForSession.mockResolvedValue({
+      data: {
+        user: {
+          identities: [
+            {
+              id: 'line-identity',
+              provider: 'custom:line',
+              identity_data: { sub: 'U1234567890' },
+            },
+          ],
+        },
+      },
+      error: null,
+    });
   });
 
   it('starts custom:line OAuth with the production application callback', async () => {
@@ -105,6 +149,22 @@ describe('LINE login routes', () => {
     expect(state.exchangeCodeForSession).toHaveBeenCalledWith('one-time-code');
     expect(response.status).toBe(303);
     expect(response.headers.get('location')).toBe('https://bunshin.example/bunshins');
+    expect(state.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        verifiedProviderUserId: 'U1234567890',
+        consentGranted: false,
+      }),
+    );
+  });
+
+  it('sends an incomplete account to the resumable onboarding flow', async () => {
+    state.registrationStatus = 'IN_PROGRESS';
+    const response = await completeLineLogin(
+      new Request('https://bunshin.example/auth/line/callback?code=one-time-code'),
+    );
+
+    expect(response.headers.get('location')).toBe('https://bunshin.example/onboarding');
   });
 
   it('returns to the Mission landing after successful authentication', async () => {

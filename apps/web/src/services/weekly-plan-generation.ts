@@ -19,12 +19,14 @@ import {
   type ContentPillarRepository,
   type SocialAccountStrategyRepository,
   type SocialProfileRepository,
+  type WeeklyPlannerInput,
   type WeeklyPlannerPort,
   type WeeklyPlanRepository,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import {
   OpenAIWeeklyPlanner,
   WEEKLY_PLANNER_PROMPT_VERSION,
@@ -65,7 +67,15 @@ export interface WeeklyPlanGenerationDependencies {
   campaigns?: CampaignRepository;
   providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
+  loadRecentPerformance?(
+    scope: Scope,
+  ): Promise<NonNullable<WeeklyPlannerInput['recentPerformance']>>;
   recordUsage(event: UsageEvent): Promise<void>;
+  runWithQuota<T>(input: {
+    workspaceId: string;
+    operationKey: string;
+    generate(): Promise<T>;
+  }): Promise<T>;
   now(): number;
 }
 
@@ -135,36 +145,43 @@ export class WeeklyPlanGenerationService {
               to: weekEnd,
             })
           : [];
+      const recentPerformance = await this.dependencies.loadRecentPerformance?.(input);
       providerAttempted = true;
-      const result = await new GenerateWeeklyPlan(this.dependencies.planner).execute({
-        weekStartDate: input.weekStartDate,
-        timezone,
-        platform: profile.platform,
-        availableMinutes: strategy.availableMinutes,
-        bunshin: {
-          name: bunshin.name,
-          objectiveSummary: bunshin.objectiveSummary,
-          audienceSummary: bunshin.audienceSummary,
-          personalitySummary: bunshin.personalitySummary,
-        },
-        approvedStrategy: {
-          concept: strategy.concept,
-          positioning: strategy.positioning,
-          targetSummary: strategy.targetSummary,
-          ctaStrategy: strategy.ctaStrategy,
-          postingPolicy: strategy.postingPolicy,
-        },
-        contentPillars: activePillars.map(({ id, title, description, weight }) => ({
-          id,
-          title,
-          description,
-          weight,
-        })),
-        grantedKnowledge: [
-          ...granted.map(({ type, title, content }) => ({ type, title, content })),
-          ...(input.additionalKnowledge ?? []),
-        ],
-        campaigns,
+      const result = await this.dependencies.runWithQuota({
+        workspaceId: input.workspaceId,
+        operationKey: input.usageIdempotencyKey,
+        generate: () =>
+          new GenerateWeeklyPlan(this.dependencies.planner).execute({
+            weekStartDate: input.weekStartDate,
+            timezone,
+            platform: profile.platform,
+            availableMinutes: strategy.availableMinutes,
+            bunshin: {
+              name: bunshin.name,
+              objectiveSummary: bunshin.objectiveSummary,
+              audienceSummary: bunshin.audienceSummary,
+              personalitySummary: bunshin.personalitySummary,
+            },
+            approvedStrategy: {
+              concept: strategy.concept,
+              positioning: strategy.positioning,
+              targetSummary: strategy.targetSummary,
+              ctaStrategy: strategy.ctaStrategy,
+              postingPolicy: strategy.postingPolicy,
+            },
+            contentPillars: activePillars.map(({ id, title, description, weight }) => ({
+              id,
+              title,
+              description,
+              weight,
+            })),
+            grantedKnowledge: [
+              ...granted.map(({ type, title, content }) => ({ type, title, content })),
+              ...(input.additionalKnowledge ?? []),
+            ],
+            campaigns,
+            ...(recentPerformance ? { recentPerformance } : {}),
+          }),
       });
       const plan = await new CreateGeneratedWeeklyPlan(
         this.dependencies.plans,
@@ -232,7 +249,43 @@ export async function createWeeklyPlanGenerationService() {
         throw new ApplicationError('NOT_FOUND', 'notification preference scope not found');
       return value.preference?.timezone ?? 'Asia/Tokyo';
     },
+    async loadRecentPerformance(scope) {
+      const since = new Date(Date.now() - 28 * 86_400_000);
+      const missions = await db.prisma.dailyMission.findMany({
+        where: {
+          workspaceId: scope.workspaceId,
+          bunshinId: scope.bunshinId,
+          bunshin: {
+            ownerUserId: scope.actorUserId,
+            groupId: scope.groupId ?? null,
+            status: { not: 'ARCHIVED' },
+          },
+          postRecord: { is: { postedAt: { gte: since } } },
+        },
+        select: { format: true, feedback: { select: { rating: true } } },
+      });
+      const formats = [...new Set(missions.map(({ format }) => format))].sort().map((format) => {
+        const values = missions.filter((mission) => mission.format === format);
+        return {
+          format,
+          postedCount: values.length,
+          goodFeedbackCount: values.filter(({ feedback }) => feedback?.rating === 'GOOD').length,
+          badFeedbackCount: values.filter(({ feedback }) => feedback?.rating === 'BAD').length,
+        };
+      });
+      return {
+        periodDays: 28,
+        postedCount: missions.length,
+        feedback: {
+          good: missions.filter(({ feedback }) => feedback?.rating === 'GOOD').length,
+          neutral: missions.filter(({ feedback }) => feedback?.rating === 'NEUTRAL').length,
+          bad: missions.filter(({ feedback }) => feedback?.rating === 'BAD').length,
+        },
+        formats,
+      };
+    },
     recordUsage: recordAiUsageSafely,
+    runWithQuota: withOrganizationAiGenerationQuota,
     now: Date.now,
   });
 }

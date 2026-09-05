@@ -108,41 +108,71 @@ export function EvidenceEditor({
     );
   };
   return (
-    <>
-      <section className="settings-card">
-        <h2>経験の根拠を登録する</h2>
-        <p>資格、利用経験、実際の結果など、本人について確認できる事実だけを登録してください。</p>
-        <form onSubmit={create}>
-          <label>
-            種類
-            <select name="type">
+    <div className="evidence-editor">
+      <section className="settings-card evidence-card">
+        <header className="evidence-card__header">
+          <span className="evidence-card__step">1</span>
+          <div>
+            <h2>経験の根拠を登録する</h2>
+            <p>資格、利用経験、実際の結果など、本人について確認できる事実だけを登録します。</p>
+          </div>
+        </header>
+        <form className="evidence-form" onSubmit={create}>
+          <label className="field">
+            <span className="field__label">種類</span>
+            <select className="field__control" name="type">
               <option value="USAGE">使った経験</option>
               <option value="EXPERIENCE">体験</option>
               <option value="RESULT">結果</option>
               <option value="QUALIFICATION">資格</option>
             </select>
           </label>
-          <label>
-            短い名前
-            <input name="title" required maxLength={160} />
+          <label className="field">
+            <span className="field__label">短い名前</span>
+            <input
+              className="field__control"
+              name="title"
+              required
+              maxLength={160}
+              placeholder="例：3か月使った感想"
+            />
           </label>
-          <label>
-            確認できる内容
-            <textarea name="claim" required maxLength={1000} />
+          <label className="field evidence-form__wide">
+            <span className="field__label">確認できる内容</span>
+            <textarea
+              className="field__control"
+              name="claim"
+              required
+              maxLength={1000}
+              rows={4}
+              placeholder="例：2026年4月から毎日利用し、○○を続けられた"
+            />
           </label>
-          <label>
-            確認先URL（任意・httpsのみ）
-            <input name="sourceUrl" type="url" />
+          <label className="field evidence-form__wide">
+            <span className="field__label">確認先URL（任意・httpsのみ）</span>
+            <input className="field__control" name="sourceUrl" type="url" placeholder="https://" />
           </label>
-          <button type="submit">登録する</button>
+          <button className="button evidence-form__submit" type="submit">
+            根拠を登録する
+          </button>
         </form>
-        <ul>
+        <div className="evidence-list-heading">
+          <h3>登録した根拠</h3>
+          <span>{evidence.length}件</span>
+        </div>
+        <ul className="evidence-list">
           {evidence.map((item) => (
             <li key={item.id}>
-              <strong>{item.title}</strong>：{item.claim}（
-              {item.status === 'ACTIVE' ? '使用できます' : '使用停止'}）
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.claim}</p>
+              </div>
+              <span className={`evidence-status evidence-status--${item.status.toLowerCase()}`}>
+                {item.status === 'ACTIVE' ? '使用できます' : '使用停止'}
+              </span>
               {item.status === 'ACTIVE' ? (
                 <button
+                  className="button button--secondary"
                   type="button"
                   onClick={() => void run(() => post(`${base}/evidence/${item.id}/revoke`))}
                 >
@@ -153,58 +183,88 @@ export function EvidenceEditor({
           ))}
         </ul>
       </section>
-      <section className="settings-card">
-        <h2>投稿文を安全確認する</h2>
-        <p>文章そのものは保存せず、確認結果と文章の照合用番号だけを保存します。</p>
-        <p>使用中の商品：{assignment?.label ?? 'ありません'}</p>
-        <form onSubmit={review}>
-          <label>
-            投稿の種類
-            <select name="classification">
+      <section className="settings-card evidence-card">
+        <header className="evidence-card__header">
+          <span className="evidence-card__step">2</span>
+          <div>
+            <h2>投稿文を安全確認する</h2>
+            <p>投稿文は保存せず、確認結果と文章の照合用番号だけを保存します。</p>
+          </div>
+        </header>
+        <p className="evidence-product">
+          <span>使用中の商品</span>
+          <strong>{assignment?.label ?? '商品は設定されていません'}</strong>
+        </p>
+        <form className="evidence-form" onSubmit={review}>
+          <label className="field">
+            <span className="field__label">投稿の種類</span>
+            <select className="field__control" name="classification">
               <option value="ORGANIC">ふつうの投稿</option>
               <option value="PRODUCT_RELATED">商品に関係する投稿</option>
               <option value="ADVERTISEMENT">広告・PR投稿</option>
             </select>
           </label>
-          <label>
+          <label className="evidence-checkbox evidence-form__wide">
             <input type="checkbox" name="personalEvidence" />
-            「自分が使った・結果が出た」など本人の経験を含む
+            <span>「自分が使った・結果が出た」など、本人の経験を書いている</span>
           </label>
-          <fieldset>
-            <legend>使う根拠</legend>
+          <fieldset className="evidence-fieldset evidence-form__wide">
+            <legend>使う根拠を選ぶ</legend>
+            <p>投稿文に書く経験だけを選んでください。</p>
             {evidence
               .filter((item) => item.status === 'ACTIVE')
               .map((item) => (
-                <label key={item.id}>
+                <label className="evidence-checkbox" key={item.id}>
                   <input type="checkbox" name="evidenceIds" value={item.id} />
-                  {item.title}
+                  <span>{item.title}</span>
                 </label>
               ))}
           </fieldset>
-          <label>
-            文章に書いた公式事実（任意・1行に「項目=内容」）
-            <textarea name="officialClaims" placeholder="価格=月額1,000円" />
+          <label className="field evidence-form__wide">
+            <span className="field__label">文章に書いた公式事実（任意）</span>
+            <span className="field__hint">1行に「項目=内容」で入力します。</span>
+            <textarea
+              className="field__control"
+              name="officialClaims"
+              rows={3}
+              placeholder="価格=月額1,000円"
+            />
           </label>
-          <label>
-            確認する投稿文
-            <textarea name="content" required maxLength={20000} />
+          <label className="field evidence-form__wide">
+            <span className="field__label">確認する投稿文</span>
+            <textarea
+              className="field__control"
+              name="content"
+              required
+              maxLength={20000}
+              rows={8}
+              placeholder="ここに投稿する文章を貼り付けてください"
+            />
           </label>
-          <button type="submit">安全を確認する</button>
+          <button className="button evidence-form__submit" type="submit">
+            投稿文を確認する
+          </button>
         </form>
-        <h3>最近の確認結果</h3>
-        <ul>
+        <div className="evidence-list-heading">
+          <h3>最近の確認結果</h3>
+          <span>{reviews.length}件</span>
+        </div>
+        <ul className="evidence-review-list">
           {reviews.map((item) => (
-            <li key={item.id}>
-              {item.verdict === 'PASS'
-                ? '使用できます'
-                : `修正が必要：${item.issueCodes.map(issueLabel).join('、')}`}
+            <li className={item.verdict === 'PASS' ? 'is-pass' : 'is-warning'} key={item.id}>
+              <strong>{item.verdict === 'PASS' ? '使用できます' : '修正が必要です'}</strong>
+              <span>
+                {item.verdict === 'PASS'
+                  ? 'このまま投稿できます。'
+                  : item.issueCodes.map(issueLabel).join('、')}
+              </span>
             </li>
           ))}
         </ul>
       </section>
-      <p role="status" aria-live="polite">
+      <p className="evidence-message" role="status" aria-live="polite">
         {message}
       </p>
-    </>
+    </div>
   );
 }

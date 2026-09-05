@@ -8,16 +8,93 @@ import { requireSameOrigin } from '../auth/request-security';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
 
+const segmentSchema = z
+  .object({
+    industryIds: z.array(z.string().uuid()).max(20).default([]),
+    purposes: z
+      .array(z.enum(['ATTRACT', 'RESERVATION', 'SALES', 'RECRUITING', 'AWARENESS', 'RETENTION']))
+      .max(6)
+      .default([]),
+  })
+  .strict();
+
 const createSchema = z.object({
   title: z.string().trim().min(1).max(120),
   message: z.string().trim().min(1).max(5000),
   reason: z.string().trim().min(1).max(1000),
   scheduledAt: z.string().datetime().optional(),
   confirmed: z.literal(true),
+  expectedRecipientCount: z.number().int().positive().max(500),
+  segment: segmentSchema,
 });
 
 const retrySchema = z.object({ reason: z.string().trim().min(1).max(1000) });
 const cancelSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+
+async function eligibleRecipients(input: {
+  workspaceId: string;
+  groupId: string;
+  segment: z.infer<typeof segmentSchema>;
+}) {
+  const db = await import('@bunshin/database');
+  const segmented = input.segment.industryIds.length > 0 || input.segment.purposes.length > 0;
+  return db.prisma.groupLineConnection.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      status: 'ACTIVE',
+      notificationConsentAt: { not: null },
+      friendshipStatus: 'FOLLOWING',
+      groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+      user: {
+        status: 'ACTIVE',
+        ...(segmented
+          ? {
+              registrationProfile: {
+                is: {
+                  status: 'COMPLETED',
+                  ...(input.segment.industryIds.length
+                    ? { primaryIndustryId: { in: input.segment.industryIds } }
+                    : {}),
+                  ...(input.segment.purposes.length
+                    ? { primaryPurpose: { in: input.segment.purposes } }
+                    : {}),
+                },
+              },
+            }
+          : {}),
+      },
+    },
+    select: { groupMembershipId: true, userId: true },
+    take: 500,
+  });
+}
+
+export async function previewServiceLineBroadcastResponse(request: Request, serviceSlug: string) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const segment = segmentSchema.parse(await request.json());
+    const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
+    const recipients = await eligibleRecipients({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      segment,
+    });
+    return Response.json(
+      {
+        data: { eligibleRecipientCount: recipients.length, capped: recipients.length === 500 },
+        requestId,
+      },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, { status: mapped.status });
+  }
+}
 
 async function enqueueBroadcastJob(input: {
   workspaceId: string;
@@ -54,6 +131,11 @@ export async function listServiceLineBroadcastsResponse(request: Request, servic
       orderBy: { createdAt: 'desc' },
       take: 30,
     });
+    const industries = await db.prisma.industry.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true },
+    });
     return Response.json({
       data: rows.map((row) => ({
         id: row.id,
@@ -63,11 +145,13 @@ export async function listServiceLineBroadcastsResponse(request: Request, servic
         scheduledAt: row.scheduledAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
         completedAt: row.completedAt?.toISOString() ?? null,
+        segment: row.segmentCriteria,
         recipients: row.recipients.reduce<Record<string, number>>((result, item) => {
           result[item.status] = (result[item.status] ?? 0) + 1;
           return result;
         }, {}),
       })),
+      options: { industries },
       requestId,
     });
   } catch (error) {
@@ -100,20 +184,17 @@ export async function sendServiceLineBroadcastResponse(request: Request, service
     });
     if (!configuration)
       throw new ApplicationError('CONFLICT', 'active service LINE configuration required');
-    const recipients = await db.prisma.groupLineConnection.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        status: 'ACTIVE',
-        notificationConsentAt: { not: null },
-        friendshipStatus: 'FOLLOWING',
-        groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
-        user: { status: 'ACTIVE' },
-      },
-      select: { groupMembershipId: true, userId: true, providerUserId: true },
-      take: 500,
+    const recipients = await eligibleRecipients({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      segment: value.segment,
     });
     if (!recipients.length) throw new ApplicationError('CONFLICT', 'no eligible LINE recipients');
+    if (recipients.length !== value.expectedRecipientCount)
+      throw new ApplicationError(
+        'CONFLICT',
+        'recipient count changed; preview and confirm the audience again',
+      );
     const scheduledAt = value.scheduledAt ? new Date(value.scheduledAt) : new Date();
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now() - 5_000)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid scheduledAt');
@@ -124,6 +205,7 @@ export async function sendServiceLineBroadcastResponse(request: Request, service
           groupId: service.serviceId,
           title: value.title,
           message: value.message,
+          segmentCriteria: value.segment,
           status: 'SCHEDULED',
           scheduledAt,
           createdByUserId: actor.userId,
@@ -148,6 +230,7 @@ export async function sendServiceLineBroadcastResponse(request: Request, service
           beforeData: {},
           afterData: {
             recipients: recipients.length,
+            segment: value.segment,
             environment,
             scheduledAt: scheduledAt.toISOString(),
           },

@@ -11,6 +11,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { createHash } from 'node:crypto';
 import { resolveTrendRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { ExaTrendResearchAdapter } from '../providers/exa-trend-research';
 import { FirecrawlTrendResearchAdapter } from '../providers/firecrawl-trend-research';
 import { GrokXTrendResearchAdapter } from '../providers/grok-x-trend-research';
@@ -101,12 +102,17 @@ export class WeeklyTrendResearchGenerationService {
         ),
         500,
       );
-      const result = await provider.search({
-        query,
-        language: 'ja',
-        country: 'JP',
-        publishedAfter: addDays(periodStart, -7),
-        maximumResults: 6,
+      const result = await withOrganizationAiGenerationQuota({
+        workspaceId: input.workspaceId,
+        operationKey: input.usageIdempotencyKey,
+        generate: () =>
+          provider.search({
+            query,
+            language: 'ja',
+            country: 'JP',
+            publishedAfter: addDays(periodStart, -7),
+            maximumResults: 6,
+          }),
       });
       if (result.items.length === 0) throw new TrendSearchProviderError('INVALID_RESPONSE', false);
       const completedAt = new Date();

@@ -39,6 +39,10 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),
 }));
 vi.mock('@bunshin/database', () => ({
+  PrismaOrganizationAiGenerationReservationRepository: class {
+    reserve = vi.fn().mockResolvedValue({ status: 'UNLIMITED', reservationId: null });
+    finish = vi.fn().mockResolvedValue(false);
+  },
   PrismaAiProviderConfigurationRepository: class {
     getActiveForRuntime = vi.fn().mockResolvedValue(null);
   },

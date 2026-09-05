@@ -26,6 +26,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
+import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import {
   OpenAIVideoPlanGenerator,
@@ -193,16 +194,22 @@ export async function generateVideoPlanResponse(
     const runtime = await resolveOpenAiRuntimeConfiguration();
     model = runtime.model;
     providerAttempted = true;
-    const generated = await new GenerateVideoPlan(
-      projects,
-      new db.PrismaVideoPlanningContextRepository(),
-      new OpenAIVideoPlanGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
-    ).execute({
+    const operationKey = `video-plan:${videoProjectId}:revision:${expectedRevision}`;
+    const generated = await withOrganizationAiGenerationQuota({
       workspaceId,
-      groupId,
-      actorUserId,
-      videoProjectId,
-      expectedRevision,
+      operationKey,
+      generate: () =>
+        new GenerateVideoPlan(
+          projects,
+          new db.PrismaVideoPlanningContextRepository(),
+          new OpenAIVideoPlanGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
+        ).execute({
+          workspaceId,
+          groupId,
+          actorUserId: actor.userId,
+          videoProjectId,
+          expectedRevision,
+        }),
     });
     await recordAiUsageSafely({
       workspaceId,
@@ -216,7 +223,7 @@ export async function generateVideoPlanResponse(
       inputTokens: generated.generation.inputTokens,
       outputTokens: generated.generation.outputTokens,
       latencyMs: generated.generation.latencyMs,
-      idempotencyKey: `video-plan:${videoProjectId}:revision:${expectedRevision}`,
+      idempotencyKey: operationKey,
     });
     return Response.json(
       { data: publicProject(generated.project), requestId },

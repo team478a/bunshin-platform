@@ -20,6 +20,15 @@ describe('LINE authentication return path', () => {
     expect(safeLineAuthReturnPath(`/groups/invitations/${token}/extra`)).toBeNull();
   });
 
+  it('accepts only an exact one-time organization invitation path', () => {
+    const token = 'a'.repeat(43);
+    expect(safeLineAuthReturnPath(`/organizations/invitations/${token}`)).toBe(
+      `/organizations/invitations/${token}`,
+    );
+    expect(safeLineAuthReturnPath(`/organizations/invitations/${token}?next=/admin`)).toBeNull();
+    expect(safeLineAuthReturnPath(`/organizations/invitations/${token}/extra`)).toBeNull();
+  });
+
   it('accepts only an exact service entry path', () => {
     expect(safeLineAuthReturnPath('/s/side-job-support')).toBe('/s/side-job-support');
     expect(safeLineAuthReturnPath('/s/side-job-support?next=/admin')).toBeNull();

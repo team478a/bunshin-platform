@@ -1,9 +1,18 @@
 import Link from 'next/link';
+import Image from 'next/image';
+import { toDataURL } from 'qrcode';
+import { getOfficialLineAccountUrl } from '@bunshin/config';
 import { PublicShell } from '../ui/public-shell';
+import { LandingFunnelTracker } from './landing-funnel-tracker';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const lineUrl = getOfficialLineAccountUrl();
+  const lineQrCode = lineUrl
+    ? await toDataURL(lineUrl, { errorCorrectionLevel: 'M', margin: 1, width: 192 })
+    : null;
   return (
     <PublicShell>
+      <LandingFunnelTracker />
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__copy">
           <p className="eyebrow">あなたのための企画担当</p>
@@ -12,14 +21,36 @@ export default function HomePage() {
             あなた専用のSNS戦略を考え、今日やることと投稿案を届けます。内容を選んでコピーし、投稿するだけです。
           </p>
           <div className="landing-actions">
-            <Link className="button button--primary" href="/login">
-              ワタシワークスをはじめる
-            </Link>
+            {lineUrl ? (
+              <a className="button button--primary" href={lineUrl} rel="noreferrer">
+                公式LINEを友だち追加してはじめる
+              </a>
+            ) : (
+              <Link className="button button--primary" href="/login">
+                ワタシワークスをはじめる
+              </Link>
+            )}
             <a className="button button--secondary" href="#how-it-works">
               使い方を見る
             </a>
           </div>
-          <small>メールリンクでログイン・パスワード不要</small>
+          <small>
+            {lineUrl
+              ? '友だち追加後、LINEの案内から登録できます'
+              : 'メールリンクでログイン・パスワード不要'}
+          </small>
+          {lineQrCode ? (
+            <figure className="landing-line-qr">
+              <Image
+                unoptimized
+                src={lineQrCode}
+                width={192}
+                height={192}
+                alt="ワタシワークス公式LINEを友だち追加するQRコード"
+              />
+              <figcaption>パソコンではスマートフォンで読み取ってください</figcaption>
+            </figure>
+          ) : null}
         </div>
         <div className="landing-visual" aria-hidden="true">
           <span className="landing-visual__circle landing-visual__circle--one" />

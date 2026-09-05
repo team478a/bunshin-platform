@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseServerEnvironment } from '../src';
+import { getOfficialLineAccountUrl, parseServerEnvironment } from '../src';
 
 const valid = {
   NODE_ENV: 'development',
@@ -17,6 +17,25 @@ describe('environment validation', () => {
       APP_ENV: 'development',
       LOG_LEVEL: 'info',
     });
+  });
+
+  it('accepts only official HTTPS LINE hosts for the friend-add destination', () => {
+    expect(
+      parseServerEnvironment({ ...valid, LINE_OFFICIAL_ACCOUNT_URL: 'https://lin.ee/example' })
+        .LINE_OFFICIAL_ACCOUNT_URL,
+    ).toBe('https://lin.ee/example');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        LINE_OFFICIAL_ACCOUNT_URL: 'https://example.com/fake-line',
+      }),
+    ).toThrow('LINE_OFFICIAL_ACCOUNT_URL');
+    expect(getOfficialLineAccountUrl('https://line.me/R/ti/p/example')).toBe(
+      'https://line.me/R/ti/p/example',
+    );
+    expect(() => getOfficialLineAccountUrl('https://example.com/fake-line')).toThrow(
+      'LINE_OFFICIAL_ACCOUNT_URL',
+    );
   });
 
   it('reports variable names without secret values', () => {

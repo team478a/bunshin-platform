@@ -2,10 +2,13 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../src/services/public-service';
 import { buildServiceLaunchReadiness } from '../../../../src/services/service-launch-readiness';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import { buildSideHustleContentFunnel } from '../../../../src/services/side-hustle-content-funnel';
+import { buildPerformanceFeedbackSummary } from '../../../../src/services/performance-feedback-summary';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -132,11 +135,22 @@ export default async function ServiceManagementHome({
   if (!group) notFound();
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twentyEightDaysAgo = new Date(now.getTime() - 28 * 86_400_000);
   const missionScope = {
     workspaceId: service.workspaceId,
     bunshin: { is: { groupId: service.serviceId } },
   };
   const [
+    activeProductPackCount,
+    activeCampaignCount,
+    activeTrackingLinkCount,
+    trendProviderReadyCount,
+    productMissions,
+    linkedProductMissions,
+    copiedProductMissions,
+    postedProductMissions,
+    recentPostedForFeedback,
+    recentFeedback,
     pendingPostApprovalCount,
     missionsCreated,
     acceptedMissions,
@@ -153,6 +167,99 @@ export default async function ServiceManagementHome({
     failedLineDeliveries,
     overdueLineDeliveries,
   ] = await Promise.all([
+    db.prisma.productPack.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        versions: {
+          some: {
+            status: 'PUBLISHED',
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
+            ],
+          },
+        },
+      },
+    }),
+    db.prisma.campaign.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'OPEN',
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
+    }),
+    db.prisma.externalTrackingLink.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        ],
+      },
+    }),
+    db.prisma.aiProviderConfiguration.count({
+      where: {
+        environment: currentAiProviderEnvironment(),
+        provider: { in: ['GROK', 'EXA', 'FIRECRAWL'] },
+        status: 'ACTIVE',
+        globallyPaused: false,
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    }),
+    db.prisma.dailyMission.count({
+      where: {
+        ...missionScope,
+        campaignId: { not: null },
+        createdAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.contentLinkUsage.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        createdAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.missionActivity.count({
+      where: {
+        ...missionScope,
+        occurredAt: { gte: sevenDaysAgo },
+        type: {
+          in: [
+            'COPIED_TEXT',
+            'COPIED_SLIDE',
+            'COPIED_IMAGE_INSTRUCTION',
+            'COPIED_VIDEO_PROMPT',
+            'COPIED_SCRIPT',
+          ],
+        },
+        dailyMission: { is: { contentLinkUsage: { isNot: null } } },
+      },
+    }),
+    db.prisma.postRecord.count({
+      where: {
+        ...missionScope,
+        postedAt: { gte: sevenDaysAgo },
+        dailyMission: { is: { contentLinkUsage: { isNot: null } } },
+      },
+    }),
+    db.prisma.postRecord.count({
+      where: { ...missionScope, postedAt: { gte: twentyEightDaysAgo } },
+    }),
+    db.prisma.missionFeedback.findMany({
+      where: {
+        ...missionScope,
+        dailyMission: { is: { postRecord: { is: { postedAt: { gte: twentyEightDaysAgo } } } } },
+      },
+      select: { rating: true },
+    }),
     db.prisma.campaignPostingApprovalRequest.count({
       where: {
         workspaceId: service.workspaceId,
@@ -285,8 +392,26 @@ export default async function ServiceManagementHome({
     activeParticipantCount: group.memberships.length,
     activeKnowledgeCount: group.knowledgeSources.length,
     lineConfigurationReady: Boolean(line?.lastVerifiedAt && !line.globallyPaused),
+    commercialContentRequired: configuration.registration.referralEnabled,
+    trendResearchEnabled: configuration.trendResearchEnabled ?? true,
+    trendProviderReady: trendProviderReadyCount > 0,
+    activeProductPackCount,
+    activeCampaignCount,
+    activeTrackingLinkCount,
   });
   const readyCount = readiness.filter((item) => item.ready).length;
+  const sideHustleFunnel = buildSideHustleContentFunnel({
+    productMissions,
+    linkedMissions: linkedProductMissions,
+    copiedMissions: copiedProductMissions,
+    postedMissions: postedProductMissions,
+  });
+  const feedbackSummary = buildPerformanceFeedbackSummary({
+    posted: recentPostedForFeedback,
+    good: recentFeedback.filter(({ rating }) => rating === 'GOOD').length,
+    neutral: recentFeedback.filter(({ rating }) => rating === 'NEUTRAL').length,
+    bad: recentFeedback.filter(({ rating }) => rating === 'BAD').length,
+  });
   type OperationAction = {
     title: string;
     detail: string;
@@ -346,6 +471,26 @@ export default async function ServiceManagementHome({
             detail: `${pendingPostApprovalCount}件の投稿案が、参加者のコピー前の確認を待っています。`,
             href: `/s/${configuration.slug}/manage/post-approvals`,
             label: '投稿案を確認する',
+          },
+        ]
+      : []),
+    ...(sideHustleFunnel.missingLinkWarning
+      ? [
+          {
+            title: '商品投稿案に専用URLがありません',
+            detail: sideHustleFunnel.missingLinkWarning,
+            href: `/s/${configuration.slug}/manage/external-tracking`,
+            label: '専用URLを確認する',
+          },
+        ]
+      : []),
+    ...(feedbackSummary.needsAttention
+      ? [
+          {
+            title: '投稿後の感想が不足しています',
+            detail: `直近28日間の投稿${feedbackSummary.posted}件のうち、感想入力は${feedbackSummary.rated}件です。次週の投稿案を改善できるよう、参加者へ入力をご案内ください。`,
+            href: `/s/${configuration.slug}/manage/line`,
+            label: 'LINEで案内する',
           },
         ]
       : []),
@@ -443,6 +588,41 @@ export default async function ServiceManagementHome({
           >
             この集計をCSVでダウンロード
           </a>
+        </section>
+        {configuration.registration.referralEnabled ? (
+          <section className="settings-card">
+            <h2>直近7日間の商品投稿の流れ</h2>
+            <p>投稿本文は表示せず、専用URLが入った投稿案の進み方だけを確認します。</p>
+            <dl className="settings-status-list">
+              {sideHustleFunnel.stages.map((stage) => (
+                <div className="settings-status-item" key={stage.key}>
+                  <dt>{stage.label}</dt>
+                  <dd>{stage.count}件</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
+        <section className="settings-card">
+          <h2>次週の投稿改善に使える感想</h2>
+          <p>直近28日間の投稿完了に対する集計です。投稿本文や参加者ごとの回答は表示しません。</p>
+          <dl className="settings-status-list">
+            <div className="settings-status-item">
+              <dt>感想入力率</dt>
+              <dd>{feedbackSummary.coveragePercent}%</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>自分らしい / 普通 / 違う</dt>
+              <dd>
+                {feedbackSummary.good}件 / {feedbackSummary.neutral}件 / {feedbackSummary.bad}件
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>未入力</dt>
+              <dd>{feedbackSummary.unrated}件</dd>
+            </div>
+          </dl>
+          <p>入力された集計は、次に作る週間計画の形式と切り口の改善に使われます。</p>
         </section>
         {operationActions.length > 0 ? (
           <section className="settings-card">

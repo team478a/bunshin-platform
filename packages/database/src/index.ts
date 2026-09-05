@@ -229,9 +229,16 @@ export {
 } from './badge-reward';
 export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
 import { ApplicationError } from '@bunshin/shared';
+import { runtimeDatabaseUrl } from './runtime-database-url';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
-export const prisma = globalPrisma.bunshinPrisma ?? new PrismaClient({ log: ['warn', 'error'] });
+const databaseUrl = runtimeDatabaseUrl(process.env['DATABASE_URL']);
+export const prisma =
+  globalPrisma.bunshinPrisma ??
+  new PrismaClient({
+    log: ['warn', 'error'],
+    ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
+  });
 if (process.env['NODE_ENV'] !== 'production') globalPrisma.bunshinPrisma = prisma;
 
 function lineConfiguration(
