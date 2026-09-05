@@ -7,7 +7,11 @@ import { CapabilitySection } from './capability-section';
 import type { SocialCapabilityStatus } from './capability-section';
 import { MemorySection } from './memory-section';
 import type { MemoryView } from './memory-section';
-import { PersonalitySection, type PersonalityVersionView } from './personality-section';
+import {
+  PersonalitySection,
+  type PersonalityLearningProposalView,
+  type PersonalityVersionView,
+} from './personality-section';
 import { SocialProfileSection, type SocialProfileView } from './social-profile-section';
 import { ContentPillarSection, type ContentPillarView } from './content-pillar-section';
 import { WeeklyPlanSection, type WeeklyPlanView } from './weekly-plan-section';
@@ -26,6 +30,7 @@ export function BunshinEditor({
   workspaceId,
   bunshin,
   personalityVersions,
+  personalityLearningProposals,
   knowledge,
   memories,
   socialCapabilityStatus,
@@ -42,6 +47,7 @@ export function BunshinEditor({
   workspaceId: string;
   bunshin: BunshinAggregate;
   personalityVersions: PersonalityVersionView[];
+  personalityLearningProposals: PersonalityLearningProposalView[];
   knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
   memories: MemoryView[];
   socialCapabilityStatus: SocialCapabilityStatus;
@@ -185,6 +191,7 @@ export function BunshinEditor({
               workspaceId={workspaceId}
               bunshinId={bunshin.id}
               versions={personalityVersions}
+              learningProposals={personalityLearningProposals}
             />
           </div>
         </details>

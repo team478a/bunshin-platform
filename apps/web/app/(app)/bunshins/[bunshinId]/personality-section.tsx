@@ -22,6 +22,18 @@ export interface PersonalityVersionView {
   createdAt: string;
 }
 
+export interface PersonalityLearningProposalView {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+  proposedContent: Omit<
+    PersonalityVersionView,
+    'id' | 'version' | 'source' | 'changeReason' | 'createdAt'
+  >;
+  reason: string;
+  evidenceCount: number;
+  createdAt: string;
+}
+
 const facePolicyLabels: Record<FacePolicy, string> = {
   FACE_OK: '顔も声も使える',
   FACE_NG_VOICE_OK: '顔は出さず、声は使える',
@@ -40,10 +52,12 @@ export function PersonalitySection({
   workspaceId,
   bunshinId,
   versions,
+  learningProposals,
 }: {
   workspaceId: string;
   bunshinId: string;
   versions: PersonalityVersionView[];
+  learningProposals: PersonalityLearningProposalView[];
 }) {
   const router = useRouter();
   const current = versions[0];
@@ -103,6 +117,20 @@ export function PersonalitySection({
     if (response.ok) router.refresh();
   }
 
+  async function act(proposalId: string, action: 'approve' | 'reject' | 'revoke') {
+    const labels = {
+      approve: 'この改善を反映',
+      reject: '今回は使わない',
+      revoke: '反映前に戻す',
+    };
+    if (!window.confirm(`${labels[action]}でよろしいですか？`)) return;
+    setMessage(null);
+    const proposalEndpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/personality-learning-proposals/${encodeURIComponent(proposalId)}/${action}`;
+    const response = await fetch(proposalEndpoint, { method: 'POST' });
+    setMessage(response.ok ? '改善提案の状態を更新しました。' : '改善提案を更新できませんでした。');
+    if (response.ok) router.refresh();
+  }
+
   if (!current) return <p>くわしい話し方は、まだ決まっていません。</p>;
 
   return (
@@ -117,6 +145,58 @@ export function PersonalitySection({
       <p className="personality-section__lead">
         むずかしい言葉は不要です。「友だちに話すように」「短く元気に」など、理想の話し方を書いてください。
       </p>
+      {learningProposals.length > 0 ? (
+        <section className="personality-learning" aria-labelledby="personality-learning-title">
+          <h3 id="personality-learning-title">話し方の改善提案</h3>
+          <p>投稿後の評価をもとにした候補です。確認するまで自動では反映されません。</p>
+          <ul>
+            {learningProposals.map((proposal) => (
+              <li key={proposal.id}>
+                <strong>{proposal.reason}</strong>
+                <span>根拠となる評価：{proposal.evidenceCount}件</span>
+                <dl>
+                  <div>
+                    <dt>話す雰囲気</dt>
+                    <dd>{proposal.proposedContent.tone}</dd>
+                  </div>
+                  <div>
+                    <dt>文章の形</dt>
+                    <dd>{proposal.proposedContent.sentenceStyle}</dd>
+                  </div>
+                </dl>
+                {proposal.status === 'PENDING' ? (
+                  <div className="personality-learning__actions">
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      onClick={() => void act(proposal.id, 'approve')}
+                    >
+                      この改善を反映する
+                    </button>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      onClick={() => void act(proposal.id, 'reject')}
+                    >
+                      今回は使わない
+                    </button>
+                  </div>
+                ) : proposal.status === 'APPROVED' ? (
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => void act(proposal.id, 'revoke')}
+                  >
+                    反映前の話し方に戻す
+                  </button>
+                ) : (
+                  <span>{proposal.status === 'REJECTED' ? '今回は使わない提案' : '取消済み'}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <form className="form-stack personality-form" onSubmit={(event) => void save(event)}>
         <label className="field">
           <span className="field__label">話す雰囲気</span>
