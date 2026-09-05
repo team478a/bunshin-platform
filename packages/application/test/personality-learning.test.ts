@@ -149,9 +149,9 @@ describe('Personality learning proposal', () => {
     });
     await new RejectPersonalityLearningProposal(repository).execute({
       ...scope,
-      proposalId: rejected!.id,
+      proposalId: rejected.id,
     });
-    expect(rejected!.status).toBe('REJECTED');
+    expect(rejected.status).toBe('REJECTED');
 
     const approved = await repository.create({
       ...scope,
@@ -162,11 +162,11 @@ describe('Personality learning proposal', () => {
     });
     await new ApprovePersonalityLearningProposal(repository).execute({
       ...scope,
-      proposalId: approved!.id,
+      proposalId: approved.id,
     });
     const revoked = await new RevokePersonalityLearningProposal(repository).execute({
       ...scope,
-      proposalId: approved!.id,
+      proposalId: approved.id,
     });
     expect(revoked.proposal.status).toBe('REVOKED');
     expect(revoked.personalityVersion.source).toBe('RESTORE');
