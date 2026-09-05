@@ -127,12 +127,19 @@ export default async function ServiceManagementHome({
       },
       lineChannelConfigurations: {
         where: { environment: currentLineEnvironment(), status: 'ACTIVE' },
-        select: { lastVerifiedAt: true, globallyPaused: true },
+        select: { id: true, lastVerifiedAt: true, lastErrorCategory: true, globallyPaused: true },
+        take: 1,
+      },
+      lineRoutingPolicies: {
+        where: { environment: currentLineEnvironment() },
+        select: { mode: true, pilotEnabled: true },
         take: 1,
       },
     },
   });
   if (!group) notFound();
+  const line = group.lineChannelConfigurations[0];
+  const linePolicy = group.lineRoutingPolicies[0];
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const twentyEightDaysAgo = new Date(now.getTime() - 28 * 86_400_000);
@@ -166,6 +173,9 @@ export default async function ServiceManagementHome({
     sentLineDeliveries,
     failedLineDeliveries,
     overdueLineDeliveries,
+    generationProviderReadyCount,
+    sharedLineReadyCount,
+    dedicatedRichMenuPublishCount,
   ] = await Promise.all([
     db.prisma.productPack.count({
       where: {
@@ -372,13 +382,55 @@ export default async function ServiceManagementHome({
         scheduledAt: { lt: now },
       },
     }),
+    db.prisma.aiProviderConfiguration.count({
+      where: {
+        environment: currentAiProviderEnvironment(),
+        provider: 'OPENAI',
+        status: 'ACTIVE',
+        globallyPaused: false,
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    }),
+    db.prisma.lineChannelConfiguration.count({
+      where: {
+        environment: currentLineEnvironment(),
+        status: 'ACTIVE',
+        globallyPaused: false,
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    }),
+    line
+      ? db.prisma.groupLineConfigurationAudit.count({
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            configurationId: line.id,
+            environment: currentLineEnvironment(),
+            action: 'RICH_MENU_PUBLISH',
+          },
+        })
+      : Promise.resolve(0),
   ]);
   const configuration = service.configuration;
   const onboarding = readServiceOnboardingSettings(
     configuration.registration.onboardingConfig,
     configuration.registration.surveyConfig,
   );
-  const line = group.lineChannelConfigurations[0];
+  const lineMode = linePolicy?.mode ?? 'SHARED';
+  const dedicatedLineReady = Boolean(
+    linePolicy?.pilotEnabled &&
+    line?.lastVerifiedAt &&
+    !line.lastErrorCategory &&
+    !line.globallyPaused,
+  );
+  const lineConfigurationReady =
+    lineMode === 'SHARED'
+      ? sharedLineReadyCount > 0
+      : lineMode === 'DEDICATED'
+        ? dedicatedLineReady
+        : false;
   const readiness = buildServiceLaunchReadiness({
     serviceSlug: configuration.slug,
     operatorName: configuration.operatorName,
@@ -391,7 +443,11 @@ export default async function ServiceManagementHome({
     activeFeatureCount: group.featurePolicies.length,
     activeParticipantCount: group.memberships.length,
     activeKnowledgeCount: group.knowledgeSources.length,
-    lineConfigurationReady: Boolean(line?.lastVerifiedAt && !line.globallyPaused),
+    lineConfigurationReady,
+    lineMode,
+    linePilotEnabled: linePolicy?.pilotEnabled ?? false,
+    lineRichMenuReady: dedicatedRichMenuPublishCount > 0,
+    generationProviderReady: generationProviderReadyCount > 0,
     commercialContentRequired: configuration.registration.referralEnabled,
     trendResearchEnabled: configuration.trendResearchEnabled ?? true,
     trendProviderReady: trendProviderReadyCount > 0,
@@ -419,7 +475,25 @@ export default async function ServiceManagementHome({
     label?: string;
   };
   const lineOperationActions: OperationAction[] = [];
-  if (line === undefined) {
+  if (configuration.registration.lineEnabled && lineMode === 'DISABLED') {
+    lineOperationActions.push({
+      title: 'LINEを使う設定と配信停止が矛盾しています',
+      detail:
+        '参加方法ではLINEを使用します。公式LINE画面で共通LINEまたは専用LINEを選んでください。',
+      href: `/s/${configuration.slug}/manage/line`,
+      label: 'LINEの使い方を確認する',
+    });
+  } else if (
+    configuration.registration.lineEnabled &&
+    lineMode === 'SHARED' &&
+    sharedLineReadyCount === 0
+  ) {
+    lineOperationActions.push({
+      title: '共通LINEを利用できません',
+      detail:
+        'システム側の共通LINE設定に接続確認または再開が必要です。システム管理者へ連絡してください。',
+    });
+  } else if (lineMode === 'DEDICATED' && line === undefined) {
     lineOperationActions.push({
       title: '公式LINEの準備ができていません',
       detail:
@@ -427,7 +501,14 @@ export default async function ServiceManagementHome({
       href: `/s/${configuration.slug}/manage/line`,
       label: '公式LINEを設定する',
     });
-  } else if (line.globallyPaused) {
+  } else if (lineMode === 'DEDICATED' && !linePolicy?.pilotEnabled) {
+    lineOperationActions.push({
+      title: '専用LINEのテスト利用が無効です',
+      detail: '公式LINE画面で専用LINEを選び直し、テスト利用を有効にしてください。',
+      href: `/s/${configuration.slug}/manage/line`,
+      label: 'LINEの使い方を確認する',
+    });
+  } else if (lineMode === 'DEDICATED' && line?.globallyPaused) {
     lineOperationActions.push({
       title: '公式LINEの通知が停止中です',
       detail:
@@ -435,13 +516,21 @@ export default async function ServiceManagementHome({
       href: `/s/${configuration.slug}/manage/line`,
       label: '公式LINEを確認する',
     });
-  } else if (!line.lastVerifiedAt) {
+  } else if (lineMode === 'DEDICATED' && (!line?.lastVerifiedAt || line.lastErrorCategory)) {
     lineOperationActions.push({
       title: '公式LINEの接続確認が必要です',
       detail:
         '登録した公式LINEが使えるか、まだ確認できていません。接続確認後に通知を開始してください。',
       href: `/s/${configuration.slug}/manage/line`,
       label: '公式LINEを確認する',
+    });
+  }
+  if (lineMode === 'DEDICATED' && dedicatedLineReady && dedicatedRichMenuPublishCount === 0) {
+    lineOperationActions.push({
+      title: '専用LINEの標準メニューが未公開です',
+      detail: '今日やることなど4つのボタンを、公式LINE画面から公開してください。',
+      href: `/s/${configuration.slug}/manage/line`,
+      label: '標準メニューを公開する',
     });
   }
   const operationActions: OperationAction[] = [

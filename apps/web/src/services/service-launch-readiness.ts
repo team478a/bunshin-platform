@@ -19,6 +19,10 @@ export interface ServiceLaunchReadinessInput {
   activeParticipantCount: number;
   activeKnowledgeCount: number;
   lineConfigurationReady: boolean;
+  lineMode?: 'SHARED' | 'DEDICATED' | 'DISABLED';
+  linePilotEnabled?: boolean;
+  lineRichMenuReady?: boolean;
+  generationProviderReady?: boolean;
   commercialContentRequired?: boolean;
   trendResearchEnabled?: boolean;
   trendProviderReady?: boolean;
@@ -64,11 +68,25 @@ export function buildServiceLaunchReadiness(
       path: `${base}/legal`,
     },
     {
+      key: 'GENERATION_AI',
+      label: '投稿案を作るAI',
+      ready: input.generationProviderReady !== false,
+      detail:
+        input.generationProviderReady === false
+          ? '文章作成AIの接続確認をシステム管理者へ依頼します。'
+          : '接続確認済みの文章作成AIで投稿案を作れます。',
+      path: `${base}`,
+    },
+    {
       key: 'LINE',
       label: '利用者への連絡方法',
       ready: input.lineEnabled ? input.lineConfigurationReady : input.emailEnabled,
       detail: input.lineEnabled
-        ? 'この環境で確認済みのLINE設定を使用できる状態にします。'
+        ? input.lineMode === 'DEDICATED'
+          ? 'このサービス専用LINEの接続確認・テスト許可・使用開始をそろえます。'
+          : input.lineMode === 'DISABLED'
+            ? 'サービス設定ではLINEを使います。LINEの使い方を共通または専用へ変更してください。'
+            : '確認済みのワタシワークス共通LINEを使用できる状態にします。'
         : '現在はメールで参加できます。LINEは必要になった時に追加できます。',
       path: input.lineEnabled ? `${base}/line` : `${base}/settings`,
     },
@@ -94,6 +112,20 @@ export function buildServiceLaunchReadiness(
       path: `${base}/members`,
     },
   ];
+  if (input.lineEnabled && input.lineMode === 'DEDICATED') {
+    items.splice(6, 0, {
+      key: 'LINE_RICH_MENU',
+      label: '専用LINEの標準メニュー',
+      ready: input.linePilotEnabled === true && input.lineRichMenuReady === true,
+      detail:
+        input.linePilotEnabled !== true
+          ? '専用LINEのテスト利用を有効にしてください。'
+          : input.lineRichMenuReady !== true
+            ? '接続確認済みの専用LINEへ標準リッチメニューを公開します。'
+            : '今日やることなど4つのボタンを専用LINEへ公開済みです。',
+      path: `${base}/line`,
+    });
+  }
   if (!input.commercialContentRequired) return items;
   items.splice(
     6,

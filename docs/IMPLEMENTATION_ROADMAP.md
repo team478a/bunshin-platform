@@ -312,14 +312,14 @@ SNS、投稿方法、BUNSHINが作る範囲を分離し、利用者が必要と�
 
 ### Phase 7-E: Controlled Learning / AI Agent Compatibility
 
-状態: E0設計レビュー中。外部Agent、学習、Skill Registry、MCPは未実装。`AI_AGENT_COMPATIBILITY_REBASELINE.md`を正本候補とする。
+状態: E0〜E3完了。管理されたSkill Registry、外部Agent Runtime、MCPは検証後まで保留する。`AI_AGENT_COMPATIBILITY_REBASELINE.md`を正本候補とする。
 
 - E0: AI／Agent互換境界、data policy、tool policy、budget、kill switch、Golden Dataset方針 — 文書完了
 - Golden Dataset Core: version固定fixture、評価器、禁止結果テスト — 完了（外部接続なし）
 - Golden Regression Runner: 全件集計、欠落・重複・未知ケース検出 — 完了（fixture-only）
-- E1: 環境別・版管理Provider Registry（D3実測と運用要件確定後）
-- E2: 既存行動から作るPreference Read ModelとLearning Proposal
-- E3: 人間承認、回帰評価、rollbackを持つ変更提案
+- E1: 環境別・版管理Provider Registry — 完了
+- E2: 既存行動から作るPreference Read ModelとLearning Proposal — 完了
+- E3: 人間承認、前後KPI、rollbackを持つ変更提案 — 完了
 - E4: 管理されたSkill Registry（十分な行動データ確認後）
 - E5: 任意のAgent Runtime Adapter（明確な品質・費用優位確認後）
 - E6: allowlist MCP Gateway（外部Agent利用が必要になった後）
@@ -328,7 +328,7 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 
 ### Phase 7-P: 人格学習・公式商品パック
 
-状態: P0設計レビュー中。実装コード、Prisma Schema、Migrationは未着手。`PERSONALITY_LEARNING_PRODUCT_PACK_REBASELINE.md`を正本候補とする。
+状態: P0〜P4完了。P5は十分な同意済みデータが蓄積した後に判断する。`PERSONALITY_LEARNING_PRODUCT_PACK_REBASELINE.md`を正本とする。
 
 - P0: 現行監査、所有権、参加同意、商品版固定、生成Context境界 — 文書レビュー
 - P1: Generation Context Builder、人格Version、Memory選択、生成Snapshot
@@ -350,7 +350,7 @@ AI／AgentへDB、秘密情報、LINE、SNS、本番設定、任意shellを直�
 - G4: 任意参加Campaign / Participation / 期間・上限・公式素材 / 管理・本人API/UI / 監査 — 完了
 - G5: 投稿比率、Weekly Plan、生成、LINE/Web導線 — 完了
 - G6: 類似検査、利用制限、KPI、1社先行テスト — 基盤完了（実運用検証待ち）
-- G7: 検証後の承認型人格学習
+- G7: 承認型人格学習、本人確認、取消・復元、学習前後KPI — 完了
 
 Phase 7-PのProduct Packと人格学習は本Phaseへ統合する。G1〜G6を飛ばしてG7へ進まない。
 
