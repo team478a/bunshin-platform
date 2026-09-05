@@ -254,6 +254,12 @@ export default async function ServiceMemberHome({
           <div className="service-home-actions">
             <Link
               className="button button--primary"
+              href={`/s/${service.configuration.slug}/activity` as Route}
+            >
+              活動・紹介を見る
+            </Link>
+            <Link
+              className="button button--primary"
               href={`/s/${service.configuration.slug}/programs` as Route}
             >
               参加中のプログラムと目標
