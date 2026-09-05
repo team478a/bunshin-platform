@@ -3,6 +3,7 @@ import { ApplicationError } from '@bunshin/shared';
 import {
   GeneratePersonalityLearningProposal,
   RunPersonalityLearningProposalJob,
+  RunWeeklyPersonalityLearningScheduler,
   type PersonalityLearningCandidate,
   type PersonalityLearningCandidateRepository,
   type PersonalityLearningProposalRepository,
@@ -35,6 +36,29 @@ const candidate = (count = 3): PersonalityLearningCandidate => ({
 });
 
 describe('Personality learning proposal job', () => {
+  it('runs only at Monday 00:00 UTC', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      candidates: 1,
+      created: 1,
+      skipped: 0,
+      failures: 0,
+      truncated: false,
+    });
+    const notDue = new RunWeeklyPersonalityLearningScheduler(
+      { execute } as never,
+      () => new Date('2026-09-07T00:01:00Z'),
+    );
+    await expect(notDue.execute()).resolves.toMatchObject({ due: false, candidates: 0 });
+    expect(execute).not.toHaveBeenCalled();
+
+    const due = new RunWeeklyPersonalityLearningScheduler(
+      { execute } as never,
+      () => new Date('2026-09-07T00:00:00Z'),
+    );
+    await expect(due.execute()).resolves.toMatchObject({ due: true, created: 1 });
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   it('does not ask for a suggestion with fewer than three feedback records', async () => {
     const suggest = vi.fn();
     const create = vi.fn();
@@ -57,6 +81,10 @@ describe('Personality learning proposal job', () => {
       { suggest },
     ).execute(candidate());
     expect(suggest).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      bunshinId: 'bunshin-1',
+      actorUserId: 'user-1',
+      usageIdempotencyKey: 'personality-learning:version-1',
       currentContent: content,
       evidence: Array(3).fill({ rating: 'BAD', missionFormat: 'TEXT' }),
     });
