@@ -6,6 +6,10 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { safeLineAuthReturnPath } from '../auth/line-return';
 import { currentLineEnvironment } from '../line/secure-configuration';
+import {
+  DEFAULT_SERVICE_PROFILE_QUESTIONS,
+  readServiceOnboardingSettings,
+} from '../services/service-onboarding-settings';
 
 const purposes = [
   'ATTRACT',
@@ -89,13 +93,30 @@ export async function userRegistrationResponse(request: Request) {
     }
     requireSameOrigin(request);
     const value = updateSchema.parse(await request.json());
+    const { complete, notificationConsent, returnTo, ...fields } = value;
+    const safeReturnTo = safeLineAuthReturnPath(returnTo);
+    const serviceSlug = safeReturnTo?.match(/^\/s\/([a-z0-9]+(?:-[a-z0-9]+)*)/)?.[1] ?? null;
+    const serviceConfiguration = serviceSlug
+      ? await db.prisma.serviceConfiguration.findFirst({
+          where: { slug: serviceSlug, visibility: 'PUBLIC', group: { status: 'ACTIVE' } },
+          select: { registration: { select: { onboardingConfig: true, surveyConfig: true } } },
+        })
+      : null;
+    const requiredQuestions = serviceConfiguration?.registration
+      ? readServiceOnboardingSettings(
+          serviceConfiguration.registration.onboardingConfig,
+          serviceConfiguration.registration.surveyConfig,
+        ).profileQuestions
+      : DEFAULT_SERVICE_PROFILE_QUESTIONS;
     if (
       value.complete &&
-      (!value.primaryIndustryId || !value.primaryPurpose || !value.activityName)
+      ((requiredQuestions.industry && !value.primaryIndustryId) ||
+        (requiredQuestions.purpose && !value.primaryPurpose) ||
+        (requiredQuestions.activityName && !value.activityName))
     )
       throw new ApplicationError(
         'VALIDATION_ERROR',
-        'industry, purpose and activity name are required',
+        'required registration questions are incomplete',
       );
     if (value.primaryIndustryId) {
       const industry = await db.prisma.industry.findFirst({
@@ -107,7 +128,6 @@ export async function userRegistrationResponse(request: Request) {
         throw new ApplicationError('VALIDATION_ERROR', 'other industry is required');
     }
     const now = new Date();
-    const { complete, notificationConsent, returnTo, ...fields } = value;
     const firstPostSuggestion =
       complete && fields.activityName && fields.primaryPurpose
         ? createFirstPostSuggestion({
@@ -168,7 +188,7 @@ export async function userRegistrationResponse(request: Request) {
     return Response.json(
       {
         data: profile,
-        destination: safeLineAuthReturnPath(returnTo) ?? '/onboarding/complete',
+        destination: safeReturnTo ?? '/onboarding/complete',
         requestId,
       },
       { status: 200, headers: { 'cache-control': 'private, no-store' } },

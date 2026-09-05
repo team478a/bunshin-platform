@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readServiceOnboardingSettings } from '../src/services/service-onboarding-settings';
+import {
+  DEFAULT_SERVICE_PROFILE_QUESTIONS,
+  readServiceOnboardingSettings,
+} from '../src/services/service-onboarding-settings';
 
 describe('service onboarding settings', () => {
   it('reads only supported public guidance fields', () => {
@@ -12,6 +15,7 @@ describe('service onboarding settings', () => {
       welcomeTitle: 'ようこそ',
       welcomeMessage: '説明',
       questions: ['使うSNSは？', '目標は？'],
+      profileQuestions: DEFAULT_SERVICE_PROFILE_QUESTIONS,
     });
   });
 
@@ -20,6 +24,27 @@ describe('service onboarding settings', () => {
       welcomeTitle: '',
       welcomeMessage: '',
       questions: ['有効'],
+      profileQuestions: DEFAULT_SERVICE_PROFILE_QUESTIONS,
+    });
+  });
+
+  it('allows each service to disable irrelevant profile questions', () => {
+    expect(
+      readServiceOnboardingSettings(
+        {
+          profileQuestions: {
+            industry: false,
+            purpose: false,
+            activityName: true,
+          },
+        },
+        null,
+      ).profileQuestions,
+    ).toEqual({
+      ...DEFAULT_SERVICE_PROFILE_QUESTIONS,
+      industry: false,
+      purpose: false,
+      activityName: true,
     });
   });
 });
