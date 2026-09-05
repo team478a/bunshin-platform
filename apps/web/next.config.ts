@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { join } from 'node:path';
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -11,6 +12,18 @@ const securityHeaders = [
 const config: NextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
+  outputFileTracingRoot: join(process.cwd(), '../..'),
+  outputFileTracingIncludes: {
+    '/api/admin/groups/*/line-rich-menu/default': [
+      '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
+    ],
+    '/api/admin/line-rich-menus/default': [
+      '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
+    ],
+    '/api/internal/jobs/run': [
+      '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
+    ],
+  },
   serverExternalPackages: ['@prisma/client', '@resvg/resvg-js'],
   transpilePackages: [
     '@bunshin/application',
