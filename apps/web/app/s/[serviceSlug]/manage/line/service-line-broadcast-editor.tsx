@@ -139,80 +139,109 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
           履歴 <strong>{broadcasts.length}件</strong>
         </span>
       </div>
-      <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
-        <fieldset>
+      <form className="line-broadcast-form" onSubmit={(event) => void submit(event)}>
+        <fieldset className="line-broadcast-targets">
           <legend>送信対象</legend>
           <p>業種と目的を両方選ぶと、両方に一致する参加者だけが対象になります。</p>
-          <label>
-            業種
-            <select
-              value={industryId}
-              onChange={(event) => {
-                setIndustryId(event.target.value);
-                setPreviewCount(null);
-              }}
+          <div className="line-broadcast-targets__filters">
+            <label className="field">
+              <span className="field__label">業種</span>
+              <select
+                className="field__control"
+                value={industryId}
+                onChange={(event) => {
+                  setIndustryId(event.target.value);
+                  setPreviewCount(null);
+                }}
+              >
+                <option value="">すべての業種</option>
+                {industries.map((industry) => (
+                  <option key={industry.id} value={industry.id}>
+                    {industry.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field__label">主な目的</span>
+              <select
+                className="field__control"
+                value={purpose}
+                onChange={(event) => {
+                  setPurpose(event.target.value);
+                  setPreviewCount(null);
+                }}
+              >
+                <option value="">すべての目的</option>
+                {purposeOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="line-broadcast-targets__preview">
+            <div>
+              <span>現在の対象</span>
+              <strong>{previewCount === null ? '未確認' : `${previewCount}人`}</strong>
+            </div>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void preview()}
             >
-              <option value="">すべての業種</option>
-              {industries.map((industry) => (
-                <option key={industry.id} value={industry.id}>
-                  {industry.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            主な目的
-            <select
-              value={purpose}
-              onChange={(event) => {
-                setPurpose(event.target.value);
-                setPreviewCount(null);
-              }}
-            >
-              <option value="">すべての目的</option>
-              {purposeOptions.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="button button--secondary" type="button" onClick={() => void preview()}>
-            送信対象を確認する
-          </button>
-          <strong>{previewCount === null ? '対象確認前' : `送信対象 ${previewCount}人`}</strong>
+              送信対象を確認する
+            </button>
+          </div>
         </fieldset>
-        <label>
-          件名
-          <input name="title" required maxLength={120} placeholder="例：今週のお知らせ" />
-        </label>
-        <label>
-          本文
-          <textarea
-            name="message"
-            required
-            maxLength={5000}
-            rows={7}
-            placeholder="送信する内容を入力してください"
-          />
-        </label>
-        <label>
-          送信理由
-          <input name="reason" required maxLength={1000} placeholder="例：公式のお知らせ" />
-        </label>
-        <label>
-          送信予定（空欄なら今すぐ）
-          <input name="scheduledAt" type="datetime-local" />
-        </label>
+        <div className="line-broadcast-form__fields">
+          <label className="field line-broadcast-form__wide">
+            <span className="field__label">件名</span>
+            <input
+              className="field__control"
+              name="title"
+              required
+              maxLength={120}
+              placeholder="例：今週のお知らせ"
+            />
+          </label>
+          <label className="field line-broadcast-form__wide">
+            <span className="field__label">本文</span>
+            <textarea
+              className="field__control line-broadcast-form__message"
+              name="message"
+              required
+              maxLength={5000}
+              rows={7}
+              placeholder="送信する内容を入力してください"
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">送信理由</span>
+            <input
+              className="field__control"
+              name="reason"
+              required
+              maxLength={1000}
+              placeholder="例：公式のお知らせ"
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">送信予定</span>
+            <input className="field__control" name="scheduledAt" type="datetime-local" />
+            <small>空欄の場合は、確認後すぐに送信します。</small>
+          </label>
+        </div>
         <button
-          className="button"
+          className="button line-broadcast-form__submit"
           disabled={sending || previewCount === null || previewCount < 1}
           type="submit"
         >
           {sending ? '予約中…' : '内容を確認して送信を予約する'}
         </button>
       </form>
-      <p aria-live="polite" role="status">
+      <p className="line-broadcast-status" aria-live="polite" role="status">
         {message}
       </p>
       <h3>最近の配信</h3>
