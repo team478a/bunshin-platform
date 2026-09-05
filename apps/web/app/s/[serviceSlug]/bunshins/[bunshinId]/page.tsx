@@ -22,6 +22,7 @@ import { WeeklyPlanSection } from '../../../../(app)/bunshins/[bunshinId]/weekly
 import type { DailyMissionView } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 import { ServiceBunshinEditor } from './service-bunshin-editor';
 import { ServiceDailyMissionSection } from './service-daily-mission-section';
+import { SimpleFirstPostSetup } from './simple-first-post-setup';
 
 export const dynamic = 'force-dynamic';
 
@@ -154,11 +155,24 @@ export default async function ServiceBunshinDetailPage({
       label: '投稿するSNSを選ぶ',
       complete: socialProfiles.some(({ status }) => status === 'ACTIVE'),
     },
-    { label: '投稿内容の方針を決める', complete: accountStrategies.length > 0 },
-    { label: '1週間分の予定を作る', complete: weeklyPlans.length > 0 },
-    { label: '今日の投稿案を受け取る', complete: dailyMissions.length > 0 },
+    {
+      label: '投稿内容の方針を決める',
+      complete: accountStrategies.some(({ status }) => status === 'APPROVED'),
+    },
+    {
+      label: '1週間分の予定を作る',
+      complete: weeklyPlans.some(({ status }) => status === 'CONFIRMED'),
+    },
+    {
+      label: '今日の投稿案を受け取る',
+      complete: dailyMissions.some(
+        ({ missionDate }) =>
+          missionDate === new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }),
+      ),
+    },
   ];
   const completedSetupSteps = setupSteps.filter(({ complete }) => complete).length;
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -193,61 +207,80 @@ export default async function ServiceBunshinDetailPage({
           </ol>
           <p>保存すると、この案内にも自動で反映されます。SNSへの投稿はご自身で行います。</p>
         </section>
-        <section className="service-entry__card">
-          <ServiceBunshinEditor serviceSlug={service.configuration.slug} bunshin={bunshin} />
-        </section>
-        <section className="service-entry__card">
-          <ContentPillarSection
-            workspaceId={service.workspaceId}
-            bunshinId={bunshin.id}
-            capabilityStatus={
-              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
-            }
-            pillars={contentPillars}
-            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/content-pillars`}
-            autoStart
-          />
-        </section>
-        <section className="service-entry__card">
-          <SocialProfileSection
-            workspaceId={service.workspaceId}
-            bunshinId={bunshin.id}
-            capabilityStatus={
-              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
-            }
-            profiles={socialProfiles}
-            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-profiles`}
-            autoStart
-          />
-        </section>
-        <section className="service-entry__card">
-          <AccountStrategySection
-            workspaceId={service.workspaceId}
-            bunshinId={bunshin.id}
-            profiles={socialProfiles}
-            strategies={accountStrategies}
-            active={
-              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
-              'ACTIVE'
-            }
-            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-account-strategies`}
-          />
-        </section>
-        <section className="service-entry__card">
-          <WeeklyPlanSection
-            workspaceId={service.workspaceId}
-            bunshinId={bunshin.id}
-            capabilityStatus={
-              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ?? null
-            }
-            profiles={socialProfiles}
-            pillars={contentPillars}
-            plans={weeklyPlans}
-            endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/weekly-plans`}
-            managedGenerationOnly
-          />
-        </section>
-        <section className="service-entry__card">
+        <SimpleFirstPostSetup
+          serviceSlug={service.configuration.slug}
+          bunshinId={bunshin.id}
+          topic={bunshin.objectiveSummary}
+          audience={bunshin.audienceSummary}
+          hasActivePillar={contentPillars.some(({ active }) => active)}
+          profiles={socialProfiles}
+          strategies={accountStrategies}
+          plans={weeklyPlans}
+          hasTodayMission={dailyMissions.some(({ missionDate }) => missionDate === today)}
+        />
+        <details className="service-advanced-settings">
+          <summary>細かい設定を自分で変える（必要な方だけ）</summary>
+          <div className="service-advanced-settings__content">
+            <section className="service-entry__card">
+              <ServiceBunshinEditor serviceSlug={service.configuration.slug} bunshin={bunshin} />
+            </section>
+            <section className="service-entry__card">
+              <ContentPillarSection
+                workspaceId={service.workspaceId}
+                bunshinId={bunshin.id}
+                capabilityStatus={
+                  capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ??
+                  null
+                }
+                pillars={contentPillars}
+                endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/content-pillars`}
+                autoStart
+              />
+            </section>
+            <section className="service-entry__card">
+              <SocialProfileSection
+                workspaceId={service.workspaceId}
+                bunshinId={bunshin.id}
+                capabilityStatus={
+                  capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ??
+                  null
+                }
+                profiles={socialProfiles}
+                endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-profiles`}
+                autoStart
+              />
+            </section>
+            <section className="service-entry__card">
+              <AccountStrategySection
+                workspaceId={service.workspaceId}
+                bunshinId={bunshin.id}
+                profiles={socialProfiles}
+                strategies={accountStrategies}
+                active={
+                  capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
+                  'ACTIVE'
+                }
+                endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/social-account-strategies`}
+              />
+            </section>
+            <section className="service-entry__card">
+              <WeeklyPlanSection
+                workspaceId={service.workspaceId}
+                bunshinId={bunshin.id}
+                capabilityStatus={
+                  capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ??
+                  null
+                }
+                profiles={socialProfiles}
+                pillars={contentPillars}
+                plans={weeklyPlans}
+                endpointBase={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/weekly-plans`}
+                managedGenerationOnly
+              />
+            </section>
+          </div>
+        </details>
+        <section className="service-entry__card" id="today-post">
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
             profiles={socialProfiles}
