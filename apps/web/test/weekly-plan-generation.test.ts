@@ -130,6 +130,12 @@ describe('WeeklyPlanGenerationService', () => {
       planner: { generate },
       providerModel: 'gpt-test',
       resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
+      loadRecentPerformance: vi.fn().mockResolvedValue({
+        periodDays: 28,
+        postedCount: 3,
+        feedback: { good: 2, neutral: 0, bad: 1 },
+        formats: [{ format: 'TEXT', postedCount: 3, goodFeedbackCount: 2, badFeedbackCount: 1 }],
+      }),
       recordUsage,
       runWithQuota: (input) => input.generate(),
       now: () => now.valueOf(),
@@ -150,6 +156,12 @@ describe('WeeklyPlanGenerationService', () => {
         timezone: 'Asia/Tokyo',
         platform: 'X',
         grantedKnowledge: [{ type: 'SKILL', title: '経験', content: '10年の経験' }],
+        recentPerformance: {
+          periodDays: 28,
+          postedCount: 3,
+          feedback: { good: 2, neutral: 0, bad: 1 },
+          formats: [{ format: 'TEXT', postedCount: 3, goodFeedbackCount: 2, badFeedbackCount: 1 }],
+        },
       }),
     );
     expect(createGeneratedPlan).toHaveBeenCalledWith(
