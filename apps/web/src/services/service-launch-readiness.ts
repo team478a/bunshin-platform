@@ -19,6 +19,12 @@ export interface ServiceLaunchReadinessInput {
   activeParticipantCount: number;
   activeKnowledgeCount: number;
   lineConfigurationReady: boolean;
+  commercialContentRequired?: boolean;
+  trendResearchEnabled?: boolean;
+  trendProviderReady?: boolean;
+  activeProductPackCount?: number;
+  activeCampaignCount?: number;
+  activeTrackingLinkCount?: number;
 }
 
 export function buildServiceLaunchReadiness(
@@ -28,7 +34,7 @@ export function buildServiceLaunchReadiness(
   const registrationReady =
     input.registrationMode !== 'CLOSED' && (input.emailEnabled || input.lineEnabled);
   const legal = new Set(input.publishedLegalTypes);
-  return [
+  const items: ServiceLaunchReadinessItem[] = [
     {
       key: 'BASIC',
       label: 'サービスの基本情報',
@@ -88,4 +94,43 @@ export function buildServiceLaunchReadiness(
       path: `${base}/members`,
     },
   ];
+  if (!input.commercialContentRequired) return items;
+  items.splice(
+    6,
+    0,
+    {
+      key: 'TREND_RESEARCH',
+      label: '新しい話題の調査',
+      ready: input.trendResearchEnabled === true && input.trendProviderReady === true,
+      detail:
+        input.trendResearchEnabled !== true
+          ? 'サービス設定で話題調査を使用するようにします。'
+          : input.trendProviderReady !== true
+            ? '話題調査サービスの接続確認をシステム管理者へ依頼します。'
+            : '確認済みの話題調査サービスから、投稿案へ新しい情報を反映します。',
+      path: `${base}/settings`,
+    },
+    {
+      key: 'PRODUCT',
+      label: '紹介する商品・活動',
+      ready: (input.activeProductPackCount ?? 0) > 0,
+      detail: '公開済みの商品情報、必須表示、避ける表現を用意します。',
+      path: `${base}/product-packs`,
+    },
+    {
+      key: 'CAMPAIGN',
+      label: '参加できる投稿企画',
+      ready: (input.activeCampaignCount ?? 0) > 0,
+      detail: '現在の期間内で参加できる商品投稿企画を1件以上公開します。',
+      path: `${base}/product-packs`,
+    },
+    {
+      key: 'TRACKING_LINK',
+      label: '投稿へ入れる専用URL',
+      ready: (input.activeTrackingLinkCount ?? 0) > 0,
+      detail: '利用中の商品別・参加者別URLを用意し、投稿案へ安全に差し込みます。',
+      path: `${base}/external-tracking`,
+    },
+  );
+  return items;
 }
