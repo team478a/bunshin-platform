@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   calculateAdminRetention,
   calculateFirstWeekThreePostKpi,
+  normalizePersonalityVersionContent,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
   VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES,
@@ -98,6 +99,8 @@ import type {
   PersonalityVersionContent,
   PersonalityVersionRepository,
   PersonalityVersionScope,
+  PersonalityLearningProposal,
+  PersonalityLearningProposalRepository,
   GroupParticipationRepository,
   ProductPackRepository,
   GroupKnowledgeRepository,
@@ -6904,6 +6907,251 @@ export class PrismaPersonalityVersionRepository implements PersonalityVersionRep
         orderBy: { version: 'desc' },
       });
       return rows.map(personalityVersion);
+    });
+  }
+}
+
+function personalityLearningProposal(
+  row: Prisma.PersonalityLearningProposalGetPayload<object>,
+): PersonalityLearningProposal {
+  const proposedContent = normalizePersonalityVersionContent(
+    row.proposedContent as unknown as PersonalityVersionContent,
+  );
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    bunshinId: row.bunshinId,
+    status: row.status,
+    proposedContent,
+    reason: row.reason,
+    evidenceIds: stringArray(row.evidenceIds, 'evidenceIds'),
+    basedOnVersionId: row.basedOnVersionId,
+    appliedVersionId: row.appliedVersionId,
+    createdAt: row.createdAt,
+    decidedAt: row.decidedAt,
+    revokedAt: row.revokedAt,
+  };
+}
+
+export class PrismaPersonalityLearningProposalRepository implements PersonalityLearningProposalRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async access(tx: Prisma.TransactionClient, input: PersonalityVersionScope) {
+    const row = await tx.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        status: { not: 'ARCHIVED' },
+        workspace: { status: 'ACTIVE' },
+      },
+      select: {
+        ownerUserId: true,
+        personality: { select: { id: true } },
+        workspace: {
+          select: {
+            memberships: {
+              where: { userId: input.actorUserId, status: 'ACTIVE' },
+              select: { role: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    const membership = row?.workspace.memberships[0];
+    if (
+      !row ||
+      !membership ||
+      !canManageBunshin(membership.role, input.actorUserId, row.ownerUserId)
+    )
+      return null;
+    return row.personality;
+  }
+
+  async create(input: Parameters<PersonalityLearningProposalRepository['create']>[0]) {
+    try {
+      return await this.client.$transaction(async (tx) => {
+        const personality = await this.access(tx, input);
+        if (!personality) return null;
+        const base = await tx.bunshinPersonalityVersion.findFirst({
+          where: {
+            id: input.basedOnVersionId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            personalityId: personality.id,
+          },
+          select: { id: true },
+        });
+        if (!base) return null;
+        const row = await tx.personalityLearningProposal.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            proposedContent: input.proposedContent as unknown as Prisma.InputJsonValue,
+            reason: input.reason,
+            evidenceIds: input.evidenceIds,
+            basedOnVersionId: input.basedOnVersionId,
+            createdByUserId: input.actorUserId,
+          },
+        });
+        return personalityLearningProposal(row);
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new ApplicationError('CONFLICT', 'pending learning proposal already exists');
+      throw error;
+    }
+  }
+
+  async list(input: Parameters<PersonalityLearningProposalRepository['list']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      if (!(await this.access(tx, input))) return null;
+      const rows = await tx.personalityLearningProposal.findMany({
+        where: { workspaceId: input.workspaceId, bunshinId: input.bunshinId },
+        orderBy: { createdAt: 'desc' },
+      });
+      return rows.map(personalityLearningProposal);
+    });
+  }
+
+  async reject(input: Parameters<PersonalityLearningProposalRepository['reject']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      if (!(await this.access(tx, input))) return null;
+      const current = await tx.personalityLearningProposal.findFirst({
+        where: {
+          id: input.proposalId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'PENDING',
+        },
+      });
+      if (!current) return null;
+      const row = await tx.personalityLearningProposal.update({
+        where: { id: current.id },
+        data: { status: 'REJECTED', decidedAt: new Date() },
+      });
+      return personalityLearningProposal(row);
+    });
+  }
+
+  async approve(input: Parameters<PersonalityLearningProposalRepository['approve']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const personality = await this.access(tx, input);
+      if (!personality) return null;
+      const proposal = await tx.personalityLearningProposal.findFirst({
+        where: {
+          id: input.proposalId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'PENDING',
+        },
+      });
+      if (!proposal) return null;
+      const content = normalizePersonalityVersionContent(
+        proposal.proposedContent as unknown as PersonalityVersionContent,
+      );
+      const latest = await tx.bunshinPersonalityVersion.aggregate({
+        where: { personalityId: personality.id },
+        _max: { version: true },
+      });
+      await tx.bunshinPersonality.update({
+        where: { id: personality.id },
+        data: {
+          ...content,
+          forbiddenExpressions: content.forbiddenExpressions,
+          preferredExpressions: content.preferredExpressions,
+        },
+      });
+      const versionRow = await tx.bunshinPersonalityVersion.create({
+        data: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          personalityId: personality.id,
+          version: (latest._max.version ?? 0) + 1,
+          source: 'LEARNING',
+          changeReason: proposal.reason,
+          basedOnVersionId: proposal.basedOnVersionId,
+          ...content,
+          forbiddenExpressions: content.forbiddenExpressions,
+          preferredExpressions: content.preferredExpressions,
+          createdByUserId: input.actorUserId,
+        },
+      });
+      const updated = await tx.personalityLearningProposal.update({
+        where: { id: proposal.id },
+        data: { status: 'APPROVED', appliedVersionId: versionRow.id, decidedAt: new Date() },
+      });
+      return {
+        proposal: personalityLearningProposal(updated),
+        personalityVersion: personalityVersion(versionRow),
+      };
+    });
+  }
+
+  async revoke(input: Parameters<PersonalityLearningProposalRepository['revoke']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const personality = await this.access(tx, input);
+      if (!personality) return null;
+      const proposal = await tx.personalityLearningProposal.findFirst({
+        where: {
+          id: input.proposalId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          status: 'APPROVED',
+        },
+      });
+      if (!proposal) return null;
+      const base = await tx.bunshinPersonalityVersion.findFirst({
+        where: { id: proposal.basedOnVersionId, personalityId: personality.id },
+      });
+      if (!base) return null;
+      const content: PersonalityVersionContent = {
+        tone: base.tone,
+        formality: base.formality,
+        energyLevel: base.energyLevel,
+        expertiseLevel: base.expertiseLevel,
+        sentenceStyle: base.sentenceStyle,
+        firstPerson: base.firstPerson,
+        forbiddenExpressions: stringArray(base.forbiddenExpressions, 'forbiddenExpressions'),
+        preferredExpressions: stringArray(base.preferredExpressions, 'preferredExpressions'),
+        visualDirection: base.visualDirection,
+        facePolicy: base.facePolicy,
+      };
+      const latest = await tx.bunshinPersonalityVersion.aggregate({
+        where: { personalityId: personality.id },
+        _max: { version: true },
+      });
+      await tx.bunshinPersonality.update({
+        where: { id: personality.id },
+        data: {
+          ...content,
+          forbiddenExpressions: content.forbiddenExpressions,
+          preferredExpressions: content.preferredExpressions,
+        },
+      });
+      const versionRow = await tx.bunshinPersonalityVersion.create({
+        data: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          personalityId: personality.id,
+          version: (latest._max.version ?? 0) + 1,
+          source: 'RESTORE',
+          changeReason: `学習提案の取消: ${proposal.reason}`,
+          basedOnVersionId: base.id,
+          ...content,
+          forbiddenExpressions: content.forbiddenExpressions,
+          preferredExpressions: content.preferredExpressions,
+          createdByUserId: input.actorUserId,
+        },
+      });
+      const updated = await tx.personalityLearningProposal.update({
+        where: { id: proposal.id },
+        data: { status: 'REVOKED', revokedAt: new Date() },
+      });
+      return {
+        proposal: personalityLearningProposal(updated),
+        personalityVersion: personalityVersion(versionRow),
+      };
     });
   }
 }
