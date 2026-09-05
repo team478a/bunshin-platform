@@ -8,6 +8,7 @@ import { resolveManagedServiceContext } from '../../../../src/services/public-se
 import { buildServiceLaunchReadiness } from '../../../../src/services/service-launch-readiness';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { buildSideHustleContentFunnel } from '../../../../src/services/side-hustle-content-funnel';
+import { buildPerformanceFeedbackSummary } from '../../../../src/services/performance-feedback-summary';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -134,6 +135,7 @@ export default async function ServiceManagementHome({
   if (!group) notFound();
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twentyEightDaysAgo = new Date(now.getTime() - 28 * 86_400_000);
   const missionScope = {
     workspaceId: service.workspaceId,
     bunshin: { is: { groupId: service.serviceId } },
@@ -147,6 +149,8 @@ export default async function ServiceManagementHome({
     linkedProductMissions,
     copiedProductMissions,
     postedProductMissions,
+    recentPostedForFeedback,
+    recentFeedback,
     pendingPostApprovalCount,
     missionsCreated,
     acceptedMissions,
@@ -245,6 +249,16 @@ export default async function ServiceManagementHome({
         postedAt: { gte: sevenDaysAgo },
         dailyMission: { is: { contentLinkUsage: { isNot: null } } },
       },
+    }),
+    db.prisma.postRecord.count({
+      where: { ...missionScope, postedAt: { gte: twentyEightDaysAgo } },
+    }),
+    db.prisma.missionFeedback.findMany({
+      where: {
+        ...missionScope,
+        dailyMission: { is: { postRecord: { is: { postedAt: { gte: twentyEightDaysAgo } } } } },
+      },
+      select: { rating: true },
     }),
     db.prisma.campaignPostingApprovalRequest.count({
       where: {
@@ -392,6 +406,12 @@ export default async function ServiceManagementHome({
     copiedMissions: copiedProductMissions,
     postedMissions: postedProductMissions,
   });
+  const feedbackSummary = buildPerformanceFeedbackSummary({
+    posted: recentPostedForFeedback,
+    good: recentFeedback.filter(({ rating }) => rating === 'GOOD').length,
+    neutral: recentFeedback.filter(({ rating }) => rating === 'NEUTRAL').length,
+    bad: recentFeedback.filter(({ rating }) => rating === 'BAD').length,
+  });
   type OperationAction = {
     title: string;
     detail: string;
@@ -461,6 +481,16 @@ export default async function ServiceManagementHome({
             detail: sideHustleFunnel.missingLinkWarning,
             href: `/s/${configuration.slug}/manage/external-tracking`,
             label: '専用URLを確認する',
+          },
+        ]
+      : []),
+    ...(feedbackSummary.needsAttention
+      ? [
+          {
+            title: '投稿後の感想が不足しています',
+            detail: `直近28日間の投稿${feedbackSummary.posted}件のうち、感想入力は${feedbackSummary.rated}件です。次週の投稿案を改善できるよう、参加者へ入力をご案内ください。`,
+            href: `/s/${configuration.slug}/manage/line`,
+            label: 'LINEで案内する',
           },
         ]
       : []),
@@ -573,6 +603,27 @@ export default async function ServiceManagementHome({
             </dl>
           </section>
         ) : null}
+        <section className="settings-card">
+          <h2>次週の投稿改善に使える感想</h2>
+          <p>直近28日間の投稿完了に対する集計です。投稿本文や参加者ごとの回答は表示しません。</p>
+          <dl className="settings-status-list">
+            <div className="settings-status-item">
+              <dt>感想入力率</dt>
+              <dd>{feedbackSummary.coveragePercent}%</dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>自分らしい / 普通 / 違う</dt>
+              <dd>
+                {feedbackSummary.good}件 / {feedbackSummary.neutral}件 / {feedbackSummary.bad}件
+              </dd>
+            </div>
+            <div className="settings-status-item">
+              <dt>未入力</dt>
+              <dd>{feedbackSummary.unrated}件</dd>
+            </div>
+          </dl>
+          <p>入力された集計は、次に作る週間計画の形式と切り口の改善に使われます。</p>
+        </section>
         {operationActions.length > 0 ? (
           <section className="settings-card">
             <h2>いま確認すること</h2>

@@ -292,6 +292,9 @@ export function ServiceDailyMissionSection({
                       <div className="mission-feedback">
                         <p className="mission-step-complete">✓ 投稿済み</p>
                         <p>この投稿は、あなたらしかったですか？</p>
+                        <small>
+                          回答は、次週の投稿形式や切り口をあなたに合わせるために使います。
+                        </small>
                         {(
                           [
                             ['GOOD', '👍 自分らしい'],
