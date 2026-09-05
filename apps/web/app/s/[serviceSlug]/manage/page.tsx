@@ -7,6 +7,7 @@ import { currentLineEnvironment } from '../../../../src/line/secure-configuratio
 import { resolveManagedServiceContext } from '../../../../src/services/public-service';
 import { buildServiceLaunchReadiness } from '../../../../src/services/service-launch-readiness';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import { buildSideHustleContentFunnel } from '../../../../src/services/side-hustle-content-funnel';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -142,6 +143,10 @@ export default async function ServiceManagementHome({
     activeCampaignCount,
     activeTrackingLinkCount,
     trendProviderReadyCount,
+    productMissions,
+    linkedProductMissions,
+    copiedProductMissions,
+    postedProductMissions,
     pendingPostApprovalCount,
     missionsCreated,
     acceptedMissions,
@@ -202,6 +207,43 @@ export default async function ServiceManagementHome({
         globallyPaused: false,
         lastVerifiedAt: { not: null },
         lastErrorCategory: null,
+      },
+    }),
+    db.prisma.dailyMission.count({
+      where: {
+        ...missionScope,
+        campaignId: { not: null },
+        createdAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.contentLinkUsage.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        createdAt: { gte: sevenDaysAgo },
+      },
+    }),
+    db.prisma.missionActivity.count({
+      where: {
+        ...missionScope,
+        occurredAt: { gte: sevenDaysAgo },
+        type: {
+          in: [
+            'COPIED_TEXT',
+            'COPIED_SLIDE',
+            'COPIED_IMAGE_INSTRUCTION',
+            'COPIED_VIDEO_PROMPT',
+            'COPIED_SCRIPT',
+          ],
+        },
+        dailyMission: { is: { contentLinkUsage: { isNot: null } } },
+      },
+    }),
+    db.prisma.postRecord.count({
+      where: {
+        ...missionScope,
+        postedAt: { gte: sevenDaysAgo },
+        dailyMission: { is: { contentLinkUsage: { isNot: null } } },
       },
     }),
     db.prisma.campaignPostingApprovalRequest.count({
@@ -344,6 +386,12 @@ export default async function ServiceManagementHome({
     activeTrackingLinkCount,
   });
   const readyCount = readiness.filter((item) => item.ready).length;
+  const sideHustleFunnel = buildSideHustleContentFunnel({
+    productMissions,
+    linkedMissions: linkedProductMissions,
+    copiedMissions: copiedProductMissions,
+    postedMissions: postedProductMissions,
+  });
   type OperationAction = {
     title: string;
     detail: string;
@@ -403,6 +451,16 @@ export default async function ServiceManagementHome({
             detail: `${pendingPostApprovalCount}件の投稿案が、参加者のコピー前の確認を待っています。`,
             href: `/s/${configuration.slug}/manage/post-approvals`,
             label: '投稿案を確認する',
+          },
+        ]
+      : []),
+    ...(sideHustleFunnel.missingLinkWarning
+      ? [
+          {
+            title: '商品投稿案に専用URLがありません',
+            detail: sideHustleFunnel.missingLinkWarning,
+            href: `/s/${configuration.slug}/manage/external-tracking`,
+            label: '専用URLを確認する',
           },
         ]
       : []),
@@ -501,6 +559,20 @@ export default async function ServiceManagementHome({
             この集計をCSVでダウンロード
           </a>
         </section>
+        {configuration.registration.referralEnabled ? (
+          <section className="settings-card">
+            <h2>直近7日間の商品投稿の流れ</h2>
+            <p>投稿本文は表示せず、専用URLが入った投稿案の進み方だけを確認します。</p>
+            <dl className="settings-status-list">
+              {sideHustleFunnel.stages.map((stage) => (
+                <div className="settings-status-item" key={stage.key}>
+                  <dt>{stage.label}</dt>
+                  <dd>{stage.count}件</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
         {operationActions.length > 0 ? (
           <section className="settings-card">
             <h2>いま確認すること</h2>
