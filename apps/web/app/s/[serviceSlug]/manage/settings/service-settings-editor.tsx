@@ -121,9 +121,7 @@ export function ServiceSettingsEditor({
   const [operationStyle, setOperationStyle] = useState('INFORMATION');
   const [welcomeTitle, setWelcomeTitle] = useState(onboarding.welcomeTitle);
   const [welcomeMessage, setWelcomeMessage] = useState(onboarding.welcomeMessage);
-  const [onboardingQuestions, setOnboardingQuestions] = useState(
-    onboarding.questions.join('\n'),
-  );
+  const [onboardingQuestions, setOnboardingQuestions] = useState(onboarding.questions.join('\n'));
   const announcement = readServiceAnnouncement(value.registration.onboardingConfig);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -419,9 +417,7 @@ export function ServiceSettingsEditor({
               onChange={(event) => setOperationStyle(event.target.value)}
             >
               <option value="INFORMATION">情報を届ける</option>
-              <option value="PERSONALIZED_SOCIAL_CONTENT">
-                利用者ごとのSNS投稿案を提供する
-              </option>
+              <option value="PERSONALIZED_SOCIAL_CONTENT">利用者ごとのSNS投稿案を提供する</option>
               <option value="PROGRAM">講座・プログラムを運営する</option>
               <option value="NETWORK">交流・コミュニティを運営する</option>
               <option value="SUPPORT">個別支援を行う</option>
