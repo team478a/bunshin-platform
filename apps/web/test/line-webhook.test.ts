@@ -268,4 +268,46 @@ describe('group dedicated LINE webhook adapter', () => {
 
     expect(followReply.send).not.toHaveBeenCalled();
   });
+
+  it('replies to a follow event before the user has completed participation registration', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-unregistered-follow',
+          replyToken: 'unregistered-reply-token',
+          source: { type: 'user', userId: 'UunregisteredFollower' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+
+    await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        processor: {
+          execute: vi.fn().mockResolvedValue({
+            outcomes: { APPLIED: 0, CONNECTION_NOT_FOUND: 1 },
+          }),
+        } as never,
+        followReply,
+      },
+    );
+
+    expect(followReply.send).toHaveBeenCalledWith({
+      accessToken: scope.accessToken,
+      replyToken: 'unregistered-reply-token',
+      serviceName: scope.serviceName,
+      participationUrl: 'https://example.com/s/sample-service',
+    });
+  });
 });
