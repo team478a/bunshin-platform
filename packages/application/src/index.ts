@@ -2430,6 +2430,7 @@ export * from './external-link-placement';
 export * from './generation-context';
 export * from './personality-version';
 export * from './personality-learning';
+export * from './personality-learning-jobs';
 export * from './memory-selector';
 export * from './group-participation';
 export * from './group-feature-entitlement';
