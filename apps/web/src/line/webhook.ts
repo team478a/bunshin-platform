@@ -278,9 +278,11 @@ export async function handleGroupLineWebhook(
       events: [event],
     });
     const replyToken = replyTokens.get(event.providerEventId);
+    const shouldReplyToFollow =
+      result?.outcomes.APPLIED === 1 || result?.outcomes.CONNECTION_NOT_FOUND === 1;
     if (
       event.type === 'FOLLOW' &&
-      result?.outcomes.APPLIED === 1 &&
+      shouldReplyToFollow &&
       replyToken &&
       scoped.serviceSlug &&
       scoped.serviceName
