@@ -17,6 +17,7 @@ const optionalUrl = z
 const createSchema = z
   .object({
     workspaceId: uuid,
+    groupId: z.union([z.literal(''), uuid]).transform((v) => v || undefined),
     templateKey: z.enum(SERVICE_CREATION_TEMPLATE_KEYS).default('CUSTOM'),
     slug: z.string().min(1).max(80),
     displayName: z.string().min(1).max(120),
@@ -99,6 +100,7 @@ export async function createServiceResponse(request: Request) {
       new db.PrismaServiceFoundationRepository(),
     ).create({
       workspaceId: value.workspaceId,
+      ...(value.groupId ? { groupId: value.groupId } : {}),
       actorUserId: user.userId,
       reason: value.reason,
       configuration: {
