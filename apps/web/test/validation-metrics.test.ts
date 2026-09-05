@@ -69,6 +69,24 @@ const snapshot = {
     decided: 2,
     adoptionRate: 0.5,
     repeatedCorrectionCount: 1,
+    applications: 1,
+    cohortTruncated: false,
+    before: {
+      missions: 3,
+      posted: 1,
+      postRate: 1 / 3,
+      feedback: 2,
+      goodFeedback: 1,
+      goodFeedbackRate: 0.5,
+    },
+    after: {
+      missions: 4,
+      posted: 3,
+      postRate: 0.75,
+      feedback: 3,
+      goodFeedback: 2,
+      goodFeedbackRate: 2 / 3,
+    },
   },
 } satisfies ValidationMetricsSnapshot;
 

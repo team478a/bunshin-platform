@@ -148,6 +148,43 @@ export default async function ValidationPage({
             <span>同じ修正の繰り返し</span>
           </article>
         </div>
+        <h3>学習適用の前後30日</h3>
+        <p>
+          対象は期間内に学習を適用し、その後30日の観測を終えた
+          {metrics.personalityLearning.applications}件です。同じ投稿案を重複して数えません。
+        </p>
+        {metrics.personalityLearning.cohortTruncated ? (
+          <p className="validation-notice">集計上限を超えています。期間を短くしてください。</p>
+        ) : null}
+        <div className="validation-table-wrap">
+          <table className="validation-table">
+            <thead>
+              <tr>
+                <th scope="col">期間</th>
+                <th scope="col">投稿案</th>
+                <th scope="col">投稿完了率</th>
+                <th scope="col">評価数</th>
+                <th scope="col">自分らしい</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(
+                [
+                  ['適用前30日', metrics.personalityLearning.before],
+                  ['適用後30日', metrics.personalityLearning.after],
+                ] as const
+              ).map(([label, item]) => (
+                <tr key={label}>
+                  <th scope="row">{label}</th>
+                  <td>{item.missions}件</td>
+                  <td>{percentage(item.postRate)}</td>
+                  <td>{item.feedback}件</td>
+                  <td>{percentage(item.goodFeedbackRate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section aria-labelledby="funnel-heading">

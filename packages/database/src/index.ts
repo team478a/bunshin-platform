@@ -8470,7 +8470,68 @@ export function summarizePersonalityLearning(
       (sum, count) => sum + Math.max(0, count - 1),
       0,
     ),
+    applications: 0,
+    cohortTruncated: false,
+    before: emptyPersonalityLearningOutcome(),
+    after: emptyPersonalityLearningOutcome(),
   };
+}
+
+const LEARNING_OUTCOME_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
+
+function emptyPersonalityLearningOutcome() {
+  return {
+    missions: 0,
+    posted: 0,
+    postRate: null,
+    feedback: 0,
+    goodFeedback: 0,
+    goodFeedbackRate: null,
+  };
+}
+
+export function summarizePersonalityLearningOutcomes(
+  applications: Array<{ bunshinId: string; appliedAt: Date }>,
+  missions: Array<{
+    id: string;
+    bunshinId: string;
+    createdAt: Date;
+    posted: boolean;
+    rating: 'GOOD' | 'BAD' | 'NEUTRAL' | null;
+  }>,
+) {
+  const beforeIds = new Set<string>();
+  const afterIds = new Set<string>();
+  const missionsByBunshin = new Map<string, typeof missions>();
+  for (const mission of missions) {
+    const values = missionsByBunshin.get(mission.bunshinId) ?? [];
+    values.push(mission);
+    missionsByBunshin.set(mission.bunshinId, values);
+  }
+  for (const application of applications) {
+    const from = application.appliedAt.getTime() - LEARNING_OUTCOME_WINDOW_MS;
+    const to = application.appliedAt.getTime() + LEARNING_OUTCOME_WINDOW_MS;
+    for (const mission of missionsByBunshin.get(application.bunshinId) ?? []) {
+      const at = mission.createdAt.getTime();
+      if (at >= from && at < application.appliedAt.getTime()) beforeIds.add(mission.id);
+      if (at >= application.appliedAt.getTime() && at < to) afterIds.add(mission.id);
+    }
+  }
+  const summarize = (ids: Set<string>) => {
+    const values = missions.filter(({ id }) => ids.has(id));
+    const feedback = values.filter(({ rating }) => rating !== null);
+    const goodFeedback = feedback.filter(({ rating }) => rating === 'GOOD').length;
+    const posted = values.filter(({ posted }) => posted).length;
+    return {
+      missions: values.length,
+      posted,
+      postRate: rate(posted, values.length),
+      feedback: feedback.length,
+      goodFeedback,
+      goodFeedbackRate: rate(goodFeedback, feedback.length),
+    };
+  };
+  return { before: summarize(beforeIds), after: summarize(afterIds) };
 }
 
 export class PrismaValidationMetricsRepository implements ValidationMetricsRepository {
@@ -8494,6 +8555,10 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
     if (authorized === null) return null;
 
     const occurred = { gte: input.period.from, lt: input.period.to };
+    const matureLearningApplication = {
+      gte: input.period.from,
+      lt: new Date(input.period.to.getTime() - LEARNING_OUTCOME_WINDOW_MS),
+    };
     const copyTypes = [
       'COPIED_TEXT',
       'COPIED_SLIDE',
@@ -8512,6 +8577,7 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       feedback,
       aiUsage,
       learningProposals,
+      learningApplications,
     ] = await Promise.all([
       this.client.workspaceMembership.findMany({
         where: {
@@ -8584,6 +8650,16 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
       this.client.personalityLearningProposal.findMany({
         where: { workspaceId: input.workspaceId, createdAt: occurred },
         select: { bunshinId: true, status: true, reason: true },
+      }),
+      this.client.personalityLearningProposal.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          status: { in: ['APPROVED', 'REVOKED'] },
+          appliedVersion: { is: { createdAt: matureLearningApplication } },
+        },
+        select: { bunshinId: true, appliedVersion: { select: { createdAt: true } } },
+        orderBy: { createdAt: 'asc' },
+        take: 501,
       }),
     ]);
 
@@ -8660,6 +8736,55 @@ export class PrismaValidationMetricsRepository implements ValidationMetricsRepos
     );
     const assistanceLevels = summarizeAssistanceLevels({ missions, activities, posts, feedback });
     const personalityLearning = summarizePersonalityLearning(learningProposals);
+    const learningCohort = learningApplications
+      .slice(0, 500)
+      .flatMap((application) =>
+        application.appliedVersion
+          ? [{ bunshinId: application.bunshinId, appliedAt: application.appliedVersion.createdAt }]
+          : [],
+      );
+    const learningMissions =
+      learningCohort.length === 0
+        ? []
+        : await this.client.dailyMission.findMany({
+            where: {
+              workspaceId: input.workspaceId,
+              bunshinId: { in: [...new Set(learningCohort.map(({ bunshinId }) => bunshinId))] },
+              createdAt: {
+                gte: new Date(
+                  Math.min(...learningCohort.map(({ appliedAt }) => appliedAt.getTime())) -
+                    LEARNING_OUTCOME_WINDOW_MS,
+                ),
+                lt: new Date(
+                  Math.max(...learningCohort.map(({ appliedAt }) => appliedAt.getTime())) +
+                    LEARNING_OUTCOME_WINDOW_MS,
+                ),
+              },
+            },
+            select: {
+              id: true,
+              bunshinId: true,
+              createdAt: true,
+              postRecord: { select: { id: true } },
+              feedback: { select: { rating: true } },
+            },
+            take: 50_001,
+          });
+    const learningOutcomes = summarizePersonalityLearningOutcomes(
+      learningCohort,
+      learningMissions.slice(0, 50_000).map((mission) => ({
+        id: mission.id,
+        bunshinId: mission.bunshinId,
+        createdAt: mission.createdAt,
+        posted: mission.postRecord !== null,
+        rating: mission.feedback?.rating ?? null,
+      })),
+    );
+    personalityLearning.applications = learningCohort.length;
+    personalityLearning.cohortTruncated =
+      learningApplications.length > 500 || learningMissions.length > 50_000;
+    personalityLearning.before = learningOutcomes.before;
+    personalityLearning.after = learningOutcomes.after;
 
     return {
       period: input.period,
