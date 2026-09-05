@@ -21,6 +21,19 @@ const profileQuestionLabels: Record<keyof ServiceProfileQuestionSettings, string
 
 export function suggestedProfileQuestions(organizationType: string, operationStyle: string) {
   const next = { ...DEFAULT_SERVICE_PROFILE_QUESTIONS };
+  if (operationStyle === 'PERSONALIZED_SOCIAL_CONTENT') {
+    return {
+      ...next,
+      industry: false,
+      purpose: false,
+      activityName: false,
+      businessName: false,
+      region: false,
+      productService: false,
+      socialProfile: false,
+      notificationConsent: true,
+    };
+  }
   if (['COMMUNITY', 'MEMBERSHIP', 'MEDIA'].includes(organizationType)) {
     next.industry = false;
     next.businessName = false;
@@ -37,6 +50,22 @@ export function suggestedProfileQuestions(organizationType: string, operationSty
   }
   if (operationStyle === 'NETWORK') next.productService = false;
   return next;
+}
+
+export function suggestedOnboardingCopy(operationStyle: string) {
+  if (operationStyle === 'PERSONALIZED_SOCIAL_CONTENT') {
+    return {
+      welcomeTitle: 'あなたらしい投稿を作るために、少し教えてください',
+      welcomeMessage:
+        'お答えいただいた内容を使って、あなたがご自身のSNSに投稿できる文章を作ります。むずかしく考えず、今のあなたに近い内容をお答えください。',
+      questions: [
+        '千ノ国メタバースを、どのようなきっかけで知りましたか？（例：知人からの紹介、説明会・イベント、SNS、すでに活動している）',
+        '普段、SNSでは主にどのような方とつながっていますか？（例：友人・知人、家族・親戚、地域の方、仕事関係、同じ趣味の方）',
+        '千ノ国メタバースについて、実際に感じたことや伝えたいことを教えてください。（まだない場合は「まだありません」で大丈夫です）',
+      ],
+    };
+  }
+  return null;
 }
 
 function dateTimeInputValue(value: string | null) {
@@ -90,6 +119,11 @@ export function ServiceSettingsEditor({
   const [profileQuestions, setProfileQuestions] = useState(onboarding.profileQuestions);
   const [organizationType, setOrganizationType] = useState('MEDIA');
   const [operationStyle, setOperationStyle] = useState('INFORMATION');
+  const [welcomeTitle, setWelcomeTitle] = useState(onboarding.welcomeTitle);
+  const [welcomeMessage, setWelcomeMessage] = useState(onboarding.welcomeMessage);
+  const [onboardingQuestions, setOnboardingQuestions] = useState(
+    onboarding.questions.join('\n'),
+  );
   const announcement = readServiceAnnouncement(value.registration.onboardingConfig);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -354,7 +388,8 @@ export function ServiceSettingsEditor({
           <input
             name="welcomeTitle"
             maxLength={120}
-            defaultValue={onboarding.welcomeTitle}
+            value={welcomeTitle}
+            onChange={(event) => setWelcomeTitle(event.target.value)}
             placeholder="例：一緒に投稿を始めましょう"
           />
         </label>
@@ -384,6 +419,9 @@ export function ServiceSettingsEditor({
               onChange={(event) => setOperationStyle(event.target.value)}
             >
               <option value="INFORMATION">情報を届ける</option>
+              <option value="PERSONALIZED_SOCIAL_CONTENT">
+                利用者ごとのSNS投稿案を提供する
+              </option>
               <option value="PROGRAM">講座・プログラムを運営する</option>
               <option value="NETWORK">交流・コミュニティを運営する</option>
               <option value="SUPPORT">個別支援を行う</option>
@@ -392,9 +430,15 @@ export function ServiceSettingsEditor({
           <button
             className="button button--secondary"
             type="button"
-            onClick={() =>
-              setProfileQuestions(suggestedProfileQuestions(organizationType, operationStyle))
-            }
+            onClick={() => {
+              setProfileQuestions(suggestedProfileQuestions(organizationType, operationStyle));
+              const copy = suggestedOnboardingCopy(operationStyle);
+              if (copy) {
+                setWelcomeTitle(copy.welcomeTitle);
+                setWelcomeMessage(copy.welcomeMessage);
+                setOnboardingQuestions(copy.questions.join('\n'));
+              }
+            }}
           >
             おすすめの質問を反映する
           </button>
@@ -422,7 +466,8 @@ export function ServiceSettingsEditor({
             name="welcomeMessage"
             maxLength={1000}
             rows={4}
-            defaultValue={onboarding.welcomeMessage}
+            value={welcomeMessage}
+            onChange={(event) => setWelcomeMessage(event.target.value)}
             placeholder="このサービスでできることを、やさしい言葉で説明します。"
           />
         </label>
@@ -431,7 +476,8 @@ export function ServiceSettingsEditor({
           <textarea
             name="onboardingQuestions"
             rows={7}
-            defaultValue={onboarding.questions.join('\n')}
+            value={onboardingQuestions}
+            onChange={(event) => setOnboardingQuestions(event.target.value)}
             placeholder={'1行に1つ入力します。\n例：どのSNSを使いたいですか？'}
           />
           <small>1行に1問、最大7問です。答えを迷わない具体的な質問にしてください。</small>
