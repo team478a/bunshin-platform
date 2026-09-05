@@ -31,7 +31,7 @@ export function ServiceOnboardingForm({
       setMessage('保存できませんでした。入力内容を確認して、もう一度お試しください。');
       return;
     }
-    router.replace(`/s/${serviceSlug}/home`);
+    router.replace(`/s/${encodeURIComponent(serviceSlug)}/bunshins/new`);
     router.refresh();
   }
 
