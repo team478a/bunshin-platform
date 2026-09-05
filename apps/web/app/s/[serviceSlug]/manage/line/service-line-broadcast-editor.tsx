@@ -186,7 +186,11 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
               <span>現在の対象</span>
               <strong>{previewCount === null ? '未確認' : `${previewCount}人`}</strong>
             </div>
-            <button className="button button--secondary" type="button" onClick={() => void preview()}>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void preview()}
+            >
               送信対象を確認する
             </button>
           </div>
