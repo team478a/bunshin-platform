@@ -2,6 +2,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../src/services/public-service';
 import { buildServiceLaunchReadiness } from '../../../../src/services/service-launch-readiness';
@@ -137,6 +138,10 @@ export default async function ServiceManagementHome({
     bunshin: { is: { groupId: service.serviceId } },
   };
   const [
+    activeProductPackCount,
+    activeCampaignCount,
+    activeTrackingLinkCount,
+    trendProviderReadyCount,
     pendingPostApprovalCount,
     missionsCreated,
     acceptedMissions,
@@ -153,6 +158,52 @@ export default async function ServiceManagementHome({
     failedLineDeliveries,
     overdueLineDeliveries,
   ] = await Promise.all([
+    db.prisma.productPack.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        versions: {
+          some: {
+            status: 'PUBLISHED',
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validUntil: null }, { validUntil: { gt: now } }] },
+            ],
+          },
+        },
+      },
+    }),
+    db.prisma.campaign.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'OPEN',
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
+    }),
+    db.prisma.externalTrackingLink.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        ],
+      },
+    }),
+    db.prisma.aiProviderConfiguration.count({
+      where: {
+        environment: currentAiProviderEnvironment(),
+        provider: { in: ['GROK', 'EXA', 'FIRECRAWL'] },
+        status: 'ACTIVE',
+        globallyPaused: false,
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    }),
     db.prisma.campaignPostingApprovalRequest.count({
       where: {
         workspaceId: service.workspaceId,
@@ -285,6 +336,12 @@ export default async function ServiceManagementHome({
     activeParticipantCount: group.memberships.length,
     activeKnowledgeCount: group.knowledgeSources.length,
     lineConfigurationReady: Boolean(line?.lastVerifiedAt && !line.globallyPaused),
+    commercialContentRequired: configuration.registration.referralEnabled,
+    trendResearchEnabled: configuration.trendResearchEnabled ?? true,
+    trendProviderReady: trendProviderReadyCount > 0,
+    activeProductPackCount,
+    activeCampaignCount,
+    activeTrackingLinkCount,
   });
   const readyCount = readiness.filter((item) => item.ready).length;
   type OperationAction = {

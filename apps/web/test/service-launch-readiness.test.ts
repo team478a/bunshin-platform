@@ -43,4 +43,21 @@ describe('service launch readiness', () => {
     expect(items.find((item) => item.key === 'LEGAL')?.ready).toBe(false);
     expect(items.find((item) => item.key === 'PARTICIPANTS')?.ready).toBe(false);
   });
+
+  it('requires the monetization path for a side-hustle service', () => {
+    const items = buildServiceLaunchReadiness({
+      ...readyInput,
+      commercialContentRequired: true,
+      trendResearchEnabled: true,
+      trendProviderReady: false,
+      activeProductPackCount: 1,
+      activeCampaignCount: 0,
+      activeTrackingLinkCount: 1,
+    });
+    expect(items).toHaveLength(12);
+    expect(items.find((item) => item.key === 'TREND_RESEARCH')?.ready).toBe(false);
+    expect(items.find((item) => item.key === 'PRODUCT')?.ready).toBe(true);
+    expect(items.find((item) => item.key === 'CAMPAIGN')?.ready).toBe(false);
+    expect(items.find((item) => item.key === 'TRACKING_LINK')?.ready).toBe(true);
+  });
 });
