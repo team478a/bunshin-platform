@@ -2,7 +2,30 @@ export interface ServiceOnboardingSettings {
   welcomeTitle: string;
   welcomeMessage: string;
   questions: string[];
+  profileQuestions: ServiceProfileQuestionSettings;
 }
+
+export interface ServiceProfileQuestionSettings {
+  industry: boolean;
+  purpose: boolean;
+  activityName: boolean;
+  businessName: boolean;
+  region: boolean;
+  productService: boolean;
+  socialProfile: boolean;
+  notificationConsent: boolean;
+}
+
+export const DEFAULT_SERVICE_PROFILE_QUESTIONS: ServiceProfileQuestionSettings = {
+  industry: true,
+  purpose: true,
+  activityName: true,
+  businessName: true,
+  region: true,
+  productService: true,
+  socialProfile: true,
+  notificationConsent: true,
+};
 
 export interface ServiceAnnouncement {
   enabled: boolean;
@@ -23,12 +46,22 @@ export function readServiceOnboardingSettings(
 ): ServiceOnboardingSettings {
   const onboarding = record(onboardingConfig);
   const survey = record(surveyConfig);
+  const configuredProfileQuestions = record(onboarding.profileQuestions);
+  const profileQuestions = Object.fromEntries(
+    Object.entries(DEFAULT_SERVICE_PROFILE_QUESTIONS).map(([key, fallback]) => [
+      key,
+      typeof configuredProfileQuestions[key] === 'boolean'
+        ? configuredProfileQuestions[key]
+        : fallback,
+    ]),
+  ) as unknown as ServiceProfileQuestionSettings;
   return {
     welcomeTitle: typeof onboarding.welcomeTitle === 'string' ? onboarding.welcomeTitle : '',
     welcomeMessage: typeof onboarding.welcomeMessage === 'string' ? onboarding.welcomeMessage : '',
     questions: Array.isArray(survey.questions)
       ? survey.questions.filter((item): item is string => typeof item === 'string').slice(0, 7)
       : [],
+    profileQuestions,
   };
 }
 

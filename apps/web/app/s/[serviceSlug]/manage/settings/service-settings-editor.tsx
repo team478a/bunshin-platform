@@ -2,9 +2,42 @@
 
 import { useState, type FormEvent } from 'react';
 import {
+  DEFAULT_SERVICE_PROFILE_QUESTIONS,
   readServiceAnnouncement,
   readServiceOnboardingSettings,
+  type ServiceProfileQuestionSettings,
 } from '../../../../../src/services/service-onboarding-settings';
+
+const profileQuestionLabels: Record<keyof ServiceProfileQuestionSettings, string> = {
+  industry: '業種',
+  purpose: '利用・発信の目的',
+  activityName: '活動名',
+  businessName: '店舗・会社名',
+  region: '活動地域',
+  productService: '商品・サービス',
+  socialProfile: 'SNSプロフィール',
+  notificationConsent: 'LINE通知の同意',
+};
+
+export function suggestedProfileQuestions(organizationType: string, operationStyle: string) {
+  const next = { ...DEFAULT_SERVICE_PROFILE_QUESTIONS };
+  if (['COMMUNITY', 'MEMBERSHIP', 'MEDIA'].includes(organizationType)) {
+    next.industry = false;
+    next.businessName = false;
+    next.productService = false;
+  }
+  if (organizationType === 'EDUCATION') {
+    next.industry = false;
+    next.businessName = false;
+  }
+  if (operationStyle === 'INFORMATION') {
+    next.purpose = false;
+    next.productService = false;
+    next.socialProfile = false;
+  }
+  if (operationStyle === 'NETWORK') next.productService = false;
+  return next;
+}
 
 function dateTimeInputValue(value: string | null) {
   if (!value) return '';
@@ -54,6 +87,9 @@ export function ServiceSettingsEditor({
     value.registration.onboardingConfig,
     value.registration.surveyConfig,
   );
+  const [profileQuestions, setProfileQuestions] = useState(onboarding.profileQuestions);
+  const [organizationType, setOrganizationType] = useState('MEDIA');
+  const [operationStyle, setOperationStyle] = useState('INFORMATION');
   const announcement = readServiceAnnouncement(value.registration.onboardingConfig);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -99,6 +135,7 @@ export function ServiceSettingsEditor({
             .split(/\r?\n/)
             .map((item) => item.trim())
             .filter(Boolean),
+          profileQuestions,
           reason: text('reason'),
         }),
       });
@@ -321,6 +358,64 @@ export function ServiceSettingsEditor({
             placeholder="例：一緒に投稿を始めましょう"
           />
         </label>
+        <section className="settings-card">
+          <h3>登録時に聞く項目を自動提案</h3>
+          <p>
+            運営団体と運営方法を選ぶと、参加者に必要な質問だけを提案します。提案後に個別に変更できます。
+          </p>
+          <label>
+            運営団体の種類
+            <select
+              value={organizationType}
+              onChange={(event) => setOrganizationType(event.target.value)}
+            >
+              <option value="MEDIA">メディア・情報発信</option>
+              <option value="COMMUNITY">コミュニティ</option>
+              <option value="MEMBERSHIP">会員組織</option>
+              <option value="EDUCATION">教育・スクール</option>
+              <option value="BUSINESS">事業者支援</option>
+              <option value="OTHER">その他</option>
+            </select>
+          </label>
+          <label>
+            主な運営方法
+            <select
+              value={operationStyle}
+              onChange={(event) => setOperationStyle(event.target.value)}
+            >
+              <option value="INFORMATION">情報を届ける</option>
+              <option value="PROGRAM">講座・プログラムを運営する</option>
+              <option value="NETWORK">交流・コミュニティを運営する</option>
+              <option value="SUPPORT">個別支援を行う</option>
+            </select>
+          </label>
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() =>
+              setProfileQuestions(suggestedProfileQuestions(organizationType, operationStyle))
+            }
+          >
+            おすすめの質問を反映する
+          </button>
+        </section>
+        <fieldset>
+          <legend>共通プロフィールで聞く項目</legend>
+          {(Object.keys(profileQuestionLabels) as Array<keyof ServiceProfileQuestionSettings>).map(
+            (key) => (
+              <label key={key}>
+                <input
+                  type="checkbox"
+                  checked={profileQuestions[key]}
+                  onChange={(event) =>
+                    setProfileQuestions((current) => ({ ...current, [key]: event.target.checked }))
+                  }
+                />{' '}
+                {profileQuestionLabels[key]}
+              </label>
+            ),
+          )}
+        </fieldset>
         <label>
           最初に表示する説明
           <textarea

@@ -1,7 +1,8 @@
 'use client';
 import type { Route } from 'next';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { ServiceProfileQuestionSettings } from '../../src/services/service-onboarding-settings';
 
 type Industry = { id: string; key: string; name: string; description: string | null };
 type Values = {
@@ -33,10 +34,12 @@ export function RegistrationWizard({
   industries,
   initial,
   returnTo,
+  profileQuestions,
 }: {
   industries: Industry[];
   initial: Record<string, unknown> | null;
   returnTo: string | null;
+  profileQuestions: ServiceProfileQuestionSettings;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<Values>({
@@ -55,6 +58,29 @@ export function RegistrationWizard({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const visibleSteps = useMemo(
+    () =>
+      [
+        profileQuestions.industry ? 1 : null,
+        profileQuestions.purpose ? 2 : null,
+        profileQuestions.activityName ||
+        profileQuestions.businessName ||
+        profileQuestions.region ||
+        profileQuestions.productService
+          ? 3
+          : null,
+        profileQuestions.socialProfile || profileQuestions.notificationConsent ? 4 : null,
+      ].filter((step): step is number => step !== null),
+    [profileQuestions],
+  );
+  useEffect(() => {
+    if (visibleSteps.includes(values.currentStep)) return;
+    setValues((current) => ({ ...current, currentStep: visibleSteps[0] ?? 4 }));
+  }, [values.currentStep, visibleSteps]);
+  const currentIndex = visibleSteps.indexOf(values.currentStep);
+  const isLastStep = currentIndex === visibleSteps.length - 1;
+  const previousStep = visibleSteps[currentIndex - 1];
+  const nextStep = visibleSteps[currentIndex + 1] ?? values.currentStep;
   const selectedIndustry = industries.find(({ id }) => id === values.primaryIndustryId);
   const update = (key: keyof Values, value: string | number) =>
     setValues((current) => ({ ...current, [key]: value }));
@@ -101,7 +127,11 @@ export function RegistrationWizard({
         <h1>あなたに合う投稿案を届ける準備</h1>
         <p>入力内容は途中でも保存され、次回は続きから再開できます。</p>
         <div className="progress-bar">
-          <span style={{ width: `${values.currentStep * 25}%` }} />
+          <span
+            style={{
+              width: `${currentIndex < 0 ? 0 : ((currentIndex + 1) / visibleSteps.length) * 100}%`,
+            }}
+          />
         </div>
       </header>
       <section className="wizard-card">
@@ -159,44 +189,58 @@ export function RegistrationWizard({
               ['businessName', '店舗・会社名'],
               ['region', '地域'],
               ['productService', '商品・サービス'],
-            ].map(([key, label]) => (
-              <label className="field" key={key}>
-                <span className="field__label">{label}</span>
-                <input
-                  className="field__control"
-                  value={String(values[key as keyof Values])}
-                  onChange={(event) => update(key as keyof Values, event.target.value)}
-                />
-              </label>
-            ))}
+            ]
+              .filter(([key]) =>
+                key === 'activityName'
+                  ? profileQuestions.activityName
+                  : key === 'businessName'
+                    ? profileQuestions.businessName
+                    : key === 'region'
+                      ? profileQuestions.region
+                      : profileQuestions.productService,
+              )
+              .map(([key, label]) => (
+                <label className="field" key={key}>
+                  <span className="field__label">{label}</span>
+                  <input
+                    className="field__control"
+                    value={String(values[key as keyof Values])}
+                    onChange={(event) => update(key as keyof Values, event.target.value)}
+                  />
+                </label>
+              ))}
           </>
         )}
         {values.currentStep === 4 && (
           <>
             <h2>通知とSNSの設定</h2>
-            <label className="field">
-              <span className="field__label">SNSプロフィールURL（任意）</span>
-              <input
-                className="field__control"
-                type="url"
-                value={values.socialUrl}
-                onChange={(event) => update('socialUrl', event.target.value)}
-                placeholder="https://"
-              />
-            </label>
-            <label className="consent-check">
-              <input
-                type="checkbox"
-                checked={values.notificationConsent}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    notificationConsent: event.target.checked,
-                  }))
-                }
-              />
-              <span>公式LINEで投稿案や重要なお知らせを受け取る</span>
-            </label>
+            {profileQuestions.socialProfile && (
+              <label className="field">
+                <span className="field__label">SNSプロフィールURL（任意）</span>
+                <input
+                  className="field__control"
+                  type="url"
+                  value={values.socialUrl}
+                  onChange={(event) => update('socialUrl', event.target.value)}
+                  placeholder="https://"
+                />
+              </label>
+            )}
+            {profileQuestions.notificationConsent && (
+              <label className="consent-check">
+                <input
+                  type="checkbox"
+                  checked={values.notificationConsent}
+                  onChange={(event) =>
+                    setValues((current) => ({
+                      ...current,
+                      notificationConsent: event.target.checked,
+                    }))
+                  }
+                />
+                <span>公式LINEで投稿案や重要なお知らせを受け取る</span>
+              </label>
+            )}
             <p>通知はあとから停止できます。プロフィール内容もアカウント画面で変更できます。</p>
           </>
         )}
@@ -206,12 +250,12 @@ export function RegistrationWizard({
           </div>
         )}
         <div className="wizard-actions">
-          {values.currentStep > 1 && (
+          {previousStep !== undefined && (
             <button
               className="button button--secondary"
               type="button"
               disabled={busy}
-              onClick={() => void save(values.currentStep - 1)}
+              onClick={() => void save(previousStep)}
             >
               戻る
             </button>
@@ -221,13 +265,15 @@ export function RegistrationWizard({
             type="button"
             disabled={
               busy ||
-              (values.currentStep === 1 && !values.primaryIndustryId) ||
-              (values.currentStep === 2 && !values.primaryPurpose) ||
-              (values.currentStep === 3 && !values.activityName)
+              (values.currentStep === 1 &&
+                profileQuestions.industry &&
+                !values.primaryIndustryId) ||
+              (values.currentStep === 2 && profileQuestions.purpose && !values.primaryPurpose) ||
+              (values.currentStep === 3 && profileQuestions.activityName && !values.activityName)
             }
-            onClick={() => void save(Math.min(4, values.currentStep + 1), values.currentStep === 4)}
+            onClick={() => void save(nextStep, isLastStep)}
           >
-            {busy ? '保存中…' : values.currentStep === 4 ? '設定を完了する' : '保存して次へ'}
+            {busy ? '保存中…' : isLastStep ? '設定を完了する' : '保存して次へ'}
           </button>
         </div>
       </section>

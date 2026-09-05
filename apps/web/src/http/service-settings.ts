@@ -44,6 +44,19 @@ const schema = z
     announcementStartsAt: scheduledDateTime,
     announcementEndsAt: scheduledDateTime,
     onboardingQuestions: z.array(z.string().min(1).max(200)).max(7).default([]),
+    profileQuestions: z
+      .object({
+        industry: z.boolean(),
+        purpose: z.boolean(),
+        activityName: z.boolean(),
+        businessName: z.boolean(),
+        region: z.boolean(),
+        productService: z.boolean(),
+        socialProfile: z.boolean(),
+        notificationConsent: z.boolean(),
+      })
+      .strict()
+      .optional(),
     reason: z.string().min(1).max(1000),
   })
   .strict()
@@ -129,6 +142,7 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
               : {}),
             welcomeTitle: value.welcomeTitle.trim(),
             welcomeMessage: value.welcomeMessage.trim(),
+            ...(value.profileQuestions ? { profileQuestions: value.profileQuestions } : {}),
             announcementEnabled: value.announcementEnabled,
             announcementTitle: value.announcementTitle.trim(),
             announcementMessage: value.announcementMessage.trim(),
