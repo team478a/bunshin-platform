@@ -13023,10 +13023,10 @@ export class PrismaExternalTrackingLinkRepository
       where: {
         id: input.linkId,
         workspaceId: input.workspaceId,
-        status: 'ACTIVE',
+        status: { in: ['DRAFT', 'ACTIVE'] },
         ...(this.serviceId ? { groupId: this.serviceId } : {}),
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!link) return null;
     return this.client.$transaction(async (tx) => {
@@ -13045,7 +13045,7 @@ export class PrismaExternalTrackingLinkRepository
           resourceType: 'LINK',
           resourceId: updated.id,
           action: 'SUSPENDED',
-          beforeData: { status: 'ACTIVE' },
+          beforeData: { status: link.status },
           afterData: { status: updated.status },
           performedByUserId: input.actorUserId,
         },
