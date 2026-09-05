@@ -955,6 +955,17 @@ export interface WeeklyPlannerInput {
   contentPillars: Array<{ id: string; title: string; description: string | null; weight: number }>;
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
   campaigns?: CampaignPlanningContext[];
+  recentPerformance?: {
+    periodDays: number;
+    postedCount: number;
+    feedback: { good: number; neutral: number; bad: number };
+    formats: Array<{
+      format: SocialPreferredFormat;
+      postedCount: number;
+      goodFeedbackCount: number;
+      badFeedbackCount: number;
+    }>;
+  };
 }
 export interface WeeklyPlannerOutput {
   strategySummary: string;
