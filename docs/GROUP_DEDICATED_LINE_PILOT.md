@@ -39,6 +39,10 @@ Callback、Webhook、LIFF URLは配備URLとRouting Keyからサーバー側で�
 
 Group IDは、CampaignまたはGroup限定機能の確定済みContextから取得する。利用者入力のGroup IDを信用しない。
 
+## 開始準備の自動診断
+
+サービス管理ホームでは、登録設定とRouting Policyの矛盾、`pilotEnabled`、接続確認済みACTIVE設定、全体停止、直近の接続エラー、現在の設定版への標準リッチメニュー公開を一括確認する。`SHARED`の場合は同じ実行環境の共通LINEが接続確認済みかを確認する。秘密情報そのものやLINE User IDは診断結果へ含めない。
+
 ## WebhookとLogin
 
 - Webhook URLは推測困難なRouting Keyを含むが、Routing Keyを署名の代わりにしない
