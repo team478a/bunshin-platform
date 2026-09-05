@@ -5,6 +5,7 @@ import {
   type LineConfigurationEnvironment,
   type LineWebhookEventType,
 } from '@bunshin/application';
+import { getServerEnvironment } from '@bunshin/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from './secure-configuration';
@@ -18,6 +19,7 @@ const webhookBody = z
             type: z.string(),
             timestamp: z.number().int().nonnegative(),
             webhookEventId: z.string().min(1).max(255),
+            replyToken: z.string().min(1).max(255).optional(),
             source: z
               .object({ userId: z.string().min(1).max(255).optional() })
               .passthrough()
@@ -129,7 +131,65 @@ export interface ActiveGroupLineWebhookConfigurationPort {
     groupId: string;
     configurationId: string;
     secret: string;
+    accessToken: string;
+    serviceSlug: string | null;
+    serviceName: string | null;
   } | null>;
+}
+
+export interface GroupLineFollowReplyPort {
+  send(input: {
+    accessToken: string;
+    replyToken: string;
+    serviceName: string;
+    participationUrl: string;
+  }): Promise<boolean>;
+}
+
+export class LineGroupFollowReply implements GroupLineFollowReplyPort {
+  constructor(private readonly request: typeof fetch = fetch) {}
+
+  async send(input: {
+    accessToken: string;
+    replyToken: string;
+    serviceName: string;
+    participationUrl: string;
+  }): Promise<boolean> {
+    try {
+      const response = await this.request('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${input.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          replyToken: input.replyToken,
+          messages: [
+            {
+              type: 'template',
+              altText: `${input.serviceName}の参加登録はこちら`,
+              template: {
+                type: 'buttons',
+                title: '参加登録のご案内',
+                text: `${input.serviceName}を利用するには、参加登録を完了してください。`,
+                actions: [
+                  {
+                    type: 'uri',
+                    label: '参加登録する',
+                    uri: input.participationUrl,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
 }
 
 export class PrismaActiveGroupLineWebhookConfiguration implements ActiveGroupLineWebhookConfigurationPort {
@@ -149,7 +209,18 @@ export class PrismaActiveGroupLineWebhookConfiguration implements ActiveGroupLin
           lineRoutingPolicies: { some: { environment, mode: 'DEDICATED', pilotEnabled: true } },
         },
       },
-      select: { id: true, workspaceId: true, groupId: true, encryptedMessagingSecret: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        groupId: true,
+        encryptedMessagingSecret: true,
+        encryptedAccessToken: true,
+        group: {
+          select: {
+            serviceConfiguration: { select: { slug: true, displayName: true } },
+          },
+        },
+      },
     });
     return configuration
       ? {
@@ -157,6 +228,9 @@ export class PrismaActiveGroupLineWebhookConfiguration implements ActiveGroupLin
           groupId: configuration.groupId,
           configurationId: configuration.id,
           secret: this.crypto.decrypt(configuration.encryptedMessagingSecret),
+          accessToken: this.crypto.decrypt(configuration.encryptedAccessToken),
+          serviceSlug: configuration.group.serviceConfiguration?.slug ?? null,
+          serviceName: configuration.group.serviceConfiguration?.displayName ?? null,
         }
       : null;
   }
@@ -169,6 +243,7 @@ export async function handleGroupLineWebhook(
     environment?: LineConfigurationEnvironment;
     configurations?: ActiveGroupLineWebhookConfigurationPort;
     processor?: ProcessGroupLineWebhookEvents;
+    followReply?: GroupLineFollowReplyPort;
   } = {},
 ) {
   if (!z.string().uuid().safeParse(routingKey).success)
@@ -185,17 +260,39 @@ export async function handleGroupLineWebhook(
     return Response.json({ error: 'invalid signature' }, { status: 401 });
   const events = parseLineWebhookEvents(rawBody);
   if (!events) return Response.json({ accepted: true });
+  const parsedBody = webhookBody.safeParse(JSON.parse(rawBody));
+  const replyTokens = parsedBody.success
+    ? new Map(parsedBody.data.events.map((event) => [event.webhookEventId, event.replyToken]))
+    : new Map<string, string | undefined>();
   const processor =
     dependencies.processor ??
     new ProcessGroupLineWebhookEvents(
       new (await import('@bunshin/database')).PrismaGroupLineConnectionRepository(),
     );
-  await processor.execute({
-    environment,
-    workspaceId: scoped.workspaceId,
-    groupId: scoped.groupId,
-    configurationId: scoped.configurationId,
-    events,
-  });
+  for (const event of events) {
+    const result = await processor.execute({
+      environment,
+      workspaceId: scoped.workspaceId,
+      groupId: scoped.groupId,
+      configurationId: scoped.configurationId,
+      events: [event],
+    });
+    const replyToken = replyTokens.get(event.providerEventId);
+    if (
+      event.type === 'FOLLOW' &&
+      result?.outcomes.APPLIED === 1 &&
+      replyToken &&
+      scoped.serviceSlug &&
+      scoped.serviceName
+    ) {
+      const baseUrl = getServerEnvironment().APP_URL;
+      await (dependencies.followReply ?? new LineGroupFollowReply()).send({
+        accessToken: scoped.accessToken,
+        replyToken,
+        serviceName: scoped.serviceName,
+        participationUrl: new URL(`/s/${scoped.serviceSlug}`, baseUrl).toString(),
+      });
+    }
+  }
   return Response.json({ accepted: true });
 }

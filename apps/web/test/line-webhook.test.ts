@@ -108,6 +108,9 @@ describe('group dedicated LINE webhook adapter', () => {
     groupId: 'group-1',
     configurationId: 'configuration-1',
     secret: 'dedicated-messaging-secret',
+    accessToken: 'dedicated-access-token',
+    serviceSlug: 'sample-service',
+    serviceName: 'サンプルサービス',
   };
 
   it('does not reveal whether a malformed routing key exists', async () => {
@@ -187,5 +190,82 @@ describe('group dedicated LINE webhook adapter', () => {
         },
       ],
     });
+  });
+
+  it('replies with the service participation button only for a newly applied follow event', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-new-follow',
+          replyToken: 'reply-token',
+          source: { type: 'user', userId: 'UnewFollower' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const processor = {
+      execute: vi.fn().mockResolvedValue({ outcomes: { APPLIED: 1 } }),
+    };
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+
+    const response = await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        processor: processor as never,
+        followReply,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(followReply.send).toHaveBeenCalledWith({
+      accessToken: scope.accessToken,
+      replyToken: 'reply-token',
+      serviceName: scope.serviceName,
+      participationUrl: 'https://example.com/s/sample-service',
+    });
+  });
+
+  it('does not reply again when LINE retries an already processed follow event', async () => {
+    const body = JSON.stringify({
+      events: [
+        {
+          type: 'follow',
+          timestamp: 1787378400000,
+          webhookEventId: 'evt-duplicate-follow',
+          replyToken: 'retry-reply-token',
+          source: { type: 'user', userId: 'UnewFollower' },
+        },
+      ],
+    });
+    const signature = createHmac('sha256', scope.secret).update(body).digest('base64');
+    const followReply = { send: vi.fn().mockResolvedValue(true) };
+
+    await handleGroupLineWebhook(
+      new Request(`https://example.com/api/line/groups/${routingKey}/webhook`, {
+        method: 'POST',
+        headers: { 'x-line-signature': signature },
+        body,
+      }),
+      routingKey,
+      {
+        environment: 'PRODUCTION',
+        configurations: { get: vi.fn().mockResolvedValue(scope) },
+        processor: {
+          execute: vi.fn().mockResolvedValue({ outcomes: { APPLIED: 0, DUPLICATE: 1 } }),
+        } as never,
+        followReply,
+      },
+    );
+
+    expect(followReply.send).not.toHaveBeenCalled();
   });
 });
