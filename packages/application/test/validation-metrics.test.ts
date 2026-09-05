@@ -50,6 +50,15 @@ const snapshot = {
       goodFeedbackRate: 1,
     },
   ],
+  personalityLearning: {
+    proposed: 0,
+    approved: 0,
+    rejected: 0,
+    revoked: 0,
+    decided: 0,
+    adoptionRate: null,
+    repeatedCorrectionCount: 0,
+  },
 };
 
 describe('GetValidationMetrics', () => {
