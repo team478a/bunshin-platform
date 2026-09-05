@@ -189,6 +189,7 @@ export default async function ServiceMemberActivityPage({
             <ServiceReferralShare
               serviceSlug={serviceSlug}
               serviceName={service.configuration.displayName}
+              serviceDescription={service.configuration.description}
               initialValue={referralValue}
             />
             <div className="service-activity-dashboard__stats" aria-label="紹介の状況">

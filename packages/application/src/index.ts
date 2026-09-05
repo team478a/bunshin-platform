@@ -2499,3 +2499,4 @@ export * from './service-credit-expiration';
 export * from './service-credit-adjustment';
 export * from './service-referral-reward';
 export * from './service-referral-reward-rules';
+export * from './service-referral-content';

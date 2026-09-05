@@ -2733,6 +2733,40 @@ a {
   margin: 16px auto 0;
 }
 
+.service-referral-content {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--service-primary) 24%, #dfe5ee);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--service-primary) 4%, #fff);
+}
+
+.service-referral-content h3,
+.service-referral-content p {
+  margin: 0;
+}
+
+.service-referral-content select,
+.service-referral-content textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #cfd6e3;
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.service-referral-content textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.service-referral-content__result {
+  display: grid;
+  gap: 12px;
+}
+
 .service-activity-dashboard__stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
