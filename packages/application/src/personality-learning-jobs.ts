@@ -31,6 +31,10 @@ export interface PersonalityLearningCandidateRepository {
 
 export interface PersonalityLearningSuggestionPort {
   suggest(input: {
+    workspaceId: string;
+    bunshinId: string;
+    actorUserId: string;
+    usageIdempotencyKey: string;
     currentContent: PersonalityVersionContent;
     evidence: Array<Pick<PersonalityLearningEvidence, 'rating' | 'missionFormat'>>;
   }): Promise<{ proposedContent: PersonalityVersionContent; reason: string }>;
@@ -42,6 +46,10 @@ export interface PersonalityLearningJobSummary {
   skipped: number;
   failures: number;
   truncated: boolean;
+}
+
+export interface PersonalityLearningScheduleSummary extends PersonalityLearningJobSummary {
+  due: boolean;
 }
 
 export class GeneratePersonalityLearningProposal {
@@ -60,6 +68,10 @@ export class GeneratePersonalityLearningProposal {
       throw new ApplicationError('VALIDATION_ERROR', 'insufficient repeated feedback');
 
     const suggestion = await this.suggestions.suggest({
+      workspaceId: candidate.workspaceId,
+      bunshinId: candidate.bunshinId,
+      actorUserId: candidate.actorUserId,
+      usageIdempotencyKey: `personality-learning:${candidate.basedOnVersionId}`,
       currentContent: candidate.currentContent,
       evidence: candidate.evidence.map(({ rating, missionFormat }) => ({ rating, missionFormat })),
     });
@@ -105,5 +117,19 @@ export class RunPersonalityLearningProposalJob {
       }
     }
     return summary;
+  }
+}
+
+export class RunWeeklyPersonalityLearningScheduler {
+  constructor(
+    private readonly job: RunPersonalityLearningProposalJob,
+    private readonly now = () => new Date(),
+  ) {}
+
+  async execute(): Promise<PersonalityLearningScheduleSummary> {
+    const at = this.now();
+    const due = at.getUTCDay() === 1 && at.getUTCHours() === 0 && at.getUTCMinutes() === 0;
+    if (!due) return { due, candidates: 0, created: 0, skipped: 0, failures: 0, truncated: false };
+    return { due, ...(await this.job.execute()) };
   }
 }

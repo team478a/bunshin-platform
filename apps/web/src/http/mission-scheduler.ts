@@ -11,6 +11,10 @@ import {
   type JobEnvironment,
   type MissionAutomationScheduleSummary,
   type TrendResearchScheduleSummary,
+  GeneratePersonalityLearningProposal,
+  RunPersonalityLearningProposalJob,
+  RunWeeklyPersonalityLearningScheduler,
+  type PersonalityLearningScheduleSummary,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
@@ -36,6 +40,7 @@ export interface MissionSchedulerPort {
         enqueued: number;
         truncated: boolean;
       };
+      personalityLearning?: PersonalityLearningScheduleSummary;
     }
   >;
 }
@@ -60,18 +65,43 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
     new db.PrismaBadgeLineJobCandidateRepository(db.prisma),
     new EnqueueJob(jobs),
   );
+  const { resolveOpenAiRuntimeConfiguration } =
+    await import('../ai/runtime-provider-configuration');
+  const { OpenAIPersonalityLearningSuggestion } =
+    await import('../providers/openai-personality-learning-suggestion');
+  const { recordAiUsageSafely } = await import('../observability/ai-usage');
   return {
     async execute(environment) {
-      const [missionResult, trendResult, badgePrepared] = await Promise.all([
+      const personalityLearning = new RunWeeklyPersonalityLearningScheduler({
+        async execute() {
+          const runtime = await resolveOpenAiRuntimeConfiguration();
+          return new RunPersonalityLearningProposalJob(
+            new db.PrismaPersonalityLearningCandidateRepository(),
+            new GeneratePersonalityLearningProposal(
+              new db.PrismaPersonalityLearningProposalRepository(),
+              new OpenAIPersonalityLearningSuggestion({
+                apiKey: runtime.apiKey,
+                model: runtime.model,
+                requestCostUsdMicros: runtime.requestCostUsdMicros,
+                recordUsage: recordAiUsageSafely,
+              }),
+            ),
+            10,
+          ).execute();
+        },
+      } as RunPersonalityLearningProposalJob);
+      const [missionResult, trendResult, badgePrepared, personalityResult] = await Promise.all([
         mission.execute(environment),
         trend.execute(environment),
         badgePreparation.execute({ environment }),
+        personalityLearning.execute(),
       ]);
       const badgeJobResult = await badgeJobs.execute(environment);
       return {
         ...missionResult,
         trend: trendResult,
         badgeLine: { ...badgePrepared, ...badgeJobResult },
+        personalityLearning: personalityResult,
       };
     },
   };
