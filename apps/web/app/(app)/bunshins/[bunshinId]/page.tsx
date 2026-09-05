@@ -4,6 +4,7 @@ import {
   ListBunshinMemories,
   GetLineNotificationPreference,
   ListPersonalityVersions,
+  ListPersonalityLearningProposals,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -52,6 +53,7 @@ export default async function BunshinPage({
       PrismaMissionOutcomeRepository,
       PrismaLineNotificationPreferenceRepository,
       PrismaPersonalityVersionRepository,
+      PrismaPersonalityLearningProposalRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -60,6 +62,13 @@ export default async function BunshinPage({
     });
     const personalityVersions = await new ListPersonalityVersions(
       new PrismaPersonalityVersionRepository(),
+    ).execute({
+      workspaceId,
+      bunshinId: bunshin.id,
+      actorUserId: currentUser.userId,
+    });
+    const personalityLearningProposals = await new ListPersonalityLearningProposals(
+      new PrismaPersonalityLearningProposalRepository(),
     ).execute({
       workspaceId,
       bunshinId: bunshin.id,
@@ -251,6 +260,14 @@ export default async function BunshinPage({
               createdAt: createdAt.toISOString(),
             }),
           )}
+          personalityLearningProposals={personalityLearningProposals.map((proposal) => ({
+            id: proposal.id,
+            status: proposal.status,
+            proposedContent: proposal.proposedContent,
+            reason: proposal.reason,
+            evidenceCount: proposal.evidenceIds.length,
+            createdAt: proposal.createdAt.toISOString(),
+          }))}
           knowledge={owned.map(({ id, title, type }) => ({
             id,
             title,
