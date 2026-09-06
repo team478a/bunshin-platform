@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SERVICE_DAILY_IDEA_DELIVERY,
   DEFAULT_SERVICE_PROFILE_QUESTIONS,
+  effectiveServiceContentAssistanceLevel,
   readServiceOnboardingSettings,
+  serviceContentAssistanceLevel,
+  serviceDeliveryDefaultAssistanceLevel,
   serviceOnboardingChoicePreset,
 } from '../src/services/service-onboarding-settings';
 
@@ -59,6 +62,29 @@ describe('service onboarding settings', () => {
         contentMode: 'IDEA',
       },
     });
+  });
+
+  it('maps service content and enrolled program plans to the generated mission level', () => {
+    expect(serviceContentAssistanceLevel('IDEA')).toBe('IDEA_ONLY');
+    expect(serviceContentAssistanceLevel('PROMPT')).toBe('GUIDED');
+    expect(serviceContentAssistanceLevel('READY_TO_USE')).toBe('READY_TO_USE');
+    expect(
+      serviceDeliveryDefaultAssistanceLevel({ enabled: false, contentMode: 'IDEA' }),
+    ).toBeNull();
+    expect(
+      effectiveServiceContentAssistanceLevel({
+        contentMode: 'IDEA',
+        enrollmentSupportMode: 'GUIDED',
+        preferredSupportMode: 'READY_TO_USE',
+      }),
+    ).toBe('READY_TO_USE');
+  });
+
+  it('accepts the prompt delivery mode from stored service settings', () => {
+    expect(
+      readServiceOnboardingSettings({ dailyIdeaDelivery: { contentMode: 'PROMPT' } }, null)
+        .dailyIdeaDelivery.contentMode,
+    ).toBe('PROMPT');
   });
 
   it('allows each service to disable irrelevant profile questions', () => {

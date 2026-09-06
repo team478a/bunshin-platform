@@ -4,6 +4,12 @@ import {
   selectGroupKnowledgeChunksForPrompt,
   type GroupKnowledgeChunkRecord,
 } from '@bunshin/application';
+import {
+  effectiveServiceContentAssistanceLevel,
+  readServiceOnboardingSettings,
+  serviceDeliveryDefaultAssistanceLevel,
+  type ServiceContentAssistanceLevel,
+} from './service-onboarding-settings';
 
 export interface ServiceGenerationKnowledgeScope {
   workspaceId: string;
@@ -85,9 +91,66 @@ export function serviceKnowledgeForPrompt(chunks: GroupKnowledgeChunkRecord[]) {
   };
 }
 
+export async function resolveServiceContentAssistanceLevel(
+  scope: ServiceGenerationKnowledgeScope,
+): Promise<ServiceContentAssistanceLevel | null> {
+  const db = await import('@bunshin/database');
+  const [registrationPolicy, membership] = await Promise.all([
+    db.prisma.serviceRegistrationPolicy.findFirst({
+      where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+      select: { onboardingConfig: true, surveyConfig: true },
+    }),
+    db.prisma.groupMembership.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        userId: scope.actorUserId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (membership) {
+    const now = new Date();
+    const enrollment = await db.prisma.programEnrollment.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        groupMembershipId: membership.id,
+        status: 'ACTIVE',
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+          { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+        ],
+      },
+      orderBy: [{ startsAt: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, supportMode: true },
+    });
+    if (enrollment) {
+      const preference = await db.prisma.programMemberPreference.findUnique({
+        where: { programEnrollmentId: enrollment.id },
+        select: { preferredSupportMode: true },
+      });
+      return effectiveServiceContentAssistanceLevel({
+        contentMode: readServiceOnboardingSettings(
+          registrationPolicy?.onboardingConfig,
+          registrationPolicy?.surveyConfig,
+        ).dailyIdeaDelivery.contentMode,
+        enrollmentSupportMode: enrollment.supportMode,
+        ...(preference ? { preferredSupportMode: preference.preferredSupportMode } : {}),
+      });
+    }
+  }
+  const dailyDelivery = readServiceOnboardingSettings(
+    registrationPolicy?.onboardingConfig,
+    registrationPolicy?.surveyConfig,
+  ).dailyIdeaDelivery;
+  return serviceDeliveryDefaultAssistanceLevel(dailyDelivery);
+}
+
 export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKnowledgeScope) {
   const db = await import('@bunshin/database');
-  const [chunks, businessProfile] = await Promise.all([
+  const [chunks, businessProfile, contentAssistanceLevel] = await Promise.all([
     new GroupKnowledgeService(
       new db.PrismaGroupKnowledgeRepository(),
     ).listApprovedChunksForGeneration({
@@ -111,10 +174,12 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
         primaryIndustry: { select: { key: true, name: true } },
       },
     }),
+    resolveServiceContentAssistanceLevel(scope),
   ]);
   const knowledge = serviceKnowledgeForPrompt(chunks);
   return {
     ...knowledge,
+    contentAssistanceLevel,
     officialKnowledge: [
       ...businessProfileKnowledgeForPrompt(
         businessProfile?.primaryIndustry

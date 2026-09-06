@@ -64,7 +64,7 @@ const schema = z
         cadence: z.enum(['DAILY', 'WEEKDAYS']),
         defaultNotificationTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/),
         lockCadence: z.boolean(),
-        contentMode: z.enum(['IDEA', 'READY_TO_USE']),
+        contentMode: z.enum(['IDEA', 'PROMPT', 'READY_TO_USE']),
       })
       .strict()
       .default({

@@ -8,6 +8,7 @@ import { createDailyMissionGenerationService } from '../services/daily-mission-g
 import { currentActivityContinuityRule } from '../activity-continuity-rule';
 import { mondayForDate, prepareServiceAutomaticWeek } from './service-automatic-week';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
+import { resolveServiceContentAssistanceLevel } from '../services/service-generation-knowledge';
 import {
   createServiceDailyIdeaFallback,
   shouldUseServiceDailyIdeaFallback,
@@ -54,10 +55,16 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
           policy?.surveyConfig,
         ).dailyIdeaDelivery;
         if (!dailyIdeas.enabled) throw error;
+        const assistanceLevel = await resolveServiceContentAssistanceLevel({
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          actorUserId: scope.actorUserId,
+        });
         mission = await createServiceDailyIdeaFallback({
           ...scope,
           groupId: scope.groupId,
           missionDate: localDate,
+          ...(assistanceLevel ? { assistanceLevel } : {}),
         });
       }
       const activityRule = await currentActivityContinuityRule();

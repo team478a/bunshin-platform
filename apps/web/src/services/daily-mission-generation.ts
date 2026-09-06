@@ -517,7 +517,7 @@ export class DailyMissionGenerationService {
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,
         ...brief.output,
-        assistanceLevel: profile.defaultAssistanceLevel,
+        assistanceLevel: serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel,
         content: missionContent,
         qualityScore: quality.output.score,
         campaignId: weeklyItem.campaignId,

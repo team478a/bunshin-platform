@@ -47,6 +47,7 @@ export async function createServiceDailyIdeaFallback(input: {
   bunshinId: string;
   actorUserId: string;
   missionDate: string;
+  assistanceLevel?: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
 }) {
   const db = await import('@bunshin/database');
   const [profile, socialProfile, weeklyItem] = await Promise.all([
@@ -108,7 +109,7 @@ export async function createServiceDailyIdeaFallback(input: {
     weeklyPlanItemId: weeklyItem?.id ?? null,
     missionDate: input.missionDate,
     format: 'TEXT',
-    assistanceLevel: 'READY_TO_USE',
+    assistanceLevel: input.assistanceLevel ?? 'READY_TO_USE',
     estimatedMinutes: 5,
     topic: idea.topic,
     angle: idea.angle,

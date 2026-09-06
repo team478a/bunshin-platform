@@ -11,7 +11,7 @@ describe('simple service first-post setup', () => {
     expect(setup).toContain('2. どのくらいのペースで投稿しますか？');
     expect(setup).toContain('deliveryPolicy.enabled && deliveryPolicy.lockCadence');
     expect(setup).toContain("? deliveryPolicy.cadence : 'WEEKLY'");
-    expect(setup).toContain("defaultAssistanceLevel: 'READY_TO_USE'");
+    expect(setup).toContain('serviceContentAssistanceLevel(deliveryPolicy.contentMode)');
   });
 
   it('prepares the existing guarded workflow in order', () => {

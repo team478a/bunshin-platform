@@ -12,7 +12,35 @@ export interface ServiceDailyIdeaDeliverySettings {
   cadence: 'DAILY' | 'WEEKDAYS';
   defaultNotificationTime: string;
   lockCadence: boolean;
-  contentMode: 'IDEA' | 'READY_TO_USE';
+  contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
+}
+
+export type ServiceContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
+
+export function serviceContentAssistanceLevel(
+  contentMode: ServiceDailyIdeaDeliverySettings['contentMode'],
+): ServiceContentAssistanceLevel {
+  if (contentMode === 'IDEA') return 'IDEA_ONLY';
+  if (contentMode === 'PROMPT') return 'GUIDED';
+  return 'READY_TO_USE';
+}
+
+export function effectiveServiceContentAssistanceLevel(input: {
+  contentMode: ServiceDailyIdeaDeliverySettings['contentMode'];
+  enrollmentSupportMode?: ServiceContentAssistanceLevel | null;
+  preferredSupportMode?: ServiceContentAssistanceLevel | null;
+}): ServiceContentAssistanceLevel {
+  return (
+    input.preferredSupportMode ??
+    input.enrollmentSupportMode ??
+    serviceContentAssistanceLevel(input.contentMode)
+  );
+}
+
+export function serviceDeliveryDefaultAssistanceLevel(
+  delivery: Pick<ServiceDailyIdeaDeliverySettings, 'enabled' | 'contentMode'>,
+): ServiceContentAssistanceLevel | null {
+  return delivery.enabled ? serviceContentAssistanceLevel(delivery.contentMode) : null;
 }
 
 export const DEFAULT_SERVICE_DAILY_IDEA_DELIVERY: ServiceDailyIdeaDeliverySettings = {
@@ -207,7 +235,11 @@ export function readServiceOnboardingSettings(
           ? configuredDailyIdeaDelivery.defaultNotificationTime
           : DEFAULT_SERVICE_DAILY_IDEA_DELIVERY.defaultNotificationTime,
       lockCadence: configuredDailyIdeaDelivery.lockCadence === true,
-      contentMode: configuredDailyIdeaDelivery.contentMode === 'IDEA' ? 'IDEA' : 'READY_TO_USE',
+      contentMode:
+        configuredDailyIdeaDelivery.contentMode === 'IDEA' ||
+        configuredDailyIdeaDelivery.contentMode === 'PROMPT'
+          ? configuredDailyIdeaDelivery.contentMode
+          : 'READY_TO_USE',
     },
   };
 }

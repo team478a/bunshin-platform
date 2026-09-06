@@ -2025,3 +2025,12 @@
 - Scale: Mission Schedulerは通知対象をIDカーソルで順次取得し、1,000件超の後続利用者も処理対象にする。
 - Boundary: SNS自動投稿、画像・動画生成、メール配信、課金、業種別の個別法務審査は今回のFREE MVPに含めない。
 - Source: `docs/WATASHI_WORKS_DAILY_IDEA_IMPLEMENTATION_REPORT.md`
+
+## 2026-09-07: 毎日の配信内容はService初期値と参加者のProgram設定から決定する
+
+- Levels: 発信アイデアを`IDEA_ONLY`、作り方・台本・配信用プロンプトを`GUIDED`、そのまま使える投稿案を`READY_TO_USE`へ対応させる。
+- Default: Serviceの毎日配信設定を、そのServiceでProgramを割り当てていない参加者の初期値とする。
+- Member plan: ACTIVEなProgram Enrollmentがある場合はEnrollmentのsupport modeを優先し、本人が許可された範囲で選んだPreferenceがあればさらに優先する。
+- Generation: 決定したlevelをDaily Mission保存時に使用し、初回Social Profile作成時にも同じlevelを保存する。AI障害時の予備案も同じlevelで表示する。
+- Boundary: 画像・動画本体の自動生成とLINEへの直接送信は別工程とし、今回の変更では開始しない。
+- Source: `docs/WATASHI_WORKS_DELIVERY_PLAN_FOUNDATION_REPORT.md`

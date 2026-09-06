@@ -3,6 +3,12 @@ import {
   businessProfileKnowledgeForPrompt,
   industrySafetyKnowledgeForPrompt,
 } from '../src/services/service-generation-knowledge';
+import { readFileSync } from 'node:fs';
+
+const generationSource = readFileSync(
+  new URL('../src/services/daily-mission-generation.ts', import.meta.url),
+  'utf8',
+);
 
 describe('service business profile generation context', () => {
   it('builds scoped business facts for the generation prompt', () => {
@@ -32,5 +38,11 @@ describe('service business profile generation context', () => {
       '診断、治療、予防効果を断定しない',
     );
     expect(industrySafetyKnowledgeForPrompt('FOOD').content).toContain('効果を保証せず');
+  });
+
+  it('uses the service or enrolled program delivery level when saving a mission', () => {
+    expect(generationSource).toContain(
+      'serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel',
+    );
   });
 });

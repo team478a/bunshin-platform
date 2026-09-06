@@ -4,6 +4,7 @@ import type { SocialPlatform, SocialPostingFrequency } from '@bunshin/capability
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClientRequestId } from '../../../../ui/client-request-id';
+import { serviceContentAssistanceLevel } from '../../../../../src/services/service-onboarding-settings';
 
 const platformLabels: Record<SocialPlatform, string> = {
   INSTAGRAM: 'インスタグラム',
@@ -66,7 +67,7 @@ export function SimpleFirstPostSetup({
     cadence: 'DAILY' | 'WEEKDAYS';
     defaultNotificationTime: string;
     lockCadence: boolean;
-    contentMode: 'IDEA' | 'READY_TO_USE';
+    contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
   };
 }) {
   const router = useRouter();
@@ -139,7 +140,7 @@ export function SimpleFirstPostSetup({
           purpose: topic,
           postingFrequency: frequency,
           preferredFormats: preferredFormats(platform),
-          defaultAssistanceLevel: 'READY_TO_USE',
+          defaultAssistanceLevel: serviceContentAssistanceLevel(deliveryPolicy.contentMode),
         });
       }
 
@@ -189,7 +190,12 @@ export function SimpleFirstPostSetup({
         <span aria-hidden="true">✓</span>
         <div>
           <h2>
-            {deliveryPolicy.contentMode === 'IDEA' ? '発信アイデア' : '投稿案'}を自動でお届けします
+            {deliveryPolicy.contentMode === 'IDEA'
+              ? '発信アイデア'
+              : deliveryPolicy.contentMode === 'PROMPT'
+                ? '作り方・配信用プロンプト'
+                : '投稿案'}
+            を自動でお届けします
           </h2>
           <p>
             {deliveryPolicy.enabled && deliveryPolicy.lockCadence

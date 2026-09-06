@@ -109,7 +109,7 @@ export const SERVICE_CREATION_TEMPLATES = {
       cadence: 'DAILY' | 'WEEKDAYS';
       defaultNotificationTime: string;
       lockCadence: boolean;
-      contentMode: 'IDEA' | 'READY_TO_USE';
+      contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
     };
     onboarding: {
       welcomeTitle: string;

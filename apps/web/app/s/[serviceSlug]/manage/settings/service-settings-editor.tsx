@@ -533,14 +533,21 @@ export function ServiceSettingsEditor({
               onChange={(event) =>
                 setDailyIdeaDelivery((current) => ({
                   ...current,
-                  contentMode: event.target.value === 'IDEA' ? 'IDEA' : 'READY_TO_USE',
+                  contentMode:
+                    event.target.value === 'IDEA' || event.target.value === 'PROMPT'
+                      ? event.target.value
+                      : 'READY_TO_USE',
                 }))
               }
             >
               <option value="IDEA">発信アイデア</option>
+              <option value="PROMPT">作り方・台本・配信用プロンプト</option>
               <option value="READY_TO_USE">そのまま使える投稿案</option>
             </select>
           </label>
+          <p>
+            ここで選ぶ内容はサービスの初期値です。「公式プログラム」で参加者へ別の内容を割り当てた場合は、参加者ごとの設定を優先します。
+          </p>
         </section>
         <label>
           最初に表示する説明
