@@ -16,8 +16,8 @@ describe('service staff role persistence', () => {
     expect(schema).toContain('enum ServiceRole');
     for (const role of ['SERVICE_OWNER', 'SERVICE_ADMIN', 'CONTENT_EDITOR', 'PARTICIPANT'])
       expect(schema).toContain(role);
-    expect(schema).toContain('role                       GroupRole');
-    expect(schema).toContain('serviceRole                ServiceRole');
+    expect(schema).toMatch(/^\s*role\s+GroupRole\b/m);
+    expect(schema).toMatch(/^\s*serviceRole\s+ServiceRole\b/m);
   });
 
   it('backfills the service creator as owner and other managers as administrators', () => {
