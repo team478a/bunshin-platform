@@ -2000,3 +2000,12 @@
 - Refresh: 成功または明示的なALREADY_EXISTSだけで一覧を更新する。HTTP 409だけでは作成済みと判断しない。
 - Support: クライアントの受付番号をx-request-idで送信し、非JSON応答・通信失敗・待機超過でも表示する。生成APIは受付番号、公開エラーコード、分類、HTTPステータスだけを記録する。
 - Scope: 既存の権限・サービス分離・生成前提条件は維持する。DB変更・追加環境変数は不要。
+
+# 2026-09-06: 参加者本人の発信方針の保存・承認を許可する
+
+- Evidence: 本番の受付番号`req_6049b7a4-10d7-452e-a1ff-15ba9111a0e4`でAI生成成功直後の保存がNOT_FOUNDとなった。投稿案側もSTRATEGY_REQUIREDを返している。
+- Cause: 発信方針RepositoryだけがWorkspaceのOWNER/ADMINを必須とし、本人所有の分身を操作するMEMBERを拒否していた。
+- Authorization: SNSプロフィール・週間予定と同じcanManageBunshin判定を使う。サービス指定時の本人所有条件、Workspace/Group一致、有効な所属、分身の非アーカイブ条件は維持する。
+- Regression: 実DBテストにサービス内MEMBER本人の保存・承認成功と、他人（ADMIN含む）・別Workspace・別Group・Group未指定の拒否を追加する。
+- Feedback: かんたん設定の各API呼び出しにも受付番号を付け、公開用エラーを表示する。
+- Operations: migration・追加環境変数・本番データの変更は不要。
