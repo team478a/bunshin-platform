@@ -3,6 +3,7 @@
 import type { SocialPlatform, SocialPostingFrequency } from '@bunshin/capability-social';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { createClientRequestId } from '../../../../ui/client-request-id';
 
 const platformLabels: Record<SocialPlatform, string> = {
   INSTAGRAM: 'インスタグラム',
@@ -186,7 +187,7 @@ export function SimpleFirstPostSetup({
           missionDate: localDate(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
           socialProfileId: profile.id,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: createClientRequestId(),
         });
       }
 
