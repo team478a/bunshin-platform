@@ -3,6 +3,35 @@ import { ApplicationError } from '@bunshin/shared';
 export const MEMBER_PRODUCT_CONTENT_PLATFORMS = ['INSTAGRAM', 'X', 'THREADS'] as const;
 export type MemberProductContentPlatform = (typeof MEMBER_PRODUCT_CONTENT_PLATFORMS)[number];
 
+export interface MemberProductProfileRecord {
+  id: string;
+  externalTrackingLinkId: string;
+  externalTrackingSystemName: string;
+  name: string;
+  appealPoint: string;
+  targetAudience: string | null;
+  updatedAt: Date;
+}
+
+export interface MemberProductProfileRepository {
+  list(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }): Promise<MemberProductProfileRecord[] | null>;
+  save(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    profileId: string | null;
+    externalTrackingLinkId: string;
+    name: string;
+    appealPoint: string;
+    targetAudience: string | null;
+    now: Date;
+  }): Promise<MemberProductProfileRecord | null>;
+}
+
 const limits: Record<MemberProductContentPlatform, number> = {
   INSTAGRAM: 2_200,
   X: 280,
@@ -42,9 +71,9 @@ export function createMemberProductContent(input: {
   approvedUrl: string;
   platform: MemberProductContentPlatform;
 }) {
-  const productName = requiredText(input.productName, 'product name', 100);
-  const appealPoint = requiredText(input.appealPoint, 'appeal point', 280);
-  const targetAudience = optionalText(input.targetAudience, 120);
+  const productName = requiredText(input.productName, 'product name', 160);
+  const appealPoint = requiredText(input.appealPoint, 'appeal point', 1_000);
+  const targetAudience = optionalText(input.targetAudience, 500);
   const url = approvedMemberUrl(input.approvedUrl);
   const suffix = `\n\n#PR\n${url}`;
   const lead = `${productName}についてご紹介します。\n${appealPoint}${
@@ -64,4 +93,45 @@ export function createMemberProductContent(input: {
     characterCount: body.length,
     characterLimit,
   };
+}
+
+export class MemberProductProfileService {
+  constructor(private readonly repository: MemberProductProfileRepository) {}
+
+  async list(input: { workspaceId: string; groupId: string; actorUserId: string }) {
+    const profiles = await this.repository.list(input);
+    if (!profiles) throw new ApplicationError('NOT_FOUND', 'service membership unavailable');
+    return profiles;
+  }
+
+  async save(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    profileId?: string | null | undefined;
+    externalTrackingLinkId: string;
+    name: string;
+    appealPoint: string;
+    targetAudience?: string | null | undefined;
+  }) {
+    const saved = await this.repository.save({
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      actorUserId: input.actorUserId,
+      profileId: input.profileId
+        ? requiredText(input.profileId, 'member product profile id', 100)
+        : null,
+      externalTrackingLinkId: requiredText(
+        input.externalTrackingLinkId,
+        'external tracking link id',
+        100,
+      ),
+      name: requiredText(input.name, 'product name', 160),
+      appealPoint: requiredText(input.appealPoint, 'appeal point', 1_000),
+      targetAudience: optionalText(input.targetAudience, 500) || null,
+      now: new Date(),
+    });
+    if (!saved) throw new ApplicationError('NOT_FOUND', 'active member URL unavailable');
+    return saved;
+  }
 }

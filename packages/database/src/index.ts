@@ -114,6 +114,7 @@ import type {
   CampaignSafetyRepository,
   ExternalTrackingLinkRepository,
   ExternalTrackingMemberLinkRepository,
+  MemberProductProfileRepository,
   ExternalLinkPlacementRepository,
   GroupFeatureEntitlementRepository,
   GroupFeaturePolicyRecord,
@@ -19204,5 +19205,146 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
       select: { postedAt: true },
     });
     return posts.filter((post) => pointWeekKey(post.postedAt, timezone) === weekKey).length >= 3;
+  }
+}
+
+export class PrismaMemberProductProfileRepository implements MemberProductProfileRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async list(input: Parameters<MemberProductProfileRepository['list']>[0]) {
+    const membership = await this.client.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+        group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+      },
+      select: { id: true },
+    });
+    if (!membership) return null;
+    const profiles = await this.client.memberProductProfile.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membership.id,
+        userId: input.actorUserId,
+        externalTrackingLink: {
+          status: 'ACTIVE',
+          scopeType: 'MEMBER',
+          memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+        },
+      },
+      include: { externalTrackingLink: { select: { system: { select: { name: true } } } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return profiles.map((profile) => ({
+      id: profile.id,
+      externalTrackingLinkId: profile.externalTrackingLinkId,
+      externalTrackingSystemName: profile.externalTrackingLink.system.name,
+      name: profile.name,
+      appealPoint: profile.appealPoint,
+      targetAudience: profile.targetAudience,
+      updatedAt: profile.updatedAt,
+    }));
+  }
+
+  async save(input: Parameters<MemberProductProfileRepository['save']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          consentedAt: { not: null },
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+        },
+        select: { id: true },
+      });
+      if (!membership) return null;
+      const link = await tx.externalTrackingLink.findFirst({
+        where: {
+          id: input.externalTrackingLinkId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: 'ACTIVE',
+          deletedAt: null,
+          scopeType: 'MEMBER',
+          memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
+        },
+        select: { id: true, system: { select: { name: true } } },
+      });
+      if (!link) return null;
+      const before = input.profileId
+        ? await tx.memberProductProfile.findFirst({
+            where: {
+              id: input.profileId,
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+            },
+          })
+        : null;
+      if (input.profileId && !before) return null;
+      const profile = before
+        ? await tx.memberProductProfile.update({
+            where: { id: before.id },
+            data: {
+              externalTrackingLinkId: link.id,
+              name: input.name,
+              appealPoint: input.appealPoint,
+              targetAudience: input.targetAudience,
+            },
+          })
+        : await tx.memberProductProfile.create({
+            data: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: membership.id,
+              userId: input.actorUserId,
+              externalTrackingLinkId: link.id,
+              name: input.name,
+              appealPoint: input.appealPoint,
+              targetAudience: input.targetAudience,
+            },
+          });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          resourceType: 'MEMBER_PRODUCT_PROFILE',
+          resourceId: profile.id,
+          action: before ? 'UPDATED' : 'CREATED',
+          beforeData: before
+            ? {
+                externalTrackingLinkId: before.externalTrackingLinkId,
+                name: before.name,
+                appealPoint: before.appealPoint,
+                targetAudience: before.targetAudience,
+              }
+            : Prisma.JsonNull,
+          afterData: {
+            externalTrackingLinkId: profile.externalTrackingLinkId,
+            name: profile.name,
+            appealPoint: profile.appealPoint,
+            targetAudience: profile.targetAudience,
+          },
+          performedByUserId: input.actorUserId,
+          performedAt: input.now,
+        },
+      });
+      return {
+        id: profile.id,
+        externalTrackingLinkId: profile.externalTrackingLinkId,
+        externalTrackingSystemName: link.system.name,
+        name: profile.name,
+        appealPoint: profile.appealPoint,
+        targetAudience: profile.targetAudience,
+        updatedAt: profile.updatedAt,
+      };
+    });
   }
 }
