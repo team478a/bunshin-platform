@@ -72,6 +72,29 @@ describe('member product content', () => {
       }),
     ).toThrow('unapproved URL');
   });
+
+  it('appends official disclosures once before the PR label and approved URL', () => {
+    const result = finalizeMemberProductCandidate({
+      draft: '毎日の習慣に取り入れやすい商品です。 提供：サンプル社',
+      approvedUrl: 'https://shop.example.jp/item/1?ref=member-1',
+      platform: 'THREADS',
+      requiredDisclosures: ['提供：サンプル社'],
+    });
+
+    expect(result.body.match(/提供：サンプル社/gu)).toHaveLength(1);
+    expect(result.body).toContain('提供：サンプル社\n#PR\nhttps://shop.example.jp');
+  });
+
+  it('rejects an AI draft containing an official forbidden expression', () => {
+    expect(() =>
+      finalizeMemberProductCandidate({
+        draft: '絶対に結果が出る商品です。',
+        approvedUrl: 'https://shop.example.jp/item/1?ref=member-1',
+        platform: 'INSTAGRAM',
+        forbiddenExpressions: ['絶対'],
+      }),
+    ).toThrow('forbidden expression');
+  });
 });
 
 describe('member product profile service', () => {
@@ -90,6 +113,7 @@ describe('member product profile service', () => {
     const repository = {
       list: vi.fn(),
       listProductMasters: vi.fn(),
+      getGenerationContext: vi.fn(),
       save,
       archive: vi.fn(),
     } satisfies MemberProductProfileRepository;
@@ -120,6 +144,7 @@ describe('member product profile service', () => {
     const repository = {
       list: vi.fn(),
       listProductMasters: vi.fn(),
+      getGenerationContext: vi.fn(),
       save: vi.fn().mockResolvedValue(null),
       archive: vi.fn(),
     } satisfies MemberProductProfileRepository;
@@ -141,6 +166,7 @@ describe('member product profile service', () => {
     const repository = {
       list: vi.fn(),
       listProductMasters: vi.fn(),
+      getGenerationContext: vi.fn(),
       save: vi.fn(),
       archive,
     } satisfies MemberProductProfileRepository;

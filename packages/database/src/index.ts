@@ -19371,7 +19371,9 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
     }));
   }
 
-  async listProductMasters(input: Parameters<MemberProductProfileRepository['listProductMasters']>[0]) {
+  async listProductMasters(
+    input: Parameters<MemberProductProfileRepository['listProductMasters']>[0],
+  ) {
     const membership = await this.client.groupMembership.findFirst({
       where: {
         workspaceId: input.workspaceId,
@@ -19384,16 +19386,125 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
       select: { id: true },
     });
     if (!membership) return null;
+    const now = new Date();
     return this.client.productPack.findMany({
       where: {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
         status: 'ACTIVE',
-        versions: { some: { status: 'PUBLISHED' } },
+        versions: {
+          some: {
+            status: 'PUBLISHED',
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
+            ],
+          },
+        },
       },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async getGenerationContext(
+    input: Parameters<MemberProductProfileRepository['getGenerationContext']>[0],
+  ) {
+    const profile = await this.client.memberProductProfile.findFirst({
+      where: {
+        id: input.profileId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        archivedAt: null,
+        groupMembership: {
+          status: 'ACTIVE',
+          consentedAt: { not: null },
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+        },
+        externalTrackingLink: {
+          status: 'ACTIVE',
+          deletedAt: null,
+          scopeType: 'MEMBER',
+          memberIdentity: { status: 'ACTIVE' },
+        },
+      },
+      select: {
+        id: true,
+        externalTrackingLinkId: true,
+        productPackId: true,
+        name: true,
+        appealPoint: true,
+        targetAudience: true,
+        productPack: {
+          select: {
+            workspaceId: true,
+            groupId: true,
+            name: true,
+            status: true,
+            versions: {
+              where: {
+                status: 'PUBLISHED',
+                AND: [
+                  { OR: [{ validFrom: null }, { validFrom: { lte: input.now } }] },
+                  { OR: [{ validUntil: null }, { validUntil: { gte: input.now } }] },
+                ],
+              },
+              orderBy: { version: 'desc' },
+              take: 1,
+              select: {
+                summary: true,
+                providerName: true,
+                targetCustomer: true,
+                facts: true,
+                suitableFor: true,
+                unsuitableFor: true,
+                rules: {
+                  orderBy: { sortOrder: 'asc' },
+                  select: { type: true, value: true, condition: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!profile) return null;
+    const productPack = profile.productPack;
+    const version = productPack?.versions[0];
+    const officialProduct =
+      productPack?.status === 'ACTIVE' &&
+      productPack.workspaceId === input.workspaceId &&
+      productPack.groupId === input.groupId &&
+      version
+        ? {
+            name: productPack.name,
+            summary: version.summary,
+            providerName: version.providerName,
+            targetCustomer: version.targetCustomer,
+            facts: version.facts,
+            suitableFor: version.suitableFor,
+            unsuitableFor: version.unsuitableFor,
+            requiredDisclosures: version.rules
+              .filter((rule) => rule.type === 'REQUIRED_DISCLOSURE')
+              .map((rule) => rule.value),
+            forbiddenExpressions: version.rules
+              .filter((rule) => rule.type === 'FORBIDDEN_EXPRESSION')
+              .map((rule) => rule.value),
+            conditionalExpressions: version.rules
+              .filter((rule) => rule.type === 'CONDITIONAL_EXPRESSION')
+              .map((rule) => ({ value: rule.value, condition: rule.condition })),
+          }
+        : null;
+    return {
+      id: profile.id,
+      externalTrackingLinkId: profile.externalTrackingLinkId,
+      productPackId: profile.productPackId,
+      name: profile.name,
+      appealPoint: profile.appealPoint,
+      targetAudience: profile.targetAudience,
+      officialProduct,
+    };
   }
 
   async save(input: Parameters<MemberProductProfileRepository['save']>[0]) {
@@ -19430,7 +19541,15 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
               workspaceId: input.workspaceId,
               groupId: input.groupId,
               status: 'ACTIVE',
-              versions: { some: { status: 'PUBLISHED' } },
+              versions: {
+                some: {
+                  status: 'PUBLISHED',
+                  AND: [
+                    { OR: [{ validFrom: null }, { validFrom: { lte: input.now } }] },
+                    { OR: [{ validUntil: null }, { validUntil: { gte: input.now } }] },
+                  ],
+                },
+              },
             },
             select: { id: true, name: true },
           })

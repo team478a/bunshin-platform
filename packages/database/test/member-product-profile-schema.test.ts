@@ -61,7 +61,16 @@ describe('member product profile persistence boundary', () => {
   it('links only published product masters in the same service', () => {
     expect(schema).toContain('productPackId          String?');
     expect(productMasterMigration).toContain('member_product_profiles_product_pack_id_fkey');
-    expect(repository).toContain("versions: { some: { status: 'PUBLISHED' } }");
+    expect(repository).toContain("status: 'PUBLISHED'");
+    expect(repository).toContain('validFrom: { lte: input.now }');
+    expect(repository).toContain('validUntil: { gte: input.now }');
     expect(repository).toContain('groupId: input.groupId');
+  });
+
+  it('loads the current official facts and copy rules only for generation', () => {
+    expect(repository).toContain('async getGenerationContext');
+    expect(repository).toContain("rule.type === 'REQUIRED_DISCLOSURE'");
+    expect(repository).toContain("rule.type === 'FORBIDDEN_EXPRESSION'");
+    expect(repository).toContain("rule.type === 'CONDITIONAL_EXPRESSION'");
   });
 });

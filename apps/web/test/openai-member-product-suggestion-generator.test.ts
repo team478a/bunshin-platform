@@ -4,6 +4,18 @@ import { OpenAIMemberProductSuggestionGenerator } from '../src/providers/openai-
 const input = {
   platform: 'INSTAGRAM' as const,
   product: { name: '商品A', appealPoint: '毎日使いやすい', targetAudience: '初心者' },
+  officialProduct: {
+    name: '公式商品A',
+    summary: '公式に確認された概要',
+    providerName: 'サンプル社',
+    targetCustomer: '習慣を整えたい方',
+    facts: { capacity: '30個' },
+    suitableFor: ['毎日続けたい方'],
+    unsuitableFor: ['対象外の方'],
+    requiredDisclosures: ['提供：サンプル社'],
+    forbiddenExpressions: ['必ず効く'],
+    conditionalExpressions: [{ value: '期間限定', condition: '販売期間内のみ' }],
+  },
   bunshin: {
     name: '案内役',
     objectiveSummary: '分かりやすく伝える',
@@ -51,6 +63,10 @@ describe('OpenAIMemberProductSuggestionGenerator', () => {
 
     expect(request.store).toBe(false);
     expect(request.input[1]?.content).not.toContain('https://');
+    expect(request.input[0]?.content).toContain('officialProductを優先');
+    expect(request.input[1]?.content).toContain('公式に確認された概要');
+    expect(request.input[1]?.content).toContain('提供：サンプル社');
+    expect(request.input[1]?.content).toContain('必ず効く');
     expect(result.candidates).toEqual(['案A', '案B', '案C']);
     expect(result.inputTokens).toBe(100);
   });
