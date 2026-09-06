@@ -5,6 +5,14 @@ vi.mock('../src/services/weekly-plan-generation', () => ({
   createWeeklyPlanGenerationService: () => Promise.resolve({ execute }),
 }));
 
+vi.mock('@bunshin/database', () => ({
+  PrismaMissionAutomationScopeRepository: class {
+    resolveScope(input: { workspaceId: string; bunshinId: string; actorUserId: string }) {
+      return Promise.resolve({ ...input, groupId: null });
+    }
+  },
+}));
+
 import { createWeeklyPlanJobHandler } from '../src/jobs/weekly-plan-job-handler';
 
 describe('weekly plan job handler', () => {

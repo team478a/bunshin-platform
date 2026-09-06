@@ -13,6 +13,11 @@ vi.mock('../src/activity-continuity-rule', () => ({
   currentActivityContinuityRule: () => Promise.resolve({ dormancyDays: 7 }),
 }));
 vi.mock('@bunshin/database', () => ({
+  PrismaMissionAutomationScopeRepository: class {
+    resolveScope(input: { workspaceId: string; bunshinId: string; actorUserId: string }) {
+      return Promise.resolve({ ...input, groupId: null });
+    }
+  },
   PrismaLineMessageDeliveryRepository: class {
     prepare = prepare;
   },
@@ -103,6 +108,8 @@ describe('daily mission job handler', () => {
       workspaceId: 'workspace-1',
       bunshinId: 'bunshin-1',
       actorUserId: 'user-1',
+      groupId: null,
+      serviceSafeMode: false,
       missionDate: '2026-08-25',
       generationIdempotencyKey: 'daily-mission:workspace-1:bunshin-1:2026-08-25',
       usageIdempotencyPrefix: 'job:job-1:daily-mission',

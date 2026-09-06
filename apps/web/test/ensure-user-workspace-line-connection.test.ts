@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   identity: vi.fn(),
+  existing: vi.fn(),
   source: vi.fn(),
   update: vi.fn(),
   connect: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('@bunshin/application', () => ({
 vi.mock('@bunshin/database', () => ({
   prisma: {
     authIdentity: { findFirst: state.identity },
-    lineConnection: { findFirst: state.source, update: state.update },
+    lineConnection: { findFirst: state.source, findUnique: state.existing, update: state.update },
   },
   PrismaLineConnectionRepository: class {},
 }));
@@ -29,6 +30,9 @@ import { ensureUserWorkspaceLineConnection } from '../src/line/ensure-user-works
 describe('workspace LINE connection provisioning', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.existing.mockResolvedValue(null);
+    state.identity.mockResolvedValue({ providerUserId: 'U123' });
+    state.source.mockResolvedValue(null);
     state.connect.mockResolvedValue({ id: 'connection-1' });
     state.update.mockResolvedValue({ id: 'connection-1' });
   });
@@ -76,5 +80,23 @@ describe('workspace LINE connection provisioning', () => {
         }),
       }),
     );
+  });
+  it('records the explicit delivery consent even without consent in another workspace', async () => {
+    await expect(ensureUserWorkspaceLineConnection('user-1', 'workspace-2', true)).resolves.toBe(
+      true,
+    );
+    expect(state.connect).toHaveBeenCalledWith(expect.objectContaining({ consentGranted: true }));
+    expect(state.update).not.toHaveBeenCalled();
+  });
+
+  it('preserves existing friendship state instead of copying a different workspace', async () => {
+    state.existing.mockResolvedValue({ id: 'existing' });
+    state.source.mockResolvedValue({
+      friendshipStatus: 'FOLLOWING',
+      notificationConsentAt: new Date(),
+    });
+    await ensureUserWorkspaceLineConnection('user-1', 'workspace-2', true);
+    expect(state.connect).toHaveBeenCalledWith(expect.objectContaining({ consentGranted: true }));
+    expect(state.update).not.toHaveBeenCalled();
   });
 });
