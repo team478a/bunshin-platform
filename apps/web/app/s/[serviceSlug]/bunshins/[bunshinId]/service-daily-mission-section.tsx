@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClientRequestId } from '../../../../ui/client-request-id';
+import { missionGenerationResult } from '../../../../ui/mission-generation-result';
 import {
   MissionContent,
   MissionGuide,
@@ -51,12 +52,13 @@ export function ServiceDailyMissionSection({
   async function generate() {
     setPending(true);
     setMessage('投稿案を作っています。画面を閉じずにお待ちください。');
+    const requestId = createClientRequestId();
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 60_000);
     try {
       const response = await fetch(`${endpoint}/generate`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-request-id': requestId },
         signal: controller.signal,
         body: JSON.stringify({
           missionDate,
@@ -65,23 +67,14 @@ export function ServiceDailyMissionSection({
           idempotencyKey: createClientRequestId(),
         }),
       });
-      if (response.ok) setMessage('今日の投稿案を作りました。');
-      else if (response.status === 409)
-        setMessage('この日の投稿案は、すでに作成済みです。画面を更新します。');
-      else {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: { message?: string; requestId?: string };
-        } | null;
-        const detail = payload?.error?.message ?? '投稿案を作れませんでした。';
-        const requestId = payload?.error?.requestId;
-        setMessage(`${detail}${requestId ? `（受付番号: ${requestId}）` : ''}`);
-      }
-      if (response.ok || response.status === 409) router.refresh();
+      const result = await missionGenerationResult(response, requestId);
+      setMessage(result.message);
+      if (result.refresh) router.refresh();
     } catch (error) {
       setMessage(
         error instanceof DOMException && error.name === 'AbortError'
-          ? '作成に時間がかかっています。少し待ってから、もう一度お試しください。'
-          : '通信できませんでした。接続を確認して、もう一度お試しください。',
+          ? `作成に時間がかかっています。少し待ってから、もう一度お試しください。（受付番号: ${requestId}）`
+          : `通信できませんでした。接続を確認して、もう一度お試しください。（受付番号: ${requestId}）`,
       );
     } finally {
       window.clearTimeout(timeout);

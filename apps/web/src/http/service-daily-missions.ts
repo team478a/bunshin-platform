@@ -10,7 +10,7 @@ import {
   RecordMissionFeedback,
   SOCIAL_PLATFORMS,
 } from '@bunshin/capability-social';
-import { requestIdFromHeader } from '@bunshin/observability';
+import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
@@ -19,6 +19,7 @@ import { resolvePublicServiceContext } from '../services/public-service';
 import { dailyMissionDto } from './daily-missions';
 import { missionActivityDto, missionDecisionDto } from './mission-engagement';
 import { missionFeedbackDto, postRecordDto } from './mission-outcome';
+import { dailyMissionGenerationError } from './daily-mission-generation-error';
 
 const uuidSchema = z.string().uuid();
 const generateSchema = z
@@ -99,6 +100,7 @@ async function respond(
   operation: () => Promise<unknown>,
   status = 200,
   suppliedRequestId?: string,
+  generation = false,
 ) {
   const requestId = suppliedRequestId ?? requestIdFromHeader(request.headers.get('x-request-id'));
   try {
@@ -107,7 +109,17 @@ async function respond(
       { status, headers: { 'cache-control': 'no-store' } },
     );
   } catch (error) {
-    const mapped = toApiError(error, requestId);
+    const mapped = generation
+      ? dailyMissionGenerationError(error, requestId)
+      : toApiError(error, requestId);
+    if (generation) {
+      createLogger().warn('service daily mission generation failed', {
+        requestId,
+        errorCode: mapped.body.error.code,
+        reason: 'reason' in mapped.body.error ? mapped.body.error.reason : 'UNCLASSIFIED',
+        status: mapped.status,
+      });
+    }
     return Response.json(mapped.body, {
       status: mapped.status,
       headers: { 'cache-control': 'no-store' },
@@ -164,6 +176,7 @@ export function generateServiceDailyMissionResponse(
     },
     201,
     requestId,
+    true,
   );
 }
 
