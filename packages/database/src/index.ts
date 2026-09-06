@@ -14865,13 +14865,14 @@ export class PrismaCampaignRepository implements CampaignRepository {
     return rows[0] ? this.planningContext(rows[0]) : null;
   }
 
-  private planningParticipant(input: {
+  private async planningParticipant(input: {
     workspaceId: string;
     groupId?: string | null;
     actorUserId: string;
     bunshinId: string;
   }) {
-    if (!input.groupId) return this.participant(input);
+    const personal = await this.participant(input);
+    if (personal || !input.groupId) return personal;
     return this.client.bunshin.findFirst({
       where: {
         id: input.bunshinId,

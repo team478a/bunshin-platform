@@ -422,7 +422,7 @@ integration('database ownership boundaries', () => {
     ).resolves.toBe(false);
     await client.bunshinCapabilityAssignment.updateMany({
       where: { workspaceId: owner.workspace.id, bunshinId: bunshin.id },
-      data: { status: 'SUSPENDED' },
+      data: { status: 'REVOKED', revokedAt: new Date() },
     });
     await expect(
       scopes.validateDaily({
