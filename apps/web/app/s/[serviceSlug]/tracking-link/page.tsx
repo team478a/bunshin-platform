@@ -1,4 +1,7 @@
-import { ExternalTrackingMemberLinkService } from '@bunshin/application';
+import {
+  ExternalTrackingMemberLinkService,
+  MemberProductProfileService,
+} from '@bunshin/application';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
@@ -32,6 +35,13 @@ export default async function ServiceMemberTrackingLinkPage({
     })
     .catch(() => null);
   if (!settings) redirect(`/s/${serviceSlug}` as Route);
+  const profiles = await new MemberProductProfileService(
+    new db.PrismaMemberProductProfileRepository(),
+  ).list({
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    actorUserId: actor.userId,
+  });
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -55,7 +65,11 @@ export default async function ServiceMemberTrackingLinkPage({
               運営者が確認したURLだけを使用します。通常の投稿へ勝手に追加されることはありません。
             </p>
           </div>
-          <MemberProductContentForm settings={JSON.parse(JSON.stringify(settings)) as never} />
+          <MemberProductContentForm
+            serviceSlug={serviceSlug}
+            settings={JSON.parse(JSON.stringify(settings)) as never}
+            profiles={JSON.parse(JSON.stringify(profiles)) as never}
+          />
         </section>
         <Link className="button" href={`/s/${serviceSlug}/home` as Route}>
           サービスホームへ戻る

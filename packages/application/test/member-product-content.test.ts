@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { createMemberProductContent } from '../src';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  MemberProductProfileService,
+  createMemberProductContent,
+  type MemberProductProfileRepository,
+} from '../src';
 
 describe('member product content', () => {
   it('creates disclosed copy with the approved member URL', () => {
@@ -44,5 +48,62 @@ describe('member product content', () => {
         platform: 'THREADS',
       }),
     ).toThrow();
+  });
+});
+
+describe('member product profile service', () => {
+  it('normalizes and saves a profile through the scoped repository', async () => {
+    const save = vi.fn<MemberProductProfileRepository['save']>().mockResolvedValue({
+      id: 'profile-1',
+      externalTrackingLinkId: 'link-1',
+      externalTrackingSystemName: '販売サービス',
+      name: 'サンプル商品',
+      appealPoint: '確認済みの特徴です。',
+      targetAudience: '初めて使う方',
+      updatedAt: new Date('2026-09-06T00:00:00Z'),
+    });
+    const repository = {
+      list: vi.fn(),
+      save,
+    } satisfies MemberProductProfileRepository;
+
+    await new MemberProductProfileService(repository).save({
+      workspaceId: 'workspace-1',
+      groupId: 'group-1',
+      actorUserId: 'user-1',
+      externalTrackingLinkId: 'link-1',
+      name: '  サンプル商品  ',
+      appealPoint: '  確認済みの特徴です。  ',
+      targetAudience: '  初めて使う方  ',
+    });
+
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        actorUserId: 'user-1',
+        name: 'サンプル商品',
+        appealPoint: '確認済みの特徴です。',
+        targetAudience: '初めて使う方',
+      }),
+    );
+  });
+
+  it('fails closed when the active member URL is outside the user scope', async () => {
+    const repository = {
+      list: vi.fn(),
+      save: vi.fn().mockResolvedValue(null),
+    } satisfies MemberProductProfileRepository;
+
+    await expect(
+      new MemberProductProfileService(repository).save({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        actorUserId: 'user-1',
+        externalTrackingLinkId: 'other-user-link',
+        name: 'サンプル商品',
+        appealPoint: '確認済みの特徴です。',
+      }),
+    ).rejects.toThrow('active member URL unavailable');
   });
 });

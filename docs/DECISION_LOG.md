@@ -1958,3 +1958,12 @@
 - Disclosure: 投稿文へ`#PR`を必ず含める。サービス参加紹介URLとは分離し、商品・代理店用の確認済みURLを使う。
 - Cost: 初期版は決定的テンプレートを用い、AI Providerを呼び出さない。
 - Source: `docs/MEMBER_PRODUCT_CONTENT_REPORT.md`
+
+# 2026-09-06: 本人の商品情報はサービス参加情報と確認済みURLへ固定して保存する
+
+- Persistence: 商品名、伝えたいポイント、対象者を端末内ではなくDBへ保存し、複数端末から同じ商品を再利用できるようにする。
+- Isolation: 商品プロフィールを`workspaceId + groupId + groupMembershipId + userId`へ固定し、保存時と取得時の双方でACTIVEかつ同意済みの本人Membershipを再検証する。
+- Link gate: 商品プロフィールは本人所有の`ACTIVE MEMBER` URLだけへ関連付ける。URLが停止した場合、その商品プロフィールも投稿作成候補から除外する。
+- Audit: 作成・更新時はURL本文を重複保存せず、商品情報と関連Link IDを外部URL監査へ記録する。
+- Scope: 削除、商品マスターへの昇格、AI個別生成、商品別成果集計は後続とする。
+- Source: `docs/MEMBER_PRODUCT_PROFILE_REUSE_REPORT.md`
