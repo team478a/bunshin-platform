@@ -34,25 +34,6 @@ type Strategy = {
   status: 'DRAFT' | 'PROPOSED' | 'APPROVED' | 'SUPERSEDED';
 };
 
-type Plan = {
-  id: string;
-  weekStartDate: string;
-  status: 'DRAFT' | 'CONFIRMED' | 'EXPIRED';
-};
-
-function localDate(value = new Date()) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function currentMonday() {
-  const value = new Date();
-  value.setDate(value.getDate() - ((value.getDay() + 6) % 7));
-  return localDate(value);
-}
-
 function preferredFormats(platform: SocialPlatform) {
   if (platform === 'TIKTOK' || platform === 'YOUTUBE_SHORTS') return ['LIVE_ACTION'] as const;
   if (platform === 'X' || platform === 'THREADS') return ['TEXT'] as const;
@@ -67,8 +48,8 @@ export function SimpleFirstPostSetup({
   hasActivePillar,
   profiles,
   strategies,
-  plans,
-  hasTodayMission,
+  deliveryEnabled,
+  deliveryTime,
 }: {
   serviceSlug: string;
   bunshinId: string;
@@ -77,24 +58,20 @@ export function SimpleFirstPostSetup({
   hasActivePillar: boolean;
   profiles: Profile[];
   strategies: Strategy[];
-  plans: Plan[];
-  hasTodayMission: boolean;
+  deliveryEnabled: boolean;
+  deliveryTime: string;
 }) {
   const router = useRouter();
   const [platform, setPlatform] = useState<SocialPlatform>('INSTAGRAM');
   const [frequency, setFrequency] = useState<SocialPostingFrequency>('WEEKLY');
+  const [localTime, setLocalTime] = useState(deliveryTime);
   const [pending, setPending] = useState(false);
   const [step, setStep] = useState('');
   const [message, setMessage] = useState('');
   const encodedService = encodeURIComponent(serviceSlug);
   const encodedBunshin = encodeURIComponent(bunshinId);
   const base = `/api/services/${encodedService}/bunshins/${encodedBunshin}`;
-  const ready =
-    hasActivePillar &&
-    profiles.some(({ status }) => status === 'ACTIVE') &&
-    strategies.some(({ status }) => status === 'APPROVED') &&
-    plans.some(({ status }) => status === 'CONFIRMED') &&
-    hasTodayMission;
+  const ready = deliveryEnabled;
 
   async function request<T>(path: string, body: unknown): Promise<T> {
     const requestId = createClientRequestId();
@@ -171,38 +148,11 @@ export function SimpleFirstPostSetup({
         await request(`/social-account-strategies/${encodeURIComponent(strategy.id)}/approve`, {});
       }
 
-      const weekStartDate = currentMonday();
-      let plan = plans.find(
-        (value) => value.weekStartDate === weekStartDate && value.status === 'CONFIRMED',
-      );
-      if (!plan) {
-        plan = plans.find(
-          (value) => value.weekStartDate === weekStartDate && value.status === 'DRAFT',
-        );
-        if (!plan) {
-          updateStep('今週の投稿予定を考えています');
-          plan = await request<Plan>('/weekly-plans/generate', {
-            weekStartDate,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
-            socialProfileId: profile.id,
-          });
-        }
-        updateStep('今週の予定を決定しています');
-        await request(`/weekly-plans/${encodeURIComponent(plan.id)}/confirm`, {});
-      }
-
-      if (!hasTodayMission) {
-        updateStep('今日の投稿案を作っています');
-        await request('/daily-missions/generate', {
-          missionDate: localDate(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
-          socialProfileId: profile.id,
-          idempotencyKey: createClientRequestId(),
-        });
-      }
+      updateStep('自動で受け取る設定を保存しています');
+      await request('/automatic-delivery', { enabled: true, localTime });
 
       setStep('');
-      setMessage('準備できました。下の「今日の投稿案」から内容を確認できます。');
+      setMessage('設定できました。投稿予定の日にLINEでお知らせします。画面を閉じて大丈夫です。');
       router.refresh();
     } catch (error) {
       setMessage(
@@ -219,11 +169,14 @@ export function SimpleFirstPostSetup({
       <section className="simple-first-post simple-first-post--ready">
         <span aria-hidden="true">✓</span>
         <div>
-          <h2>投稿の準備ができています</h2>
-          <p>下の「今日の投稿案」から、内容を確認してください。</p>
+          <h2>投稿案を自動でお届けします</h2>
+          <p>
+            投稿予定の日の{deliveryTime}
+            ごろ（日本時間）にLINEでお知らせします。予定の準備や投稿案の生成は自動です。
+          </p>
         </div>
         <a className="button button--primary" href="#today-post">
-          今日の投稿案を見る
+          届いた投稿案を見る
         </a>
       </section>
     );
@@ -233,8 +186,8 @@ export function SimpleFirstPostSetup({
     <section className="simple-first-post" aria-labelledby="simple-setup-title">
       <header>
         <p className="eyebrow">かんたん設定</p>
-        <h2 id="simple-setup-title">2つ選ぶだけで、今日の投稿案を準備します</h2>
-        <p>細かい内容は、最初に答えた内容をもとにシステムが設定します。</p>
+        <h2 id="simple-setup-title">最初に設定すると、投稿案がLINEに届きます</h2>
+        <p>投稿するSNSとペースを選んでください。投稿予定と内容はこちらで準備します。</p>
       </header>
       {profiles.some(({ status }) => status === 'ACTIVE') ? null : (
         <fieldset>
@@ -274,13 +227,26 @@ export function SimpleFirstPostSetup({
           </div>
         </fieldset>
       )}
+      <label>
+        受け取る時刻（日本時間）
+        <input
+          type="time"
+          min="07:00"
+          max="20:59"
+          value={localTime}
+          onChange={(event) => setLocalTime(event.target.value)}
+        />
+      </label>
+      <p>
+        下のボタンでLINE通知を受け取ることに同意し、自動のお届けを開始します。LINE公式アカウントの友だち追加が必要です。最初のお届けは次の投稿予定日です。SNSへの投稿はご自身で行います。
+      </p>
       <button
         className="button button--primary button--full"
         type="button"
         disabled={pending}
         onClick={() => void prepare()}
       >
-        {pending ? step || '準備しています…' : 'この内容で今日の投稿案を準備する'}
+        {pending ? step || '準備しています…' : 'この設定で自動のお届けを始める'}
       </button>
       {pending ? (
         <p className="simple-first-post__wait">少し時間がかかります。そのままお待ちください。</p>

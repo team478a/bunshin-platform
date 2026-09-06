@@ -420,6 +420,75 @@ integration('database ownership boundaries', () => {
         missionDate: '2026-08-25',
       }),
     ).resolves.toBe(false);
+    // The service scheduler must recover a missing week without asking a MEMBER to confirm it.
+    await client.workspace.update({
+      where: { id: owner.workspace.id },
+      data: { type: 'ORGANIZATION' },
+    });
+    await client.workspaceMembership.updateMany({
+      where: { workspaceId: owner.workspace.id, userId: owner.user.id },
+      data: { role: 'MEMBER' },
+    });
+    const serviceGroup = await client.group.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        name: 'Automatic delivery',
+        memberships: {
+          create: {
+            workspaceId: owner.workspace.id,
+            userId: owner.user.id,
+            role: 'PARTICIPANT',
+            status: 'ACTIVE',
+            consentedAt: new Date(),
+          },
+        },
+      },
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: serviceGroup.id } });
+    const automaticScope = {
+      workspaceId: owner.workspace.id,
+      bunshinId: bunshin.id,
+      actorUserId: owner.user.id,
+    };
+    await expect(
+      scopes.validateDaily({ ...automaticScope, missionDate: '2026-09-07' }),
+    ).resolves.toBe(true);
+    await expect(scopes.resolveScope(automaticScope)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const preference = await client.lineNotificationPreference.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        userId: owner.user.id,
+        enabled: true,
+        notificationConsentAt: new Date(),
+      },
+    });
+    await expect(scopes.resolveScope(automaticScope)).resolves.toMatchObject({
+      groupId: serviceGroup.id,
+    });
+    await expect(
+      scopes.resolveScope({ ...automaticScope, actorUserId: outsider.user.id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(
+      scopes.resolveScope({ ...automaticScope, workspaceId: outsider.workspace.id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await client.lineNotificationPreference.update({
+      where: { id: preference.id },
+      data: { enabled: false },
+    });
+    await expect(scopes.resolveScope(automaticScope)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await client.lineNotificationPreference.update({
+      where: { id: preference.id },
+      data: { enabled: true },
+    });
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: serviceGroup.id, userId: owner.user.id } },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    await expect(
+      scopes.validateDaily({ ...automaticScope, missionDate: '2026-09-07' }),
+    ).resolves.toBe(false);
+    await expect(scopes.resolveScope(automaticScope)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await client.bunshinCapabilityAssignment.updateMany({
       where: { workspaceId: owner.workspace.id, bunshinId: bunshin.id },
       data: { status: 'SUSPENDED' },

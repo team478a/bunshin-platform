@@ -5,6 +5,7 @@ import { currentLineEnvironment } from './secure-configuration';
 export async function ensureUserWorkspaceLineConnection(
   userId: string,
   workspaceId: string,
+  consentGranted?: boolean,
 ): Promise<boolean> {
   const db = await import('@bunshin/database');
   const environment = currentLineEnvironment();
@@ -27,19 +28,24 @@ export async function ensureUserWorkspaceLineConnection(
   ]);
   if (!identity) return false;
 
+  const existing = await db.prisma.lineConnection.findUnique({
+    where: { environment_workspaceId_userId: { environment, workspaceId, userId } },
+    select: { id: true },
+  });
+
   await new ConnectLineMessagingAccount(new db.PrismaLineConnectionRepository()).execute({
     environment,
     workspaceId,
     actorUserId: userId,
     verifiedProviderUserId: identity.providerUserId,
-    consentGranted: source?.notificationConsentAt !== null && source !== null,
+    consentGranted: consentGranted ?? (source?.notificationConsentAt !== null && source !== null),
   });
-  if (source)
+  if (source && !existing)
     await db.prisma.lineConnection.update({
       where: { environment_workspaceId_userId: { environment, workspaceId, userId } },
       data: {
         friendshipStatus: source.friendshipStatus,
-        notificationConsentAt: source.notificationConsentAt,
+        notificationConsentAt: consentGranted ? new Date() : source.notificationConsentAt,
         followedAt: source.followedAt,
         unfollowedAt: source.unfollowedAt,
         lastWebhookAt: source.lastWebhookAt,

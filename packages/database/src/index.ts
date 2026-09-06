@@ -540,9 +540,49 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
         capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
         socialAccountStrategies: { some: { status: 'APPROVED' } },
         socialProfiles: { some: { status: 'ACTIVE' } },
+        AND: [
+          {
+            OR: [
+              { groupId: null },
+              {
+                ownerUserId: input.actorUserId,
+                group: {
+                  status: 'ACTIVE',
+                  memberships: {
+                    some: {
+                      userId: input.actorUserId,
+                      status: 'ACTIVE',
+                      consentedAt: { not: null },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
       },
-      select: { id: true },
+      select: { id: true, groupId: true },
     });
+  }
+
+  async resolveScope(input: { workspaceId: string; bunshinId: string; actorUserId: string }) {
+    const row = await this.base(input);
+    if (!row) throw new ApplicationError('FORBIDDEN', 'automation scope is unavailable');
+    if (row.groupId) {
+      const preference = await this.client.lineNotificationPreference.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          userId: input.actorUserId,
+          enabled: true,
+          notificationConsentAt: { not: null },
+          OR: [{ pausedUntil: null }, { pausedUntil: { lte: new Date() } }],
+        },
+        select: { id: true },
+      });
+      if (!preference) throw new ApplicationError('FORBIDDEN', 'automatic delivery is disabled');
+    }
+    return { ...input, groupId: row.groupId };
   }
 
   async validateWeekly(input: Parameters<MissionAutomationScopeRepository['validateWeekly']>[0]) {
@@ -560,7 +600,14 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
   }
 
   async validateDaily(input: Parameters<MissionAutomationScopeRepository['validateDaily']>[0]) {
-    if (!(await this.base(input))) return false;
+    const scope = await this.base(input);
+    if (!scope) return false;
+    // Service jobs prepare and confirm their own week before checking today's items.
+    if (scope.groupId) {
+      const monday = new Date(`${input.missionDate}T00:00:00.000Z`);
+      monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+      return this.validateWeekly({ ...input, weekStartDate: monday.toISOString().slice(0, 10) });
+    }
     const missionDate = new Date(`${input.missionDate}T00:00:00.000Z`);
     return (
       (await this.client.weeklyPlan.count({
@@ -1777,7 +1824,7 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
   async prepare(input: Parameters<LineMessageDeliveryRepository['prepare']>[0]) {
     const accessible = await this.client.bunshin.findFirst({
       where: lineMissionScope(input),
-      select: { id: true },
+      select: { id: true, groupId: true },
     });
     if (!accessible) return null;
     const mission = await this.client.dailyMission.findFirst({
@@ -1796,7 +1843,12 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
     const usageGroupId = mission.contentLinkUsage?.groupId ?? null;
     if (campaignGroupId && usageGroupId && campaignGroupId !== usageGroupId)
       throw new ApplicationError('CONFLICT', 'Mission group context mismatch');
-    const groupId = campaignGroupId ?? usageGroupId;
+    const groupId = accessible.groupId ?? campaignGroupId ?? usageGroupId;
+    if (
+      accessible.groupId &&
+      [campaignGroupId, usageGroupId].some((id) => id && id !== accessible.groupId)
+    )
+      throw new ApplicationError('CONFLICT', 'Mission service context mismatch');
     if (
       groupId &&
       !(await this.client.groupMembership.findFirst({
@@ -1987,7 +2039,25 @@ export class PrismaLineDeliveryPreferenceRepository implements LineDeliveryPrefe
           status: 'ACTIVE',
           memberships: { some: { userId: input.userId, status: 'ACTIVE' } },
         },
-        bunshin: { status: { not: 'ARCHIVED' } },
+        bunshin: {
+          status: { not: 'ARCHIVED' },
+          OR: [
+            { groupId: null },
+            {
+              ownerUserId: input.userId,
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.userId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+            },
+          ],
+        },
         user: { status: 'ACTIVE' },
       },
     });

@@ -23,6 +23,7 @@ import type { DailyMissionView } from '../../../../(app)/bunshins/[bunshinId]/da
 import { ServiceBunshinEditor } from './service-bunshin-editor';
 import { ServiceDailyMissionSection } from './service-daily-mission-section';
 import { SimpleFirstPostSetup } from './simple-first-post-setup';
+import { ServiceDeliverySettings } from './service-delivery-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,30 +150,15 @@ export default async function ServiceBunshinDetailPage({
     '--service-secondary': service.configuration.brand.secondaryColor,
     '--service-font': service.configuration.brand.fontFamily,
   } as CSSProperties;
-  const setupSteps = [
-    { label: '発信するテーマを決める', complete: contentPillars.length > 0 },
-    {
-      label: '投稿するSNSを選ぶ',
-      complete: socialProfiles.some(({ status }) => status === 'ACTIVE'),
-    },
-    {
-      label: '投稿内容の方針を決める',
-      complete: accountStrategies.some(({ status }) => status === 'APPROVED'),
-    },
-    {
-      label: '1週間分の予定を作る',
-      complete: weeklyPlans.some(({ status }) => status === 'CONFIRMED'),
-    },
-    {
-      label: '今日の投稿案を受け取る',
-      complete: dailyMissions.some(
-        ({ missionDate }) =>
-          missionDate === new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }),
-      ),
-    },
-  ];
-  const completedSetupSteps = setupSteps.filter(({ complete }) => complete).length;
-  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const notification = await new db.PrismaLineNotificationPreferenceRepository().getScoped({
+    workspaceId: service.workspaceId,
+    bunshinId,
+    actorUserId: actor.userId,
+  });
+  const deliveryEnabled = Boolean(
+    notification.preference?.enabled && notification.preference.notificationConsentAt,
+  );
+  const deliveryTime = notification.preference?.localTime ?? '08:00';
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -180,33 +166,8 @@ export default async function ServiceBunshinDetailPage({
         <header className="service-entry__header">
           <p className="eyebrow">投稿パートナーの設定</p>
           <h1>{bunshin.name}</h1>
-          <p>上から順番に設定すると、あなた向けの最初の投稿案が完成します。</p>
+          <p>初回設定のあとは、投稿案を自動で準備してLINEでお知らせします。</p>
         </header>
-        <section
-          className="service-entry__card service-setup-guide"
-          aria-labelledby="setup-guide-title"
-        >
-          <div className="service-setup-guide__heading">
-            <div>
-              <p className="eyebrow">最初の投稿案まで</p>
-              <h2 id="setup-guide-title">
-                あと {setupSteps.length - completedSetupSteps} ステップです
-              </h2>
-            </div>
-            <strong aria-label={`${setupSteps.length}件中${completedSetupSteps}件完了`}>
-              {completedSetupSteps} / {setupSteps.length}
-            </strong>
-          </div>
-          <ol className="service-setup-guide__steps">
-            {setupSteps.map((step, index) => (
-              <li key={step.label} className={step.complete ? 'is-complete' : ''}>
-                <span aria-hidden="true">{step.complete ? '✓' : index + 1}</span>
-                {step.label}
-              </li>
-            ))}
-          </ol>
-          <p>保存すると、この案内にも自動で反映されます。SNSへの投稿はご自身で行います。</p>
-        </section>
         <SimpleFirstPostSetup
           serviceSlug={service.configuration.slug}
           bunshinId={bunshin.id}
@@ -215,12 +176,18 @@ export default async function ServiceBunshinDetailPage({
           hasActivePillar={contentPillars.some(({ active }) => active)}
           profiles={socialProfiles}
           strategies={accountStrategies}
-          plans={weeklyPlans}
-          hasTodayMission={dailyMissions.some(({ missionDate }) => missionDate === today)}
+          deliveryEnabled={deliveryEnabled}
+          deliveryTime={deliveryTime}
         />
         <details className="service-advanced-settings">
           <summary>細かい設定を自分で変える（必要な方だけ）</summary>
           <div className="service-advanced-settings__content">
+            <ServiceDeliverySettings
+              serviceSlug={service.configuration.slug}
+              bunshinId={bunshin.id}
+              enabled={deliveryEnabled}
+              localTime={deliveryTime}
+            />
             <section className="service-entry__card">
               <ServiceBunshinEditor serviceSlug={service.configuration.slug} bunshin={bunshin} />
             </section>
@@ -283,12 +250,7 @@ export default async function ServiceBunshinDetailPage({
         <section className="service-entry__card" id="today-post">
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
-            profiles={socialProfiles}
             missions={dailyMissions}
-            active={
-              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
-              'ACTIVE'
-            }
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>
