@@ -19352,18 +19352,48 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
           memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
         },
       },
-      include: { externalTrackingLink: { select: { system: { select: { name: true } } } } },
+      include: {
+        externalTrackingLink: { select: { system: { select: { name: true } } } },
+        productPack: { select: { id: true, name: true, status: true } },
+      },
       orderBy: { updatedAt: 'desc' },
     });
     return profiles.map((profile) => ({
       id: profile.id,
       externalTrackingLinkId: profile.externalTrackingLinkId,
       externalTrackingSystemName: profile.externalTrackingLink.system.name,
+      productPackId: profile.productPack?.status === 'ACTIVE' ? profile.productPack.id : null,
+      productPackName: profile.productPack?.status === 'ACTIVE' ? profile.productPack.name : null,
       name: profile.name,
       appealPoint: profile.appealPoint,
       targetAudience: profile.targetAudience,
       updatedAt: profile.updatedAt,
     }));
+  }
+
+  async listProductMasters(input: Parameters<MemberProductProfileRepository['listProductMasters']>[0]) {
+    const membership = await this.client.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+        group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+      },
+      select: { id: true },
+    });
+    if (!membership) return null;
+    return this.client.productPack.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+        versions: { some: { status: 'PUBLISHED' } },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async save(input: Parameters<MemberProductProfileRepository['save']>[0]) {
@@ -19393,6 +19423,19 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
         select: { id: true, system: { select: { name: true } } },
       });
       if (!link) return null;
+      const productPack = input.productPackId
+        ? await tx.productPack.findFirst({
+            where: {
+              id: input.productPackId,
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              status: 'ACTIVE',
+              versions: { some: { status: 'PUBLISHED' } },
+            },
+            select: { id: true, name: true },
+          })
+        : null;
+      if (input.productPackId && !productPack) return null;
       const before = input.profileId
         ? await tx.memberProductProfile.findFirst({
             where: {
@@ -19411,6 +19454,7 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
             where: { id: before.id },
             data: {
               externalTrackingLinkId: link.id,
+              productPackId: productPack?.id ?? null,
               name: input.name,
               appealPoint: input.appealPoint,
               targetAudience: input.targetAudience,
@@ -19423,6 +19467,7 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
               groupMembershipId: membership.id,
               userId: input.actorUserId,
               externalTrackingLinkId: link.id,
+              productPackId: productPack?.id ?? null,
               name: input.name,
               appealPoint: input.appealPoint,
               targetAudience: input.targetAudience,
@@ -19438,6 +19483,7 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
           beforeData: before
             ? {
                 externalTrackingLinkId: before.externalTrackingLinkId,
+                productPackId: before.productPackId,
                 name: before.name,
                 appealPoint: before.appealPoint,
                 targetAudience: before.targetAudience,
@@ -19445,6 +19491,7 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
             : Prisma.JsonNull,
           afterData: {
             externalTrackingLinkId: profile.externalTrackingLinkId,
+            productPackId: profile.productPackId,
             name: profile.name,
             appealPoint: profile.appealPoint,
             targetAudience: profile.targetAudience,
@@ -19457,6 +19504,8 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
         id: profile.id,
         externalTrackingLinkId: profile.externalTrackingLinkId,
         externalTrackingSystemName: link.system.name,
+        productPackId: productPack?.id ?? null,
+        productPackName: productPack?.name ?? null,
         name: profile.name,
         appealPoint: profile.appealPoint,
         targetAudience: profile.targetAudience,

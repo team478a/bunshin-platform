@@ -7,10 +7,17 @@ export interface MemberProductProfileRecord {
   id: string;
   externalTrackingLinkId: string;
   externalTrackingSystemName: string;
+  productPackId: string | null;
+  productPackName: string | null;
   name: string;
   appealPoint: string;
   targetAudience: string | null;
   updatedAt: Date;
+}
+
+export interface MemberProductMasterOption {
+  id: string;
+  name: string;
 }
 
 export interface MemberProductProfileRepository {
@@ -19,12 +26,18 @@ export interface MemberProductProfileRepository {
     groupId: string;
     actorUserId: string;
   }): Promise<MemberProductProfileRecord[] | null>;
+  listProductMasters(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }): Promise<MemberProductMasterOption[] | null>;
   save(input: {
     workspaceId: string;
     groupId: string;
     actorUserId: string;
     profileId: string | null;
     externalTrackingLinkId: string;
+    productPackId: string | null;
     name: string;
     appealPoint: string;
     targetAudience: string | null;
@@ -140,12 +153,23 @@ export class MemberProductProfileService {
     return profiles;
   }
 
+  async listProductMasters(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+  }) {
+    const products = await this.repository.listProductMasters(input);
+    if (!products) throw new ApplicationError('NOT_FOUND', 'service membership unavailable');
+    return products;
+  }
+
   async save(input: {
     workspaceId: string;
     groupId: string;
     actorUserId: string;
     profileId?: string | null | undefined;
     externalTrackingLinkId: string;
+    productPackId?: string | null | undefined;
     name: string;
     appealPoint: string;
     targetAudience?: string | null | undefined;
@@ -162,6 +186,9 @@ export class MemberProductProfileService {
         'external tracking link id',
         100,
       ),
+      productPackId: input.productPackId
+        ? requiredText(input.productPackId, 'product pack id', 100)
+        : null,
       name: requiredText(input.name, 'product name', 160),
       appealPoint: requiredText(input.appealPoint, 'appeal point', 1_000),
       targetAudience: optionalText(input.targetAudience, 500) || null,

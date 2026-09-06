@@ -80,6 +80,8 @@ describe('member product profile service', () => {
       id: 'profile-1',
       externalTrackingLinkId: 'link-1',
       externalTrackingSystemName: '販売サービス',
+      productPackId: null,
+      productPackName: null,
       name: 'サンプル商品',
       appealPoint: '確認済みの特徴です。',
       targetAudience: '初めて使う方',
@@ -87,6 +89,7 @@ describe('member product profile service', () => {
     });
     const repository = {
       list: vi.fn(),
+      listProductMasters: vi.fn(),
       save,
       archive: vi.fn(),
     } satisfies MemberProductProfileRepository;
@@ -116,6 +119,7 @@ describe('member product profile service', () => {
   it('fails closed when the active member URL is outside the user scope', async () => {
     const repository = {
       list: vi.fn(),
+      listProductMasters: vi.fn(),
       save: vi.fn().mockResolvedValue(null),
       archive: vi.fn(),
     } satisfies MemberProductProfileRepository;
@@ -136,6 +140,7 @@ describe('member product profile service', () => {
     const archive = vi.fn<MemberProductProfileRepository['archive']>().mockResolvedValue(true);
     const repository = {
       list: vi.fn(),
+      listProductMasters: vi.fn(),
       save: vi.fn(),
       archive,
     } satisfies MemberProductProfileRepository;

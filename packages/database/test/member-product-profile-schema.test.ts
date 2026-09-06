@@ -17,6 +17,13 @@ const archiveMigration = readFileSync(
   ),
   'utf8',
 );
+const productMasterMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260906170000_link_member_product_master/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('member product profile persistence boundary', () => {
   it('binds profiles to workspace, service, membership, user and a tracking link', () => {
@@ -49,5 +56,12 @@ describe('member product profile persistence boundary', () => {
     expect(archiveMigration).toContain("ADD VALUE IF NOT EXISTS 'ARCHIVED'");
     expect(repository).toContain("action: 'ARCHIVED'");
     expect(repository).toContain('if (profile.archivedAt) return false');
+  });
+
+  it('links only published product masters in the same service', () => {
+    expect(schema).toContain('productPackId          String?');
+    expect(productMasterMigration).toContain('member_product_profiles_product_pack_id_fkey');
+    expect(repository).toContain("versions: { some: { status: 'PUBLISHED' } }");
+    expect(repository).toContain('groupId: input.groupId');
   });
 });
