@@ -422,7 +422,7 @@ integration('database ownership boundaries', () => {
     ).resolves.toBe(false);
     await client.bunshinCapabilityAssignment.updateMany({
       where: { workspaceId: owner.workspace.id, bunshinId: bunshin.id },
-      data: { status: 'REVOKED', revokedAt: new Date() },
+      data: { status: 'SUSPENDED' },
     });
     await expect(
       scopes.validateDaily({
@@ -2678,7 +2678,7 @@ integration('database ownership boundaries', () => {
     }
     await client.groupMembership.update({
       where: { groupId_userId: { groupId: group.id, userId: user.id } },
-      data: { status: 'SUSPENDED' },
+      data: { status: 'REVOKED', revokedAt: new Date() },
     });
     await expect(new CampaignService(repository).listPlanningContexts(input)).rejects.toMatchObject(
       { code: 'NOT_FOUND' },
