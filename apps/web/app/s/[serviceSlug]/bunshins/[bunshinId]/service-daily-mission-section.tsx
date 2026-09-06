@@ -13,15 +13,6 @@ import {
   type DailyMissionView,
 } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 
-const platformLabels = {
-  INSTAGRAM: 'インスタグラム',
-  TIKTOK: 'ティックトック',
-  X: 'X（旧ツイッター）',
-  THREADS: 'スレッズ',
-  YOUTUBE_SHORTS: 'ユーチューブ ショート',
-  OTHER: 'その他',
-} as const;
-
 export function ServiceDailyMissionSection({
   endpoint,
   missions,

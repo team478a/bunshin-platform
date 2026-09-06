@@ -12,15 +12,16 @@ vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://example.com' }),
 }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: m.actor }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: m.actor }),
 }));
 vi.mock('../src/services/public-service', () => ({
-  resolvePublicServiceContext: async () => ({ workspaceId: 'workspace', serviceId: 'service' }),
+  resolvePublicServiceContext: () =>
+    Promise.resolve({ workspaceId: 'workspace', serviceId: 'service' }),
 }));
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
 vi.mock('../src/jobs/service-automatic-week', () => ({ mondayForDate: () => '2026-09-07' }));
 vi.mock('../src/line/ensure-user-workspace-connection', () => ({
-  ensureUserWorkspaceLineConnection: async () => true,
+  ensureUserWorkspaceLineConnection: () => Promise.resolve(true),
 }));
 vi.mock('@bunshin/application', () => ({
   GetBunshin: class {

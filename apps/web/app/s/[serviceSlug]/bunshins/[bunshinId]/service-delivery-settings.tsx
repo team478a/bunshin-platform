@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClientRequestId } from '../../../../ui/client-request-id';
 
@@ -14,31 +14,30 @@ export function ServiceDeliverySettings(props: {
   const [localTime, setLocalTime] = useState(props.localTime);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    const requestId = createClientRequestId();
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(props.serviceSlug)}/bunshins/${encodeURIComponent(props.bunshinId)}/automatic-delivery`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-request-id': requestId },
+          body: JSON.stringify({ enabled, localTime }),
+        },
+      );
+      if (!response.ok) throw new Error();
+      setMessage('お届け設定を保存しました。');
+      router.refresh();
+    } catch {
+      setMessage(`設定を保存できませんでした。（受付番号: ${requestId}）`);
+    } finally {
+      setPending(false);
+    }
+  }
   return (
-    <form
-      onSubmit={async (event) => {
-        event.preventDefault();
-        setPending(true);
-        const requestId = createClientRequestId();
-        try {
-          const response = await fetch(
-            `/api/services/${encodeURIComponent(props.serviceSlug)}/bunshins/${encodeURIComponent(props.bunshinId)}/automatic-delivery`,
-            {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', 'x-request-id': requestId },
-              body: JSON.stringify({ enabled, localTime }),
-            },
-          );
-          if (!response.ok) throw new Error();
-          setMessage('お届け設定を保存しました。');
-          router.refresh();
-        } catch {
-          setMessage(`設定を保存できませんでした。（受付番号: ${requestId}）`);
-        } finally {
-          setPending(false);
-        }
-      }}
-    >
+    <form onSubmit={(event) => void save(event)}>
       <h2>自動のお届け設定</h2>
       <label>
         <input

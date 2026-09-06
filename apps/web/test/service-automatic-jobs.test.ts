@@ -37,7 +37,7 @@ vi.mock('@bunshin/application', () => ({
   },
 }));
 vi.mock('../src/services/weekly-plan-generation', () => ({
-  createWeeklyPlanGenerationService: async () => ({ execute: m.week }),
+  createWeeklyPlanGenerationService: () => Promise.resolve({ execute: m.week }),
 }));
 vi.mock('../src/services/daily-mission-generation', () => ({
   createDailyMissionGenerationService: () => ({ execute: m.daily }),
@@ -46,7 +46,7 @@ vi.mock('../src/services/service-generation-knowledge', () => ({
   loadServiceGenerationKnowledge: m.knowledge,
 }));
 vi.mock('../src/activity-continuity-rule', () => ({
-  currentActivityContinuityRule: async () => ({ dormancyDays: 7 }),
+  currentActivityContinuityRule: () => Promise.resolve({ dormancyDays: 7 }),
 }));
 import { createDailyMissionJobHandler } from '../src/jobs/daily-mission-job-handler';
 import { createWeeklyPlanJobHandler } from '../src/jobs/weekly-plan-job-handler';
