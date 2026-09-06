@@ -59,23 +59,25 @@ export async function generateMemberProductSuggestionsResponse(
       groupId: service.serviceId,
       actorUserId: actor.userId,
     };
-    const [bunshin, profiles, settings, runtime] = await Promise.all([
+    const [bunshin, profile, settings, runtime] = await Promise.all([
       new GetBunshin(new db.PrismaBunshinRepository()).execute({
         ...scope,
         bunshinId: input.bunshinId,
       }),
-      new MemberProductProfileService(new db.PrismaMemberProductProfileRepository()).list(scope),
+      new MemberProductProfileService(
+        new db.PrismaMemberProductProfileRepository(),
+      ).getGenerationContext({ ...scope, profileId: input.profileId }),
       new ExternalTrackingMemberLinkService(
         new db.PrismaExternalTrackingLinkRepository(undefined, service.serviceId),
       ).list(scope),
       resolveOpenAiRuntimeConfiguration(),
     ]);
-    const profile = profiles.find((item) => item.id === input.profileId);
     const link = settings.links.find(
-      (item) => item.id === profile?.externalTrackingLinkId && item.status === 'ACTIVE',
+      (item) => item.id === profile.externalTrackingLinkId && item.status === 'ACTIVE',
     );
-    if (!profile || !link)
-      throw new ApplicationError('NOT_FOUND', 'active member product profile unavailable');
+    if (!link) throw new ApplicationError('NOT_FOUND', 'active member product profile unavailable');
+    if (profile.productPackId && !profile.officialProduct)
+      throw new ApplicationError('CONTENT_REJECTED', 'official product information unavailable');
     usage = {
       workspaceId: scope.workspaceId,
       bunshinId: bunshin.id,
@@ -97,6 +99,7 @@ export async function generateMemberProductSuggestionsResponse(
             appealPoint: profile.appealPoint,
             targetAudience: profile.targetAudience,
           },
+          officialProduct: profile.officialProduct,
           bunshin: {
             name: bunshin.name,
             objectiveSummary: bunshin.objectiveSummary,
@@ -114,6 +117,11 @@ export async function generateMemberProductSuggestionsResponse(
         draft,
         approvedUrl: link.url,
         platform: input.platform,
+        requiredDisclosures: profile.officialProduct?.requiredDisclosures,
+        forbiddenExpressions: [
+          ...(bunshin.personality?.forbiddenExpressions ?? []),
+          ...(profile.officialProduct?.forbiddenExpressions ?? []),
+        ],
       }),
     );
     await recordAiUsageSafely({

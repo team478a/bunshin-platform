@@ -11,6 +11,7 @@ const inputSchema = z
   .object({
     profileId: z.string().uuid().nullable().optional(),
     externalTrackingLinkId: z.string().uuid(),
+    productPackId: z.string().uuid().nullable().optional(),
     name: z.string().trim().min(1).max(160),
     appealPoint: z.string().trim().min(1).max(1000),
     targetAudience: z.string().trim().max(500).nullable().optional(),

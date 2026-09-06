@@ -42,6 +42,13 @@ describe('member product content UI boundary', () => {
     expect(http).not.toContain('groupMembershipId:');
   });
 
+  it('links a saved product only to a published service product master', () => {
+    const page = source('app/s/[serviceSlug]/tracking-link/page.tsx');
+    expect(form).toContain('公式商品情報（任意）');
+    expect(form).toContain('productPackId: productPackId || null');
+    expect(page).toContain('listProductMasters(scope)');
+  });
+
   it('lets only the signed-in member archive a saved product', () => {
     const http = source('src/http/member-product-profiles.ts');
     const route = source('app/api/services/[serviceSlug]/member-products/[profileId]/route.ts');
@@ -56,11 +63,19 @@ describe('member product content UI boundary', () => {
     const http = source('src/http/member-product-suggestions.ts');
     expect(http).toContain('requireSameOrigin(request)');
     expect(http).toContain('new GetBunshin');
-    expect(http).toContain('MemberProductProfileService');
+    expect(http).toContain('getGenerationContext');
     expect(http).toContain("item.status === 'ACTIVE'");
     expect(http).toContain('resolveOpenAiRuntimeConfiguration()');
     expect(http).toContain('withOrganizationAiGenerationQuota');
     expect(http).toContain("taskType: 'MEMBER_PRODUCT_COPY_GENERATOR'");
     expect(http).not.toContain('process.env.OPENAI_API_KEY');
+  });
+
+  it('uses official product facts and enforces official copy rules on the server', () => {
+    const http = source('src/http/member-product-suggestions.ts');
+    expect(http).toContain('officialProduct: profile.officialProduct');
+    expect(http).toContain('requiredDisclosures: profile.officialProduct?.requiredDisclosures');
+    expect(http).toContain('profile.officialProduct?.forbiddenExpressions');
+    expect(http).toContain("'official product information unavailable'");
   });
 });

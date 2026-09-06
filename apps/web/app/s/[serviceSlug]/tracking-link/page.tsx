@@ -41,8 +41,12 @@ export default async function ServiceMemberTrackingLinkPage({
     groupId: service.serviceId,
     actorUserId: actor.userId,
   };
-  const [profiles, bunshins] = await Promise.all([
-    new MemberProductProfileService(new db.PrismaMemberProductProfileRepository()).list(scope),
+  const profileService = new MemberProductProfileService(
+    new db.PrismaMemberProductProfileRepository(),
+  );
+  const [profiles, productMasters, bunshins] = await Promise.all([
+    profileService.list(scope),
+    profileService.listProductMasters(scope),
     new ListServiceBunshins(new db.PrismaBunshinRepository()).execute(scope),
   ]);
 
@@ -72,6 +76,7 @@ export default async function ServiceMemberTrackingLinkPage({
             serviceSlug={serviceSlug}
             settings={JSON.parse(JSON.stringify(settings)) as never}
             profiles={JSON.parse(JSON.stringify(profiles)) as never}
+            productMasters={productMasters}
             bunshins={bunshins.map(({ id, name }) => ({ id, name }))}
           />
         </section>

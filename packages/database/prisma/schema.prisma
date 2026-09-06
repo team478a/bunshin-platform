@@ -2536,6 +2536,7 @@ model ProductPack {
   assignments           ProductPackAssignment[]
   externalTrackingLinks ExternalTrackingLink[]
   contentLinkUsages     ContentLinkUsage[]
+  memberProductProfiles MemberProductProfile[]
 
   @@unique([workspaceId, groupId, name])
   @@index([workspaceId, status])
@@ -3520,6 +3521,7 @@ model MemberProductProfile {
   groupMembershipId      String               @map("group_membership_id") @db.Uuid
   userId                 String               @map("user_id") @db.Uuid
   externalTrackingLinkId String               @map("external_tracking_link_id") @db.Uuid
+  productPackId          String?              @map("product_pack_id") @db.Uuid
   name                   String               @db.VarChar(160)
   appealPoint            String               @map("appeal_point") @db.VarChar(1000)
   targetAudience         String?              @map("target_audience") @db.VarChar(500)
@@ -3531,9 +3533,11 @@ model MemberProductProfile {
   groupMembership        GroupMembership      @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "member_product_profiles_membership_fkey")
   user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalTrackingLink   ExternalTrackingLink @relation(fields: [externalTrackingLinkId], references: [id], onDelete: Cascade)
+  productPack            ProductPack?         @relation(fields: [productPackId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, groupId, groupMembershipId, archivedAt, updatedAt])
   @@index([externalTrackingLinkId, updatedAt])
+  @@index([productPackId, updatedAt])
   @@map("member_product_profiles")
 }
 

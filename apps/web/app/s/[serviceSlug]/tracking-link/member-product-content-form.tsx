@@ -3,6 +3,7 @@
 import {
   MEMBER_PRODUCT_CONTENT_PLATFORMS,
   type MemberProductContentPlatform,
+  type MemberProductMasterOption,
   type MemberProductProfileRecord,
   type MemberTrackingLinkSettings,
 } from '@bunshin/application';
@@ -15,17 +16,20 @@ export function MemberProductContentForm({
   serviceSlug,
   settings,
   profiles,
+  productMasters,
   bunshins,
 }: {
   serviceSlug: string;
   settings: MemberTrackingLinkSettings;
   profiles: MemberProductProfileRecord[];
+  productMasters: MemberProductMasterOption[];
   bunshins: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const activeLinks = settings.links.filter((link) => link.status === 'ACTIVE');
   const [profileId, setProfileId] = useState('');
   const [linkId, setLinkId] = useState(activeLinks[0]?.id ?? '');
+  const [productPackId, setProductPackId] = useState('');
   const [name, setName] = useState('');
   const [appealPoint, setAppealPoint] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
@@ -42,12 +46,14 @@ export function MemberProductContentForm({
     const profile = profiles.find((item) => item.id === id);
     if (!profile) {
       setLinkId(activeLinks[0]?.id ?? '');
+      setProductPackId('');
       setName('');
       setAppealPoint('');
       setTargetAudience('');
       return;
     }
     setLinkId(profile.externalTrackingLinkId);
+    setProductPackId(profile.productPackId ?? '');
     setName(profile.name);
     setAppealPoint(profile.appealPoint);
     setTargetAudience(profile.targetAudience ?? '');
@@ -71,6 +77,7 @@ export function MemberProductContentForm({
           body: JSON.stringify({
             profileId: profileId || null,
             externalTrackingLinkId: linkId,
+            productPackId: productPackId || null,
             name,
             appealPoint,
             targetAudience: targetAudience || null,
@@ -157,6 +164,18 @@ export function MemberProductContentForm({
             </option>
           ))}
         </select>
+      </label>
+      <label>
+        公式商品情報（任意）
+        <select value={productPackId} onChange={(event) => setProductPackId(event.target.value)}>
+          <option value="">紐付けない</option>
+          {productMasters.map((product) => (
+            <option key={product.id} value={product.id}>
+              {product.name}
+            </option>
+          ))}
+        </select>
+        <small>運営者が公開した商品と関連付けます。</small>
       </label>
       {profileId && (
         <button
