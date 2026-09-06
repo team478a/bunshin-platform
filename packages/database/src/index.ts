@@ -19345,6 +19345,7 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
         groupId: input.groupId,
         groupMembershipId: membership.id,
         userId: input.actorUserId,
+        archivedAt: null,
         externalTrackingLink: {
           status: 'ACTIVE',
           scopeType: 'MEMBER',
@@ -19400,6 +19401,7 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
               groupId: input.groupId,
               groupMembershipId: membership.id,
               userId: input.actorUserId,
+              archivedAt: null,
             },
           })
         : null;
@@ -19460,6 +19462,52 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
         targetAudience: profile.targetAudience,
         updatedAt: profile.updatedAt,
       };
+    });
+  }
+
+  async archive(input: Parameters<MemberProductProfileRepository['archive']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          consentedAt: { not: null },
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+        },
+        select: { id: true },
+      });
+      if (!membership) return null;
+      const profile = await tx.memberProductProfile.findFirst({
+        where: {
+          id: input.profileId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: membership.id,
+          userId: input.actorUserId,
+        },
+      });
+      if (!profile) return null;
+      if (profile.archivedAt) return false;
+      await tx.memberProductProfile.update({
+        where: { id: profile.id },
+        data: { archivedAt: input.now },
+      });
+      await tx.externalTrackingAuditLog.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          resourceType: 'MEMBER_PRODUCT_PROFILE',
+          resourceId: profile.id,
+          action: 'ARCHIVED',
+          beforeData: { archivedAt: null },
+          afterData: { archivedAt: input.now.toISOString() },
+          performedByUserId: input.actorUserId,
+          performedAt: input.now,
+        },
+      });
+      return true;
     });
   }
 }

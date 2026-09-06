@@ -42,6 +42,16 @@ describe('member product content UI boundary', () => {
     expect(http).not.toContain('groupMembershipId:');
   });
 
+  it('lets only the signed-in member archive a saved product', () => {
+    const http = source('src/http/member-product-profiles.ts');
+    const route = source('app/api/services/[serviceSlug]/member-products/[profileId]/route.ts');
+    expect(form).toContain('この保存商品を非表示にする');
+    expect(form).toContain("method: 'DELETE'");
+    expect(route).toContain('archiveMemberProductProfileResponse');
+    expect(http).toContain('actorUserId: actor.userId');
+    expect(http).toContain('requireSameOrigin(request)');
+  });
+
   it('loads AI inputs again inside the authenticated server boundary', () => {
     const http = source('src/http/member-product-suggestions.ts');
     expect(http).toContain('requireSameOrigin(request)');
