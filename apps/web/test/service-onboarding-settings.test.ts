@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_SERVICE_DAILY_IDEA_DELIVERY,
   DEFAULT_SERVICE_PROFILE_QUESTIONS,
   readServiceOnboardingSettings,
   serviceOnboardingChoicePreset,
@@ -17,6 +18,8 @@ describe('service onboarding settings', () => {
       welcomeMessage: '説明',
       questions: ['使うSNSは？', '目標は？'],
       profileQuestions: DEFAULT_SERVICE_PROFILE_QUESTIONS,
+      businessProfileEnabled: false,
+      dailyIdeaDelivery: DEFAULT_SERVICE_DAILY_IDEA_DELIVERY,
     });
   });
 
@@ -26,6 +29,35 @@ describe('service onboarding settings', () => {
       welcomeMessage: '',
       questions: ['有効'],
       profileQuestions: DEFAULT_SERVICE_PROFILE_QUESTIONS,
+      businessProfileEnabled: false,
+      dailyIdeaDelivery: DEFAULT_SERVICE_DAILY_IDEA_DELIVERY,
+    });
+  });
+
+  it('reads the enterprise daily idea delivery policy without affecting legacy services', () => {
+    expect(
+      readServiceOnboardingSettings(
+        {
+          businessProfileEnabled: true,
+          dailyIdeaDelivery: {
+            enabled: true,
+            cadence: 'WEEKDAYS',
+            defaultNotificationTime: '09:30',
+            lockCadence: true,
+            contentMode: 'IDEA',
+          },
+        },
+        null,
+      ),
+    ).toMatchObject({
+      businessProfileEnabled: true,
+      dailyIdeaDelivery: {
+        enabled: true,
+        cadence: 'WEEKDAYS',
+        defaultNotificationTime: '09:30',
+        lockCadence: true,
+        contentMode: 'IDEA',
+      },
     });
   });
 

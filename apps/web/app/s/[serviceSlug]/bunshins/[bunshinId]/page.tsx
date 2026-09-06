@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
+import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../../ui/public-shell';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
@@ -158,7 +159,11 @@ export default async function ServiceBunshinDetailPage({
   const deliveryEnabled = Boolean(
     notification.preference?.enabled && notification.preference.notificationConsentAt,
   );
-  const deliveryTime = notification.preference?.localTime ?? '08:00';
+  const deliveryPolicy = readServiceOnboardingSettings(
+    service.configuration.registration.onboardingConfig,
+    service.configuration.registration.surveyConfig,
+  ).dailyIdeaDelivery;
+  const deliveryTime = notification.preference?.localTime ?? deliveryPolicy.defaultNotificationTime;
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -178,6 +183,7 @@ export default async function ServiceBunshinDetailPage({
           strategies={accountStrategies}
           deliveryEnabled={deliveryEnabled}
           deliveryTime={deliveryTime}
+          deliveryPolicy={deliveryPolicy}
         />
         <details className="service-advanced-settings">
           <summary>細かい設定を自分で変える（必要な方だけ）</summary>

@@ -9,7 +9,31 @@ import { resolvePublicServiceContext } from '../services/public-service';
 import { buildServiceOnboardingAnswers } from '../services/service-onboarding-response';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
 
-const answersSchema = z.object({ answers: z.array(z.string().min(1).max(1000)).max(7) }).strict();
+const purposes = [
+  'ATTRACT',
+  'RESERVATION',
+  'SALES',
+  'RECRUITING',
+  'AWARENESS',
+  'RETENTION',
+] as const;
+const businessProfileSchema = z
+  .object({
+    primaryIndustryId: z.string().uuid(),
+    otherIndustryText: z.string().trim().max(160).nullable(),
+    businessName: z.string().trim().min(1).max(200),
+    region: z.string().trim().max(160).nullable(),
+    productService: z.string().trim().min(1).max(1000),
+    primaryPurpose: z.enum(purposes),
+    targetAudience: z.string().trim().min(1).max(500),
+  })
+  .strict();
+const answersSchema = z
+  .object({
+    answers: z.array(z.string().min(1).max(1000)).max(7),
+    businessProfile: businessProfileSchema.nullable().default(null),
+  })
+  .strict();
 
 export async function saveServiceOnboardingResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
@@ -28,8 +52,11 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
       service.configuration.registration.onboardingConfig,
       service.configuration.registration.surveyConfig,
     );
-    if (settings.questions.length === 0 || value.answers.length !== settings.questions.length) {
+    if (value.answers.length !== settings.questions.length) {
       throw new ApplicationError('VALIDATION_ERROR', 'all onboarding answers are required');
+    }
+    if (settings.businessProfileEnabled !== Boolean(value.businessProfile)) {
+      throw new ApplicationError('VALIDATION_ERROR', 'service business profile is required');
     }
     const entries = buildServiceOnboardingAnswers(settings.questions, value.answers);
     const db = await import('@bunshin/database');
@@ -44,22 +71,48 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
       select: { id: true },
     });
     if (!membership) throw new ApplicationError('FORBIDDEN', 'active service membership required');
-    const saved = await db.prisma.serviceOnboardingResponse.upsert({
-      where: { groupMembershipId: membership.id },
-      create: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        groupMembershipId: membership.id,
-        userId: actor.userId,
-        questionsSnapshot: settings.questions,
-        answers: entries,
-      },
-      update: {
-        questionsSnapshot: settings.questions,
-        answers: entries,
-        completedAt: new Date(),
-      },
-      select: { id: true, completedAt: true },
+    if (value.businessProfile) {
+      const industry = await db.prisma.industry.findFirst({
+        where: { id: value.businessProfile.primaryIndustryId, status: 'ACTIVE' },
+        select: { key: true },
+      });
+      if (!industry) throw new ApplicationError('VALIDATION_ERROR', 'industry is unavailable');
+      if (industry.key === 'OTHER' && !value.businessProfile.otherIndustryText) {
+        throw new ApplicationError('VALIDATION_ERROR', 'other industry is required');
+      }
+    }
+    const saved = await db.prisma.$transaction(async (tx) => {
+      const response = await tx.serviceOnboardingResponse.upsert({
+        where: { groupMembershipId: membership.id },
+        create: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          groupMembershipId: membership.id,
+          userId: actor.userId,
+          questionsSnapshot: settings.questions,
+          answers: entries,
+        },
+        update: {
+          questionsSnapshot: settings.questions,
+          answers: entries,
+          completedAt: new Date(),
+        },
+        select: { id: true, completedAt: true },
+      });
+      if (value.businessProfile) {
+        await tx.serviceMemberBusinessProfile.upsert({
+          where: { groupMembershipId: membership.id },
+          create: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            groupMembershipId: membership.id,
+            userId: actor.userId,
+            ...value.businessProfile,
+          },
+          update: value.businessProfile,
+        });
+      }
+      return response;
     });
     await new ServiceReferralRewardService(
       new db.PrismaServiceReferralRewardRepository(),

@@ -57,6 +57,23 @@ const schema = z
       })
       .strict()
       .optional(),
+    businessProfileEnabled: z.boolean().default(false),
+    dailyIdeaDelivery: z
+      .object({
+        enabled: z.boolean(),
+        cadence: z.enum(['DAILY', 'WEEKDAYS']),
+        defaultNotificationTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/),
+        lockCadence: z.boolean(),
+        contentMode: z.enum(['IDEA', 'READY_TO_USE']),
+      })
+      .strict()
+      .default({
+        enabled: false,
+        cadence: 'DAILY',
+        defaultNotificationTime: '08:00',
+        lockCadence: false,
+        contentMode: 'READY_TO_USE',
+      }),
     reason: z.string().min(1).max(1000),
   })
   .strict()
@@ -143,6 +160,8 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
             welcomeTitle: value.welcomeTitle.trim(),
             welcomeMessage: value.welcomeMessage.trim(),
             ...(value.profileQuestions ? { profileQuestions: value.profileQuestions } : {}),
+            businessProfileEnabled: value.businessProfileEnabled,
+            dailyIdeaDelivery: value.dailyIdeaDelivery,
             announcementEnabled: value.announcementEnabled,
             announcementTitle: value.announcementTitle.trim(),
             announcementMessage: value.announcementMessage.trim(),

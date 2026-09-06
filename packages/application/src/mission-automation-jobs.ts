@@ -30,9 +30,13 @@ export interface MissionAutomationScopeRepository {
 }
 
 export interface MissionAutomationCandidateRepository {
-  listEnabled(limit: number): Promise<{
+  listEnabled(
+    limit: number,
+    cursor?: string,
+  ): Promise<{
     candidates: LineNotificationPreference[];
     truncated: boolean;
+    nextCursor?: string;
   }>;
 }
 
@@ -103,49 +107,60 @@ export class RunMissionAutomationScheduler {
 
   async execute(environment: JobEnvironment): Promise<MissionAutomationScheduleSummary> {
     const at = this.now();
-    const values = await this.candidates.listEnabled(this.limit);
     const summary: MissionAutomationScheduleSummary = {
       environment,
-      candidates: values.candidates.length,
+      candidates: 0,
       due: 0,
       weeklyEnqueued: 0,
       dailyEnqueued: 0,
       skipped: 0,
       failures: 0,
-      truncated: values.truncated,
+      truncated: false,
     };
-    for (const preference of values.candidates) {
-      const local = localClock(at, preference.timezone);
-      if (local.time !== preference.localTime) continue;
-      summary.due += 1;
-      const scope = {
-        environment,
-        workspaceId: preference.workspaceId,
-        bunshinId: preference.bunshinId,
-        actorUserId: preference.userId,
-        correlationId: `scheduler:${environment}:${local.date}`,
-      };
-      if (local.weekday === 'Sun' && !isSuppressed(preference, at, local, false)) {
+    let cursor: string | undefined;
+    let pageCount = 0;
+    do {
+      const values = await this.candidates.listEnabled(this.limit, cursor);
+      summary.candidates += values.candidates.length;
+      pageCount += 1;
+      for (const preference of values.candidates) {
+        const local = localClock(at, preference.timezone);
+        if (local.time !== preference.localTime) continue;
+        summary.due += 1;
+        const scope = {
+          environment,
+          workspaceId: preference.workspaceId,
+          bunshinId: preference.bunshinId,
+          actorUserId: preference.userId,
+          correlationId: `scheduler:${environment}:${local.date}`,
+        };
+        if (local.weekday === 'Sun' && !isSuppressed(preference, at, local, false)) {
+          try {
+            await this.weekly.execute({ ...scope, weekStartDate: nextLocalDate(local.date) });
+            summary.weeklyEnqueued += 1;
+          } catch (error) {
+            if (error instanceof ApplicationError && error.code === 'FORBIDDEN')
+              summary.skipped += 1;
+            else summary.failures += 1;
+          }
+        }
+        if (isSuppressed(preference, at, local)) {
+          summary.skipped += 1;
+          continue;
+        }
         try {
-          await this.weekly.execute({ ...scope, weekStartDate: nextLocalDate(local.date) });
-          summary.weeklyEnqueued += 1;
+          await this.daily.execute({ ...scope, missionDate: local.date });
+          summary.dailyEnqueued += 1;
         } catch (error) {
           if (error instanceof ApplicationError && error.code === 'FORBIDDEN') summary.skipped += 1;
           else summary.failures += 1;
         }
       }
-      if (isSuppressed(preference, at, local)) {
-        summary.skipped += 1;
-        continue;
-      }
-      try {
-        await this.daily.execute({ ...scope, missionDate: local.date });
-        summary.dailyEnqueued += 1;
-      } catch (error) {
-        if (error instanceof ApplicationError && error.code === 'FORBIDDEN') summary.skipped += 1;
-        else summary.failures += 1;
-      }
-    }
+      cursor = values.truncated ? values.nextCursor : undefined;
+      summary.truncated = values.truncated && !cursor;
+      if (!values.truncated) break;
+    } while (cursor && pageCount < 100);
+    if (cursor && pageCount >= 100) summary.truncated = true;
     return summary;
   }
 }

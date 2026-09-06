@@ -650,11 +650,12 @@ export class PrismaMissionAutomationScopeRepository implements MissionAutomation
 export class PrismaMissionAutomationCandidateRepository implements MissionAutomationCandidateRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  async listEnabled(limit: number) {
+  async listEnabled(limit: number, cursor?: string) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid scheduler candidate limit');
     const rows = await this.client.lineNotificationPreference.findMany({
       where: {
+        ...(cursor ? { id: { gt: cursor } } : {}),
         enabled: true,
         notificationConsentAt: { not: null },
         workspace: { status: 'ACTIVE' },
@@ -664,9 +665,14 @@ export class PrismaMissionAutomationCandidateRepository implements MissionAutoma
       orderBy: { id: 'asc' },
       take: limit + 1,
     });
+    const candidates = rows.slice(0, limit).map(lineNotificationPreference);
+    const truncated = rows.length > limit;
     return {
-      candidates: rows.slice(0, limit).map(lineNotificationPreference),
-      truncated: rows.length > limit,
+      candidates,
+      truncated,
+      ...(truncated && candidates.length > 0
+        ? { nextCursor: candidates[candidates.length - 1]!.id }
+        : {}),
     };
   }
 }
@@ -11131,6 +11137,30 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
       });
       if (existing !== null && !['ACTIVE', 'PENDING_APPROVAL'].includes(existing.status))
         return null;
+      if (existing === null) {
+        const commercial = await tx.serviceCommercialSetting.findFirst({
+          where: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            status: 'ACTIVE',
+            OR: [{ startsAt: null }, { startsAt: { lte: input.now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] }],
+          },
+          select: { includedMemberLimit: true },
+        });
+        if (commercial?.includedMemberLimit) {
+          const members = await tx.groupMembership.count({
+            where: {
+              workspaceId: configuration.workspaceId,
+              groupId: configuration.groupId,
+              status: { in: ['ACTIVE', 'PENDING_APPROVAL'] },
+            },
+          });
+          if (members >= commercial.includedMemberLimit) {
+            throw new ApplicationError('FORBIDDEN', 'service member limit reached');
+          }
+        }
+      }
       const status = configuration.registration.mode === 'PUBLIC' ? 'ACTIVE' : 'PENDING_APPROVAL';
       const membership = await tx.groupMembership.upsert({
         where: {
@@ -11240,7 +11270,7 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
         },
       });
       return groupMembershipRecord(membership);
-    });
+    }, { isolationLevel: 'Serializable' });
   }
 
   async approve(input: Parameters<ServiceParticipationRepository['approve']>[0]) {

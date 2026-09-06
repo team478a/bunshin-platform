@@ -1622,6 +1622,7 @@ model User {
   serviceLegalDocumentsCreated      ServiceLegalDocument[]              @relation("ServiceLegalDocumentAuthor")
   serviceLegalConsents              ServiceLegalConsent[]
   serviceOnboardingResponses        ServiceOnboardingResponse[]
+  serviceMemberBusinessProfiles     ServiceMemberBusinessProfile[]
   campaignPostingApprovalsRequested CampaignPostingApprovalRequest[]    @relation("CampaignPostingApprovalRequester")
   campaignPostingApprovalsReviewed  CampaignPostingApprovalRequest[]    @relation("CampaignPostingApprovalReviewer")
   campaignPostingApprovalPolicies   CampaignPostingApprovalPolicy[]     @relation("CampaignPostingApprovalPolicyEditor")
@@ -1719,15 +1720,16 @@ model User {
 }
 
 model Industry {
-  id                   String                    @id @default(uuid()) @db.Uuid
-  key                  String                    @unique @db.VarChar(80)
-  name                 String                    @db.VarChar(120)
-  description          String?                   @db.VarChar(500)
-  displayOrder         Int                       @default(0) @map("display_order")
-  status               IndustryStatus            @default(ACTIVE)
-  createdAt            DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  registrationProfiles UserRegistrationProfile[]
+  id                            String                         @id @default(uuid()) @db.Uuid
+  key                           String                         @unique @db.VarChar(80)
+  name                          String                         @db.VarChar(120)
+  description                   String?                        @db.VarChar(500)
+  displayOrder                  Int                            @default(0) @map("display_order")
+  status                        IndustryStatus                 @default(ACTIVE)
+  createdAt                     DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registrationProfiles          UserRegistrationProfile[]
+  serviceMemberBusinessProfiles ServiceMemberBusinessProfile[]
 
   @@index([status, displayOrder])
   @@map("industries")
@@ -1813,6 +1815,7 @@ model Workspace {
   groups                          Group[]
   groupMemberships                GroupMembership[]
   serviceOnboardingResponses      ServiceOnboardingResponse[]
+  serviceMemberBusinessProfiles   ServiceMemberBusinessProfile[]
   groupInvitations                GroupInvitation[]
   productPacks                    ProductPack[]
   productPackAssignments          ProductPackAssignment[]
@@ -1893,6 +1896,7 @@ model Workspace {
   organizationEntitlement         OrganizationEntitlement?
   organizationEntitlementAudits   OrganizationEntitlementAudit[]
   organizationAiReservations      OrganizationAiGenerationReservation[]
+  serviceAiReservations           ServiceAiGenerationReservation[]
   serviceCustomDomains            ServiceCustomDomain[]
   serviceCommercialSettings       ServiceCommercialSetting[]
   serviceBrands                   ServiceBrand[]
@@ -2008,6 +2012,27 @@ model OrganizationAiGenerationReservation {
   @@map("organization_ai_generation_reservations")
 }
 
+/// Service Commercial Settingの月間AI枠を外部API呼び出し前に確保する台帳。
+model ServiceAiGenerationReservation {
+  id           String                          @id @default(uuid()) @db.Uuid
+  workspaceId  String                          @map("workspace_id") @db.Uuid
+  groupId      String                          @map("group_id") @db.Uuid
+  monthKey     String                          @map("month_key") @db.Char(7)
+  operationKey String                          @map("operation_key") @db.VarChar(200)
+  status       OrganizationAiReservationStatus @default(RESERVED)
+  expiresAt    DateTime                        @map("expires_at") @db.Timestamptz(6)
+  consumedAt   DateTime?                       @map("consumed_at") @db.Timestamptz(6)
+  releasedAt   DateTime?                       @map("released_at") @db.Timestamptz(6)
+  createdAt    DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace    Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group        Group                           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, operationKey])
+  @@index([workspaceId, groupId, monthKey, status, expiresAt])
+  @@map("service_ai_generation_reservations")
+}
+
 model OrganizationEntitlementAudit {
   id          String    @id @default(uuid()) @db.Uuid
   workspaceId String    @map("workspace_id") @db.Uuid
@@ -2084,6 +2109,8 @@ model Group {
   serviceLegalDocuments           ServiceLegalDocument[]
   serviceLegalConsents            ServiceLegalConsent[]
   serviceOnboardingResponses      ServiceOnboardingResponse[]
+  serviceMemberBusinessProfiles   ServiceMemberBusinessProfile[]
+  serviceAiReservations           ServiceAiGenerationReservation[]
   campaignPostingApprovalPolicy   CampaignPostingApprovalPolicy?
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
@@ -2321,38 +2348,68 @@ model ServiceOnboardingResponse {
   @@map("service_onboarding_responses")
 }
 
+/// 企業向けサービスで使う、Service Membership固有の事業情報。
+/// User共通プロフィールを参照せず、複数Service・複数事業の情報を分離する。
+model ServiceMemberBusinessProfile {
+  id                String          @id @default(uuid()) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  groupId           String          @map("group_id") @db.Uuid
+  groupMembershipId String          @unique @map("group_membership_id") @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  primaryIndustryId String?         @map("primary_industry_id") @db.Uuid
+  otherIndustryText String?         @map("other_industry_text") @db.VarChar(160)
+  businessName      String          @map("business_name") @db.VarChar(200)
+  region            String?         @db.VarChar(160)
+  productService    String          @map("product_service") @db.VarChar(1000)
+  primaryPurpose    String          @map("primary_purpose") @db.VarChar(80)
+  targetAudience    String          @map("target_audience") @db.VarChar(500)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryIndustry   Industry?       @relation(fields: [primaryIndustryId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId, groupMembershipId, userId])
+  @@index([workspaceId, groupId, primaryIndustryId])
+  @@index([workspaceId, groupId, userId])
+  @@map("service_member_business_profiles")
+}
+
 model GroupMembership {
-  id                         String                           @id @default(uuid()) @db.Uuid
-  workspaceId                String                           @map("workspace_id") @db.Uuid
-  groupId                    String                           @map("group_id") @db.Uuid
-  userId                     String                           @map("user_id") @db.Uuid
-  role                       GroupRole                        @default(PARTICIPANT)
-  serviceRole                ServiceRole                      @default(PARTICIPANT) @map("service_role")
-  status                     GroupMembershipStatus            @default(INVITED)
-  consentedAt                DateTime?                        @map("consented_at") @db.Timestamptz(6)
-  declinedAt                 DateTime?                        @map("declined_at") @db.Timestamptz(6)
-  revokedAt                  DateTime?                        @map("revoked_at") @db.Timestamptz(6)
-  createdAt                  DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                  DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace                  Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  group                      Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user                       User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  externalTrackingIdentities ExternalTrackingMemberIdentity[]
-  contentLinkUsages          ContentLinkUsage[]
-  featureAssignments         GroupMemberFeatureAssignment[]
-  featureAudits              GroupFeatureAuditLog[]
-  membershipAudits           GroupMembershipAuditLog[]
-  featureUsageEvents         GroupFeatureUsageEvent[]
-  videoProjects              VideoProject[]
-  videoAssets                VideoAsset[]
-  lineConnections            GroupLineConnection[]
-  serviceLegalConsents       ServiceLegalConsent[]
-  serviceOnboardingResponse  ServiceOnboardingResponse?
-  serviceReferralCode        ServiceReferralCode?
-  referredServiceReferrals   ServiceReferral[]                @relation("ServiceReferralReferredMembership")
-  serviceCreditAccount       ServiceCreditAccount?
-  serviceReferralRewards     ServiceReferralReward[]          @relation("ServiceReferralRewardMembership")
-  memberProductProfiles      MemberProductProfile[]
+  id                           String                           @id @default(uuid()) @db.Uuid
+  workspaceId                  String                           @map("workspace_id") @db.Uuid
+  groupId                      String                           @map("group_id") @db.Uuid
+  userId                       String                           @map("user_id") @db.Uuid
+  role                         GroupRole                        @default(PARTICIPANT)
+  serviceRole                  ServiceRole                      @default(PARTICIPANT) @map("service_role")
+  status                       GroupMembershipStatus            @default(INVITED)
+  consentedAt                  DateTime?                        @map("consented_at") @db.Timestamptz(6)
+  declinedAt                   DateTime?                        @map("declined_at") @db.Timestamptz(6)
+  revokedAt                    DateTime?                        @map("revoked_at") @db.Timestamptz(6)
+  createdAt                    DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                    Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                        Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user                         User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalTrackingIdentities   ExternalTrackingMemberIdentity[]
+  contentLinkUsages            ContentLinkUsage[]
+  featureAssignments           GroupMemberFeatureAssignment[]
+  featureAudits                GroupFeatureAuditLog[]
+  membershipAudits             GroupMembershipAuditLog[]
+  featureUsageEvents           GroupFeatureUsageEvent[]
+  videoProjects                VideoProject[]
+  videoAssets                  VideoAsset[]
+  lineConnections              GroupLineConnection[]
+  serviceLegalConsents         ServiceLegalConsent[]
+  serviceOnboardingResponse    ServiceOnboardingResponse?
+  serviceMemberBusinessProfile ServiceMemberBusinessProfile?
+  serviceReferralCode          ServiceReferralCode?
+  referredServiceReferrals     ServiceReferral[]                @relation("ServiceReferralReferredMembership")
+  serviceCreditAccount         ServiceCreditAccount?
+  serviceReferralRewards       ServiceReferralReward[]          @relation("ServiceReferralRewardMembership")
+  memberProductProfiles        MemberProductProfile[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])

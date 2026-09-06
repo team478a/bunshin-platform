@@ -7,6 +7,11 @@ import {
 import { createDailyMissionGenerationService } from '../services/daily-mission-generation';
 import { currentActivityContinuityRule } from '../activity-continuity-rule';
 import { mondayForDate, prepareServiceAutomaticWeek } from './service-automatic-week';
+import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
+import {
+  createServiceDailyIdeaFallback,
+  shouldUseServiceDailyIdeaFallback,
+} from '../services/service-daily-idea-fallback';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
@@ -28,14 +33,33 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         // A day off is successful, not a failed generation requiring user intervention.
         if (!plan.items.some((item) => item.scheduledDate === localDate)) return;
       }
-      const mission = await createDailyMissionGenerationService().execute({
-        ...scope,
-        serviceSafeMode: Boolean(scope.groupId),
-        missionDate: localDate,
-        generationIdempotencyKey: job.idempotencyKey,
-        usageIdempotencyPrefix: `job:${job.id}:daily-mission`,
-        existingPolicy: 'RETURN',
-      });
+      let mission;
+      try {
+        mission = await createDailyMissionGenerationService().execute({
+          ...scope,
+          serviceSafeMode: Boolean(scope.groupId),
+          missionDate: localDate,
+          generationIdempotencyKey: job.idempotencyKey,
+          usageIdempotencyPrefix: `job:${job.id}:daily-mission`,
+          existingPolicy: 'RETURN',
+        });
+      } catch (error) {
+        if (!scope.groupId || !shouldUseServiceDailyIdeaFallback(error)) throw error;
+        const policy = await db.prisma.serviceRegistrationPolicy.findFirst({
+          where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+          select: { onboardingConfig: true, surveyConfig: true },
+        });
+        const dailyIdeas = readServiceOnboardingSettings(
+          policy?.onboardingConfig,
+          policy?.surveyConfig,
+        ).dailyIdeaDelivery;
+        if (!dailyIdeas.enabled) throw error;
+        mission = await createServiceDailyIdeaFallback({
+          ...scope,
+          groupId: scope.groupId,
+          missionDate: localDate,
+        });
+      }
       const activityRule = await currentActivityContinuityRule();
       const returnReminder = await new db.PrismaLineReturnReminderRepository().shouldUse({
         workspaceId: job.workspaceId,

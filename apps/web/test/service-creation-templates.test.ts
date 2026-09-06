@@ -28,4 +28,21 @@ describe('service creation templates', () => {
       questions: [],
     });
   });
+
+  it('prepares a LINE-only daily idea service with a service business profile', () => {
+    expect(SERVICE_CREATION_TEMPLATES.BUSINESS_DAILY_IDEAS).toMatchObject({
+      registrationMode: 'PUBLIC',
+      emailEnabled: false,
+      lineEnabled: true,
+      referralEnabled: false,
+      businessProfileEnabled: true,
+      dailyIdeaDelivery: {
+        enabled: true,
+        cadence: 'DAILY',
+        defaultNotificationTime: '08:00',
+        lockCadence: true,
+        contentMode: 'IDEA',
+      },
+    });
+  });
 });

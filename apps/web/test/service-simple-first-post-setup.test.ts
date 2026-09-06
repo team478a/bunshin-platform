@@ -9,7 +9,8 @@ describe('simple service first-post setup', () => {
   it('asks members only for the posting destination and pace', () => {
     expect(setup).toContain('1. どのSNSに投稿しますか？');
     expect(setup).toContain('2. どのくらいのペースで投稿しますか？');
-    expect(setup).toContain("useState<SocialPostingFrequency>('WEEKLY')");
+    expect(setup).toContain('deliveryPolicy.enabled && deliveryPolicy.lockCadence');
+    expect(setup).toContain("? deliveryPolicy.cadence : 'WEEKLY'");
     expect(setup).toContain("defaultAssistanceLevel: 'READY_TO_USE'");
   });
 

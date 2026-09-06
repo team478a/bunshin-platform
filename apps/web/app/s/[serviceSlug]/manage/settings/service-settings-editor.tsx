@@ -117,6 +117,10 @@ export function ServiceSettingsEditor({
     value.registration.surveyConfig,
   );
   const [profileQuestions, setProfileQuestions] = useState(onboarding.profileQuestions);
+  const [businessProfileEnabled, setBusinessProfileEnabled] = useState(
+    onboarding.businessProfileEnabled,
+  );
+  const [dailyIdeaDelivery, setDailyIdeaDelivery] = useState(onboarding.dailyIdeaDelivery);
   const [organizationType, setOrganizationType] = useState('MEDIA');
   const [operationStyle, setOperationStyle] = useState('INFORMATION');
   const [welcomeTitle, setWelcomeTitle] = useState(onboarding.welcomeTitle);
@@ -168,6 +172,8 @@ export function ServiceSettingsEditor({
             .map((item) => item.trim())
             .filter(Boolean),
           profileQuestions,
+          businessProfileEnabled,
+          dailyIdeaDelivery,
           reason: text('reason'),
         }),
       });
@@ -456,6 +462,86 @@ export function ServiceSettingsEditor({
             ),
           )}
         </fieldset>
+        <section className="settings-card">
+          <h3>企業向けの毎日配信</h3>
+          <p>有効にすると、業種と会社情報をサービスごとに保存し、投稿案づくりに使用します。</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={businessProfileEnabled}
+              onChange={(event) => setBusinessProfileEnabled(event.target.checked)}
+            />{' '}
+            サービス専用の企業プロフィールを登録する
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={dailyIdeaDelivery.enabled}
+              onChange={(event) =>
+                setDailyIdeaDelivery((current) => ({ ...current, enabled: event.target.checked }))
+              }
+            />{' '}
+            発信アイデアの自動配信を使う
+          </label>
+          <label>
+            配信頻度
+            <select
+              value={dailyIdeaDelivery.cadence}
+              onChange={(event) =>
+                setDailyIdeaDelivery((current) => ({
+                  ...current,
+                  cadence: event.target.value === 'WEEKDAYS' ? 'WEEKDAYS' : 'DAILY',
+                }))
+              }
+            >
+              <option value="DAILY">毎日</option>
+              <option value="WEEKDAYS">平日のみ</option>
+            </select>
+          </label>
+          <label>
+            初期のお届け時刻
+            <input
+              type="time"
+              min="07:00"
+              max="20:59"
+              value={dailyIdeaDelivery.defaultNotificationTime}
+              onChange={(event) =>
+                setDailyIdeaDelivery((current) => ({
+                  ...current,
+                  defaultNotificationTime: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={dailyIdeaDelivery.lockCadence}
+              onChange={(event) =>
+                setDailyIdeaDelivery((current) => ({
+                  ...current,
+                  lockCadence: event.target.checked,
+                }))
+              }
+            />{' '}
+            利用者に投稿ペースを選ばせず、この頻度を使う
+          </label>
+          <label>
+            届ける内容
+            <select
+              value={dailyIdeaDelivery.contentMode}
+              onChange={(event) =>
+                setDailyIdeaDelivery((current) => ({
+                  ...current,
+                  contentMode: event.target.value === 'IDEA' ? 'IDEA' : 'READY_TO_USE',
+                }))
+              }
+            >
+              <option value="IDEA">発信アイデア</option>
+              <option value="READY_TO_USE">そのまま使える投稿案</option>
+            </select>
+          </label>
+        </section>
         <label>
           最初に表示する説明
           <textarea
