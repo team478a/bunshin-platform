@@ -71,7 +71,16 @@ export function SimpleFirstPostSetup({
   const encodedService = encodeURIComponent(serviceSlug);
   const encodedBunshin = encodeURIComponent(bunshinId);
   const base = `/api/services/${encodedService}/bunshins/${encodedBunshin}`;
-  const ready = deliveryEnabled;
+  const ready =
+    deliveryEnabled &&
+    hasActivePillar &&
+    profiles.some(
+      (profile) =>
+        profile.status === 'ACTIVE' &&
+        strategies.some(
+          (strategy) => strategy.socialProfileId === profile.id && strategy.status === 'APPROVED',
+        ),
+    );
 
   async function request<T>(path: string, body: unknown): Promise<T> {
     const requestId = createClientRequestId();
