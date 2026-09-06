@@ -1,5 +1,6 @@
 import {
   ExternalTrackingMemberLinkService,
+  ListServiceBunshins,
   MemberProductProfileService,
 } from '@bunshin/application';
 import type { Route } from 'next';
@@ -35,13 +36,15 @@ export default async function ServiceMemberTrackingLinkPage({
     })
     .catch(() => null);
   if (!settings) redirect(`/s/${serviceSlug}` as Route);
-  const profiles = await new MemberProductProfileService(
-    new db.PrismaMemberProductProfileRepository(),
-  ).list({
+  const scope = {
     workspaceId: service.workspaceId,
     groupId: service.serviceId,
     actorUserId: actor.userId,
-  });
+  };
+  const [profiles, bunshins] = await Promise.all([
+    new MemberProductProfileService(new db.PrismaMemberProductProfileRepository()).list(scope),
+    new ListServiceBunshins(new db.PrismaBunshinRepository()).execute(scope),
+  ]);
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -69,6 +72,7 @@ export default async function ServiceMemberTrackingLinkPage({
             serviceSlug={serviceSlug}
             settings={JSON.parse(JSON.stringify(settings)) as never}
             profiles={JSON.parse(JSON.stringify(profiles)) as never}
+            bunshins={bunshins.map(({ id, name }) => ({ id, name }))}
           />
         </section>
         <Link className="button" href={`/s/${serviceSlug}/home` as Route}>

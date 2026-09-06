@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   MemberProductProfileService,
   createMemberProductContent,
+  finalizeMemberProductCandidate,
   type MemberProductProfileRepository,
 } from '../src';
 
@@ -48,6 +49,28 @@ describe('member product content', () => {
         platform: 'THREADS',
       }),
     ).toThrow();
+  });
+
+  it('finalizes an AI draft with the approved URL and one disclosure', () => {
+    const result = finalizeMemberProductCandidate({
+      draft: '毎日の楽しみに取り入れやすい商品をご紹介します。 #PR',
+      approvedUrl: 'https://shop.example.jp/item/1?ref=member-1',
+      platform: 'THREADS',
+    });
+
+    expect(result.body.match(/#PR/gu)).toHaveLength(1);
+    expect(result.body).toContain('https://shop.example.jp/item/1?ref=member-1');
+    expect(result.body.length).toBeLessThanOrEqual(500);
+  });
+
+  it('rejects an AI draft containing a provider-supplied URL', () => {
+    expect(() =>
+      finalizeMemberProductCandidate({
+        draft: '詳しくは https://unapproved.example をご覧ください。',
+        approvedUrl: 'https://shop.example.jp/item/1?ref=member-1',
+        platform: 'INSTAGRAM',
+      }),
+    ).toThrow('unapproved URL');
   });
 });
 

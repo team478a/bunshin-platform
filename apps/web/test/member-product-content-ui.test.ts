@@ -13,9 +13,17 @@ describe('member product content UI boundary', () => {
   });
 
   it('requires explicit generation and manual posting', () => {
-    expect(form).toContain('商品情報を保存して投稿文を作る');
+    expect(form).toContain('商品情報を保存してAIで3案作る');
     expect(form).toContain('自動投稿はしません');
     expect(form).not.toContain('/api/daily-missions');
+  });
+
+  it('lets the member select a Bunshin and edit one of three drafts', () => {
+    expect(form).toContain('投稿文に使う分身');
+    expect(form).toContain('member-products/suggestions');
+    expect(form).toContain('suggestionPayload.data.candidates');
+    expect(form).toContain('setCandidates');
+    expect(form).toContain('type="radio"');
   });
 
   it('warns users to confirm changing product facts', () => {
@@ -32,5 +40,17 @@ describe('member product content UI boundary', () => {
     expect(http).toContain('actorUserId: actor.userId');
     expect(http).toContain('service.serviceId');
     expect(http).not.toContain('groupMembershipId:');
+  });
+
+  it('loads AI inputs again inside the authenticated server boundary', () => {
+    const http = source('src/http/member-product-suggestions.ts');
+    expect(http).toContain('requireSameOrigin(request)');
+    expect(http).toContain('new GetBunshin');
+    expect(http).toContain('MemberProductProfileService');
+    expect(http).toContain("item.status === 'ACTIVE'");
+    expect(http).toContain('resolveOpenAiRuntimeConfiguration()');
+    expect(http).toContain('withOrganizationAiGenerationQuota');
+    expect(http).toContain("taskType: 'MEMBER_PRODUCT_COPY_GENERATOR'");
+    expect(http).not.toContain('process.env.OPENAI_API_KEY');
   });
 });
