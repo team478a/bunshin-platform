@@ -2609,6 +2609,43 @@ a {
   outline: 3px solid color-mix(in srgb, var(--service-primary) 18%, transparent);
 }
 
+.service-onboarding-question {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.service-onboarding-question legend {
+  margin-bottom: 10px;
+  color: #17233b;
+  font-weight: 750;
+  line-height: 1.6;
+}
+
+.service-onboarding-options > button {
+  width: 100%;
+  min-height: 64px;
+  font: inherit;
+}
+
+.service-onboarding-options > button.is-selected {
+  color: var(--service-primary);
+  border-color: var(--service-primary);
+  background: color-mix(in srgb, var(--service-primary) 9%, white);
+  box-shadow: 0 0 0 1px var(--service-primary);
+}
+
+.service-onboarding-options > button.is-selected small {
+  color: var(--service-primary);
+}
+
+.service-onboarding-other {
+  margin-top: 2px;
+}
+
 .service-participation__document {
   display: grid;
   gap: 12px;

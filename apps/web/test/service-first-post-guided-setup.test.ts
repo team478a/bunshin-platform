@@ -16,6 +16,13 @@ describe('service first-post guided setup', () => {
     expect(proposals).toContain('回答をもとに、あなた向けの投稿パートナーを準備しています');
   });
 
+  it('uses large choices for known questions and keeps a free-text fallback', () => {
+    expect(onboardingForm).toContain('serviceOnboardingChoicePreset(question)');
+    expect(onboardingForm).toContain('aria-pressed={selections[index] === option}');
+    expect(onboardingForm).toContain('preset.otherLabel');
+    expect(onboardingForm).toContain('if (!preset)');
+  });
+
   it('opens the created partner directly instead of returning to the list', () => {
     expect(proposals).toContain('result.data?.id');
     expect(proposals).toContain('encodeURIComponent(bunshinId)');
