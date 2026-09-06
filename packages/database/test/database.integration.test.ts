@@ -2225,6 +2225,50 @@ integration('database ownership boundaries', () => {
       }),
     ).resolves.toMatchObject({ platform: 'TIKTOK' });
 
+    // Service participants must be able to save and approve their own strategy.
+    const serviceGroup = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Strategy service' },
+    });
+    await client.bunshin.update({
+      where: { id: memberOwned.id },
+      data: { groupId: serviceGroup.id },
+    });
+    const memberProfile = await client.socialProfile.findFirstOrThrow({
+      where: { bunshinId: memberOwned.id, platform: 'TIKTOK' },
+    });
+    const memberStrategyInput = {
+      ...strategyInput,
+      groupId: serviceGroup.id,
+      actorUserId: member.user.id,
+      bunshinId: memberOwned.id,
+      socialProfileId: memberProfile.id,
+      platform: 'TIKTOK' as const,
+    };
+    const memberStrategy = await createStrategy.execute(memberStrategyInput);
+    await expect(
+      approveStrategy.execute({
+        ...memberStrategyInput,
+        strategyId: memberStrategy.id,
+      }),
+    ).resolves.toMatchObject({ status: 'APPROVED' });
+    for (const invalidScope of [
+      { actorUserId: admin.user.id },
+      { workspaceId: outsider.workspace.id },
+      { groupId: randomUUID() },
+      { groupId: null },
+    ]) {
+      await expect(
+        createStrategy.execute({ ...memberStrategyInput, ...invalidScope }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        approveStrategy.execute({
+          ...memberStrategyInput,
+          strategyId: memberStrategy.id,
+          ...invalidScope,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    }
+
     await assignments.setStatus({
       workspaceId: owner.workspace.id,
       actorUserId: owner.user.id,

@@ -7985,7 +7985,7 @@ function socialAccountStrategy(
 
 export class PrismaSocialAccountStrategyRepository implements SocialAccountStrategyRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
-  private managed(
+  private async managed(
     client: PrismaClient | Prisma.TransactionClient,
     input: {
       workspaceId: string;
@@ -7994,7 +7994,7 @@ export class PrismaSocialAccountStrategyRepository implements SocialAccountStrat
       bunshinId: string;
     },
   ) {
-    return client.bunshin.findFirst({
+    const bunshin = await client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
@@ -8003,14 +8003,29 @@ export class PrismaSocialAccountStrategyRepository implements SocialAccountStrat
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
-          memberships: {
-            some: { userId: input.actorUserId, status: 'ACTIVE', role: { in: ['OWNER', 'ADMIN'] } },
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      include: {
+        workspace: {
+          select: {
+            memberships: {
+              where: { userId: input.actorUserId, status: 'ACTIVE' },
+              select: { role: true },
+              take: 1,
+            },
           },
         },
       },
-      select: { id: true },
     });
+    const role = bunshin?.workspace.memberships[0]?.role;
+    return bunshin !== null &&
+      role !== undefined &&
+      canManageBunshin(role, input.actorUserId, bunshin.ownerUserId)
+      ? bunshin
+      : null;
   }
+
   private accessible(input: {
     workspaceId: string;
     groupId?: string | null;

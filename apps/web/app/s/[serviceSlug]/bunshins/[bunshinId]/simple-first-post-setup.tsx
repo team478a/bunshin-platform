@@ -97,12 +97,22 @@ export function SimpleFirstPostSetup({
     hasTodayMission;
 
   async function request<T>(path: string, body: unknown): Promise<T> {
+    const requestId = createClientRequestId();
     const response = await fetch(`${base}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-request-id': requestId },
       body: JSON.stringify(body),
+    }).catch(() => {
+      throw new Error(`通信できませんでした。（受付番号: ${requestId}）`);
     });
-    if (!response.ok) throw new Error(path);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string; requestId?: string };
+      } | null;
+      throw new Error(
+        `${payload?.error?.message ?? '処理を完了できませんでした。'}（受付番号: ${payload?.error?.requestId ?? requestId}）`,
+      );
+    }
     const result = (await response.json()) as { data: T };
     return result.data;
   }
@@ -194,9 +204,9 @@ export function SimpleFirstPostSetup({
       setStep('');
       setMessage('準備できました。下の「今日の投稿案」から内容を確認できます。');
       router.refresh();
-    } catch {
+    } catch (error) {
       setMessage(
-        `「${currentStep}」で処理が止まりました。保存済みの内容は残っています。画面を更新して、もう一度お試しください。`,
+        `「${currentStep}」で処理が止まりました。${error instanceof Error ? error.message : '処理を完了できませんでした。'} 保存済みの内容は残っています。画面を更新して、もう一度お試しください。`,
       );
       router.refresh();
     } finally {
