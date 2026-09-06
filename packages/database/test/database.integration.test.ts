@@ -2251,6 +2251,83 @@ integration('database ownership boundaries', () => {
         strategyId: memberStrategy.id,
       }),
     ).resolves.toMatchObject({ status: 'APPROVED' });
+    const memberScope = {
+      workspaceId: owner.workspace.id,
+      groupId: serviceGroup.id,
+      actorUserId: member.user.id,
+      bunshinId: memberOwned.id,
+    };
+    const memberPillar = await new CreateContentPillar(
+      new PrismaContentPillarRepository(client),
+      assignments,
+    ).execute({ ...memberScope, title: '本人のテーマ', weight: 100 });
+    const memberPlans = new PrismaWeeklyPlanRepository(client);
+    const memberPlan = await new CreateGeneratedWeeklyPlan(memberPlans, assignments).execute({
+      ...memberScope,
+      weekStartDate: '2026-08-31',
+      timezone: 'Asia/Tokyo',
+      strategySummary: '本人の予定',
+      items: [
+        {
+          scheduledDate: '2026-09-06',
+          contentPillarId: memberPillar.id,
+          goal: '紹介',
+          angle: '体験',
+          recommendedFormat: 'TEXT',
+          notes: null,
+          campaignId: null,
+          classification: 'ORGANIC',
+        },
+      ],
+    });
+    await expect(
+      new ConfirmWeeklyPlan(memberPlans, assignments).execute({
+        ...memberScope,
+        weeklyPlanId: memberPlan.id,
+      }),
+    ).resolves.toMatchObject({ status: 'CONFIRMED' });
+    const memberMissions = new PrismaDailyMissionRepository(client);
+    const missionInput = {
+      ...memberScope,
+      socialProfileId: memberProfile.id,
+      weeklyPlanItemId: memberPlan.items[0]!.id,
+      missionDate: '2026-09-06',
+      format: 'TEXT' as const,
+      estimatedMinutes: 5,
+      topic: '紹介',
+      angle: '体験',
+      reason: '本人向け',
+      content: {
+        body: '私の体験を紹介します。',
+        threadParts: [],
+        cta: 'ご覧ください',
+        caption: null,
+        hashtags: [],
+      },
+    };
+    const memberMission = await new CreateDailyMission(memberMissions, assignments).execute(
+      missionInput,
+    );
+    await expect(new ListDailyMissions(memberMissions).execute(memberScope)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: memberMission.id })]),
+    );
+    const memberEngagement = new PrismaMissionEngagementRepository(client);
+    await new DecideMission(memberMissions, assignments, memberEngagement).execute({
+      ...memberScope,
+      dailyMissionId: memberMission.id,
+      decision: 'ACCEPTED',
+      idempotencyKey: randomUUID(),
+    });
+    const memberOutcomes = new PrismaMissionOutcomeRepository(client);
+    await new RecordManualPost(memberMissions, assignments, memberOutcomes).execute({
+      ...memberScope,
+      dailyMissionId: memberMission.id,
+      platform: 'TIKTOK',
+      idempotencyKey: randomUUID(),
+    });
+    await expect(
+      new CreateDailyMission(memberMissions, assignments).execute(missionInput),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
     for (const invalidScope of [
       { actorUserId: admin.user.id },
       { workspaceId: outsider.workspace.id },
@@ -2265,6 +2342,25 @@ integration('database ownership boundaries', () => {
           ...memberStrategyInput,
           strategyId: memberStrategy.id,
           ...invalidScope,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        new ConfirmWeeklyPlan(memberPlans, assignments).execute({
+          ...memberScope,
+          ...invalidScope,
+          weeklyPlanId: memberPlan.id,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        new ListDailyMissions(memberMissions).execute({ ...memberScope, ...invalidScope }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        new RecordManualPost(memberMissions, assignments, memberOutcomes).execute({
+          ...memberScope,
+          ...invalidScope,
+          dailyMissionId: memberMission.id,
+          platform: 'TIKTOK',
+          idempotencyKey: randomUUID(),
         }),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     }
