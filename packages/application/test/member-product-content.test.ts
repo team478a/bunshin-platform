@@ -88,6 +88,7 @@ describe('member product profile service', () => {
     const repository = {
       list: vi.fn(),
       save,
+      archive: vi.fn(),
     } satisfies MemberProductProfileRepository;
 
     await new MemberProductProfileService(repository).save({
@@ -116,6 +117,7 @@ describe('member product profile service', () => {
     const repository = {
       list: vi.fn(),
       save: vi.fn().mockResolvedValue(null),
+      archive: vi.fn(),
     } satisfies MemberProductProfileRepository;
 
     await expect(
@@ -128,5 +130,30 @@ describe('member product profile service', () => {
         appealPoint: '確認済みの特徴です。',
       }),
     ).rejects.toThrow('active member URL unavailable');
+  });
+
+  it('archives only through the scoped repository', async () => {
+    const archive = vi.fn<MemberProductProfileRepository['archive']>().mockResolvedValue(true);
+    const repository = {
+      list: vi.fn(),
+      save: vi.fn(),
+      archive,
+    } satisfies MemberProductProfileRepository;
+
+    await new MemberProductProfileService(repository).archive({
+      workspaceId: 'workspace-1',
+      groupId: 'group-1',
+      actorUserId: 'user-1',
+      profileId: 'profile-1',
+    });
+
+    expect(archive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        actorUserId: 'user-1',
+        profileId: 'profile-1',
+      }),
+    );
   });
 });

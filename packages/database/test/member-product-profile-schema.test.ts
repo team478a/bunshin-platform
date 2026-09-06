@@ -10,6 +10,13 @@ const migration = readFileSync(
   'utf8',
 );
 const repository = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+const archiveMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260906150000_archive_member_product_profiles/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('member product profile persistence boundary', () => {
   it('binds profiles to workspace, service, membership, user and a tracking link', () => {
@@ -34,5 +41,13 @@ describe('member product profile persistence boundary', () => {
     expect(repository).toContain("status: 'ACTIVE'");
     expect(repository).toContain("scopeType: 'MEMBER'");
     expect(repository).toContain('groupMembershipId: membership.id');
+  });
+
+  it('archives profiles without deleting their audit history', () => {
+    expect(schema).toContain('archivedAt             DateTime?');
+    expect(archiveMigration).toContain('ADD COLUMN "archived_at"');
+    expect(archiveMigration).toContain("ADD VALUE IF NOT EXISTS 'ARCHIVED'");
+    expect(repository).toContain("action: 'ARCHIVED'");
+    expect(repository).toContain('if (profile.archivedAt) return false');
   });
 });

@@ -30,6 +30,13 @@ export interface MemberProductProfileRepository {
     targetAudience: string | null;
     now: Date;
   }): Promise<MemberProductProfileRecord | null>;
+  archive(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    profileId: string;
+    now: Date;
+  }): Promise<boolean | null>;
 }
 
 const limits: Record<MemberProductContentPlatform, number> = {
@@ -162,5 +169,23 @@ export class MemberProductProfileService {
     });
     if (!saved) throw new ApplicationError('NOT_FOUND', 'active member URL unavailable');
     return saved;
+  }
+
+  async archive(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    profileId: string;
+  }) {
+    const archived = await this.repository.archive({
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      actorUserId: input.actorUserId,
+      profileId: requiredText(input.profileId, 'member product profile id', 100),
+      now: new Date(),
+    });
+    if (archived === null)
+      throw new ApplicationError('NOT_FOUND', 'member product profile unavailable');
+    return { archived };
   }
 }

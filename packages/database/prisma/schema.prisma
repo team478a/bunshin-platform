@@ -946,6 +946,7 @@ enum ExternalTrackingAuditAction {
   UPDATED
   ACTIVATED
   SUSPENDED
+  ARCHIVED
 }
 
 enum ExternalLinkPlacementTarget {
@@ -3522,6 +3523,7 @@ model MemberProductProfile {
   name                   String               @db.VarChar(160)
   appealPoint            String               @map("appeal_point") @db.VarChar(1000)
   targetAudience         String?              @map("target_audience") @db.VarChar(500)
+  archivedAt             DateTime?            @map("archived_at") @db.Timestamptz(6)
   createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace              Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -3530,7 +3532,7 @@ model MemberProductProfile {
   user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalTrackingLink   ExternalTrackingLink @relation(fields: [externalTrackingLinkId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, groupId, groupMembershipId, updatedAt])
+  @@index([workspaceId, groupId, groupMembershipId, archivedAt, updatedAt])
   @@index([externalTrackingLinkId, updatedAt])
   @@map("member_product_profiles")
 }

@@ -50,3 +50,36 @@ export async function saveMemberProductProfileResponse(request: Request, service
     });
   }
 }
+
+export async function archiveMemberProductProfileResponse(
+  request: Request,
+  serviceSlug: string,
+  profileId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const service = await resolvePublicServiceContext(serviceSlug);
+    const db = await import('@bunshin/database');
+    const result = await new MemberProductProfileService(
+      new db.PrismaMemberProductProfileRepository(),
+    ).archive({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      profileId: z.string().uuid().parse(profileId),
+    });
+    return Response.json(
+      { data: result, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}

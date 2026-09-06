@@ -117,6 +117,26 @@ export function MemberProductContentForm({
     }
   }
 
+  async function archiveSelectedProfile() {
+    if (!profileId || saving) return;
+    setSaving(true);
+    setMessage('保存した商品を非表示にしています…');
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/member-products/${encodeURIComponent(profileId)}`,
+        { method: 'DELETE' },
+      );
+      if (!response.ok) throw new Error('ARCHIVE_FAILED');
+      selectProfile('');
+      setMessage('保存した商品を非表示にしました。');
+      router.refresh();
+    } catch {
+      setMessage('商品を非表示にできませんでした。少し待ってから再度お試しください。');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (activeLinks.length === 0) {
     return (
       <div className="empty-state">
@@ -138,6 +158,16 @@ export function MemberProductContentForm({
           ))}
         </select>
       </label>
+      {profileId && (
+        <button
+          className="button"
+          type="button"
+          disabled={saving}
+          onClick={() => void archiveSelectedProfile()}
+        >
+          この保存商品を非表示にする
+        </button>
+      )}
       <label>
         使用するURL
         <select value={linkId} onChange={(event) => setLinkId(event.target.value)} required>
