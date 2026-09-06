@@ -46,6 +46,15 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
+  it('shows progress and browser or API failures instead of silently resetting the button', () => {
+    expect(experience).toContain('投稿案を作っています。画面を閉じずにお待ちください。');
+    expect(experience).toContain('createClientRequestId()');
+    expect(experience).toContain('controller.abort()');
+    expect(experience).toContain('catch (error)');
+    expect(experience).toContain('aria-live="polite"');
+    expect(experience).toContain('受付番号:');
+  });
+
   it('connects decisions, copies, posting and feedback through service routes', () => {
     expect(source).toContain('decideServiceDailyMissionResponse');
     expect(source).toContain('recordServiceMissionActivityResponse');

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { createClientRequestId } from '../../../../ui/client-request-id';
 import {
   MissionContent,
   MissionGuide,
@@ -49,32 +50,46 @@ export function ServiceDailyMissionSection({
 
   async function generate() {
     setPending(true);
-    setMessage(null);
+    setMessage('投稿案を作っています。画面を閉じずにお待ちください。');
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60_000);
     try {
       const response = await fetch(`${endpoint}/generate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           missionDate,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo',
           socialProfileId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: createClientRequestId(),
         }),
       });
+      if (response.ok) setMessage('今日の投稿案を作りました。');
+      else if (response.status === 409)
+        setMessage('この日の投稿案は、すでに作成済みです。画面を更新します。');
+      else {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string; requestId?: string };
+        } | null;
+        const detail = payload?.error?.message ?? '投稿案を作れませんでした。';
+        const requestId = payload?.error?.requestId;
+        setMessage(`${detail}${requestId ? `（受付番号: ${requestId}）` : ''}`);
+      }
+      if (response.ok || response.status === 409) router.refresh();
+    } catch (error) {
       setMessage(
-        response.ok
-          ? '今日の投稿案を作りました。'
-          : response.status === 409
-            ? 'この日の投稿案は、すでに作成済みです。'
-            : '投稿案を作れませんでした。SNS戦略と確定済みの週間計画を確認してください。',
+        error instanceof DOMException && error.name === 'AbortError'
+          ? '作成に時間がかかっています。少し待ってから、もう一度お試しください。'
+          : '通信できませんでした。接続を確認して、もう一度お試しください。',
       );
-      if (response.ok) router.refresh();
     } finally {
+      window.clearTimeout(timeout);
       setPending(false);
     }
   }
 
-  const key = () => crypto.randomUUID();
+  const key = () => createClientRequestId();
 
   async function record(id: string, resource: string, payload: Record<string, unknown>) {
     if (pendingAction) return false;
@@ -182,7 +197,11 @@ export function ServiceDailyMissionSection({
           {activeProfiles.length === 0 ? <p>先に、使いたいSNSを登録してください。</p> : null}
         </div>
       ) : null}
-      {message ? <p className="notice">{message}</p> : null}
+      {message ? (
+        <p className="notice" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
       {missions.length === 0 ? <p>今日の投稿案はまだありません。</p> : null}
       <ul className="mission-list">
         {missions.map((mission) => (

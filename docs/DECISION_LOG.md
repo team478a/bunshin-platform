@@ -1985,3 +1985,10 @@
 - Choice: 利用者は3案を選択・修正・コピーし、自分のSNSから投稿する。自動投稿は実装しない。
 - Operations: 組織AI上限を消費し、モデル、Prompt版、Token、原価見積り、処理時間、成否を既存AI利用履歴へ記録する。
 - Source: `docs/MEMBER_PRODUCT_AI_SUGGESTIONS_REPORT.md`
+
+# 2026-09-06: 投稿案作成ボタンは処理中・失敗を必ず画面へ返す
+
+- Compatibility: `crypto.randomUUID`がない古いアプリ内ブラウザでも、Web CryptoからUUID v4形式の冪等キーを生成する。
+- Feedback: 押下直後に処理中表示へ切り替え、APIエラー、通信失敗、60秒の待機超過を画面へ表示する。
+- Support: APIエラーでは公開用メッセージと受付番号だけを表示し、内部エラーや認証情報を露出しない。
+- Scope: 投稿案生成の前提条件・生成内容・自動投稿しない境界は変更しない。
