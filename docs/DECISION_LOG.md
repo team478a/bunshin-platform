@@ -1967,3 +1967,11 @@
 - Audit: 作成・更新時はURL本文を重複保存せず、商品情報と関連Link IDを外部URL監査へ記録する。
 - Scope: 削除、商品マスターへの昇格、AI個別生成、商品別成果集計は後続とする。
 - Source: `docs/MEMBER_PRODUCT_PROFILE_REUSE_REPORT.md`
+
+# 2026-09-06: 標準の参加質問はタップ選択を優先する
+
+- Accessibility: 高齢の利用者を含むスマートフォン利用では、長文の自由入力を参加開始の必須条件にしない。
+- Choice: 標準質問と千ノ国メディア向け質問は大きな単一選択ボタンで回答し、選択肢にない場合だけ自由入力を表示する。
+- Custom fallback: 運営者が独自に追加した質問は内容を推測せず、従来どおり自由入力にフォールバックする。
+- Compatibility: 保存する回答形式は文字列のままとし、既存の投稿パートナー提案およびサービス境界を変更しない。
+- Source: `docs/SERVICE_ONBOARDING_CHOICE_OPTIONS_REPORT.md`

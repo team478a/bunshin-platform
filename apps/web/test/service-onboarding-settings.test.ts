@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SERVICE_PROFILE_QUESTIONS,
   readServiceOnboardingSettings,
+  serviceOnboardingChoicePreset,
 } from '../src/services/service-onboarding-settings';
 
 describe('service onboarding settings', () => {
@@ -46,5 +47,17 @@ describe('service onboarding settings', () => {
       purpose: false,
       activityName: true,
     });
+  });
+
+  it('offers tap-friendly presets for standard and media questions only', () => {
+    expect(serviceOnboardingChoicePreset('どのSNSで発信したいですか？')?.options).toContain(
+      'インスタグラム',
+    );
+    expect(
+      serviceOnboardingChoicePreset(
+        '千ノ国メタバースを、どのようなきっかけで知りましたか？（例：知人からの紹介）',
+      )?.options,
+    ).toContain('友人・知人からの紹介');
+    expect(serviceOnboardingChoicePreset('運営者が自由に追加した質問')).toBeNull();
   });
 });
