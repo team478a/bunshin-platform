@@ -97,6 +97,26 @@ describe('Mission Deep Link landing', () => {
     expect(mocks.redirect).not.toHaveBeenCalledWith(expect.stringContaining('secret-token'));
   });
 
+  it('opens a service mission in its own service view with the verified group scope', async () => {
+    mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
+    mocks.consume.mockResolvedValue({
+      id: 'state-a',
+      workspaceId: 'workspace-a',
+      bunshinId: 'bunshin-a',
+      dailyMissionId: 'mission-a',
+    });
+    mocks.findMission.mockResolvedValue({
+      format: 'TEXT',
+      bunshin: { groupId: 'group-a', group: { serviceConfiguration: { slug: 'my-service' } } },
+    });
+    await expect(TodayPage({ searchParams: Promise.resolve({ state: 'token' }) })).rejects.toThrow(
+      'REDIRECT:/s/my-service/bunshins/bunshin-a#today-post',
+    );
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: 'group-a', actorUserId: 'user-a' }),
+    );
+  });
+
   it('rejects missing or oversized state before database access', async () => {
     mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
     await expect(TodayPage({ searchParams: Promise.resolve({}) })).rejects.toThrow('NOT_FOUND');

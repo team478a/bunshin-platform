@@ -6,6 +6,7 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 const onboardingForm = source('app/s/[serviceSlug]/onboarding/service-onboarding-form.tsx');
 const proposals = source('app/s/[serviceSlug]/bunshins/new/service-bunshin-proposals.tsx');
 const detailPage = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
+const setup = source('app/s/[serviceSlug]/bunshins/[bunshinId]/simple-first-post-setup.tsx');
 
 describe('service first-post guided setup', () => {
   it('continues from onboarding directly to personalized partner proposals', () => {
@@ -29,9 +30,9 @@ describe('service first-post guided setup', () => {
     expect(proposals).toContain('?setup=1');
   });
 
-  it('shows progress through the manual-post setup without enabling auto-posting', () => {
-    expect(detailPage).toContain('最初の投稿案まで');
-    expect(detailPage).toContain('今日の投稿案を受け取る');
-    expect(detailPage).toContain('SNSへの投稿はご自身で行います');
+  it('starts automatic preparation while leaving SNS posting to the member', () => {
+    expect(detailPage).toContain('初回設定のあとは、投稿案を自動で準備してLINEでお知らせします。');
+    expect(setup).toContain('この設定で自動のお届けを始める');
+    expect(setup).toContain('SNSへの投稿はご自身で行います');
   });
 });

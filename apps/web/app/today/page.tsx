@@ -25,19 +25,6 @@ export default async function TodayPage({
       new db.PrismaMissionDeepLinkStateRepository(),
       new HkdfMissionDeepLinkSigner(),
     ).execute({ token, environment: currentLineEnvironment(), actorUserId: user.userId });
-    await new RecordMissionActivity(
-      new db.PrismaDailyMissionRepository(),
-      new db.PrismaBunshinCapabilityAssignmentRepository(),
-      new db.PrismaMissionEngagementRepository(),
-    ).execute({
-      workspaceId: state.workspaceId,
-      actorUserId: user.userId,
-      bunshinId: state.bunshinId,
-      dailyMissionId: state.dailyMissionId,
-      type: 'VIEWED',
-      idempotencyKey: `line-deep-link:${state.id}`,
-      metadata: null,
-    });
     const mission = await db.prisma.dailyMission.findFirst({
       where: {
         id: state.dailyMissionId,
@@ -47,10 +34,33 @@ export default async function TodayPage({
       },
       select: {
         format: true,
+        bunshin: {
+          select: {
+            groupId: true,
+            group: { select: { serviceConfiguration: { select: { slug: true } } } },
+          },
+        },
         campaign: { select: { groupId: true } },
         contentLinkUsage: { select: { groupId: true } },
       },
     });
+    await new RecordMissionActivity(
+      new db.PrismaDailyMissionRepository(),
+      new db.PrismaBunshinCapabilityAssignmentRepository(),
+      new db.PrismaMissionEngagementRepository(),
+    ).execute({
+      workspaceId: state.workspaceId,
+      ...(mission?.bunshin?.groupId ? { groupId: mission.bunshin.groupId } : {}),
+      actorUserId: user.userId,
+      bunshinId: state.bunshinId,
+      dailyMissionId: state.dailyMissionId,
+      type: 'VIEWED',
+      idempotencyKey: `line-deep-link:${state.id}`,
+      metadata: null,
+    });
+    const serviceSlug = mission?.bunshin?.group?.serviceConfiguration?.slug;
+    if (serviceSlug)
+      redirect(`/s/${encodeURIComponent(serviceSlug)}/bunshins/${state.bunshinId}#today-post`);
     if (mission && ['IMAGE', 'SLIDE'].includes(mission.format)) {
       const now = new Date();
       const preferredGroupId = mission.contentLinkUsage?.groupId ?? mission.campaign?.groupId;

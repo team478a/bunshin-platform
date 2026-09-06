@@ -46,13 +46,12 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
-  it('shows progress and browser or API failures instead of silently resetting the button', () => {
-    expect(experience).toContain('投稿案を作っています。画面を閉じずにお待ちください。');
-    expect(experience).toContain('createClientRequestId()');
-    expect(experience).toContain('controller.abort()');
-    expect(experience).toContain('catch (error)');
+  it('presents delivered content without a generation action', () => {
+    expect(experience).not.toContain('async function generate');
+    expect(experience).toContain(
+      '投稿予定の日に、あなたに合った内容を自動で準備し、LINEでお知らせします。',
+    );
     expect(experience).toContain('aria-live="polite"');
-    expect(experience).toContain('受付番号:');
   });
 
   it('connects decisions, copies, posting and feedback through service routes', () => {

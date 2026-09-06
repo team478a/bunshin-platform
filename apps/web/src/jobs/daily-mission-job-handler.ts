@@ -6,21 +6,36 @@ import {
 } from '@bunshin/application';
 import { createDailyMissionGenerationService } from '../services/daily-mission-generation';
 import { currentActivityContinuityRule } from '../activity-continuity-rule';
+import { mondayForDate, prepareServiceAutomaticWeek } from './service-automatic-week';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
     async execute({ job, localDate }) {
       if (!job.bunshinId) return;
-      const mission = await createDailyMissionGenerationService().execute({
+      const db = await import('@bunshin/database');
+      const scope = await new db.PrismaMissionAutomationScopeRepository().resolveScope({
         workspaceId: job.workspaceId,
         bunshinId: job.bunshinId,
         actorUserId: job.requestedBy,
+      });
+      if (scope.groupId) {
+        const plan = await prepareServiceAutomaticWeek({
+          ...scope,
+          groupId: scope.groupId,
+          weekStartDate: mondayForDate(localDate),
+          usageIdempotencyKey: `job:${job.id}:weekly-plan`,
+        });
+        // A day off is successful, not a failed generation requiring user intervention.
+        if (!plan.items.some((item) => item.scheduledDate === localDate)) return;
+      }
+      const mission = await createDailyMissionGenerationService().execute({
+        ...scope,
+        serviceSafeMode: Boolean(scope.groupId),
         missionDate: localDate,
         generationIdempotencyKey: job.idempotencyKey,
         usageIdempotencyPrefix: `job:${job.id}:daily-mission`,
         existingPolicy: 'RETURN',
       });
-      const db = await import('@bunshin/database');
       const activityRule = await currentActivityContinuityRule();
       const returnReminder = await new db.PrismaLineReturnReminderRepository().shouldUse({
         workspaceId: job.workspaceId,

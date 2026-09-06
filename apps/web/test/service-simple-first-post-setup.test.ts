@@ -19,13 +19,13 @@ describe('simple service first-post setup', () => {
       '/social-profiles',
       '/social-account-strategies/generate',
       '/approve',
-      '/weekly-plans/generate',
-      '/confirm',
-      '/daily-missions/generate',
+      '/automatic-delivery',
     ];
     endpoints.forEach((endpoint) => expect(setup).toContain(endpoint));
     expect(setup).toContain("goal: 'BRAND_AWARENESS'");
     expect(setup).not.toContain('post-record');
+    expect(setup).not.toContain('/daily-missions/generate');
+    expect(setup).not.toContain('/weekly-plans/generate');
   });
 
   it('keeps detailed controls available without making them the primary path', () => {
