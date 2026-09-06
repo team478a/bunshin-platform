@@ -74,6 +74,7 @@ export interface WeeklyPlanGenerationDependencies {
   recordUsage(event: UsageEvent): Promise<void>;
   runWithQuota<T>(input: {
     workspaceId: string;
+    groupId?: string | null;
     operationKey: string;
     generate(): Promise<T>;
   }): Promise<T>;
@@ -154,6 +155,7 @@ export class WeeklyPlanGenerationService {
       providerAttempted = true;
       const result = await this.dependencies.runWithQuota({
         workspaceId: input.workspaceId,
+        ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
         operationKey: input.usageIdempotencyKey,
         generate: () =>
           new GenerateWeeklyPlan(this.dependencies.planner).execute({

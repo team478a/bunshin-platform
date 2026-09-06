@@ -2013,3 +2013,24 @@
 ## 2026-09-06: サービス投稿案は初回設定後に自動で届ける
 
 利用者の指摘により、手動生成を通常導線としていた実装を修正する。サービス参加者は初回にSNS・ペース・LINE通知同意を設定し、以後は既存cron/workerが週間予定の準備・確定・投稿案生成・通知を行う。予定のない日はエラーにしない。個人用機能の手動確定とSNSへの本人による投稿は維持する。詳細は `SERVICE_AUTOMATIC_DELIVERY.md`。
+
+## 2026-09-07: 企業向け毎日発信アイデアはService Membership単位で生成・配信する
+
+- Product: 和愛株式会社が運営する無料サービスとして、企業・店舗・個人事業主へ業種に合う発信アイデアを毎日または平日にLINEで届ける。
+- Isolation: 業種、事業名、商品・サービス、目的、対象顧客は`ServiceMemberBusinessProfile`へ保存し、Workspace、Service Group、Membership、Userの複合参照で固定する。User共通プロフィールから暗黙補完しない。
+- Generation: Service固有の事業プロフィールと業種別安全ルールを、投稿パートナー候補、週間計画、Daily Missionの公式Knowledgeへ渡す。
+- Delivery: 専用テンプレートはLINE登録、毎日8時、発信アイデア、頻度固定を初期値とする。利用者は初回にSNSと通知時刻を設定し、以後の生成・通知は既存の冪等なJobで自動実行する。
+- Resilience: AI Provider障害、品質拒否、AI上限到達時は決定的な安全予備案をDaily Missionとして保存し、通常のLINE配信へ接続する。
+- Limits: AI利用枠はOrganization枠に加えてService単位でも予約・消費し、参加者上限はService参加時に適用する。
+- Scale: Mission Schedulerは通知対象をIDカーソルで順次取得し、1,000件超の後続利用者も処理対象にする。
+- Boundary: SNS自動投稿、画像・動画生成、メール配信、課金、業種別の個別法務審査は今回のFREE MVPに含めない。
+- Source: `docs/WATASHI_WORKS_DAILY_IDEA_IMPLEMENTATION_REPORT.md`
+
+## 2026-09-07: 毎日の配信内容はService初期値と参加者のProgram設定から決定する
+
+- Levels: 発信アイデアを`IDEA_ONLY`、作り方・台本・配信用プロンプトを`GUIDED`、そのまま使える投稿案を`READY_TO_USE`へ対応させる。
+- Default: Serviceの毎日配信設定を、そのServiceでProgramを割り当てていない参加者の初期値とする。
+- Member plan: ACTIVEなProgram Enrollmentがある場合はEnrollmentのsupport modeを優先し、本人が許可された範囲で選んだPreferenceがあればさらに優先する。
+- Generation: 決定したlevelをDaily Mission保存時に使用し、初回Social Profile作成時にも同じlevelを保存する。AI障害時の予備案も同じlevelで表示する。
+- Boundary: 画像・動画本体の自動生成とLINEへの直接送信は別工程とし、今回の変更では開始しない。
+- Source: `docs/WATASHI_WORKS_DELIVERY_PLAN_FOUNDATION_REPORT.md`

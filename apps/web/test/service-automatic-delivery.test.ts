@@ -16,7 +16,24 @@ vi.mock('../src/auth/current-user', () => ({
 }));
 vi.mock('../src/services/public-service', () => ({
   resolvePublicServiceContext: () =>
-    Promise.resolve({ workspaceId: 'workspace', serviceId: 'service' }),
+    Promise.resolve({
+      workspaceId: 'workspace',
+      serviceId: 'service',
+      configuration: {
+        registration: {
+          onboardingConfig: {
+            dailyIdeaDelivery: {
+              enabled: true,
+              cadence: 'WEEKDAYS',
+              defaultNotificationTime: '08:00',
+              lockCadence: true,
+              contentMode: 'IDEA',
+            },
+          },
+          surveyConfig: {},
+        },
+      },
+    }),
 }));
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
 vi.mock('../src/jobs/service-automatic-week', () => ({ mondayForDate: () => '2026-09-07' }));
@@ -70,7 +87,12 @@ describe('service automatic delivery settings', () => {
       actorUserId: 'member',
     });
     expect(m.save).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true, consentGranted: true, localTime: '08:00' }),
+      expect.objectContaining({
+        enabled: true,
+        consentGranted: true,
+        localTime: '08:00',
+        frequency: 'WEEKDAYS',
+      }),
     );
     expect(m.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ environment: 'PRODUCTION', actorUserId: 'member', bunshinId: id }),

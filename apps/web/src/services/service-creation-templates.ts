@@ -1,6 +1,7 @@
 export const SERVICE_CREATION_TEMPLATE_KEYS = [
   'SIDE_HUSTLE_AFFILIATE',
   'ENTERPRISE_PROGRAM',
+  'BUSINESS_DAILY_IDEAS',
   'CUSTOM',
 ] as const;
 
@@ -48,6 +49,28 @@ export const SERVICE_CREATION_TEMPLATES = {
       ],
     },
   },
+  BUSINESS_DAILY_IDEAS: {
+    label: '企業向け毎日発信アイデア',
+    description: '業種と目的に合う発信アイデアを、毎日LINEで受け取る無料サービス向けです。',
+    registrationMode: 'PUBLIC',
+    emailEnabled: false,
+    lineEnabled: true,
+    inviteCodeEnabled: false,
+    referralEnabled: false,
+    businessProfileEnabled: true,
+    dailyIdeaDelivery: {
+      enabled: true,
+      cadence: 'DAILY',
+      defaultNotificationTime: '08:00',
+      lockCadence: true,
+      contentMode: 'IDEA',
+    },
+    onboarding: {
+      welcomeTitle: 'あなたの事業に合う発信アイデアをお届けします',
+      welcomeMessage: '業種や商品について教えてください。設定後は毎日LINEにアイデアが届きます。',
+      questions: ['発信するときに大切にしたいことを教えてください。'],
+    },
+  },
   CUSTOM: {
     label: '自由に設定する',
     description: '用途を決めず、必要な登録方法を個別に設定します。',
@@ -56,6 +79,14 @@ export const SERVICE_CREATION_TEMPLATES = {
     lineEnabled: false,
     inviteCodeEnabled: false,
     referralEnabled: false,
+    businessProfileEnabled: false,
+    dailyIdeaDelivery: {
+      enabled: false,
+      cadence: 'DAILY',
+      defaultNotificationTime: '08:00',
+      lockCadence: false,
+      contentMode: 'READY_TO_USE',
+    },
     onboarding: {
       welcomeTitle: '',
       welcomeMessage: '',
@@ -72,6 +103,14 @@ export const SERVICE_CREATION_TEMPLATES = {
     lineEnabled: boolean;
     inviteCodeEnabled: boolean;
     referralEnabled: boolean;
+    businessProfileEnabled?: boolean;
+    dailyIdeaDelivery?: {
+      enabled: boolean;
+      cadence: 'DAILY' | 'WEEKDAYS';
+      defaultNotificationTime: string;
+      lockCadence: boolean;
+      contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
+    };
     onboarding: {
       welcomeTitle: string;
       welcomeMessage: string;

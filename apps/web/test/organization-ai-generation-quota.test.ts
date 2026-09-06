@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { withOrganizationAiGenerationQuota } from '../src/organization-ai-generation-quota';
+import type { ServiceAiGenerationQuotaRepository } from '../src/organization-ai-generation-quota';
 
 const workspaceId = '98a31509-e0d9-473a-b374-890623a4b7d0';
+const groupId = '0cf3b205-7007-4238-b012-161085a680a5';
 
 function repository(status: 'RESERVED' | 'ALREADY_RESERVED' | 'UNLIMITED' | 'EXHAUSTED') {
   const reserve = vi.fn().mockResolvedValue({
@@ -14,6 +16,15 @@ function repository(status: 'RESERVED' | 'ALREADY_RESERVED' | 'UNLIMITED' | 'EXH
   });
   const finish = vi.fn().mockResolvedValue(true);
   return { reserve, finish } satisfies OrganizationAiGenerationReservationRepository;
+}
+
+function serviceRepository(status: 'RESERVED' | 'ALREADY_RESERVED' | 'UNLIMITED' | 'EXHAUSTED') {
+  const reserve = vi.fn().mockResolvedValue({
+    status,
+    id: status === 'RESERVED' || status === 'ALREADY_RESERVED' ? 'service-reservation-1' : null,
+  });
+  const finish = vi.fn().mockResolvedValue(undefined);
+  return { reserve, finish } satisfies ServiceAiGenerationQuotaRepository;
 }
 
 describe('organization AI generation quota', () => {
@@ -81,5 +92,65 @@ describe('organization AI generation quota', () => {
     });
 
     expect(quota.finish).not.toHaveBeenCalled();
+  });
+
+  it('rejects an exhausted service before reserving an organization slot', async () => {
+    const organizationQuota = repository('RESERVED');
+    const serviceQuota = serviceRepository('EXHAUSTED');
+    const generate = vi.fn();
+
+    await expect(
+      withOrganizationAiGenerationQuota({
+        workspaceId,
+        groupId,
+        operationKey: 'daily-content:service-limit',
+        repository: organizationQuota,
+        serviceRepository: serviceQuota,
+        generate,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(organizationQuota.reserve).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('releases a service slot when the organization limit is exhausted', async () => {
+    const organizationQuota = repository('EXHAUSTED');
+    const serviceQuota = serviceRepository('RESERVED');
+
+    await expect(
+      withOrganizationAiGenerationQuota({
+        workspaceId,
+        groupId,
+        operationKey: 'daily-content:organization-limit',
+        repository: organizationQuota,
+        serviceRepository: serviceQuota,
+        generate: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(serviceQuota.finish).toHaveBeenCalledWith({
+      reservationId: 'service-reservation-1',
+      outcome: 'RELEASED',
+    });
+  });
+
+  it('consumes both service and organization slots after generation', async () => {
+    const organizationQuota = repository('RESERVED');
+    const serviceQuota = serviceRepository('RESERVED');
+
+    await withOrganizationAiGenerationQuota({
+      workspaceId,
+      groupId,
+      operationKey: 'daily-content:success',
+      repository: organizationQuota,
+      serviceRepository: serviceQuota,
+      generate: () => Promise.resolve('generated'),
+    });
+
+    expect(serviceQuota.finish).toHaveBeenCalledWith({
+      reservationId: 'service-reservation-1',
+      outcome: 'CONSUMED',
+    });
   });
 });

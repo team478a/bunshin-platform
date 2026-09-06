@@ -192,6 +192,14 @@ export class DailyMissionGenerationService {
             scope,
           );
       const currentPersonality = personalityVersions[0] ?? null;
+      const serviceKnowledge =
+        input.serviceSafeMode && input.groupId
+          ? await loadServiceGenerationKnowledge({
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              actorUserId: input.actorUserId,
+            })
+          : null;
       const granted = input.serviceSafeMode
         ? []
         : await new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
@@ -246,7 +254,9 @@ export class DailyMissionGenerationService {
         ctaStrategy: strategy.ctaStrategy,
         postingPolicy: strategy.postingPolicy,
       };
-      const knowledge = granted.map(({ type, title, content }) => ({ type, title, content }));
+      const knowledge =
+        serviceKnowledge?.officialKnowledge ??
+        granted.map(({ type, title, content }) => ({ type, title, content }));
       const groupKnowledge = campaign
         ? selectGroupKnowledgeChunksForPrompt(
             await new GroupKnowledgeService(
@@ -263,14 +273,8 @@ export class DailyMissionGenerationService {
             sourceLabel: chunk.sourceLabel,
             content: chunk.content.trim(),
           }))
-        : input.serviceSafeMode && input.groupId
-          ? (
-              await loadServiceGenerationKnowledge({
-                workspaceId: input.workspaceId,
-                groupId: input.groupId,
-                actorUserId: input.actorUserId,
-              })
-            ).groupKnowledge
+        : serviceKnowledge
+          ? serviceKnowledge.groupKnowledge
           : [];
       const usage = async (
         suffix: string,
@@ -298,6 +302,7 @@ export class DailyMissionGenerationService {
       const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
         withOrganizationAiGenerationQuota({
           workspaceId: input.workspaceId,
+          ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
           operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
           generate,
         });
@@ -512,7 +517,7 @@ export class DailyMissionGenerationService {
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,
         ...brief.output,
-        assistanceLevel: profile.defaultAssistanceLevel,
+        assistanceLevel: serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel,
         content: missionContent,
         qualityScore: quality.output.score,
         campaignId: weeklyItem.campaignId,

@@ -3,7 +3,53 @@ export interface ServiceOnboardingSettings {
   welcomeMessage: string;
   questions: string[];
   profileQuestions: ServiceProfileQuestionSettings;
+  businessProfileEnabled: boolean;
+  dailyIdeaDelivery: ServiceDailyIdeaDeliverySettings;
 }
+
+export interface ServiceDailyIdeaDeliverySettings {
+  enabled: boolean;
+  cadence: 'DAILY' | 'WEEKDAYS';
+  defaultNotificationTime: string;
+  lockCadence: boolean;
+  contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
+}
+
+export type ServiceContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
+
+export function serviceContentAssistanceLevel(
+  contentMode: ServiceDailyIdeaDeliverySettings['contentMode'],
+): ServiceContentAssistanceLevel {
+  if (contentMode === 'IDEA') return 'IDEA_ONLY';
+  if (contentMode === 'PROMPT') return 'GUIDED';
+  return 'READY_TO_USE';
+}
+
+export function effectiveServiceContentAssistanceLevel(input: {
+  contentMode: ServiceDailyIdeaDeliverySettings['contentMode'];
+  enrollmentSupportMode?: ServiceContentAssistanceLevel | null;
+  preferredSupportMode?: ServiceContentAssistanceLevel | null;
+}): ServiceContentAssistanceLevel {
+  return (
+    input.preferredSupportMode ??
+    input.enrollmentSupportMode ??
+    serviceContentAssistanceLevel(input.contentMode)
+  );
+}
+
+export function serviceDeliveryDefaultAssistanceLevel(
+  delivery: Pick<ServiceDailyIdeaDeliverySettings, 'enabled' | 'contentMode'>,
+): ServiceContentAssistanceLevel | null {
+  return delivery.enabled ? serviceContentAssistanceLevel(delivery.contentMode) : null;
+}
+
+export const DEFAULT_SERVICE_DAILY_IDEA_DELIVERY: ServiceDailyIdeaDeliverySettings = {
+  enabled: false,
+  cadence: 'DAILY',
+  defaultNotificationTime: '08:00',
+  lockCadence: false,
+  contentMode: 'READY_TO_USE',
+};
 
 export interface ServiceOnboardingChoicePreset {
   options: readonly string[];
@@ -163,6 +209,7 @@ export function readServiceOnboardingSettings(
   const onboarding = record(onboardingConfig);
   const survey = record(surveyConfig);
   const configuredProfileQuestions = record(onboarding.profileQuestions);
+  const configuredDailyIdeaDelivery = record(onboarding.dailyIdeaDelivery);
   const profileQuestions = Object.fromEntries(
     Object.entries(DEFAULT_SERVICE_PROFILE_QUESTIONS).map(([key, fallback]) => [
       key,
@@ -178,6 +225,22 @@ export function readServiceOnboardingSettings(
       ? survey.questions.filter((item): item is string => typeof item === 'string').slice(0, 7)
       : [],
     profileQuestions,
+    businessProfileEnabled: onboarding.businessProfileEnabled === true,
+    dailyIdeaDelivery: {
+      enabled: configuredDailyIdeaDelivery.enabled === true,
+      cadence: configuredDailyIdeaDelivery.cadence === 'WEEKDAYS' ? 'WEEKDAYS' : 'DAILY',
+      defaultNotificationTime:
+        typeof configuredDailyIdeaDelivery.defaultNotificationTime === 'string' &&
+        /^(0[7-9]|1\d|20):[0-5]\d$/.test(configuredDailyIdeaDelivery.defaultNotificationTime)
+          ? configuredDailyIdeaDelivery.defaultNotificationTime
+          : DEFAULT_SERVICE_DAILY_IDEA_DELIVERY.defaultNotificationTime,
+      lockCadence: configuredDailyIdeaDelivery.lockCadence === true,
+      contentMode:
+        configuredDailyIdeaDelivery.contentMode === 'IDEA' ||
+        configuredDailyIdeaDelivery.contentMode === 'PROMPT'
+          ? configuredDailyIdeaDelivery.contentMode
+          : 'READY_TO_USE',
+    },
   };
 }
 

@@ -29,16 +29,40 @@ export default async function ServiceOnboardingPage({
       status: 'ACTIVE',
       group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
     },
-    select: { id: true, serviceOnboardingResponse: { select: { id: true } } },
+    select: {
+      id: true,
+      serviceOnboardingResponse: { select: { id: true } },
+      serviceMemberBusinessProfile: {
+        select: {
+          primaryIndustryId: true,
+          otherIndustryText: true,
+          businessName: true,
+          region: true,
+          productService: true,
+          primaryPurpose: true,
+          targetAudience: true,
+        },
+      },
+    },
   });
   if (!membership) redirect(`/s/${serviceSlug}` as Route);
   const settings = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
   );
-  if (settings.questions.length === 0 || membership.serviceOnboardingResponse) {
+  const onboardingComplete =
+    (settings.questions.length === 0 || Boolean(membership.serviceOnboardingResponse)) &&
+    (!settings.businessProfileEnabled || Boolean(membership.serviceMemberBusinessProfile));
+  if (onboardingComplete) {
     redirect(`/s/${serviceSlug}/home` as Route);
   }
+  const industries = settings.businessProfileEnabled
+    ? await db.prisma.industry.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, key: true, name: true },
+      })
+    : [];
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
     '--service-secondary': service.configuration.brand.secondaryColor,
@@ -54,7 +78,13 @@ export default async function ServiceOnboardingPage({
           <p>{settings.welcomeMessage || 'あなたに合った内容を届けるための質問です。'}</p>
         </header>
         <section className="service-entry__card">
-          <ServiceOnboardingForm serviceSlug={serviceSlug} questions={settings.questions} />
+          <ServiceOnboardingForm
+            serviceSlug={serviceSlug}
+            questions={settings.questions}
+            businessProfileEnabled={settings.businessProfileEnabled}
+            industries={industries}
+            initialBusinessProfile={membership.serviceMemberBusinessProfile}
+          />
         </section>
       </article>
     </PublicShell>

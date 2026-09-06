@@ -28,6 +28,7 @@ describe('PrismaMissionAutomationCandidateRepository', () => {
     await expect(repository.listEnabled(1)).resolves.toMatchObject({
       candidates: [expect.objectContaining({ id: 'one' })],
       truncated: true,
+      nextCursor: 'one',
     });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -40,6 +41,17 @@ describe('PrismaMissionAutomationCandidateRepository', () => {
         orderBy: { id: 'asc' },
         take: 2,
       }),
+    );
+  });
+
+  it('continues after the supplied cursor', async () => {
+    const findMany = vi.fn().mockResolvedValue([row('two')]);
+    const repository = new PrismaMissionAutomationCandidateRepository({
+      lineNotificationPreference: { findMany },
+    } as never);
+    await repository.listEnabled(10, 'one');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: { gt: 'one' } }) }),
     );
   });
 

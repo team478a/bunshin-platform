@@ -65,6 +65,7 @@ export default async function ServiceMemberHome({
       serviceRole: true,
       user: { select: { displayName: true } },
       serviceOnboardingResponse: { select: { id: true } },
+      serviceMemberBusinessProfile: { select: { id: true } },
       featureAssignments: {
         where: { status: 'ENABLED' },
         select: { featureKey: true, startsAt: true, endsAt: true },
@@ -86,7 +87,10 @@ export default async function ServiceMemberHome({
     service.configuration.registration.surveyConfig,
   );
   const announcement = readServiceAnnouncement(service.configuration.registration.onboardingConfig);
-  if (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) {
+  if (
+    (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) ||
+    (onboarding.businessProfileEnabled && !membership.serviceMemberBusinessProfile)
+  ) {
     redirect(`/s/${service.configuration.slug}/onboarding` as Route);
   }
 

@@ -96,4 +96,28 @@ describe('RunMissionAutomationScheduler', () => {
     ).execute('STAGING');
     expect(result).toMatchObject({ failures: 1, truncated: true, environment: 'STAGING' });
   });
+
+  it('continues through candidate pages so users after the first 1000 are scheduled', async () => {
+    const listEnabled = vi
+      .fn()
+      .mockResolvedValueOnce({
+        candidates: [preference({ id: 'first' })],
+        truncated: true,
+        nextCursor: 'first',
+      })
+      .mockResolvedValueOnce({
+        candidates: [preference({ id: 'second', userId: 'user-2' })],
+        truncated: false,
+      });
+    const result = await new RunMissionAutomationScheduler(
+      { listEnabled },
+      { execute: weekly } as never,
+      { execute: daily } as never,
+      () => new Date('2026-08-24T23:00:00.000Z'),
+      1,
+    ).execute('PRODUCTION');
+    expect(listEnabled).toHaveBeenNthCalledWith(2, 1, 'first');
+    expect(daily).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ candidates: 2, due: 2, truncated: false });
+  });
 });

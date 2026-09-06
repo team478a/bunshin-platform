@@ -30,6 +30,17 @@ export async function serviceBunshinProposalsResponse(request: Request, serviceS
       },
       select: {
         serviceOnboardingResponse: { select: { answers: true } },
+        serviceMemberBusinessProfile: {
+          select: {
+            otherIndustryText: true,
+            businessName: true,
+            region: true,
+            productService: true,
+            primaryPurpose: true,
+            targetAudience: true,
+            primaryIndustry: { select: { name: true } },
+          },
+        },
       },
     });
     if (!membership) throw new ApplicationError('NOT_FOUND', 'service membership not found');
@@ -37,7 +48,22 @@ export async function serviceBunshinProposalsResponse(request: Request, serviceS
     if (answers.length === 0) {
       throw new ApplicationError('VALIDATION_ERROR', 'service onboarding response required');
     }
-    const context = serviceOnboardingProposalContext(answers);
+    const profile = membership.serviceMemberBusinessProfile;
+    const businessContext = profile
+      ? [
+          `業種：${profile.otherIndustryText || profile.primaryIndustry?.name || '未設定'}`,
+          `店舗・会社名：${profile.businessName}`,
+          profile.region ? `活動地域：${profile.region}` : null,
+          `商品・サービス：${profile.productService}`,
+          `発信目的：${profile.primaryPurpose}`,
+          `対象顧客：${profile.targetAudience}`,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '';
+    const context = [businessContext, serviceOnboardingProposalContext(answers)]
+      .filter(Boolean)
+      .join('\n');
     const input = {
       goal: `次の初回回答に合う発信目的を設計してください。\n${context}`,
       audience: '初回回答から、投稿を届けたい相手を具体化してください。',

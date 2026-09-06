@@ -14,6 +14,7 @@ import { resolvePublicServiceContext } from '../services/public-service';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { mondayForDate } from '../jobs/service-automatic-week';
 import { ensureUserWorkspaceLineConnection } from '../line/ensure-user-workspace-connection';
+import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
 
 const schema = z
   .object({ enabled: z.boolean(), localTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/) })
@@ -37,6 +38,10 @@ export async function updateServiceAutomaticDelivery(
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const service = await resolvePublicServiceContext(serviceSlug);
+    const deliveryPolicy = readServiceOnboardingSettings(
+      service.configuration.registration.onboardingConfig,
+      service.configuration.registration.surveyConfig,
+    ).dailyIdeaDelivery;
     const db = await import('@bunshin/database');
     const scope = {
       workspaceId: service.workspaceId,
@@ -67,7 +72,7 @@ export async function updateServiceAutomaticDelivery(
       consentGranted: value.enabled,
       localTime: value.localTime,
       timezone: 'Asia/Tokyo',
-      frequency: 'DAILY',
+      frequency: deliveryPolicy.enabled ? deliveryPolicy.cadence : 'DAILY',
       quietHoursStart: '21:00',
       quietHoursEnd: '07:00',
       pausedUntil: null,

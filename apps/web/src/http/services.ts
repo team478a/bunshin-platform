@@ -95,6 +95,18 @@ export async function createServiceResponse(request: Request) {
     if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const value = createSchema.parse(await request.json());
     const template = SERVICE_CREATION_TEMPLATES[value.templateKey];
+    const businessProfileEnabled =
+      'businessProfileEnabled' in template ? template.businessProfileEnabled : false;
+    const dailyIdeaDelivery =
+      'dailyIdeaDelivery' in template
+        ? template.dailyIdeaDelivery
+        : {
+            enabled: false as const,
+            cadence: 'DAILY' as const,
+            defaultNotificationTime: '08:00',
+            lockCadence: false as const,
+            contentMode: 'READY_TO_USE' as const,
+          };
     const db = await import('@bunshin/database');
     const service = await new ServiceFoundationService(
       new db.PrismaServiceFoundationRepository(),
@@ -133,6 +145,8 @@ export async function createServiceResponse(request: Request) {
             templateKey: value.templateKey,
             welcomeTitle: template.onboarding.welcomeTitle,
             welcomeMessage: template.onboarding.welcomeMessage,
+            businessProfileEnabled,
+            dailyIdeaDelivery,
           },
           surveyConfig: { questions: [...template.onboarding.questions] },
         },

@@ -4,6 +4,7 @@ import type { SocialPlatform, SocialPostingFrequency } from '@bunshin/capability
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClientRequestId } from '../../../../ui/client-request-id';
+import { serviceContentAssistanceLevel } from '../../../../../src/services/service-onboarding-settings';
 
 const platformLabels: Record<SocialPlatform, string> = {
   INSTAGRAM: 'インスタグラム',
@@ -50,6 +51,7 @@ export function SimpleFirstPostSetup({
   strategies,
   deliveryEnabled,
   deliveryTime,
+  deliveryPolicy,
 }: {
   serviceSlug: string;
   bunshinId: string;
@@ -60,10 +62,19 @@ export function SimpleFirstPostSetup({
   strategies: Strategy[];
   deliveryEnabled: boolean;
   deliveryTime: string;
+  deliveryPolicy: {
+    enabled: boolean;
+    cadence: 'DAILY' | 'WEEKDAYS';
+    defaultNotificationTime: string;
+    lockCadence: boolean;
+    contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
+  };
 }) {
   const router = useRouter();
   const [platform, setPlatform] = useState<SocialPlatform>('INSTAGRAM');
-  const [frequency, setFrequency] = useState<SocialPostingFrequency>('WEEKLY');
+  const [frequency, setFrequency] = useState<SocialPostingFrequency>(
+    deliveryPolicy.enabled && deliveryPolicy.lockCadence ? deliveryPolicy.cadence : 'WEEKLY',
+  );
   const [localTime, setLocalTime] = useState(deliveryTime);
   const [pending, setPending] = useState(false);
   const [step, setStep] = useState('');
@@ -129,7 +140,7 @@ export function SimpleFirstPostSetup({
           purpose: topic,
           postingFrequency: frequency,
           preferredFormats: preferredFormats(platform),
-          defaultAssistanceLevel: 'READY_TO_USE',
+          defaultAssistanceLevel: serviceContentAssistanceLevel(deliveryPolicy.contentMode),
         });
       }
 
@@ -178,9 +189,21 @@ export function SimpleFirstPostSetup({
       <section className="simple-first-post simple-first-post--ready">
         <span aria-hidden="true">✓</span>
         <div>
-          <h2>投稿案を自動でお届けします</h2>
+          <h2>
+            {deliveryPolicy.contentMode === 'IDEA'
+              ? '発信アイデア'
+              : deliveryPolicy.contentMode === 'PROMPT'
+                ? '作り方・配信用プロンプト'
+                : '投稿案'}
+            を自動でお届けします
+          </h2>
           <p>
-            投稿予定の日の{deliveryTime}
+            {deliveryPolicy.enabled && deliveryPolicy.lockCadence
+              ? deliveryPolicy.cadence === 'DAILY'
+                ? '毎日'
+                : '平日'
+              : '投稿予定の日の'}
+            {deliveryTime}
             ごろ（日本時間）にLINEでお知らせします。予定の準備や投稿案の生成は自動です。
           </p>
         </div>
@@ -217,7 +240,8 @@ export function SimpleFirstPostSetup({
           </div>
         </fieldset>
       )}
-      {profiles.some(({ status }) => status === 'ACTIVE') ? null : (
+      {profiles.some(({ status }) => status === 'ACTIVE') ||
+      (deliveryPolicy.enabled && deliveryPolicy.lockCadence) ? null : (
         <fieldset>
           <legend>2. どのくらいのペースで投稿しますか？</legend>
           <div className="simple-first-post__choices simple-first-post__choices--frequency">
