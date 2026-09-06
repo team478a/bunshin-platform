@@ -76,10 +76,12 @@ describe('WeeklyPlanGenerationService', () => {
   const createGeneratedPlan = vi.fn();
   const recordUsage = vi.fn();
   const listPlans = vi.fn();
+  const listPlanningContexts = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     listPlans.mockResolvedValue([]);
+    listPlanningContexts.mockResolvedValue([]);
     createGeneratedPlan.mockResolvedValue(generatedPlan);
     generate.mockResolvedValue({
       output: {
@@ -128,6 +130,7 @@ describe('WeeklyPlanGenerationService', () => {
           .mockResolvedValue([{ type: 'SKILL', title: '経験', content: '10年の経験' }]),
       } as never,
       planner: { generate },
+      campaigns: { listPlanningContexts } as never,
       providerModel: 'gpt-test',
       resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
       loadRecentPerformance: vi.fn().mockResolvedValue({
@@ -170,6 +173,24 @@ describe('WeeklyPlanGenerationService', () => {
     expect(recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'SUCCESS', idempotencyKey: 'job:job-1:weekly-plan' }),
     );
+  });
+
+  it('continues service generation with no campaigns and retains the group through saving', async () => {
+    const serviceScope = { ...scope, groupId: 'service-1' };
+    await service().execute({
+      ...serviceScope,
+      weekStartDate: '2026-08-24',
+      timezone: 'Asia/Tokyo',
+      usageIdempotencyKey: 'service-request:service-weekly-plan',
+      existingPolicy: 'CONFLICT',
+      includeCampaigns: true,
+      includeGrantedKnowledge: false,
+    });
+    expect(listPlanningContexts).toHaveBeenCalledWith(expect.objectContaining(serviceScope));
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ campaigns: [], grantedKnowledge: [] }),
+    );
+    expect(createGeneratedPlan).toHaveBeenCalledWith(expect.objectContaining(serviceScope));
   });
 
   it('returns an existing week without calling the provider in idempotent job mode', async () => {

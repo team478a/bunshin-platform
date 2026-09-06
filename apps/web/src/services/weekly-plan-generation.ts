@@ -24,6 +24,7 @@ import {
   type WeeklyPlanRepository,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
+import { createLogger } from '@bunshin/observability';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
@@ -96,6 +97,7 @@ export class WeeklyPlanGenerationService {
   ) {
     const started = this.dependencies.now();
     let providerAttempted = false;
+    let stage = 'PRECONDITIONS';
     try {
       await new RequireActiveBunshinCapability(this.dependencies.assignments).execute({
         ...input,
@@ -137,6 +139,7 @@ export class WeeklyPlanGenerationService {
           : await new ListGrantedKnowledgeForBunshin(this.dependencies.knowledge).execute(input);
       const weekEnd = new Date(`${input.weekStartDate}T23:59:59.999Z`);
       weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+      stage = 'CAMPAIGN_CONTEXT';
       const campaigns =
         input.includeCampaigns !== false && this.dependencies.campaigns
           ? await new CampaignService(this.dependencies.campaigns).listPlanningContexts({
@@ -145,7 +148,9 @@ export class WeeklyPlanGenerationService {
               to: weekEnd,
             })
           : [];
+      stage = 'RECENT_PERFORMANCE';
       const recentPerformance = await this.dependencies.loadRecentPerformance?.(input);
+      stage = 'AI_GENERATION';
       providerAttempted = true;
       const result = await this.dependencies.runWithQuota({
         workspaceId: input.workspaceId,
@@ -183,6 +188,7 @@ export class WeeklyPlanGenerationService {
             ...(recentPerformance ? { recentPerformance } : {}),
           }),
       });
+      stage = 'SAVE_PLAN';
       const plan = await new CreateGeneratedWeeklyPlan(
         this.dependencies.plans,
         this.dependencies.assignments,
@@ -206,6 +212,11 @@ export class WeeklyPlanGenerationService {
       });
       return { plan, titles: new Map(pillars.map(({ id, title }) => [id, title])) };
     } catch (error) {
+      createLogger().warn('weekly plan generation failed', {
+        correlationId: input.usageIdempotencyKey,
+        stage,
+        errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+      });
       if (providerAttempted)
         await this.dependencies.recordUsage({
           ...input,

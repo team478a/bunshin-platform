@@ -1,0 +1,20 @@
+# サービス週間予定のキャンペーン参照修正（2026-09-06）
+
+## 調査結果
+
+利用者の受付番号482330d5-eb61-4c3f-8ae5-d74d3dfb239bの画面では週間予定生成が失敗していた。同時刻の本番ログでweekly-plans/generateの404と、その後の投稿案生成のWEEKLY_PLAN_REQUIREDを確認した。旧週間予定APIのログには詳細な失敗段階がなかった。
+
+コード上では、週間予定生成でキャンペーンを参照する際、PrismaCampaignRepository.participantがWorkspace.typeをPERSONALに固定していた。サービスが属するORGANIZATIONでは本人の分身でもnullとなり、CampaignServiceがNOT_FOUNDを返す。キャンペーンが0件の場合もAI呼び出し前に停止する。
+
+## 修正
+
+計画用の参照に限り、groupIdが指定されているときは同じWorkspace・Group・本人所有の分身、有効なWorkspace所属、有効で同意済みのGroup所属を確認する。groupIdなしは従来の個人用判定を維持する。参加申請や管理操作の権限は変更しない。
+
+週間予定の失敗ログに段階と受付番号を含むcorrelationId、公開エラーコードを残す。AI入力や内部エラー全文は記録しない。
+
+## 検証と前回との差
+
+- 実DBでORGANIZATIONのMEMBER本人がキャンペーン0件を正常に取得できること、他人・別Workspace・別Group・Group未指定・停止済み所属が拒否されることを検証する。
+- WeeklyPlanGenerationServiceでキャンペーン0件からAI出力の検証・保存へ進み、groupIdを保持することを検証する。AIプロバイダーはテスト用の応答に置き換える。
+- 前回の回帰テストは保存コマンドを直接実行し、PERSONALのテストWorkspaceを利用していたため、この事前参照の不具合を検出できなかった。
+- 本番のAI呼び出しや利用者データの変更は行わない。migration・追加環境変数は不要。
