@@ -6,6 +6,7 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
 import { PublicShell } from '../../../ui/public-shell';
 import { MemberTrackingLinkForm } from './member-tracking-link-form';
+import { MemberProductContentForm } from './member-product-content-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,16 @@ export default async function ServiceMemberTrackingLinkPage({
             serviceSlug={serviceSlug}
             settings={JSON.parse(JSON.stringify(settings)) as never}
           />
+        </section>
+        <section className="settings-card">
+          <div>
+            <p className="eyebrow">投稿を作る</p>
+            <h2>登録したURLで商品紹介文を作る</h2>
+            <p>
+              運営者が確認したURLだけを使用します。通常の投稿へ勝手に追加されることはありません。
+            </p>
+          </div>
+          <MemberProductContentForm settings={JSON.parse(JSON.stringify(settings)) as never} />
         </section>
         <Link className="button" href={`/s/${serviceSlug}/home` as Route}>
           サービスホームへ戻る

@@ -2773,6 +2773,34 @@ a {
   gap: 10px;
 }
 
+.member-product-content,
+.member-product-content__result {
+  display: grid;
+  gap: 14px;
+}
+
+.member-product-content label {
+  display: grid;
+  gap: 8px;
+  font-weight: 750;
+}
+
+.member-product-content input,
+.member-product-content select,
+.member-product-content textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #cfd6e3;
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.member-product-content textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+
 .service-activity-dashboard__stats--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
