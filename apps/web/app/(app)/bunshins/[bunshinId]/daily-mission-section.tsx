@@ -1,6 +1,8 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { createClientRequestId } from '../../../ui/client-request-id';
+import { missionGenerationResult } from '../../../ui/mission-generation-result';
 import {
   progressStatusLabel,
   weeklyCalendar,
@@ -350,36 +352,25 @@ export function DailyMissionSection({
   async function generate() {
     setError(null);
     setGenerating(true);
+    const requestId = createClientRequestId();
     try {
       const response = await fetch(`${endpoint}/generate`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-request-id': requestId },
         body: JSON.stringify({
           missionDate,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           socialProfileId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: requestId,
         }),
       });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: { code?: string };
-        } | null;
-        const code = payload?.error?.code;
-        setError(
-          code === 'CONFIGURATION_ERROR'
-            ? 'AI生成の設定が完了していません。管理者へお問い合わせください。'
-            : code === 'CONTENT_REJECTED'
-              ? '内容を安全に作れませんでした。時間をおいて再度お試しください。'
-              : code === 'AI_PROVIDER_UNAVAILABLE'
-                ? '生成サービスへ接続できませんでした。時間をおいて再度お試しください。'
-                : response.status === 409
-                  ? 'この日の投稿案は、すでに作成中か作成済みです。'
-                  : '投稿案を作れませんでした。SNSの進め方と1週間の予定を確認してください。',
-        );
-        return;
-      }
-      router.refresh();
+      const result = await missionGenerationResult(response, requestId);
+      if (!response.ok) setError(result.message);
+      if (result.refresh) router.refresh();
+    } catch {
+      setError(
+        `通信できませんでした。接続を確認して、もう一度お試しください。（受付番号: ${requestId}）`,
+      );
     } finally {
       setGenerating(false);
     }
