@@ -25,9 +25,11 @@ const platformLabels = {
 export function ServiceDailyMissionSection({
   endpoint,
   missions,
+  active,
 }: {
   endpoint: string;
   missions: DailyMissionView[];
+  active: boolean;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);

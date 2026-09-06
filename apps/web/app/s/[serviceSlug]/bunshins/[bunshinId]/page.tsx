@@ -251,6 +251,10 @@ export default async function ServiceBunshinDetailPage({
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
             missions={dailyMissions}
+            active={
+              capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
+              'ACTIVE'
+            }
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>
