@@ -1948,3 +1948,13 @@
 - Attribution: 紹介URLには投稿先だけを計測情報として付与し、氏名、メール、LINE ID等の個人情報を含めない。
 - Cost: 初期版は決定的テンプレートを用い、AI Providerを呼び出さない。サービス共通機能として千ノ国メディアと後続の副業サービスで再利用する。
 - Source: `docs/SERVICE_REFERRAL_CONTENT_REPORT.md`
+
+# 2026-09-06: 本人の商品URLは確認済みURLから明示的に投稿文を作る
+
+- Product fit: 利用者ごとのSNSコンテンツ提供というワタシワークスの役割に含め、千ノ国メディア固有ではなく副業向けにも使える共通機能とする。
+- Review gate: 利用者が登録したURLのうち、運営者確認後に`ACTIVE`となった本人のURLだけを投稿文候補へ表示する。確認待ち・停止中URLは使わない。
+- User intent: 通常のDaily Missionへ自動挿入せず、利用者が商品、伝えたいポイント、投稿先を入力して作成した時だけURLを含める。
+- Accuracy: URL先から価格、効果、在庫等を自動取得しない。利用者が確認した事実を入力し、生成後の全文を確認して手動投稿する。
+- Disclosure: 投稿文へ`#PR`を必ず含める。サービス参加紹介URLとは分離し、商品・代理店用の確認済みURLを使う。
+- Cost: 初期版は決定的テンプレートを用い、AI Providerを呼び出さない。
+- Source: `docs/MEMBER_PRODUCT_CONTENT_REPORT.md`
