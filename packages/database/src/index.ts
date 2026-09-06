@@ -14852,17 +14852,46 @@ export class PrismaCampaignRepository implements CampaignRepository {
   }
 
   async listPlanningContexts(input: Parameters<CampaignRepository['listPlanningContexts']>[0]) {
-    if (!(await this.participant(input))) return null;
+    if (!(await this.planningParticipant(input))) return null;
     const rows = await this.planningRows(this.planningWhere(input));
     return rows.map((row) => this.planningContext(row));
   }
 
   async resolvePlanningContext(input: Parameters<CampaignRepository['resolvePlanningContext']>[0]) {
-    if (!(await this.participant(input))) return null;
+    if (!(await this.planningParticipant(input))) return null;
     const rows = await this.planningRows(
       this.planningWhere({ ...input, from: input.at, to: input.at }),
     );
     return rows[0] ? this.planningContext(rows[0]) : null;
+  }
+
+  private planningParticipant(input: {
+    workspaceId: string;
+    groupId?: string | null;
+    actorUserId: string;
+    bunshinId: string;
+  }) {
+    if (!input.groupId) return this.participant(input);
+    return this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+        group: {
+          status: 'ACTIVE',
+          memberships: {
+            some: { userId: input.actorUserId, status: 'ACTIVE', consentedAt: { not: null } },
+          },
+        },
+      },
+      select: { id: true },
+    });
   }
 }
 

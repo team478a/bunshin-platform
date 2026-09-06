@@ -2613,6 +2613,78 @@ integration('database ownership boundaries', () => {
     ).rejects.toThrow();
   });
 
+  it('allows an organization service member to plan without campaigns, while isolating the scope', async () => {
+    const user = await client.user.create({ data: { displayName: 'Service planner' } });
+    const other = await client.user.create({ data: { displayName: 'Other planner' } });
+    const workspace = await client.workspace.create({
+      data: {
+        type: 'ORGANIZATION',
+        name: 'Planning service',
+        memberships: {
+          create: [
+            { userId: user.id, role: 'MEMBER' },
+            { userId: other.id, role: 'ADMIN' },
+          ],
+        },
+      },
+    });
+    const group = await client.group.create({
+      data: {
+        workspaceId: workspace.id,
+        name: 'Planning group',
+        memberships: {
+          create: {
+            workspaceId: workspace.id,
+            userId: user.id,
+            role: 'PARTICIPANT',
+            status: 'ACTIVE',
+            consentedAt: new Date(),
+          },
+        },
+      },
+    });
+    const bunshin = await client.bunshin.create({
+      data: {
+        workspaceId: workspace.id,
+        groupId: group.id,
+        ownerUserId: user.id,
+        name: 'Service planner',
+        slug: `service-planner-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Share',
+        audienceSummary: 'Friends',
+        personalitySummary: 'Friendly',
+      },
+    });
+    const repository = new PrismaCampaignRepository(client);
+    const input = {
+      workspaceId: workspace.id,
+      groupId: group.id,
+      actorUserId: user.id,
+      bunshinId: bunshin.id,
+      from: new Date('2026-09-01'),
+      to: new Date('2026-09-07'),
+    };
+    await expect(new CampaignService(repository).listPlanningContexts(input)).resolves.toEqual([]);
+    for (const change of [
+      { groupId: randomUUID() },
+      { groupId: null },
+      { actorUserId: other.id },
+      { workspaceId: randomUUID() },
+    ]) {
+      await expect(
+        new CampaignService(repository).listPlanningContexts({ ...input, ...change }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    }
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: user.id } },
+      data: { status: 'SUSPENDED' },
+    });
+    await expect(new CampaignService(repository).listPlanningContexts(input)).rejects.toMatchObject(
+      { code: 'NOT_FOUND' },
+    );
+  });
+
   it('persists scoped Weekly Plans with local dates, pillars, and immutable transitions', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const owner = await accounts.execute({ displayName: 'Plan Owner' });
