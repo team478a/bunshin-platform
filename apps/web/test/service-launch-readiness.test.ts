@@ -92,6 +92,9 @@ describe('service launch readiness', () => {
     expect(items.find((item) => item.key === 'TREND_RESEARCH')?.ready).toBe(false);
     expect(items.find((item) => item.key === 'PRODUCT')?.ready).toBe(true);
     expect(items.find((item) => item.key === 'CAMPAIGN')?.ready).toBe(false);
+    expect(items.find((item) => item.key === 'CAMPAIGN')?.path).toBe(
+      '/s/sample-service/manage/campaigns',
+    );
     expect(items.find((item) => item.key === 'TRACKING_LINK')?.ready).toBe(true);
   });
 });

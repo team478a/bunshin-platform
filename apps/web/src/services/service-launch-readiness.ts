@@ -154,7 +154,7 @@ export function buildServiceLaunchReadiness(
       label: '参加できる投稿企画',
       ready: (input.activeCampaignCount ?? 0) > 0,
       detail: '現在の期間内で参加できる商品投稿企画を1件以上公開します。',
-      path: `${base}/product-packs`,
+      path: `${base}/campaigns`,
     },
     {
       key: 'TRACKING_LINK',
