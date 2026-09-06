@@ -1975,3 +1975,13 @@
 - Custom fallback: 運営者が独自に追加した質問は内容を推測せず、従来どおり自由入力にフォールバックする。
 - Compatibility: 保存する回答形式は文字列のままとし、既存の投稿パートナー提案およびサービス境界を変更しない。
 - Source: `docs/SERVICE_ONBOARDING_CHOICE_OPTIONS_REPORT.md`
+
+# 2026-09-06: 本人の商品紹介は分身設定から3案を明示生成する
+
+- Intent: 保存済み商品と本人所有の分身を選び、Instagram、X、Threads向けの投稿文を明示操作時だけ3案生成する。
+- Runtime: 本番管理画面で有効化済みのOpenAI設定を既存Runtime Resolver経由で再利用し、鍵を画面・ログ・DBの生成記録へ露出しない。
+- Isolation: 商品、分身、承認済みURLは認証Userと対象Serviceからサーバーで再取得し、クライアント提供の本文やURLを生成根拠にしない。
+- Safety: URLはProviderへ送らず、生成後に承認済みURLと`#PR`を強制する。Provider生成URL、未提供の事実、媒体上限超過を許可しない。
+- Choice: 利用者は3案を選択・修正・コピーし、自分のSNSから投稿する。自動投稿は実装しない。
+- Operations: 組織AI上限を消費し、モデル、Prompt版、Token、原価見積り、処理時間、成否を既存AI利用履歴へ記録する。
+- Source: `docs/MEMBER_PRODUCT_AI_SUGGESTIONS_REPORT.md`

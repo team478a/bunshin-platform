@@ -38,6 +38,35 @@ const limits: Record<MemberProductContentPlatform, number> = {
   THREADS: 500,
 };
 
+export function finalizeMemberProductCandidate(input: {
+  draft: string;
+  approvedUrl: string;
+  platform: MemberProductContentPlatform;
+}) {
+  const draft = input.draft.replace(/\r\n/g, '\n').trim();
+  if (!draft || draft.length > 4_000)
+    throw new ApplicationError('CONTENT_REJECTED', 'invalid member product candidate');
+  if (/https?:\/\//iu.test(draft))
+    throw new ApplicationError('CONTENT_REJECTED', 'unapproved URL in member product candidate');
+  const url = approvedMemberUrl(input.approvedUrl);
+  const suffix = `\n\n#PR\n${url}`;
+  const characterLimit = limits[input.platform];
+  const available = characterLimit - suffix.length;
+  if (available < 1)
+    throw new ApplicationError('CONTENT_REJECTED', 'member product URL exceeds platform limit');
+  const text = draft.replace(/(^|\s)#PR(?=\s|$)/giu, '$1').trim();
+  if (!text) throw new ApplicationError('CONTENT_REJECTED', 'empty member product candidate');
+  const body = `${text.slice(0, available).trim()}${suffix}`;
+  return {
+    platform: input.platform,
+    body,
+    approvedUrl: url,
+    disclosure: '#PR' as const,
+    characterCount: body.length,
+    characterLimit,
+  };
+}
+
 function requiredText(value: string, field: string, maximum: number) {
   const normalized = value.replace(/\s+/g, ' ').trim();
   if (!normalized || normalized.length > maximum)

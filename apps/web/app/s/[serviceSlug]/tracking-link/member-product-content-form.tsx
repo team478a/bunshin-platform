@@ -2,7 +2,6 @@
 
 import {
   MEMBER_PRODUCT_CONTENT_PLATFORMS,
-  createMemberProductContent,
   type MemberProductContentPlatform,
   type MemberProductProfileRecord,
   type MemberTrackingLinkSettings,
@@ -16,10 +15,12 @@ export function MemberProductContentForm({
   serviceSlug,
   settings,
   profiles,
+  bunshins,
 }: {
   serviceSlug: string;
   settings: MemberTrackingLinkSettings;
   profiles: MemberProductProfileRecord[];
+  bunshins: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const activeLinks = settings.links.filter((link) => link.status === 'ACTIVE');
@@ -29,13 +30,15 @@ export function MemberProductContentForm({
   const [appealPoint, setAppealPoint] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
   const [platform, setPlatform] = useState<MemberProductContentPlatform>('INSTAGRAM');
-  const [body, setBody] = useState('');
+  const [bunshinId, setBunshinId] = useState(bunshins[0]?.id ?? '');
+  const [candidates, setCandidates] = useState<string[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
   function selectProfile(id: string) {
     setProfileId(id);
-    setBody('');
+    setCandidates([]);
     const profile = profiles.find((item) => item.id === id);
     if (!profile) {
       setLinkId(activeLinks[0]?.id ?? '');
@@ -76,28 +79,35 @@ export function MemberProductContentForm({
       );
       if (!response.ok) throw new Error('SAVE_FAILED');
       const payload = (await response.json()) as { data: { id: string } };
-      const result = createMemberProductContent({
-        productName: name,
-        appealPoint,
-        targetAudience,
-        approvedUrl: link.url,
-        platform,
-      });
-      setBody(result.body);
-      setMessage(
-        `商品情報を保存し、投稿文を作成しました（${result.characterCount}/${result.characterLimit}文字）。`,
+      if (!bunshinId) throw new Error('BUNSHIN_REQUIRED');
+      setMessage('分身設定に合わせて3案を作成しています…');
+      const suggestionResponse = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/member-products/suggestions`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ profileId: payload.data.id, bunshinId, platform }),
+        },
       );
+      if (!suggestionResponse.ok) throw new Error('GENERATION_FAILED');
+      const suggestionPayload = (await suggestionResponse.json()) as {
+        data: { candidates: Array<{ body: string }> };
+      };
+      setCandidates(suggestionPayload.data.candidates.map(({ body }) => body));
+      setSelectedCandidate(0);
+      setMessage('分身設定に合わせた投稿文を3案作成しました。内容を確認してください。');
       setProfileId(payload.data.id);
       router.refresh();
     } catch {
-      setBody('');
-      setMessage('保存または投稿文の作成ができませんでした。入力内容を確認してください。');
+      setCandidates([]);
+      setMessage('保存またはAI投稿案の作成ができませんでした。少し待ってから再度お試しください。');
     } finally {
       setSaving(false);
     }
   }
 
   async function copy() {
+    const body = candidates[selectedCandidate];
     if (!body) return;
     try {
       await navigator.clipboard.writeText(body);
@@ -181,25 +191,55 @@ export function MemberProductContentForm({
           ))}
         </select>
       </label>
+      <label>
+        投稿文に使う分身
+        <select value={bunshinId} onChange={(event) => setBunshinId(event.target.value)} required>
+          {bunshins.map((bunshin) => (
+            <option key={bunshin.id} value={bunshin.id}>
+              {bunshin.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <p className="notice">
         価格・効果・在庫などは自動取得しません。事実を確認して入力してください。投稿文にはPR表記が入ります。
       </p>
+      {bunshins.length === 0 && (
+        <p className="notice">先に投稿パートナー（分身）を作成すると、AI投稿案を利用できます。</p>
+      )}
       <button className="button button--primary button--full" type="submit" disabled={saving}>
-        {saving ? '保存中…' : '商品情報を保存して投稿文を作る'}
+        {saving ? '作成中…' : '商品情報を保存してAIで3案作る'}
       </button>
-      {body && (
+      {candidates.length > 0 && (
         <div className="member-product-content__result">
-          <label>
-            投稿前に内容を確認してください
-            <textarea
-              readOnly
-              rows={9}
-              value={body}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </label>
+          <strong>使う案を選び、必要なら投稿前に直してください</strong>
+          {candidates.map((candidate, index) => (
+            <label className="member-product-content__candidate" key={index}>
+              <span>
+                <input
+                  type="radio"
+                  name="selected-product-candidate"
+                  checked={selectedCandidate === index}
+                  onChange={() => setSelectedCandidate(index)}
+                />
+                案{index + 1}
+              </span>
+              <textarea
+                rows={9}
+                value={candidate}
+                onChange={(event) =>
+                  setCandidates((current) =>
+                    current.map((item, itemIndex) =>
+                      itemIndex === index ? event.target.value : item,
+                    ),
+                  )
+                }
+                onFocus={() => setSelectedCandidate(index)}
+              />
+            </label>
+          ))}
           <button className="button button--full" type="button" onClick={() => void copy()}>
-            投稿文をコピー
+            選んだ投稿文をコピー
           </button>
           <small>自動投稿はしません。コピー後、ご自身のSNSから投稿してください。</small>
         </div>
