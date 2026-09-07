@@ -1401,6 +1401,12 @@ enum DailyMissionStatus {
   EXPIRED
 }
 
+enum MissionContentVariantGenerationStatus {
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
 enum MissionDecisionValue {
   PENDING
   ACCEPTED
@@ -5401,6 +5407,9 @@ model DailyMission {
   campaignPostingApprovalRequest CampaignPostingApprovalRequest?
   campaign                       Campaign?                       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   contentLinkUsage               ContentLinkUsage?
+  contentVariants                MissionContentVariant[]
+  contentVariantGenerations      MissionContentVariantGeneration[]
+  contentVariantSelections       MissionContentVariantSelection[]
 
   @@unique([workspaceId, bunshinId, missionDate])
   @@unique([workspaceId, bunshinId, id])
@@ -5504,6 +5513,81 @@ model DailyMissionGeneration {
   @@unique([workspaceId, bunshinId, actorUserId, idempotencyKey])
   @@index([workspaceId, bunshinId, status, updatedAt])
   @@map("daily_mission_generations")
+}
+
+/// Daily Mission本体の一意制約を変えずに保持する、追記型の別案。
+model MissionContentVariant {
+  id                  String                           @id @default(uuid()) @db.Uuid
+  workspaceId         String                           @map("workspace_id") @db.Uuid
+  bunshinId           String                           @map("bunshin_id") @db.Uuid
+  dailyMissionId      String                           @map("daily_mission_id") @db.Uuid
+  actorUserId         String                           @map("actor_user_id") @db.Uuid
+  sequence            Int
+  format              SocialPreferredFormat
+  contentJson         Json                             @map("content_json")
+  qualityScore        Int                              @map("quality_score")
+  model               String                           @db.VarChar(120)
+  promptVersion       String                           @map("prompt_version") @db.VarChar(120)
+  inputTokens         Int?                             @map("input_tokens")
+  outputTokens        Int?                             @map("output_tokens")
+  estimatedCostMicros BigInt?                          @map("estimated_cost_micros")
+  latencyMs           Int                              @map("latency_ms")
+  createdAt           DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  dailyMission        DailyMission                     @relation(fields: [workspaceId, bunshinId, dailyMissionId, format], references: [workspaceId, bunshinId, id, format], onDelete: Cascade, map: "mission_content_variants_mission_fkey")
+  generation          MissionContentVariantGeneration?
+  selections          MissionContentVariantSelection[]
+
+  @@unique([workspaceId, bunshinId, dailyMissionId, sequence], map: "mission_content_variants_sequence_key")
+  @@unique([workspaceId, bunshinId, dailyMissionId, id], map: "mission_content_variants_scope_id_key")
+  @@index([workspaceId, bunshinId, dailyMissionId, createdAt], map: "mission_content_variants_mission_created_idx")
+  @@map("mission_content_variants")
+}
+
+/// 別案生成のclaim/成功/失敗を冪等に記録する。失敗時にもAI観測値を残す。
+model MissionContentVariantGeneration {
+  id                  String                                @id @default(uuid()) @db.Uuid
+  workspaceId         String                                @map("workspace_id") @db.Uuid
+  bunshinId           String                                @map("bunshin_id") @db.Uuid
+  dailyMissionId      String                                @map("daily_mission_id") @db.Uuid
+  actorUserId         String                                @map("actor_user_id") @db.Uuid
+  idempotencyKey      String                                @map("idempotency_key") @db.VarChar(200)
+  status              MissionContentVariantGenerationStatus @default(PROCESSING)
+  variantId           String?                               @unique @map("variant_id") @db.Uuid
+  model               String?                               @db.VarChar(120)
+  promptVersion       String?                               @map("prompt_version") @db.VarChar(120)
+  inputTokens         Int?                                  @map("input_tokens")
+  outputTokens        Int?                                  @map("output_tokens")
+  estimatedCostMicros BigInt?                               @map("estimated_cost_micros")
+  latencyMs           Int?                                  @map("latency_ms")
+  errorCategory       String?                               @map("error_category") @db.VarChar(80)
+  createdAt           DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dailyMission        DailyMission                          @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade, map: "mission_content_variant_generations_mission_fkey")
+  variant             MissionContentVariant?                @relation(fields: [workspaceId, bunshinId, dailyMissionId, variantId], references: [workspaceId, bunshinId, dailyMissionId, id], onDelete: Restrict, map: "mission_content_variant_generations_variant_fkey")
+
+  @@unique([workspaceId, bunshinId, actorUserId, idempotencyKey], map: "mission_content_variant_generations_idempotency_key")
+  @@unique([workspaceId, bunshinId, dailyMissionId, variantId], map: "mission_content_variant_generations_variant_scope_key")
+  @@unique([workspaceId, bunshinId, dailyMissionId, id], map: "mission_content_variant_generations_scope_id_key")
+  @@index([workspaceId, bunshinId, dailyMissionId, status, updatedAt], map: "mission_content_variant_generations_status_idx")
+  @@map("mission_content_variant_generations")
+}
+
+/// 「この案を使う」の履歴。選択を上書きせず、最新行を現在選択として扱う。
+model MissionContentVariantSelection {
+  id             String                @id @default(uuid()) @db.Uuid
+  workspaceId    String                @map("workspace_id") @db.Uuid
+  bunshinId      String                @map("bunshin_id") @db.Uuid
+  dailyMissionId String                @map("daily_mission_id") @db.Uuid
+  variantId      String                @map("variant_id") @db.Uuid
+  actorUserId    String                @map("actor_user_id") @db.Uuid
+  idempotencyKey String                @map("idempotency_key") @db.VarChar(200)
+  selectedAt     DateTime              @default(now()) @map("selected_at") @db.Timestamptz(6)
+  dailyMission   DailyMission          @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade, map: "mission_content_variant_selections_mission_fkey")
+  variant        MissionContentVariant @relation(fields: [workspaceId, bunshinId, dailyMissionId, variantId], references: [workspaceId, bunshinId, dailyMissionId, id], onDelete: Restrict, map: "mission_content_variant_selections_variant_fkey")
+
+  @@unique([workspaceId, bunshinId, actorUserId, idempotencyKey], map: "mission_content_variant_selections_idempotency_key")
+  @@index([workspaceId, bunshinId, dailyMissionId, selectedAt], map: "mission_content_variant_selections_latest_idx")
+  @@map("mission_content_variant_selections")
 }
 
 model MissionContent {

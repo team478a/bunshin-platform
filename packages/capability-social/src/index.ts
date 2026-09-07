@@ -1865,6 +1865,186 @@ export interface DailyMissionRepository {
   } | null>;
 }
 
+export const MISSION_CONTENT_VARIANT_GENERATION_STATUSES = [
+  'PROCESSING',
+  'SUCCEEDED',
+  'FAILED',
+] as const;
+export type MissionContentVariantGenerationStatus =
+  (typeof MISSION_CONTENT_VARIANT_GENERATION_STATUSES)[number];
+
+export interface MissionContentVariant {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  dailyMissionId: string;
+  actorUserId: string;
+  sequence: number;
+  format: SocialPreferredFormat;
+  content: MissionContent;
+  qualityScore: number;
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostMicros: bigint | null;
+  latencyMs: number;
+  createdAt: Date;
+  selectedAt: Date | null;
+}
+
+export interface MissionContentVariantGeneration {
+  id: string;
+  workspaceId: string;
+  bunshinId: string;
+  dailyMissionId: string;
+  actorUserId: string;
+  idempotencyKey: string;
+  status: MissionContentVariantGenerationStatus;
+  variantId: string | null;
+  errorCategory: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MissionContentVariantRepository {
+  claim(
+    input: DailyMissionScope & { dailyMissionId: string; idempotencyKey: string },
+  ): Promise<{ acquired: boolean; generation: MissionContentVariantGeneration } | null>;
+  complete(
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      generationId: string;
+      format: SocialPreferredFormat;
+      content: MissionContent;
+      qualityScore: number;
+      model: string;
+      promptVersion: string;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      estimatedCostMicros: bigint | null;
+      latencyMs: number;
+    },
+  ): Promise<MissionContentVariant | null>;
+  fail(
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      generationId: string;
+      errorCategory: string;
+      model?: string;
+      promptVersion?: string;
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+      estimatedCostMicros?: bigint | null;
+      latencyMs?: number;
+    },
+  ): Promise<boolean | null>;
+  list(
+    input: DailyMissionScope & { dailyMissionId: string },
+  ): Promise<MissionContentVariant[] | null>;
+  select(
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      variantId: string;
+      idempotencyKey: string;
+      selectedAt: Date;
+    },
+  ): Promise<MissionContentVariant | null>;
+}
+
+function variantIdempotencyKey(value: string) {
+  if (value.trim().length < 1 || value.length > 200)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid idempotency key');
+  return value;
+}
+
+export class ClaimMissionContentVariantGeneration {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: DailyMissionScope & { dailyMissionId: string; idempotencyKey: string }) {
+    const result = await this.repository.claim({
+      ...input,
+      idempotencyKey: variantIdempotencyKey(input.idempotencyKey),
+    });
+    if (!result) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return result;
+  }
+}
+
+export class CompleteMissionContentVariantGeneration {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: Parameters<MissionContentVariantRepository['complete']>[0]) {
+    const nullableCount = (value: number | null, field: string) =>
+      value === null ? null : missionInteger(value, 0, 2_000_000_000, field);
+    if (input.estimatedCostMicros !== null && input.estimatedCostMicros < 0n)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid estimated cost');
+    const variant = await this.repository.complete({
+      ...input,
+      content: normalizeMissionContent(input.format, input.content),
+      qualityScore: missionInteger(input.qualityScore, 0, 100, 'quality score'),
+      model: missionString(input.model, 120, 'model'),
+      promptVersion: missionString(input.promptVersion, 120, 'prompt version'),
+      inputTokens: nullableCount(input.inputTokens, 'input tokens'),
+      outputTokens: nullableCount(input.outputTokens, 'output tokens'),
+      latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency'),
+    });
+    if (!variant) throw new ApplicationError('NOT_FOUND', 'variant generation not found');
+    return variant;
+  }
+}
+
+export class FailMissionContentVariantGeneration {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: Parameters<MissionContentVariantRepository['fail']>[0]) {
+    const failed = await this.repository.fail({
+      ...input,
+      errorCategory: missionString(input.errorCategory, 80, 'error category'),
+      ...(input.model === undefined ? {} : { model: missionString(input.model, 120, 'model') }),
+      ...(input.promptVersion === undefined
+        ? {}
+        : { promptVersion: missionString(input.promptVersion, 120, 'prompt version') }),
+      ...(input.inputTokens === undefined || input.inputTokens === null
+        ? {}
+        : { inputTokens: missionInteger(input.inputTokens, 0, 2_000_000_000, 'input tokens') }),
+      ...(input.outputTokens === undefined || input.outputTokens === null
+        ? {}
+        : {
+            outputTokens: missionInteger(input.outputTokens, 0, 2_000_000_000, 'output tokens'),
+          }),
+      ...(input.latencyMs === undefined
+        ? {}
+        : { latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency') }),
+    });
+    if (failed === null) throw new ApplicationError('NOT_FOUND', 'variant generation not found');
+    return failed;
+  }
+}
+
+export class ListMissionContentVariants {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: DailyMissionScope & { dailyMissionId: string }) {
+    const variants = await this.repository.list(input);
+    if (!variants) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return variants;
+  }
+}
+
+export class SelectMissionContentVariant {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: Parameters<MissionContentVariantRepository['select']>[0]) {
+    const variant = await this.repository.select({
+      ...input,
+      idempotencyKey: variantIdempotencyKey(input.idempotencyKey),
+    });
+    if (!variant) throw new ApplicationError('NOT_FOUND', 'mission content variant not found');
+    return variant;
+  }
+}
+
 const missionString = (value: unknown, maximum: number, field: string) => {
   if (typeof value !== 'string' || value.trim().length < 1 || value.trim().length > maximum)
     throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
