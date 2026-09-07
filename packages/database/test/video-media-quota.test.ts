@@ -9,6 +9,7 @@ import {
 const scope = { workspaceId: 'w', groupId: 'g', videoProjectId: 'p', projectRevision: 3 };
 const m = {
   $queryRaw: vi.fn(),
+  organizationEntitlement: { findUnique: vi.fn() },
   serviceCommercialSetting: { findFirst: vi.fn() },
   serviceMediaGenerationReservation: {
     findUnique: vi.fn(),
@@ -17,7 +18,7 @@ const m = {
     updateMany: vi.fn(),
   },
   videoSceneGeneration: { findMany: vi.fn() },
-  videoProject: { updateMany: vi.fn() },
+  videoProject: { updateMany: vi.fn(), count: vi.fn() },
 };
 const tx = m as unknown as Prisma.TransactionClient;
 describe('transactional service video allowance', () => {
@@ -83,6 +84,27 @@ describe('transactional service video allowance', () => {
         data: expect.objectContaining({ status: 'CONSUMED' }),
       }),
     );
+  });
+  it('applies the organization ceiling to subtitle renders as well as AI scenes', async () => {
+    m.organizationEntitlement.findUnique.mockResolvedValue({
+      suspended: false,
+      monthlyVideoGenerationLimit: 1,
+    });
+    m.videoProject.count.mockResolvedValue(1);
+    await expect(reserveVideoMedia(tx, scope)).rejects.toThrow('組織の今月');
+    expect(m.videoProject.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: 'w',
+          id: { not: 'p' },
+          OR: expect.arrayContaining([
+            expect.objectContaining({ renderAttempts: expect.any(Object) }),
+            expect.objectContaining({ sceneGenerations: expect.any(Object) }),
+          ]),
+        }),
+      }),
+    );
+    expect(m.serviceMediaGenerationReservation.upsert).not.toHaveBeenCalled();
   });
   it('retains a batch reservation while another scene is still running', async () => {
     m.videoSceneGeneration.findMany.mockResolvedValue([

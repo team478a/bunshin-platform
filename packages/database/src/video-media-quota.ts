@@ -13,12 +13,41 @@ const operationKey = (input: VideoMediaScope) =>
 
 /** Called inside the same transaction as queueing. Lock the service to serialize its quota. */
 export async function reserveVideoMedia(tx: Prisma.TransactionClient, input: VideoMediaScope) {
+  const now = new Date();
+  await tx.$queryRaw(Prisma.sql`
+    SELECT id FROM organization_entitlements WHERE workspace_id = ${input.workspaceId}::uuid FOR UPDATE
+  `);
+  const organization = await tx.organizationEntitlement.findUnique({
+    where: { workspaceId: input.workspaceId },
+  });
+  if (organization) {
+    if (
+      organization.suspended ||
+      (organization.startsAt && organization.startsAt > now) ||
+      (organization.endsAt && organization.endsAt <= now)
+    )
+      throw new ApplicationError('FORBIDDEN', '組織の動画作成契約が有効ではありません');
+    if (organization.monthlyVideoGenerationLimit !== null) {
+      const createdAt = { gte: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) };
+      const used = await tx.videoProject.count({
+        where: {
+          workspaceId: input.workspaceId,
+          id: { not: input.videoProjectId },
+          OR: [
+            { sceneGenerations: { some: { createdAt } } },
+            { renderAttempts: { some: { createdAt } } },
+          ],
+        },
+      });
+      if (used >= organization.monthlyVideoGenerationLimit)
+        throw new ApplicationError('FORBIDDEN', '組織の今月の動画作成枠を使い切りました');
+    }
+  }
   await tx.$queryRaw(Prisma.sql`
     SELECT id FROM service_commercial_settings
     WHERE workspace_id = ${input.workspaceId}::uuid AND group_id = ${input.groupId}::uuid
     FOR UPDATE
   `);
-  const now = new Date();
   const setting = await tx.serviceCommercialSetting.findFirst({
     where: { workspaceId: input.workspaceId, groupId: input.groupId },
   });
