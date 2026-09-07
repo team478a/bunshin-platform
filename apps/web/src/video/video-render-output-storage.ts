@@ -105,6 +105,15 @@ export class SupabaseVideoRenderOutputStorage implements VideoRenderOutputStorag
     return { storageKey };
   }
 
+  async createLineDeliveryUrl(storageKey: string) {
+    const signed = await this.storage.storage
+      .from(BUCKET)
+      .createSignedUrl(storageKey, 24 * 60 * 60);
+    if (signed.error)
+      throw new ApplicationError('INTERNAL_ERROR', '動画配信用URLを準備できませんでした');
+    return signed.data.signedUrl;
+  }
+
   async createDownloadUrl(storageKey: string) {
     const signed = await this.storage.storage.from(BUCKET).createSignedUrl(storageKey, 5 * 60);
     if (signed.error)

@@ -11,6 +11,33 @@ const input = {
 };
 
 describe('video completion retries', () => {
+  it('sends a video and review link in one request', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    const video = {
+      originalContentUrl: 'https://example.com/video.mp4',
+      previewImageUrl: 'https://example.com/cover.png',
+    };
+    await new LineMessagingApiAdapter(request).pushVideoCompletion({ ...input, video });
+    const body = JSON.parse(request.mock.calls[0]![1]!.body as string) as {
+      messages: Array<{ type: string; text?: string }>;
+    };
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0]).toEqual({ type: 'video', ...video });
+    expect(body.messages[1]?.text).toContain(input.reviewUrl);
+  });
+  it.each([
+    'http://example.com/video',
+    'https://user:pass@example.com/video',
+    'https://example.com/video#fragment',
+  ])('rejects unsafe attachment URL %s before sending', async (url) => {
+    const request = vi.fn<typeof fetch>();
+    const result = await new LineMessagingApiAdapter(request).pushVideoCompletion({
+      ...input,
+      video: { originalContentUrl: url, previewImageUrl: 'https://example.com/cover.png' },
+    });
+    expect(result.ok).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
   it('reuses the same key and payload after a timeout and accepts confirmed duplicates', async () => {
     const request = vi
       .fn<typeof fetch>()

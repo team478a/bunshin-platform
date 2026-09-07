@@ -16,7 +16,7 @@ import { SupabaseVideoRenderOutputStorage } from '../video/video-render-output-s
 import { SupabaseFalVideoSceneOutputStorage } from '../video/fal-video-scene-output-storage';
 import { HkdfVideoRenderWebhookSigner } from '../video/video-render-webhook-signer';
 import { ActiveLineDeliveryConfigurationAdapter } from '../line/delivery-configuration';
-import { LineMessagingApiAdapter } from '../line/messaging-provider';
+import { videoCompletionMessaging } from '../line/video-completion-messaging';
 import { currentLineEnvironment, lineEndpointUrls } from '../line/secure-configuration';
 
 const tokyoLocalDate = (value: Date) =>
@@ -64,7 +64,7 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
           new ActiveLineDeliveryConfigurationAdapter(),
           new db.PrismaLineConnectionRepository(),
           new db.PrismaLineDeliveryPreferenceRepository(),
-          new LineMessagingApiAdapter(),
+          videoCompletionMessaging(context),
         ).execute({ context, environment, reviewUrl: base.toString() });
         if (!notification.sent && notification.retryable)
           throw new VideoRenderJobHandlerError(
