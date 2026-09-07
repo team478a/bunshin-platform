@@ -2100,3 +2100,12 @@
 - Visibility: 参加者は本人の商品別集計だけを確認する。サービスのコンテンツ担当者以上は商品別の匿名集計を確認できるが、参加者の投稿本文は取得・表示しない。
 - Meaning: 専用URL使用数は、承認済みURLを含む投稿案を作成した回数であり、外部サイトでのクリック数・購入数・成果発生数とは扱わない。
 - Source: `docs/MEMBER_PRODUCT_ACTIVITY_REPORT.md`
+
+## 2026-09-07: Daily Missionの別案は本体と分離した追記履歴として保持する
+
+- Mission: 通常のDaily Missionは引き続き同一日・同一Bunshinにつき1件とし、一意制約を変更しない。
+- Variant: 別案本文は元Missionへ紐づく`MissionContentVariant`として追記し、初期上限を1件に固定する。
+- Observation: 生成claim、成功、失敗にはモデル、Prompt Version、token、推定原価、処理時間、エラー区分を保存する。
+- Selection: 「この案を使う」は本文の上書きではなく選択履歴へ追記し、最新の選択を現在値として扱う。
+- Isolation: すべての操作でWorkspace、Service、User、Bunshin、Daily Missionの一致と有効なMembershipを再検証する。
+- Source: `docs/MISSION_CONTENT_VARIANT_FOUNDATION_REPORT.md`

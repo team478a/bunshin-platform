@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260907190000_add_service_media_generation_reservations';
+export const LATEST_DATABASE_MIGRATION = '20260907210000_add_mission_content_variants';
