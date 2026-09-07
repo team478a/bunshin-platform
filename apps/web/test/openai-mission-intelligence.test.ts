@@ -96,7 +96,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v5',
+      promptVersion: 'mission-content-generator-v6',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -120,6 +120,50 @@ describe('OpenAIMissionContentGenerator', () => {
       'caption',
       'hashtags',
     ]);
+  });
+
+  it('sends the original content and rewrite constraints when generating a variant', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          model: 'gpt-5.2',
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    body: '別の導入から始める本文',
+                    threadParts: [],
+                    cta: null,
+                    caption: null,
+                    hashtags: [],
+                  }),
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await new OpenAIMissionContentGenerator({ apiKey: 'test-key', fetch: fetcher }).generate({
+      ...base,
+      contentPillar: { title: '実践', description: null },
+      grantedKnowledge: [],
+      variantSourceContent: {
+        body: '原案本文',
+        threadParts: [],
+        cta: null,
+        caption: null,
+        hashtags: [],
+      },
+      variantInstructions: ['導入と構成を変える'],
+    });
+    const requestBody = fetcher.mock.calls[0]?.[1]?.body as string;
+    expect(requestBody).toContain('原案本文');
+    expect(requestBody).toContain('導入と構成を変える');
+    expect(requestBody).toContain('原案の言い換えだけにしません');
   });
 
   it('surfaces provider failures without returning partial content', async () => {

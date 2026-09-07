@@ -1571,6 +1571,9 @@ export interface MissionContentGeneratorInput {
   }>;
   selectedMemories: SelectedBunshinMemory[];
   campaign?: CampaignPlanningContext | null;
+  /** Existing Mission content that must be rewritten into a meaningfully different proposal. */
+  variantSourceContent?: MissionContent;
+  variantInstructions?: string[];
   repairInstructions?: string[];
 }
 
@@ -1603,6 +1606,19 @@ export class GenerateMissionContent {
 
   async execute(input: MissionContentGeneratorInput) {
     assertPlatformFormat(input.platform, input.brief.format);
+    if (input.variantSourceContent !== undefined) {
+      input.variantSourceContent = normalizeMissionContent(
+        input.brief.format,
+        input.variantSourceContent,
+      );
+      if (!input.variantInstructions?.length || input.variantInstructions.length > 10)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid variant instructions');
+      input.variantInstructions = input.variantInstructions.map((value) =>
+        missionString(value, 500, 'variant instruction'),
+      );
+    } else if (input.variantInstructions !== undefined) {
+      throw new ApplicationError('VALIDATION_ERROR', 'variant source content is required');
+    }
     if (input.repairInstructions !== undefined) {
       if (input.repairInstructions.length < 1 || input.repairInstructions.length > 10)
         throw new ApplicationError('VALIDATION_ERROR', 'invalid repair instructions');
