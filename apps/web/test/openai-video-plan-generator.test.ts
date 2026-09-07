@@ -61,7 +61,7 @@ describe('OpenAIVideoPlanGenerator', () => {
       fetch: fetcher,
     }).generate(input);
     expect(result).toMatchObject({
-      promptVersion: 'video-plan-v3-short-narration',
+      promptVersion: 'video-plan-v4-openai-schema-compatible',
       inputTokens: 100,
       outputTokens: 200,
     });
@@ -84,7 +84,11 @@ describe('OpenAIVideoPlanGenerator', () => {
       minItems: 5,
       maxItems: 7,
     });
-    expect(JSON.stringify(request.text.format.schema)).not.toContain('AI_VIDEO');
+    const serializedSchema = JSON.stringify(request.text.format.schema);
+    expect(serializedSchema).not.toContain('AI_VIDEO');
+    expect(serializedSchema).not.toContain('uniqueItems');
+    expect(serializedSchema).not.toContain('minLength');
+    expect(serializedSchema).not.toContain('maxLength');
     expect(request.input[1]?.content).toContain('asset-1');
     expect(request.input[1]?.content).toContain('#PR');
   });
