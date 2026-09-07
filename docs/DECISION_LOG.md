@@ -2063,3 +2063,12 @@
 - Error boundary: 画面で404へ変換するのは`NOT_FOUND` / `FORBIDDEN`だけとし、DB・Provider・設定・未知の障害は観測可能なサーバーエラーとして残す。
 - Credential operation: DB password変更時はVercel Productionの`DATABASE_URL`と`DIRECT_URL`を同じ作業で更新する。
 - Source: `docs/PRODUCTION_SCHEMA_SAFETY_REPORT.md`
+
+## 2026-09-07: 毎日の字幕動画と動画生成枠を一緒に接続する
+
+- Scope: 利用者の依頼に基づき、毎日配信の画像設定へ字幕動画と併用設定を追加する。
+- Automation: 明示的に有効化されたServiceの完成原稿から30秒の字幕動画を準備する。SNSへの投稿判断は本人に残す。
+- Content: 投稿本文と必須表記を省略しない。制作指示や外部AI向けPromptは字幕に転用しない。長文は文章通知を継続する。
+- Quota: 個別AI場面と完成合成で同一プロジェクト版の動画枠を共有する。Service行ロックで同時予約を直列化し、完成MP4保存と同じTransactionで消費する。失敗で解放し再試行で再予約する。
+- Delivery: 完成動画は既存の本人確認URLをLINEへ送る。動画ファイル添付、AIキャラクターの自動選択、素材写真の生成入力は後続作業とする。
+- Source: docs/DAILY_VIDEO_MEDIA_INTEGRATION_REPORT.md

@@ -1,3 +1,4 @@
+import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -3970,6 +3971,68 @@ integration('database ownership boundaries', () => {
         to: new Date(Date.now() + 60_000),
       }),
     ).resolves.toEqual([]);
+  });
+  it('serializes service video reservations and atomically rolls back or consumes them', async () => {
+    const owner = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Video quota owner' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Video quota ' + randomUUID() },
+    });
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        slug: 'quota-' + randomUUID(),
+        displayName: 'Quota test',
+        description: 'Integration test',
+        operatorName: 'Test',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.serviceCommercialSetting.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        configurationId: configuration.id,
+        planName: 'One video',
+        status: 'ACTIVE',
+        monthlyVideoGenerationLimit: 1,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const scope = {
+      workspaceId: owner.workspace.id,
+      groupId: group.id,
+      videoProjectId: randomUUID(),
+      projectRevision: 3,
+    };
+    await expect(
+      client.$transaction(async (tx) => {
+        await reserveVideoMedia(tx, scope);
+        throw new Error('queue failed');
+      }),
+    ).rejects.toThrow('queue failed');
+    expect(
+      await client.serviceMediaGenerationReservation.count({ where: { groupId: group.id } }),
+    ).toBe(0);
+    const candidates = [scope, { ...scope, videoProjectId: randomUUID() }];
+    const attempts = await Promise.allSettled(
+      candidates.map((candidate) => client.$transaction((tx) => reserveVideoMedia(tx, candidate))),
+    );
+    expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === 'rejected')).toHaveLength(1);
+    const winner = candidates[attempts.findIndex((attempt) => attempt.status === 'fulfilled')]!;
+    await client.$transaction((tx) => reserveVideoMedia(tx, winner));
+    await client.$transaction((tx) => finishVideoMedia(tx, winner, 'CONSUMED'));
+    await client.$transaction((tx) => finishVideoMedia(tx, winner, 'CONSUMED'));
+    await client.$transaction((tx) => finishVideoMedia(tx, winner, 'RELEASED'));
+    expect(
+      await client.serviceMediaGenerationReservation.count({
+        where: { groupId: group.id, status: 'CONSUMED' },
+      }),
+    ).toBe(1);
   });
 });
 

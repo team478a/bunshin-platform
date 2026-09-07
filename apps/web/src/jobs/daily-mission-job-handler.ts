@@ -14,6 +14,7 @@ import {
   shouldUseServiceDailyIdeaFallback,
 } from '../services/service-daily-idea-fallback';
 import { queueAutomaticDailyImage } from '../services/automatic-daily-image';
+import { queueAutomaticDailyVideo } from '../services/automatic-daily-video';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
@@ -82,6 +83,17 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
           mediaMode: dailyIdeas.mediaMode,
         });
       const activityRule = await currentActivityContinuityRule();
+      if (scope.groupId && dailyIdeas?.enabled)
+        await queueAutomaticDailyVideo({
+          environment: job.environment,
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          actorUserId: scope.actorUserId,
+          bunshinId: scope.bunshinId,
+          correlationId: job.correlationId,
+          mission,
+          mediaMode: dailyIdeas.mediaMode,
+        });
       const returnReminder = await new db.PrismaLineReturnReminderRepository().shouldUse({
         workspaceId: job.workspaceId,
         bunshinId: job.bunshinId,

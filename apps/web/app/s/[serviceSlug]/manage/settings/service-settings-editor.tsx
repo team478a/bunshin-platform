@@ -549,22 +549,29 @@ export function ServiceSettingsEditor({
             ここで選ぶ内容はサービスの初期値です。「公式プログラム」で参加者へ別の内容を割り当てた場合は、参加者ごとの設定を優先します。
           </p>
           <label>
-            LINEへ届ける画像
+            自動で準備する画像・動画
             <select
               value={dailyIdeaDelivery.mediaMode}
               onChange={(event) =>
                 setDailyIdeaDelivery((current) => ({
                   ...current,
-                  mediaMode: event.target.value === 'IMAGE' ? 'IMAGE' : 'TEXT_ONLY',
+                  mediaMode:
+                    event.target.value === 'VIDEO' ||
+                    event.target.value === 'IMAGE_AND_VIDEO' ||
+                    event.target.value === 'IMAGE'
+                      ? event.target.value
+                      : 'TEXT_ONLY',
                 }))
               }
             >
               <option value="TEXT_ONLY">文章だけ届ける</option>
               <option value="IMAGE">画像・スライド形式の日は確認用画像も届ける</option>
+              <option value="VIDEO">投稿文から30秒の字幕動画を準備する</option>
+              <option value="IMAGE_AND_VIDEO">画像と30秒の字幕動画を準備する</option>
             </select>
           </label>
           <small>
-            画像は完成原稿プラン、画像作成枠、画像Pilotと参加者の同意がすべて有効な場合だけ自動作成します。送信後も投稿前の確認が必要です。
+            画像は完成原稿プラン、画像作成枠、画像Pilotと参加者の同意がすべて有効な場合だけ自動作成します。字幕動画は動画作成枠と動画機能が有効な場合に準備し、完成後にLINEで確認リンクを届けます。送信後も投稿前の確認が必要です。
           </small>
         </section>
         <label>

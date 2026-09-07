@@ -65,7 +65,7 @@ const schema = z
         defaultNotificationTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/),
         lockCadence: z.boolean(),
         contentMode: z.enum(['IDEA', 'PROMPT', 'READY_TO_USE']),
-        mediaMode: z.enum(['TEXT_ONLY', 'IMAGE']),
+        mediaMode: z.enum(['TEXT_ONLY', 'IMAGE', 'VIDEO', 'IMAGE_AND_VIDEO']),
       })
       .strict()
       .default({

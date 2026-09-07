@@ -17,10 +17,12 @@ export function ServiceDailyMissionSection({
   endpoint,
   missions,
   active,
+  videos = {},
 }: {
   endpoint: string;
   missions: DailyMissionView[];
   active: boolean;
+  videos?: Record<string, { href: string; status: string }>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -115,6 +117,17 @@ export function ServiceDailyMissionSection({
       <ul className="mission-list">
         {missions.map((mission) => (
           <li className="mission-card" key={mission.id}>
+            {videos[mission.id] ? (
+              <p>
+                <a href={videos[mission.id]!.href}>
+                  {['READY_FOR_REVIEW', 'COMPLETED'].includes(videos[mission.id]!.status)
+                    ? 'この投稿案の字幕動画を見る'
+                    : videos[mission.id]!.status === 'FAILED'
+                      ? '字幕動画の作成状況を確認する'
+                      : '字幕動画を準備しています — 状況を見る'}
+                </a>
+              </p>
+            ) : null}
             <h3>
               {mission.missionDate} — {mission.topic}
             </h3>

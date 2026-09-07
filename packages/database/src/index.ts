@@ -1,3 +1,4 @@
+import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -15294,6 +15295,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
       }
       const row = await tx.videoProject.create({
         data: {
+          ...(input.id ? { id: input.id } : {}),
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           groupMembershipId: input.groupMembershipId,
@@ -15766,6 +15768,13 @@ const videoSceneGenerationRecord = (
   inputSnapshot: row.inputSnapshot as Record<string, unknown>,
 });
 
+export class PrismaVideoMediaQuotaRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+  async reserve(input: Parameters<typeof reserveVideoMedia>[1]) {
+    await this.client.$transaction((tx) => reserveVideoMedia(tx, input));
+  }
+}
+
 export class PrismaVideoSceneGenerationRepository implements VideoSceneGenerationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -15814,6 +15823,12 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
           (scene.aiProcessingTypes as unknown as string[]).includes('VIDEO_GENERATION'),
       );
       if (scenes.length === 0) return [];
+      await reserveVideoMedia(tx, {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        videoProjectId: project.id,
+        projectRevision: project.revision,
+      });
       const rows = await Promise.all(
         scenes.map(async (scene) => {
           const estimatedCostUsdMicros = Math.round(
@@ -15945,41 +15960,59 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
   }
 
   async markSucceeded(input: Parameters<VideoSceneGenerationRepository['markSucceeded']>[0]) {
-    const changed = await this.client.videoSceneGeneration.updateMany({
-      where: {
-        id: input.generationId,
-        workspaceId: input.workspaceId,
-        status: { in: ['SUBMITTED', 'GENERATING'] },
-      },
-      data: {
-        status: 'SUCCEEDED',
-        outputStorageKey: input.outputStorageKey,
-        completedAt: new Date(),
-        expiresAt: assetRetentionExpiry(),
-        errorCode: null,
-      },
+    return this.client.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT p.id FROM video_projects p
+        JOIN video_scene_generations g ON g.video_project_id = p.id
+        WHERE g.id = ${input.generationId}::uuid AND g.workspace_id = ${input.workspaceId}::uuid
+        FOR UPDATE OF p`);
+      const changed = await tx.videoSceneGeneration.updateMany({
+        where: {
+          id: input.generationId,
+          workspaceId: input.workspaceId,
+          status: { in: ['SUBMITTED', 'GENERATING'] },
+        },
+        data: {
+          status: 'SUCCEEDED',
+          outputStorageKey: input.outputStorageKey,
+          completedAt: new Date(),
+          expiresAt: assetRetentionExpiry(),
+          errorCode: null,
+        },
+      });
+      if (changed.count !== 1) return null;
+      const row = await tx.videoSceneGeneration.findUniqueOrThrow({
+        where: { id: input.generationId },
+      });
+      await settleVideoSceneBatch(tx, row);
+      return videoSceneGenerationRecord(row);
     });
-    if (changed.count !== 1) return null;
-    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
-      where: { id: input.generationId },
-    });
-    return videoSceneGenerationRecord(row);
   }
 
   async markFailed(input: Parameters<VideoSceneGenerationRepository['markFailed']>[0]) {
-    const changed = await this.client.videoSceneGeneration.updateMany({
-      where: {
-        id: input.generationId,
-        workspaceId: input.workspaceId,
-        status: { in: ['QUEUED', 'SUBMITTED', 'GENERATING'] },
-      },
-      data: { status: 'FAILED', errorCode: input.errorCode.slice(0, 80), completedAt: new Date() },
+    return this.client.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT p.id FROM video_projects p
+        JOIN video_scene_generations g ON g.video_project_id = p.id
+        WHERE g.id = ${input.generationId}::uuid AND g.workspace_id = ${input.workspaceId}::uuid
+        FOR UPDATE OF p`);
+      const changed = await tx.videoSceneGeneration.updateMany({
+        where: {
+          id: input.generationId,
+          workspaceId: input.workspaceId,
+          status: { in: ['QUEUED', 'SUBMITTED', 'GENERATING'] },
+        },
+        data: {
+          status: 'FAILED',
+          errorCode: input.errorCode.slice(0, 80),
+          completedAt: new Date(),
+        },
+      });
+      if (changed.count !== 1) return null;
+      const row = await tx.videoSceneGeneration.findUniqueOrThrow({
+        where: { id: input.generationId },
+      });
+      await settleVideoSceneBatch(tx, row);
+      return videoSceneGenerationRecord(row);
     });
-    if (changed.count !== 1) return null;
-    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
-      where: { id: input.generationId },
-    });
-    return videoSceneGenerationRecord(row);
   }
 }
 
@@ -16058,6 +16091,12 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       });
       if (existing) return videoRenderRecord(existing);
       if (project.status !== 'APPROVED') return null;
+      await reserveVideoMedia(tx, {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        videoProjectId: project.id,
+        projectRevision: project.revision,
+      });
       const changed = await tx.videoProject.updateMany({
         where: { id: project.id, revision: input.expectedRevision, status: 'APPROVED' },
         data: { status: 'QUEUED' },
@@ -16182,6 +16221,7 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       });
       if (changed.count !== 1) return null;
       const render = await tx.videoRender.findUniqueOrThrow({ where: { id: input.renderId } });
+      await finishVideoMedia(tx, render, 'CONSUMED');
       await tx.videoProject.updateMany({
         where: { id: render.videoProjectId, workspaceId: input.workspaceId, status: 'RENDERING' },
         data: { status: 'READY_FOR_REVIEW' },
@@ -16202,6 +16242,7 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       });
       if (changed.count !== 1) return null;
       const render = await tx.videoRender.findUniqueOrThrow({ where: { id: input.renderId } });
+      await finishVideoMedia(tx, render, 'RELEASED');
       await tx.videoProject.updateMany({
         where: {
           id: render.videoProjectId,
@@ -16406,6 +16447,7 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
         });
         if (!originalJob) return null;
         const nextStatus = render.externalJobId ? 'SUBMITTED' : 'QUEUED';
+        await reserveVideoMedia(tx, render);
         const changed = await tx.videoRender.updateMany({
           where: { id: render.id, status: 'FAILED', completedAt: render.completedAt },
           data: { status: nextStatus, errorCode: null, completedAt: null },
@@ -16511,6 +16553,7 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
           select: { id: true },
         });
         if (!originalJob) return null;
+        await reserveVideoMedia(tx, generation);
         const changed = await tx.videoSceneGeneration.updateMany({
           where: { id: generation.id, status: 'FAILED', completedAt: generation.completedAt },
           data: {

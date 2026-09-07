@@ -13,7 +13,7 @@ export interface ServiceDailyIdeaDeliverySettings {
   defaultNotificationTime: string;
   lockCadence: boolean;
   contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
-  mediaMode: 'TEXT_ONLY' | 'IMAGE';
+  mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
 }
 
 export type ServiceContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -242,7 +242,12 @@ export function readServiceOnboardingSettings(
         configuredDailyIdeaDelivery.contentMode === 'PROMPT'
           ? configuredDailyIdeaDelivery.contentMode
           : 'READY_TO_USE',
-      mediaMode: configuredDailyIdeaDelivery.mediaMode === 'IMAGE' ? 'IMAGE' : 'TEXT_ONLY',
+      mediaMode:
+        configuredDailyIdeaDelivery.mediaMode === 'VIDEO' ||
+        configuredDailyIdeaDelivery.mediaMode === 'IMAGE_AND_VIDEO' ||
+        configuredDailyIdeaDelivery.mediaMode === 'IMAGE'
+          ? configuredDailyIdeaDelivery.mediaMode
+          : 'TEXT_ONLY',
     },
   };
 }
