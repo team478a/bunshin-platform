@@ -2058,6 +2058,7 @@
 - Deploy gate: Vercel Production buildは、保持済みのDB接続で`prisma migrate deploy`を実行し、最新migrationを読み取り専用で再確認してからApplicationをbuildする。
 - Failure: migration、Schema Gate、Application buildのいずれかが失敗した場合、新deploymentは公開されない。PreviewとDevelopmentではmigrationを実行しない。
 - Credential: 古いGitHub Environment secretを更新する方式はやめ、現在正常稼働しているVercel Productionの接続情報に一本化する。
+- Connectivity: Vercel build machineはSupabaseのIPv6 direct hostへ到達できないため、migration実行中の`DIRECT_URL`だけ明示設定したIPv4 session poolerへ変換する。
 - Monitoring: 正式ドメインのlive/readinessを15分ごとに確認し、DB接続と最新Schemaの両方を監視する。
 - Error boundary: 画面で404へ変換するのは`NOT_FOUND` / `FORBIDDEN`だけとし、DB・Provider・設定・未知の障害は観測可能なサーバーエラーとして残す。
 - Credential operation: DB password変更時はVercel Productionの`DATABASE_URL`と`DIRECT_URL`を同じ作業で更新する。
