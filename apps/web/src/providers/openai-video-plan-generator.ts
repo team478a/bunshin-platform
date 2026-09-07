@@ -6,7 +6,7 @@ import type {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 
-export const VIDEO_PLAN_PROMPT_VERSION = 'video-plan-v3-short-narration';
+export const VIDEO_PLAN_PROMPT_VERSION = 'video-plan-v4-openai-schema-compatible';
 
 type ResponseValue = {
   output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
@@ -32,8 +32,8 @@ function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
           properties: {
             sceneNo: { type: 'integer', minimum: 1, maximum: maxItems },
             durationMs: { type: 'integer', minimum: 500, maximum: 60_000 },
-            narration: { type: 'string', minLength: 1, maxLength: 2_000 },
-            caption: { type: 'string', minLength: 1, maxLength: 240 },
+            narration: { type: 'string' },
+            caption: { type: 'string' },
             visualType: {
               type: 'string',
               enum: ['TEXT_MOTION', ...(standardComposition ? [] : ['AI_VIDEO'])],
@@ -42,11 +42,10 @@ function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
             keywords: {
               type: 'array',
               maxItems: 20,
-              items: { type: 'string', minLength: 1, maxLength: 80 },
+              items: { type: 'string' },
             },
             aiProcessingTypes: {
               type: 'array',
-              uniqueItems: true,
               items: {
                 type: 'string',
                 enum: ['SCRIPT_GENERATION', ...(standardComposition ? [] : ['VIDEO_GENERATION'])],
@@ -67,7 +66,6 @@ function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
       },
       projectAiProcessingTypes: {
         type: 'array',
-        uniqueItems: true,
         items: {
           type: 'string',
           enum: ['SCRIPT_GENERATION', ...(standardComposition ? [] : ['VIDEO_GENERATION'])],
