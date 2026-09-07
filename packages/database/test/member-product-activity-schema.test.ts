@@ -22,8 +22,8 @@ describe('member product activity persistence boundary', () => {
 
   it('keeps copy and posted activities append-only and idempotent per candidate', () => {
     expect(schema).toContain('model MemberProductContentEvent');
-    expect(schema).toContain('@@unique([contentRunId, type, candidateIndex])');
-    expect(schema).toContain('@@unique([contentRunId, operationKey])');
+    expect(schema).toContain('@@unique([contentRunId, type, candidateIndex], map:');
+    expect(schema).toContain('@@unique([contentRunId, operationKey], map:');
   });
 
   it('rechecks active membership, owner, service, profile, Bunshin and URL before writes', () => {
