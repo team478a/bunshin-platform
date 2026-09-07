@@ -78,4 +78,20 @@ describe('member product content UI boundary', () => {
     expect(http).toContain('profile.officialProduct?.forbiddenExpressions');
     expect(http).toContain("'official product information unavailable'");
   });
+
+  it('records product generation, copy and manual post without storing the draft body', () => {
+    const suggestions = source('src/http/member-product-suggestions.ts');
+    const activities = source('src/http/member-product-activities.ts');
+    const operations = source('app/s/[serviceSlug]/manage/member-products/page.tsx');
+    expect(suggestions).toContain('profileService.recordGeneration');
+    expect(suggestions).toContain('generationId');
+    expect(form).toContain("recordActivity('COPIED')");
+    expect(form).toContain("recordActivity('POSTED')");
+    expect(form).toContain('この内容を投稿しました');
+    expect(activities).toContain('actorUserId: actor.userId');
+    expect(activities).toContain('requireSameOrigin(request)');
+    expect(operations).toContain('memberProductContentActivity.groupBy');
+    expect(operations).toContain('投稿文の本文や参加者の分身設定は表示しません');
+    expect(activities).not.toContain('body:');
+  });
 });

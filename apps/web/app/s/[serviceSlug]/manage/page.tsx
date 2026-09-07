@@ -40,6 +40,11 @@ const sections = [
     href: 'post-approvals',
   },
   {
+    title: '保存商品の利用状況',
+    description: '保存商品ごとの投稿案作成、コピー、投稿完了、専用URLの状態を確認します。',
+    href: 'member-products',
+  },
+  {
     title: '公式LINE',
     description: 'このサービス専用の公式LINE、通知時間、接続状態を設定します。',
     href: 'line',

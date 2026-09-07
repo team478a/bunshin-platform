@@ -80,6 +80,25 @@ export interface MemberProductProfileRepository {
     profileId: string;
     now: Date;
   }): Promise<boolean | null>;
+  recordGeneration(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    profileId: string;
+    bunshinId: string;
+    platform: MemberProductContentPlatform;
+    generationId: string;
+    now: Date;
+  }): Promise<boolean | null>;
+  recordActivity(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    generationId: string;
+    type: 'COPIED' | 'POSTED';
+    candidateIndex: number;
+    now: Date;
+  }): Promise<boolean | null>;
 }
 
 const limits: Record<MemberProductContentPlatform, number> = {
@@ -270,6 +289,51 @@ export class MemberProductProfileService {
     if (archived === null)
       throw new ApplicationError('NOT_FOUND', 'member product profile unavailable');
     return { archived };
+  }
+
+  async recordGeneration(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    profileId: string;
+    bunshinId: string;
+    platform: MemberProductContentPlatform;
+  }) {
+    const generationId = crypto.randomUUID();
+    const recorded = await this.repository.recordGeneration({
+      ...input,
+      profileId: requiredText(input.profileId, 'member product profile id', 100),
+      bunshinId: requiredText(input.bunshinId, 'bunshin id', 100),
+      generationId,
+      now: new Date(),
+    });
+    if (recorded === null)
+      throw new ApplicationError('NOT_FOUND', 'active member product generation scope unavailable');
+    return { generationId };
+  }
+
+  async recordActivity(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    generationId: string;
+    type: 'COPIED' | 'POSTED';
+    candidateIndex: number;
+  }) {
+    if (
+      !Number.isInteger(input.candidateIndex) ||
+      input.candidateIndex < 0 ||
+      input.candidateIndex > 2
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid member product candidate index');
+    const recorded = await this.repository.recordActivity({
+      ...input,
+      generationId: requiredText(input.generationId, 'member product generation id', 100),
+      now: new Date(),
+    });
+    if (recorded === null)
+      throw new ApplicationError('NOT_FOUND', 'member product generation unavailable');
+    return { recorded };
   }
 }
 
