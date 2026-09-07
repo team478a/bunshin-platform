@@ -5,6 +5,7 @@ import {
   GetLineNotificationPreference,
   ListPersonalityVersions,
   ListPersonalityLearningProposals,
+  ListPointRewardCatalog,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
@@ -57,6 +58,7 @@ export default async function BunshinPage({
       PrismaLineNotificationPreferenceRepository,
       PrismaPersonalityVersionRepository,
       PrismaPersonalityLearningProposalRepository,
+      PrismaPointRedemptionRepository,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -224,6 +226,14 @@ export default async function BunshinPage({
         }),
       ),
     );
+    const variantPointCost = await new ListPointRewardCatalog(new PrismaPointRedemptionRepository())
+      .execute({ workspaceId, actorUserId: currentUser.userId })
+      .then(
+        (catalog) =>
+          catalog.find(({ rewardType }) => rewardType === 'ALTERNATIVE_PLAN_GENERATION')
+            ?.pointCost ?? null,
+      )
+      .catch(() => null);
     return (
       <>
         <p>
@@ -452,6 +462,7 @@ export default async function BunshinPage({
               ),
             }),
           )}
+          variantPointCost={variantPointCost}
           progress={progress}
           motivation={motivation}
           localDate={localDate}

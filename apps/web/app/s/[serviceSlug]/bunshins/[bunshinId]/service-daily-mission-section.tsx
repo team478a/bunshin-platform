@@ -17,11 +17,15 @@ import {
 export function ServiceDailyMissionSection({
   endpoint,
   missions,
+  variantPointCost,
+  pointWorkspaceId,
   active,
   videos = {},
 }: {
   endpoint: string;
   missions: DailyMissionView[];
+  variantPointCost: number | null;
+  pointWorkspaceId: string;
   active: boolean;
   videos?: Record<string, { href: string; status: string }>;
 }) {
@@ -135,6 +139,16 @@ export function ServiceDailyMissionSection({
 
   async function generateVariant(missionId: string, instruction?: string) {
     if (pendingAction) return;
+    if (variantPointCost === null) {
+      setMessage('ポイント交換を利用できません。時間をおいて、もう一度お試しください。');
+      return;
+    }
+    if (
+      !window.confirm(
+        `${variantPointCost} WPを使って${instruction?.trim() ? '内容を直した案' : '別の案'}を作ります。よろしいですか？`,
+      )
+    )
+      return;
     const requestId = key();
     setPendingAction(`${missionId}:variant`);
     setMessage(null);
@@ -144,6 +158,7 @@ export function ServiceDailyMissionSection({
         headers: { 'content-type': 'application/json', 'x-request-id': requestId },
         body: JSON.stringify({
           idempotencyKey: requestId,
+          acceptedPointCost: variantPointCost,
           ...(instruction?.trim() ? { instruction: instruction.trim() } : {}),
         }),
       });
@@ -154,9 +169,11 @@ export function ServiceDailyMissionSection({
         setMessage(
           payload?.error?.code === 'CONTENT_REJECTED'
             ? `安全に使える別案を作れませんでした。時間をおいてもう一度お試しください。（受付番号: ${requestId}）`
-            : payload?.error?.code === 'CONFLICT'
-              ? '別案は1つまでです。表示中の別案から選んでください。'
-              : `別案を作れませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
+            : payload?.error?.code === 'FORBIDDEN'
+              ? 'WPが足りないか、ポイント交換を利用できません。ポイント画面を確認してください。'
+              : payload?.error?.code === 'CONFLICT'
+                ? '価格が変わったか、別案がすでにあります。画面を更新してください。'
+                : `別案を作れませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
         );
         return;
       }
@@ -235,10 +252,12 @@ export function ServiceDailyMissionSection({
                   <div className="mission-variant-actions">
                     <button
                       type="button"
-                      disabled={pendingAction !== null}
+                      disabled={pendingAction !== null || variantPointCost === null}
                       onClick={() => void generateVariant(mission.id)}
                     >
-                      別の案を見る
+                      {variantPointCost === null
+                        ? 'ポイント交換を利用できません'
+                        : `${variantPointCost} WPで別の案を見る`}
                     </button>
                     <label>
                       直したいところ（任意）
@@ -256,14 +275,24 @@ export function ServiceDailyMissionSection({
                     <button
                       type="button"
                       disabled={
-                        pendingAction !== null || !(variantInstructions[mission.id] ?? '').trim()
+                        pendingAction !== null ||
+                        variantPointCost === null ||
+                        !(variantInstructions[mission.id] ?? '').trim()
                       }
                       onClick={() =>
                         void generateVariant(mission.id, variantInstructions[mission.id])
                       }
                     >
-                      内容を直す
+                      {variantPointCost === null
+                        ? 'ポイント交換を利用できません'
+                        : `${variantPointCost} WPで内容を直す`}
                     </button>
+                    <p>
+                      作成に使ったWPは、失敗した場合に戻ります。{' '}
+                      <a href={`/points?workspaceId=${encodeURIComponent(pointWorkspaceId)}`}>
+                        残高を見る
+                      </a>
+                    </p>
                   </div>
                 ) : null}
                 {mission.variants[0] && !mission.variants[0].selectedAt ? (

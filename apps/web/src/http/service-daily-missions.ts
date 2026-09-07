@@ -69,7 +69,11 @@ const feedbackSchema = z
   .object({ rating: z.enum(MISSION_FEEDBACK_RATINGS), idempotencyKey: keySchema })
   .strict();
 const variantGenerationSchema = z
-  .object({ idempotencyKey: uuidSchema, instruction: z.string().trim().min(1).max(500).optional() })
+  .object({
+    idempotencyKey: uuidSchema,
+    acceptedPointCost: z.number().int().positive(),
+    instruction: z.string().trim().min(1).max(500).optional(),
+  })
   .strict();
 const variantSelectionSchema = z.object({ idempotencyKey: uuidSchema }).strict();
 const emptySchema = z.object({}).strict();
@@ -218,14 +222,15 @@ export function generateServiceMissionContentVariantResponse(
       requireSameOrigin(request);
       const parsed = variantGenerationSchema.safeParse(await body(request));
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-      const { createMissionContentVariantGenerationService } =
-        await import('../services/mission-content-variant-generation');
+      const { generatePointFundedMissionContentVariant } =
+        await import('../services/point-funded-mission-content-variant');
       return missionContentVariantDto(
-        await createMissionContentVariantGenerationService().execute({
+        await generatePointFundedMissionContentVariant({
           ...(await scope(serviceSlug, bunshinId)),
           dailyMissionId: uuidSchema.parse(dailyMissionId),
           generationIdempotencyKey: parsed.data.idempotencyKey,
           usageIdempotencyPrefix: requestId,
+          acceptedPointCost: parsed.data.acceptedPointCost,
           serviceSafeMode: true,
           ...(parsed.data.instruction ? { variantInstructions: [parsed.data.instruction] } : {}),
         }),

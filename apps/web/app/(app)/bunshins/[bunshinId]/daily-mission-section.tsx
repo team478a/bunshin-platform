@@ -331,6 +331,7 @@ export function DailyMissionSection({
   capabilityStatus,
   profiles,
   missions,
+  variantPointCost,
   progress,
   motivation,
   localDate,
@@ -344,6 +345,7 @@ export function DailyMissionSection({
     status: 'ACTIVE' | 'INACTIVE';
   }>;
   missions: DailyMissionView[];
+  variantPointCost: number | null;
   progress: MissionProgressView;
   motivation: ActivityMotivationView;
   localDate: string;
@@ -563,6 +565,16 @@ export function DailyMissionSection({
 
   async function generateVariant(missionId: string, instruction?: string) {
     if (pendingAction !== null) return;
+    if (variantPointCost === null) {
+      setError('ポイント交換を利用できません。時間をおいて、もう一度お試しください。');
+      return;
+    }
+    if (
+      !window.confirm(
+        `${variantPointCost} WPを使って${instruction?.trim() ? '内容を直した案' : '別の案'}を作ります。よろしいですか？`,
+      )
+    )
+      return;
     setError(null);
     const requestId = createClientRequestId();
     setPendingAction(`${missionId}:variant`);
@@ -572,6 +584,7 @@ export function DailyMissionSection({
         headers: { 'content-type': 'application/json', 'x-request-id': requestId },
         body: JSON.stringify({
           idempotencyKey: requestId,
+          acceptedPointCost: variantPointCost,
           ...(instruction?.trim() ? { instruction: instruction.trim() } : {}),
         }),
       });
@@ -582,9 +595,11 @@ export function DailyMissionSection({
         setError(
           payload?.error?.code === 'CONTENT_REJECTED'
             ? `安全に使える別案を作れませんでした。時間をおいてもう一度お試しください。（受付番号: ${requestId}）`
-            : payload?.error?.code === 'CONFLICT'
-              ? '別案は1つまでです。表示中の別案から選んでください。'
-              : `別案を作れませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
+            : payload?.error?.code === 'FORBIDDEN'
+              ? 'WPが足りないか、ポイント交換を利用できません。ポイント画面を確認してください。'
+              : payload?.error?.code === 'CONFLICT'
+                ? '価格が変わったか、別案がすでにあります。画面を更新してください。'
+                : `別案を作れませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
         );
         return;
       }
@@ -874,10 +889,12 @@ export function DailyMissionSection({
                           <div className="mission-variant-actions">
                             <button
                               type="button"
-                              disabled={busy}
+                              disabled={busy || variantPointCost === null}
                               onClick={() => void generateVariant(mission.id)}
                             >
-                              別の案を見る
+                              {variantPointCost === null
+                                ? 'ポイント交換を利用できません'
+                                : `${variantPointCost} WPで別の案を見る`}
                             </button>
                             <label>
                               直したいところ（任意）
@@ -894,13 +911,25 @@ export function DailyMissionSection({
                             </label>
                             <button
                               type="button"
-                              disabled={busy || !(variantInstructions[mission.id] ?? '').trim()}
+                              disabled={
+                                busy ||
+                                variantPointCost === null ||
+                                !(variantInstructions[mission.id] ?? '').trim()
+                              }
                               onClick={() =>
                                 void generateVariant(mission.id, variantInstructions[mission.id])
                               }
                             >
-                              内容を直す
+                              {variantPointCost === null
+                                ? 'ポイント交換を利用できません'
+                                : `${variantPointCost} WPで内容を直す`}
                             </button>
+                            <p>
+                              作成に使ったWPは、失敗した場合に戻ります。{' '}
+                              <a href={`/points?workspaceId=${encodeURIComponent(workspaceId)}`}>
+                                残高を見る
+                              </a>
+                            </p>
                           </div>
                         )}
                         {variant && !variant.selectedAt && (
