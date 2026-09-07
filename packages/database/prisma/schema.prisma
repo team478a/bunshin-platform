@@ -949,6 +949,12 @@ enum ExternalTrackingAuditAction {
   ARCHIVED
 }
 
+enum MemberProductContentActivityType {
+  GENERATED
+  COPIED
+  POSTED
+}
+
 enum ExternalLinkPlacementTarget {
   BODY
   CAPTION
@@ -1675,6 +1681,7 @@ model User {
   externalTrackingLinksUpdated      ExternalTrackingLink[]              @relation("ExternalTrackingLinkUpdater")
   externalTrackingAuditsPerformed   ExternalTrackingAuditLog[]          @relation("ExternalTrackingAuditActor")
   memberProductProfiles             MemberProductProfile[]
+  memberProductActivities           MemberProductContentActivity[]
   externalLinkPlacementsCreated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementCreator")
   externalLinkPlacementsUpdated     ExternalLinkPlacementTemplate[]     @relation("ExternalLinkPlacementUpdater")
   contentLinkUsages                 ContentLinkUsage[]                  @relation("ContentLinkUsageUser")
@@ -1867,6 +1874,7 @@ model Workspace {
   externalTrackingLinks           ExternalTrackingLink[]
   externalTrackingAudits          ExternalTrackingAuditLog[]
   memberProductProfiles           MemberProductProfile[]
+  memberProductActivities         MemberProductContentActivity[]
   externalLinkPlacements          ExternalLinkPlacementTemplate[]
   contentLinkUsages               ContentLinkUsage[]
   groupFeaturePolicies            GroupFeaturePolicy[]
@@ -2097,6 +2105,7 @@ model Group {
   externalTrackingLinks           ExternalTrackingLink[]
   externalTrackingAudits          ExternalTrackingAuditLog[]
   memberProductProfiles           MemberProductProfile[]
+  memberProductActivities         MemberProductContentActivity[]
   externalLinkPlacements          ExternalLinkPlacementTemplate[]
   contentLinkUsages               ContentLinkUsage[]
   featurePolicies                 GroupFeaturePolicy[]
@@ -2439,6 +2448,7 @@ model GroupMembership {
   serviceCreditAccount         ServiceCreditAccount?
   serviceReferralRewards       ServiceReferralReward[]          @relation("ServiceReferralRewardMembership")
   memberProductProfiles        MemberProductProfile[]
+  memberProductActivities      MemberProductContentActivity[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -3571,7 +3581,9 @@ model ExternalTrackingLink {
   updatedBy             User                            @relation("ExternalTrackingLinkUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   contentLinkUsages     ContentLinkUsage[]
   memberProductProfiles MemberProductProfile[]
+  memberProductActivities MemberProductContentActivity[]
 
+  @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, status])
   @@index([systemId, scopeKey, status])
   @@index([memberIdentityId, status])
@@ -3620,11 +3632,42 @@ model MemberProductProfile {
   user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalTrackingLink   ExternalTrackingLink @relation(fields: [externalTrackingLinkId], references: [id], onDelete: Cascade)
   productPack            ProductPack?         @relation(fields: [productPackId], references: [id], onDelete: SetNull)
+  contentActivities      MemberProductContentActivity[]
 
+  @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, groupMembershipId, archivedAt, updatedAt])
   @@index([externalTrackingLinkId, updatedAt])
   @@index([productPackId, updatedAt])
   @@map("member_product_profiles")
+}
+
+model MemberProductContentActivity {
+  id                     String                           @id @default(uuid()) @db.Uuid
+  workspaceId            String                           @map("workspace_id") @db.Uuid
+  groupId                String                           @map("group_id") @db.Uuid
+  groupMembershipId      String                           @map("group_membership_id") @db.Uuid
+  userId                 String                           @map("user_id") @db.Uuid
+  memberProductProfileId String                           @map("member_product_profile_id") @db.Uuid
+  bunshinId              String                           @map("bunshin_id") @db.Uuid
+  externalTrackingLinkId String                           @map("external_tracking_link_id") @db.Uuid
+  generationId           String                           @map("generation_id") @db.Uuid
+  type                   MemberProductContentActivityType
+  platform               String                           @db.VarChar(20)
+  candidateIndex         Int?                             @map("candidate_index")
+  occurredAt             DateTime                         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace              Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                  Group                            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupMembership        GroupMembership                  @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "member_product_content_activities_membership_fkey")
+  user                   User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberProductProfile   MemberProductProfile             @relation(fields: [workspaceId, groupId, memberProductProfileId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  bunshin                Bunshin                          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade)
+  externalTrackingLink   ExternalTrackingLink             @relation(fields: [workspaceId, groupId, externalTrackingLinkId], references: [workspaceId, groupId, id], onDelete: Restrict)
+
+  @@unique([groupMembershipId, generationId, type])
+  @@index([workspaceId, groupId, memberProductProfileId, occurredAt])
+  @@index([workspaceId, groupId, userId, occurredAt])
+  @@index([externalTrackingLinkId, occurredAt])
+  @@map("member_product_content_activities")
 }
 
 model CampaignSimilarityReview {
@@ -4901,6 +4944,7 @@ model Bunshin {
   userEvidence                    UserEvidence[]
   advertisingSafetyReviews        AdvertisingSafetyReview[]
   contentLinkUsages               ContentLinkUsage[]
+  memberProductActivities         MemberProductContentActivity[]
   campaignParticipations          CampaignParticipation[]
   campaignSimilarityReviews       CampaignSimilarityReview[]
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]

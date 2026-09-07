@@ -59,14 +59,15 @@ export async function generateMemberProductSuggestionsResponse(
       groupId: service.serviceId,
       actorUserId: actor.userId,
     };
+    const profileService = new MemberProductProfileService(
+      new db.PrismaMemberProductProfileRepository(),
+    );
     const [bunshin, profile, settings, runtime] = await Promise.all([
       new GetBunshin(new db.PrismaBunshinRepository()).execute({
         ...scope,
         bunshinId: input.bunshinId,
       }),
-      new MemberProductProfileService(
-        new db.PrismaMemberProductProfileRepository(),
-      ).getGenerationContext({ ...scope, profileId: input.profileId }),
+      profileService.getGenerationContext({ ...scope, profileId: input.profileId }),
       new ExternalTrackingMemberLinkService(
         new db.PrismaExternalTrackingLinkRepository(undefined, service.serviceId),
       ).list(scope),
@@ -124,6 +125,12 @@ export async function generateMemberProductSuggestionsResponse(
         ],
       }),
     );
+    const { generationId } = await profileService.recordGeneration({
+      ...scope,
+      profileId: profile.id,
+      bunshinId: bunshin.id,
+      platform: input.platform,
+    });
     await recordAiUsageSafely({
       workspaceId: scope.workspaceId,
       bunshinId: bunshin.id,
@@ -148,7 +155,7 @@ export async function generateMemberProductSuggestionsResponse(
       latency: result.latencyMs,
     });
     return Response.json(
-      { data: { candidates }, requestId },
+      { data: { candidates, generationId }, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {

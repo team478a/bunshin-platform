@@ -19786,4 +19786,110 @@ export class PrismaMemberProductProfileRepository implements MemberProductProfil
       return true;
     });
   }
+
+  async recordGeneration(input: Parameters<MemberProductProfileRepository['recordGeneration']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const profile = await tx.memberProductProfile.findFirst({
+        where: {
+          id: input.profileId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          archivedAt: null,
+          groupMembership: {
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+          },
+          externalTrackingLink: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            scopeType: 'MEMBER',
+            memberIdentity: { status: 'ACTIVE' },
+          },
+        },
+        select: { groupMembershipId: true, externalTrackingLinkId: true },
+      });
+      if (!profile) return null;
+      const bunshin = await tx.bunshin.findFirst({
+        where: {
+          id: input.bunshinId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!bunshin) return null;
+      await tx.memberProductContentActivity.create({
+        data: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: profile.groupMembershipId,
+          userId: input.actorUserId,
+          memberProductProfileId: input.profileId,
+          bunshinId: bunshin.id,
+          externalTrackingLinkId: profile.externalTrackingLinkId,
+          generationId: input.generationId,
+          type: 'GENERATED',
+          platform: input.platform,
+          occurredAt: input.now,
+        },
+      });
+      return true;
+    });
+  }
+
+  async recordActivity(input: Parameters<MemberProductProfileRepository['recordActivity']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const generated = await tx.memberProductContentActivity.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          generationId: input.generationId,
+          type: 'GENERATED',
+          groupMembership: {
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+          },
+          memberProductProfile: { archivedAt: null },
+          externalTrackingLink: {
+            status: 'ACTIVE',
+            deletedAt: null,
+            scopeType: 'MEMBER',
+            memberIdentity: { status: 'ACTIVE' },
+          },
+        },
+      });
+      if (!generated) return null;
+      await tx.memberProductContentActivity.upsert({
+        where: {
+          groupMembershipId_generationId_type: {
+            groupMembershipId: generated.groupMembershipId,
+            generationId: generated.generationId,
+            type: input.type,
+          },
+        },
+        update: {},
+        create: {
+          workspaceId: generated.workspaceId,
+          groupId: generated.groupId,
+          groupMembershipId: generated.groupMembershipId,
+          userId: generated.userId,
+          memberProductProfileId: generated.memberProductProfileId,
+          bunshinId: generated.bunshinId,
+          externalTrackingLinkId: generated.externalTrackingLinkId,
+          generationId: generated.generationId,
+          type: input.type,
+          platform: generated.platform,
+          candidateIndex: input.candidateIndex,
+          occurredAt: input.now,
+        },
+      });
+      return true;
+    });
+  }
 }

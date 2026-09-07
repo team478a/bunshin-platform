@@ -116,6 +116,8 @@ describe('member product profile service', () => {
       getGenerationContext: vi.fn(),
       save,
       archive: vi.fn(),
+      recordGeneration: vi.fn(),
+      recordActivity: vi.fn(),
     } satisfies MemberProductProfileRepository;
 
     await new MemberProductProfileService(repository).save({
@@ -147,6 +149,8 @@ describe('member product profile service', () => {
       getGenerationContext: vi.fn(),
       save: vi.fn().mockResolvedValue(null),
       archive: vi.fn(),
+      recordGeneration: vi.fn(),
+      recordActivity: vi.fn(),
     } satisfies MemberProductProfileRepository;
 
     await expect(
@@ -169,6 +173,8 @@ describe('member product profile service', () => {
       getGenerationContext: vi.fn(),
       save: vi.fn(),
       archive,
+      recordGeneration: vi.fn(),
+      recordActivity: vi.fn(),
     } satisfies MemberProductProfileRepository;
 
     await new MemberProductProfileService(repository).archive({
@@ -186,5 +192,75 @@ describe('member product profile service', () => {
         profileId: 'profile-1',
       }),
     );
+  });
+
+  it('records generated, copied and posted activity through the scoped repository', async () => {
+    const recordGeneration = vi
+      .fn<MemberProductProfileRepository['recordGeneration']>()
+      .mockResolvedValue(true);
+    const recordActivity = vi
+      .fn<MemberProductProfileRepository['recordActivity']>()
+      .mockResolvedValue(true);
+    const repository = {
+      list: vi.fn(),
+      listProductMasters: vi.fn(),
+      getGenerationContext: vi.fn(),
+      save: vi.fn(),
+      archive: vi.fn(),
+      recordGeneration,
+      recordActivity,
+    } satisfies MemberProductProfileRepository;
+    const service = new MemberProductProfileService(repository);
+
+    const generated = await service.recordGeneration({
+      workspaceId: 'workspace-1',
+      groupId: 'group-1',
+      actorUserId: 'user-1',
+      profileId: 'profile-1',
+      bunshinId: 'bunshin-1',
+      platform: 'INSTAGRAM',
+    });
+    await service.recordActivity({
+      workspaceId: 'workspace-1',
+      groupId: 'group-1',
+      actorUserId: 'user-1',
+      generationId: generated.generationId,
+      type: 'COPIED',
+      candidateIndex: 1,
+    });
+
+    expect(recordGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: 'profile-1', bunshinId: 'bunshin-1' }),
+    );
+    expect(recordActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationId: generated.generationId,
+        type: 'COPIED',
+        candidateIndex: 1,
+      }),
+    );
+  });
+
+  it('rejects a candidate index outside the generated three options', async () => {
+    const repository = {
+      list: vi.fn(),
+      listProductMasters: vi.fn(),
+      getGenerationContext: vi.fn(),
+      save: vi.fn(),
+      archive: vi.fn(),
+      recordGeneration: vi.fn(),
+      recordActivity: vi.fn(),
+    } satisfies MemberProductProfileRepository;
+
+    await expect(
+      new MemberProductProfileService(repository).recordActivity({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        actorUserId: 'user-1',
+        generationId: 'generation-1',
+        type: 'POSTED',
+        candidateIndex: 3,
+      }),
+    ).rejects.toThrow('invalid member product candidate index');
   });
 });

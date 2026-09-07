@@ -24,6 +24,13 @@ const productMasterMigration = readFileSync(
   ),
   'utf8',
 );
+const activityMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260907210000_add_member_product_content_activities/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('member product profile persistence boundary', () => {
   it('binds profiles to workspace, service, membership, user and a tracking link', () => {
@@ -72,5 +79,22 @@ describe('member product profile persistence boundary', () => {
     expect(repository).toContain("rule.type === 'REQUIRED_DISCLOSURE'");
     expect(repository).toContain("rule.type === 'FORBIDDEN_EXPRESSION'");
     expect(repository).toContain("rule.type === 'CONDITIONAL_EXPRESSION'");
+  });
+
+  it('keeps product generation, copy and post activity in a scoped append-only table', () => {
+    expect(schema).toContain('model MemberProductContentActivity');
+    expect(schema).toContain('MemberProductContentActivityType');
+    expect(activityMigration).toContain(
+      'FOREIGN KEY ("workspace_id", "group_id", "group_membership_id", "user_id")',
+    );
+    expect(activityMigration).toContain(
+      'FOREIGN KEY ("workspace_id", "group_id", "member_product_profile_id")',
+    );
+    expect(activityMigration).toContain(
+      '"member_product_content_activities_group_membership_id_generation_id_type_key"',
+    );
+    expect(repository).toContain('async recordGeneration');
+    expect(repository).toContain('async recordActivity');
+    expect(repository).toContain('memberProductProfile: { archivedAt: null }');
   });
 });

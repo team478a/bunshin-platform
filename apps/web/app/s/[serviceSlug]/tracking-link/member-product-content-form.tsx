@@ -36,6 +36,7 @@ export function MemberProductContentForm({
   const [platform, setPlatform] = useState<MemberProductContentPlatform>('INSTAGRAM');
   const [bunshinId, setBunshinId] = useState(bunshins[0]?.id ?? '');
   const [candidates, setCandidates] = useState<string[]>([]);
+  const [generationId, setGenerationId] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
@@ -43,6 +44,7 @@ export function MemberProductContentForm({
   function selectProfile(id: string) {
     setProfileId(id);
     setCandidates([]);
+    setGenerationId('');
     const profile = profiles.find((item) => item.id === id);
     if (!profile) {
       setLinkId(activeLinks[0]?.id ?? '');
@@ -98,15 +100,17 @@ export function MemberProductContentForm({
       );
       if (!suggestionResponse.ok) throw new Error('GENERATION_FAILED');
       const suggestionPayload = (await suggestionResponse.json()) as {
-        data: { candidates: Array<{ body: string }> };
+        data: { candidates: Array<{ body: string }>; generationId: string };
       };
       setCandidates(suggestionPayload.data.candidates.map(({ body }) => body));
+      setGenerationId(suggestionPayload.data.generationId);
       setSelectedCandidate(0);
       setMessage('分身設定に合わせた投稿文を3案作成しました。内容を確認してください。');
       setProfileId(payload.data.id);
       router.refresh();
     } catch {
       setCandidates([]);
+      setGenerationId('');
       setMessage('保存またはAI投稿案の作成ができませんでした。少し待ってから再度お試しください。');
     } finally {
       setSaving(false);
@@ -118,10 +122,41 @@ export function MemberProductContentForm({
     if (!body) return;
     try {
       await navigator.clipboard.writeText(body);
-      setMessage('投稿文をコピーしました。');
+      const recorded = await recordActivity('COPIED');
+      setMessage(
+        recorded
+          ? '投稿文をコピーしました。'
+          : '投稿文をコピーしました。利用履歴だけ保存できませんでした。',
+      );
     } catch {
       setMessage('コピーできませんでした。投稿文を長押ししてコピーしてください。');
     }
+  }
+
+  async function recordActivity(type: 'COPIED' | 'POSTED') {
+    if (!generationId) return false;
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/member-products/generations/${encodeURIComponent(generationId)}/activities`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ type, candidateIndex: selectedCandidate }),
+        },
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function markPosted() {
+    const recorded = await recordActivity('POSTED');
+    setMessage(
+      recorded
+        ? '投稿完了を記録しました。'
+        : '投稿完了を記録できませんでした。少し待ってから再度お試しください。',
+    );
   }
 
   async function archiveSelectedProfile() {
@@ -290,7 +325,12 @@ export function MemberProductContentForm({
           <button className="button button--full" type="button" onClick={() => void copy()}>
             選んだ投稿文をコピー
           </button>
-          <small>自動投稿はしません。コピー後、ご自身のSNSから投稿してください。</small>
+          <button className="button button--full" type="button" onClick={() => void markPosted()}>
+            この内容を投稿しました
+          </button>
+          <small>
+            自動投稿はしません。コピー後、ご自身のSNSから投稿し、完了したら記録してください。
+          </small>
         </div>
       )}
       {message && (
