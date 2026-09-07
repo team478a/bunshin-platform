@@ -123,7 +123,12 @@ export function SocialImageWorkspace({
       const referenceBase64 = referenceFile
         ? await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+            reader.onload = () => {
+              const encoded =
+                typeof reader.result === 'string' ? reader.result.split(',')[1] : null;
+              if (!encoded) reject(new Error('empty image'));
+              else resolve(encoded);
+            };
             reader.onerror = () => reject(new Error('read failed'));
             reader.readAsDataURL(referenceFile);
           })
