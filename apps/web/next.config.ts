@@ -24,7 +24,10 @@ const config: NextConfig = {
       '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
     ],
   },
-  serverExternalPackages: ['@prisma/client', '@resvg/resvg-js'],
+  // Satori loads harfbuzzjs asynchronously and resolves hb.wasm from its own
+  // package directory. Keeping both packages external preserves that runtime
+  // directory instead of baking Vercel's build path (/ROOT) into the bundle.
+  serverExternalPackages: ['@prisma/client', '@resvg/resvg-js', 'harfbuzzjs', 'satori'],
   transpilePackages: [
     '@bunshin/application',
     '@bunshin/config',
