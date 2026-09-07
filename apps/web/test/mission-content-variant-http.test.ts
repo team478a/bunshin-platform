@@ -28,6 +28,7 @@ const serviceExperience = readFileSync(
   ),
   'utf8',
 );
+const pointsPage = readFileSync(new URL('../app/(app)/points/page.tsx', import.meta.url), 'utf8');
 
 describe('mission content variant HTTP and UI boundary', () => {
   it.each([personalHttp, serviceHttp])(
@@ -38,7 +39,8 @@ describe('mission content variant HTTP and UI boundary', () => {
       expect(source).toContain('requireSameOrigin(request)');
       expect(source).toContain('ListMissionContentVariants');
       expect(source).toContain('SelectMissionContentVariant');
-      expect(source).toContain('createMissionContentVariantGenerationService');
+      expect(source).toContain('generatePointFundedMissionContentVariant');
+      expect(source).toContain('acceptedPointCost: z.number().int().positive()');
     },
   );
 
@@ -54,6 +56,8 @@ describe('mission content variant HTTP and UI boundary', () => {
     expect(source).toContain('ListMissionContentVariants');
     expect(source).toContain('PrismaMissionContentVariantRepository');
     expect(source).toContain('selectedAt: selectedAt?.toISOString() ?? null');
+    expect(source).toContain('ALTERNATIVE_PLAN_GENERATION');
+    expect(source).toContain('PrismaPointRedemptionRepository');
   });
 
   it.each([personalExperience, serviceExperience])(
@@ -64,6 +68,16 @@ describe('mission content variant HTTP and UI boundary', () => {
       expect(source).toContain('この案を使う');
       expect(source).toContain('missionWithSelectedVariant');
       expect(source).toContain('/variants');
+      expect(source).toContain('acceptedPointCost: variantPointCost');
+      expect(source).toContain('window.confirm');
+      expect(source).toContain('作成に使ったWPは、失敗した場合に戻ります。');
     },
   );
+
+  it('opens the balance for the workspace charged by the variant', () => {
+    expect(personalExperience).toContain('/points?workspaceId=');
+    expect(serviceExperience).toContain('pointWorkspaceId');
+    expect(servicePage).toContain('pointWorkspaceId={service.workspaceId}');
+    expect(pointsPage).toContain('workspaces.find(({ id }) => id === requestedWorkspaceId)');
+  });
 });

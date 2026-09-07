@@ -1,4 +1,8 @@
-import { GetBunshin, ListBunshinCapabilityAssignments } from '@bunshin/application';
+import {
+  GetBunshin,
+  ListBunshinCapabilityAssignments,
+  ListPointRewardCatalog,
+} from '@bunshin/application';
 import {
   ListContentPillars,
   ListDailyMissions,
@@ -67,6 +71,7 @@ export default async function ServiceBunshinDetailPage({
   let accountStrategies;
   let weeklyPlans;
   let dailyMissions: DailyMissionView[];
+  let variantPointCost: number | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -141,6 +146,14 @@ export default async function ServiceBunshinDetailPage({
         }),
       ),
     );
+    variantPointCost = await new ListPointRewardCatalog(new db.PrismaPointRedemptionRepository())
+      .execute({ workspaceId: service.workspaceId, actorUserId: actor.userId })
+      .then(
+        (catalog) =>
+          catalog.find(({ rewardType }) => rewardType === 'ALTERNATIVE_PLAN_GENERATION')
+            ?.pointCost ?? null,
+      )
+      .catch(() => null);
     dailyMissions = missionRecords.map((mission, index) => ({
       id: mission.id,
       missionDate: mission.missionDate,
@@ -301,6 +314,8 @@ export default async function ServiceBunshinDetailPage({
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
             missions={dailyMissions}
+            variantPointCost={variantPointCost}
+            pointWorkspaceId={service.workspaceId}
             videos={videos}
             active={
               capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===

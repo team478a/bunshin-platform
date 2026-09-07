@@ -2127,3 +2127,14 @@
 - Service: Service、Workspace、Membership、User、Bunshinの範囲はURLやリクエスト本文から信用せず、公開Service文脈からサーバー側で導出する。
 - Copy: Service画面ではコピー直前に専用URLの有効性と承認状態を再確認し、変更・停止・確認待ちの投稿案をコピーさせない。
 - Source: `docs/MISSION_CONTENT_VARIANT_UI_REPORT.md`
+
+## 2026-09-08: Daily Missionの別案生成は版管理されたWP交換を先に予約する
+
+- Price: 必要WPを画面へ固定値で埋め込まず、現在有効な`ALTERNATIVE_PLAN_GENERATION`カタログから取得する。
+- Consent: 「別の案を見る」と「内容を直す」は必要WPを表示し、利用者が確認画面で了承した場合だけ生成APIを呼ぶ。
+- Validation: 画面で了承した価格をAPIへ渡し、サーバー側の現在価格と一致しない場合は予約前に停止する。
+- Lifecycle: AI生成前に最大60分のポイント予約を作成し、派生案の保存完了後だけ確定する。生成・品質・安全・保存処理が失敗した場合は予約を解放する。
+- Retry: Mission IDと生成冪等キーを交換対象に含め、同じ送信の再試行は同じ予約を使う。失敗後の新しい生成は新しい冪等キーで予約できる。
+- Confirmation failure: 派生案保存後の確定処理だけが失敗した場合は自動解放せず、同じ冪等キーの再試行で確定できる状態を維持する。
+- Balance link: 複数Workspace所属時は交換対象Workspaceをポイント画面へ明示し、本人が所属する場合だけその残高を表示する。
+- Source: `docs/MISSION_CONTENT_VARIANT_POINT_REDEMPTION_REPORT.md`

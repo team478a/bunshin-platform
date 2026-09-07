@@ -23,11 +23,19 @@ const transactionLabels: Record<PointTransactionType, string> = {
 const date = (value: Date) =>
   new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(value);
 
-export default async function PointsPage() {
+export default async function PointsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ workspaceId?: string }>;
+}) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
-  const workspace = (await db.listActiveWorkspacesForUser(user.userId))[0];
+  const workspaces = await db.listActiveWorkspacesForUser(user.userId);
+  const requestedWorkspaceId = (await searchParams).workspaceId;
+  const workspace = requestedWorkspaceId
+    ? workspaces.find(({ id }) => id === requestedWorkspaceId)
+    : workspaces[0];
   if (!workspace) redirect('/bunshins');
 
   let dashboard;
@@ -62,6 +70,7 @@ export default async function PointsPage() {
         <p className="eyebrow">ワタシポイント</p>
         <h1>ポイント</h1>
         <p>投稿を続けると、ポイントがたまります。</p>
+        {workspaces.length > 1 ? <p>{workspace.name}のポイントを表示しています。</p> : null}
       </header>
 
       <section className="point-balance" aria-labelledby="point-balance-title">

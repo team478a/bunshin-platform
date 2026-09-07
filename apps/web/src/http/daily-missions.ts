@@ -37,6 +37,7 @@ const emptySchema = z.object({}).strict();
 const variantGenerationSchema = z
   .object({
     idempotencyKey: uuidSchema,
+    acceptedPointCost: z.number().int().positive(),
     instruction: z.string().trim().min(1).max(500).optional(),
   })
   .strict();
@@ -281,14 +282,15 @@ export function generateMissionContentVariantResponse(
       requireSameOrigin(request);
       const parsed = variantGenerationSchema.safeParse(await jsonBody(request));
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-      const { createMissionContentVariantGenerationService } =
-        await import('../services/mission-content-variant-generation');
+      const { generatePointFundedMissionContentVariant } =
+        await import('../services/point-funded-mission-content-variant');
       return missionContentVariantDto(
-        await createMissionContentVariantGenerationService().execute({
+        await generatePointFundedMissionContentVariant({
           ...(await scope(workspaceId, bunshinId)),
           dailyMissionId: resourceId(dailyMissionId),
           generationIdempotencyKey: parsed.data.idempotencyKey,
           usageIdempotencyPrefix: requestId,
+          acceptedPointCost: parsed.data.acceptedPointCost,
           ...(parsed.data.instruction ? { variantInstructions: [parsed.data.instruction] } : {}),
         }),
       );
