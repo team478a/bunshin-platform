@@ -2052,3 +2052,12 @@
 - Error handling: 詳細画面はNOT_FOUND / FORBIDDENだけを404へ変換し、DB障害や不正データ等の内部エラーを404として隠さない。
 - Isolation: Workspace外、Inactive Membership、ARCHIVED Bunshin、Service Bunshinは従来どおり対象外とする。
 - Source: `docs/BUNSHIN_DETAIL_404_AUTHORIZATION_REPORT.md`
+
+## 2026-09-07: 本番Schema不整合を公開前Gateと定期readinessで検出する
+
+- Deploy gate: Vercel Production buildは最新migrationの正常完了を読み取り専用で検査し、未適用ならApplicationの公開を停止する。
+- Migration: 本番migrationは従来どおり承認付きworkflowで明示実行する。Vercel buildやreadinessから自動適用しない。
+- Monitoring: 正式ドメインのlive/readinessを15分ごとに確認し、DB接続と最新Schemaの両方を監視する。
+- Error boundary: 画面で404へ変換するのは`NOT_FOUND` / `FORBIDDEN`だけとし、DB・Provider・設定・未知の障害は観測可能なサーバーエラーとして残す。
+- Credential operation: DB password変更時はVercel ProductionとGitHub Environmentの接続情報を同じ作業で更新する。
+- Source: `docs/PRODUCTION_SCHEMA_SAFETY_REPORT.md`

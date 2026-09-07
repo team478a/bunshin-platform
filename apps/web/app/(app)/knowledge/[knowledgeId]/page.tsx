@@ -1,6 +1,7 @@
 import { GetOwnerKnowledge } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { KnowledgeForm } from '../form';
 export const dynamic = 'force-dynamic';
 export default async function KnowledgeDetail({
@@ -27,7 +28,8 @@ export default async function KnowledgeDetail({
         item={{ id: item.id, type: item.type, title: item.title, content: item.content }}
       />
     );
-  } catch {
-    notFound();
+  } catch (error) {
+    if (isRouteNotFound(error)) notFound();
+    throw error;
   }
 }

@@ -34,6 +34,8 @@ pnpm db:migrate:deploy
 
 `migrate:dev`はlocal developmentだけで使用する。CIは空のtest DBへ`migrate deploy`して検証する。本番migrationはCIやVercel buildから自動適用せず、承認された変更windowで明示実行する。
 
+VercelのProduction buildは、読み取り専用の`pnpm db:assert-ready`を最初に実行する。Repository内で最新のmigrationが本番DBの`_prisma_migrations`へ正常完了として記録されていなければ、buildを失敗させて新しいApplicationの公開を止める。このGateはmigrationを適用しない。
+
 ## Production Migration Workflow
 
 本番migrationは`.github/workflows/production-migrate.yml`をGitHub Actionsから手動実行する。
@@ -55,6 +57,10 @@ pnpm db:migrate:deploy
 4. Environment reviewerが対象commitとmigrationを確認して承認する。
 5. `migrate status`、`migrate deploy`、再度の`migrate status`が成功したことを確認する。
 6. Vercelの`/api/health/ready`とSupabase Table Editorを確認する。
+
+`/api/health/ready`はDBへの接続だけでなく、Applicationが要求する最新migrationも確認する。`databaseSchema: current`がない、またはHTTP 503の場合は、画面確認へ進まずmigration状態を調べる。
+
+GitHub Environmentの`DATABASE_URL`と`DIRECT_URL`は、SupabaseのDB passwordを変更した直後にVercel Productionと同時更新する。片方だけを更新しない。認証情報が古いと承認済みmigration workflow自体を実行できないため、password変更手順の完了条件に両方の更新を含める。
 
 Workflowは同時に1実行だけ許可し、進行中のproduction migrationを新しい実行でcancelしない。Secret値をlogへ出すcommandを追加してはいけない。
 

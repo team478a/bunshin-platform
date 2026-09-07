@@ -1,5 +1,6 @@
 import 'server-only';
 import { ServiceFoundationService, type ServiceFoundationRecord } from '@bunshin/application';
+import { ApplicationError } from '@bunshin/shared';
 
 const SERVICE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -20,7 +21,8 @@ export interface ManagedServiceContext extends PublicServiceContext {
 }
 
 export async function resolvePublicServiceContext(slug: string): Promise<PublicServiceContext> {
-  if (slug.length > 80 || !SERVICE_SLUG.test(slug)) throw new Error('SERVICE_NOT_FOUND');
+  if (slug.length > 80 || !SERVICE_SLUG.test(slug))
+    throw new ApplicationError('NOT_FOUND', 'service not found');
   const db = await import('@bunshin/database');
   const configuration = await new ServiceFoundationService(
     new db.PrismaServiceFoundationRepository(),
@@ -37,7 +39,8 @@ export async function resolveManagedServiceContext(
   actorUserId: string,
   permission: ServiceManagementPermission = 'ADMINISTRATION',
 ): Promise<ManagedServiceContext> {
-  if (slug.length > 80 || !SERVICE_SLUG.test(slug)) throw new Error('SERVICE_NOT_FOUND');
+  if (slug.length > 80 || !SERVICE_SLUG.test(slug))
+    throw new ApplicationError('NOT_FOUND', 'service not found');
   const db = await import('@bunshin/database');
   const allowedRoles =
     permission === 'CONTENT' ? [...SERVICE_CONTENT_ROLES] : [...SERVICE_MANAGEMENT_ROLES];

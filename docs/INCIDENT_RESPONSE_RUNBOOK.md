@@ -20,7 +20,10 @@
 - tenant isolationを壊していないこと
 - 代表的なStrategy / Mission read
 - DB migration status
+- `/api/health/ready`の`databaseSchema: current`
 
 ## 事後対応
 
 24時間以内を目標に、原因、影響範囲、時系列、復旧操作、再発防止を記録する。個人情報とSecretは含めない。
+
+画面が404を返していても、同時刻のVercel logにPrisma、Provider、設定エラーがある場合は「対象なし」と判断しない。404へ変換してよいのは、明示的な`NOT_FOUND`または情報秘匿が必要な`FORBIDDEN`だけとする。

@@ -22,7 +22,12 @@ export async function readyResponse(request: Request): Promise<Response> {
     return Response.json({
       status: 'ready',
       environment: environment.APP_ENV,
-      checks: { configuration: 'ok', authentication: 'ok', database: 'ok' },
+      checks: {
+        configuration: 'ok',
+        authentication: 'ok',
+        database: 'ok',
+        databaseSchema: 'current',
+      },
       requestId,
     });
   } catch (error) {

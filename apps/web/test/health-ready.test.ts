@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
+
+const databaseReadiness = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_ENV: 'production' }),
 }));
 
 vi.mock('@bunshin/database', () => ({
-  checkDatabaseReadiness: vi.fn().mockResolvedValue(undefined),
+  checkDatabaseReadiness: databaseReadiness,
 }));
 
 import { readyResponse } from '../src/http/health';
 
 describe('readiness check', () => {
   beforeEach(() => {
+    databaseReadiness.mockReset().mockResolvedValue(undefined);
     vi.stubEnv('APP_ENV', 'production');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'sb_publishable_test_key_1234567890');
@@ -30,7 +34,12 @@ describe('readiness check', () => {
     expect(await response.json()).toEqual({
       status: 'ready',
       environment: 'production',
-      checks: { configuration: 'ok', authentication: 'ok', database: 'ok' },
+      checks: {
+        configuration: 'ok',
+        authentication: 'ok',
+        database: 'ok',
+        databaseSchema: 'current',
+      },
       requestId: 'req_12345678',
     });
   });
@@ -54,5 +63,16 @@ describe('readiness check', () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ error: { code: 'CONFIGURATION_ERROR' } });
+  });
+
+  it('fails closed when the production database schema is behind', async () => {
+    databaseReadiness.mockRejectedValueOnce(
+      new ApplicationError('DATABASE_UNAVAILABLE', 'Database schema is not current'),
+    );
+
+    const response = await readyResponse(new Request('http://localhost/api/health/ready'));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: 'DATABASE_UNAVAILABLE' } });
   });
 });

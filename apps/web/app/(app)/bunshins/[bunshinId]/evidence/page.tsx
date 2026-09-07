@@ -1,6 +1,7 @@
 import { AdvertisingSafetyService } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
 import { EvidenceEditor } from './evidence-editor';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function EvidencePage({
   const service = new AdvertisingSafetyService(new db.PrismaAdvertisingSafetyRepository());
   try {
     const [bunshin, evidence, reviews, assignment] = await Promise.all([
-      db.prisma.bunshin.findFirstOrThrow({
+      db.prisma.bunshin.findFirst({
         where: { id: bunshinId, workspaceId, ownerUserId: user.userId },
         select: { id: true, name: true },
       }),
@@ -41,6 +42,7 @@ export default async function EvidencePage({
         },
       }),
     ]);
+    if (!bunshin) notFound();
     return (
       <main className="app-page">
         <header className="app-page__heading">
@@ -64,7 +66,8 @@ export default async function EvidencePage({
         />
       </main>
     );
-  } catch {
-    notFound();
+  } catch (error) {
+    if (isRouteNotFound(error)) notFound();
+    throw error;
   }
 }

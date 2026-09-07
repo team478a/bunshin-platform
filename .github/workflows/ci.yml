@@ -70,4 +70,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:validate
       - run: pnpm db:migrate:deploy
+      - run: pnpm db:assert-ready
       - run: pnpm test:integration

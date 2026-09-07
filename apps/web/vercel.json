@@ -9,7 +9,7 @@
     }
   },
   "ignoreCommand": "npx turbo-ignore --fallback=HEAD^1",
-  "buildCommand": "cd ../.. && pnpm turbo run build --filter=web",
+  "buildCommand": "cd ../.. && pnpm db:assert-ready && pnpm turbo run build --filter=web",
   "crons": [
     { "path": "/api/internal/jobs/schedule", "schedule": "* * * * *" },
     { "path": "/api/internal/jobs/run", "schedule": "* * * * *" },

@@ -1,6 +1,8 @@
 name: Production Health Smoke
 
 on:
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       confirmation:
@@ -13,10 +15,14 @@ permissions:
 
 jobs:
   health:
+    concurrency:
+      group: production-health-smoke
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require main and explicit confirmation
+      - name: Require main and explicit confirmation for manual runs
+        if: github.event_name == 'workflow_dispatch'
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
@@ -25,10 +31,10 @@ jobs:
       - name: Check liveness
         run: |
           curl --fail --silent --show-error --retry 3 \
-            https://bunshin-platform-web.vercel.app/api/health/live \
+            https://www.watashi-works.com/api/health/live \
             | jq -e '.status == "ok" and .service == "web"'
       - name: Check readiness
         run: |
           curl --fail --silent --show-error --retry 3 \
-            https://bunshin-platform-web.vercel.app/api/health/ready \
-            | jq -e '.status == "ready" and .environment == "production" and .checks.configuration == "ok" and .checks.authentication == "ok" and .checks.database == "ok"'
+            https://www.watashi-works.com/api/health/ready \
+            | jq -e '.status == "ready" and .environment == "production" and .checks.configuration == "ok" and .checks.authentication == "ok" and .checks.database == "ok" and .checks.databaseSchema == "current"'
