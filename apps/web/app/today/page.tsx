@@ -118,7 +118,11 @@ export default async function TodayPage({
     }
     redirect(`/bunshins/${state.bunshinId}#daily-mission`);
   } catch (error) {
-    if (error instanceof ApplicationError) notFound();
+    if (
+      error instanceof ApplicationError &&
+      (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+    )
+      notFound();
     throw error;
   }
 }

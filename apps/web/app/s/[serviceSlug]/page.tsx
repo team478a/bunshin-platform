@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { PublicShell } from '../../ui/public-shell';
 import { resolvePublicServiceContext } from '../../../src/services/public-service';
 import { currentUserProvider } from '../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../src/navigation/route-not-found';
 import { ParticipationForm } from './participation-form';
 
 export const dynamic = 'force-dynamic';
@@ -36,8 +37,9 @@ const registrationCopy = {
 const service = cache(async (slug: string) => {
   try {
     return await resolvePublicServiceContext(slug);
-  } catch {
-    notFound();
+  } catch (error) {
+    if (isRouteNotFound(error)) notFound();
+    throw error;
   }
 });
 

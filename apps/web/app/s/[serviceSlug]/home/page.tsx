@@ -5,6 +5,7 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { currentActivityContinuityRule } from '../../../../src/activity-continuity-rule';
 import {
   localDateInTimezone,
@@ -25,8 +26,9 @@ export const dynamic = 'force-dynamic';
 async function context(slug: string) {
   try {
     return await resolvePublicServiceContext(slug);
-  } catch {
-    notFound();
+  } catch (error) {
+    if (isRouteNotFound(error)) notFound();
+    throw error;
   }
 }
 

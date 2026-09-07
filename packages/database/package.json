@@ -12,6 +12,7 @@
     "db:validate": "prisma validate",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:assert-ready": "prisma generate && node scripts/assert-schema-ready.mjs",
     "lint": "eslint src test",
     "test": "vitest run --passWithNoTests --exclude '**/*.integration.test.ts'",
     "test:integration": "prisma generate && vitest run test/database.integration.test.ts",

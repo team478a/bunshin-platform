@@ -236,6 +236,8 @@ export {
 export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
 import { ApplicationError } from '@bunshin/shared';
 import { runtimeDatabaseUrl } from './runtime-database-url';
+import { LATEST_DATABASE_MIGRATION } from './schema-readiness';
+export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
 const databaseUrl = runtimeDatabaseUrl(process.env['DATABASE_URL']);
@@ -7360,8 +7362,19 @@ export class PrismaPersonalityLearningProposalRepository implements PersonalityL
 
 export async function checkDatabaseReadiness(client: PrismaClient = prisma): Promise<void> {
   try {
-    await client.$queryRaw`SELECT 1`;
+    const rows = await client.$queryRaw<Array<{ applied: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM "_prisma_migrations"
+        WHERE "migration_name" = ${LATEST_DATABASE_MIGRATION}
+          AND "finished_at" IS NOT NULL
+          AND "rolled_back_at" IS NULL
+      ) AS "applied"
+    `;
+    if (rows[0]?.applied !== true)
+      throw new ApplicationError('DATABASE_UNAVAILABLE', 'Database schema is not current');
   } catch (error) {
+    if (error instanceof ApplicationError) throw error;
     throw new ApplicationError('DATABASE_UNAVAILABLE', 'Database readiness check failed', error);
   }
 }

@@ -63,7 +63,7 @@ describe('public service context', () => {
   it.each(['Bad-Slug', '../admin', 'service?next=evil', ''])(
     'rejects an invalid slug: %s',
     async (slug) => {
-      await expect(resolvePublicServiceContext(slug)).rejects.toThrow('SERVICE_NOT_FOUND');
+      await expect(resolvePublicServiceContext(slug)).rejects.toMatchObject({ code: 'NOT_FOUND' });
       expect(state.findPublicBySlug).not.toHaveBeenCalled();
     },
   );

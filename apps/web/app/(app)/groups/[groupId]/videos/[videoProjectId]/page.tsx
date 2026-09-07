@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { GetVideoProject } from '@bunshin/application';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../../../../src/navigation/route-not-found';
 import { VideoPlanGenerator } from '../../../../../ui/video-plan-generator';
 import { VideoPlanApprover } from '../../../../../ui/video-plan-approver';
 import { VideoRenderRequester } from '../../../../../ui/video-render-requester';
@@ -70,8 +71,9 @@ export default async function VideoProjectPage({
       actorUserId: actor.userId,
       videoProjectId: videoProjectId.data,
     });
-  } catch {
-    notFound();
+  } catch (error) {
+    if (isRouteNotFound(error)) notFound();
+    throw error;
   }
   const disclosure = disclosureGuide(project.disclosureSnapshot);
   const character = characterGuide(

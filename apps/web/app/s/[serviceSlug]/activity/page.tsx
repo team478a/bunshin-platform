@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceReferralShare } from './service-referral-share';
@@ -23,8 +24,9 @@ const referralStatusLabel = {
 async function context(slug: string) {
   try {
     return await resolvePublicServiceContext(slug);
-  } catch {
-    notFound();
+  } catch (error) {
+    if (isRouteNotFound(error)) notFound();
+    throw error;
   }
 }
 
