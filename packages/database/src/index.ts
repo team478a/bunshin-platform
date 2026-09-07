@@ -6783,6 +6783,20 @@ export class PrismaBunshinRepository implements BunshinRepository {
           status: 'ACTIVE',
           memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
         },
+        OR: [
+          { ownerUserId: input.actorUserId },
+          {
+            workspace: {
+              memberships: {
+                some: {
+                  userId: input.actorUserId,
+                  status: 'ACTIVE',
+                  role: { in: ['OWNER', 'ADMIN'] },
+                },
+              },
+            },
+          },
+        ],
       },
       orderBy: { updatedAt: 'desc' },
       include: bunshinRelations,
@@ -6825,14 +6839,30 @@ export class PrismaBunshinRepository implements BunshinRepository {
           memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
         },
         OR: [
-          { groupId: null },
+          { ownerUserId: input.actorUserId },
           {
-            group: {
-              status: 'ACTIVE',
-              memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+            workspace: {
+              memberships: {
+                some: {
+                  userId: input.actorUserId,
+                  status: 'ACTIVE',
+                  role: { in: ['OWNER', 'ADMIN'] },
+                },
+              },
             },
           },
         ],
+        AND: {
+          OR: [
+            { groupId: null },
+            {
+              group: {
+                status: 'ACTIVE',
+                memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+              },
+            },
+          ],
+        },
       },
       include: bunshinRelations,
     });

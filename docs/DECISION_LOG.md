@@ -2044,3 +2044,11 @@
 - Fallback: 画像が処理中ならLINE Jobを再試行し、生成失敗または安全に画像URLを取得できない場合はDaily Mission本文の通知だけを送る。
 - Boundary: 無料一般枠と動画生成は対象外とする。動画Provider接続は既存ロードマップの運営確認条件を維持する。
 - Source: `docs/SERVICE_DAILY_IMAGE_LINE_DELIVERY_REPORT.md`
+
+## 2026-09-07: 個人BUNSHINの一覧と詳細は同じ所有権境界を使う
+
+- Incident: MEMBERの一覧に別User所有のBUNSHINが表示され、カードを開くと詳細側の管理認可で404になっていた。
+- Authorization: 個人BUNSHINは本人所有だけを表示・取得する。WorkspaceのOWNER / ADMINは既存どおり所属Workspace内を管理できる。
+- Error handling: 詳細画面はNOT_FOUND / FORBIDDENだけを404へ変換し、DB障害や不正データ等の内部エラーを404として隠さない。
+- Isolation: Workspace外、Inactive Membership、ARCHIVED Bunshin、Service Bunshinは従来どおり対象外とする。
+- Source: `docs/BUNSHIN_DETAIL_404_AUTHORIZATION_REPORT.md`
