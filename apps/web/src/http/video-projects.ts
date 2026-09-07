@@ -105,6 +105,11 @@ export async function createVideoProjectResponse(
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = createSchema.parse(await request.json());
+    if (input.type === 'PHOTO_SLIDESHOW')
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        '写真スライド動画は準備中です。字幕動画をご利用ください。',
+      );
     if (input.compositionMode === 'AI_SCENES' && !input.characterProfileVersionId)
       throw new ApplicationError('VALIDATION_ERROR', 'AI動画ではAIキャラクターを選んでください');
     const db = await import('@bunshin/database');
@@ -142,7 +147,7 @@ export async function createVideoProjectResponse(
         explanation:
           input.compositionMode === 'AI_SCENES'
             ? 'AIが台本とAI動画用の場面を提案します。外部生成は承認後に、設定と予算を確認して開始します。'
-            : 'AIが台本と素材候補を提案します。標準動画ではAI動画生成を使いません。',
+            : 'AIが字幕用の台本を提案します。背景と字幕の動画を作ります。写真の合成と音声は準備中です。',
       },
     });
     return Response.json(

@@ -404,6 +404,11 @@ export async function updateServiceCustomDomainResponse(request: Request, config
     if (!uuid.safeParse(configurationId).success)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid service id');
     const value = customDomainSchema.parse(await request.json());
+    if (['ACTIVE', 'VERIFIED'].includes(value.status))
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        '独自ドメインの公開機能は準備中です。準備中として保存してください。',
+      );
     if (
       ['localhost', 'vercel.app'].some(
         (suffix) => value.hostname === suffix || value.hostname.endsWith(`.${suffix}`),

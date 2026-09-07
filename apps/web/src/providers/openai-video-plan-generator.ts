@@ -6,7 +6,7 @@ import type {
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 
-export const VIDEO_PLAN_PROMPT_VERSION = 'video-plan-v1';
+export const VIDEO_PLAN_PROMPT_VERSION = 'video-plan-v2-supported-composition';
 
 type ResponseValue = {
   output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
@@ -36,14 +36,7 @@ function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
             caption: { type: 'string', minLength: 1, maxLength: 240 },
             visualType: {
               type: 'string',
-              enum: [
-                'USER_ASSET',
-                'APPROVED_ASSET',
-                'STOCK_IMAGE',
-                'GENERATED_IMAGE',
-                'TEXT_MOTION',
-                ...(standardComposition ? [] : ['AI_VIDEO']),
-              ],
+              enum: ['TEXT_MOTION', ...(standardComposition ? [] : ['AI_VIDEO'])],
             },
             visualPrompt: { type: ['string', 'null'] },
             keywords: {
@@ -56,13 +49,7 @@ function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
               uniqueItems: true,
               items: {
                 type: 'string',
-                enum: [
-                  'SCRIPT_GENERATION',
-                  'VOICE_SYNTHESIS',
-                  'IMAGE_GENERATION',
-                  'AUTOMATIC_ASSET_SELECTION',
-                  ...(standardComposition ? [] : ['VIDEO_GENERATION']),
-                ],
+                enum: ['SCRIPT_GENERATION', ...(standardComposition ? [] : ['VIDEO_GENERATION'])],
               },
             },
           },
@@ -83,13 +70,7 @@ function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
         uniqueItems: true,
         items: {
           type: 'string',
-          enum: [
-            'SCRIPT_GENERATION',
-            'VOICE_SYNTHESIS',
-            'IMAGE_GENERATION',
-            'AUTOMATIC_ASSET_SELECTION',
-            ...(standardComposition ? [] : ['VIDEO_GENERATION']),
-          ],
+          enum: ['SCRIPT_GENERATION', ...(standardComposition ? [] : ['VIDEO_GENERATION'])],
         },
       },
     },
@@ -115,7 +96,7 @@ export class OpenAIVideoPlanGenerator implements VideoPlanGeneratorPort {
         input: [
           {
             role: 'system',
-            content: `あなたはワタシワークスの縦型動画企画担当です。渡された本人の分身、対象者、AIキャラクター、許可済み商品情報、本人素材、承認済み素材だけを使い、日本語の場面構成を作ります。AIキャラクターがある場合は見た目・世界観・安全ルールに沿ったvisualPromptを作りますが、実在人物に似せたり、ルール外の設定を追加したりしません。素材は本人素材、承認済み素材、素材写真、生成画像の順で優先します。事実や体験を捏造せず、必須表記と禁止表現を守ってください。30秒は5〜7場面、60秒は8〜12場面とし、durationMsの合計を指定時間と完全一致させ、sceneNoを1から連番にします。${input.project.standardComposition ? '標準動画は静止画、字幕、文字の動きで構成し、AI動画生成を使いません。' : 'AI動画を使える企画です。AI_VIDEOの場面は必ず5秒または10秒にし、visualPromptとVIDEO_GENERATIONを設定します。不要なAI_VIDEOは使いません。'}USER_ASSETまたはAPPROVED_ASSETを選ぶ場合は渡されたassetIdをkeywordsへ含めます。AI利用種別は実際に利用するものだけを返します。`,
+            content: `あなたはワタシワークスの縦型動画企画担当です。渡された本人の分身、対象者、AIキャラクター、許可済み商品情報、本人素材、承認済み素材だけを使い、日本語の場面構成を作ります。AIキャラクターがある場合は見た目・世界観・安全ルールに沿ったvisualPromptを作りますが、実在人物に似せたり、ルール外の設定を追加したりしません。現在の動画出力はTEXT_MOTIONとAI_VIDEOだけに対応します。写真合成・音声合成は行いません。narrationは参考台本であり、音声として出力されません。事実や体験を捏造せず、必須表記と禁止表現を守ってください。30秒は5〜7場面、60秒は8〜12場面とし、durationMsの合計を指定時間と完全一致させ、sceneNoを1から連番にします。${input.project.standardComposition ? '標準動画は単色背景、字幕、文字の動きで構成します。全場面をTEXT_MOTIONにしてください。' : 'AI動画を使える企画です。AI_VIDEOの場面は必ず5秒または10秒にし、visualPromptとVIDEO_GENERATIONを設定します。不要なAI_VIDEOは使いません。'}AI利用種別は実際に利用するものだけを返します。`,
           },
           { role: 'user', content: JSON.stringify(input) },
         ],

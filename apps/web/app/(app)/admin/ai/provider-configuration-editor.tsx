@@ -24,7 +24,7 @@ const labels: Record<Provider, string> = {
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
   CREATOMATE: '動画を仕上げるサービス（Creatomate）',
   FAL: 'AI動画を作るサービス（fal）',
-  RUNWAY: 'AI動画を作るサービス（Runway）',
+  RUNWAY: 'Runway（提供準備中）',
 };
 const usd = (micros: number) => (micros / 1_000_000).toFixed(2);
 const connectionErrors: Record<string, string> = {
@@ -223,11 +223,13 @@ export function AiProviderConfigurationEditor(props: {
                 </p>
                 <p>
                   次にすること：
-                  {!item?.apiKeyConfigured
-                    ? 'APIキーを登録する'
-                    : item.status !== 'ACTIVE'
-                      ? 'この設定を使い始める'
-                      : '設定済みです'}
+                  {value === 'RUNWAY'
+                    ? '提供開始までお待ちください'
+                    : !item?.apiKeyConfigured
+                      ? 'APIキーを登録する'
+                      : item.status !== 'ACTIVE'
+                        ? 'この設定を使い始める'
+                        : '設定済みです'}
                 </p>
               </article>
             );
@@ -283,11 +285,13 @@ export function AiProviderConfigurationEditor(props: {
               value={provider}
               onChange={(event) => setProvider(event.target.value as Provider)}
             >
-              {Object.entries(labels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(labels)
+                .filter(([value]) => value !== 'RUNWAY')
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </select>
           </label>
           {['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? (
@@ -412,7 +416,7 @@ export function AiProviderConfigurationEditor(props: {
                   {usd(item.monthlyBudgetUsdMicros)}
                 </p>
                 <p>利用1回の見込み原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
-                {item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
+                {item.provider !== 'RUNWAY' && item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
                   <button
                     className="button button--primary"
                     disabled={actionConfigurationId !== null}

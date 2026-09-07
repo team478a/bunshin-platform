@@ -56,10 +56,9 @@ export function ServiceCustomDomainEditor({
       </p>
       <ol>
         <li>利用するドメインを入力し「準備中」で保存します。</li>
-        <li>DNS・ホスティング側で接続を確認した後、「確認済み」に変更します。</li>
-        <li>実際にサービス専用画面で開けることを確認してから「利用中」にします。</li>
+        <li>公開先の接続機能は準備中です。現在は希望するドメインの登録まで行えます。</li>
       </ol>
-      <p>「利用中」にしても、DNS設定・ホスト名ルーティングが未実装の環境では公開されません。</p>
+      <p>登録だけでは公開されません。現在はサービスの既存URLをご利用ください。</p>
       <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
         <label>
           独自ドメイン
@@ -74,8 +73,16 @@ export function ServiceCustomDomainEditor({
           状態
           <select defaultValue={domain?.status ?? 'DRAFT'} name="status">
             <option value="DRAFT">準備中</option>
-            <option value="VERIFIED">確認済み</option>
-            <option value="ACTIVE">利用中</option>
+            {domain?.status === 'VERIFIED' ? (
+              <option value="VERIFIED" disabled>
+                確認済み（旧設定）
+              </option>
+            ) : null}
+            {domain?.status === 'ACTIVE' ? (
+              <option value="ACTIVE" disabled>
+                利用中（旧設定・公開未保証）
+              </option>
+            ) : null}
             <option value="DISABLED">停止中</option>
           </select>
         </label>

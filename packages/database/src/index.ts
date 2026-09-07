@@ -1,7 +1,9 @@
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
+import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  assertSupportedVideoComposition,
   calculateAdminRetention,
   calculateFirstWeekThreePostKpi,
   normalizePersonalityVersionContent,
@@ -2413,6 +2415,8 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
         where: { id: input.configurationId, environment: input.environment },
       });
       if (target === null) return null;
+      if (target.provider === 'RUNWAY')
+        throw new ApplicationError('CONFLICT', 'Runwayは提供準備中です。');
       if (
         target.encryptedApiKey === null ||
         target.lastVerifiedAt === null ||
@@ -6241,11 +6245,26 @@ export class PrismaAccountDeletionExecutionRepository implements AccountDeletion
 }
 
 export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurgeRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly mediaStorage?: AccountDeletionMediaStorage,
+  ) {}
 
   async completeAfterAuthDeletion(
     input: Parameters<AccountDeletionPurgeRepository['completeAfterAuthDeletion']>[0],
   ) {
+    const media = await purgeAccountMedia(this.client, input, this.mediaStorage);
+    if (media === false) return null;
+    if (media === 'PENDING')
+      return {
+        requestId: input.requestId,
+        userId: input.userId,
+        status: 'PROCESSING' as const,
+        blockedReason: null,
+      };
+    // Storage can take time; validate the completion lease against a fresh
+    // clock rather than the timestamp from before the network operations.
+    if (this.mediaStorage) input = { ...input, now: new Date() };
     return this.client.$transaction(async (tx) => {
       const request = await tx.accountDeletionRequest.findFirst({
         where: {
@@ -6444,6 +6463,47 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
         ]);
       }
 
+      const mediaOwner = { ownerUserId: input.userId };
+      await Promise.all([
+        tx.serviceMemberBusinessProfile.deleteMany({ where: { userId: input.userId } }),
+        tx.videoProject.updateMany({
+          where: mediaOwner,
+          data: {
+            title: '退会済みデータ',
+            status: 'CANCELLED',
+            characterProfileSnapshot: {},
+            characterReferenceSnapshot: [],
+            disclosureSnapshot: {},
+          },
+        }),
+        tx.videoScene.updateMany({
+          where: { videoProject: mediaOwner },
+          data: {
+            narration: '',
+            caption: '',
+            visualPrompt: null,
+            keywords: [],
+          },
+        }),
+        tx.videoAsset.updateMany({
+          where: mediaOwner,
+          data: { originalFilename: 'deleted', usageTerms: null },
+        }),
+        tx.videoRender.updateMany({ where: mediaOwner, data: { notificationSnapshot: null } }),
+        tx.videoSceneGeneration.updateMany({ where: mediaOwner, data: { inputSnapshot: {} } }),
+        tx.socialImageGenerationRequest.updateMany({
+          where: mediaOwner,
+          data: {
+            status: 'CANCELLED',
+            layout: {},
+            referenceImage: Prisma.DbNull,
+          },
+        }),
+        tx.videoDelivery.updateMany({
+          where: mediaOwner,
+          data: { status: 'REVOKED', notificationStatus: 'CANCELLED', revokedAt: input.now },
+        }),
+      ]);
       const memberships = await tx.workspaceMembership.updateMany({
         where: { userId: input.userId },
         data: { status: 'REVOKED' },
@@ -16062,6 +16122,7 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
         include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       if (!project) return null;
+      assertSupportedVideoComposition(videoProjectRecord(project));
       const aiScenes = project.scenes.filter(
         (scene) =>
           scene.visualType === 'AI_VIDEO' ||

@@ -56,6 +56,19 @@ const project = (): VideoProjectRecord => ({
 });
 
 describe('Creatomate video render adapter', () => {
+  it.each(['USER_ASSET', 'APPROVED_ASSET', 'STOCK_IMAGE', 'GENERATED_IMAGE'] as const)(
+    'rejects unsupported %s instead of silently rendering a blank background',
+    (visualType) => {
+      const value = project();
+      value.scenes[0]!.visualType = visualType;
+      expect(() => buildCreatomateRenderScript(value)).toThrow('写真・音声');
+    },
+  );
+  it('rejects a voice promise before submitting a silent video', () => {
+    const value = project();
+    value.aiProcessingTypes = ['VOICE_SYNTHESIS'];
+    expect(() => buildCreatomateRenderScript(value)).toThrow('写真・音声');
+  });
   it('maps an approved standard plan to a vertical RenderScript without personal metadata', () => {
     const script = buildCreatomateRenderScript(project());
     expect(script).toMatchObject({ output_format: 'mp4', width: 1080, height: 1920, duration: 30 });
