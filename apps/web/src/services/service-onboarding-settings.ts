@@ -13,6 +13,7 @@ export interface ServiceDailyIdeaDeliverySettings {
   defaultNotificationTime: string;
   lockCadence: boolean;
   contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
+  mediaMode: 'TEXT_ONLY' | 'IMAGE';
 }
 
 export type ServiceContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -49,6 +50,7 @@ export const DEFAULT_SERVICE_DAILY_IDEA_DELIVERY: ServiceDailyIdeaDeliverySettin
   defaultNotificationTime: '08:00',
   lockCadence: false,
   contentMode: 'READY_TO_USE',
+  mediaMode: 'TEXT_ONLY',
 };
 
 export interface ServiceOnboardingChoicePreset {
@@ -240,6 +242,7 @@ export function readServiceOnboardingSettings(
         configuredDailyIdeaDelivery.contentMode === 'PROMPT'
           ? configuredDailyIdeaDelivery.contentMode
           : 'READY_TO_USE',
+      mediaMode: configuredDailyIdeaDelivery.mediaMode === 'IMAGE' ? 'IMAGE' : 'TEXT_ONLY',
     },
   };
 }

@@ -18,6 +18,7 @@ import {
 } from '../providers/openai-social-image-generation';
 import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../social-image-renderer';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
+import { reserveServiceMediaGeneration } from '../service-media-generation-quota';
 
 const promptFor = (layout: { headline: string; bodyLines: string[] }) =>
   [
@@ -61,9 +62,46 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
       });
       const pointPayment = redemption?.status === 'CONFIRMED';
       const badgePayment = badgeUsage?.status === 'CONSUMED';
-      if (pointPayment === badgePayment)
+      const serviceCreditPayment = Boolean(
+        await db.prisma.serviceCreditLedger.findFirst({
+          where: {
+            workspaceId: context.workspaceId,
+            groupId: context.groupId,
+            userId: context.ownerUserId,
+            type: 'CONSUME',
+            sourceId: context.requestId,
+            account: {
+              workspaceId: context.workspaceId,
+              groupId: context.groupId,
+              userId: context.ownerUserId,
+            },
+          },
+          select: { id: true },
+        }),
+      );
+      const legacyPaymentCount = [pointPayment, badgePayment, serviceCreditPayment].filter(
+        Boolean,
+      ).length;
+      const serviceMediaReservation = legacyPaymentCount
+        ? ({ status: 'NOT_CONFIGURED', id: null } as const)
+        : await reserveServiceMediaGeneration({
+            workspaceId: context.workspaceId,
+            groupId: context.groupId,
+            kind: 'IMAGE',
+            operationKey: context.idempotencyKey,
+          });
+      if (serviceMediaReservation.status === 'EXHAUSTED')
+        throw new SocialImageGenerationJobHandlerError('SOCIAL_IMAGE_SERVICE_LIMIT_REACHED', false);
+      if (serviceMediaReservation.status === 'ALREADY_CONSUMED')
         throw new SocialImageGenerationJobHandlerError(
-          pointPayment
+          'SOCIAL_IMAGE_SERVICE_USAGE_CONFLICT',
+          false,
+        );
+      const planPayment = ['RESERVED', 'ALREADY_RESERVED'].includes(serviceMediaReservation.status);
+      const paymentCount = legacyPaymentCount + Number(planPayment);
+      if (paymentCount !== 1)
+        throw new SocialImageGenerationJobHandlerError(
+          paymentCount > 1
             ? 'SOCIAL_IMAGE_MULTIPLE_PAYMENTS_FOUND'
             : 'SOCIAL_IMAGE_PAYMENT_UNAVAILABLE',
           false,
@@ -127,7 +165,12 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           completed: rendered.completedPng,
           thumbnail: rendered.thumbnailPng,
         });
-        const completed = await repository.complete({ context, mediaId, ...stored });
+        const completed = await repository.complete({
+          context,
+          mediaId,
+          ...stored,
+          serviceMediaReservationId: planPayment ? serviceMediaReservation.id : null,
+        });
         if (!completed) {
           await storage.remove({
             workspaceId: context.workspaceId,

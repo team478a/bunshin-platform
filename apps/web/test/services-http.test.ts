@@ -220,6 +220,7 @@ describe('service admin HTTP', () => {
                 defaultNotificationTime: '08:00',
                 lockCadence: false,
                 contentMode: 'READY_TO_USE',
+                mediaMode: 'TEXT_ONLY',
               },
             },
             surveyConfig: { questions: [] },

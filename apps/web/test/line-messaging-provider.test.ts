@@ -103,6 +103,37 @@ describe('LINE Messaging API adapter', () => {
     expect(body.messages[0]?.text).toContain('SNS：X');
   });
 
+  it('sends a review image before the Mission summary when one is ready', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    await new LineMessagingApiAdapter(request).pushMissionNotification({
+      accessToken: 'access-token',
+      recipientId: 'provider-user-a',
+      deepLinkUrl: 'https://app.example.com/today?state=opaque',
+      image: {
+        originalContentUrl: 'https://storage.example.com/completed.png?token=one',
+        previewImageUrl: 'https://storage.example.com/thumbnail.png?token=two',
+      },
+      summary: {
+        platform: 'INSTAGRAM',
+        format: 'IMAGE',
+        estimatedMinutes: 5,
+        topic: '今日のテーマ',
+        researched: false,
+      },
+      kind: 'DAILY_MISSION',
+    });
+    const body = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
+      messages: Array<Record<string, string>>;
+    };
+    expect(body.messages[0]).toEqual({
+      type: 'image',
+      originalContentUrl: 'https://storage.example.com/completed.png?token=one',
+      previewImageUrl: 'https://storage.example.com/thumbnail.png?token=two',
+    });
+    expect(body.messages[1]?.text).toContain('確認用の画像も用意しました');
+    expect(body.messages[1]?.text).not.toContain('画像づくりは始まりません');
+  });
+
   it('uses a gentle return message for a low-priority reminder', async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
     await new LineMessagingApiAdapter(request).pushMissionNotification({

@@ -548,6 +548,24 @@ export function ServiceSettingsEditor({
           <p>
             ここで選ぶ内容はサービスの初期値です。「公式プログラム」で参加者へ別の内容を割り当てた場合は、参加者ごとの設定を優先します。
           </p>
+          <label>
+            LINEへ届ける画像
+            <select
+              value={dailyIdeaDelivery.mediaMode}
+              onChange={(event) =>
+                setDailyIdeaDelivery((current) => ({
+                  ...current,
+                  mediaMode: event.target.value === 'IMAGE' ? 'IMAGE' : 'TEXT_ONLY',
+                }))
+              }
+            >
+              <option value="TEXT_ONLY">文章だけ届ける</option>
+              <option value="IMAGE">画像・スライド形式の日は確認用画像も届ける</option>
+            </select>
+          </label>
+          <small>
+            画像は完成原稿プラン、画像作成枠、画像Pilotと参加者の同意がすべて有効な場合だけ自動作成します。送信後も投稿前の確認が必要です。
+          </small>
         </section>
         <label>
           最初に表示する説明

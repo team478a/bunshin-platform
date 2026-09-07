@@ -90,6 +90,10 @@ function dependencies(input?: {
 async function execute(
   values: ReturnType<typeof dependencies>,
   deepLinkUrl: string | (() => Promise<string>) = 'https://app.example.com/today?state=opaque',
+  image?: () => Promise<{
+    originalContentUrl: string;
+    previewImageUrl: string;
+  } | null>,
 ) {
   return new ExecuteLineMissionDelivery(
     values.repository,
@@ -105,6 +109,7 @@ async function execute(
     actorUserId: 'user-a',
     workerId: 'worker-a',
     deepLinkUrl,
+    ...(image ? { image } : {}),
   });
 }
 
@@ -196,6 +201,35 @@ describe('LINE delivery execution', () => {
     expect(issueDeepLink).toHaveBeenCalledOnce();
     expect(values.provider.pushMissionNotification).toHaveBeenCalledWith(
       expect.objectContaining({ deepLinkUrl: 'https://app.example.com/today?state=opaque' }),
+    );
+  });
+
+  it('passes a validated review image to the provider', async () => {
+    const values = dependencies();
+    const image = vi.fn().mockResolvedValue({
+      originalContentUrl: 'https://storage.example.com/completed.png?token=one',
+      previewImageUrl: 'https://storage.example.com/thumbnail.png?token=two',
+    });
+    await expect(execute(values, undefined, image)).resolves.toMatchObject({ status: 'SENT' });
+    expect(values.provider.pushMissionNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: {
+          originalContentUrl: 'https://storage.example.com/completed.png?token=one',
+          previewImageUrl: 'https://storage.example.com/thumbnail.png?token=two',
+        },
+      }),
+    );
+  });
+
+  it('falls back to the text notification when the review image cannot be resolved safely', async () => {
+    const values = dependencies();
+    const image = vi.fn().mockResolvedValue({
+      originalContentUrl: 'http://storage.example.com/completed.png',
+      previewImageUrl: 'https://storage.example.com/thumbnail.png',
+    });
+    await expect(execute(values, undefined, image)).resolves.toMatchObject({ status: 'SENT' });
+    expect(values.provider.pushMissionNotification).toHaveBeenCalledWith(
+      expect.not.objectContaining({ image: expect.anything() }),
     );
   });
 

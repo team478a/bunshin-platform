@@ -254,6 +254,11 @@ export type LineProviderFailure = {
   retryable: boolean;
 };
 
+export interface LineMissionImage {
+  originalContentUrl: string;
+  previewImageUrl: string;
+}
+
 export interface LineMessagingProviderPort {
   getQuota(
     accessToken: string,
@@ -264,6 +269,7 @@ export interface LineMessagingProviderPort {
     deepLinkUrl: string;
     summary: LineMissionNotificationSummary;
     kind: LineMessageKind;
+    image?: LineMissionImage;
   }): Promise<{ ok: true } | LineProviderFailure>;
   pushBadgeNotification?(input: {
     accessToken: string;
@@ -324,6 +330,7 @@ export class ExecuteLineMissionDelivery {
     actorUserId: string;
     workerId: string;
     deepLinkUrl: string | (() => Promise<string>);
+    image?: LineMissionImage | (() => Promise<LineMissionImage | null>);
   }): Promise<LineDeliveryExecutionResult> {
     if (!input.deliveryId.trim() || !input.actorUserId.trim())
       throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE delivery scope');
@@ -421,6 +428,18 @@ export class ExecuteLineMissionDelivery {
     } catch {
       return failWithoutProvider('FAILED', 'CONFIGURATION_UNAVAILABLE', true);
     }
+    let image: LineMissionImage | undefined;
+    try {
+      const resolvedImage =
+        typeof input.image === 'function' ? await input.image() : (input.image ?? null);
+      if (resolvedImage) {
+        this.validateImageUrl(resolvedImage.originalContentUrl);
+        this.validateImageUrl(resolvedImage.previewImageUrl);
+        image = resolvedImage;
+      }
+    } catch {
+      image = undefined;
+    }
     const result = await this.safeProviderCall(() =>
       this.provider.pushMissionNotification({
         accessToken: configuration.accessToken,
@@ -428,6 +447,7 @@ export class ExecuteLineMissionDelivery {
         deepLinkUrl,
         summary,
         kind: claim.delivery.kind,
+        ...(image ? { image } : {}),
       }),
     );
     if (!result.ok) return this.recordProviderFailure(claim, input, result, now);
@@ -490,6 +510,23 @@ export class ExecuteLineMissionDelivery {
       throw new ApplicationError('VALIDATION_ERROR', 'Mission deep link requires HTTPS');
     if (url.username || url.password || url.hash || value.length > 2_048)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid Mission deep link URL');
+  }
+
+  private validateImageUrl(value: string): void {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE image URL');
+    }
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      value.length > 2_048
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid LINE image URL');
   }
 }
 

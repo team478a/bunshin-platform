@@ -1897,6 +1897,7 @@ model Workspace {
   organizationEntitlementAudits   OrganizationEntitlementAudit[]
   organizationAiReservations      OrganizationAiGenerationReservation[]
   serviceAiReservations           ServiceAiGenerationReservation[]
+  serviceMediaReservations        ServiceMediaGenerationReservation[]
   serviceCustomDomains            ServiceCustomDomain[]
   serviceCommercialSettings       ServiceCommercialSetting[]
   serviceBrands                   ServiceBrand[]
@@ -1993,6 +1994,11 @@ enum OrganizationAiReservationStatus {
   RELEASED
 }
 
+enum ServiceMediaGenerationKind {
+  IMAGE
+  VIDEO
+}
+
 /// AI文章生成の月間枠を外部API呼び出し前に確保するための冪等な台帳。
 model OrganizationAiGenerationReservation {
   id           String                          @id @default(uuid()) @db.Uuid
@@ -2031,6 +2037,28 @@ model ServiceAiGenerationReservation {
   @@unique([workspaceId, groupId, operationKey])
   @@index([workspaceId, groupId, monthKey, status, expiresAt])
   @@map("service_ai_generation_reservations")
+}
+
+/// Service Commercial Settingの画像・動画枠をProvider実行前に確保する台帳。
+model ServiceMediaGenerationReservation {
+  id           String                          @id @default(uuid()) @db.Uuid
+  workspaceId  String                          @map("workspace_id") @db.Uuid
+  groupId      String                          @map("group_id") @db.Uuid
+  kind         ServiceMediaGenerationKind
+  monthKey     String                          @map("month_key") @db.Char(7)
+  operationKey String                          @map("operation_key") @db.VarChar(200)
+  status       OrganizationAiReservationStatus @default(RESERVED)
+  expiresAt    DateTime                        @map("expires_at") @db.Timestamptz(6)
+  consumedAt   DateTime?                       @map("consumed_at") @db.Timestamptz(6)
+  releasedAt   DateTime?                       @map("released_at") @db.Timestamptz(6)
+  createdAt    DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace    Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group        Group                           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, kind, operationKey], map: "service_media_reservation_operation_key")
+  @@index([workspaceId, groupId, kind, monthKey, status, expiresAt], map: "service_media_reservation_month_status_idx")
+  @@map("service_media_generation_reservations")
 }
 
 model OrganizationEntitlementAudit {
@@ -2111,6 +2139,7 @@ model Group {
   serviceOnboardingResponses      ServiceOnboardingResponse[]
   serviceMemberBusinessProfiles   ServiceMemberBusinessProfile[]
   serviceAiReservations           ServiceAiGenerationReservation[]
+  serviceMediaReservations        ServiceMediaGenerationReservation[]
   campaignPostingApprovalPolicy   CampaignPostingApprovalPolicy?
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]

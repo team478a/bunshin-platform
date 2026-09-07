@@ -17549,6 +17549,7 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           ownerUserId: request.ownerUserId,
           bunshinId: request.bunshinId,
           dailyMissionId: request.dailyMissionId,
+          idempotencyKey: request.idempotencyKey,
           layout: request.layout as unknown as SocialImageGenerationExecutionContext['layout'],
           model: pilot.defaultModel,
           quality: pilot.defaultQuality,
@@ -17574,6 +17575,20 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
 
   async complete(input: Parameters<SocialImageGenerationExecutionRepository['complete']>[0]) {
     return this.client.$transaction(async (tx) => {
+      if (input.serviceMediaReservationId) {
+        const consumed = await tx.serviceMediaGenerationReservation.updateMany({
+          where: {
+            id: input.serviceMediaReservationId,
+            workspaceId: input.context.workspaceId,
+            groupId: input.context.groupId,
+            kind: 'IMAGE',
+            operationKey: input.context.idempotencyKey,
+            status: 'RESERVED',
+          },
+          data: { status: 'CONSUMED', consumedAt: new Date() },
+        });
+        if (consumed.count !== 1) return false;
+      }
       const changed = await tx.socialImageGenerationRequest.updateMany({
         where: {
           id: input.context.requestId,
@@ -17607,24 +17622,37 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
   }
 
   async markFailed(input: { workspaceId: string; requestId: string; errorCode: string }) {
-    const request = await this.client.socialImageGenerationRequest.findFirst({
-      where: {
-        id: input.requestId,
-        workspaceId: input.workspaceId,
-        status: { in: ['QUEUED', 'GENERATING_ASSET', 'COMPOSING'] },
-      },
-      select: { ownerUserId: true },
+    return this.client.$transaction(async (tx) => {
+      const request = await tx.socialImageGenerationRequest.findFirst({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          status: { in: ['QUEUED', 'GENERATING_ASSET', 'COMPOSING'] },
+        },
+        select: { ownerUserId: true, groupId: true, idempotencyKey: true },
+      });
+      if (!request) return null;
+      const changed = await tx.socialImageGenerationRequest.updateMany({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          status: { in: ['QUEUED', 'GENERATING_ASSET', 'COMPOSING'] },
+        },
+        data: { status: 'FAILED', errorCode: input.errorCode, revision: { increment: 1 } },
+      });
+      if (changed.count !== 1) return null;
+      await tx.serviceMediaGenerationReservation.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: request.groupId,
+          kind: 'IMAGE',
+          operationKey: request.idempotencyKey,
+          status: 'RESERVED',
+        },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+      return request;
     });
-    if (!request) return null;
-    const changed = await this.client.socialImageGenerationRequest.updateMany({
-      where: {
-        id: input.requestId,
-        workspaceId: input.workspaceId,
-        status: { in: ['QUEUED', 'GENERATING_ASSET', 'COMPOSING'] },
-      },
-      data: { status: 'FAILED', errorCode: input.errorCode, revision: { increment: 1 } },
-    });
-    return changed.count === 1 ? request : null;
   }
 }
 
