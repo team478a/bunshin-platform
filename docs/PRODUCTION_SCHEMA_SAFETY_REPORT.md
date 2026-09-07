@@ -7,11 +7,13 @@
 - 複数の画面が例外の種類を確認せず`notFound()`へ変換し、DB障害まで404として見せる余地があった。
 - GitHub Environment `production`のDB secretは古く、migration workflowが`P1000`で失敗する一方、Vercel ProductionのDB接続は正常だった。
 - Supabaseでmigration専用login roleも検証したが、既存objectのownerである`postgres`を安全に継承できず、所有権の一括移管が必要になるため採用しなかった。
+- 初回のVercel Production適用で、build machineからSupabaseのIPv6 direct hostへ到達できず`P1001`になった。旧deploymentは公開されたまま維持され、利用者影響は発生しなかった。
 
 ## 2. 変更した内容
 
 - Vercel Production buildの先頭で未適用migrationを適用し、直後に読み取り専用Schema Gateを実行する。
 - PreviewとDevelopment buildではmigrationを実行しない。ProductionでDB変数が欠ける場合はbuildを失敗させる。
+- Supabaseの`DIRECT_URL`はpasswordとquery parameterを保ったま、migration実行時だけIPv4 session poolerへ変換する。Application runtimeの接続設定は変更しない。
 - 古いGitHub DB secretに依存していた手動migration workflowを削除した。
 - Runtime readinessへ最新migration確認を追加し、成功応答へ`databaseSchema: current`を追加した。
 - 正式ドメインのlive/readinessを15分ごとに確認するGitHub Actions scheduleを追加した。
@@ -30,6 +32,7 @@
 
 - Database readiness unit test
 - Vercel用wrapperがPreview / Developmentでskipし、ProductionのDB変数不足時に停止するunit test
+- Supabase direct URLからIPv4 session poolerへの変換と、password・SSL query・非Supabase URL保持のunit test
 - CI temporary PostgreSQL上でVercel用wrapper経由のProduction migrationを実行
 - CI temporary PostgreSQLに全migrationを適用した後の`db:assert-ready`
 - Web health、public service、route not-found boundary test
