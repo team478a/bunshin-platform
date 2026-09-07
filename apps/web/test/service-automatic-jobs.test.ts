@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   reminder: vi.fn(),
   policy: vi.fn(),
   image: vi.fn(),
+  video: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/database', () => ({
@@ -47,6 +48,9 @@ vi.mock('../src/services/daily-mission-generation', () => ({
 }));
 vi.mock('../src/services/automatic-daily-image', () => ({
   queueAutomaticDailyImage: m.image,
+}));
+vi.mock('../src/services/automatic-daily-video', () => ({
+  queueAutomaticDailyVideo: m.video,
 }));
 vi.mock('../src/services/service-generation-knowledge', () => ({
   loadServiceGenerationKnowledge: m.knowledge,

@@ -112,7 +112,7 @@ export const SERVICE_CREATION_TEMPLATES = {
       defaultNotificationTime: string;
       lockCadence: boolean;
       contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
-      mediaMode: 'TEXT_ONLY' | 'IMAGE';
+      mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
     };
     onboarding: {
       welcomeTitle: string;

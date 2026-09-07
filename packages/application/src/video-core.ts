@@ -69,6 +69,7 @@ export interface VideoProjectRecord {
 
 export interface VideoProjectRepository {
   create(input: {
+    id?: string;
     workspaceId: string;
     groupId: string;
     groupMembershipId: string;
@@ -330,6 +331,7 @@ export class CreateVideoProject {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid durationSeconds');
     const value = await this.repository.create({
       ...input,
+      ...(input.id ? { id: id(input.id, 'id') } : {}),
       workspaceId: id(input.workspaceId, 'workspaceId'),
       groupId: id(input.groupId, 'groupId'),
       groupMembershipId: id(input.groupMembershipId, 'groupMembershipId'),

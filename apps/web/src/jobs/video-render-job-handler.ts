@@ -33,9 +33,13 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
       try {
         const configuration = await resolveCreatomateRuntimeConfiguration();
         const db = await import('@bunshin/database');
+        const repository = new db.PrismaVideoRenderRepository();
+        const execution = await repository.findForExecution(input);
+        if (execution?.render.status === 'QUEUED')
+          await new db.PrismaVideoMediaQuotaRepository().reserve(execution.render);
         const aiSceneStorage = new SupabaseFalVideoSceneOutputStorage();
         const result = await new ExecuteVideoRenderStep(
-          new db.PrismaVideoRenderRepository(),
+          repository,
           new CreatomateVideoRenderAdapter(configuration.apiKey),
           new SupabaseVideoRenderOutputStorage(),
           new HkdfVideoRenderWebhookSigner(),

@@ -26,6 +26,7 @@ import { ServiceBunshinEditor } from './service-bunshin-editor';
 import { ServiceDailyMissionSection } from './service-daily-mission-section';
 import { SimpleFirstPostSetup } from './simple-first-post-setup';
 import { ServiceDeliverySettings } from './service-delivery-settings';
+import { dailyVideoProjectId } from '../../../../../src/services/automatic-daily-video';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ export default async function ServiceBunshinDetailPage({
   let accountStrategies;
   let weeklyPlans;
   let dailyMissions: DailyMissionView[];
+  const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
       workspaceId: service.workspaceId,
@@ -98,6 +100,27 @@ export default async function ServiceBunshinDetailPage({
       new db.PrismaDailyMissionRepository(),
     ).execute(scope);
     const engagementRepository = new db.PrismaMissionEngagementRepository();
+    const videoProjects = await db.prisma.videoProject.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        ownerUserId: actor.userId,
+        bunshinId,
+        id: {
+          in: missionRecords.map((mission) =>
+            dailyVideoProjectId(service.workspaceId, bunshinId, mission.id),
+          ),
+        },
+      },
+      select: { id: true, status: true },
+    });
+    for (const mission of missionRecords) {
+      const video = videoProjects.find(
+        (item) => item.id === dailyVideoProjectId(service.workspaceId, bunshinId, mission.id),
+      );
+      if (video)
+        videos[mission.id] = { href: `/s/${serviceSlug}/videos/${video.id}`, status: video.status };
+    }
     const outcomeRepository = new db.PrismaMissionOutcomeRepository();
     const missionStates = await Promise.all(
       missionRecords.map(async (mission) => ({
@@ -260,6 +283,7 @@ export default async function ServiceBunshinDetailPage({
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
             missions={dailyMissions}
+            videos={videos}
             active={
               capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
               'ACTIVE'

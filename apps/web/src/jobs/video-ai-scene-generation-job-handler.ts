@@ -32,8 +32,12 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
       try {
         const configuration = await resolveVideoAiRuntimeConfiguration({ provider: 'FAL' });
         const db = await import('@bunshin/database');
+        const repository = new db.PrismaVideoSceneGenerationRepository();
+        const execution = await repository.findForExecution(input);
+        if (execution?.generation.status === 'QUEUED')
+          await new db.PrismaVideoMediaQuotaRepository().reserve(execution.generation);
         const result = await new ExecuteVideoSceneGenerationStep(
-          new db.PrismaVideoSceneGenerationRepository(),
+          repository,
           new FalKlingVideoAdapter(configuration.apiKey),
           new PrivateCharacterReferenceUrls(),
           new SupabaseFalVideoSceneOutputStorage(),

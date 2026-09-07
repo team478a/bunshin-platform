@@ -17,13 +17,13 @@ export type AutomaticDailyImageResult =
   | { status: 'QUEUED' | 'ALREADY_AVAILABLE'; requestId: string };
 
 export function isAutomaticDailyImageEligible(input: {
-  mediaMode: 'TEXT_ONLY' | 'IMAGE';
+  mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
   assistanceLevel: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
   format: string;
   environment: JobEnvironment;
 }) {
   return (
-    input.mediaMode === 'IMAGE' &&
+    (input.mediaMode === 'IMAGE' || input.mediaMode === 'IMAGE_AND_VIDEO') &&
     input.assistanceLevel === 'READY_TO_USE' &&
     ['IMAGE', 'SLIDE'].includes(input.format) &&
     input.environment === 'PRODUCTION'
@@ -45,7 +45,7 @@ export async function queueAutomaticDailyImage(input: {
     angle: string;
     campaignId?: string | null;
   };
-  mediaMode: 'TEXT_ONLY' | 'IMAGE';
+  mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
 }): Promise<AutomaticDailyImageResult> {
   if (
     !isAutomaticDailyImageEligible({
