@@ -69,6 +69,8 @@ export function SocialImageWorkspace({
   const [requestView, setRequestView] = useState<RequestView | null>(null);
   const [requestId, setRequestId] = useState(selected?.request?.id ?? null);
   const [busy, setBusy] = useState(false);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceConsent, setReferenceConsent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
   const [availableCredits, setAvailableCredits] = useState(imageCreditAvailable);
@@ -82,6 +84,8 @@ export function SocialImageWorkspace({
     setRequestId(selected?.request?.id ?? null);
     setRequestView(null);
     setMessage(null);
+    setReferenceFile(null);
+    setReferenceConsent(false);
   }, [selected]);
 
   useEffect(() => {
@@ -106,45 +110,67 @@ export function SocialImageWorkspace({
 
   async function create() {
     if (!selected || !endpoint || busy) return;
+    if (referenceFile && (!referenceConsent || referenceFile.size > 3_000_000)) {
+      setMessage('3MB以下の写真を選び、利用許可を確認してください。');
+      return;
+    }
     setBusy(true);
     setMessage(null);
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        groupMembershipId,
-        campaignId: selected.campaignId,
-        productPackVersionId: selected.productPackVersionId,
-        idempotencyKey: crypto.randomUUID(),
-        layout: {
-          templateKey: 'PERSON_HEADLINE',
-          headline: selected.topic,
-          bodyLines: [selected.angle],
-          cta: '詳しくは投稿文をご覧ください',
-          accentColor: '#FF3B30',
-        },
-      }),
-    });
-    const payload = (await response.json().catch(() => null)) as {
-      data?: { id?: string };
-      error?: { code?: string };
-    } | null;
-    if (response.ok && payload?.data?.id) {
-      if (usesImageCredits) setAvailableCredits((value) => Math.max(0, (value ?? 0) - 1));
-      else if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
-      setRequestId(payload.data.id);
-      setRequestView(null);
-      setMessage('画像づくりを始めました。このまま少しお待ちください。');
-    } else {
-      setMessage(
-        payload?.error?.code === 'FORBIDDEN'
-          ? usesImageCredits
-            ? '画像作成回数が足りないか、この機能を利用できません。画像作成回数の画面をご確認ください。'
-            : 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
-          : '画像づくりを始められませんでした。少し待ってから、もう一度お試しください。',
-      );
+    try {
+      const referenceBase64 = referenceFile
+        ? await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+            reader.onerror = () => reject(new Error('read failed'));
+            reader.readAsDataURL(referenceFile);
+          })
+        : null;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId,
+          ...(referenceBase64
+            ? { referenceImage: { base64: referenceBase64, rightsConfirmed: true } }
+            : {}),
+          campaignId: selected.campaignId,
+          productPackVersionId: selected.productPackVersionId,
+          idempotencyKey: crypto.randomUUID(),
+          layout: {
+            templateKey: 'PERSON_HEADLINE',
+            headline: selected.topic,
+            bodyLines: [selected.angle],
+            cta: '詳しくは投稿文をご覧ください',
+            accentColor: '#FF3B30',
+          },
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        data?: { id?: string };
+        error?: { code?: string };
+      } | null;
+      if (response.ok && payload?.data?.id) {
+        if (usesImageCredits) setAvailableCredits((value) => Math.max(0, (value ?? 0) - 1));
+        else if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
+        setRequestId(payload.data.id);
+        setRequestView(null);
+        setMessage('画像づくりを始めました。このまま少しお待ちください。');
+      } else {
+        setMessage(
+          payload?.error?.code === 'FORBIDDEN'
+            ? usesImageCredits
+              ? '画像作成回数が足りないか、この機能を利用できません。画像作成回数の画面をご確認ください。'
+              : 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
+            : payload?.error?.code === 'VALIDATION_ERROR'
+              ? '写真の形式・サイズや入力内容を確認してください。写真は3MB以下のJPEG・PNG・WebPに対応しています。'
+              : '画像づくりを始められませんでした。少し待ってから、もう一度お試しください。',
+        );
+      }
+    } catch {
+      setMessage('写真の読み込み、または送信に失敗しました。もう一度お試しください。');
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function decide(decision: 'ADOPTED' | 'REJECTED') {
@@ -194,6 +220,7 @@ export function SocialImageWorkspace({
         </label>
         <select
           id="image-mission"
+          disabled={busy}
           value={selectedId}
           onChange={(event) => setSelectedId(event.target.value)}
         >
@@ -204,6 +231,30 @@ export function SocialImageWorkspace({
           ))}
         </select>
         {selected ? <p>{selected.angle}</p> : null}
+        <label htmlFor="image-reference">参考にする商品・本人写真（任意・1枚）</label>
+        <input
+          key={selectedId}
+          id="image-reference"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={busy}
+          onChange={(event) => {
+            setReferenceFile(event.target.files?.[0] ?? null);
+            setReferenceConsent(false);
+          }}
+        />
+        <p>JPEG・PNG・WebP、3MB以下。この画像作成にだけ使い、参考写真は7日後から順次削除します。</p>
+        {referenceFile ? (
+          <label>
+            <input
+              type="checkbox"
+              checked={referenceConsent}
+              disabled={busy}
+              onChange={(event) => setReferenceConsent(event.target.checked)}
+            />
+            この写真を使う権利と、写っている本人の同意があり、画像生成のためOpenAIへ送信することを確認しました。
+          </label>
+        ) : null}
       </section>
 
       <section className="settings-card social-image-review" aria-live="polite">

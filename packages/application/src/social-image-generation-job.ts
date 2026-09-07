@@ -1,5 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import type { CompleteJob, FailJob, Job } from './index';
+import type { SocialImageReference } from './social-image-generation-core';
 import type { SocialImageLayout } from './social-image-templates';
 
 export const SOCIAL_IMAGE_GENERATION_JOB_TYPE = 'SOCIAL_IMAGE_GENERATE';
@@ -19,6 +20,7 @@ export interface SocialImageGenerationExecutionContext {
   bunshinId: string;
   dailyMissionId: string;
   idempotencyKey: string;
+  referenceImage?: SocialImageReference | null;
   layout: SocialImageLayout;
   model: string;
   quality: string;

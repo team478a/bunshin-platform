@@ -16952,6 +16952,8 @@ const socialImageGenerationRequestRecord = (
 ): SocialImageGenerationRequestRecord => ({
   ...row,
   status: row.status,
+  referenceImage:
+    (row.referenceImage as SocialImageGenerationRequestRecord['referenceImage']) ?? null,
   templateKey: row.templateKey as SocialImageGenerationRequestRecord['templateKey'],
   layout: row.layout as unknown as SocialImageGenerationRequestRecord['layout'],
 });
@@ -17213,6 +17215,7 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
             generationContextSnapshotId: input.generationContextSnapshotId,
             pilotEnrollmentId: input.pilotEnrollmentId,
             templateKey: input.layout.templateKey,
+            referenceImage: input.referenceImage ?? Prisma.DbNull,
             layout: input.layout as unknown as Prisma.InputJsonValue,
             idempotencyKey: input.idempotencyKey,
           },
@@ -17637,6 +17640,9 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           bunshinId: request.bunshinId,
           dailyMissionId: request.dailyMissionId,
           idempotencyKey: request.idempotencyKey,
+          referenceImage:
+            (request.referenceImage as SocialImageGenerationExecutionContext['referenceImage']) ??
+            null,
           layout: request.layout as unknown as SocialImageGenerationExecutionContext['layout'],
           model: pilot.defaultModel,
           quality: pilot.defaultQuality,

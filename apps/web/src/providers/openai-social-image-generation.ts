@@ -83,29 +83,44 @@ export class OpenAiSocialImageGenerationAdapter implements SocialImageAssetGener
     if (input.width !== 1080 || input.height !== 1350)
       throw new ApplicationError('VALIDATION_ERROR', '画像生成サイズが不正です');
 
+    const reference = input.referenceImage;
+    if (reference && (!reference.length || reference.length > 20_000_000))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid reference image');
+    const fields = {
+      model: input.model,
+      prompt,
+      n: 1,
+      size: '1024x1536',
+      quality: input.quality,
+      output_format: 'png',
+      user: input.requestId,
+    };
+    const form = new FormData();
+    if (reference) {
+      for (const [name, value] of Object.entries(fields)) form.set(name, String(value));
+      form.set(
+        'image',
+        new Blob([new Uint8Array(reference)], { type: 'image/png' }),
+        'reference.png',
+      );
+    }
     const now = this.options.now ?? Date.now;
     const started = now();
     let response: Response;
     try {
-      response = await (this.options.fetch ?? fetch)(ENDPOINT, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.options.apiKey}`,
-          'content-type': 'application/json',
+      response = await (this.options.fetch ?? fetch)(
+        reference ? 'https://api.openai.com/v1/images/edits' : ENDPOINT,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${this.options.apiKey}`,
+            ...(reference ? {} : { 'content-type': 'application/json' }),
+          },
+          body: reference ? form : JSON.stringify({ ...fields, moderation: 'auto' }),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(120_000),
         },
-        body: JSON.stringify({
-          model: input.model,
-          prompt,
-          n: 1,
-          size: '1024x1536',
-          quality: input.quality,
-          output_format: 'png',
-          moderation: 'auto',
-          user: input.requestId,
-        }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(120_000),
-      });
+      );
     } catch {
       throw new OpenAiSocialImageProviderError('PROVIDER_UNAVAILABLE', true);
     }

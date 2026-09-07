@@ -16,6 +16,25 @@ const input = {
 };
 
 describe('OpenAI social image generation adapter', () => {
+  it('sends the selected photograph as multipart data to image edits', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ data: [{ b64_json: Buffer.from(png).toString('base64') }] }),
+      );
+    await new OpenAiSocialImageGenerationAdapter({ apiKey: 'test', fetch: request }).generate({
+      ...input,
+      referenceImage: png,
+    });
+    const [url, options] = request.mock.calls[0]!;
+    expect(url).toBe('https://api.openai.com/v1/images/edits');
+    expect(options.headers['content-type']).toBeUndefined();
+    expect(options.body).toBeInstanceOf(FormData);
+    expect(options.body.get('model')).toBe(input.model);
+    const file = options.body.get('image') as File;
+    expect(file.type).toBe('image/png');
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(png);
+  });
   it('requests one moderated PNG without storing provider data', async () => {
     const request = vi.fn().mockResolvedValue(
       Response.json({

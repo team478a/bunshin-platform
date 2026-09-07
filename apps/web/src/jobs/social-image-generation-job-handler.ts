@@ -124,9 +124,18 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
       const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
       const usageKey = `social-image:${context.requestId}:attempt:${input.attemptCount}`;
       try {
+        const referenceImage = context.referenceImage
+          ? await new SupabaseSocialImageStorage().readReference({
+              ...context,
+              sha256: context.referenceImage.sha256,
+            })
+          : undefined;
         const generated = await provider.generate({
           requestId: context.requestId,
-          prompt: promptFor(context.layout),
+          prompt: context.referenceImage
+            ? `${promptFor(context.layout).replace('Do not render letters, words, logos, watermarks, UI, signs, or captions.', 'Do not add captions, watermarks or new logos.')} Use the supplied photograph as the main subject reference. Preserve the person's appearance or product shape and colors. Do not invent product claims or change product labeling.`
+            : promptFor(context.layout),
+          ...(referenceImage ? { referenceImage } : {}),
           width: 1080,
           height: 1350,
           model: context.model,
@@ -139,7 +148,9 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           taskType: 'SOCIAL_IMAGE_GENERATION',
           provider: generated.provider,
           model: generated.model,
-          promptVersion: 'social-image-asset-v1',
+          promptVersion: context.referenceImage
+            ? 'social-image-reference-v1'
+            : 'social-image-asset-v1',
           status: 'SUCCESS',
           inputTokens: generated.inputTokens,
           outputTokens: generated.outputTokens,
@@ -191,7 +202,9 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
             taskType: 'SOCIAL_IMAGE_GENERATION',
             provider: 'OPENAI',
             model: context.model,
-            promptVersion: 'social-image-asset-v1',
+            promptVersion: context.referenceImage
+              ? 'social-image-reference-v1'
+              : 'social-image-asset-v1',
             status: 'FAILED',
             inputTokens: null,
             outputTokens: null,
