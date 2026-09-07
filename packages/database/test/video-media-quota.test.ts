@@ -92,6 +92,23 @@ describe('transactional service video allowance', () => {
     await settleVideoSceneBatch(tx, scope);
     expect(m.serviceMediaGenerationReservation.updateMany).not.toHaveBeenCalled();
   });
+  it('makes a successfully retried scene batch ready for final composition without consuming its slot', async () => {
+    m.videoSceneGeneration.findMany.mockResolvedValue([
+      { status: 'SUCCEEDED' },
+      { status: 'SUCCEEDED' },
+    ]);
+    await settleVideoSceneBatch(tx, scope);
+    expect(m.serviceMediaGenerationReservation.updateMany).not.toHaveBeenCalled();
+    expect(m.videoProject.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: 'QUEUED',
+          renderAttempts: { none: { projectRevision: 3 } },
+        }),
+        data: { status: 'APPROVED' },
+      }),
+    );
+  });
   it('releases a failed batch when its last scene finishes and marks the project retryable', async () => {
     m.videoSceneGeneration.findMany.mockResolvedValue([
       { status: 'FAILED' },
