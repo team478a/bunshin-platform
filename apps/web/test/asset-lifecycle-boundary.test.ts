@@ -13,12 +13,13 @@ describe('asset lifecycle boundary', () => {
     expect(operations).toContain("route: '/api/internal/assets/purge-expired'");
   });
 
-  it('limits deletion to the four private asset buckets and does not accept unsafe keys', () => {
+  it('limits deletion to the five private asset buckets and does not accept unsafe keys', () => {
     const storage = source('src/assets/asset-lifecycle-storage.ts');
     expect(storage).toContain("'social-image-media'");
     expect(storage).toContain("'video-assets'");
     expect(storage).toContain("'video-renders'");
     expect(storage).toContain("'video-ai-scenes'");
+    expect(storage).toContain("'video-narrations'");
     expect(storage).toContain("!value.includes('..')");
   });
 

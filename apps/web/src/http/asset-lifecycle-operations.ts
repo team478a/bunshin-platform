@@ -50,6 +50,12 @@ export async function runExpiredAssetPurge(now = new Date()): Promise<AssetLifec
     }),
   ]);
 
+  const narrations = await db.prisma.videoNarration.findMany({
+    where: { expiresAt: due, deletedAt: null },
+    orderBy: { expiresAt: 'asc' },
+    take: batchSize,
+    select: { id: true, workspaceId: true, ownerUserId: true, renderId: true, storageKey: true },
+  });
   let deleted = 0;
   let failed = 0;
   const references = await db.prisma.socialImageGenerationRequest.findMany({
@@ -72,6 +78,21 @@ export async function runExpiredAssetPurge(now = new Date()): Promise<AssetLifec
   };
 
   await Promise.all([
+    ...narrations.map((narration) =>
+      remove(async () => {
+        await storage.remove({
+          bucket: 'video-narrations',
+          keys: [
+            narration.storageKey ??
+              `${narration.workspaceId}/${narration.ownerUserId}/${narration.renderId}.wav`,
+          ],
+        });
+        await db.prisma.videoNarration.updateMany({
+          where: { id: narration.id, expiresAt: due, deletedAt: null },
+          data: { status: 'DELETED', deletedAt: now, storageKey: null },
+        });
+      }),
+    ),
     ...references.map((reference) =>
       remove(async () => {
         await storage.remove({
@@ -136,7 +157,12 @@ export async function runExpiredAssetPurge(now = new Date()): Promise<AssetLifec
   ]);
   return {
     scanned:
-      videoAssets.length + images.length + renders.length + scenes.length + references.length,
+      videoAssets.length +
+      images.length +
+      renders.length +
+      scenes.length +
+      references.length +
+      narrations.length,
     deleted,
     failed,
   };

@@ -175,6 +175,13 @@ export class SupabaseVideoAssetStorage implements VideoAssetStoragePort {
     };
   }
 
+  async createDownloadUrl(storageKey: string) {
+    const signed = await this.storage.storage.from(BUCKET).createSignedUrl(storageKey, 3600);
+    if (signed.error)
+      throw new ApplicationError('INTERNAL_ERROR', '写真を動画用に読み込めませんでした');
+    return signed.data.signedUrl;
+  }
+
   async inspectUploadedObject(input: { storageKey: string }) {
     const signed = await this.storage.storage.from(BUCKET).createSignedUrl(input.storageKey, 60);
     if (signed.error)

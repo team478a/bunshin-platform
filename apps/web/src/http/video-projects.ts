@@ -38,6 +38,8 @@ const uuid = z.string().uuid();
 const createSchema = z
   .object({
     groupMembershipId: z.uuid(),
+    photoAssetIds: z.array(z.uuid()).max(5).default([]),
+    narrationEnabled: z.boolean().default(false),
     bunshinId: z.uuid(),
     campaignId: z.uuid().nullable().optional(),
     characterProfileVersionId: z.uuid().nullable().optional(),
@@ -106,11 +108,6 @@ export async function createVideoProjectResponse(
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = createSchema.parse(await request.json());
-    if (input.type === 'PHOTO_SLIDESHOW')
-      throw new ApplicationError(
-        'VALIDATION_ERROR',
-        '写真スライド動画は準備中です。字幕動画をご利用ください。',
-      );
     if (input.compositionMode === 'AI_SCENES' && !input.characterProfileVersionId)
       throw new ApplicationError('VALIDATION_ERROR', 'AI動画ではAIキャラクターを選んでください');
     const db = await import('@bunshin/database');
@@ -126,6 +123,8 @@ export async function createVideoProjectResponse(
       campaignId: input.campaignId ?? null,
       characterProfileVersionId: input.characterProfileVersionId ?? null,
       title: input.title,
+      photoAssetIds: input.photoAssetIds,
+      narrationEnabled: input.narrationEnabled,
       platform: input.platform,
       type: input.type,
       durationSeconds: input.durationSeconds,
@@ -148,7 +147,7 @@ export async function createVideoProjectResponse(
         explanation:
           input.compositionMode === 'AI_SCENES'
             ? 'AIが台本とAI動画用の場面を提案します。外部生成は承認後に、設定と予算を確認して開始します。'
-            : 'AIが字幕用の台本を提案します。背景と字幕の動画を作ります。写真の合成と音声は準備中です。',
+            : '選択した写真または背景と字幕を合成します。音声を有効にした場合はAIナレーションを追加します。',
       },
     });
     return Response.json(

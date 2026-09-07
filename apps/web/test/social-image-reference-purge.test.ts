@@ -11,6 +11,7 @@ vi.mock('@bunshin/database', () => ({
     socialImageGeneratedMedia: { findMany: vi.fn().mockResolvedValue([]) },
     videoRender: { findMany: vi.fn().mockResolvedValue([]) },
     videoSceneGeneration: { findMany: vi.fn().mockResolvedValue([]) },
+    videoNarration: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
     socialImageGenerationRequest: { findMany: fake.findMany, updateMany: fake.updateMany },
   },
 }));

@@ -135,6 +135,23 @@ export default async function VideosPage({
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
+  const photos = await db.prisma.videoAsset.findMany({
+    where: {
+      workspaceId: membership.group.workspaceId,
+      groupId: membership.group.id,
+      groupMembershipId: membership.id,
+      ownerUserId: actor.userId,
+      status: 'READY',
+      deletedAt: null,
+      kind: { in: ['IMAGE', 'LOGO'] },
+      verifiedMimeType: { in: ['image/jpeg', 'image/png', 'image/webp'] },
+      rightsConfirmedAt: { lte: new Date() },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { id: true, originalFilename: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
   const serviceSlug = (await searchParams)?.service;
   const serviceBase = serviceSlug ? `/s/${serviceSlug}` : null;
   return (
@@ -162,6 +179,7 @@ export default async function VideosPage({
         bunshins={bunshins}
         campaigns={campaigns}
         characters={characters}
+        photos={photos}
       />
       <section className="settings-card">
         <h2>作成中の動画</h2>

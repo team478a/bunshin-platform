@@ -2081,3 +2081,13 @@
 - Configuration: Runwayと独自ドメイン公開は提供準備中として扱う。設定保存を機能の稼働と同一視しない。
 - Follow-up: 写真・音声の実生成、写真再利用、運営者LINE動画添付、独自ドメイン公開、決済自動化はこの修正だけで完成扱いにしない。
 - Source: docs/FUNCTIONAL_COMPLETENESS_REMEDIATION_REPORT.md
+
+## 2026-09-07: 本人写真と同意済みAIナレーションを標準動画へ接続する
+
+- Photo scope: 本人が利用許諾を確認して保存した画像・ロゴを5枚まで選び、企画の場面順に繰り返して合成する。
+- Isolation: 写真はWorkspace、Group、Membership、Owner、MIME、期限、保存パスを作成時・承認投入時・実行時に再確認する。
+- Narration: 利用者が明示的に有効化した場合だけ、確認対象の場面台本をOpenAI `tts-1`へ送り、24kHz mono PCMから固定長WAVを構成する。完成動画には「AI音声」を表示する。
+- Reliability: レンダー単位の音声状態とPrompt Version、モデル、声、試行文字数、推定原価、処理時間、成否を保存する。一時障害は同時実行を排除して最大3回まで再試行する。
+- Retention: 音声は非公開Storageへ90日保存し、期限切れ処理と退会処理の対象に含める。
+- Boundary: SNSへの自動投稿、写真自体のAI生成、AI動画場面の仕様変更は含めない。
+- Source: `docs/VIDEO_PHOTO_NARRATION_IMPLEMENTATION_REPORT.md`

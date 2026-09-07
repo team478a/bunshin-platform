@@ -3,7 +3,12 @@ import { ApplicationError } from '@bunshin/shared';
 
 export interface AccountDeletionMediaStorage {
   remove(input: {
-    bucket: 'video-assets' | 'social-image-media' | 'video-renders' | 'video-ai-scenes';
+    bucket:
+      | 'video-assets'
+      | 'social-image-media'
+      | 'video-renders'
+      | 'video-ai-scenes'
+      | 'video-narrations';
     keys: string[];
   }): Promise<void>;
 }
@@ -58,7 +63,7 @@ export async function purgeAccountMedia(
     client.socialImageGenerationRequest.updateMany({ where: owner, data: { status: 'CANCELLED' } }),
   ]);
   const take = 20;
-  const [assets, images, renders, scenes, references] = await Promise.all([
+  const [assets, images, renders, scenes, references, narrations] = await Promise.all([
     client.videoAsset.findMany({ where: { ...owner, deletedAt: null }, take }),
     client.socialImageGeneratedMedia.findMany({ where: { ...owner, deletedAt: null }, take }),
     client.videoRender.findMany({ where: { ...owner, deletedAt: null }, take }),
@@ -67,6 +72,7 @@ export async function purgeAccountMedia(
       where: { ...owner, referenceImage: { not: Prisma.DbNull }, referencePurgedAt: null },
       take,
     }),
+    client.videoNarration.findMany({ where: { ...owner, deletedAt: null }, take }),
   ]);
   const remove = async (
     bucket: Parameters<AccountDeletionMediaStorage['remove']>[0]['bucket'],
@@ -154,9 +160,26 @@ export async function purgeAccountMedia(
       data: { referencePurgedAt: input.now, referenceImage: Prisma.DbNull },
     });
   }
+  for (const narration of narrations) {
+    await remove(
+      'video-narrations',
+      [
+        narration.storageKey ??
+          `${narration.workspaceId}/${input.userId}/${narration.renderId}.wav`,
+      ],
+      narration.workspaceId,
+      narration.groupId,
+    );
+    await client.videoNarration.updateMany({
+      where: { id: narration.id, ...owner },
+      data: { status: 'DELETED', deletedAt: input.now, storageKey: null },
+    });
+  }
   // Full pages may have more data. Reclaim on the next batch rather than mark
   // the account completed before every page has been purged.
-  return [assets, images, renders, scenes, references].every((page) => page.length < take)
+  return [assets, images, renders, scenes, references, narrations].every(
+    (page) => page.length < take,
+  )
     ? true
     : 'PENDING';
 }

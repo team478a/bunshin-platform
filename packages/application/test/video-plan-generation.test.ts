@@ -129,6 +129,27 @@ describe('GenerateVideoPlan', () => {
     );
   });
 
+  it('maps selected photos to scenes in order and records requested voice synthesis', async () => {
+    const photos = ['77777777-7777-4777-8777-777777777771', '77777777-7777-4777-8777-777777777772'];
+    const projects = projectRepository();
+    projects.findOwned = vi.fn().mockResolvedValue({
+      ...project,
+      photoAssetIds: photos,
+      narrationEnabled: true,
+    });
+    await new GenerateVideoPlan(projects, contextRepository(), generator()).execute(input);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(projects.replacePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectAiProcessingTypes: ['SCRIPT_GENERATION', 'VOICE_SYNTHESIS'],
+        scenes: expect.arrayContaining([
+          expect.objectContaining({ visualType: 'USER_ASSET', keywords: [photos[0]] }),
+          expect.objectContaining({ visualType: 'USER_ASSET', keywords: [photos[1]] }),
+        ]),
+      }),
+    );
+  });
+
   it('does not call the provider when the project is outside the caller scope', async () => {
     const projects = projectRepository();
     projects.findOwned = vi.fn().mockResolvedValue(null);

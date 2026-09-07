@@ -61,7 +61,7 @@ describe('OpenAIVideoPlanGenerator', () => {
       fetch: fetcher,
     }).generate(input);
     expect(result).toMatchObject({
-      promptVersion: 'video-plan-v2-supported-composition',
+      promptVersion: 'video-plan-v3-short-narration',
       inputTokens: 100,
       outputTokens: 200,
     });

@@ -1,3 +1,5 @@
+import { prepareVideoNarration } from '../video/prepare-video-narration';
+import { SupabaseVideoAssetStorage } from '../video/video-asset-storage';
 import 'server-only';
 import {
   ExecuteVideoRenderStep,
@@ -38,12 +40,24 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
         if (execution?.render.status === 'QUEUED')
           await new db.PrismaVideoMediaQuotaRepository().reserve(execution.render);
         const aiSceneStorage = new SupabaseFalVideoSceneOutputStorage();
+        const compositor = new CreatomateVideoRenderAdapter(configuration.apiKey);
+        const photos = new SupabaseVideoAssetStorage();
         const result = await new ExecuteVideoRenderStep(
           repository,
-          new CreatomateVideoRenderAdapter(configuration.apiKey),
+          {
+            submit: async (input) => {
+              const narrationUrl = await prepareVideoNarration(input.project, input.renderId);
+              return compositor.submit({
+                ...input,
+                ...(narrationUrl ? { narrationUrl } : {}),
+              });
+            },
+            inspect: (input) => compositor.inspect(input),
+          },
           new SupabaseVideoRenderOutputStorage(),
           new HkdfVideoRenderWebhookSigner(),
           { createUrl: (storageKey) => aiSceneStorage.createDownloadUrl(storageKey) },
+          { createUrl: (storageKey) => photos.createDownloadUrl(storageKey) },
         ).execute(input);
         if (result.status !== 'SUCCEEDED') return result;
         const completedAt = result.render.completedAt ?? new Date();
