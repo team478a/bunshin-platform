@@ -47,6 +47,8 @@ const decisionSchema = z.discriminatedUnion('decision', [
 ]);
 const activitySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('VIEWED'), idempotencyKey: keySchema }).strict(),
+  z.object({ type: z.literal('CONFIRMED'), idempotencyKey: keySchema }).strict(),
+  z.object({ type: z.literal('RESTED'), idempotencyKey: keySchema }).strict(),
   z.object({ type: z.literal('COPIED_TEXT'), idempotencyKey: keySchema }).strict(),
   z.object({ type: z.literal('COPIED_IMAGE_INSTRUCTION'), idempotencyKey: keySchema }).strict(),
   z.object({ type: z.literal('COPIED_VIDEO_PROMPT'), idempotencyKey: keySchema }).strict(),

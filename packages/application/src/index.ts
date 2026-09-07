@@ -2503,3 +2503,5 @@ export * from './service-referral-content';
 export * from './member-product-content';
 export * from './member-product-activity';
 export * from './daily-actions';
+export * from './weekly-activity-report';
+export * from './weekly-activity-report-job';
