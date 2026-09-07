@@ -15478,7 +15478,11 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
 const assetRetentionExpiry = (from = new Date()) =>
   new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-const videoRenderRecord = (row: Prisma.VideoRenderGetPayload<object>): VideoRenderRecord => row;
+const videoRenderRecord = (row: Prisma.VideoRenderGetPayload<object>): VideoRenderRecord => {
+  const { notificationSnapshot, ...record } = row;
+  void notificationSnapshot;
+  return record;
+};
 
 const videoDeliveryRecord = (row: Prisma.VideoDeliveryGetPayload<object>): VideoDeliveryRecord => ({
   ...row,

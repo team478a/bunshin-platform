@@ -243,6 +243,7 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     projectTitle: string;
     reviewUrl: string;
     retryKey: string;
+    video?: { originalContentUrl: string; previewImageUrl: string };
   }) {
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.retryKey)
@@ -271,6 +272,23 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
       reviewUrl.hash
     )
       return { ok: false, category: 'PROVIDER_UNAVAILABLE', retryable: false } as const;
+    if (input.video) {
+      try {
+        for (const value of [input.video.originalContentUrl, input.video.previewImageUrl]) {
+          const url = new URL(value);
+          if (
+            value.length > 2000 ||
+            url.protocol !== 'https:' ||
+            url.username ||
+            url.password ||
+            url.hash
+          )
+            return httpFailure(400);
+        }
+      } catch {
+        return httpFailure(400);
+      }
+    }
     try {
       const response = await this.request(`${endpoint}/v2/bot/message/push`, {
         method: 'POST',
@@ -282,6 +300,7 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
         body: JSON.stringify({
           to: input.recipientId,
           messages: [
+            ...(input.video ? [{ type: 'video', ...input.video }] : []),
             {
               type: 'text',
               text: [
