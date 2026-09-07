@@ -2147,3 +2147,12 @@
 - History: `DailyAction`は追記型履歴とし、同じUserと冪等キーの再送を重複登録しない。Daily Missionとの任意関連を持ち、後続の週次レポートで素材追加を集計できる。
 - UX: 投稿案の下に1件のおすすめActionを出し、別Actionは折りたたむ。投稿しない日でも次の生成材料を残せるようにする。
 - Source: `docs/DAILY_ACTION_MATERIAL_IMPLEMENTATION_REPORT.md`
+
+## 2026-09-08: 週次レポートは既存の追記履歴から本人・分身別に導出する
+
+- Aggregate: Missionの確認、コピー、投稿完了、休み、Daily Actionの素材追加、別案選択を本人のTimezoneで月曜から日曜まで集計する。
+- Deduplication: Mission操作は同一Missionを週1件として数え、再送・複数形式のコピー・別案の再選択で件数を水増ししない。Daily Actionは追加した記録ごとに数える。
+- Isolation: RepositoryがWorkspace、Service、Membership、Owner User、Bunshinを先に検証し、すべての取得条件にもWorkspace、User、Bunshinを含める。
+- Storage: 集計結果のSnapshotテーブルは作らず、監査可能な既存の追記履歴から表示時・配信時に再計算する。
+- LINE: 前週分を月曜の設定時刻に冪等Jobとして登録する。通知本文は件数と短い案内、認証が必要なHTTPS画面URLだけとし、投稿本文・素材内容・個人Memoryを渡さない。
+- Source: `docs/WEEKLY_ACTIVITY_REPORT_IMPLEMENTATION_REPORT.md`

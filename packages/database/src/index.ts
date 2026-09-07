@@ -29,6 +29,7 @@ import type {
   KnowledgeGrantRepository,
   DailyActionRepository,
   DailyActionRecord,
+  WeeklyActivityReportRepository,
   BunshinMemoryRepository,
   BunshinCapabilityAssignmentRepository,
   BunshinCapabilityAssignment,
@@ -1409,7 +1410,13 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
           this.client.job.count({
             where: {
               environment,
-              jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+              jobType: {
+                in: [
+                  'LINE_MISSION_DELIVER',
+                  'BADGE_LINE_DELIVER',
+                  'WEEKLY_ACTIVITY_REPORT_DELIVER',
+                ],
+              },
               status,
             },
           }),
@@ -1534,14 +1541,18 @@ export class PrismaLineOperationalSnapshotRepository implements LineOperationalS
       this.client.job.count({
         where: {
           environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: 'RETRY_SCHEDULED',
         },
       }),
       this.client.job.count({
         where: {
           environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: 'DEAD',
         },
       }),
@@ -8135,6 +8146,82 @@ export class PrismaDailyActionRepository implements DailyActionRepository {
   }
 }
 
+export class PrismaWeeklyActivityReportRepository implements WeeklyActivityReportRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async read(input: Parameters<WeeklyActivityReportRepository['read']>[0]) {
+    const bunshin = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        ...(input.groupId === undefined
+          ? {}
+          : {
+              groupId: input.groupId,
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+            }),
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+    if (!bunshin) return null;
+    const range = { gte: input.from, lt: input.to };
+    const [activities, posts, dailyActions, variantSelections] = await Promise.all([
+      this.client.missionActivity.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          occurredAt: range,
+        },
+        select: { dailyMissionId: true, type: true, occurredAt: true },
+      }),
+      this.client.postRecord.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          postedAt: range,
+        },
+        select: { dailyMissionId: true, postedAt: true },
+      }),
+      this.client.dailyAction.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          ownerUserId: input.actorUserId,
+          createdAt: range,
+        },
+        select: { id: true, createdAt: true },
+      }),
+      this.client.missionContentVariantSelection.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          selectedAt: range,
+        },
+        select: { dailyMissionId: true, selectedAt: true },
+      }),
+    ]);
+    return { activities, posts, dailyActions, variantSelections };
+  }
+}
+
 function memory(row: Prisma.BunshinMemoryGetPayload<object>): BunshinMemory {
   return {
     ...row,
@@ -10442,7 +10529,9 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         by: ['status'],
         where: {
           environment: input.environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: { in: ['RETRY_SCHEDULED', 'DEAD'] },
         },
         _count: { _all: true },
@@ -10450,7 +10539,9 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       this.client.job.count({
         where: {
           environment: input.environment,
-          jobType: { notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: 'DEAD',
         },
       }),

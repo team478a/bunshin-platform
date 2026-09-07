@@ -15,6 +15,9 @@ import {
   RunPersonalityLearningProposalJob,
   RunWeeklyPersonalityLearningScheduler,
   type PersonalityLearningScheduleSummary,
+  RunWeeklyActivityReportScheduler,
+  ScheduleWeeklyActivityReportDelivery,
+  type WeeklyActivityReportScheduleSummary,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
@@ -41,6 +44,7 @@ export interface MissionSchedulerPort {
         truncated: boolean;
       };
       personalityLearning?: PersonalityLearningScheduleSummary;
+      weeklyActivityReport?: WeeklyActivityReportScheduleSummary;
     }
   >;
 }
@@ -57,6 +61,10 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
   const trend = new RunTrendResearchScheduler(
     new db.PrismaTrendResearchAutomationCandidateRepository(),
     new ScheduleWeeklyTrendResearch(new EnqueueJob(jobs), scopes),
+  );
+  const weeklyActivityReport = new RunWeeklyActivityReportScheduler(
+    new db.PrismaMissionAutomationCandidateRepository(),
+    new ScheduleWeeklyActivityReportDelivery(new EnqueueJob(jobs)),
   );
   const badgePreparation = new PrepareBadgeLineNotifications(
     new db.PrismaBadgeLineNotificationPreparationRepository(db.prisma),
@@ -90,18 +98,21 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           ).execute();
         },
       } as RunPersonalityLearningProposalJob);
-      const [missionResult, trendResult, badgePrepared, personalityResult] = await Promise.all([
-        mission.execute(environment),
-        trend.execute(environment),
-        badgePreparation.execute({ environment }),
-        personalityLearning.execute(),
-      ]);
+      const [missionResult, trendResult, badgePrepared, personalityResult, weeklyReportResult] =
+        await Promise.all([
+          mission.execute(environment),
+          trend.execute(environment),
+          badgePreparation.execute({ environment }),
+          personalityLearning.execute(),
+          weeklyActivityReport.execute(environment),
+        ]);
       const badgeJobResult = await badgeJobs.execute(environment);
       return {
         ...missionResult,
         trend: trendResult,
         badgeLine: { ...badgePrepared, ...badgeJobResult },
         personalityLearning: personalityResult,
+        weeklyActivityReport: weeklyReportResult,
       };
     },
   };
