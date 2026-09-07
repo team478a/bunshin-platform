@@ -1,6 +1,7 @@
 import {
   ExternalTrackingMemberLinkService,
   ListServiceBunshins,
+  MemberProductActivityService,
   MemberProductProfileService,
 } from '@bunshin/application';
 import type { Route } from 'next';
@@ -44,10 +45,13 @@ export default async function ServiceMemberTrackingLinkPage({
   const profileService = new MemberProductProfileService(
     new db.PrismaMemberProductProfileRepository(),
   );
-  const [profiles, productMasters, bunshins] = await Promise.all([
+  const [profiles, productMasters, bunshins, activitySummary] = await Promise.all([
     profileService.list(scope),
     profileService.listProductMasters(scope),
     new ListServiceBunshins(new db.PrismaBunshinRepository()).execute(scope),
+    new MemberProductActivityService(
+      new db.PrismaMemberProductActivityRepository(),
+    ).listMemberSummary(scope),
   ]);
 
   return (
@@ -79,6 +83,39 @@ export default async function ServiceMemberTrackingLinkPage({
             productMasters={productMasters}
             bunshins={bunshins.map(({ id, name }) => ({ id, name }))}
           />
+          {activitySummary.length > 0 && (
+            <div className="member-product-activity-summary">
+              <h2>商品別の活動</h2>
+              <p>専用URLを使って作成した投稿案、コピー、投稿完了の記録です。</p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>商品</th>
+                      <th>作成</th>
+                      <th>コピー</th>
+                      <th>投稿完了</th>
+                      <th>専用URL使用</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activitySummary.map((item) => (
+                      <tr key={item.profileId}>
+                        <td>
+                          {item.productName}
+                          {item.productPackName ? `（${item.productPackName}）` : ''}
+                        </td>
+                        <td>{item.generatedCount}</td>
+                        <td>{item.copiedCount}</td>
+                        <td>{item.postedCount}</td>
+                        <td>{item.trackingUrlUsedCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
         <Link className="button" href={`/s/${serviceSlug}/home` as Route}>
           サービスホームへ戻る

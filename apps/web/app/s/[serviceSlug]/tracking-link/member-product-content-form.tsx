@@ -36,6 +36,7 @@ export function MemberProductContentForm({
   const [platform, setPlatform] = useState<MemberProductContentPlatform>('INSTAGRAM');
   const [bunshinId, setBunshinId] = useState(bunshins[0]?.id ?? '');
   const [candidates, setCandidates] = useState<string[]>([]);
+  const [activityId, setActivityId] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
@@ -43,6 +44,7 @@ export function MemberProductContentForm({
   function selectProfile(id: string) {
     setProfileId(id);
     setCandidates([]);
+    setActivityId('');
     const profile = profiles.find((item) => item.id === id);
     if (!profile) {
       setLinkId(activeLinks[0]?.id ?? '');
@@ -67,6 +69,7 @@ export function MemberProductContentForm({
       return;
     }
     setSaving(true);
+    setActivityId('');
     setMessage('商品情報を保存しています…');
     try {
       const response = await fetch(
@@ -98,15 +101,17 @@ export function MemberProductContentForm({
       );
       if (!suggestionResponse.ok) throw new Error('GENERATION_FAILED');
       const suggestionPayload = (await suggestionResponse.json()) as {
-        data: { candidates: Array<{ body: string }> };
+        data: { candidates: Array<{ body: string }>; activityId: string };
       };
       setCandidates(suggestionPayload.data.candidates.map(({ body }) => body));
+      setActivityId(suggestionPayload.data.activityId);
       setSelectedCandidate(0);
       setMessage('分身設定に合わせた投稿文を3案作成しました。内容を確認してください。');
       setProfileId(payload.data.id);
       router.refresh();
     } catch {
       setCandidates([]);
+      setActivityId('');
       setMessage('保存またはAI投稿案の作成ができませんでした。少し待ってから再度お試しください。');
     } finally {
       setSaving(false);
@@ -118,9 +123,49 @@ export function MemberProductContentForm({
     if (!body) return;
     try {
       await navigator.clipboard.writeText(body);
-      setMessage('投稿文をコピーしました。');
+      const recorded = await recordActivity('COPIED');
+      setMessage(
+        recorded
+          ? '投稿文をコピーしました。'
+          : '投稿文をコピーしました。活動記録だけ保存できませんでした。',
+      );
     } catch {
       setMessage('コピーできませんでした。投稿文を長押ししてコピーしてください。');
+    }
+  }
+
+  async function markPosted() {
+    if (!activityId) return;
+    setSaving(true);
+    const recorded = await recordActivity('POSTED');
+    setMessage(
+      recorded
+        ? '投稿完了を記録しました。'
+        : '投稿完了を記録できませんでした。少し待ってから再度お試しください。',
+    );
+    setSaving(false);
+  }
+
+  async function recordActivity(type: 'COPIED' | 'POSTED') {
+    if (!activityId) return false;
+    try {
+      const response = await fetch(
+        `/api/services/${encodeURIComponent(serviceSlug)}/member-products/activity`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            activityId,
+            type,
+            candidateIndex: selectedCandidate,
+          }),
+        },
+      );
+      if (!response.ok) return false;
+      router.refresh();
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -289,6 +334,14 @@ export function MemberProductContentForm({
           ))}
           <button className="button button--full" type="button" onClick={() => void copy()}>
             選んだ投稿文をコピー
+          </button>
+          <button
+            className="button button--primary button--full"
+            type="button"
+            disabled={saving || !activityId}
+            onClick={() => void markPosted()}
+          >
+            SNSへの投稿完了を記録
           </button>
           <small>自動投稿はしません。コピー後、ご自身のSNSから投稿してください。</small>
         </div>
