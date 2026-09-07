@@ -28,6 +28,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
+import { normalizeImageReference } from '../social-image-reference';
 import {
   finishServiceMediaGeneration,
   reserveServiceMediaGeneration,
@@ -37,6 +38,10 @@ const uuid = z.string().uuid();
 const createSchema = z
   .object({
     groupMembershipId: uuid,
+    referenceImage: z
+      .object({ base64: z.string().min(1).max(4_000_000), rightsConfirmed: z.literal(true) })
+      .strict()
+      .optional(),
     campaignId: uuid.nullable().optional(),
     productPackVersionId: uuid.nullable().optional(),
     idempotencyKey: z.string().trim().min(8).max(200),
@@ -76,7 +81,21 @@ async function body(request: Request) {
   if (!request.headers.get('content-type')?.startsWith('application/json'))
     throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
   try {
-    return (await request.json()) as unknown;
+    if (!request.body) throw new Error('empty body');
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.byteLength;
+      if (size > 4_100_000) {
+        await reader.cancel();
+        throw new Error('body too large');
+      }
+      chunks.push(part.value);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
   } catch (error) {
     throw new ApplicationError('VALIDATION_ERROR', 'invalid JSON', error);
   }
@@ -105,6 +124,9 @@ export async function createSocialImageResponse(
     requireSameOrigin(request);
     const actor = await actorUserId();
     const parsed = createSchema.parse(await body(request));
+    const reference = parsed.referenceImage
+      ? await normalizeImageReference(parsed.referenceImage.base64)
+      : null;
     const runtime = getServerEnvironment();
     const db = await import('@bunshin/database');
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
@@ -125,8 +147,24 @@ export async function createSocialImageResponse(
       campaignId: parsed.campaignId ?? null,
       productPackVersionId: parsed.productPackVersionId ?? null,
       layout: parsed.layout,
+      referenceImage: reference?.referenceImage ?? null,
       idempotencyKey: parsed.idempotencyKey,
     });
+    if ((created.referenceImage?.sha256 ?? null) !== (reference?.referenceImage.sha256 ?? null))
+      throw new ApplicationError('CONFLICT', '同じ受付番号で参考写真を変更できません');
+    if (reference && Date.now() - created.createdAt.getTime() >= 7 * 24 * 60 * 60 * 1000)
+      throw new ApplicationError(
+        'CONFLICT',
+        '参考写真の保存期限を過ぎています。新しく作成してください',
+      );
+    if (reference)
+      await new SupabaseSocialImageStorage().storeReference({
+        workspaceId,
+        groupId,
+        ownerUserId: actor,
+        requestId: created.id,
+        bytes: reference.bytes,
+      });
     await assertOrganizationGenerationQuota({ workspaceId, kind: 'IMAGE' });
     const runtimeConfiguration = await resolveOpenAiRuntimeConfiguration();
     const serviceMediaReservation = await reserveServiceMediaGeneration({

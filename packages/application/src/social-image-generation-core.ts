@@ -43,7 +43,10 @@ export type SocialImageGenerationBlockReason =
   | 'SAFETY_BLOCKED'
   | 'LIMIT_REACHED';
 
+export type SocialImageReference = { sha256: string; rightsConfirmed: true };
+
 export interface SocialImageGenerationRequestRecord {
+  referenceImage?: SocialImageReference | null;
   id: string;
   workspaceId: string;
   groupId: string;
@@ -113,6 +116,7 @@ export interface SocialImageGenerationRequestRepository {
     productPackVersionId: string | null;
     generationContextSnapshotId: string | null;
     pilotEnrollmentId: string;
+    referenceImage?: SocialImageReference | null;
     layout: SocialImageLayout;
     idempotencyKey: string;
   }): Promise<SocialImageGenerationRequestRecord | null>;
@@ -156,6 +160,7 @@ export interface SocialImageAssetGenerationProviderPort {
     height: typeof SOCIAL_IMAGE_HEIGHT;
     model: string;
     quality: string;
+    referenceImage?: Uint8Array;
   }): Promise<{
     bytes: Uint8Array;
     mimeType: 'image/png';
@@ -254,12 +259,19 @@ export class CreateSocialImageGenerationRequest {
     dailyMissionId: string;
     campaignId: string | null;
     productPackVersionId: string | null;
+    referenceImage?: SocialImageReference | null;
     layout: SocialImageLayout;
     idempotencyKey: string;
     now?: Date;
   }) {
     if (input.environment !== 'PRODUCTION')
       throw new ApplicationError('FORBIDDEN', 'social image pilot is production only');
+    if (
+      input.referenceImage &&
+      (!/^[a-f0-9]{64}$/.test(input.referenceImage.sha256) ||
+        input.referenceImage.rightsConfirmed !== true)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid image reference consent');
     const scope = {
       workspaceId: uuid(input.workspaceId, 'workspaceId'),
       groupId: uuid(input.groupId, 'groupId'),
@@ -290,11 +302,21 @@ export class CreateSocialImageGenerationRequest {
         'generationContextSnapshotId',
       ),
       pilotEnrollmentId: uuid(authorized.pilotEnrollmentId, 'pilotEnrollmentId'),
+      referenceImage: input.referenceImage ?? null,
       layout: normalizeSocialImageLayout(input.layout),
       idempotencyKey,
     });
     if (!value)
       throw new ApplicationError('CONFLICT', 'social image generation request unavailable');
+    if (
+      value.workspaceId !== scope.workspaceId ||
+      value.groupId !== scope.groupId ||
+      value.ownerUserId !== scope.actorUserId ||
+      value.bunshinId !== scope.bunshinId ||
+      value.dailyMissionId !== scope.dailyMissionId ||
+      (value.referenceImage?.sha256 ?? null) !== (input.referenceImage?.sha256 ?? null)
+    )
+      throw new ApplicationError('CONFLICT', 'image request key belongs to different content');
     return value;
   }
 }

@@ -97,6 +97,47 @@ async function assertBytes(
 }
 
 export class SupabaseSocialImageStorage implements SocialImageStoragePort {
+  private referenceKey(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    requestId: string;
+  }) {
+    return `${scope({ ...input, mediaId: input.requestId })}/reference.png`;
+  }
+
+  async storeReference(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    requestId: string;
+    bytes: Uint8Array;
+  }) {
+    await assertBytes(input.bytes, MAX_SOURCE_BYTES, 'image/png');
+    await this.ensureBucket();
+    const result = await this.storage.storage
+      .from(BUCKET)
+      .upload(this.referenceKey(input), input.bytes, { contentType: 'image/png', upsert: false });
+    if (result.error && !/already exists|duplicate/i.test(result.error.message))
+      throw new ApplicationError('INTERNAL_ERROR', '参考写真を保存できませんでした');
+  }
+
+  async readReference(input: {
+    workspaceId: string;
+    groupId: string;
+    ownerUserId: string;
+    requestId: string;
+    sha256: string;
+  }) {
+    const result = await this.storage.storage.from(BUCKET).download(this.referenceKey(input));
+    if (result.error || !result.data || result.data.size > MAX_SOURCE_BYTES)
+      throw new ApplicationError('VALIDATION_ERROR', '参考写真を確認できませんでした');
+    const bytes = new Uint8Array(await result.data.arrayBuffer());
+    if (createHash('sha256').update(bytes).digest('hex') !== input.sha256)
+      throw new ApplicationError('VALIDATION_ERROR', '参考写真が変更されています');
+    await assertBytes(bytes, MAX_SOURCE_BYTES, 'image/png');
+    return bytes;
+  }
   constructor(private readonly storage: SupabaseClient = client()) {}
 
   private async ensureBucket() {

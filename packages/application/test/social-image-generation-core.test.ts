@@ -69,6 +69,40 @@ const repository = (
 });
 
 describe('Social image generation core', () => {
+  it.each(['workspaceId', 'groupId', 'ownerUserId', 'bunshinId', 'dailyMissionId'] as const)(
+    'rejects an idempotency result from a different %s',
+    async (field) => {
+      const requests = repository({
+        create: vi
+          .fn()
+          .mockResolvedValue({ ...record(), [field]: '99999999-9999-4999-8999-999999999999' }),
+      });
+      await expect(
+        new CreateSocialImageGenerationRequest(authorization(), requests).execute({
+          environment: 'PRODUCTION',
+          ...ids,
+          campaignId: null,
+          productPackVersionId: null,
+          layout,
+          idempotencyKey: 'mission-image-1',
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    },
+  );
+
+  it('rejects replacing a photograph on an existing request key', async () => {
+    await expect(
+      new CreateSocialImageGenerationRequest(authorization(), repository()).execute({
+        environment: 'PRODUCTION',
+        ...ids,
+        campaignId: null,
+        productPackVersionId: null,
+        layout,
+        idempotencyKey: 'mission-image-1',
+        referenceImage: { sha256: 'a'.repeat(64), rightsConfirmed: true },
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
   it('uses the existing extensible group feature key', () => {
     expect(SOCIAL_IMAGE_GENERATION_FEATURE_KEY).toBe('SOCIAL.IMAGE_GENERATION');
   });

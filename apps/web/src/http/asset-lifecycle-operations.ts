@@ -52,6 +52,16 @@ export async function runExpiredAssetPurge(now = new Date()): Promise<AssetLifec
 
   let deleted = 0;
   let failed = 0;
+  const references = await db.prisma.socialImageGenerationRequest.findMany({
+    where: {
+      referenceImage: { path: ['sha256'], not: '' },
+      referencePurgedAt: null,
+      createdAt: { lte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: batchSize,
+    select: { id: true, workspaceId: true, groupId: true, ownerUserId: true },
+  });
   const remove = async (operation: () => Promise<void>) => {
     try {
       await operation();
@@ -62,6 +72,20 @@ export async function runExpiredAssetPurge(now = new Date()): Promise<AssetLifec
   };
 
   await Promise.all([
+    ...references.map((reference) =>
+      remove(async () => {
+        await storage.remove({
+          bucket: 'social-image-media',
+          keys: [
+            `${reference.workspaceId}/${reference.groupId}/${reference.ownerUserId}/${reference.id}/${reference.id}/reference.png`,
+          ],
+        });
+        await db.prisma.socialImageGenerationRequest.updateMany({
+          where: { id: reference.id, referencePurgedAt: null },
+          data: { referencePurgedAt: now },
+        });
+      }),
+    ),
     ...videoAssets.map((asset) =>
       remove(async () => {
         await storage.remove({ bucket: 'video-assets', keys: [asset.storageKey] });
@@ -111,7 +135,8 @@ export async function runExpiredAssetPurge(now = new Date()): Promise<AssetLifec
     ),
   ]);
   return {
-    scanned: videoAssets.length + images.length + renders.length + scenes.length,
+    scanned:
+      videoAssets.length + images.length + renders.length + scenes.length + references.length,
     deleted,
     failed,
   };
