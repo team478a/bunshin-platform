@@ -2091,3 +2091,12 @@
 - Retention: 音声は非公開Storageへ90日保存し、期限切れ処理と退会処理の対象に含める。
 - Boundary: SNSへの自動投稿、写真自体のAI生成、AI動画場面の仕様変更は含めない。
 - Source: `docs/VIDEO_PHOTO_NARRATION_IMPLEMENTATION_REPORT.md`
+
+## 2026-09-07: 本人商品の投稿活動は生成単位と追記イベントで集計する
+
+- Record: 投稿本文や専用URL本文を複製せず、本人商品プロフィール、分身、承認済み専用URL、公式商品との参照と候補数だけを生成単位で保存する。
+- Activity: コピーと本人申告の投稿完了は、生成単位・候補番号へ紐づく追記イベントとして保存し、再送や連打で同じ操作を重複計上しない。
+- Isolation: 作成時と活動記録時にWorkspace、Service、Membership、User、商品プロフィール、BunshinをRepositoryで再検証する。
+- Visibility: 参加者は本人の商品別集計だけを確認する。サービスのコンテンツ担当者以上は商品別の匿名集計を確認できるが、参加者の投稿本文は取得・表示しない。
+- Meaning: 専用URL使用数は、承認済みURLを含む投稿案を作成した回数であり、外部サイトでのクリック数・購入数・成果発生数とは扱わない。
+- Source: `docs/MEMBER_PRODUCT_ACTIVITY_REPORT.md`

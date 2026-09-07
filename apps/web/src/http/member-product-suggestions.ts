@@ -2,6 +2,7 @@ import 'server-only';
 import {
   ExternalTrackingMemberLinkService,
   GetBunshin,
+  MemberProductActivityService,
   MemberProductProfileService,
   finalizeMemberProductCandidate,
 } from '@bunshin/application';
@@ -140,6 +141,19 @@ export async function generateMemberProductSuggestionsResponse(
       pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
       idempotencyKey: `${requestId}:member-product-suggestions`,
     });
+    usage = undefined;
+    const activity = await new MemberProductActivityService(
+      new db.PrismaMemberProductActivityRepository(),
+    ).recordGeneration({
+      ...scope,
+      profileId: profile.id,
+      bunshinId: bunshin.id,
+      externalTrackingLinkId: profile.externalTrackingLinkId,
+      productPackId: profile.productPackId,
+      platform: input.platform,
+      candidateCount: candidates.length,
+      operationKey: `${requestId}:member-product-suggestions`,
+    });
     logger.info('member product suggestions generated', {
       workspaceId: scope.workspaceId,
       bunshinId: bunshin.id,
@@ -148,7 +162,7 @@ export async function generateMemberProductSuggestionsResponse(
       latency: result.latencyMs,
     });
     return Response.json(
-      { data: { candidates }, requestId },
+      { data: { candidates, activityId: activity.id }, requestId },
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {

@@ -78,4 +78,34 @@ describe('member product content UI boundary', () => {
     expect(http).toContain('profile.officialProduct?.forbiddenExpressions');
     expect(http).toContain("'official product information unavailable'");
   });
+
+  it('records generation, copy and manual posting without storing a second URL value', () => {
+    const suggestion = source('src/http/member-product-suggestions.ts');
+    const activity = source('src/http/member-product-activity.ts');
+    const route = source('app/api/services/[serviceSlug]/member-products/activity/route.ts');
+    expect(suggestion).toContain('PrismaMemberProductActivityRepository');
+    expect(suggestion).toContain('activityId: activity.id');
+    expect(form).toContain("recordActivity('COPIED')");
+    expect(form).toContain("recordActivity('POSTED')");
+    expect(form).toContain('SNSへの投稿完了を記録');
+    expect(activity).toContain('actorUserId: actor.userId');
+    expect(activity).toContain('service.serviceId');
+    expect(route).toContain('recordMemberProductActivityResponse');
+    expect(activity).not.toContain('url:');
+  });
+
+  it('shows a member only their product-scoped activity summary', () => {
+    const page = source('app/s/[serviceSlug]/tracking-link/page.tsx');
+    expect(page).toContain('listMemberSummary(scope)');
+    expect(page).toContain('商品別の活動');
+    expect(page).toContain('trackingUrlUsedCount');
+  });
+
+  it('shows content managers aggregate counts without participant copy text', () => {
+    const page = source('app/s/[serviceSlug]/manage/product-packs/page.tsx');
+    expect(page).toContain("resolveManagedServiceContext(serviceSlug, actor.userId, 'CONTENT')");
+    expect(page).toContain('listServiceSummary(scope)');
+    expect(page).toContain('商品別の参加者活動');
+    expect(page).toContain('参加者個人の投稿本文を表示せず');
+  });
 });

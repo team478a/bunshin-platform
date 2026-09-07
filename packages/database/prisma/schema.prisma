@@ -949,6 +949,17 @@ enum ExternalTrackingAuditAction {
   ARCHIVED
 }
 
+enum MemberProductContentPlatform {
+  INSTAGRAM
+  X
+  THREADS
+}
+
+enum MemberProductContentEventType {
+  COPIED
+  POSTED
+}
+
 enum ExternalLinkPlacementTarget {
   BODY
   CAPTION
@@ -2623,6 +2634,7 @@ model ProductPack {
   externalTrackingLinks ExternalTrackingLink[]
   contentLinkUsages     ContentLinkUsage[]
   memberProductProfiles MemberProductProfile[]
+  memberProductContentRuns MemberProductContentRun[]
 
   @@unique([workspaceId, groupId, name])
   @@index([workspaceId, status])
@@ -3571,6 +3583,7 @@ model ExternalTrackingLink {
   updatedBy             User                            @relation("ExternalTrackingLinkUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   contentLinkUsages     ContentLinkUsage[]
   memberProductProfiles MemberProductProfile[]
+  memberProductContentRuns MemberProductContentRun[]
 
   @@index([workspaceId, groupId, status])
   @@index([systemId, scopeKey, status])
@@ -3620,11 +3633,55 @@ model MemberProductProfile {
   user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   externalTrackingLink   ExternalTrackingLink @relation(fields: [externalTrackingLinkId], references: [id], onDelete: Cascade)
   productPack            ProductPack?         @relation(fields: [productPackId], references: [id], onDelete: SetNull)
+  contentRuns            MemberProductContentRun[]
 
+  @@unique([workspaceId, groupId, groupMembershipId, userId, id], map: "member_product_profiles_scope_id_key")
   @@index([workspaceId, groupId, groupMembershipId, archivedAt, updatedAt])
   @@index([externalTrackingLinkId, updatedAt])
   @@index([productPackId, updatedAt])
   @@map("member_product_profiles")
+}
+
+model MemberProductContentRun {
+  id                     String                       @id @default(uuid()) @db.Uuid
+  workspaceId            String                       @map("workspace_id") @db.Uuid
+  groupId                String                       @map("group_id") @db.Uuid
+  groupMembershipId      String                       @map("group_membership_id") @db.Uuid
+  userId                 String                       @map("user_id") @db.Uuid
+  profileId              String                       @map("profile_id") @db.Uuid
+  bunshinId              String                       @map("bunshin_id") @db.Uuid
+  externalTrackingLinkId String                       @map("external_tracking_link_id") @db.Uuid
+  productPackId          String?                      @map("product_pack_id") @db.Uuid
+  platform               MemberProductContentPlatform
+  candidateCount         Int                          @map("candidate_count")
+  operationKey           String                       @map("operation_key") @db.VarChar(160)
+  createdAt              DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  profile                MemberProductProfile         @relation(fields: [workspaceId, groupId, groupMembershipId, userId, profileId], references: [workspaceId, groupId, groupMembershipId, userId, id], onDelete: Cascade, map: "member_product_content_runs_profile_fkey")
+  bunshin                Bunshin                      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  externalTrackingLink   ExternalTrackingLink         @relation(fields: [externalTrackingLinkId], references: [id], onDelete: Restrict)
+  productPack            ProductPack?                 @relation(fields: [productPackId], references: [id], onDelete: SetNull)
+  events                 MemberProductContentEvent[]
+
+  @@unique([groupMembershipId, operationKey], map: "member_product_content_runs_membership_operation_key")
+  @@index([workspaceId, groupId, groupMembershipId, profileId, createdAt], map: "member_product_content_runs_scope_profile_created_idx")
+  @@index([workspaceId, groupId, productPackId, createdAt], map: "member_product_content_runs_scope_product_created_idx")
+  @@index([externalTrackingLinkId, createdAt], map: "member_product_content_runs_link_created_idx")
+  @@map("member_product_content_runs")
+}
+
+model MemberProductContentEvent {
+  id             String                        @id @default(uuid()) @db.Uuid
+  contentRunId   String                        @map("content_run_id") @db.Uuid
+  type           MemberProductContentEventType
+  candidateIndex Int                           @map("candidate_index")
+  operationKey   String                        @map("operation_key") @db.VarChar(160)
+  occurredAt     DateTime                      @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  contentRun     MemberProductContentRun       @relation(fields: [contentRunId], references: [id], onDelete: Cascade)
+
+  @@unique([contentRunId, type, candidateIndex], map: "member_product_content_events_run_type_candidate_key")
+  @@unique([contentRunId, operationKey], map: "member_product_content_events_run_operation_key")
+  @@index([contentRunId, occurredAt], map: "member_product_content_events_run_occurred_idx")
+  @@map("member_product_content_events")
 }
 
 model CampaignSimilarityReview {
@@ -4912,6 +4969,7 @@ model Bunshin {
   achievementBadges               AchievementBadge[]
   badgeAwards                     BadgeAward[]                     @relation("BadgeAwardSourceBunshin")
   videoProjects                   VideoProject[]
+  memberProductContentRuns        MemberProductContentRun[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
