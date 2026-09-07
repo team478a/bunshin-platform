@@ -1,9 +1,9 @@
 import 'server-only';
 import type { VideoProjectRecord, VideoRenderProviderPort } from '@bunshin/application';
 import { assertSupportedVideoComposition } from '@bunshin/application';
+import { isAllowedCreatomateOutputUrl } from '../video/creatomate-output-url';
 
 const API_BASE_URL = 'https://api.creatomate.com/v2';
-const OUTPUT_HOST = 'cdn.creatomate.com';
 
 type Fetch = typeof fetch;
 
@@ -191,7 +191,7 @@ function safeOutputUrl(value: unknown) {
   } catch {
     throw new VideoRenderProviderError('INVALID_RESPONSE', false);
   }
-  if (url.protocol !== 'https:' || url.hostname !== OUTPUT_HOST || url.username || url.password)
+  if (!isAllowedCreatomateOutputUrl(url))
     throw new VideoRenderProviderError('INVALID_RESPONSE', false);
   return url.toString();
 }

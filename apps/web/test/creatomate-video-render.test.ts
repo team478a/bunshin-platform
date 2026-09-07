@@ -205,6 +205,23 @@ describe('Creatomate video render adapter', () => {
     });
   });
 
+  it('accepts the Creatomate-managed Backblaze delivery URL used by trial renders', async () => {
+    const request = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'render-123',
+          status: 'succeeded',
+          url: 'https://f002.backblazeb2.com/file/creatomate-example/render-123.mp4',
+        }),
+      ),
+    );
+    await expect(
+      new CreatomateVideoRenderAdapter('secret', request).inspect({
+        externalJobId: 'render-123',
+      }),
+    ).resolves.toMatchObject({ status: 'SUCCEEDED' });
+  });
+
   it('rejects an unexpected output host', async () => {
     const request = vi
       .fn()

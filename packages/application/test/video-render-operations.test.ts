@@ -3,6 +3,7 @@ import {
   GetVideoRenderOperations,
   RequestVideoSceneGenerationRetry,
   RequestVideoRenderRetry,
+  VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES,
   type VideoRenderOperationsRepository,
 } from '../src/index';
 
@@ -13,6 +14,10 @@ const repository = (): VideoRenderOperationsRepository => ({
 });
 
 describe('video render operations', () => {
+  it('allows an operator to retry after correcting render configuration', () => {
+    expect(VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES).toContain('VIDEO_RENDER_CONFIGURATION');
+  });
+
   it('returns the current-environment snapshot', async () => {
     const snapshot = {
       counts: { QUEUED: 1 } as never,

@@ -5,6 +5,7 @@ import type { VideoCompletionNotificationStatus } from './video-render-completio
 
 export const VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES = [
   'PROVIDER_TIMEOUT',
+  'VIDEO_RENDER_CONFIGURATION',
   'CREATOMATE_RATE_LIMIT',
   'CREATOMATE_TIMEOUT_OR_NETWORK',
   'CREATOMATE_PROVIDER_ERROR',
