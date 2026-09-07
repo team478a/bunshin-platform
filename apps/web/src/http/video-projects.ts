@@ -26,6 +26,7 @@ import {
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { assertPrivateVideoStorageConfiguration } from '../video/video-storage-configuration';
 import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { currentLineEnvironment } from '../line/secure-configuration';
@@ -309,6 +310,7 @@ export async function queueVideoRenderResponse(
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const input = renderSchema.parse(await request.json());
     await resolveCreatomateRuntimeConfiguration();
+    assertPrivateVideoStorageConfiguration();
     const db = await import('@bunshin/database');
     const render = await new QueueVideoRender(new db.PrismaVideoRenderRepository()).execute({
       workspaceId: uuid.parse(workspaceId),

@@ -3,10 +3,10 @@ import type { VideoRenderOutputStoragePort } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { isAllowedCreatomateOutputUrl } from './creatomate-output-url';
 
 const BUCKET = 'video-renders';
 const MAX_BYTES = 100_000_000;
-const ALLOWED_SOURCE_HOST = 'cdn.creatomate.com';
 
 function client() {
   const environment = getServerEnvironment();
@@ -25,13 +25,7 @@ function sourceUrl(value: string) {
   } catch {
     throw new ApplicationError('VALIDATION_ERROR', '完成動画のURLが不正です');
   }
-  if (
-    parsed.protocol !== 'https:' ||
-    parsed.hostname !== ALLOWED_SOURCE_HOST ||
-    parsed.username ||
-    parsed.password ||
-    parsed.hash
-  )
+  if (!isAllowedCreatomateOutputUrl(parsed))
     throw new ApplicationError('VALIDATION_ERROR', '完成動画のURLが許可されていません');
   return parsed.toString();
 }

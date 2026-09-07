@@ -67,4 +67,19 @@ describe('video render output storage', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(request).not.toHaveBeenCalled();
   });
+
+  it('downloads an MP4 from Creatomate managed Backblaze storage', async () => {
+    const fake = storageClient();
+    const bytes = new Uint8Array([0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, { status: 200 })));
+    await expect(
+      new SupabaseVideoRenderOutputStorage(fake.value as never).store({
+        workspaceId: 'workspace',
+        groupId: 'group',
+        ownerUserId: 'owner',
+        renderId: 'render',
+        sourceUrl: 'https://f002.backblazeb2.com/file/creatomate-example/render-123.mp4',
+      }),
+    ).resolves.toEqual({ storageKey: 'workspace/owner/render.mp4' });
+  });
 });
