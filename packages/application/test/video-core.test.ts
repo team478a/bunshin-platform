@@ -95,6 +95,35 @@ describe('Video Core', () => {
     ).resolves.toMatchObject({ id: ids.videoProjectId, groupId: ids.groupId });
   });
 
+  it('requires one to five unique photos for a photo slideshow', async () => {
+    const value = repository();
+    const input: Parameters<VideoProjectRepository['create']>[0] = {
+      ...ids,
+      campaignId: null,
+      characterProfileVersionId: null,
+      title: '写真動画',
+      platform: 'INSTAGRAM' as const,
+      type: 'PHOTO_SLIDESHOW' as const,
+      durationSeconds: 30 as const,
+      standardComposition: true,
+      aiProcessingTypes: ['SCRIPT_GENERATION'],
+      disclosureSnapshot: {},
+    };
+    await expect(new CreateVideoProject(value).execute(input)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    await new CreateVideoProject(value).execute({
+      ...input,
+      photoAssetIds: ['77777777-7777-4777-8777-777777777777'],
+    });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(value.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        photoAssetIds: ['77777777-7777-4777-8777-777777777777'],
+      }),
+    );
+  });
+
   it('does not reveal a project outside the caller scope', async () => {
     const value = repository({ findOwned: vi.fn().mockResolvedValue(null) });
     await expect(
@@ -123,6 +152,15 @@ describe('Video Core', () => {
       aiProcessingTypes: ['VIDEO_GENERATION'],
     };
     input.aiVideoSceneCount = 1;
+    await expect(new ReplaceVideoPlan(repository()).execute(input)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('rejects narration that cannot fit its scene when voice synthesis is requested', async () => {
+    const input = planInput();
+    input.projectAiProcessingTypes = ['SCRIPT_GENERATION', 'VOICE_SYNTHESIS'];
+    input.scenes[0]!.narration = 'あ'.repeat(19);
     await expect(new ReplaceVideoPlan(repository()).execute(input)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });

@@ -4,13 +4,14 @@ import { ApplicationError } from '@bunshin/shared';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export type AssetLifecycleBucket =
-  'social-image-media' | 'video-assets' | 'video-renders' | 'video-ai-scenes';
+  'social-image-media' | 'video-assets' | 'video-renders' | 'video-ai-scenes' | 'video-narrations';
 
 const buckets = new Set<AssetLifecycleBucket>([
   'social-image-media',
   'video-assets',
   'video-renders',
   'video-ai-scenes',
+  'video-narrations',
 ]);
 
 function client() {

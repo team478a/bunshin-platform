@@ -56,7 +56,7 @@ const project = (): VideoProjectRecord => ({
 });
 
 describe('Creatomate video render adapter', () => {
-  it.each(['USER_ASSET', 'APPROVED_ASSET', 'STOCK_IMAGE', 'GENERATED_IMAGE'] as const)(
+  it.each(['APPROVED_ASSET', 'STOCK_IMAGE', 'GENERATED_IMAGE'] as const)(
     'rejects unsupported %s instead of silently rendering a blank background',
     (visualType) => {
       const value = project();
@@ -67,7 +67,44 @@ describe('Creatomate video render adapter', () => {
   it('rejects a voice promise before submitting a silent video', () => {
     const value = project();
     value.aiProcessingTypes = ['VOICE_SYNTHESIS'];
-    expect(() => buildCreatomateRenderScript(value)).toThrow('写真・音声');
+    expect(() => buildCreatomateRenderScript(value)).toThrow(VideoRenderProviderError);
+  });
+  it('composes an owned photo and generated narration from short-lived URLs', () => {
+    const value = project();
+    const firstScene = value.scenes[0]!;
+    value.photoAssetIds = ['30000000-0000-4000-8000-000000000001'];
+    value.narrationEnabled = true;
+    value.aiProcessingTypes = ['SCRIPT_GENERATION', 'VOICE_SYNTHESIS'];
+    value.scenes[0] = {
+      ...firstScene,
+      visualType: 'USER_ASSET',
+      keywords: [value.photoAssetIds[0]!],
+    };
+    const script = buildCreatomateRenderScript(
+      value,
+      [],
+      [{ videoSceneId: firstScene.id, url: 'https://storage.example/photo.jpg?token=short' }],
+      'https://storage.example/narration.wav?token=short',
+    );
+    expect(script.elements).toContainEqual(
+      expect.objectContaining({
+        type: 'image',
+        source: 'https://storage.example/photo.jpg?token=short',
+      }),
+    );
+    expect(script.elements).toContainEqual(
+      expect.objectContaining({
+        type: 'audio',
+        source: 'https://storage.example/narration.wav?token=short',
+      }),
+    );
+    expect(script.elements).toContainEqual(expect.objectContaining({ text: 'AI音声' }));
+  });
+
+  it('fails closed when an owned-photo scene has no signed source', () => {
+    const value = project();
+    value.scenes[0] = { ...value.scenes[0]!, visualType: 'USER_ASSET' };
+    expect(() => buildCreatomateRenderScript(value)).toThrow(VideoRenderProviderError);
   });
   it('maps an approved standard plan to a vertical RenderScript without personal metadata', () => {
     const script = buildCreatomateRenderScript(project());

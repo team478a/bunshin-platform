@@ -10,18 +10,22 @@ export function VideoProjectCreator({
   bunshins,
   campaigns,
   characters,
+  photos = [],
 }: {
   workspaceId: string;
   groupId: string;
   groupMembershipId: string;
   bunshins: Array<{ id: string; name: string }>;
   campaigns: Array<{ id: string; name: string }>;
+  photos?: Array<{ id: string; originalFilename: string }>;
   characters: Array<{ id: string; name: string; version: number; referenceCount: number }>;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [compositionMode, setCompositionMode] = useState<'STANDARD' | 'AI_SCENES'>('STANDARD');
+
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,6 +50,8 @@ export function VideoProjectCreator({
             type: values.get('type'),
             durationSeconds,
             compositionMode,
+            photoAssetIds: compositionMode === 'STANDARD' ? selectedPhotos : [],
+            narrationEnabled: values.get('narrationEnabled') === 'on',
           }),
         },
       );
@@ -113,6 +119,12 @@ export function VideoProjectCreator({
           <select className="field__control" name="type" defaultValue="EXPLAINER">
             <option value="EXPLAINER">わかりやすく説明する</option>
             <option value="PRODUCT_INTRODUCTION">商品を紹介する</option>
+            <option
+              value="PHOTO_SLIDESHOW"
+              disabled={compositionMode !== 'STANDARD' || selectedPhotos.length === 0}
+            >
+              写真を順番に見せる
+            </option>
           </select>
         </label>
         <label className="field">
@@ -129,7 +141,7 @@ export function VideoProjectCreator({
             value={compositionMode}
             onChange={(event) => setCompositionMode(event.target.value as 'STANDARD' | 'AI_SCENES')}
           >
-            <option value="STANDARD">字幕動画（背景と文字・音声なし）</option>
+            <option value="STANDARD">写真・字幕動画</option>
             <option value="AI_SCENES" disabled={characters.length === 0}>
               AI動画を使う（場面ごとにAIで動画を作る）
             </option>
@@ -139,6 +151,42 @@ export function VideoProjectCreator({
               AIキャラクターと基準画像を選びます。生成は承認後に始まり、設定した上限内だけで実行されます。
             </small>
           ) : null}
+        </label>
+        {compositionMode === 'STANDARD' ? (
+          <fieldset>
+            <legend>使う写真（任意・5枚まで）</legend>
+            <p>チェックした順に表示します。場面数より少ない場合は同じ順で繰り返します。</p>
+            {photos.length === 0 ? (
+              <p>動画一覧の「写真・動画・ロゴを管理」から写真を追加できます。</p>
+            ) : null}
+            {photos.map((photo) => (
+              <label key={photo.id} className="field">
+                <input
+                  type="checkbox"
+                  checked={selectedPhotos.includes(photo.id)}
+                  disabled={selectedPhotos.length >= 5 && !selectedPhotos.includes(photo.id)}
+                  onChange={(event) =>
+                    setSelectedPhotos((previous) =>
+                      event.target.checked
+                        ? [...previous, photo.id]
+                        : previous.filter((id) => id !== photo.id),
+                    )
+                  }
+                />
+                {selectedPhotos.includes(photo.id)
+                  ? `${selectedPhotos.indexOf(photo.id) + 1}番目：`
+                  : ''}
+                {photo.originalFilename}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+        <label className="field">
+          <input type="checkbox" name="narrationEnabled" />
+          AIナレーションを付ける
+          <small>
+            確認した台本をOpenAIへ送り、AI音声を作ります。動画内にも「AI音声」と表示します。音声生成もAI利用回数に含まれます。
+          </small>
         </label>
         <label className="field">
           <span className="field__label">紹介する企画（任意）</span>

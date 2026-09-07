@@ -1,3 +1,4 @@
+import { authorizedVideoPhotos } from './video-photos';
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
 import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -6470,6 +6471,8 @@ export class PrismaAccountDeletionPurgeRepository implements AccountDeletionPurg
           where: mediaOwner,
           data: {
             title: '退会済みデータ',
+            photoAssetIds: [],
+            narrationEnabled: false,
             status: 'CANCELLED',
             characterProfileSnapshot: {},
             characterReferenceSnapshot: [],
@@ -15353,6 +15356,17 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         };
         characterReferenceSnapshot = references;
       }
+      await authorizedVideoPhotos(
+        tx,
+        {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          groupMembershipId: input.groupMembershipId,
+          ownerUserId: input.actorUserId,
+        },
+        input.photoAssetIds ?? [],
+        now,
+      );
       const row = await tx.videoProject.create({
         data: {
           ...(input.id ? { id: input.id } : {}),
@@ -15369,6 +15383,8 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           platform: input.platform,
           type: input.type,
           durationSeconds: input.durationSeconds,
+          photoAssetIds: input.photoAssetIds ?? [],
+          narrationEnabled: input.narrationEnabled ?? false,
           standardComposition: input.standardComposition,
           aiProcessingTypes: input.aiProcessingTypes,
           disclosureSnapshot: input.disclosureSnapshot as Prisma.InputJsonValue,
@@ -15451,9 +15467,25 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
             },
           },
         },
-        select: { id: true, durationSeconds: true },
+        select: {
+          id: true,
+          durationSeconds: true,
+          photoAssetIds: true,
+          narrationEnabled: true,
+        },
       });
       if (!project) return null;
+      if (
+        input.scenes.some((scene, index) =>
+          project.photoAssetIds.length > 0
+            ? scene.visualType !== 'USER_ASSET' ||
+              scene.keywords[0] !== project.photoAssetIds[index % project.photoAssetIds.length]
+            : scene.visualType === 'USER_ASSET',
+        )
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'selected photos do not match the plan');
+      if (!project.narrationEnabled && input.projectAiProcessingTypes.includes('VOICE_SYNTHESIS'))
+        throw new ApplicationError('VALIDATION_ERROR', 'narration consent required');
       const totalMs = input.scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
       if (totalMs !== project.durationSeconds * 1_000) return null;
       await tx.videoScene.deleteMany({ where: { videoProjectId: project.id } });
@@ -16122,6 +16154,7 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
         include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       if (!project) return null;
+      await authorizedVideoPhotos(tx, project, project.photoAssetIds ?? [], now);
       assertSupportedVideoComposition(videoProjectRecord(project));
       const aiScenes = project.scenes.filter(
         (scene) =>
@@ -16221,10 +16254,29 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
     );
     if (!row.project.standardComposition && aiSceneSources.length !== aiSceneIds.length)
       return null;
+    const photos =
+      row.status === 'QUEUED'
+        ? await authorizedVideoPhotos(this.client, row, row.project.photoAssetIds ?? [])
+        : [];
+    const photoSceneSources =
+      row.status === 'QUEUED'
+        ? row.project.scenes
+            .filter((scene) => scene.visualType === 'USER_ASSET')
+            .map((scene) => {
+              const photo = photos.find((item) => item.id === (scene.keywords as string[])[0]);
+              if (!photo)
+                throw new ApplicationError(
+                  'VALIDATION_ERROR',
+                  '写真を選び直して企画を再作成してください。',
+                );
+              return { videoSceneId: scene.id, storageKey: photo.storageKey };
+            })
+        : [];
     return {
       render: videoRenderRecord(row),
       project: videoProjectRecord(row.project),
       aiSceneSources,
+      photoSceneSources,
     };
   }
 

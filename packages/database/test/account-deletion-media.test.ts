@@ -19,6 +19,7 @@ function fixture() {
     },
     ownerKnowledge: model(),
     bunshin: model(),
+    videoNarration: model(),
     videoProject: model(),
     videoAsset: model(),
     videoRender: model(),

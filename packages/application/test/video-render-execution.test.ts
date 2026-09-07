@@ -91,6 +91,7 @@ describe('video render execution', () => {
       renderId,
       project: expect.objectContaining({ id: render().videoProjectId }),
       aiSceneSources: [],
+      photoSceneSources: [],
       webhookUrl: 'https://app.example/webhook',
     });
     expect(values.markSubmitted).toHaveBeenCalledWith({
@@ -195,6 +196,60 @@ describe('video render execution', () => {
           {
             videoSceneId: aiScene.id,
             url: 'https://storage.example/private/scene.mp4?short=1',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('uses a short-lived URL for each authorized photo only when composition starts', async () => {
+    const values = repository(render());
+    const photoScene = {
+      id: '99999999-9999-4999-8999-999999999999',
+      videoProjectId: render().videoProjectId,
+      sceneNo: 1,
+      durationMs: 30_000,
+      narration: '説明',
+      caption: '画面',
+      visualType: 'USER_ASSET' as const,
+      visualPrompt: null,
+      keywords: ['88888888-8888-4888-8888-888888888888'],
+      aiProcessingTypes: [],
+      locked: false,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    values.findForExecution = vi.fn().mockResolvedValue({
+      render: render(),
+      project: { ...project(), scenes: [photoScene] },
+      aiSceneSources: [],
+      photoSceneSources: [
+        { videoSceneId: photoScene.id, storageKey: 'video-assets/workspace/owner/photo.jpg' },
+      ],
+    });
+    const provider = {
+      submit: vi.fn().mockResolvedValue({ externalJobId: 'job' }),
+      inspect: vi.fn(),
+    };
+    const photos = {
+      createUrl: vi.fn().mockResolvedValue('https://storage.example/photo.jpg?short=1'),
+    };
+    await new ExecuteVideoRenderStep(
+      values,
+      provider,
+      { store: vi.fn() },
+      { createUrl: vi.fn().mockResolvedValue('https://app.example/webhook') },
+      { createUrl: vi.fn() },
+      photos,
+    ).execute({ workspaceId, renderId });
+    expect(photos.createUrl).toHaveBeenCalledWith('video-assets/workspace/owner/photo.jpg');
+    expect(provider.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoSceneSources: [
+          {
+            videoSceneId: photoScene.id,
+            url: 'https://storage.example/photo.jpg?short=1',
           },
         ],
       }),

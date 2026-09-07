@@ -42,6 +42,8 @@ export interface VideoSceneRecord {
 }
 
 export interface VideoProjectRecord {
+  photoAssetIds?: string[];
+  narrationEnabled?: boolean;
   id: string;
   workspaceId: string;
   groupId: string;
@@ -69,6 +71,8 @@ export interface VideoProjectRecord {
 
 export interface VideoProjectRepository {
   create(input: {
+    photoAssetIds?: string[];
+    narrationEnabled?: boolean;
     id?: string;
     workspaceId: string;
     groupId: string;
@@ -177,6 +181,7 @@ export interface VideoRenderExecutionContext {
   render: VideoRenderRecord;
   project: VideoProjectRecord;
   aiSceneSources: Array<{ videoSceneId: string; storageKey: string }>;
+  photoSceneSources?: Array<{ videoSceneId: string; storageKey: string }>;
 }
 
 export interface VideoSceneRenderSourcePort {
@@ -188,6 +193,8 @@ export interface VideoRenderProviderPort {
     renderId: string;
     project: VideoProjectRecord;
     aiSceneSources: Array<{ videoSceneId: string; url: string }>;
+    photoSceneSources?: Array<{ videoSceneId: string; url: string }>;
+    narrationUrl?: string;
     webhookUrl: string;
   }): Promise<{ externalJobId: string }>;
   inspect(input: {
@@ -329,8 +336,20 @@ export class CreateVideoProject {
   async execute(input: Parameters<VideoProjectRepository['create']>[0]) {
     if (![30, 60].includes(input.durationSeconds))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid durationSeconds');
+    const photoAssetIds = (input.photoAssetIds ?? []).map((value) => id(value, 'photoAssetId'));
+    if (
+      photoAssetIds.length > 5 ||
+      new Set(photoAssetIds).size !== photoAssetIds.length ||
+      (!input.standardComposition && photoAssetIds.length > 0) ||
+      (input.type === 'PHOTO_SLIDESHOW' && photoAssetIds.length === 0)
+    )
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        '写真動画は標準動画で1〜5枚の写真を選択してください。',
+      );
     const value = await this.repository.create({
       ...input,
+      photoAssetIds,
       ...(input.id ? { id: id(input.id, 'id') } : {}),
       workspaceId: id(input.workspaceId, 'workspaceId'),
       groupId: id(input.groupId, 'groupId'),
@@ -368,12 +387,12 @@ export function isSupportedVideoComposition(input: {
   scenes: Array<{ visualType: string; aiProcessingTypes: string[] }>;
   aiProcessingTypes: string[];
 }) {
-  const supported = new Set(['SCRIPT_GENERATION', 'VIDEO_GENERATION']);
+  const supported = new Set(['SCRIPT_GENERATION', 'VIDEO_GENERATION', 'VOICE_SYNTHESIS']);
   return (
     input.aiProcessingTypes.every((type) => supported.has(type)) &&
     input.scenes.every(
       (scene) =>
-        ['TEXT_MOTION', 'AI_VIDEO'].includes(scene.visualType) &&
+        ['TEXT_MOTION', 'AI_VIDEO', 'USER_ASSET'].includes(scene.visualType) &&
         scene.aiProcessingTypes.every((type) => supported.has(type)),
     )
   );
@@ -433,9 +452,15 @@ export class ReplaceVideoPlan {
         (!visualPrompt || ![5_000, 10_000].includes(scene.durationMs))
       )
         throw new ApplicationError('VALIDATION_ERROR', 'invalid AI video scene');
+      const narration = text(scene.narration, 'narration', 2_000);
+      if (
+        input.projectAiProcessingTypes.includes('VOICE_SYNTHESIS') &&
+        Array.from(narration).length > Math.floor((scene.durationMs / 1_000) * 3)
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'narration exceeds the scene duration');
       return {
         ...scene,
-        narration: text(scene.narration, 'narration', 2_000),
+        narration,
         caption: text(scene.caption, 'caption', 240),
         visualPrompt,
         keywords: [...new Set(scene.keywords.map((keyword) => text(keyword, 'keyword', 80)))].slice(
@@ -509,6 +534,7 @@ export class ExecuteVideoRenderStep {
     private readonly storage: VideoRenderOutputStoragePort,
     private readonly webhook: VideoRenderWebhookPort,
     private readonly sceneSources: VideoSceneRenderSourcePort,
+    private readonly photoSources?: VideoSceneRenderSourcePort,
   ) {}
 
   async execute(input: {
@@ -537,10 +563,21 @@ export class ExecuteVideoRenderStep {
           url: await this.sceneSources.createUrl(source.storageKey),
         })),
       );
+      const photoSceneSources = await Promise.all(
+        (value.photoSceneSources ?? []).map(async (source) => {
+          if (!this.photoSources)
+            throw new ApplicationError('CONFIGURATION_ERROR', 'photo source unavailable');
+          return {
+            videoSceneId: source.videoSceneId,
+            url: await this.photoSources.createUrl(source.storageKey),
+          };
+        }),
+      );
       const submitted = await this.provider.submit({
         renderId: render.id,
         project: value.project,
         aiSceneSources,
+        photoSceneSources,
         webhookUrl,
       });
       const updated = await this.repository.markSubmitted({
@@ -628,8 +665,20 @@ export class GenerateVideoPlan {
     const saved = await new ReplaceVideoPlan(this.projects).execute({
       ...scope,
       expectedRevision: input.expectedRevision,
-      scenes: generated.output.scenes.map((scene) => ({ ...scene, locked: false })),
-      projectAiProcessingTypes: generated.output.projectAiProcessingTypes,
+      scenes: generated.output.scenes.map((scene, index) => ({
+        ...scene,
+        locked: false,
+        ...(project.photoAssetIds?.length
+          ? {
+              visualType: 'USER_ASSET' as const,
+              keywords: [project.photoAssetIds[index % project.photoAssetIds.length]!],
+            }
+          : {}),
+      })),
+      projectAiProcessingTypes: [
+        ...generated.output.projectAiProcessingTypes,
+        ...(project.narrationEnabled ? ['VOICE_SYNTHESIS' as const] : []),
+      ],
       standardComposition: project.standardComposition,
       aiVideoSceneCount: generated.output.scenes.filter((scene) => scene.visualType === 'AI_VIDEO')
         .length,

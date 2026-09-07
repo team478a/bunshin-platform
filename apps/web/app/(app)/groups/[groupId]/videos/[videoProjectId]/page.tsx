@@ -201,7 +201,9 @@ export default async function VideoProjectPage({
         <section className="settings-card">
           <h2>企画と台本を作る</h2>
           <p>分身の目的・届けたい相手・話し方と、使える素材をもとにAIが提案します。</p>
-          <p>標準動画は背景と字幕で作ります。写真の合成と音声は準備中です。</p>
+          <p>
+            選択した写真または背景と字幕を合成します。音声を有効にした場合はAIナレーションを追加します。
+          </p>
           <VideoPlanGenerator
             workspaceId={project.workspaceId}
             groupId={project.groupId}
@@ -221,7 +223,11 @@ export default async function VideoProjectPage({
                 </a>
               </p>
             ) : null}
-            <p>下の順番と画面に出す文字を確認してください。参考台本は音声として出力されません。</p>
+            <p>
+              {project.narrationEnabled
+                ? '下の順番、字幕、読み上げる台本を確認してください。AI音声で読み上げます。'
+                : '下の順番と字幕を確認してください。音声は付けません。'}
+            </p>
             <p>この画面では動画本体はまだ作りません。</p>
           </section>
           {project.scenes.map((scene) => (
@@ -230,7 +236,9 @@ export default async function VideoProjectPage({
                 {scene.sceneNo}番目（{Math.round(scene.durationMs / 1000)}秒）
               </h2>
               <p>
-                <strong>参考台本（音声出力なし）：</strong>
+                <strong>
+                  {project.narrationEnabled ? 'AI音声で読み上げる台本：' : '参考台本（音声なし）：'}
+                </strong>
                 {scene.narration}
               </p>
               <p>
@@ -381,7 +389,9 @@ export default async function VideoProjectPage({
           {project.status === 'FAILED' ? (
             <section className="settings-card">
               <h2>動画を完成できませんでした</h2>
-              <p>設定または外部サービスの状態を管理者が確認します。</p>
+              <p>
+                写真の保存期限や台本の長さを確認してください。音声生成に失敗した場合は、自動で再生成せず停止します。動画一覧から企画を新しく作成できます。
+              </p>
             </section>
           ) : null}
         </>
