@@ -26,12 +26,10 @@ import { videoCompletionMessaging } from '../src/line/video-completion-messaging
 import { GET } from '../app/api/media/video-cover/route';
 
 const createMessaging = (context: VideoRenderCompletionContext) =>
-  videoCompletionMessaging(
-    context,
-    async () =>
-      ({
-        prisma: { videoRender: { findFirst: fake.findFirst, updateMany: fake.updateMany } },
-      }) as never,
+  videoCompletionMessaging(context, () =>
+    Promise.resolve({
+      prisma: { videoRender: { findFirst: fake.findFirst, updateMany: fake.updateMany } },
+    } as never),
   );
 
 const id = '11111111-1111-4111-8111-111111111111';
