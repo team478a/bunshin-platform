@@ -11,6 +11,7 @@ import {
   VIDEO_AI_SCENE_GENERATION_JOB_TYPE,
   VIDEO_RENDER_JOB_TYPE,
   isAiVideoScene,
+  assertSupportedVideoComposition,
   type JobEnvironment,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
@@ -374,6 +375,7 @@ export async function queueVideoAiScenesResponse(
     if (!project) throw new ApplicationError('NOT_FOUND', 'video project not found');
     if (project.revision !== input.expectedRevision)
       throw new ApplicationError('CONFLICT', 'video project revision conflict');
+    assertSupportedVideoComposition(project);
     await assertOrganizationGenerationQuota({
       workspaceId: parsedWorkspaceId,
       kind: 'VIDEO',
