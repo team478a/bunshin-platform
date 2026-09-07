@@ -14,6 +14,7 @@ const context: VideoRenderCompletionContext = {
   ownerUserId: '55555555-5555-4555-8555-555555555555',
   videoProjectId: '66666666-6666-4666-8666-666666666666',
   projectTitle: '紹介動画',
+  completedAt: new Date(),
   notificationStatus: 'PENDING',
   notificationAttemptCount: 0,
 };
@@ -25,6 +26,34 @@ const repository = (overrides: Partial<VideoRenderCompletionRepository> = {}) =>
 });
 
 describe('video render completion', () => {
+  it('stops before the provider retry key expires, even after an interrupted first attempt', async () => {
+    const recordNotification = vi.fn(() => Promise.resolve(true));
+    const getActive = vi.fn();
+    const pushVideoCompletion = vi.fn();
+    const completedAt = new Date('2026-09-07T00:00:00Z');
+    const result = await new SendVideoCompletionNotification(
+      repository({ recordNotification }),
+      { getActive },
+      { resolve: vi.fn() },
+      { isAllowed: vi.fn() },
+      { getQuota: vi.fn(), pushVideoCompletion },
+      () => new Date('2026-09-07T23:00:00Z'),
+    ).execute({
+      context: { ...context, completedAt },
+      environment: 'PRODUCTION',
+      reviewUrl: 'https://example.jp/video',
+    });
+    expect(result).toEqual({
+      sent: false,
+      retryable: false,
+      errorCode: 'NOTIFICATION_RETRY_WINDOW_EXPIRED',
+    });
+    expect(getActive).not.toHaveBeenCalled();
+    expect(pushVideoCompletion).not.toHaveBeenCalled();
+    expect(recordNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'CANCELLED' }),
+    );
+  });
   it('finalizes only a valid completed render scope', async () => {
     const finalize = vi.fn(() => Promise.resolve(context));
     const result = await new FinalizeVideoRenderCompletion(repository({ finalize })).execute({
@@ -66,7 +95,9 @@ describe('video render completion', () => {
       reviewUrl: 'https://example.jp/groups/group/videos/project',
     });
     expect(result).toEqual({ sent: true, retryable: false, errorCode: null });
-    expect(pushVideoCompletion).toHaveBeenCalledOnce();
+    expect(pushVideoCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({ retryKey: context.renderId }),
+    );
     expect(recordNotification).toHaveBeenCalledWith(expect.objectContaining({ status: 'SENT' }));
   });
 

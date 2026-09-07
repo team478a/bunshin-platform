@@ -45,7 +45,8 @@ type DeliveryNoticeResult =
   | 'NOT_ALLOWED'
   | 'RECIPIENT_UNAVAILABLE'
   | 'QUOTA_UNAVAILABLE'
-  | 'FAILED';
+  | 'FAILED'
+  | 'RETRY_WINDOW_EXPIRED';
 
 function notificationOutcome(value: DeliveryNoticeResult) {
   if (value === 'SENT') return { status: 'SENT' as const, errorCode: null };
@@ -54,12 +55,15 @@ function notificationOutcome(value: DeliveryNoticeResult) {
 }
 
 async function sendDeliveryNotice(input: {
+  deliveryId: string;
+  createdAt: Date;
   serviceSlug: string;
   workspaceId: string;
   groupId: string;
   ownerUserId: string;
   videoProjectId: string;
 }): Promise<DeliveryNoticeResult> {
+  if (Date.now() - input.createdAt.getTime() >= 23 * 60 * 60 * 1000) return 'RETRY_WINDOW_EXPIRED';
   const db = await import('@bunshin/database');
   const project = await db.prisma.videoProject.findFirst({
     where: {
@@ -116,6 +120,7 @@ async function sendDeliveryNotice(input: {
     recipientId,
     projectTitle: project.title,
     reviewUrl: reviewUrl.toString(),
+    retryKey: input.deliveryId,
   });
   return result.ok ? 'SENT' : 'FAILED';
 }
@@ -291,6 +296,8 @@ export async function assignServiceVideoDeliveryResponse(request: Request, servi
       expiresAt: input.expiresAt === null ? null : new Date(input.expiresAt),
     });
     const notification = await sendDeliveryNotice({
+      deliveryId: delivery.id,
+      createdAt: delivery.createdAt,
       serviceSlug,
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
@@ -333,11 +340,13 @@ export async function retryServiceVideoDeliveryNotificationResponse(
         status: { not: 'REVOKED' },
         notificationStatus: { not: 'SENT' },
       },
-      select: { id: true, ownerUserId: true, videoProjectId: true },
+      select: { id: true, ownerUserId: true, videoProjectId: true, createdAt: true },
     });
     if (!delivery)
       throw new ApplicationError('NOT_FOUND', 'video delivery notification unavailable');
     const notification = await sendDeliveryNotice({
+      deliveryId: delivery.id,
+      createdAt: delivery.createdAt,
       serviceSlug,
       workspaceId: service.workspaceId,
       groupId: service.serviceId,

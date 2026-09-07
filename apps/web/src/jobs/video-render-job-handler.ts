@@ -73,6 +73,7 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
           );
         return result;
       } catch (error) {
+        if (error instanceof VideoRenderJobHandlerError) throw error;
         if (error instanceof VideoRenderProviderError)
           throw new VideoRenderJobHandlerError(`CREATOMATE_${error.category}`, error.retryable);
         if (error instanceof ApplicationError) throw error;
