@@ -9,9 +9,12 @@ const m = vi.hoisted(() => ({
   prepare: vi.fn(),
   enqueue: vi.fn(),
   reminder: vi.fn(),
+  policy: vi.fn(),
+  image: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/database', () => ({
+  prisma: { serviceRegistrationPolicy: { findFirst: m.policy } },
   PrismaMissionAutomationScopeRepository: class {
     resolveScope = m.scope;
   },
@@ -41,6 +44,9 @@ vi.mock('../src/services/weekly-plan-generation', () => ({
 }));
 vi.mock('../src/services/daily-mission-generation', () => ({
   createDailyMissionGenerationService: () => ({ execute: m.daily }),
+}));
+vi.mock('../src/services/automatic-daily-image', () => ({
+  queueAutomaticDailyImage: m.image,
 }));
 vi.mock('../src/services/service-generation-knowledge', () => ({
   loadServiceGenerationKnowledge: m.knowledge,
@@ -83,6 +89,38 @@ describe('service automatic preparation and delivery', () => {
     });
     m.daily.mockResolvedValue({ id: 'mission' });
     m.prepare.mockResolvedValue({ id: 'delivery' });
+    m.policy.mockResolvedValue(null);
+    m.image.mockResolvedValue({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
+  });
+  it('queues an opted-in commercial image before preparing the LINE delivery', async () => {
+    m.policy.mockResolvedValue({
+      onboardingConfig: {
+        dailyIdeaDelivery: {
+          enabled: true,
+          cadence: 'DAILY',
+          defaultNotificationTime: '08:00',
+          lockCadence: true,
+          contentMode: 'READY_TO_USE',
+          mediaMode: 'IMAGE',
+        },
+      },
+      surveyConfig: null,
+    });
+    const mission = {
+      id: 'mission',
+      format: 'IMAGE',
+      assistanceLevel: 'READY_TO_USE',
+      topic: 'topic',
+      angle: 'angle',
+    };
+    m.daily.mockResolvedValue(mission);
+    await createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' });
+    expect(m.image).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: 'service', mission, mediaMode: 'IMAGE' }),
+    );
+    expect(m.image.mock.invocationCallOrder[0]).toBeLessThan(
+      m.prepare.mock.invocationCallOrder[0]!,
+    );
   });
   it('prepares and confirms a missing week, then generates safely and queues LINE without user actions', async () => {
     await createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' });

@@ -48,6 +48,7 @@ describe('service onboarding settings', () => {
             defaultNotificationTime: '09:30',
             lockCadence: true,
             contentMode: 'IDEA',
+            mediaMode: 'IMAGE',
           },
         },
         null,
@@ -60,6 +61,7 @@ describe('service onboarding settings', () => {
         defaultNotificationTime: '09:30',
         lockCadence: true,
         contentMode: 'IDEA',
+        mediaMode: 'IMAGE',
       },
     });
   });
@@ -85,6 +87,14 @@ describe('service onboarding settings', () => {
       readServiceOnboardingSettings({ dailyIdeaDelivery: { contentMode: 'PROMPT' } }, null)
         .dailyIdeaDelivery.contentMode,
     ).toBe('PROMPT');
+  });
+
+  it('keeps automatic image delivery opt-in for existing services', () => {
+    expect(
+      readServiceOnboardingSettings({ dailyIdeaDelivery: { mediaMode: 'IMAGE' } }, null)
+        .dailyIdeaDelivery.mediaMode,
+    ).toBe('IMAGE');
+    expect(readServiceOnboardingSettings({}, null).dailyIdeaDelivery.mediaMode).toBe('TEXT_ONLY');
   });
 
   it('allows each service to disable irrelevant profile questions', () => {

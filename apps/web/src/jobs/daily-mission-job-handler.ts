@@ -13,6 +13,7 @@ import {
   createServiceDailyIdeaFallback,
   shouldUseServiceDailyIdeaFallback,
 } from '../services/service-daily-idea-fallback';
+import { queueAutomaticDailyImage } from '../services/automatic-daily-image';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
@@ -24,6 +25,16 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         bunshinId: job.bunshinId,
         actorUserId: job.requestedBy,
       });
+      const policy = scope.groupId
+        ? await db.prisma.serviceRegistrationPolicy.findFirst({
+            where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+            select: { onboardingConfig: true, surveyConfig: true },
+          })
+        : null;
+      const dailyIdeas = scope.groupId
+        ? readServiceOnboardingSettings(policy?.onboardingConfig, policy?.surveyConfig)
+            .dailyIdeaDelivery
+        : null;
       if (scope.groupId) {
         const plan = await prepareServiceAutomaticWeek({
           ...scope,
@@ -46,15 +57,7 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         });
       } catch (error) {
         if (!scope.groupId || !shouldUseServiceDailyIdeaFallback(error)) throw error;
-        const policy = await db.prisma.serviceRegistrationPolicy.findFirst({
-          where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
-          select: { onboardingConfig: true, surveyConfig: true },
-        });
-        const dailyIdeas = readServiceOnboardingSettings(
-          policy?.onboardingConfig,
-          policy?.surveyConfig,
-        ).dailyIdeaDelivery;
-        if (!dailyIdeas.enabled) throw error;
+        if (!dailyIdeas?.enabled) throw error;
         const assistanceLevel = await resolveServiceContentAssistanceLevel({
           workspaceId: scope.workspaceId,
           groupId: scope.groupId,
@@ -67,6 +70,17 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
           ...(assistanceLevel ? { assistanceLevel } : {}),
         });
       }
+      if (scope.groupId && dailyIdeas?.enabled)
+        await queueAutomaticDailyImage({
+          environment: job.environment,
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          actorUserId: scope.actorUserId,
+          bunshinId: scope.bunshinId,
+          correlationId: job.correlationId,
+          mission,
+          mediaMode: dailyIdeas.mediaMode,
+        });
       const activityRule = await currentActivityContinuityRule();
       const returnReminder = await new db.PrismaLineReturnReminderRepository().shouldUse({
         workspaceId: job.workspaceId,

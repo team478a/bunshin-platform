@@ -68,6 +68,7 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     deepLinkUrl: string;
     summary: LineMissionNotificationSummary;
     kind: LineMessageKind;
+    image?: { originalContentUrl: string; previewImageUrl: string };
   }) {
     if (!input.accessToken.trim()) return httpFailure(401);
     if (!input.recipientId.trim()) return httpFailure(400);
@@ -97,6 +98,15 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
         body: JSON.stringify({
           to: input.recipientId,
           messages: [
+            ...(input.image
+              ? [
+                  {
+                    type: 'image',
+                    originalContentUrl: input.image.originalContentUrl,
+                    previewImageUrl: input.image.previewImageUrl,
+                  },
+                ]
+              : []),
             {
               type: 'text',
               text: [
@@ -119,12 +129,14 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
                 ...(summary.externalLinkIncluded
                   ? ['あなた専用の紹介URLを入れました。URLは確認画面で安全に表示します。']
                   : []),
-                ...(['IMAGE', 'SLIDE'].includes(summary.format)
-                  ? [
-                      '画像は確認画面で作れます。',
-                      'このお知らせを開いただけでは画像づくりは始まりません。',
-                    ]
-                  : []),
+                ...(input.image
+                  ? ['確認用の画像も用意しました。内容を確認してから使ってください。']
+                  : ['IMAGE', 'SLIDE'].includes(summary.format)
+                    ? [
+                        '画像は確認画面で作れます。',
+                        'このお知らせを開いただけでは画像づくりは始まりません。',
+                      ]
+                    : []),
                 '',
                 'くわしく見る',
                 input.deepLinkUrl,

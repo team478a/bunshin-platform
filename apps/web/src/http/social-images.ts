@@ -28,6 +28,10 @@ import { requireSameOrigin } from '../auth/request-security';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
+import {
+  finishServiceMediaGeneration,
+  reserveServiceMediaGeneration,
+} from '../service-media-generation-quota';
 
 const uuid = z.string().uuid();
 const createSchema = z
@@ -125,20 +129,31 @@ export async function createSocialImageResponse(
     });
     await assertOrganizationGenerationQuota({ workspaceId, kind: 'IMAGE' });
     const runtimeConfiguration = await resolveOpenAiRuntimeConfiguration();
-    const serviceCreditUsage = await new ConsumeServiceCreditForSocialImage(serviceCredits).execute(
-      {
-        workspaceId,
-        groupId,
-        groupMembershipId: parsed.groupMembershipId,
-        userId: actor,
-        imageRequestId: created.id,
-        idempotencyKey: `social-image:${created.id}`,
-      },
-    );
+    const serviceMediaReservation = await reserveServiceMediaGeneration({
+      workspaceId,
+      groupId,
+      kind: 'IMAGE',
+      operationKey: created.idempotencyKey,
+    });
+    if (serviceMediaReservation.status === 'EXHAUSTED')
+      throw new ApplicationError('FORBIDDEN', 'monthly image generation limit reached');
+    if (serviceMediaReservation.status === 'ALREADY_CONSUMED')
+      throw new ApplicationError('CONFLICT', 'image generation was already consumed');
+    const planPayment = ['RESERVED', 'ALREADY_RESERVED'].includes(serviceMediaReservation.status);
+    const serviceCreditUsage = planPayment
+      ? ({ status: 'NOT_CONFIGURED' } as const)
+      : await new ConsumeServiceCreditForSocialImage(serviceCredits).execute({
+          workspaceId,
+          groupId,
+          groupMembershipId: parsed.groupMembershipId,
+          userId: actor,
+          imageRequestId: created.id,
+          idempotencyKey: `social-image:${created.id}`,
+        });
     if (serviceCreditUsage.status === 'INSUFFICIENT')
       throw new ApplicationError('FORBIDDEN', 'image credit is unavailable');
     const badgeUsage =
-      serviceCreditUsage.status === 'NOT_CONFIGURED'
+      !planPayment && serviceCreditUsage.status === 'NOT_CONFIGURED'
         ? await new TryConsumeBadgeEntitlement(badgeEntitlements).execute({
             workspaceId,
             userId: actor,
@@ -152,7 +167,7 @@ export async function createSocialImageResponse(
     if (badgeUsage?.status === 'REFUNDED')
       throw new ApplicationError('CONFLICT', 'image entitlement was already refunded');
     let reservation = null;
-    if (serviceCreditUsage.status === 'NOT_CONFIGURED' && !badgeUsage) {
+    if (!planPayment && serviceCreditUsage.status === 'NOT_CONFIGURED' && !badgeUsage) {
       const catalog = await new ListPointRewardCatalog(redemptions).execute({
         workspaceId,
         actorUserId: actor,
@@ -203,7 +218,12 @@ export async function createSocialImageResponse(
         maxAttempts: 5,
       });
     } catch (error) {
-      if (reservation?.status === 'RESERVED') {
+      if (serviceMediaReservation.status === 'RESERVED') {
+        await finishServiceMediaGeneration({
+          reservation: serviceMediaReservation,
+          outcome: 'RELEASED',
+        }).catch(() => undefined);
+      } else if (reservation?.status === 'RESERVED') {
         await new ReleasePointRedemption(redemptions)
           .execute({
             workspaceId,

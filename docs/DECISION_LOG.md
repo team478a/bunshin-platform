@@ -2034,3 +2034,13 @@
 - Generation: 決定したlevelをDaily Mission保存時に使用し、初回Social Profile作成時にも同じlevelを保存する。AI障害時の予備案も同じlevelで表示する。
 - Boundary: 画像・動画本体の自動生成とLINEへの直接送信は別工程とし、今回の変更では開始しない。
 - Source: `docs/WATASHI_WORKS_DELIVERY_PLAN_FOUNDATION_REPORT.md`
+
+## 2026-09-07: 商用Serviceの画像枠はDaily Mission生成後に自動利用できる
+
+- Opt-in: Service管理者が毎日配信の画像添付を有効にした場合だけ対象とする。既存Serviceは本文のみを初期値とする。
+- Eligibility: `READY_TO_USE`の`IMAGE`または`SLIDE` Missionに限定し、Production、同意済みACTIVE Membership、Feature Entitlement、承認済み画像パイロットの既存Gateを維持する。
+- Limit: Service商用設定の月間画像数を予約台帳で先に確保し、同じService・月・Missionの重複消費を防ぐ。画像完成と同じTransactionで消費し、失敗時は解放する。
+- Delivery: 完成画像は`READY_FOR_REVIEW`のまま、短期署名URLをLINEへ確認用画像として添付する。SNSへの自動投稿や画像の自動採用は行わない。
+- Fallback: 画像が処理中ならLINE Jobを再試行し、生成失敗または安全に画像URLを取得できない場合はDaily Mission本文の通知だけを送る。
+- Boundary: 無料一般枠と動画生成は対象外とする。動画Provider接続は既存ロードマップの運営確認条件を維持する。
+- Source: `docs/SERVICE_DAILY_IMAGE_LINE_DELIVERY_REPORT.md`

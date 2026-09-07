@@ -64,6 +64,7 @@ export const SERVICE_CREATION_TEMPLATES = {
       defaultNotificationTime: '08:00',
       lockCadence: true,
       contentMode: 'IDEA',
+      mediaMode: 'TEXT_ONLY',
     },
     onboarding: {
       welcomeTitle: 'あなたの事業に合う発信アイデアをお届けします',
@@ -86,6 +87,7 @@ export const SERVICE_CREATION_TEMPLATES = {
       defaultNotificationTime: '08:00',
       lockCadence: false,
       contentMode: 'READY_TO_USE',
+      mediaMode: 'TEXT_ONLY',
     },
     onboarding: {
       welcomeTitle: '',
@@ -110,6 +112,7 @@ export const SERVICE_CREATION_TEMPLATES = {
       defaultNotificationTime: string;
       lockCadence: boolean;
       contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
+      mediaMode: 'TEXT_ONLY' | 'IMAGE';
     };
     onboarding: {
       welcomeTitle: string;

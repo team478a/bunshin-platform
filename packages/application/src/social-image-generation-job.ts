@@ -18,6 +18,7 @@ export interface SocialImageGenerationExecutionContext {
   ownerUserId: string;
   bunshinId: string;
   dailyMissionId: string;
+  idempotencyKey: string;
   layout: SocialImageLayout;
   model: string;
   quality: string;
@@ -42,6 +43,7 @@ export interface SocialImageGenerationExecutionRepository {
     completedStorageKey: string;
     thumbnailStorageKey: string;
     contentHash: string;
+    serviceMediaReservationId: string | null;
   }): Promise<boolean>;
   markFailed(input: {
     workspaceId: string;

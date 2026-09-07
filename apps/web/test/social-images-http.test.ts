@@ -16,6 +16,8 @@ const fakes = vi.hoisted(() => ({
   refundServiceCredit: vi.fn(),
   organizationEntitlement: vi.fn(),
   imageUsageCount: vi.fn(),
+  reserveServiceMedia: vi.fn(),
+  finishServiceMedia: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -37,6 +39,10 @@ vi.mock('../src/ai/runtime-provider-configuration', () => ({
     requestCostUsdMicros: 50_000,
     source: 'ADMIN_CONFIGURATION',
   }),
+}));
+vi.mock('../src/service-media-generation-quota', () => ({
+  reserveServiceMediaGeneration: fakes.reserveServiceMedia,
+  finishServiceMediaGeneration: fakes.finishServiceMedia,
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: {
@@ -156,6 +162,8 @@ beforeEach(() => {
   fakes.refundServiceCredit.mockResolvedValue(undefined);
   fakes.organizationEntitlement.mockResolvedValue(null);
   fakes.imageUsageCount.mockResolvedValue(0);
+  fakes.reserveServiceMedia.mockResolvedValue({ status: 'NOT_CONFIGURED', id: null });
+  fakes.finishServiceMedia.mockResolvedValue(undefined);
 });
 
 describe('social image HTTP', () => {
@@ -274,6 +282,61 @@ describe('social image HTTP', () => {
     );
     expect(fakes.consumeBadgeEntitlement).not.toHaveBeenCalled();
     expect(fakes.reservePoint).not.toHaveBeenCalled();
+  });
+
+  it('uses the commercial Service image allowance without charging legacy balances', async () => {
+    fakes.reserveServiceMedia.mockResolvedValueOnce({
+      status: 'RESERVED',
+      id: '00000000-0000-4000-8000-000000000530',
+    });
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-plan',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(202);
+    expect(fakes.consumeServiceCredit).not.toHaveBeenCalled();
+    expect(fakes.consumeBadgeEntitlement).not.toHaveBeenCalled();
+    expect(fakes.reservePoint).not.toHaveBeenCalled();
+  });
+
+  it('releases a new commercial Service reservation when queueing fails', async () => {
+    const serviceReservation = {
+      status: 'RESERVED' as const,
+      id: '00000000-0000-4000-8000-000000000530',
+    };
+    fakes.reserveServiceMedia.mockResolvedValueOnce(serviceReservation);
+    fakes.enqueue.mockRejectedValueOnce(new Error('queue unavailable'));
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-plan-release',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(500);
+    expect(fakes.finishServiceMedia).toHaveBeenCalledWith({
+      reservation: serviceReservation,
+      outcome: 'RELEASED',
+    });
   });
 
   it('returns a service image credit when queueing fails', async () => {
