@@ -2109,3 +2109,12 @@
 - Selection: 「この案を使う」は本文の上書きではなく選択履歴へ追記し、最新の選択を現在値として扱う。
 - Isolation: すべての操作でWorkspace、Service、User、Bunshin、Daily Missionの一致と有効なMembershipを再検証する。
 - Source: `docs/MISSION_CONTENT_VARIANT_FOUNDATION_REPORT.md`
+
+## 2026-09-07: 別案は元Missionの生成文脈と現在の利用権を両方検証する
+
+- Context: Generation Context SnapshotのIDと版から原案の生成文脈を復元し、現在も同じWorkspace、Service、User、Bunshinから参照できる場合だけ生成する。
+- Link: AIが出力したURLは除去し、コピー可否を再確認した元Missionの承認済みURLだけを同じ配置先へ復元する。
+- Difference: 原案とのSimHash類似度が85%以上の候補は保存しない。
+- Safety: CampaignとProduct Packを現在時点で再解決し、Campaign重複審査と広告表現審査を通過した候補だけを保存する。
+- Observation: 生成と品質審査ごとにAI枠を予約し、別案生成試行には合計token、固定リクエスト原価、処理時間、失敗区分を残す。
+- Source: `docs/MISSION_CONTENT_VARIANT_GENERATION_REPORT.md`

@@ -26,8 +26,8 @@
 通常のDaily Missionは1日1件のまま維持する。別案は元Missionに紐づく追記型の派生案として保存し、通常Missionの一意制約を変更しない。
 
 1. 派生案、生成試行、選択履歴のCoreとMigration（コード実装済み・本番Migration待ち）
-2. 元Missionと同じWorkspace、User、Bunshin、Service、Campaign、許可済みURLの再検証
-3. 原案と直近派生案の重複検査、日次上限、AI利用量・原価記録
+2. 元Missionと同じWorkspace、User、Bunshin、Service、Campaign、許可済みURLの再検証（コード実装済み・API接続待ち）
+3. 原案と直近派生案の重複検査、日次上限、AI利用量・原価記録（コード実装済み・API接続待ち）
 4. 「別の案を見る」「この案を使う」「内容を直す」のAPI/UI
 5. 30 WP交換との接続。生成失敗時は予約を解放し、生成成功後だけ確定する
 

@@ -173,6 +173,36 @@ describe('GenerateMissionContent', () => {
       expect.objectContaining({ repairInstructions: ['本文を短くする'] }),
     );
   });
+
+  it('requires validated rewrite instructions with variant source content', async () => {
+    const generator = {
+      generate: vi.fn().mockResolvedValue({
+        output: contents.TEXT,
+        model: 'gpt-5.2',
+        promptVersion: 'v1',
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: 1,
+      }),
+    };
+    await new GenerateMissionContent(generator).execute({
+      ...context,
+      variantSourceContent: contents.TEXT,
+      variantInstructions: ['導入と構成を変える'],
+    });
+    expect(generator.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variantSourceContent: contents.TEXT,
+        variantInstructions: ['導入と構成を変える'],
+      }),
+    );
+    await expect(
+      new GenerateMissionContent(generator).execute({
+        ...context,
+        variantSourceContent: contents.TEXT,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
 });
 
 describe('CheckMissionQuality', () => {
