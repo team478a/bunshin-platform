@@ -110,7 +110,10 @@ export function SocialImageWorkspace({
 
   async function create() {
     if (!selected || !endpoint || busy) return;
-    if (referenceFile && (!referenceConsent || referenceFile.size > 3_000_000)) {
+    if (
+      referenceFile &&
+      (!referenceConsent || referenceFile.size === 0 || referenceFile.size > 3_000_000)
+    ) {
       setMessage('3MB以下の写真を選び、利用許可を確認してください。');
       return;
     }
