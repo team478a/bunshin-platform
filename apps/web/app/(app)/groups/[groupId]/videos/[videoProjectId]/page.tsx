@@ -1,3 +1,4 @@
+import { isSupportedVideoComposition } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { GetVideoProject } from '@bunshin/application';
 import { z } from 'zod';
@@ -200,7 +201,7 @@ export default async function VideoProjectPage({
         <section className="settings-card">
           <h2>企画と台本を作る</h2>
           <p>分身の目的・届けたい相手・話し方と、使える素材をもとにAIが提案します。</p>
-          <p>標準の動画ではAI動画を生成しません。画像・文字・音声を組み合わせます。</p>
+          <p>標準動画は背景と字幕で作ります。写真の合成と音声は準備中です。</p>
           <VideoPlanGenerator
             workspaceId={project.workspaceId}
             groupId={project.groupId}
@@ -212,7 +213,15 @@ export default async function VideoProjectPage({
         <>
           <section className="settings-card">
             <h2>内容を確認してください</h2>
-            <p>下の順番、話す言葉、画面に出す文字を確認してください。</p>
+            {!isSupportedVideoComposition(project) ? (
+              <p>
+                この企画には準備中の写真・音声機能が含まれます。台本を作り直すか、
+                <a href={`/groups/${project.groupId}/videos`}>
+                  動画一覧から字幕動画を新しく作成してください。
+                </a>
+              </p>
+            ) : null}
+            <p>下の順番と画面に出す文字を確認してください。参考台本は音声として出力されません。</p>
             <p>この画面では動画本体はまだ作りません。</p>
           </section>
           {project.scenes.map((scene) => (
@@ -221,7 +230,7 @@ export default async function VideoProjectPage({
                 {scene.sceneNo}番目（{Math.round(scene.durationMs / 1000)}秒）
               </h2>
               <p>
-                <strong>話す言葉：</strong>
+                <strong>参考台本（音声出力なし）：</strong>
                 {scene.narration}
               </p>
               <p>
@@ -245,12 +254,14 @@ export default async function VideoProjectPage({
               <section className="settings-card">
                 <h2>この内容でよいですか？</h2>
                 <p>よければ台本を確認済みにします。確認後は内容を固定します。</p>
-                <VideoPlanApprover
-                  workspaceId={project.workspaceId}
-                  groupId={project.groupId}
-                  projectId={project.id}
-                  revision={project.revision}
-                />
+                {isSupportedVideoComposition(project) ? (
+                  <VideoPlanApprover
+                    workspaceId={project.workspaceId}
+                    groupId={project.groupId}
+                    projectId={project.id}
+                    revision={project.revision}
+                  />
+                ) : null}
               </section>
               <section className="settings-card">
                 <h2>作り直す場合</h2>
@@ -264,7 +275,7 @@ export default async function VideoProjectPage({
               </section>
             </>
           ) : null}
-          {project.status === 'APPROVED' ? (
+          {project.status === 'APPROVED' && isSupportedVideoComposition(project) ? (
             <section className="settings-card">
               <h2>台本を確認しました</h2>
               {project.standardComposition ? (

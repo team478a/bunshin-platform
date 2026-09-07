@@ -364,6 +364,31 @@ export class GetVideoProject {
   }
 }
 
+export function isSupportedVideoComposition(input: {
+  scenes: Array<{ visualType: string; aiProcessingTypes: string[] }>;
+  aiProcessingTypes: string[];
+}) {
+  const supported = new Set(['SCRIPT_GENERATION', 'VIDEO_GENERATION']);
+  return (
+    input.aiProcessingTypes.every((type) => supported.has(type)) &&
+    input.scenes.every(
+      (scene) =>
+        ['TEXT_MOTION', 'AI_VIDEO'].includes(scene.visualType) &&
+        scene.aiProcessingTypes.every((type) => supported.has(type)),
+    )
+  );
+}
+
+export function assertSupportedVideoComposition(
+  input: Parameters<typeof isSupportedVideoComposition>[0],
+) {
+  if (!isSupportedVideoComposition(input))
+    throw new ApplicationError(
+      'VALIDATION_ERROR',
+      '写真・音声を含む動画は準備中です。企画を作り直し、字幕動画をご利用ください。',
+    );
+}
+
 export class ReplaceVideoPlan {
   constructor(private readonly repository: VideoProjectRepository) {}
   async execute(input: Parameters<VideoProjectRepository['replacePlan']>[0]) {
@@ -425,6 +450,7 @@ export class ReplaceVideoPlan {
     const aiVideoSceneCount = scenes.filter((scene) => scene.visualType === 'AI_VIDEO').length;
     if (aiVideoSceneCount !== input.aiVideoSceneCount)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid aiVideoSceneCount');
+    assertSupportedVideoComposition({ scenes, aiProcessingTypes: input.projectAiProcessingTypes });
     const value = await this.repository.replacePlan({
       ...input,
       workspaceId: id(input.workspaceId, 'workspaceId'),
@@ -503,6 +529,7 @@ export class ExecuteVideoRenderStep {
 
     let render = value.render;
     if (render.status === 'QUEUED') {
+      assertSupportedVideoComposition(value.project);
       const webhookUrl = await this.webhook.createUrl(scope);
       const aiSceneSources = await Promise.all(
         value.aiSceneSources.map(async (source) => ({

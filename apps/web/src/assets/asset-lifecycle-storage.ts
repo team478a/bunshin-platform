@@ -37,11 +37,13 @@ export class SupabaseAssetLifecycleStorage {
   constructor(private readonly storage: SupabaseClient = client()) {}
 
   async remove(input: { bucket: AssetLifecycleBucket; keys: string[] }) {
-    const keys = [...new Set(input.keys.filter(safeKey))];
-    if (!buckets.has(input.bucket) || keys.length === 0 || keys.length > 3)
+    const keys = [...new Set(input.keys)];
+    if (!buckets.has(input.bucket) || keys.length === 0 || keys.length > 3 || !keys.every(safeKey))
       throw new ApplicationError('VALIDATION_ERROR', '削除対象のファイルが不正です');
     const result = await this.storage.storage.from(input.bucket).remove(keys);
-    if (result.error)
+    // A queued/failed render may never have created its bucket or output.
+    // Already absent objects are a successful, idempotent deletion.
+    if (result.error && result.error.status !== 404 && result.error.statusCode !== '404')
       throw new ApplicationError('INTERNAL_ERROR', '期限切れファイルを削除できませんでした');
   }
 }

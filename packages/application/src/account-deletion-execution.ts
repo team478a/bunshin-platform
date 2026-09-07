@@ -141,6 +141,7 @@ export class RunAccountDeletionBatch {
       });
       if (result?.status === 'COMPLETED') summary.completed += 1;
       else if (result?.status === 'BLOCKED') summary.blocked += 1;
+      else if (result?.status === 'PROCESSING') summary.retryScheduled += 1;
       else summary.infrastructureFailures += 1;
     }
     return summary;
@@ -175,7 +176,7 @@ export class RetryBlockedAccountDeletion {
 export interface AccountDeletionPurgeResult {
   requestId: string;
   userId: string;
-  status: 'COMPLETED' | 'BLOCKED';
+  status: 'COMPLETED' | 'BLOCKED' | 'PROCESSING';
   blockedReason: AccountDeletionBlockedReason | null;
 }
 

@@ -1,5 +1,6 @@
 import 'server-only';
 import type { VideoProjectRecord, VideoRenderProviderPort } from '@bunshin/application';
+import { assertSupportedVideoComposition } from '@bunshin/application';
 
 const API_BASE_URL = 'https://api.creatomate.com/v2';
 const OUTPUT_HOST = 'cdn.creatomate.com';
@@ -38,6 +39,7 @@ export function buildCreatomateRenderScript(
   project: VideoProjectRecord,
   aiSceneSources: Array<{ videoSceneId: string; url: string }> = [],
 ) {
+  assertSupportedVideoComposition(project);
   if (project.standardComposition && (project.aiVideoSceneCount > 0 || aiSceneSources.length > 0))
     throw new VideoRenderProviderError('INVALID_REQUEST', false);
   const sources = new Map(aiSceneSources.map((source) => [source.videoSceneId, source.url]));

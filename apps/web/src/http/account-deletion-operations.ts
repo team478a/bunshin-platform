@@ -11,6 +11,7 @@ import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { randomUUID } from 'node:crypto';
 import { authorizeCronRequest } from './cron-security';
+import { SupabaseAssetLifecycleStorage } from '../assets/asset-lifecycle-storage';
 
 const logger = createLogger();
 
@@ -38,7 +39,9 @@ async function configuredBatch(): Promise<AccountDeletionBatchPort> {
       environment: configuration.SUPABASE_AUTH_ADMIN_ENV,
       runtimeEnvironment: configuration.APP_ENV,
     }),
-    new CompleteAccountDeletionPurge(new db.PrismaAccountDeletionPurgeRepository()),
+    new CompleteAccountDeletionPurge(
+      new db.PrismaAccountDeletionPurgeRepository(db.prisma, new SupabaseAssetLifecycleStorage()),
+    ),
   );
 }
 

@@ -113,7 +113,6 @@ export function VideoProjectCreator({
           <select className="field__control" name="type" defaultValue="EXPLAINER">
             <option value="EXPLAINER">わかりやすく説明する</option>
             <option value="PRODUCT_INTRODUCTION">商品を紹介する</option>
-            <option value="PHOTO_SLIDESHOW">写真を順番に見せる</option>
           </select>
         </label>
         <label className="field">
@@ -130,7 +129,7 @@ export function VideoProjectCreator({
             value={compositionMode}
             onChange={(event) => setCompositionMode(event.target.value as 'STANDARD' | 'AI_SCENES')}
           >
-            <option value="STANDARD">標準動画（画像・文字・音声で作る）</option>
+            <option value="STANDARD">字幕動画（背景と文字・音声なし）</option>
             <option value="AI_SCENES" disabled={characters.length === 0}>
               AI動画を使う（場面ごとにAIで動画を作る）
             </option>

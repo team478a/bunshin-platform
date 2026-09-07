@@ -79,7 +79,10 @@ export default async function VideoAssetsPage({
       <header className="app-page__heading">
         <p className="eyebrow">動画づくり</p>
         <h1>写真・動画・ロゴ</h1>
-        <p>{membership.group.name}で作る動画に、自分の素材を使えるようにします。</p>
+        <p>
+          {membership.group.name}
+          の素材を保管します。保管した写真・動画・ロゴを完成動画に組み込む機能は準備中です。
+        </p>
         <a
           href={serviceSlug ? `/s/${serviceSlug}/videos` : `/groups/${membership.group.id}/videos`}
         >
