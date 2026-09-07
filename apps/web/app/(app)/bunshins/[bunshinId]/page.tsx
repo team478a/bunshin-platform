@@ -6,6 +6,7 @@ import {
   ListPersonalityVersions,
   ListPersonalityLearningProposals,
 } from '@bunshin/application';
+import { ApplicationError } from '@bunshin/shared';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -443,7 +444,12 @@ export default async function BunshinPage({
         />
       </>
     );
-  } catch {
-    notFound();
+  } catch (error) {
+    if (
+      error instanceof ApplicationError &&
+      (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+    )
+      notFound();
+    throw error;
   }
 }

@@ -1867,6 +1867,30 @@ integration('database ownership boundaries', () => {
     const ownerBunshin = await create(owner.user.id, owner.user.id, `owner-${randomUUID()}`);
     const memberBunshin = await create(member.user.id, member.user.id, `member-${randomUUID()}`);
     expect(
+      (await repository.list({ workspaceId: owner.workspace.id, actorUserId: member.user.id })).map(
+        (item) => item.id,
+      ),
+    ).toEqual([memberBunshin.id]);
+    await expect(
+      repository.find({
+        workspaceId: owner.workspace.id,
+        actorUserId: member.user.id,
+        bunshinId: ownerBunshin.id,
+      }),
+    ).resolves.toBeNull();
+    expect(
+      (await repository.list({ workspaceId: owner.workspace.id, actorUserId: admin.user.id })).map(
+        (item) => item.id,
+      ),
+    ).toEqual(expect.arrayContaining([ownerBunshin.id, memberBunshin.id]));
+    await expect(
+      repository.find({
+        workspaceId: owner.workspace.id,
+        actorUserId: admin.user.id,
+        bunshinId: ownerBunshin.id,
+      }),
+    ).resolves.toMatchObject({ id: ownerBunshin.id });
+    expect(
       await repository.update({
         workspaceId: owner.workspace.id,
         actorUserId: member.user.id,
