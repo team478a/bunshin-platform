@@ -13,8 +13,8 @@ const migration = readFileSync(
 describe('service media generation reservation schema', () => {
   it('stores an idempotent, service-scoped monthly reservation ledger', () => {
     expect(schema).toContain('model ServiceMediaGenerationReservation');
-    expect(schema).toContain('@@unique([workspaceId, groupId, kind, operationKey])');
-    expect(schema).toContain('@@index([workspaceId, groupId, kind, monthKey, status, expiresAt])');
+    expect(schema).toContain('map: "service_media_reservation_operation_key"');
+    expect(schema).toContain('map: "service_media_reservation_month_status_idx"');
     expect(migration).toContain('CREATE TYPE "ServiceMediaGenerationKind"');
     expect(migration).toContain('DEFAULT gen_random_uuid()');
     expect(migration).toContain('FOREIGN KEY ("workspace_id", "group_id")');

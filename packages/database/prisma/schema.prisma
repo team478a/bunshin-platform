@@ -2056,8 +2056,8 @@ model ServiceMediaGenerationReservation {
   workspace    Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   group        Group                           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
 
-  @@unique([workspaceId, groupId, kind, operationKey])
-  @@index([workspaceId, groupId, kind, monthKey, status, expiresAt])
+  @@unique([workspaceId, groupId, kind, operationKey], map: "service_media_reservation_operation_key")
+  @@index([workspaceId, groupId, kind, monthKey, status, expiresAt], map: "service_media_reservation_month_status_idx")
   @@map("service_media_generation_reservations")
 }
 

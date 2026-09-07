@@ -16,10 +16,10 @@ CREATE TABLE "service_media_generation_reservations" (
   CONSTRAINT "service_media_generation_reservations_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "service_media_generation_reservations_workspace_id_group_id_kind_operation_key_key"
+CREATE UNIQUE INDEX "service_media_reservation_operation_key"
 ON "service_media_generation_reservations"("workspace_id", "group_id", "kind", "operation_key");
 
-CREATE INDEX "service_media_generation_reservations_workspace_id_group_id_kind_month_key_status_expires_at_idx"
+CREATE INDEX "service_media_reservation_month_status_idx"
 ON "service_media_generation_reservations"("workspace_id", "group_id", "kind", "month_key", "status", "expires_at");
 
 ALTER TABLE "service_media_generation_reservations"
