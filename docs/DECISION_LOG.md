@@ -2118,3 +2118,12 @@
 - Safety: CampaignとProduct Packを現在時点で再解決し、Campaign重複審査と広告表現審査を通過した候補だけを保存する。
 - Observation: 生成と品質審査ごとにAI枠を予約し、別案生成試行には合計token、固定リクエスト原価、処理時間、失敗区分を残す。
 - Source: `docs/MISSION_CONTENT_VARIANT_GENERATION_REPORT.md`
+
+## 2026-09-07: Daily Missionの別案は元本文を上書きせず画面上で選択する
+
+- UI: 配信済みのDaily Missionにだけ「別の案を見る」「内容を直す」を表示し、Mission自体の自動配信は維持する。
+- Selection: 「この案を使う」で選択履歴を追記し、最新の選択案を表示・コピー対象として解決する。元Mission本文は変更しない。
+- Correction: 利用者の修正指示は500文字以内とし、別案生成時の追加指示として扱う。元Missionの必須表記と許可済みURLは引き続きサーバー側で固定する。
+- Service: Service、Workspace、Membership、User、Bunshinの範囲はURLやリクエスト本文から信用せず、公開Service文脈からサーバー側で導出する。
+- Copy: Service画面ではコピー直前に専用URLの有効性と承認状態を再確認し、変更・停止・確認待ちの投稿案をコピーさせない。
+- Source: `docs/MISSION_CONTENT_VARIANT_UI_REPORT.md`

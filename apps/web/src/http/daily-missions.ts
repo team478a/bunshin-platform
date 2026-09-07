@@ -4,10 +4,13 @@ import {
   CreateDailyMission,
   GetDailyMission,
   ListDailyMissions,
+  ListMissionContentVariants,
+  SelectMissionContentVariant,
   SOCIAL_PREFERRED_FORMATS,
   TransitionDailyMission,
   type DailyMission,
   type DailyMissionStatus,
+  type MissionContentVariant,
 } from '@bunshin/capability-social';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
@@ -31,6 +34,13 @@ const createSchema = z
   })
   .strict();
 const emptySchema = z.object({}).strict();
+const variantGenerationSchema = z
+  .object({
+    idempotencyKey: uuidSchema,
+    instruction: z.string().trim().min(1).max(500).optional(),
+  })
+  .strict();
+const variantSelectionSchema = z.object({ idempotencyKey: uuidSchema }).strict();
 const generateSchema = z
   .object({
     missionDate: z.string(),
@@ -87,6 +97,17 @@ export const dailyMissionDto = (value: DailyMission) => ({
   expiredAt: value.expiredAt?.toISOString() ?? null,
   createdAt: value.createdAt.toISOString(),
   updatedAt: value.updatedAt.toISOString(),
+});
+
+export const missionContentVariantDto = (value: MissionContentVariant) => ({
+  id: value.id,
+  dailyMissionId: value.dailyMissionId,
+  sequence: value.sequence,
+  format: value.format,
+  content: value.content,
+  qualityScore: value.qualityScore,
+  createdAt: value.createdAt.toISOString(),
+  selectedAt: value.selectedAt?.toISOString() ?? null,
 });
 
 async function respond(
@@ -227,6 +248,79 @@ export function authorizeDailyMissionCopyResponse(
       ...(await scope(workspaceId, bunshinId)),
       dailyMissionId: resourceId(dailyMissionId),
     });
+  });
+}
+
+export function listMissionContentVariantsResponse(
+  request: Request,
+  workspaceId: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    const db = await import('@bunshin/database');
+    return (
+      await new ListMissionContentVariants(new db.PrismaMissionContentVariantRepository()).execute({
+        ...(await scope(workspaceId, bunshinId)),
+        dailyMissionId: resourceId(dailyMissionId),
+      })
+    ).map(missionContentVariantDto);
+  });
+}
+
+export function generateMissionContentVariantResponse(
+  request: Request,
+  workspaceId: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  return respond(
+    request,
+    async () => {
+      requireSameOrigin(request);
+      const parsed = variantGenerationSchema.safeParse(await jsonBody(request));
+      if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+      const { createMissionContentVariantGenerationService } =
+        await import('../services/mission-content-variant-generation');
+      return missionContentVariantDto(
+        await createMissionContentVariantGenerationService().execute({
+          ...(await scope(workspaceId, bunshinId)),
+          dailyMissionId: resourceId(dailyMissionId),
+          generationIdempotencyKey: parsed.data.idempotencyKey,
+          usageIdempotencyPrefix: requestId,
+          ...(parsed.data.instruction ? { variantInstructions: [parsed.data.instruction] } : {}),
+        }),
+      );
+    },
+    201,
+    requestId,
+  );
+}
+
+export function selectMissionContentVariantResponse(
+  request: Request,
+  workspaceId: string,
+  bunshinId: string,
+  dailyMissionId: string,
+  variantId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = variantSelectionSchema.safeParse(await jsonBody(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const db = await import('@bunshin/database');
+    return missionContentVariantDto(
+      await new SelectMissionContentVariant(new db.PrismaMissionContentVariantRepository()).execute(
+        {
+          ...(await scope(workspaceId, bunshinId)),
+          dailyMissionId: resourceId(dailyMissionId),
+          variantId: resourceId(variantId),
+          idempotencyKey: parsed.data.idempotencyKey,
+          selectedAt: new Date(),
+        },
+      ),
+    );
   });
 }
 

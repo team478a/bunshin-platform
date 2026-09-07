@@ -2073,6 +2073,33 @@ a {
 .mission-assistance-content ol:last-child {
   margin-bottom: 0;
 }
+.mission-variant-actions,
+.mission-variant {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #d6d6f7;
+  border-radius: 12px;
+  background: var(--color-primary-soft);
+}
+.mission-variant-actions label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+.mission-variant-actions textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+}
+.mission-variant h4 {
+  margin: 0;
+}
+.mission-variant button,
+.mission-variant-actions button {
+  margin: 0;
+}
 .mission-trend-context {
   margin-top: 10px;
   padding: 16px;
