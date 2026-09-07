@@ -16672,6 +16672,7 @@ export class PrismaVideoRenderCompletionRepository implements VideoRenderComplet
           ownerUserId: render.ownerUserId,
           videoProjectId: render.videoProjectId,
           projectTitle: render.project.title,
+          completedAt: render.completedAt!,
           notificationStatus: updated.notificationStatus ?? 'PENDING',
           notificationAttemptCount: updated.notificationAttemptCount,
         };

@@ -18,6 +18,7 @@ export interface VideoRenderCompletionContext {
   ownerUserId: string;
   videoProjectId: string;
   projectTitle: string;
+  completedAt: Date;
   notificationStatus: VideoCompletionNotificationStatus;
   notificationAttemptCount: number;
 }
@@ -81,6 +82,7 @@ export interface VideoCompletionMessagingPort {
     recipientId: string;
     projectTitle: string;
     reviewUrl: string;
+    retryKey: string;
   }): Promise<{ ok: true } | LineProviderFailure>;
 }
 
@@ -110,6 +112,11 @@ export class SendVideoCompletionNotification {
         errorCode,
         attemptedAt: this.now(),
       });
+    // Bound retries conservatively to completion, before LINE's 24-hour key expiry.
+    if (this.now().getTime() - input.context.completedAt.getTime() >= 23 * 60 * 60 * 1000) {
+      await record('CANCELLED', 'NOTIFICATION_RETRY_WINDOW_EXPIRED');
+      return { sent: false, retryable: false, errorCode: 'NOTIFICATION_RETRY_WINDOW_EXPIRED' };
+    }
     const configuration = await this.configuration.getActive(input.environment, {
       workspaceId: input.context.workspaceId,
       groupId: input.context.groupId,
@@ -170,6 +177,7 @@ export class SendVideoCompletionNotification {
       recipientId,
       projectTitle: input.context.projectTitle,
       reviewUrl: input.reviewUrl,
+      retryKey: input.context.renderId,
     });
     if (!result.ok) {
       await record('FAILED', result.category);
