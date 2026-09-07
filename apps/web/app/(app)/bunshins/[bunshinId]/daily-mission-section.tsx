@@ -41,6 +41,13 @@ export type DailyMissionView = {
     campaignName: string | null;
     advertisingClassification: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
   } | null;
+  variants: Array<{
+    id: string;
+    sequence: number;
+    content: Record<string, unknown>;
+    qualityScore: number;
+    selectedAt: string | null;
+  }>;
 };
 
 export type ContentAssistanceLevel = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -307,6 +314,17 @@ export function copyOptions(mission: DailyMissionView) {
   ].filter((item): item is typeof item & { value: string } => item.value !== null);
 }
 
+export function selectedMissionVariant(mission: DailyMissionView) {
+  return mission.variants
+    .filter(({ selectedAt }) => selectedAt !== null)
+    .sort((left, right) => right.selectedAt!.localeCompare(left.selectedAt!))[0];
+}
+
+export function missionWithSelectedVariant(mission: DailyMissionView): DailyMissionView {
+  const selected = selectedMissionVariant(mission);
+  return selected ? { ...mission, content: selected.content } : mission;
+}
+
 export function DailyMissionSection({
   workspaceId,
   bunshinId,
@@ -341,6 +359,7 @@ export function DailyMissionSection({
   const [otherDetail, setOtherDetail] = useState('');
   const [generating, setGenerating] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [variantInstructions, setVariantInstructions] = useState<Record<string, string>>({});
   const [missionDate, setMissionDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
   const activeProfiles = profiles.filter(({ status }) => status === 'ACTIVE');
   const [socialProfileId, setSocialProfileId] = useState(activeProfiles[0]?.id ?? '');
@@ -539,6 +558,49 @@ export function DailyMissionSection({
   async function feedback(id: string, rating: 'GOOD' | 'NEUTRAL' | 'BAD') {
     setError(null);
     const ok = await engagementPost(id, 'feedback', { rating, idempotencyKey: key() });
+    if (ok) router.refresh();
+  }
+
+  async function generateVariant(missionId: string, instruction?: string) {
+    if (pendingAction !== null) return;
+    setError(null);
+    const requestId = createClientRequestId();
+    setPendingAction(`${missionId}:variant`);
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(missionId)}/variants`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': requestId },
+        body: JSON.stringify({
+          idempotencyKey: requestId,
+          ...(instruction?.trim() ? { instruction: instruction.trim() } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { code?: string };
+        } | null;
+        setError(
+          payload?.error?.code === 'CONTENT_REJECTED'
+            ? `安全に使える別案を作れませんでした。時間をおいてもう一度お試しください。（受付番号: ${requestId}）`
+            : payload?.error?.code === 'CONFLICT'
+              ? '別案は1つまでです。表示中の別案から選んでください。'
+              : `別案を作れませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
+        );
+        return;
+      }
+      setVariantInstructions((current) => ({ ...current, [missionId]: '' }));
+      router.refresh();
+    } catch {
+      setError(`通信できませんでした。もう一度お試しください。（受付番号: ${requestId}）`);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function selectVariant(missionId: string, variantId: string) {
+    const ok = await engagementPost(missionId, `variants/${encodeURIComponent(variantId)}/select`, {
+      idempotencyKey: key(),
+    });
     if (ok) router.refresh();
   }
 
@@ -767,6 +829,8 @@ export function DailyMissionSection({
                 <div className="mission-detail">
                   {(() => {
                     const selected = assistanceSelections[mission.id] ?? mission.assistanceLevel;
+                    const missionForUse = missionWithSelectedVariant(mission);
+                    const variant = mission.variants[0];
                     return (
                       <>
                         <fieldset className="mission-assistance-picker">
@@ -798,13 +862,62 @@ export function DailyMissionSection({
                         <MissionIdea mission={mission} />
                         <MissionTrendContext mission={mission} />
                         {(selected === 'GUIDED' || selected === 'READY_TO_USE') && (
-                          <MissionGuide mission={mission} />
+                          <MissionGuide mission={missionForUse} />
                         )}
                         {selected === 'READY_TO_USE' && (
                           <div className="mission-assistance-content">
-                            <h4>完成版</h4>
-                            <MissionContent mission={mission} />
+                            <h4>{variant?.selectedAt ? '使用する別案' : '完成版'}</h4>
+                            <MissionContent mission={missionForUse} />
                           </div>
+                        )}
+                        {active && !variant && (
+                          <div className="mission-variant-actions">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void generateVariant(mission.id)}
+                            >
+                              別の案を見る
+                            </button>
+                            <label>
+                              直したいところ（任意）
+                              <textarea
+                                value={variantInstructions[mission.id] ?? ''}
+                                maxLength={500}
+                                onChange={(event) =>
+                                  setVariantInstructions((current) => ({
+                                    ...current,
+                                    [mission.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={busy || !(variantInstructions[mission.id] ?? '').trim()}
+                              onClick={() =>
+                                void generateVariant(mission.id, variantInstructions[mission.id])
+                              }
+                            >
+                              内容を直す
+                            </button>
+                          </div>
+                        )}
+                        {variant && !variant.selectedAt && (
+                          <aside className="mission-variant">
+                            <h4>別の案</h4>
+                            <MissionContent mission={{ ...mission, content: variant.content }} />
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void selectVariant(mission.id, variant.id)}
+                            >
+                              この案を使う
+                            </button>
+                          </aside>
+                        )}
+                        {variant?.selectedAt && (
+                          <p className="mission-step-complete">✓ 別の案を使用中です</p>
                         )}
                         {mission.externalLinkUsage && (
                           <aside className="mission-link-summary">
@@ -890,7 +1003,7 @@ export function DailyMissionSection({
                         'READY_TO_USE' && <p>完成版を見ると、文章や台本をコピーできます。</p>}
                       {(assistanceSelections[mission.id] ?? mission.assistanceLevel) ===
                         'READY_TO_USE' &&
-                        copyOptions(mission).map((option, index) => (
+                        copyOptions(missionWithSelectedVariant(mission)).map((option, index) => (
                           <span key={`${option.type}-${index}`}>
                             <button
                               type="button"

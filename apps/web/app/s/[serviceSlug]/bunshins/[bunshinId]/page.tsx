@@ -2,6 +2,7 @@ import { GetBunshin, ListBunshinCapabilityAssignments } from '@bunshin/applicati
 import {
   ListContentPillars,
   ListDailyMissions,
+  ListMissionContentVariants,
   GetMissionDecision,
   ListSocialAccountStrategies,
   ListSocialProfiles,
@@ -132,6 +133,14 @@ export default async function ServiceBunshinDetailPage({
         feedback: await outcomeRepository.getFeedback({ ...scope, dailyMissionId: mission.id }),
       })),
     );
+    const missionVariants = await Promise.all(
+      missionRecords.map((mission) =>
+        new ListMissionContentVariants(new db.PrismaMissionContentVariantRepository()).execute({
+          ...scope,
+          dailyMissionId: mission.id,
+        }),
+      ),
+    );
     dailyMissions = missionRecords.map((mission, index) => ({
       id: mission.id,
       missionDate: mission.missionDate,
@@ -167,6 +176,15 @@ export default async function ServiceBunshinDetailPage({
             advertisingClassification: mission.linkUsage.advertisingClassification,
           }
         : null,
+      variants: missionVariants[index]!.map(
+        ({ id, sequence, content, qualityScore, selectedAt }) => ({
+          id,
+          sequence,
+          content,
+          qualityScore,
+          selectedAt: selectedAt?.toISOString() ?? null,
+        }),
+      ),
     }));
   } catch (error) {
     if (isRouteNotFound(error)) notFound();

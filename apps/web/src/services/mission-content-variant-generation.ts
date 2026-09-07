@@ -51,6 +51,7 @@ interface Input {
   generationIdempotencyKey: string;
   usageIdempotencyPrefix: string;
   serviceSafeMode?: boolean;
+  variantInstructions?: string[];
 }
 
 const VARIANT_SIMILARITY_THRESHOLD_BASIS_POINTS = 8_500;
@@ -467,6 +468,7 @@ export class MissionContentVariantGenerationService {
           '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
           '導入のフック、文章構成、具体例、言葉選びを明確に変える',
           '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
+          ...(input.variantInstructions ?? []),
         ],
       };
       const generator = new GenerateMissionContent(

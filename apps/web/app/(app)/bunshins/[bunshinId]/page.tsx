@@ -15,6 +15,7 @@ import {
   ListSocialAccountStrategies,
   ListWeeklyPlans,
   ListDailyMissions,
+  ListMissionContentVariants,
   GetMissionDecision,
   GetMissionProgress,
   EvaluateActivityMotivation,
@@ -49,6 +50,7 @@ export default async function BunshinPage({
       PrismaContentPillarRepository,
       PrismaWeeklyPlanRepository,
       PrismaDailyMissionRepository,
+      PrismaMissionContentVariantRepository,
       PrismaMissionEngagementRepository,
       PrismaAchievementBadgeRepository,
       PrismaMissionOutcomeRepository,
@@ -211,6 +213,16 @@ export default async function BunshinPage({
           dailyMissionId: mission.id,
         }),
       })),
+    );
+    const missionVariants = await Promise.all(
+      dailyMissions.map((mission) =>
+        new ListMissionContentVariants(new PrismaMissionContentVariantRepository()).execute({
+          workspaceId,
+          actorUserId: currentUser.userId,
+          bunshinId: bunshin.id,
+          dailyMissionId: mission.id,
+        }),
+      ),
     );
     return (
       <>
@@ -423,6 +435,21 @@ export default async function BunshinPage({
                     expiresAt: linkUsage.expiresAt?.toISOString() ?? null,
                   }
                 : null,
+              variants: missionVariants[index]!.map(
+                ({
+                  id: variantId,
+                  sequence,
+                  content: variantContent,
+                  qualityScore,
+                  selectedAt,
+                }) => ({
+                  id: variantId,
+                  sequence,
+                  content: variantContent,
+                  qualityScore,
+                  selectedAt: selectedAt?.toISOString() ?? null,
+                }),
+              ),
             }),
           )}
           progress={progress}

@@ -46,8 +46,9 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
-  it('presents delivered content without a generation action', () => {
-    expect(experience).not.toContain('async function generate');
+  it('keeps automatic delivery while allowing variants only for delivered missions', () => {
+    expect(experience).not.toContain('/daily-missions/generate');
+    expect(experience).toContain('async function generateVariant');
     expect(experience).toContain(
       '投稿予定の日に、あなたに合った内容を自動で準備し、LINEでお知らせします。',
     );
@@ -59,10 +60,12 @@ describe('service daily mission boundary', () => {
     expect(source).toContain('recordServiceMissionActivityResponse');
     expect(source).toContain('recordServicePostResponse');
     expect(source).toContain('recordServiceMissionFeedbackResponse');
+    expect(source).toContain('authorizeServiceDailyMissionCopyResponse');
     expect(experience).toContain('採用する');
     expect(experience).toContain('今回は使わない');
-    expect(experience).toContain('copyOptions(mission)');
+    expect(experience).toContain('copyOptions(missionWithSelectedVariant(mission))');
     expect(experience).toContain('投稿しました');
     expect(experience).toContain('この投稿は、あなたらしかったですか？');
+    expect(experience).toContain('copy-authorization');
   });
 });

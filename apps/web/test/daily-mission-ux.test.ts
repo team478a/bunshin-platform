@@ -3,6 +3,7 @@ import {
   copyOptions,
   missionAssistanceOptions,
   missionGuide,
+  missionWithSelectedVariant,
   type DailyMissionView,
 } from '../app/(app)/bunshins/[bunshinId]/daily-mission-section';
 
@@ -30,6 +31,7 @@ function mission(
     postedAt: null,
     feedback: null,
     trendContext: null,
+    variants: [],
   };
 }
 
@@ -132,5 +134,34 @@ describe('Daily Mission copy UX', () => {
       },
       { label: '投稿文をコピー', value: '投稿文', type: 'COPIED_TEXT' },
     ]);
+  });
+
+  it('uses selected variant content for display and copy without overwriting the original', () => {
+    const original = mission('TEXT', {
+      body: '原案',
+      threadParts: [],
+      cta: null,
+      caption: null,
+      hashtags: [],
+    });
+    original.variants = [
+      {
+        id: 'variant-1',
+        sequence: 1,
+        content: {
+          body: '選んだ別案',
+          threadParts: [],
+          cta: null,
+          caption: null,
+          hashtags: [],
+        },
+        qualityScore: 92,
+        selectedAt: '2026-09-07T12:00:00.000Z',
+      },
+    ];
+    const selected = missionWithSelectedVariant(original);
+    expect(selected.content['body']).toBe('選んだ別案');
+    expect(original.content['body']).toBe('原案');
+    expect(copyOptions(selected)[0]?.value).toBe('選んだ別案');
   });
 });

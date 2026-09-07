@@ -9,6 +9,7 @@ import {
   MissionIdea,
   MissionTrendContext,
   copyOptions,
+  missionWithSelectedVariant,
   rejectionReasons,
   type DailyMissionView,
 } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
@@ -30,6 +31,7 @@ export function ServiceDailyMissionSection({
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [variantInstructions, setVariantInstructions] = useState<Record<string, string>>({});
 
   const key = () => createClientRequestId();
 
@@ -70,12 +72,44 @@ export function ServiceDailyMissionSection({
   }
 
   async function copy(id: string, value: string, type: string, metadata?: { slideIndex: number }) {
+    if (pendingAction) return;
+    setPendingAction(`${id}:copy-authorization`);
+    setMessage(null);
+    const authorization = await fetch(`${endpoint}/${encodeURIComponent(id)}/copy-authorization`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }).catch(() => null);
+    if (!authorization?.ok) {
+      setMessage('専用URLを確認できませんでした。少し待ってから、もう一度お試しください。');
+      setPendingAction(null);
+      return;
+    }
+    const authorizationResult = (await authorization.json().catch(() => null)) as {
+      data?: { allowed?: boolean; reason?: string; reviewNote?: string | null };
+    } | null;
+    const authorizationData = authorizationResult?.data;
+    if (!authorizationData?.allowed) {
+      setMessage(
+        authorizationData?.reason === 'LINK_CHANGED'
+          ? 'あなた専用の紹介URLが新しくなりました。この投稿案を作り直してください。'
+          : authorizationData?.reason === 'APPROVAL_PENDING'
+            ? 'この投稿案は運営者の確認待ちです。確認が終わるまでコピーできません。'
+            : authorizationData?.reason === 'APPROVAL_CHANGES_REQUESTED'
+              ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
+              : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
+      );
+      setPendingAction(null);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(value);
     } catch {
       setMessage('コピーできませんでした。ブラウザの設定を確認してください。');
+      setPendingAction(null);
       return;
     }
+    setPendingAction(null);
     const ok = await record(id, 'activities', {
       type,
       idempotencyKey: key(),
@@ -97,6 +131,51 @@ export function ServiceDailyMissionSection({
 
   async function feedback(id: string, rating: 'GOOD' | 'NEUTRAL' | 'BAD') {
     if (await record(id, 'feedback', { rating, idempotencyKey: key() })) router.refresh();
+  }
+
+  async function generateVariant(missionId: string, instruction?: string) {
+    if (pendingAction) return;
+    const requestId = key();
+    setPendingAction(`${missionId}:variant`);
+    setMessage(null);
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(missionId)}/variants`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': requestId },
+        body: JSON.stringify({
+          idempotencyKey: requestId,
+          ...(instruction?.trim() ? { instruction: instruction.trim() } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { code?: string };
+        } | null;
+        setMessage(
+          payload?.error?.code === 'CONTENT_REJECTED'
+            ? `安全に使える別案を作れませんでした。時間をおいてもう一度お試しください。（受付番号: ${requestId}）`
+            : payload?.error?.code === 'CONFLICT'
+              ? '別案は1つまでです。表示中の別案から選んでください。'
+              : `別案を作れませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
+        );
+        return;
+      }
+      setVariantInstructions((current) => ({ ...current, [missionId]: '' }));
+      router.refresh();
+    } catch {
+      setMessage(`通信できませんでした。もう一度お試しください。（受付番号: ${requestId}）`);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function selectVariant(missionId: string, variantId: string) {
+    if (
+      await record(missionId, `variants/${encodeURIComponent(variantId)}/select`, {
+        idempotencyKey: key(),
+      })
+    )
+      router.refresh();
   }
 
   return (
@@ -150,8 +229,61 @@ export function ServiceDailyMissionSection({
               <div className="mission-detail">
                 <MissionIdea mission={mission} />
                 <MissionTrendContext mission={mission} />
-                <MissionGuide mission={mission} />
-                <MissionContent mission={mission} />
+                <MissionGuide mission={missionWithSelectedVariant(mission)} />
+                <MissionContent mission={missionWithSelectedVariant(mission)} />
+                {active && !mission.variants[0] ? (
+                  <div className="mission-variant-actions">
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => void generateVariant(mission.id)}
+                    >
+                      別の案を見る
+                    </button>
+                    <label>
+                      直したいところ（任意）
+                      <textarea
+                        value={variantInstructions[mission.id] ?? ''}
+                        maxLength={500}
+                        onChange={(event) =>
+                          setVariantInstructions((current) => ({
+                            ...current,
+                            [mission.id]: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={
+                        pendingAction !== null || !(variantInstructions[mission.id] ?? '').trim()
+                      }
+                      onClick={() =>
+                        void generateVariant(mission.id, variantInstructions[mission.id])
+                      }
+                    >
+                      内容を直す
+                    </button>
+                  </div>
+                ) : null}
+                {mission.variants[0] && !mission.variants[0].selectedAt ? (
+                  <aside className="mission-variant">
+                    <h4>別の案</h4>
+                    <MissionContent
+                      mission={{ ...mission, content: mission.variants[0].content }}
+                    />
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => void selectVariant(mission.id, mission.variants[0]!.id)}
+                    >
+                      この案を使う
+                    </button>
+                  </aside>
+                ) : null}
+                {mission.variants[0]?.selectedAt ? (
+                  <p className="mission-step-complete">✓ 別の案を使用中です</p>
+                ) : null}
                 {active && mission.decision !== 'ACCEPTED' ? (
                   <div className="mission-decision-actions">
                     <button
@@ -204,7 +336,7 @@ export function ServiceDailyMissionSection({
                 {active && mission.decision === 'ACCEPTED' ? (
                   <div className="mission-accepted">
                     <p className="mission-step-complete">✓ 採用しました</p>
-                    {copyOptions(mission).map((option, index) => (
+                    {copyOptions(missionWithSelectedVariant(mission)).map((option, index) => (
                       <button
                         key={`${option.type}:${index}`}
                         type="button"
