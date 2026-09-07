@@ -2053,11 +2053,12 @@
 - Isolation: Workspace外、Inactive Membership、ARCHIVED Bunshin、Service Bunshinは従来どおり対象外とする。
 - Source: `docs/BUNSHIN_DETAIL_404_AUTHORIZATION_REPORT.md`
 
-## 2026-09-07: 本番Schema不整合を公開前Gateと定期readinessで検出する
+## 2026-09-07: 本番Schema不整合をmigration付き公開前Gateと定期readinessで防ぐ
 
-- Deploy gate: Vercel Production buildは最新migrationの正常完了を読み取り専用で検査し、未適用ならApplicationの公開を停止する。
-- Migration: 本番migrationは従来どおり承認付きworkflowで明示実行する。Vercel buildやreadinessから自動適用しない。
+- Deploy gate: Vercel Production buildは、保持済みのDB接続で`prisma migrate deploy`を実行し、最新migrationを読み取り専用で再確認してからApplicationをbuildする。
+- Failure: migration、Schema Gate、Application buildのいずれかが失敗した場合、新deploymentは公開されない。PreviewとDevelopmentではmigrationを実行しない。
+- Credential: 古いGitHub Environment secretを更新する方式はやめ、現在正常稼働しているVercel Productionの接続情報に一本化する。
 - Monitoring: 正式ドメインのlive/readinessを15分ごとに確認し、DB接続と最新Schemaの両方を監視する。
 - Error boundary: 画面で404へ変換するのは`NOT_FOUND` / `FORBIDDEN`だけとし、DB・Provider・設定・未知の障害は観測可能なサーバーエラーとして残す。
-- Credential operation: DB password変更時はVercel ProductionとGitHub Environmentの接続情報を同じ作業で更新する。
+- Credential operation: DB password変更時はVercel Productionの`DATABASE_URL`と`DIRECT_URL`を同じ作業で更新する。
 - Source: `docs/PRODUCTION_SCHEMA_SAFETY_REPORT.md`
