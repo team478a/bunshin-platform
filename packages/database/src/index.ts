@@ -27,6 +27,8 @@ import type {
   WorkspaceAccessRepository,
   OwnerKnowledgeRepository,
   KnowledgeGrantRepository,
+  DailyActionRepository,
+  DailyActionRecord,
   BunshinMemoryRepository,
   BunshinCapabilityAssignmentRepository,
   BunshinCapabilityAssignment,
@@ -7952,6 +7954,184 @@ export class PrismaKnowledgeGrantRepository implements KnowledgeGrantRepository 
       orderBy: { updatedAt: 'desc' },
     });
     return rows.map(knowledge);
+  }
+}
+
+function dailyAction(row: Prisma.DailyActionGetPayload<object>): DailyActionRecord {
+  return { ...row, kind: row.kind };
+}
+
+export class PrismaDailyActionRepository implements DailyActionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async bunshin(input: {
+    workspaceId: string;
+    bunshinId: string;
+    actorUserId: string;
+    groupId?: string;
+  }) {
+    return this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        ...(input.groupId === undefined
+          ? {}
+          : {
+              groupId: input.groupId,
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+            }),
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+  }
+
+  async find(input: Parameters<DailyActionRepository['find']>[0]) {
+    if (!(await this.bunshin(input))) return null;
+    const row = await this.client.dailyAction.findFirst({
+      where: {
+        id: input.dailyActionId,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        ownerUserId: input.actorUserId,
+      },
+    });
+    return row ? dailyAction(row) : null;
+  }
+
+  async findByIdempotency(input: Parameters<DailyActionRepository['findByIdempotency']>[0]) {
+    if (!(await this.bunshin(input))) return null;
+    const row = await this.client.dailyAction.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        ownerUserId: input.actorUserId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+    return row ? dailyAction(row) : null;
+  }
+
+  async list(input: Parameters<DailyActionRepository['list']>[0]) {
+    if (!(await this.bunshin(input))) return null;
+    const rows = await this.client.dailyAction.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        ownerUserId: input.actorUserId,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: input.limit,
+    });
+    return rows.map(dailyAction);
+  }
+
+  async create(input: Parameters<DailyActionRepository['create']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const existing = await tx.dailyAction.findUnique({
+        where: {
+          ownerUserId_idempotencyKey: {
+            ownerUserId: input.actorUserId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (existing)
+        return existing.workspaceId === input.workspaceId && existing.bunshinId === input.bunshinId
+          ? dailyAction(existing)
+          : null;
+      const bunshin = await tx.bunshin.findFirst({
+        where: {
+          id: input.bunshinId,
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+          ...(input.groupId === undefined
+            ? {}
+            : {
+                groupId: input.groupId,
+                group: {
+                  status: 'ACTIVE',
+                  memberships: {
+                    some: {
+                      userId: input.actorUserId,
+                      status: 'ACTIVE',
+                      consentedAt: { not: null },
+                    },
+                  },
+                },
+              }),
+          workspace: {
+            status: 'ACTIVE',
+            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          },
+        },
+        select: { id: true },
+      });
+      if (!bunshin) return null;
+      if (input.dailyMissionId) {
+        const mission = await tx.dailyMission.findFirst({
+          where: {
+            id: input.dailyMissionId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+          },
+          select: { id: true },
+        });
+        if (!mission) return null;
+      }
+      const knowledge = await tx.ownerKnowledge.create({
+        data: {
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          type: input.knowledgeType,
+          title: input.title,
+          content: input.content,
+          sourceType: 'MANUAL',
+        },
+      });
+      await tx.bunshinKnowledgeGrant.create({
+        data: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          ownerKnowledgeId: knowledge.id,
+          grantedByUserId: input.actorUserId,
+        },
+      });
+      return dailyAction(
+        await tx.dailyAction.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            ownerUserId: input.actorUserId,
+            ownerKnowledgeId: knowledge.id,
+            dailyMissionId: input.dailyMissionId,
+            kind: input.kind,
+            title: input.title,
+            content: input.content,
+            assetStorageKey: input.assetStorageKey,
+            assetMimeType: input.assetMimeType,
+            assetOriginalFilename: input.assetOriginalFilename,
+            assetSizeBytes: input.assetSizeBytes,
+            idempotencyKey: input.idempotencyKey,
+          },
+        }),
+      );
+    });
   }
 }
 

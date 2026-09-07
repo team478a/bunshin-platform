@@ -26,6 +26,7 @@ function fixture() {
     videoSceneGeneration: model(),
     socialImageGeneratedMedia: model(),
     socialImageGenerationRequest: model(),
+    dailyAction: model(),
     $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
   };
   const storage = { remove: vi.fn().mockResolvedValue(undefined) };
@@ -115,5 +116,26 @@ describe('account media purge', () => {
       })),
     );
     expect(await execute()).toBe('PENDING');
+  });
+  it('purges a Daily Action asset only inside its owner and Bunshin scope', async () => {
+    const { db, storage, execute } = fixture();
+    db.dailyAction.findMany.mockResolvedValue([
+      {
+        id: 'action',
+        workspaceId: 'workspace',
+        bunshinId: 'bunshin',
+        ownerUserId: 'owner',
+        assetStorageKey: 'workspace/owner/bunshin/action.m4a',
+      },
+    ]);
+    expect(await execute()).toBe(true);
+    expect(storage.remove).toHaveBeenCalledWith({
+      bucket: 'daily-action-materials',
+      keys: ['workspace/owner/bunshin/action.m4a'],
+    });
+    expect(db.dailyAction.updateMany).toHaveBeenCalledWith({
+      where: { id: 'action', ownerUserId: 'owner' },
+      data: expect.objectContaining({ assetStorageKey: null, content: '' }),
+    });
   });
 });

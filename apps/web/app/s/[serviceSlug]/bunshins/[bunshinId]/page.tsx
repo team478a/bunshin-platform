@@ -2,6 +2,7 @@ import {
   GetBunshin,
   ListBunshinCapabilityAssignments,
   ListPointRewardCatalog,
+  DailyActionService,
 } from '@bunshin/application';
 import {
   ListContentPillars,
@@ -22,6 +23,7 @@ import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
 import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../../ui/public-shell';
+import { DailyActionCollector } from '../../../../ui/daily-action-collector';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
 import { AccountStrategySection } from '../../../../(app)/bunshins/[bunshinId]/account-strategy-section';
@@ -71,6 +73,7 @@ export default async function ServiceBunshinDetailPage({
   let accountStrategies;
   let weeklyPlans;
   let dailyMissions: DailyMissionView[];
+  let dailyActions;
   let variantPointCost: number | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
@@ -81,6 +84,10 @@ export default async function ServiceBunshinDetailPage({
       actorUserId: actor.userId,
     };
     bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
+    dailyActions = await new DailyActionService(new db.PrismaDailyActionRepository()).list({
+      ...scope,
+      limit: 20,
+    });
     capabilities = await new ListBunshinCapabilityAssignments(
       new db.PrismaBunshinCapabilityAssignmentRepository(),
     ).execute(scope);
@@ -321,6 +328,31 @@ export default async function ServiceBunshinDetailPage({
               capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
               'ACTIVE'
             }
+          />
+        </section>
+        <section className="service-entry__card">
+          <DailyActionCollector
+            endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-actions`}
+            dailyMissionId={dailyMissions[0]?.id ?? null}
+            initialActions={dailyActions.map(
+              ({
+                id,
+                kind,
+                title,
+                createdAt,
+                assetStorageKey,
+                assetMimeType,
+                assetOriginalFilename,
+              }) => ({
+                id,
+                kind,
+                title,
+                createdAt: createdAt.toISOString(),
+                hasAsset: assetStorageKey !== null,
+                assetMimeType,
+                assetOriginalFilename,
+              }),
+            )}
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>

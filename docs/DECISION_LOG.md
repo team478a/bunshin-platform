@@ -2138,3 +2138,12 @@
 - Confirmation failure: 派生案保存後の確定処理だけが失敗した場合は自動解放せず、同じ冪等キーの再試行で確定できる状態を維持する。
 - Balance link: 複数Workspace所属時は交換対象Workspaceをポイント画面へ明示し、本人が所属する場合だけその残高を表示する。
 - Source: `docs/MISSION_CONTENT_VARIANT_POINT_REDEMPTION_REPORT.md`
+
+## 2026-09-08: Daily Actionは本人Knowledgeと分身別Grantとして保存する
+
+- Action: 写真、質問、音声メモ、コメント返信、過去投稿の改善、休む理由を同じDaily Action境界で記録する。
+- Knowledge: 各Actionは本人所有`OwnerKnowledge`へ変換し、選択中のBunshinへのGrantだけを同一Transactionで作成する。他のBunshinへ自動共有しない。
+- Media: 写真と音声は非公開Storageへ保存し、署名ではなくファイルシグネチャでMIMEを確認する。保存パスにはWorkspace、User、Bunshin、冪等キーを含め、取得時も全スコープを再検証する。
+- History: `DailyAction`は追記型履歴とし、同じUserと冪等キーの再送を重複登録しない。Daily Missionとの任意関連を持ち、後続の週次レポートで素材追加を集計できる。
+- UX: 投稿案の下に1件のおすすめActionを出し、別Actionは折りたたむ。投稿しない日でも次の生成材料を残せるようにする。
+- Source: `docs/DAILY_ACTION_MATERIAL_IMPLEMENTATION_REPORT.md`
