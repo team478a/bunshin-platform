@@ -8,7 +8,8 @@ export interface AccountDeletionMediaStorage {
       | 'social-image-media'
       | 'video-renders'
       | 'video-ai-scenes'
-      | 'video-narrations';
+      | 'video-narrations'
+      | 'daily-action-materials';
     keys: string[];
   }): Promise<void>;
 }
@@ -47,7 +48,8 @@ export async function purgeAccountMedia(
   const hasMedia =
     (await client.videoProject.count({ where: owner })) +
     (await client.videoAsset.count({ where: owner })) +
-    (await client.socialImageGenerationRequest.count({ where: owner }));
+    (await client.socialImageGenerationRequest.count({ where: owner })) +
+    (await client.dailyAction.count({ where: { ...owner, assetStorageKey: { not: null } } }));
   if (hasMedia > 0 && input.now.getTime() - account.updatedAt.getTime() < 24 * 60 * 60 * 1000)
     return 'PENDING';
   await client.$transaction([
@@ -63,17 +65,20 @@ export async function purgeAccountMedia(
     client.socialImageGenerationRequest.updateMany({ where: owner, data: { status: 'CANCELLED' } }),
   ]);
   const take = 20;
-  const [assets, images, renders, scenes, references, narrations] = await Promise.all([
-    client.videoAsset.findMany({ where: { ...owner, deletedAt: null }, take }),
-    client.socialImageGeneratedMedia.findMany({ where: { ...owner, deletedAt: null }, take }),
-    client.videoRender.findMany({ where: { ...owner, deletedAt: null }, take }),
-    client.videoSceneGeneration.findMany({ where: { ...owner, deletedAt: null }, take }),
-    client.socialImageGenerationRequest.findMany({
-      where: { ...owner, referenceImage: { not: Prisma.DbNull }, referencePurgedAt: null },
-      take,
-    }),
-    client.videoNarration.findMany({ where: { ...owner, deletedAt: null }, take }),
-  ]);
+  const [assets, images, renders, scenes, references, narrations, dailyActions] = await Promise.all(
+    [
+      client.videoAsset.findMany({ where: { ...owner, deletedAt: null }, take }),
+      client.socialImageGeneratedMedia.findMany({ where: { ...owner, deletedAt: null }, take }),
+      client.videoRender.findMany({ where: { ...owner, deletedAt: null }, take }),
+      client.videoSceneGeneration.findMany({ where: { ...owner, deletedAt: null }, take }),
+      client.socialImageGenerationRequest.findMany({
+        where: { ...owner, referenceImage: { not: Prisma.DbNull }, referencePurgedAt: null },
+        take,
+      }),
+      client.videoNarration.findMany({ where: { ...owner, deletedAt: null }, take }),
+      client.dailyAction.findMany({ where: { ...owner, assetStorageKey: { not: null } }, take }),
+    ],
+  );
   const remove = async (
     bucket: Parameters<AccountDeletionMediaStorage['remove']>[0]['bucket'],
     keys: string[],
@@ -88,9 +93,11 @@ export async function purgeAccountMedia(
     const prefix =
       bucket === 'video-assets'
         ? `video-assets/${workspaceId}/${input.userId}/`
-        : bucket === 'social-image-media'
-          ? `${workspaceId}/${groupId}/${input.userId}/`
-          : `${workspaceId}/${input.userId}/`;
+        : bucket === 'daily-action-materials'
+          ? `${workspaceId}/${input.userId}/${groupId}/`
+          : bucket === 'social-image-media'
+            ? `${workspaceId}/${groupId}/${input.userId}/`
+            : `${workspaceId}/${input.userId}/`;
     if (keys.some((key) => !key.startsWith(prefix) || key.includes('..')))
       throw new ApplicationError('CONFLICT', 'Account deletion storage scope mismatch');
     if (
@@ -175,9 +182,29 @@ export async function purgeAccountMedia(
       data: { status: 'DELETED', deletedAt: input.now, storageKey: null },
     });
   }
+  for (const action of dailyActions) {
+    await remove(
+      'daily-action-materials',
+      [action.assetStorageKey!],
+      action.workspaceId,
+      action.bunshinId,
+    );
+    await client.dailyAction.updateMany({
+      where: { id: action.id, ...owner },
+      data: {
+        title: '退会済みデータ',
+        content: '',
+        assetStorageKey: null,
+        assetMimeType: null,
+        assetOriginalFilename: null,
+        assetSizeBytes: null,
+        assetPurgedAt: input.now,
+      },
+    });
+  }
   // Full pages may have more data. Reclaim on the next batch rather than mark
   // the account completed before every page has been purged.
-  return [assets, images, renders, scenes, references, narrations].every(
+  return [assets, images, renders, scenes, references, narrations, dailyActions].every(
     (page) => page.length < take,
   )
     ? true

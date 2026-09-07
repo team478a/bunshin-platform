@@ -2,6 +2,8 @@ import {
   GetBunshin,
   ListBunshinCapabilityAssignments,
   ListPointRewardCatalog,
+  DailyActionService,
+  GetWeeklyActivityReport,
 } from '@bunshin/application';
 import {
   ListContentPillars,
@@ -22,6 +24,8 @@ import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
 import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../../ui/public-shell';
+import { DailyActionCollector } from '../../../../ui/daily-action-collector';
+import { WeeklyActivityReportCard } from '../../../../ui/weekly-activity-report';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
 import { AccountStrategySection } from '../../../../(app)/bunshins/[bunshinId]/account-strategy-section';
@@ -32,6 +36,7 @@ import { ServiceDailyMissionSection } from './service-daily-mission-section';
 import { SimpleFirstPostSetup } from './simple-first-post-setup';
 import { ServiceDeliverySettings } from './service-delivery-settings';
 import { dailyVideoProjectId } from '../../../../../src/services/automatic-daily-video';
+import { localDateInTimezone, weekRange } from '../../../../../src/activity-progress';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,10 +60,13 @@ export async function generateMetadata({
 
 export default async function ServiceBunshinDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string; bunshinId: string }>;
+  searchParams: Promise<{ weekStart?: string | string[] }>;
 }) {
   const { serviceSlug, bunshinId } = await params;
+  const requestedWeekStart = (await searchParams).weekStart;
   const service = await context(serviceSlug);
   const actor = await (await currentUserProvider()).getCurrentUser();
   const returnTo = `/s/${service.configuration.slug}/bunshins/${bunshinId}` as Route;
@@ -71,6 +79,7 @@ export default async function ServiceBunshinDetailPage({
   let accountStrategies;
   let weeklyPlans;
   let dailyMissions: DailyMissionView[];
+  let dailyActions;
   let variantPointCost: number | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
@@ -81,6 +90,10 @@ export default async function ServiceBunshinDetailPage({
       actorUserId: actor.userId,
     };
     bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
+    dailyActions = await new DailyActionService(new db.PrismaDailyActionRepository()).list({
+      ...scope,
+      limit: 20,
+    });
     capabilities = await new ListBunshinCapabilityAssignments(
       new db.PrismaBunshinCapabilityAssignmentRepository(),
     ).execute(scope);
@@ -221,6 +234,28 @@ export default async function ServiceBunshinDetailPage({
     service.configuration.registration.surveyConfig,
   ).dailyIdeaDelivery;
   const deliveryTime = notification.preference?.localTime ?? deliveryPolicy.defaultNotificationTime;
+  const reportTimezone = notification.preference?.timezone ?? 'Asia/Tokyo';
+  const currentWeekStart = weekRange(localDateInTimezone(new Date(), reportTimezone)).weekStart;
+  const selectedWeekStart = (() => {
+    if (typeof requestedWeekStart !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(requestedWeekStart))
+      return currentWeekStart;
+    const value = new Date(`${requestedWeekStart}T00:00:00.000Z`);
+    return !Number.isNaN(value.valueOf()) &&
+      value.toISOString().slice(0, 10) === requestedWeekStart &&
+      value.getUTCDay() === 1
+      ? requestedWeekStart
+      : currentWeekStart;
+  })();
+  const weeklyReport = await new GetWeeklyActivityReport(
+    new db.PrismaWeeklyActivityReportRepository(),
+  ).execute({
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    bunshinId,
+    actorUserId: actor.userId,
+    timezone: reportTimezone,
+    weekStart: selectedWeekStart,
+  });
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -321,6 +356,32 @@ export default async function ServiceBunshinDetailPage({
               capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
               'ACTIVE'
             }
+          />
+        </section>
+        <WeeklyActivityReportCard report={weeklyReport} />
+        <section className="service-entry__card">
+          <DailyActionCollector
+            endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-actions`}
+            dailyMissionId={dailyMissions[0]?.id ?? null}
+            initialActions={dailyActions.map(
+              ({
+                id,
+                kind,
+                title,
+                createdAt,
+                assetStorageKey,
+                assetMimeType,
+                assetOriginalFilename,
+              }) => ({
+                id,
+                kind,
+                title,
+                createdAt: createdAt.toISOString(),
+                hasAsset: assetStorageKey !== null,
+                assetMimeType,
+                assetOriginalFilename,
+              }),
+            )}
           />
         </section>
         <Link href={`/s/${service.configuration.slug}/bunshins` as Route}>一覧へ戻る</Link>

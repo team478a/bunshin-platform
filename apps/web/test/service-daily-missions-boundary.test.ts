@@ -67,5 +67,9 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('投稿しました');
     expect(experience).toContain('この投稿は、あなたらしかったですか？');
     expect(experience).toContain('copy-authorization');
+    expect(source).toContain("z.literal('CONFIRMED')");
+    expect(source).toContain("z.literal('RESTED')");
+    expect(experience).toContain('内容を確認しました');
+    expect(experience).toContain('今日はお休みする');
   });
 });

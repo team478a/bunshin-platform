@@ -1441,6 +1441,15 @@ enum MissionActivityType {
   FEEDBACK_BAD
 }
 
+enum DailyActionKind {
+  PHOTO
+  CUSTOMER_QUESTION
+  VOICE_MEMO
+  COMMENT_REPLY
+  POST_IMPROVEMENT
+  REST_REASON
+}
+
 enum PostSource {
   MANUAL
 }
@@ -1628,6 +1637,7 @@ model User {
   platformAdminAuditsAsActor        PlatformAdminAudit[]                @relation("PlatformAdminAuditActor")
   bunshins                          Bunshin[]
   ownerKnowledge                    OwnerKnowledge[]                    @relation("KnowledgeOwner")
+  dailyActions                      DailyAction[]                       @relation("DailyActionOwner")
   knowledgeGrants                   BunshinKnowledgeGrant[]             @relation("GrantActor")
   capabilityAssignments             BunshinCapabilityAssignment[]       @relation("CapabilityAssignmentActor")
   missionActivities                 MissionActivity[]                   @relation("MissionActivityActor")
@@ -1840,6 +1850,7 @@ model Workspace {
   groupKnowledgeAudits            GroupKnowledgeAuditLog[]
   bunshins                        Bunshin[]
   ownerKnowledge                  OwnerKnowledge[]
+  dailyActions                    DailyAction[]
   knowledgeGrants                 BunshinKnowledgeGrant[]
   memories                        BunshinMemory[]
   capabilityAssignments           BunshinCapabilityAssignment[]
@@ -4940,6 +4951,7 @@ model Bunshin {
   audiences                       BunshinAudience[]
   personality                     BunshinPersonality?
   knowledgeGrants                 BunshinKnowledgeGrant[]
+  dailyActions                    DailyAction[]
   memories                        BunshinMemory[]
   capabilityAssignments           BunshinCapabilityAssignment[]
   socialProfiles                  SocialProfile[]
@@ -5069,9 +5081,39 @@ model OwnerKnowledge {
   workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   ownerUser   User                    @relation("KnowledgeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   grants      BunshinKnowledgeGrant[]
+  dailyActions DailyAction[]
 
   @@index([workspaceId, ownerUserId, status, updatedAt])
   @@map("owner_knowledge")
+}
+
+model DailyAction {
+  id                    String          @id @default(uuid()) @db.Uuid
+  workspaceId           String          @map("workspace_id") @db.Uuid
+  bunshinId             String          @map("bunshin_id") @db.Uuid
+  ownerUserId           String          @map("owner_user_id") @db.Uuid
+  ownerKnowledgeId      String          @map("owner_knowledge_id") @db.Uuid
+  dailyMissionId        String?         @map("daily_mission_id") @db.Uuid
+  kind                  DailyActionKind
+  title                 String          @db.VarChar(160)
+  content               String          @db.VarChar(20000)
+  assetStorageKey       String?         @map("asset_storage_key") @db.VarChar(512)
+  assetMimeType         String?         @map("asset_mime_type") @db.VarChar(120)
+  assetOriginalFilename String?         @map("asset_original_filename") @db.VarChar(255)
+  assetSizeBytes        Int?            @map("asset_size_bytes")
+  assetPurgedAt         DateTime?       @map("asset_purged_at") @db.Timestamptz(6)
+  idempotencyKey        String          @map("idempotency_key") @db.Uuid
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspace             Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin               Bunshin         @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  ownerUser             User            @relation("DailyActionOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  ownerKnowledge        OwnerKnowledge  @relation(fields: [ownerKnowledgeId], references: [id], onDelete: Restrict)
+  dailyMission          DailyMission?   @relation(fields: [dailyMissionId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerUserId, idempotencyKey])
+  @@index([workspaceId, bunshinId, createdAt])
+  @@index([ownerKnowledgeId])
+  @@map("daily_actions")
 }
 
 model BunshinKnowledgeGrant {
@@ -5408,6 +5450,7 @@ model DailyMission {
   campaign                       Campaign?                       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   contentLinkUsage               ContentLinkUsage?
   contentVariants                MissionContentVariant[]
+  dailyActions                   DailyAction[]
   contentVariantGenerations      MissionContentVariantGeneration[]
   contentVariantSelections       MissionContentVariantSelection[]
 

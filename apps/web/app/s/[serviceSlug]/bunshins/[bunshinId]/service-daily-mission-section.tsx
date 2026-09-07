@@ -137,6 +137,16 @@ export function ServiceDailyMissionSection({
     if (await record(id, 'feedback', { rating, idempotencyKey: key() })) router.refresh();
   }
 
+  async function continuity(id: string, type: 'CONFIRMED' | 'RESTED') {
+    const ok = await record(id, 'activities', { type, idempotencyKey: key() });
+    if (ok)
+      setMessage(
+        type === 'CONFIRMED'
+          ? '内容を確認したと記録しました。'
+          : '今日はお休みすると記録しました。',
+      );
+  }
+
   async function generateVariant(missionId: string, instruction?: string) {
     if (pendingAction) return;
     if (variantPointCost === null) {
@@ -248,6 +258,24 @@ export function ServiceDailyMissionSection({
                 <MissionTrendContext mission={mission} />
                 <MissionGuide mission={missionWithSelectedVariant(mission)} />
                 <MissionContent mission={missionWithSelectedVariant(mission)} />
+                {active ? (
+                  <div className="mission-decision-actions">
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => void continuity(mission.id, 'CONFIRMED')}
+                    >
+                      内容を確認しました
+                    </button>{' '}
+                    <button
+                      type="button"
+                      disabled={pendingAction !== null}
+                      onClick={() => void continuity(mission.id, 'RESTED')}
+                    >
+                      今日はお休みする
+                    </button>
+                  </div>
+                ) : null}
                 {active && !mission.variants[0] ? (
                   <div className="mission-variant-actions">
                     <button

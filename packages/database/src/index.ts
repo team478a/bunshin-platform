@@ -27,6 +27,9 @@ import type {
   WorkspaceAccessRepository,
   OwnerKnowledgeRepository,
   KnowledgeGrantRepository,
+  DailyActionRepository,
+  DailyActionRecord,
+  WeeklyActivityReportRepository,
   BunshinMemoryRepository,
   BunshinCapabilityAssignmentRepository,
   BunshinCapabilityAssignment,
@@ -1407,7 +1410,13 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
           this.client.job.count({
             where: {
               environment,
-              jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+              jobType: {
+                in: [
+                  'LINE_MISSION_DELIVER',
+                  'BADGE_LINE_DELIVER',
+                  'WEEKLY_ACTIVITY_REPORT_DELIVER',
+                ],
+              },
               status,
             },
           }),
@@ -1532,14 +1541,18 @@ export class PrismaLineOperationalSnapshotRepository implements LineOperationalS
       this.client.job.count({
         where: {
           environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: 'RETRY_SCHEDULED',
         },
       }),
       this.client.job.count({
         where: {
           environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: 'DEAD',
         },
       }),
@@ -7955,6 +7968,260 @@ export class PrismaKnowledgeGrantRepository implements KnowledgeGrantRepository 
   }
 }
 
+function dailyAction(row: Prisma.DailyActionGetPayload<object>): DailyActionRecord {
+  return { ...row, kind: row.kind };
+}
+
+export class PrismaDailyActionRepository implements DailyActionRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  private async bunshin(input: {
+    workspaceId: string;
+    bunshinId: string;
+    actorUserId: string;
+    groupId?: string;
+  }) {
+    return this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        ...(input.groupId === undefined
+          ? {}
+          : {
+              groupId: input.groupId,
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+            }),
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+  }
+
+  async find(input: Parameters<DailyActionRepository['find']>[0]) {
+    if (!(await this.bunshin(input))) return null;
+    const row = await this.client.dailyAction.findFirst({
+      where: {
+        id: input.dailyActionId,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        ownerUserId: input.actorUserId,
+      },
+    });
+    return row ? dailyAction(row) : null;
+  }
+
+  async findByIdempotency(input: Parameters<DailyActionRepository['findByIdempotency']>[0]) {
+    if (!(await this.bunshin(input))) return null;
+    const row = await this.client.dailyAction.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        ownerUserId: input.actorUserId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+    return row ? dailyAction(row) : null;
+  }
+
+  async list(input: Parameters<DailyActionRepository['list']>[0]) {
+    if (!(await this.bunshin(input))) return null;
+    const rows = await this.client.dailyAction.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        ownerUserId: input.actorUserId,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: input.limit,
+    });
+    return rows.map(dailyAction);
+  }
+
+  async create(input: Parameters<DailyActionRepository['create']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const existing = await tx.dailyAction.findUnique({
+        where: {
+          ownerUserId_idempotencyKey: {
+            ownerUserId: input.actorUserId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (existing)
+        return existing.workspaceId === input.workspaceId && existing.bunshinId === input.bunshinId
+          ? dailyAction(existing)
+          : null;
+      const bunshin = await tx.bunshin.findFirst({
+        where: {
+          id: input.bunshinId,
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+          ...(input.groupId === undefined
+            ? {}
+            : {
+                groupId: input.groupId,
+                group: {
+                  status: 'ACTIVE',
+                  memberships: {
+                    some: {
+                      userId: input.actorUserId,
+                      status: 'ACTIVE',
+                      consentedAt: { not: null },
+                    },
+                  },
+                },
+              }),
+          workspace: {
+            status: 'ACTIVE',
+            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+          },
+        },
+        select: { id: true },
+      });
+      if (!bunshin) return null;
+      if (input.dailyMissionId) {
+        const mission = await tx.dailyMission.findFirst({
+          where: {
+            id: input.dailyMissionId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+          },
+          select: { id: true },
+        });
+        if (!mission) return null;
+      }
+      const knowledge = await tx.ownerKnowledge.create({
+        data: {
+          workspaceId: input.workspaceId,
+          ownerUserId: input.actorUserId,
+          type: input.knowledgeType,
+          title: input.title,
+          content: input.content,
+          sourceType: 'MANUAL',
+        },
+      });
+      await tx.bunshinKnowledgeGrant.create({
+        data: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          ownerKnowledgeId: knowledge.id,
+          grantedByUserId: input.actorUserId,
+        },
+      });
+      return dailyAction(
+        await tx.dailyAction.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            ownerUserId: input.actorUserId,
+            ownerKnowledgeId: knowledge.id,
+            dailyMissionId: input.dailyMissionId,
+            kind: input.kind,
+            title: input.title,
+            content: input.content,
+            assetStorageKey: input.assetStorageKey,
+            assetMimeType: input.assetMimeType,
+            assetOriginalFilename: input.assetOriginalFilename,
+            assetSizeBytes: input.assetSizeBytes,
+            idempotencyKey: input.idempotencyKey,
+          },
+        }),
+      );
+    });
+  }
+}
+
+export class PrismaWeeklyActivityReportRepository implements WeeklyActivityReportRepository {
+  constructor(private readonly client: PrismaClient = prisma) {}
+
+  async read(input: Parameters<WeeklyActivityReportRepository['read']>[0]) {
+    const bunshin = await this.client.bunshin.findFirst({
+      where: {
+        id: input.bunshinId,
+        workspaceId: input.workspaceId,
+        ownerUserId: input.actorUserId,
+        status: { in: ['DRAFT', 'ACTIVE', 'PAUSED'] },
+        ...(input.groupId === undefined
+          ? {}
+          : {
+              groupId: input.groupId,
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    consentedAt: { not: null },
+                  },
+                },
+              },
+            }),
+        workspace: {
+          status: 'ACTIVE',
+          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+        },
+      },
+      select: { id: true },
+    });
+    if (!bunshin) return null;
+    const range = { gte: input.from, lt: input.to };
+    const [activities, posts, dailyActions, variantSelections] = await Promise.all([
+      this.client.missionActivity.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          occurredAt: range,
+        },
+        select: { dailyMissionId: true, type: true, occurredAt: true },
+      }),
+      this.client.postRecord.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          postedAt: range,
+        },
+        select: { dailyMissionId: true, postedAt: true },
+      }),
+      this.client.dailyAction.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          ownerUserId: input.actorUserId,
+          createdAt: range,
+        },
+        select: { id: true, createdAt: true },
+      }),
+      this.client.missionContentVariantSelection.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          selectedAt: range,
+        },
+        select: { dailyMissionId: true, selectedAt: true },
+      }),
+    ]);
+    return { activities, posts, dailyActions, variantSelections };
+  }
+}
+
 function memory(row: Prisma.BunshinMemoryGetPayload<object>): BunshinMemory {
   return {
     ...row,
@@ -10262,7 +10529,9 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         by: ['status'],
         where: {
           environment: input.environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: { in: ['RETRY_SCHEDULED', 'DEAD'] },
         },
         _count: { _all: true },
@@ -10270,7 +10539,9 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       this.client.job.count({
         where: {
           environment: input.environment,
-          jobType: { notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'WEEKLY_ACTIVITY_REPORT_DELIVER'],
+          },
           status: 'DEAD',
         },
       }),

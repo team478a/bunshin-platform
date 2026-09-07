@@ -11,6 +11,7 @@ import {
   ExpireServiceCredits,
   ExecuteGroupKnowledgeExtractionJob,
   ExecuteServiceLineBroadcastJob,
+  ExecuteWeeklyActivityReportJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -62,6 +63,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createSocialImageGenerationJobHandler },
     { createGroupKnowledgeExtractionJobHandler },
     { createServiceLineBroadcastJobHandler },
+    { createWeeklyActivityReportJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
@@ -73,6 +75,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/social-image-generation-job-handler'),
     import('../jobs/group-knowledge-extraction-job-handler'),
     import('../jobs/service-line-broadcast-job-handler'),
+    import('../jobs/weekly-activity-report-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -115,6 +118,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
+  const weeklyActivityReportExecutor = new ExecuteWeeklyActivityReportJob(
+    createWeeklyActivityReportJobHandler(),
+    complete,
+    fail,
+  );
   // PDF / video extraction can legitimately wait up to 120 seconds on the provider.
   // Keep the lease longer than every configured provider timeout so another cron
   // invocation cannot claim and charge for the same extraction concurrently.
@@ -122,19 +130,21 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     execute: (job, workerId) =>
       job.jobType === 'LINE_MISSION_DELIVER'
         ? lineExecutor.execute(job, workerId)
-        : job.jobType === 'BADGE_LINE_DELIVER'
-          ? badgeLineExecutor.execute(job, workerId)
-          : job.jobType === 'VIDEO_RENDER_PROCESS'
-            ? videoExecutor.execute(job, workerId)
-            : job.jobType === 'VIDEO_AI_SCENE_GENERATION_PROCESS'
-              ? videoAiSceneExecutor.execute(job, workerId)
-              : job.jobType === 'SOCIAL_IMAGE_GENERATE'
-                ? socialImageExecutor.execute(job, workerId)
-                : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
-                  ? groupKnowledgeExecutor.execute(job, workerId)
-                  : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
-                    ? serviceLineBroadcastExecutor.execute(job, workerId)
-                    : missionExecutor.execute(job, workerId),
+        : job.jobType === 'WEEKLY_ACTIVITY_REPORT_DELIVER'
+          ? weeklyActivityReportExecutor.execute(job, workerId)
+          : job.jobType === 'BADGE_LINE_DELIVER'
+            ? badgeLineExecutor.execute(job, workerId)
+            : job.jobType === 'VIDEO_RENDER_PROCESS'
+              ? videoExecutor.execute(job, workerId)
+              : job.jobType === 'VIDEO_AI_SCENE_GENERATION_PROCESS'
+                ? videoAiSceneExecutor.execute(job, workerId)
+                : job.jobType === 'SOCIAL_IMAGE_GENERATE'
+                  ? socialImageExecutor.execute(job, workerId)
+                  : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
+                    ? groupKnowledgeExecutor.execute(job, workerId)
+                    : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
+                      ? serviceLineBroadcastExecutor.execute(job, workerId)
+                      : missionExecutor.execute(job, workerId),
   });
 }
 
