@@ -218,6 +218,7 @@ export class WeeklyPlanGenerationService {
         correlationId: input.usageIdempotencyKey,
         stage,
         errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
       });
       if (providerAttempted)
         await this.dependencies.recordUsage({

@@ -9343,7 +9343,18 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
         },
       },
       create: {
-        ...input,
+        workspaceId: input.workspaceId,
+        bunshinId: input.bunshinId,
+        actorUserId: input.actorUserId,
+        taskType: input.taskType,
+        provider: input.provider,
+        model: input.model,
+        promptVersion: input.promptVersion,
+        status: input.status,
+        inputTokens: input.inputTokens,
+        outputTokens: input.outputTokens,
+        latencyMs: input.latencyMs,
+        idempotencyKey: input.idempotencyKey,
         estimatedCostUsdMicros:
           input.estimatedCostUsdMicros === undefined || input.estimatedCostUsdMicros === null
             ? null

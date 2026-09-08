@@ -86,6 +86,25 @@ describe('GenerateWeeklyPlan', () => {
     expect(provider.generate).not.toHaveBeenCalled();
   });
 
+  it('normalizes campaign classification when no campaign is available', async () => {
+    const result = await new GenerateWeeklyPlan(
+      planner({
+        ...output,
+        items: [
+          {
+            ...output.items[0]!,
+            classification: 'PRODUCT_RELATED',
+            campaignId: null,
+          },
+        ],
+      }),
+    ).execute(input);
+    expect(result.output.items[0]).toMatchObject({
+      classification: 'ORGANIC',
+      campaignId: null,
+    });
+  });
+
   const campaign = {
     id: 'campaign-1',
     name: '公式企画',
