@@ -10,6 +10,7 @@ const images = source('../app/s/[serviceSlug]/images/page.tsx');
 const videos = source('../app/s/[serviceSlug]/videos/page.tsx');
 const videoAssets = source('../app/s/[serviceSlug]/video-assets/page.tsx');
 const videoDetail = source('../app/s/[serviceSlug]/videos/[videoProjectId]/page.tsx');
+const groupImages = source('../app/(app)/groups/[groupId]/images/page.tsx');
 
 describe('service media entry boundary', () => {
   it('keeps image and video entry links inside the service URL', () => {
@@ -32,5 +33,9 @@ describe('service media entry boundary', () => {
     expect(videos).toContain('service: service.configuration.slug');
     expect(videoAssets).toContain('service: service.configuration.slug');
     expect(videoDetail).toContain('service: service.configuration.slug');
+  });
+
+  it('uses the participant membership that owns image creation credits', () => {
+    expect(groupImages).toContain("serviceRole: 'PARTICIPANT'");
   });
 });
