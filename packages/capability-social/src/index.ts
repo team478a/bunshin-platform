@@ -1646,6 +1646,16 @@ export class GenerateMissionContent {
       selectedMemories,
     });
     const output = normalizeMissionContent(input.brief.format, result.output);
+    // The model sometimes returns its own creation-time estimate even though the
+    // mission brief is the user-facing time budget. Keep generated content within
+    // that already validated budget instead of rejecting an otherwise usable post.
+    if (
+      'estimatedMinutes' in output &&
+      typeof output.estimatedMinutes === 'number' &&
+      output.estimatedMinutes > input.brief.estimatedMinutes
+    ) {
+      output.estimatedMinutes = input.brief.estimatedMinutes;
+    }
     validatePlatformContent(input.platform, input.brief, output);
     return {
       ...result,
