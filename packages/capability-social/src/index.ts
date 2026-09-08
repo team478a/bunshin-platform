@@ -1025,10 +1025,19 @@ export class GenerateWeeklyPlan {
       dates.add(scheduledDate);
       if (!pillarIds.has(item.contentPillarId))
         throw new ApplicationError('VALIDATION_ERROR', 'generated pillar is outside context');
-      const campaign = item.campaignId ? campaigns.get(item.campaignId) : null;
-      if (item.classification === 'ORGANIC' && item.campaignId !== null)
+      const classification =
+        campaignValues.length === 0
+          ? ('ORGANIC' as const)
+          : validateEnum(
+              item.classification,
+              ['ORGANIC', 'PRODUCT_RELATED', 'ADVERTISEMENT'] as const,
+              'classification',
+            );
+      const campaignId = campaignValues.length === 0 ? null : item.campaignId;
+      const campaign = campaignId ? campaigns.get(campaignId) : null;
+      if (classification === 'ORGANIC' && campaignId !== null)
         throw new ApplicationError('VALIDATION_ERROR', 'organic item cannot use campaign');
-      if (item.classification !== 'ORGANIC' && !campaign)
+      if (classification !== 'ORGANIC' && !campaign)
         throw new ApplicationError('VALIDATION_ERROR', 'campaign item is outside context');
       return {
         scheduledDate,
@@ -1037,12 +1046,8 @@ export class GenerateWeeklyPlan {
         angle: weeklyText(item.angle, 500, 'angle'),
         recommendedFormat: weeklyFormat(item.recommendedFormat),
         notes: weeklyNullable(item.notes, 1000) ?? null,
-        campaignId: item.campaignId,
-        classification: validateEnum(
-          item.classification,
-          ['ORGANIC', 'PRODUCT_RELATED', 'ADVERTISEMENT'] as const,
-          'classification',
-        ),
+        campaignId,
+        classification,
       };
     });
     for (const campaign of campaignValues) {
