@@ -6244,3 +6244,19 @@ model ServiceLineLinkAttempt {
   @@index([expiresAt])
   @@map("service_line_link_attempts")
 }
+
+model VideoLineAccess {
+  stateHash String @id @map("state_hash") @db.Char(64)
+  projectId String @map("project_id") @db.Uuid
+  ownerUserId String @map("owner_user_id") @db.Uuid
+  configurationId String @map("configuration_id") @db.Uuid
+  providerHash String @map("provider_hash") @db.Char(64)
+  nonce String @db.VarChar(64)
+  verifier String @db.VarChar(128)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  sessionHash String? @unique @map("session_hash") @db.Char(64)
+  sessionExpiresAt DateTime? @map("session_expires_at") @db.Timestamptz(6)
+  @@index([expiresAt, sessionExpiresAt])
+  @@map("video_line_access")
+}

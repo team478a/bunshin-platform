@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260908060000_service_line_link';
+export const LATEST_DATABASE_MIGRATION = '20260908090000_video_line_access';
