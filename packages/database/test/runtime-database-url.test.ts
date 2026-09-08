@@ -21,7 +21,21 @@ describe('runtimeDatabaseUrl', () => {
     expect(result.searchParams.get('schema')).toBe('public');
   });
 
-  it('does not modify direct or session-pooler URLs', () => {
+  it('uses transaction mode for a Supabase runtime session URL', () => {
+    const result = new URL(
+      runtimeDatabaseUrl(
+        'postgresql://user:secret@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require',
+      )!,
+    );
+    expect(result.port).toBe('6543');
+    expect(result.searchParams.get('pgbouncer')).toBe('true');
+    expect(result.searchParams.get('connection_limit')).toBe('1');
+    expect(result.searchParams.get('sslmode')).toBe('require');
+    expect(result.username).toBe('user');
+    expect(result.password).toBe('secret');
+  });
+
+  it('does not modify direct or unrelated session-pooler URLs', () => {
     const direct = 'postgresql://user:secret@db.example.com:5432/postgres';
     expect(runtimeDatabaseUrl(direct)).toBe(direct);
   });
