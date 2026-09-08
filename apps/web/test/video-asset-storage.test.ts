@@ -37,8 +37,9 @@ describe('SupabaseVideoAssetStorage', () => {
     });
     expect(fake.createBucket).toHaveBeenCalledWith(
       'video-assets',
-      expect.objectContaining({ public: false, fileSizeLimit: 200_000_000 }),
+      expect.objectContaining({ public: false }),
     );
+    expect(fake.createBucket.mock.calls[0]?.[1]).not.toHaveProperty('fileSizeLimit');
     expect(fake.createSignedUploadUrl).toHaveBeenCalledWith('video-assets/workspace/user/id', {
       upsert: false,
     });

@@ -58,7 +58,9 @@ export class ExecuteVideoRenderJob {
             ? new VideoRenderJobHandlerError('VIDEO_RENDER_INVALID_REQUEST', false)
             : error instanceof ApplicationError && error.code === 'CONFIGURATION_ERROR'
               ? new VideoRenderJobHandlerError('VIDEO_RENDER_CONFIGURATION', false)
-              : new VideoRenderJobHandlerError('VIDEO_RENDER_UNEXPECTED', true);
+              : error instanceof ApplicationError && error.code === 'INTERNAL_ERROR'
+                ? new VideoRenderJobHandlerError('VIDEO_RENDER_INFRASTRUCTURE', true)
+                : new VideoRenderJobHandlerError('VIDEO_RENDER_UNEXPECTED', true);
       const failedJob = await this.fail.execute(job, workerId, {
         errorCategory: classified.category,
         retryable: classified.retryable,
