@@ -312,7 +312,7 @@ describe('LINE messaging persistence isolation', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('claims a state once using environment, actor, version and exact expiry', async () => {
+  it('opens a state using environment, actor, version and exact signed expiry', async () => {
     const now = new Date('2026-08-22T04:00:00Z');
     const expiresAt = new Date('2026-08-22T04:10:00Z');
     const row = {
@@ -355,12 +355,51 @@ describe('LINE messaging persistence isolation', () => {
         userId: 'user-a',
         keyVersion: 1,
         expiresAt,
-        consumedAt: null,
       }),
     });
     expect(tx.missionDeepLinkState.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { consumedAt: now } }),
     );
+  });
+
+  it('reopens an already verified state for the same actor without another update', async () => {
+    const now = new Date('2026-08-22T04:13:00Z');
+    const consumedAt = new Date('2026-08-22T04:02:00Z');
+    const row = {
+      id: '77d8baef-d7de-48d7-975e-c7c0ea4c81bf',
+      environment: 'PRODUCTION' as const,
+      workspaceId: 'workspace-a',
+      bunshinId: 'bunshin-a',
+      userId: 'user-a',
+      dailyMissionId: 'mission-a',
+      keyVersion: 1,
+      expiresAt: new Date('2026-08-22T04:10:00Z'),
+      consumedAt,
+      createdAt: new Date('2026-08-22T04:00:00Z'),
+    };
+    const tx = {
+      missionDeepLinkState: {
+        findFirst: vi.fn().mockResolvedValue(row),
+        updateMany: vi.fn(),
+      },
+    };
+    const client = {
+      $transaction: vi
+        .fn()
+        .mockImplementation((work: (transaction: typeof tx) => Promise<unknown>) => work(tx)),
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaMissionDeepLinkStateRepository(client).consume({
+        id: row.id,
+        environment: 'PRODUCTION',
+        actorUserId: 'user-a',
+        keyVersion: 1,
+        expiresAt: row.expiresAt,
+        now,
+      }),
+    ).resolves.toEqual(row);
+    expect(tx.missionDeepLinkState.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a concurrently consumed state', async () => {

@@ -169,4 +169,59 @@ describe('LINE messaging core', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(repository.consume).not.toHaveBeenCalled();
   });
+
+  it('accepts an actor-bound notification opened after the original ten-minute window', async () => {
+    const stored = state();
+    const repository = {
+      create: vi.fn(),
+      consume: vi.fn().mockResolvedValue(stored),
+    } satisfies MissionDeepLinkStateRepository;
+    const signer = {
+      sign: vi.fn(),
+      verify: vi.fn().mockResolvedValue({
+        stateId,
+        environment: 'PRODUCTION',
+        keyVersion: 2,
+        expiresAtEpochSeconds: 1_787_371_800,
+      }),
+    } satisfies MissionDeepLinkSignerPort;
+    const openedAt = new Date('2026-08-22T04:13:00.000Z');
+
+    await expect(
+      new ConsumeMissionDeepLinkState(repository, signer, () => openedAt).execute({
+        token: 'opaque-token',
+        environment: 'PRODUCTION',
+        actorUserId: 'user-a',
+      }),
+    ).resolves.toBe(stored);
+  });
+
+  it('rejects a notification outside the one-day access window', async () => {
+    const repository = {
+      create: vi.fn(),
+      consume: vi.fn(),
+    } satisfies MissionDeepLinkStateRepository;
+    const signer = {
+      sign: vi.fn(),
+      verify: vi.fn().mockResolvedValue({
+        stateId,
+        environment: 'PRODUCTION',
+        keyVersion: 2,
+        expiresAtEpochSeconds: 1_787_371_800,
+      }),
+    } satisfies MissionDeepLinkSignerPort;
+
+    await expect(
+      new ConsumeMissionDeepLinkState(
+        repository,
+        signer,
+        () => new Date('2026-08-23T04:10:00.001Z'),
+      ).execute({
+        token: 'opaque-token',
+        environment: 'PRODUCTION',
+        actorUserId: 'user-a',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(repository.consume).not.toHaveBeenCalled();
+  });
 });

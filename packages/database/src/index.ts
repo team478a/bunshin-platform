@@ -2190,8 +2190,6 @@ export class PrismaMissionDeepLinkStateRepository implements MissionDeepLinkStat
           userId: input.actorUserId,
           keyVersion: input.keyVersion,
           expiresAt: input.expiresAt,
-          consumedAt: null,
-          AND: { expiresAt: { gt: input.now } },
           user: { status: 'ACTIVE' },
           workspace: {
             status: 'ACTIVE',
@@ -2217,6 +2215,7 @@ export class PrismaMissionDeepLinkStateRepository implements MissionDeepLinkStat
         },
       });
       if (!state) return null;
+      if (state.consumedAt) return missionDeepLinkState(state);
       const claimed = await tx.missionDeepLinkState.updateMany({
         where: {
           id: state.id,
@@ -2225,7 +2224,6 @@ export class PrismaMissionDeepLinkStateRepository implements MissionDeepLinkStat
           keyVersion: input.keyVersion,
           expiresAt: input.expiresAt,
           consumedAt: null,
-          AND: { expiresAt: { gt: input.now } },
         },
         data: { consumedAt: input.now },
       });
