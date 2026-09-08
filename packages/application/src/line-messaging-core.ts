@@ -622,6 +622,9 @@ export class ConsumeMissionDeepLinkState {
     private readonly repository: MissionDeepLinkStateRepository,
     private readonly signer: MissionDeepLinkSignerPort,
     private readonly now = () => new Date(),
+    // LINE notifications are often opened after the original 10-minute authentication window.
+    // The signed state remains actor-bound and can safely recover the same day's mission.
+    private readonly accessGraceMilliseconds = 24 * 60 * 60_000,
   ) {}
 
   async execute(input: {
@@ -631,9 +634,11 @@ export class ConsumeMissionDeepLinkState {
   }) {
     const claims = await this.signer.verify(input.token);
     const now = this.now();
+    if (this.accessGraceMilliseconds < 0 || this.accessGraceMilliseconds > 7 * 24 * 60 * 60_000)
+      throw new ApplicationError('CONFIGURATION_ERROR', 'invalid Mission deep link access grace');
     if (!uuid.test(claims.stateId) || claims.environment !== input.environment)
       throw new ApplicationError('FORBIDDEN', 'invalid Mission deep link state');
-    if (claims.expiresAtEpochSeconds * 1_000 < now.getTime())
+    if (claims.expiresAtEpochSeconds * 1_000 + this.accessGraceMilliseconds < now.getTime())
       throw new ApplicationError('FORBIDDEN', 'Mission deep link state expired');
     const state = await this.repository.consume({
       id: claims.stateId,
