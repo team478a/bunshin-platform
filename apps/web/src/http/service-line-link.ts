@@ -100,8 +100,8 @@ export async function startServiceLineLink(request: Request) {
   try {
     requireSameOrigin(request);
     const form = await request.formData();
-    const slug = String(form.get('serviceSlug') ?? '');
-    const id = String(form.get('bunshinId') ?? '');
+    const slug = z.string().parse(form.get('serviceSlug'));
+    const id = z.string().parse(form.get('bunshinId'));
     const scope = await serviceLineLinkScope(slug, id);
     destination = returnPath(slug, id);
     if (form.get('consent') !== 'yes') throw new Error('Consent required');
@@ -249,8 +249,8 @@ export async function retryCompletedVideoNotice(request: Request) {
   try {
     requireSameOrigin(request);
     const form = await request.formData();
-    const slug = String(form.get('serviceSlug') ?? '');
-    const id = String(form.get('bunshinId') ?? '');
+    const slug = z.string().parse(form.get('serviceSlug'));
+    const id = z.string().parse(form.get('bunshinId'));
     const scope = await serviceLineLinkScope(slug, id);
     destination = returnPath(slug, id);
     const renderId = z.string().uuid().parse(form.get('renderId'));

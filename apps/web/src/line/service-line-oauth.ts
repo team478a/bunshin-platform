@@ -51,7 +51,7 @@ export async function verifyServiceLineCode(
   },
   request: typeof fetch = fetch,
 ) {
-  const post = async (path: string, body: Record<string, string>) => {
+  const post = async (path: string, body: Record<string, string>): Promise<unknown> => {
     const response = await request(`https://api.line.me${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },

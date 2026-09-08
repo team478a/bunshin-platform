@@ -50,8 +50,12 @@ describe('service LINE proof verification', () => {
       providerUserId: claims.sub,
       following: true,
     });
-    expect(String(request.mock.calls[0]?.[1]?.body)).toContain('code_verifier=verifier');
-    expect(String(request.mock.calls[1]?.[1]?.body)).toContain('nonce=nonce');
+    const tokenBody = request.mock.calls[0]?.[1]?.body;
+    const verifyBody = request.mock.calls[1]?.[1]?.body;
+    if (!(tokenBody instanceof URLSearchParams) || !(verifyBody instanceof URLSearchParams))
+      throw new Error('Expected form-encoded provider requests');
+    expect(tokenBody.get('code_verifier')).toBe('verifier');
+    expect(verifyBody.get('nonce')).toBe('nonce');
     expect(request.mock.calls[2]?.[1]?.headers).toEqual({ authorization: 'Bearer access-token' });
   });
   it.each([

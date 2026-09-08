@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as serviceLineOAuth from '../src/line/service-line-oauth';
 const m = vi.hoisted(() => ({
   actor: vi.fn(),
   bunshin: vi.fn(),
@@ -42,7 +43,7 @@ vi.mock('../src/line/secure-configuration', () => ({
   },
 }));
 vi.mock('../src/line/service-line-oauth', async (original) => ({
-  ...(await original<typeof import('../src/line/service-line-oauth')>()),
+  ...(await original<typeof serviceLineOAuth>()),
   verifyServiceLineCode: m.verify,
 }));
 vi.mock('@bunshin/database', () => {
