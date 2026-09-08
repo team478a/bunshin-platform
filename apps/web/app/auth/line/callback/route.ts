@@ -6,6 +6,7 @@ import { recordAuthenticatedRegistrationEvent } from '../../../../src/registrati
 import {
   LINE_AUTH_RETURN_COOKIE,
   lineAuthReturnFromCookie,
+  videoAuthReturnProjectId,
 } from '../../../../src/auth/line-return';
 
 function clearReturnCookie(response: NextResponse): NextResponse {
@@ -119,6 +120,8 @@ export async function GET(request: Request): Promise<Response> {
     );
     if (required.some((item) => !item.consentedAt))
       return NextResponse.redirect(new URL('/consent', request.url), 303);
+    if (videoAuthReturnProjectId(returnTo))
+      return clearReturnCookie(NextResponse.redirect(new URL(returnTo!, request.url), 303));
     const registration = await db.prisma.userRegistrationProfile.findUnique({
       where: { userId: currentUser.userId },
       select: { status: true },

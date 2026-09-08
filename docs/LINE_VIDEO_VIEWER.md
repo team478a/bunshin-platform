@@ -9,3 +9,7 @@
 OAuthは10分の単回state、HttpOnly/Secure/SameSite=Lax Cookie、PKCE、nonceを利用し、消費後にnonce/verifierを消去する。閲覧Cookieは動画単位・30分期限の乱数とし、DBにはハッシュだけを保持する。閲覧とダウンロードのたびに所有者、所属、専用LINE設定、通知先の一致、期限を再確認する。保存先はWorkspace/所有者/Renderの一致を確認したうえで5分の署名URLを発行する。匿名UUIDアクセスや別LINEの認証では許可しない。
 
 本番LINE Loginチャネルには既存URLを残して`https://www.watashi-works.com/auth/video-line/callback`を追加する。受入確認は、アプリ所有者と異なる/未ログインのブラウザーで既存通知URLから入り、LINE本人確認後にMP4を読み込んで再生できることまで行う。
+
+閲覧ページのReferrer Policyは`same-origin`とする。`no-referrer`ではブラウザーの同一オリジンPOSTもOriginが`null`になり、認証開始のCSRF検査で拒否される。外部への参照元送信は抑えつつ、同一サイトのフォーム送信に必要なOriginを維持する。OAuthリダイレクトおよび署名付き動画URLへのリダイレクトは引き続き`no-referrer`で保護する。
+
+ログイン画面の戻り先にはUUID形式の動画閲覧URLだけを許可する。この文脈のLINEボタンは専用チャネルの動画本人確認へ進める。アプリ認証を使用した場合も必要な規約同意を維持し、業種などの初期設定は要求せず保護された閲覧画面へ戻す。閲覧権限の検証は省略しない。

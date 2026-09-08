@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({
   registrationStatus: 'COMPLETED',
   connect: vi.fn(),
   identityCreate: vi.fn(),
+  verifyOtp: vi.fn(),
+  acceptConsents: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -14,6 +16,9 @@ vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://bunshin.example', APP_ENV: 'development' }),
 }));
 vi.mock('@bunshin/application', () => ({
+  AcceptRequiredLegalConsents: class {
+    execute = state.acceptConsents;
+  },
   ConnectLineMessagingAccount: class {
     execute = state.connect;
   },
@@ -24,6 +29,7 @@ vi.mock('../src/auth/supabase', () => ({
       auth: {
         signInWithOAuth: state.signInWithOAuth,
         exchangeCodeForSession: state.exchangeCodeForSession,
+        verifyOtp: state.verifyOtp,
       },
     }),
 }));
@@ -61,12 +67,16 @@ vi.mock('@bunshin/database', () => ({
 
 import { GET as completeLineLogin } from '../app/auth/line/callback/route';
 import { POST as startLineLogin } from '../app/auth/line/route';
+import { POST as completeEmailLogin } from '../app/auth/confirm/route';
+import { POST as acceptConsents } from '../app/consent/accept/route';
 
 describe('LINE login routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.requiredConsents = [];
     state.registrationStatus = 'COMPLETED';
+    state.verifyOtp.mockResolvedValue({ error: null });
+    state.acceptConsents.mockResolvedValue(undefined);
     state.connect.mockResolvedValue({ id: 'connection-1' });
     state.identityCreate.mockResolvedValue({ id: 'identity-1' });
     state.signInWithOAuth.mockResolvedValue({
@@ -165,6 +175,61 @@ describe('LINE login routes', () => {
     );
 
     expect(response.headers.get('location')).toBe('https://bunshin.example/onboarding');
+  });
+
+  const videoPath = '/video-access/11111111-1111-4111-8111-111111111111';
+  const returnCookie = `bunshin_line_auth_return=${encodeURIComponent(videoPath)}`;
+  const callbackRequest = () =>
+    new Request('https://bunshin.example/auth/line/callback?code=one-time-code', {
+      headers: { cookie: returnCookie },
+    });
+  const emailRequest = () =>
+    new Request('https://bunshin.example/auth/confirm', {
+      method: 'POST',
+      headers: { origin: 'https://bunshin.example', cookie: returnCookie },
+      body: new URLSearchParams({ token_hash: 'valid-token', type: 'email' }),
+    });
+
+  it('returns incomplete LINE accounts to the protected viewer without requiring industry setup', async () => {
+    state.registrationStatus = 'IN_PROGRESS';
+    const response = await completeLineLogin(callbackRequest());
+    expect(response.headers.get('location')).toBe(`https://bunshin.example${videoPath}`);
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('returns incomplete email accounts to the protected viewer', async () => {
+    state.registrationStatus = 'IN_PROGRESS';
+    const response = await completeEmailLogin(emailRequest());
+    expect(response.headers.get('location')).toBe(`https://bunshin.example${videoPath}`);
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('preserves required legal consent and the video return cookie for both login methods', async () => {
+    state.registrationStatus = 'IN_PROGRESS';
+    state.requiredConsents = [{ consentedAt: null }];
+    for (const response of [
+      await completeLineLogin(callbackRequest()),
+      await completeEmailLogin(emailRequest()),
+    ]) {
+      expect(response.headers.get('location')).toBe('https://bunshin.example/consent');
+      expect(response.headers.get('set-cookie')).toBeNull();
+    }
+  });
+
+  it('returns to the protected viewer after consent without forcing industry setup', async () => {
+    state.registrationStatus = 'IN_PROGRESS';
+    const response = await acceptConsents(
+      new Request('https://bunshin.example/consent/accept', {
+        method: 'POST',
+        headers: { origin: 'https://bunshin.example', cookie: returnCookie },
+        body: new URLSearchParams({ documentId: 'required-document' }),
+      }),
+    );
+    expect(state.acceptConsents).toHaveBeenCalledWith({
+      userId: 'user-1',
+      documentIds: ['required-document'],
+    });
+    expect(response.headers.get('location')).toBe(`https://bunshin.example${videoPath}`);
   });
 
   it('returns to the Mission landing after successful authentication', async () => {

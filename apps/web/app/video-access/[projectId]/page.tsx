@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 export const metadata = {
   title: '動画を見る',
   robots: { index: false, follow: false },
-  referrer: 'no-referrer' as const,
+  // Keep Origin on our POST form while withholding referrers from external sites.
+  referrer: 'same-origin' as const,
 };
 export default async function VideoAccessPage({
   params,

@@ -1,5 +1,5 @@
 import { PublicShell } from '../ui/public-shell';
-import { safeLineAuthReturnPath } from '../../src/auth/line-return';
+import { safeLineAuthReturnPath, videoAuthReturnProjectId } from '../../src/auth/line-return';
 
 export default async function LoginPage({
   searchParams,
@@ -8,6 +8,7 @@ export default async function LoginPage({
 }) {
   const query = await searchParams;
   const returnTo = safeLineAuthReturnPath(query.returnTo);
+  const videoProjectId = videoAuthReturnProjectId(returnTo);
   return (
     <PublicShell narrow>
       <section className="auth-panel" aria-labelledby="login-title">
@@ -42,13 +43,14 @@ export default async function LoginPage({
             <span>少し時間を空けて再度お試しいただくか、LINEでログインしてください。</span>
           </div>
         )}
-        <form action="/auth/line" method="post">
+        <form action={videoProjectId ? '/auth/video-line/start' : '/auth/line'} method="post">
+          {videoProjectId && <input name="projectId" type="hidden" value={videoProjectId} />}
           {returnTo && <input name="returnTo" type="hidden" value={returnTo} />}
           <button className="button button--line button--full" type="submit">
             <span className="button__line-mark" aria-hidden="true">
               LINE
             </span>
-            LINEでログイン
+            {videoProjectId ? 'LINEで本人確認して動画を見る' : 'LINEでログイン'}
           </button>
         </form>
         <div className="auth-divider" aria-hidden="true">

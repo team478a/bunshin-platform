@@ -3,6 +3,12 @@ export const LINE_AUTH_RETURN_MAX_AGE_SECONDS = 10 * 60;
 
 const MAX_STATE_LENGTH = 2048;
 
+export function videoAuthReturnProjectId(value: string | null | undefined): string | null {
+  return (
+    value?.match(/^\/video-access\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/i)?.[1] ?? null
+  );
+}
+
 export function missionReturnPath(token: string): string | null {
   if (token.length === 0 || token.length > MAX_STATE_LENGTH) return null;
   return `/today?state=${encodeURIComponent(token)}`;
@@ -22,6 +28,7 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
   try {
     const url = new URL(value, 'https://bunshin.invalid');
     if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
+    if (videoAuthReturnProjectId(value)) return value;
     if (/^\/groups\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
       return url.pathname;
     if (/^\/organizations\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
