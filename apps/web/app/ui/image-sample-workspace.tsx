@@ -1,6 +1,7 @@
 'use client';
 import Image from 'next/image';
 import { useState } from 'react';
+type SampleResponse = { status: string; error?: { message?: string } };
 export function ImageSampleWorkspace({
   groupId,
   bunshins,
@@ -18,6 +19,8 @@ export function ImageSampleWorkspace({
     event.preventDefault();
     if (busy) return;
     const form = new FormData(event.currentTarget);
+    const bodyLines = form.get('bodyLines');
+    if (typeof bodyLines !== 'string') return;
     const id = attempt ?? crypto.randomUUID();
     setAttempt(id);
     setBusy(true);
@@ -31,7 +34,7 @@ export function ImageSampleWorkspace({
           groupId,
           bunshinId: form.get('bunshinId'),
           headline: form.get('headline'),
-          bodyLines: String(form.get('bodyLines'))
+          bodyLines: bodyLines
             .split('\n')
             .map((x) => x.trim())
             .filter(Boolean),
@@ -39,7 +42,7 @@ export function ImageSampleWorkspace({
           artDirection: form.get('artDirection'),
         }),
       });
-      const data = await response.json();
+      const data = (await response.json()) as SampleResponse;
       if (!response.ok) {
         setMessage(data.error?.message ?? '作成できませんでした。');
         setAttempt(null);
@@ -65,7 +68,7 @@ export function ImageSampleWorkspace({
     try {
       const response = await fetch(`/api/admin/image-samples/${id}`);
       if (!response.ok) return;
-      const data = await response.json();
+      const data = (await response.json()) as SampleResponse;
       setItems((current) =>
         current.map((item) => (item.id === id ? { id, status: data.status } : item)),
       );
