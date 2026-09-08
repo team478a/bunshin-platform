@@ -27,7 +27,7 @@ const schema = z
     artDirection: z.string().trim().min(10).max(1000),
   })
   .strict();
-const promptVersion = 'social-image-admin-sample-v2';
+const promptVersion = 'social-image-admin-sample-v3';
 const model = 'gpt-image-1';
 const localDate = (now: Date) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -174,6 +174,7 @@ export async function createImageSample(request: Request) {
           ? [
               'Create one premium editorial lifestyle photograph for a Japanese social-media carousel cover.',
               'Show one original Japanese adult professional in a warm, softly lit home workspace, framed from the waist or chest up, with a natural approachable expression and realistic hands and skin texture.',
+              'Compose for a square-safe crop: keep the entire head, hair, face, shoulders and hands inside the central 70 percent of the frame, with generous headroom and background around every edge. Do not crop the top of the head.',
               'Use warm cream, soft coral and muted lavender styling with coherent commercial photography lighting. Keep the person clearly separated from a simple background.',
               'This is a photo asset for a separate layout. Do not render any text, letters, numbers, logos, watermarks, interface elements, cards, icons, borders or decorative typography.',
               'Create an original person. Do not imitate a real person, celebrity, or supplied example.',

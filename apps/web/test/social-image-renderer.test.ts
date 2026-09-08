@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import {
   ManagedSocialImageRenderer,
+  editorialHeadline,
   loadBundledSocialImageFonts,
   type SocialImageRendererFonts,
 } from '../src/social-image-renderer';
@@ -80,6 +81,10 @@ beforeAll(async () => {
 });
 
 describe('Managed social image renderer', () => {
+  it('breaks Japanese editorial headlines at a balanced phrase boundary', () => {
+    expect(editorialHeadline('千ノ国、次は何を知りたい？')).toBe('千ノ国、次は\n何を知りたい？');
+  });
+
   it.each(Object.keys(layouts) as SocialImageTemplateKey[])(
     'renders %s as fixed PNG and thumbnail',
     async (key) => {
