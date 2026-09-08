@@ -14,6 +14,10 @@ const config: NextConfig = {
   typedRoutes: true,
   outputFileTracingRoot: join(process.cwd(), '../..'),
   outputFileTracingIncludes: {
+    '/api/admin/image-samples': [
+      './assets/fonts/noto-sans-jp/*.otf',
+      '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
+    ],
     '/api/admin/groups/*/line-rich-menu/default': [
       '../../node_modules/.pnpm/harfbuzzjs@*/node_modules/harfbuzzjs/hb.wasm',
     ],
