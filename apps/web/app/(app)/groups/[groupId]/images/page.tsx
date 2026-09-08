@@ -29,6 +29,7 @@ export default async function GroupImagesPage({
       groupId: parsedGroupId.data,
       userId: actor.userId,
       status: 'ACTIVE',
+      serviceRole: 'PARTICIPANT',
       consentedAt: { not: null },
       group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
     },
