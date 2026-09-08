@@ -15,6 +15,7 @@ import {
 } from '../services/service-daily-idea-fallback';
 import { queueAutomaticDailyImage } from '../services/automatic-daily-image';
 import { queueAutomaticDailyVideo } from '../services/automatic-daily-video';
+import { createLogger } from '@bunshin/observability';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
@@ -44,7 +45,16 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
           usageIdempotencyKey: `job:${job.id}:weekly-plan`,
         });
         // A day off is successful, not a failed generation requiring user intervention.
-        if (!plan.items.some((item) => item.scheduledDate === localDate)) return;
+        if (!plan.items.some((item) => item.scheduledDate === localDate)) {
+          createLogger().info('daily mission skipped for unscheduled date', {
+            jobId: job.id,
+            correlationId: job.correlationId,
+            environment: job.environment,
+            localDate,
+            reason: 'UNSCHEDULED_DATE',
+          });
+          return;
+        }
       }
       let mission;
       try {

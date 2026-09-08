@@ -51,6 +51,7 @@ export function SimpleFirstPostSetup({
   strategies,
   deliveryEnabled,
   deliveryTime,
+  deliverySchedule,
   deliveryPolicy,
 }: {
   serviceSlug: string;
@@ -62,6 +63,10 @@ export function SimpleFirstPostSetup({
   strategies: Strategy[];
   deliveryEnabled: boolean;
   deliveryTime: string;
+  deliverySchedule: {
+    state: 'READY' | 'PREPARING' | 'OFF';
+    nextScheduledDate: string | null;
+  };
   deliveryPolicy: {
     enabled: boolean;
     cadence: 'DAILY' | 'WEEKDAYS';
@@ -92,6 +97,14 @@ export function SimpleFirstPostSetup({
           (strategy) => strategy.socialProfileId === profile.id && strategy.status === 'APPROVED',
         ),
     );
+  const nextDeliveryLabel = deliverySchedule.nextScheduledDate
+    ? new Intl.DateTimeFormat('ja-JP', {
+        month: 'numeric',
+        day: 'numeric',
+        weekday: 'short',
+        timeZone: 'UTC',
+      }).format(new Date(`${deliverySchedule.nextScheduledDate}T00:00:00.000Z`))
+    : null;
 
   async function request<T>(path: string, body: unknown): Promise<T> {
     const requestId = createClientRequestId();
@@ -205,6 +218,15 @@ export function SimpleFirstPostSetup({
               : '投稿予定の日の'}
             {deliveryTime}
             ごろ（日本時間）にLINEでお知らせします。予定の準備や投稿案の生成は自動です。
+          </p>
+          <p className="simple-first-post__delivery-status" role="status">
+            {deliverySchedule.state === 'READY'
+              ? '今日の投稿案は準備できています。LINEが届いていない場合も、下のボタンから確認できます。'
+              : deliverySchedule.state === 'PREPARING'
+                ? `今日は配信予定日です。${deliveryTime}ごろから投稿案を準備しています。`
+                : nextDeliveryLabel
+                  ? `今日は投稿予定がないため、LINE配信はありません。次回は${nextDeliveryLabel}の予定です。`
+                  : '今日は投稿予定がないため、LINE配信はありません。次回日は週間予定の更新後に表示します。'}
           </p>
         </div>
         <a className="button button--primary" href="#today-post">

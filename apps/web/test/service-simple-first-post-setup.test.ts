@@ -35,4 +35,10 @@ describe('simple service first-post setup', () => {
     expect(page).toContain('細かい設定を自分で変える（必要な方だけ）');
     expect(page).toContain('id="today-post"');
   });
+
+  it('explains when today is not a delivery day and shows the next date', () => {
+    expect(page).toContain('resolveDeliveryScheduleStatus');
+    expect(setup).toContain('今日は投稿予定がないため、LINE配信はありません。');
+    expect(setup).toContain('次回は${nextDeliveryLabel}の予定です。');
+  });
 });
