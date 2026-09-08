@@ -165,7 +165,7 @@ describe('administrator image quality samples', () => {
     );
     expect(m.update).toHaveBeenCalledWith({ where: { id }, data: { status: 'READY' } });
     expect(m.usage).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'SUCCESS', promptVersion: 'social-image-admin-sample-v2' }),
+      expect.objectContaining({ status: 'SUCCESS', promptVersion: 'social-image-admin-sample-v3' }),
     );
   });
   it('replays the same request without a second provider call and rejects changed inputs', async () => {

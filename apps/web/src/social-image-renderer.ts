@@ -164,13 +164,19 @@ const assetElement = (plan: SocialImageCompositionPlan, dataUri: string | null):
   });
 };
 
-const editorialHeadline = (value: string) => {
+export const editorialHeadline = (value: string) => {
   const characters = Array.from(value);
   if (characters.length <= 11) return value;
-  const punctuation = characters.findIndex(
-    (character, index) => index >= 6 && index <= 11 && ['、', '。', '！', '？'].includes(character),
-  );
-  const breakAt = punctuation >= 0 ? punctuation + 1 : 10;
+  const midpoint = characters.length / 2;
+  const minimum = Math.max(4, Math.floor(characters.length * 0.35));
+  const maximum = Math.min(11, characters.length - 4);
+  const naturalBreaks = new Set(['、', '。', '！', '？', 'は', 'が', 'を', 'に', 'で', 'と', 'へ', 'も']);
+  const candidates = Array.from({ length: Math.max(0, maximum - minimum + 1) }, (_, index) =>
+    minimum + index,
+  ).filter((index) => naturalBreaks.has(characters[index - 1] ?? ''));
+  const breakAt =
+    candidates.sort((left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint))[0] ??
+    Math.min(10, Math.max(minimum, Math.round(midpoint)));
   return `${characters.slice(0, breakAt).join('')}\n${characters.slice(breakAt).join('')}`;
 };
 
