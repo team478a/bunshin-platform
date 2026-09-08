@@ -313,6 +313,20 @@ export async function readImageSample(id: string, download: boolean) {
   });
 }
 
+export async function authorizedImageSampleView(id: string) {
+  if (!z.uuid().safeParse(id).success) return null;
+  const db = await import('@bunshin/database');
+  const sample = await db.prisma.socialImageSample.findUnique({ where: { id } });
+  const scope = sample ? await imageSampleScope(sample.groupId, sample.bunshinId) : null;
+  if (!sample || !scope || sample.ownerUserId !== scope.actor.userId) return null;
+  return {
+    id: sample.id,
+    status: sample.status,
+    groupId: sample.groupId,
+    groupName: scope.member.group.name,
+  };
+}
+
 export async function deleteImageSample(request: Request, id: string) {
   try {
     requireSameOrigin(request);

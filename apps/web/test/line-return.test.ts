@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  imageAuthReturnSampleId,
   lineAuthReturnFromCookie,
   missionReturnPath,
   safeLineAuthReturnPath,
@@ -25,6 +26,15 @@ describe('LINE authentication return path', () => {
       expect(safeLineAuthReturnPath(invalid)).toBeNull();
       expect(videoAuthReturnProjectId(invalid)).toBeNull();
     }
+  });
+
+  it('keeps an exact image viewer path through login', () => {
+    const id = '22222222-2222-4222-8222-222222222222';
+    const path = `/image-access/${id}`;
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+    expect(imageAuthReturnSampleId(path)).toBe(id);
+    expect(safeLineAuthReturnPath(`${path}/download`)).toBeNull();
+    expect(safeLineAuthReturnPath(`${path}?next=/admin`)).toBeNull();
   });
   it('accepts and canonicalizes only a signed Mission landing path', () => {
     expect(safeLineAuthReturnPath('/today?state=a%2Bb')).toBe('/today?state=a%2Bb');
