@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260907210000_add_mission_content_variants';
+export const LATEST_DATABASE_MIGRATION = '20260908060000_service_line_link';
