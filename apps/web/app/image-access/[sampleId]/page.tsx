@@ -26,7 +26,6 @@ export default async function ImageAccessPage({
             <p>{sample.groupName} の試作画像です。</p>
             {sample.status === 'READY' ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element -- authenticated route */}
                 <img
                   src={source}
                   alt="試作した投稿画像"
