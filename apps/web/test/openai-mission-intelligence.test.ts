@@ -96,7 +96,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v6',
+      promptVersion: 'mission-content-generator-v7',
       inputTokens: 100,
       outputTokens: 50,
     });
