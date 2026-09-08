@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
 import {
   CompleteJob,
   ExecuteVideoRenderJob,
@@ -308,4 +309,38 @@ it('schedules another job attempt while the provider is still rendering', async 
     ),
   ).resolves.toMatchObject({ status: 'RETRY_SCHEDULED' });
   expect(handler.markFailed).not.toHaveBeenCalled();
+});
+
+it('classifies output storage failures as retryable infrastructure failures', async () => {
+  const jobs: JobRepository = {
+    enqueue: vi.fn(),
+    claim: vi.fn(),
+    complete: vi.fn(),
+    fail: vi.fn((input) =>
+      Promise.resolve({
+        ...job,
+        status: 'RETRY_SCHEDULED' as const,
+        lastErrorCategory: input.failure.errorCategory,
+      }),
+    ),
+    cancel: vi.fn(),
+  };
+  const handler = {
+    execute: vi
+      .fn()
+      .mockRejectedValue(
+        new ApplicationError('INTERNAL_ERROR', '動画の保存先を準備できませんでした'),
+      ),
+    markFailed: vi.fn(),
+  };
+
+  await expect(
+    new ExecuteVideoRenderJob(handler, new CompleteJob(jobs), new FailJob(jobs, () => now)).execute(
+      job,
+      'worker',
+    ),
+  ).resolves.toMatchObject({
+    status: 'RETRY_SCHEDULED',
+    lastErrorCategory: 'VIDEO_RENDER_INFRASTRUCTURE',
+  });
 });

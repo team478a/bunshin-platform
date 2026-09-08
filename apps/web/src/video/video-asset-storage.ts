@@ -5,7 +5,6 @@ import { ApplicationError } from '@bunshin/shared';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const BUCKET = 'video-assets';
-const MAX_BYTES = 200_000_000;
 const INSPECTION_BYTES = 4_000_000;
 
 function storageConfiguration() {
@@ -143,7 +142,6 @@ export class SupabaseVideoAssetStorage implements VideoAssetStoragePort {
     if (found.data) return;
     const created = await this.storage.storage.createBucket(BUCKET, {
       public: false,
-      fileSizeLimit: MAX_BYTES,
       allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'],
     });
     if (created.error && !/already exists/i.test(created.error.message))

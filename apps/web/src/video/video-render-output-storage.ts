@@ -66,7 +66,6 @@ export class SupabaseVideoRenderOutputStorage implements VideoRenderOutputStorag
     if (found.data) return;
     const created = await this.storage.storage.createBucket(BUCKET, {
       public: false,
-      fileSizeLimit: MAX_BYTES,
       allowedMimeTypes: ['video/mp4'],
     });
     if (created.error && !/already exists/i.test(created.error.message))

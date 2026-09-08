@@ -4,6 +4,7 @@ import { SupabaseVideoRenderOutputStorage } from '../src/video/video-render-outp
 
 function storageClient() {
   const upload = vi.fn().mockResolvedValue({ data: { path: 'stored' }, error: null });
+  const createBucket = vi.fn().mockResolvedValue({ data: {}, error: null });
   const createSignedUrl = vi
     .fn()
     .mockResolvedValue({ data: { signedUrl: 'https://storage.example/signed' }, error: null });
@@ -13,16 +14,37 @@ function storageClient() {
     value: {
       storage: {
         getBucket: vi.fn().mockResolvedValue({ data: { id: 'video-renders' }, error: null }),
-        createBucket: vi.fn(),
+        createBucket,
         from: vi.fn(() => ({ upload, createSignedUrl })),
       },
     },
+    createBucket,
   };
 }
 
 beforeEach(() => vi.restoreAllMocks());
 
 describe('video render output storage', () => {
+  it('creates the private bucket without overriding the project upload limit', async () => {
+    const fake = storageClient();
+    fake.value.storage.getBucket.mockResolvedValue({ data: null, error: null });
+    const bytes = new Uint8Array([0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(bytes, { status: 200 })));
+
+    await new SupabaseVideoRenderOutputStorage(fake.value as never).store({
+      workspaceId: 'workspace',
+      groupId: 'group',
+      ownerUserId: 'owner',
+      renderId: 'render',
+      sourceUrl: 'https://cdn.creatomate.com/result.mp4',
+    });
+
+    expect(fake.createBucket).toHaveBeenCalledWith('video-renders', {
+      public: false,
+      allowedMimeTypes: ['video/mp4'],
+    });
+  });
+
   it('downloads a verified Creatomate MP4 into a private scoped key', async () => {
     const fake = storageClient();
     const bytes = new Uint8Array([0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
