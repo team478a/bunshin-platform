@@ -6228,3 +6228,19 @@ model VideoNarration {
   @@index([expiresAt, deletedAt])
   @@map("video_narrations")
 }
+
+// Short-lived, single-use proof for attaching a notification destination to the existing session.
+model ServiceLineLinkAttempt {
+  stateHash String @id @map("state_hash") @db.Char(64)
+  actorUserId String @map("actor_user_id") @db.Uuid
+  bunshinId String @map("bunshin_id") @db.Uuid
+  configurationId String @map("configuration_id") @db.Uuid
+  serviceSlug String @map("service_slug") @db.VarChar(80)
+  nonce String @db.VarChar(64)
+  verifier String @db.VarChar(128)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  @@index([expiresAt])
+  @@map("service_line_link_attempts")
+}

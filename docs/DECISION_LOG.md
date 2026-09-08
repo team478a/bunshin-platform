@@ -2138,3 +2138,11 @@
 - Confirmation failure: 派生案保存後の確定処理だけが失敗した場合は自動解放せず、同じ冪等キーの再試行で確定できる状態を維持する。
 - Balance link: 複数Workspace所属時は交換対象Workspaceをポイント画面へ明示し、本人が所属する場合だけその残高を表示する。
 - Source: `docs/MISSION_CONTENT_VARIANT_POINT_REDEMPTION_REPORT.md`
+
+## 2026-09-08: Service専用LINE通知先を現在のセッションに紐付けて復旧する
+
+- メールで利用中のService参加者が動画完成通知を復旧できるよう、通知同意と専用LINE OAuthを独立した接続画面にする。
+- 現在の所有者・Service所属と単回state/PKCE/nonceを検証し、ログインIdentityやアカウントの統合は行わない。
+- Groupだけに所属する本人の通知許可を認め、停止設定とService/Bunshinの境界を維持する。
+- 完成済み動画は再生成せず、23時間以内の抑止取消通知だけを一意ジョブで再開する。
+- Source: `docs/SERVICE_LINE_LINK_RECOVERY.md`

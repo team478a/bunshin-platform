@@ -166,6 +166,110 @@ integration('database ownership boundaries', () => {
 
   afterAll(async () => client.$disconnect());
 
+  it('allows consented group-only owners to receive notices while preserving service isolation', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Service LINE owner' });
+    const outsider = await accounts.execute({ displayName: 'Service LINE outsider' });
+    const group = await client.group.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        name: 'LINE recovery',
+        memberships: {
+          create: {
+            workspaceId: owner.workspace.id,
+            userId: owner.user.id,
+            role: 'PARTICIPANT',
+            status: 'ACTIVE',
+            consentedAt: new Date(),
+          },
+        },
+      },
+    });
+    const bunshin = await client.bunshin.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        ownerUserId: owner.user.id,
+        name: 'LINE recovery',
+        slug: `recovery-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Completion notices',
+        audienceSummary: 'Owner',
+        personalitySummary: 'Helpful',
+      },
+    });
+    await client.lineNotificationPreference.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        userId: owner.user.id,
+        bunshinId: bunshin.id,
+        enabled: true,
+        notificationConsentAt: new Date(),
+      },
+    });
+    await client.workspaceMembership.deleteMany({
+      where: { workspaceId: owner.workspace.id, userId: owner.user.id },
+    });
+    const { PrismaLineDeliveryPreferenceRepository } = await import('../src/index');
+    const preferences = new PrismaLineDeliveryPreferenceRepository(client);
+    const scope = {
+      workspaceId: owner.workspace.id,
+      userId: owner.user.id,
+      bunshinId: bunshin.id,
+      at: new Date('2026-09-08T03:00:00Z'),
+    };
+    await expect(preferences.isAllowed(scope)).resolves.toBe(true);
+    await expect(preferences.isAllowed({ ...scope, userId: outsider.user.id })).resolves.toBe(
+      false,
+    );
+    await expect(
+      preferences.isAllowed({ ...scope, workspaceId: outsider.workspace.id }),
+    ).resolves.toBe(false);
+    await expect(
+      preferences.isAllowed({ ...scope, at: new Date('2026-09-08T13:00:00Z') }),
+    ).resolves.toBe(false);
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: owner.user.id } },
+      data: { consentedAt: null, status: 'INVITED' },
+    });
+    await expect(preferences.isAllowed(scope)).resolves.toBe(false);
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: owner.user.id } },
+      data: { consentedAt: new Date(), status: 'REVOKED', revokedAt: new Date() },
+    });
+    await expect(preferences.isAllowed(scope)).resolves.toBe(false);
+  });
+
+  it('allows only one concurrent callback to consume a service LINE proof', async () => {
+    const stateHash = randomUUID().replaceAll('-', '').repeat(2);
+    await client.serviceLineLinkAttempt.create({
+      data: {
+        stateHash,
+        actorUserId: randomUUID(),
+        bunshinId: randomUUID(),
+        configurationId: randomUUID(),
+        serviceSlug: 'integration',
+        nonce: 'nonce',
+        verifier: 'verifier',
+        expiresAt: new Date(Date.now() + 600_000),
+      },
+    });
+    try {
+      const claim = () =>
+        client.serviceLineLinkAttempt.updateMany({
+          where: { stateHash, consumedAt: null, expiresAt: { gt: new Date() } },
+          data: { consumedAt: new Date(), nonce: '', verifier: '' },
+        });
+      const results = await Promise.all([claim(), claim()]);
+      expect(results.map(({ count }) => count).sort()).toEqual([0, 1]);
+      expect(
+        await client.serviceLineLinkAttempt.findUnique({ where: { stateHash } }),
+      ).toMatchObject({ nonce: '', verifier: '', consumedAt: expect.any(Date) });
+    } finally {
+      await client.serviceLineLinkAttempt.delete({ where: { stateHash } });
+    }
+  });
+
   it('creates User, PERSONAL Workspace, and OWNER Membership transactionally', async () => {
     const result = await new CreateUserWithPersonalWorkspace(
       new PrismaAccountUnitOfWork(client),
