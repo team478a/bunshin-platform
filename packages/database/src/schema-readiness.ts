@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260908130000_social_image_carousel_pages';
+export const LATEST_DATABASE_MIGRATION = '20260909080000_enable_public_rls';
