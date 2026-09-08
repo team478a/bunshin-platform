@@ -4885,7 +4885,14 @@ export class PrismaDailyMissionGenerationRepository {
     try {
       return {
         record: await this.client.dailyMissionGeneration.create({
-          data: { ...input, missionDate, status: 'PENDING' },
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            actorUserId: input.actorUserId,
+            idempotencyKey: input.idempotencyKey,
+            missionDate,
+            status: 'PENDING',
+          },
         }),
         acquired: true,
       };
