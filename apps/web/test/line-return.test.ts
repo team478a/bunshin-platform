@@ -3,9 +3,29 @@ import {
   lineAuthReturnFromCookie,
   missionReturnPath,
   safeLineAuthReturnPath,
+  videoAuthReturnProjectId,
 } from '../src/auth/line-return';
 
 describe('LINE authentication return path', () => {
+  it('keeps the exact video viewer path through the authentication cookie', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const path = `/video-access/${id}`;
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+    expect(videoAuthReturnProjectId(path)).toBe(id);
+    expect(lineAuthReturnFromCookie(`bunshin_line_auth_return=${encodeURIComponent(path)}`)).toBe(
+      path,
+    );
+    for (const invalid of [
+      path + '/download',
+      path + '?next=/admin',
+      path + '#fragment',
+      '/video-access/unavailable',
+      'https://evil.example' + path,
+    ]) {
+      expect(safeLineAuthReturnPath(invalid)).toBeNull();
+      expect(videoAuthReturnProjectId(invalid)).toBeNull();
+    }
+  });
   it('accepts and canonicalizes only a signed Mission landing path', () => {
     expect(safeLineAuthReturnPath('/today?state=a%2Bb')).toBe('/today?state=a%2Bb');
     expect(missionReturnPath('a+b')).toBe('/today?state=a%2Bb');
