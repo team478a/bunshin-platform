@@ -14,7 +14,13 @@ export function runtimeDatabaseUrl(source: string | undefined): string | undefin
   } catch {
     return source;
   }
-  if (!POSTGRES_PROTOCOLS.has(url.protocol) || url.port !== '6543') return source;
+  if (!POSTGRES_PROTOCOLS.has(url.protocol)) return source;
+  // Runtime serverless clients must not reserve the small session-mode pool.
+  // Prisma migrations read DIRECT_URL separately and do not call this helper.
+  if (url.hostname.endsWith('.pooler.supabase.com') && url.port === '5432') {
+    url.port = '6543';
+  }
+  if (url.port !== '6543') return source;
 
   url.searchParams.set('pgbouncer', 'true');
   url.searchParams.set('connection_limit', '1');
