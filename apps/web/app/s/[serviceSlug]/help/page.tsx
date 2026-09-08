@@ -86,7 +86,11 @@ export default async function ServiceHelpPage({
           <div className="service-help__header-actions">
             <Link
               className="button button--primary"
-              href={(membership ? `${serviceBase}/home` : serviceBase) as Route}
+              href={
+                membership
+                  ? `/s/${service.configuration.slug}/home`
+                  : `/s/${service.configuration.slug}`
+              }
             >
               {membership ? 'サービスホームへ戻る' : 'サービス案内へ戻る'}
             </Link>
