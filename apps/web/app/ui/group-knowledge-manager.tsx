@@ -969,7 +969,7 @@ export function GroupKnowledgeManager({
                   </button>
                 </>
               ) : null}
-              {['FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
+              {['DRAFT', 'FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
                 <button
                   type="button"
                   disabled={saving}
