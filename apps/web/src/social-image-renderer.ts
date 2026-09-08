@@ -170,9 +170,23 @@ export const editorialHeadline = (value: string) => {
   const midpoint = characters.length / 2;
   const minimum = Math.max(4, Math.floor(characters.length * 0.35));
   const maximum = Math.min(11, characters.length - 4);
-  const naturalBreaks = new Set(['、', '。', '！', '？', 'は', 'が', 'を', 'に', 'で', 'と', 'へ', 'も']);
-  const candidates = Array.from({ length: Math.max(0, maximum - minimum + 1) }, (_, index) =>
-    minimum + index,
+  const naturalBreaks = new Set([
+    '、',
+    '。',
+    '！',
+    '？',
+    'は',
+    'が',
+    'を',
+    'に',
+    'で',
+    'と',
+    'へ',
+    'も',
+  ]);
+  const candidates = Array.from(
+    { length: Math.max(0, maximum - minimum + 1) },
+    (_, index) => minimum + index,
   ).filter((index) => naturalBreaks.has(characters[index - 1] ?? ''));
   const breakAt =
     candidates.sort((left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint))[0] ??

@@ -82,9 +82,7 @@ beforeAll(async () => {
 
 describe('Managed social image renderer', () => {
   it('breaks Japanese editorial headlines at a balanced phrase boundary', () => {
-    expect(editorialHeadline('千ノ国、次は何を知りたい？')).toBe(
-      '千ノ国、次は\n何を知りたい？',
-    );
+    expect(editorialHeadline('千ノ国、次は何を知りたい？')).toBe('千ノ国、次は\n何を知りたい？');
   });
 
   it.each(Object.keys(layouts) as SocialImageTemplateKey[])(
