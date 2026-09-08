@@ -20,11 +20,14 @@ import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../soci
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { reserveServiceMediaGeneration } from '../service-media-generation-quota';
 
-const promptFor = (layout: {
-  templateKey: string;
-  headline: string;
-  bodyLines: string[];
-}, hasReference: boolean) =>
+const promptFor = (
+  layout: {
+    templateKey: string;
+    headline: string;
+    bodyLines: string[];
+  },
+  hasReference: boolean,
+) =>
   layout.templateKey === 'EDITORIAL_COVER'
     ? [
         'Create one premium editorial lifestyle photograph for a Japanese social-media carousel cover.',

@@ -175,7 +175,8 @@ const editorialCoverTree = (
     const characters = Array.from(plan.layout.headline);
     if (characters.length <= 11) return plan.layout.headline;
     const punctuation = characters.findIndex(
-      (character, index) => index >= 6 && index <= 11 && ['、', '。', '！', '？'].includes(character),
+      (character, index) =>
+        index >= 6 && index <= 11 && ['、', '。', '！', '？'].includes(character),
     );
     const breakAt = punctuation >= 0 ? punctuation + 1 : 10;
     return `${characters.slice(0, breakAt).join('')}\n${characters.slice(breakAt).join('')}`;
@@ -184,25 +185,45 @@ const editorialCoverTree = (
     createElement('div', {
       style: positioned(
         { x: -82, y: -72, width: 330, height: 250 },
-        { display: 'flex', borderRadius: 150, backgroundColor: '#F5A7A0', transform: 'rotate(-12deg)' },
+        {
+          display: 'flex',
+          borderRadius: 150,
+          backgroundColor: '#F5A7A0',
+          transform: 'rotate(-12deg)',
+        },
       ),
     }),
     createElement('div', {
       style: positioned(
         { x: 930, y: 180, width: 250, height: 410 },
-        { display: 'flex', borderRadius: 130, backgroundColor: lavender, transform: 'rotate(8deg)' },
+        {
+          display: 'flex',
+          borderRadius: 130,
+          backgroundColor: lavender,
+          transform: 'rotate(8deg)',
+        },
       ),
     }),
     createElement('div', {
       style: positioned(
         { x: -110, y: 1050, width: 330, height: 360 },
-        { display: 'flex', borderRadius: 160, backgroundColor: '#F18B84', transform: 'rotate(14deg)' },
+        {
+          display: 'flex',
+          borderRadius: 160,
+          backgroundColor: '#F18B84',
+          transform: 'rotate(14deg)',
+        },
       ),
     }),
     createElement('div', {
       style: positioned(
         { x: 692, y: 1120, width: 470, height: 300 },
-        { display: 'flex', borderRadius: 180, backgroundColor: '#D9C9E8', transform: 'rotate(-7deg)' },
+        {
+          display: 'flex',
+          borderRadius: 180,
+          backgroundColor: '#D9C9E8',
+          transform: 'rotate(-7deg)',
+        },
       ),
     }),
     createElement(
