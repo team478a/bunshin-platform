@@ -13,7 +13,7 @@ const request = {
   campaignId: null,
   status: 'QUEUED',
   layout: {
-    templateKey: 'THREE_POINTS',
+    templateKey: 'THREE_POINTS' as const,
     headline: '今日の3つ',
     bodyLines: ['ひとつ', 'ふたつ', 'みっつ'],
     cta: '保存してください',
@@ -57,6 +57,8 @@ function transaction(overrides: Record<string, unknown> = {}) {
     socialImagePilotEvidence: { findMany: vi.fn().mockResolvedValue(approvalEvidence) },
     bunshin: { findFirst: vi.fn().mockResolvedValue({ id: request.bunshinId }) },
     campaign: { findFirst: vi.fn() },
+    serviceMediaGenerationReservation: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    socialImageGeneratedMedia: { createMany: vi.fn().mockResolvedValue({ count: 2 }) },
     ...overrides,
   };
   return tx;
@@ -148,5 +150,42 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
       reason: 'PILOT_STOPPED',
     });
     expect(tx.socialImageGenerationRequest.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('completes one request with ordered carousel pages atomically', async () => {
+    const tx = transaction();
+    await expect(
+      repository(tx).complete({
+        context: {
+          requestId: request.id,
+          workspaceId: request.workspaceId,
+          groupId: request.groupId,
+          ownerUserId: request.ownerUserId,
+          bunshinId: request.bunshinId,
+          dailyMissionId: request.dailyMissionId,
+          idempotencyKey: 'carousel-1',
+          layout: request.layout,
+          model: 'gpt-image-1',
+          quality: 'medium',
+        },
+        media: [0, 1].map((pageIndex) => ({
+          mediaId: `00000000-0000-4000-8000-00000000001${pageIndex}`,
+          pageIndex,
+          sourceStorageKey: pageIndex === 0 ? 'source.png' : null,
+          completedStorageKey: `completed-${pageIndex}.png`,
+          thumbnailStorageKey: `thumbnail-${pageIndex}.png`,
+          contentHash: String(pageIndex).repeat(64),
+        })),
+        serviceMediaReservationId: null,
+      }),
+    ).resolves.toBe(true);
+    expect(tx.socialImageGeneratedMedia.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ requestId: request.id, pageIndex: 0 }),
+          expect.objectContaining({ requestId: request.id, pageIndex: 1 }),
+        ]),
+      }),
+    );
   });
 });

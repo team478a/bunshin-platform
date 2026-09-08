@@ -4,6 +4,8 @@ import {
   EnqueueJob,
   SOCIAL_IMAGE_GENERATION_JOB_TYPE,
   TransitionSocialImageGenerationRequest,
+  buildEditorialCarouselLayout,
+  type EditorialCarouselSlideInput,
   type JobEnvironment,
 } from '@bunshin/application';
 import { assertOrganizationGenerationQuota } from '../organization-generation-quota';
@@ -43,6 +45,7 @@ export async function queueAutomaticDailyImage(input: {
     format: string;
     topic: string;
     angle: string;
+    content?: Record<string, unknown>;
     campaignId?: string | null;
   };
   mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
@@ -101,6 +104,33 @@ export async function queueAutomaticDailyImage(input: {
     await assertOrganizationGenerationQuota({ workspaceId: input.workspaceId, kind: 'IMAGE' });
 
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
+    const rawSlides = input.mission.content?.['slides'];
+    const slides: EditorialCarouselSlideInput[] =
+      input.mission.format === 'SLIDE' && Array.isArray(rawSlides)
+        ? rawSlides.flatMap((value) => {
+            if (!value || typeof value !== 'object') return [];
+            const slide = value as Record<string, unknown>;
+            if (
+              !['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'].includes(String(slide['role'])) ||
+              typeof slide['headline'] !== 'string' ||
+              typeof slide['body'] !== 'string'
+            )
+              return [];
+            return [
+              {
+                role: slide['role'] as EditorialCarouselSlideInput['role'],
+                headline: slide['headline'],
+                body: slide['body'],
+              },
+            ];
+          })
+        : [];
+    const layout = buildEditorialCarouselLayout({
+      slides: slides.length
+        ? slides
+        : [{ role: 'HOOK', headline: input.mission.topic, body: input.mission.angle }],
+      accentColor: brand?.primaryColor ?? '#EF6A63',
+    });
     let request = await new CreateSocialImageGenerationRequest(
       new db.PrismaSocialImageGenerationAuthorizationRepository(),
       requests,
@@ -114,13 +144,7 @@ export async function queueAutomaticDailyImage(input: {
       dailyMissionId: input.mission.id,
       campaignId: mission.campaignId,
       productPackVersionId: mission.contentLinkUsage?.productPackVersionId ?? null,
-      layout: {
-        templateKey: 'EDITORIAL_COVER',
-        headline: input.mission.topic,
-        bodyLines: [input.mission.angle],
-        cta: '今日の投稿案を確認する',
-        accentColor: brand?.primaryColor ?? '#0B356A',
-      },
+      layout,
       idempotencyKey: operationKey,
     });
     if (request.status === 'READY_FOR_REVIEW')

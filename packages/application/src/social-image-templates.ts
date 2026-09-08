@@ -5,6 +5,8 @@ export const SOCIAL_IMAGE_HEIGHT = 1350 as const;
 
 export const SOCIAL_IMAGE_TEMPLATE_KEYS = [
   'EDITORIAL_COVER',
+  'EDITORIAL_POINT',
+  'EDITORIAL_SUMMARY',
   'PERSON_HEADLINE',
   'PROBLEM_CHECKLIST',
   'THREE_POINTS',
@@ -14,12 +16,22 @@ export const SOCIAL_IMAGE_TEMPLATE_KEYS = [
 
 export type SocialImageTemplateKey = (typeof SOCIAL_IMAGE_TEMPLATE_KEYS)[number];
 
-export interface SocialImageLayout {
+export type SocialImagePageLayout = {
   templateKey: SocialImageTemplateKey;
   headline: string;
   bodyLines: string[];
   cta: string | null;
   accentColor: string;
+};
+
+export interface SocialImageLayout extends SocialImagePageLayout {
+  carouselPages?: SocialImagePageLayout[];
+}
+
+export interface EditorialCarouselSlideInput {
+  role: 'HOOK' | 'PROBLEM' | 'INSIGHT' | 'SOLUTION' | 'CTA';
+  headline: string;
+  body: string;
 }
 
 export interface SocialImageRect {
@@ -84,6 +96,34 @@ export const SOCIAL_IMAGE_TEMPLATE_DEFINITIONS: Readonly<
     headline: rule(20, 1, 3, 76, 60),
     body: rule(12, 1, 2, 34, 30),
     cta: rule(28, 0, 1, 30, 28),
+  },
+  EDITORIAL_POINT: {
+    key: 'EDITORIAL_POINT',
+    version: 1,
+    canvas,
+    safeArea,
+    imageArea: null,
+    headlineArea: { x: 88, y: 220, width: 850, height: 300 },
+    bodyArea: { x: 88, y: 580, width: 904, height: 430 },
+    ctaArea: { x: 72, y: 1160, width: 936, height: 90 },
+    assetPlacement: 'NONE',
+    headline: rule(20, 1, 3, 70, 56),
+    body: rule(26, 1, 4, 40, 34),
+    cta: rule(28, 0, 1, 30, 28),
+  },
+  EDITORIAL_SUMMARY: {
+    key: 'EDITORIAL_SUMMARY',
+    version: 1,
+    canvas,
+    safeArea,
+    imageArea: null,
+    headlineArea: { x: 88, y: 230, width: 904, height: 260 },
+    bodyArea: { x: 88, y: 560, width: 904, height: 440 },
+    ctaArea: { x: 72, y: 1140, width: 936, height: 110 },
+    assetPlacement: 'NONE',
+    headline: rule(20, 1, 3, 70, 56),
+    body: rule(26, 1, 4, 42, 34),
+    cta: rule(28, 1, 1, 32, 28),
   },
   PERSON_HEADLINE: {
     key: 'PERSON_HEADLINE',
@@ -183,7 +223,7 @@ export const getSocialImageTemplateDefinition = (key: SocialImageTemplateKey) =>
   return definition;
 };
 
-export const normalizeSocialImageLayout = (input: SocialImageLayout): SocialImageLayout => {
+const normalizeSocialImagePageLayout = (input: SocialImagePageLayout): SocialImagePageLayout => {
   const definition = getSocialImageTemplateDefinition(input.templateKey);
   if (
     input.bodyLines.length < definition.body.minLines ||
@@ -207,6 +247,69 @@ export const normalizeSocialImageLayout = (input: SocialImageLayout): SocialImag
     cta,
     accentColor,
   };
+};
+
+export const normalizeSocialImageLayout = (input: SocialImageLayout): SocialImageLayout => {
+  const layout = normalizeSocialImagePageLayout(input);
+  if (input.carouselPages && (input.carouselPages.length < 1 || input.carouselPages.length > 6))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid carouselPages');
+  const carouselPages = input.carouselPages?.map(normalizeSocialImagePageLayout);
+  return { ...layout, ...(carouselPages ? { carouselPages } : {}) };
+};
+
+const compactText = (value: string) => value.replace(/\s+/gu, ' ').trim();
+
+const fitLine = (value: string, maximum: number) => {
+  const characters = Array.from(compactText(value));
+  if (characters.length <= maximum) return characters.join('');
+  return `${characters.slice(0, Math.max(1, maximum - 1)).join('')}…`;
+};
+
+const splitLines = (value: string, maximum: number, maxLines: number) => {
+  const characters = Array.from(compactText(value));
+  const lines: string[] = [];
+  let line = '';
+  for (const character of characters) {
+    line += character;
+    if (Array.from(line).length >= maximum || ['。', '！', '？'].includes(character)) {
+      lines.push(line.trim());
+      line = '';
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line.trim());
+  if (!lines.length) lines.push('今日からできること');
+  if (lines.length === maxLines && lines.join('').length < characters.length)
+    lines[maxLines - 1] = fitLine(lines[maxLines - 1] ?? '', maximum);
+  return lines.filter(Boolean);
+};
+
+export const buildEditorialCarouselLayout = (input: {
+  slides: EditorialCarouselSlideInput[];
+  accentColor: string;
+}): SocialImageLayout => {
+  if (input.slides.length < 1 || input.slides.length > 7)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid editorial carousel slides');
+  const slides = input.slides.slice(0, 7);
+  const first = slides[0]!;
+  const remaining = slides.slice(1).map((slide, index, values): SocialImagePageLayout => {
+    const summary = slide.role === 'CTA' || index === values.length - 1;
+    return {
+      templateKey: summary ? 'EDITORIAL_SUMMARY' : 'EDITORIAL_POINT',
+      headline: fitLine(slide.headline, 20),
+      bodyLines: splitLines(slide.body, 26, 4),
+      cta: summary ? 'あとで見返せるように保存' : '次のページへ',
+      accentColor: input.accentColor,
+    };
+  });
+  return normalizeSocialImageLayout({
+    templateKey: 'EDITORIAL_COVER',
+    headline: fitLine(first.headline, 20),
+    bodyLines: splitLines(first.body, 12, 2),
+    cta: remaining.length ? 'スワイプして続きを見る' : 'あとで見返せるように保存',
+    accentColor: input.accentColor,
+    ...(remaining.length ? { carouselPages: remaining } : {}),
+  });
 };
 
 export interface SocialImageCompositionPlan {

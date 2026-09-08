@@ -4306,6 +4306,7 @@ model SocialImageGeneratedMedia {
   ownerUserId         String                          @map("owner_user_id") @db.Uuid
   dailyMissionId      String                          @map("daily_mission_id") @db.Uuid
   requestId           String                          @map("request_id") @db.Uuid
+  pageIndex           Int                             @default(0) @map("page_index")
   status              SocialImageGeneratedMediaStatus @default(READY)
   sourceStorageKey    String?                         @map("source_storage_key") @db.VarChar(512)
   completedStorageKey String                          @unique @map("completed_storage_key") @db.VarChar(512)
@@ -4320,6 +4321,7 @@ model SocialImageGeneratedMedia {
   request             SocialImageGenerationRequest    @relation(fields: [workspaceId, groupId, requestId, ownerUserId, dailyMissionId], references: [workspaceId, groupId, id, ownerUserId, dailyMissionId], onDelete: Cascade)
 
   @@unique([workspaceId, id])
+  @@unique([requestId, pageIndex])
   @@index([workspaceId, groupId, ownerUserId, status, createdAt])
   @@index([dailyMissionId, status])
   @@index([requestId, status])

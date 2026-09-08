@@ -7,6 +7,7 @@ import {
   RefundPointRedemption,
   RefundBadgeEntitlementUsage,
   SocialImageGenerationJobHandlerError,
+  getSocialImageTemplateDefinition,
   type SocialImageGenerationJobHandler,
 } from '@bunshin/application';
 import { randomUUID } from 'node:crypto';
@@ -143,6 +144,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         throw new SocialImageGenerationJobHandlerError(`SOCIAL_IMAGE_${access.reason}`, false);
       const runtime = await resolveOpenAiRuntimeConfiguration();
       const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
+      const assetQuality =
+        context.layout.templateKey === 'EDITORIAL_COVER' ? 'high' : context.quality;
       const usageKey = `social-image:${context.requestId}:attempt:${input.attemptCount}`;
       try {
         const referenceImage = context.referenceImage
@@ -158,7 +161,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           width: 1080,
           height: 1350,
           model: context.model,
-          quality: context.quality,
+          quality: assetQuality,
         });
         await recordAiUsageSafely({
           workspaceId: context.workspaceId,
@@ -178,38 +181,79 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           pricingVersion: 'ADMIN_FIXED_REQUEST_COST',
           idempotencyKey: usageKey,
         });
-        const rendered = await new ManagedSocialImageRenderer(
-          await loadBundledSocialImageFonts(),
-        ).render({ layout: context.layout, sourceAsset: Buffer.from(generated.bytes) });
+        const renderer = new ManagedSocialImageRenderer(await loadBundledSocialImageFonts());
+        const { carouselPages, ...coverLayout } = context.layout;
+        const layouts = [coverLayout, ...(carouselPages ?? [])];
+        const renderedPages = await Promise.all(
+          layouts.map((layout) =>
+            renderer.render({
+              layout,
+              sourceAsset:
+                getSocialImageTemplateDefinition(layout.templateKey).assetPlacement === 'NONE'
+                  ? null
+                  : Buffer.from(generated.bytes),
+            }),
+          ),
+        );
         if (!(await repository.moveToComposing(input)))
           throw new SocialImageGenerationJobHandlerError('SOCIAL_IMAGE_STATE_CONFLICT', false);
-        const mediaId = randomUUID();
         const storage = new SupabaseSocialImageStorage();
-        const stored = await storage.store({
-          workspaceId: context.workspaceId,
-          groupId: context.groupId,
-          ownerUserId: context.ownerUserId,
-          requestId: context.requestId,
-          mediaId,
-          source: { bytes: generated.bytes, mimeType: 'image/png' },
-          completed: rendered.completedPng,
-          thumbnail: rendered.thumbnailPng,
-        });
+        const storedPages: Array<{
+          mediaId: string;
+          pageIndex: number;
+          sourceStorageKey: string | null;
+          completedStorageKey: string;
+          thumbnailStorageKey: string;
+          contentHash: string;
+        }> = [];
+        try {
+          for (const [pageIndex, rendered] of renderedPages.entries()) {
+            const mediaId = randomUUID();
+            const stored = await storage.store({
+              workspaceId: context.workspaceId,
+              groupId: context.groupId,
+              ownerUserId: context.ownerUserId,
+              requestId: context.requestId,
+              mediaId,
+              source: pageIndex === 0 ? { bytes: generated.bytes, mimeType: 'image/png' } : null,
+              completed: rendered.completedPng,
+              thumbnail: rendered.thumbnailPng,
+            });
+            storedPages.push({ mediaId, pageIndex, ...stored });
+          }
+        } catch (error) {
+          await Promise.allSettled(
+            storedPages.map((page) =>
+              storage.remove({
+                workspaceId: context.workspaceId,
+                groupId: context.groupId,
+                ownerUserId: context.ownerUserId,
+                requestId: context.requestId,
+                mediaId: page.mediaId,
+                ...(page.pageIndex === 0 ? { sourceMimeType: 'image/png' as const } : {}),
+              }),
+            ),
+          );
+          throw error;
+        }
         const completed = await repository.complete({
           context,
-          mediaId,
-          ...stored,
+          media: storedPages,
           serviceMediaReservationId: planPayment ? serviceMediaReservation.id : null,
         });
         if (!completed) {
-          await storage.remove({
-            workspaceId: context.workspaceId,
-            groupId: context.groupId,
-            ownerUserId: context.ownerUserId,
-            requestId: context.requestId,
-            mediaId,
-            sourceMimeType: 'image/png',
-          });
+          await Promise.allSettled(
+            storedPages.map((page) =>
+              storage.remove({
+                workspaceId: context.workspaceId,
+                groupId: context.groupId,
+                ownerUserId: context.ownerUserId,
+                requestId: context.requestId,
+                mediaId: page.mediaId,
+                ...(page.pageIndex === 0 ? { sourceMimeType: 'image/png' as const } : {}),
+              }),
+            ),
+          );
           throw new SocialImageGenerationJobHandlerError('SOCIAL_IMAGE_STATE_CONFLICT', false);
         }
       } catch (error) {

@@ -164,6 +164,16 @@ const assetElement = (plan: SocialImageCompositionPlan, dataUri: string | null):
   });
 };
 
+const editorialHeadline = (value: string) => {
+  const characters = Array.from(value);
+  if (characters.length <= 11) return value;
+  const punctuation = characters.findIndex(
+    (character, index) => index >= 6 && index <= 11 && ['、', '。', '！', '？'].includes(character),
+  );
+  const breakAt = punctuation >= 0 ? punctuation + 1 : 10;
+  return `${characters.slice(0, breakAt).join('')}\n${characters.slice(breakAt).join('')}`;
+};
+
 const editorialCoverTree = (
   plan: SocialImageCompositionPlan,
   dataUri: string | null,
@@ -171,16 +181,7 @@ const editorialCoverTree = (
   const ink = '#35251A';
   const coral = plan.layout.accentColor;
   const lavender = '#C9B5DF';
-  const headline = (() => {
-    const characters = Array.from(plan.layout.headline);
-    if (characters.length <= 11) return plan.layout.headline;
-    const punctuation = characters.findIndex(
-      (character, index) =>
-        index >= 6 && index <= 11 && ['、', '。', '！', '？'].includes(character),
-    );
-    const breakAt = punctuation >= 0 ? punctuation + 1 : 10;
-    return `${characters.slice(0, breakAt).join('')}\n${characters.slice(breakAt).join('')}`;
-  })();
+  const headline = editorialHeadline(plan.layout.headline);
   const children: ReactNode[] = [
     createElement('div', {
       style: positioned(
@@ -351,8 +352,150 @@ const editorialCoverTree = (
   );
 };
 
+const editorialTextPageTree = (plan: SocialImageCompositionPlan): ReactNode => {
+  const ink = '#35251A';
+  const coral = plan.layout.accentColor;
+  const lavender = '#C9B5DF';
+  const summary = plan.templateKey === 'EDITORIAL_SUMMARY';
+  const children: ReactNode[] = [
+    createElement('div', {
+      style: positioned(
+        { x: -120, y: -105, width: 400, height: 300 },
+        {
+          display: 'flex',
+          borderRadius: 180,
+          backgroundColor: '#F5A7A0',
+          transform: 'rotate(-8deg)',
+        },
+      ),
+    }),
+    createElement('div', {
+      style: positioned(
+        { x: 900, y: 90, width: 280, height: 460 },
+        {
+          display: 'flex',
+          borderRadius: 150,
+          backgroundColor: lavender,
+          transform: 'rotate(8deg)',
+        },
+      ),
+    }),
+    createElement('div', {
+      style: positioned(
+        { x: 710, y: 1110, width: 500, height: 330 },
+        {
+          display: 'flex',
+          borderRadius: 190,
+          backgroundColor: '#DCCDEA',
+          transform: 'rotate(-9deg)',
+        },
+      ),
+    }),
+    createElement(
+      'div',
+      {
+        style: positioned(
+          { x: 88, y: 92, width: summary ? 210 : 230, height: 72 },
+          {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 36,
+            color: '#FFFFFF',
+            backgroundColor: coral,
+            fontFamily: FONT_FAMILY,
+            fontSize: 34,
+            fontWeight: 700,
+            letterSpacing: 2,
+          },
+        ),
+      },
+      summary ? 'まとめ' : 'ポイント',
+    ),
+    textBlock(editorialHeadline(plan.layout.headline), plan.definition.headlineArea, {
+      fontSize: plan.definition.headline.fontSize,
+      weight: 700,
+      color: ink,
+    }),
+    createElement(
+      'div',
+      {
+        style: positioned(plan.definition.bodyArea, {
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          padding: '54px 58px',
+          gap: 22,
+          borderRadius: 54,
+          color: ink,
+          backgroundColor: '#FFFFFF',
+          boxShadow: '0 18px 50px rgba(93,66,47,0.14)',
+          fontFamily: FONT_FAMILY,
+          fontSize: plan.definition.body.fontSize,
+          fontWeight: summary ? 700 : 400,
+          lineHeight: 1.45,
+        }),
+      },
+      ...plan.layout.bodyLines.map((line, index) =>
+        createElement(
+          'div',
+          { key: `${index}-${line}`, style: { display: 'flex', alignItems: 'center' } },
+          createElement('span', {
+            style: {
+              display: 'flex',
+              flexShrink: 0,
+              width: 18,
+              height: 18,
+              marginRight: 22,
+              borderRadius: 9,
+              backgroundColor: index % 2 === 0 ? coral : lavender,
+            },
+          }),
+          line,
+        ),
+      ),
+    ),
+  ];
+  if (plan.layout.cta && plan.definition.ctaArea && plan.definition.cta)
+    children.push(
+      createElement(
+        'div',
+        {
+          style: positioned(plan.definition.ctaArea, {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 45,
+            color: summary ? '#FFFFFF' : ink,
+            backgroundColor: summary ? coral : 'rgba(255,255,255,0.72)',
+            fontFamily: FONT_FAMILY,
+            fontSize: plan.definition.cta.fontSize,
+            fontWeight: 700,
+          }),
+        },
+        plan.layout.cta,
+      ),
+    );
+  return createElement(
+    'div',
+    {
+      style: {
+        position: 'relative',
+        display: 'flex',
+        width: plan.definition.canvas.width,
+        height: plan.definition.canvas.height,
+        overflow: 'hidden',
+        backgroundColor: '#FFF8EF',
+      },
+    },
+    ...children,
+  );
+};
+
 const composeTree = (plan: SocialImageCompositionPlan, dataUri: string | null): ReactNode => {
   if (plan.templateKey === 'EDITORIAL_COVER') return editorialCoverTree(plan, dataUri);
+  if (plan.templateKey === 'EDITORIAL_POINT' || plan.templateKey === 'EDITORIAL_SUMMARY')
+    return editorialTextPageTree(plan);
   const dark = '#0B2D5C';
   const isBackground = plan.definition.assetPlacement === 'BACKGROUND';
   const foreground = isBackground ? '#FFFFFF' : dark;

@@ -17742,9 +17742,15 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
   async findMediaOwned(
     input: Parameters<SocialImageGenerationRequestRepository['findMediaOwned']>[0],
   ) {
+    return (await this.listMediaOwned(input))[0] ?? null;
+  }
+
+  async listMediaOwned(
+    input: Parameters<SocialImageGenerationRequestRepository['listMediaOwned']>[0],
+  ) {
     const request = await this.findOwned(input);
-    if (!request || request.status !== 'READY_FOR_REVIEW') return null;
-    const media = await this.client.socialImageGeneratedMedia.findFirst({
+    if (!request || request.status !== 'READY_FOR_REVIEW') return [];
+    const media = await this.client.socialImageGeneratedMedia.findMany({
       where: {
         requestId: request.id,
         workspaceId: request.workspaceId,
@@ -17752,9 +17758,9 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
         ownerUserId: request.ownerUserId,
         status: { in: ['READY', 'ADOPTED'] },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ pageIndex: 'asc' }, { createdAt: 'desc' }],
     });
-    return media ? { ...media, width: 1080 as const, height: 1350 as const } : null;
+    return media.map((item) => ({ ...item, width: 1080 as const, height: 1350 as const }));
   }
 
   async setMediaStatus(
@@ -17803,11 +17809,22 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
           data: { status: 'READY' },
         });
       }
-      const media = await tx.socialImageGeneratedMedia.update({
-        where: { id: target.id },
+      await tx.socialImageGeneratedMedia.updateMany({
+        where: {
+          requestId: request.id,
+          workspaceId: request.workspaceId,
+          groupId: request.groupId,
+          ownerUserId: request.ownerUserId,
+          status: { in: ['READY', 'ADOPTED'] },
+        },
         data: { status: input.status },
       });
-      return { ...media, width: 1080 as const, height: 1350 as const };
+      return {
+        ...target,
+        status: input.status,
+        width: 1080 as const,
+        height: 1350 as const,
+      };
     });
   }
 }
@@ -18107,6 +18124,7 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
 
   async complete(input: Parameters<SocialImageGenerationExecutionRepository['complete']>[0]) {
     return this.client.$transaction(async (tx) => {
+      if (input.media.length < 1 || input.media.length > 7) return false;
       if (input.serviceMediaReservationId) {
         const consumed = await tx.serviceMediaGenerationReservation.updateMany({
           where: {
@@ -18132,22 +18150,23 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
         data: { status: 'READY_FOR_REVIEW', revision: { increment: 1 }, errorCode: null },
       });
       if (changed.count !== 1) return false;
-      await tx.socialImageGeneratedMedia.create({
-        data: {
-          id: input.mediaId,
+      await tx.socialImageGeneratedMedia.createMany({
+        data: input.media.map((media) => ({
+          id: media.mediaId,
           workspaceId: input.context.workspaceId,
           groupId: input.context.groupId,
           ownerUserId: input.context.ownerUserId,
           dailyMissionId: input.context.dailyMissionId,
           requestId: input.context.requestId,
-          sourceStorageKey: input.sourceStorageKey,
-          completedStorageKey: input.completedStorageKey,
-          thumbnailStorageKey: input.thumbnailStorageKey,
+          pageIndex: media.pageIndex,
+          sourceStorageKey: media.sourceStorageKey,
+          completedStorageKey: media.completedStorageKey,
+          thumbnailStorageKey: media.thumbnailStorageKey,
           width: 1080,
           height: 1350,
-          contentHash: input.contentHash,
+          contentHash: media.contentHash,
           expiresAt: assetRetentionExpiry(),
-        },
+        })),
       });
       return true;
     });

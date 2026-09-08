@@ -35,6 +35,24 @@ import {
 } from '../service-media-generation-quota';
 
 const uuid = z.string().uuid();
+const pageLayoutSchema = z
+  .object({
+    templateKey: z.enum([
+      'EDITORIAL_COVER',
+      'EDITORIAL_POINT',
+      'EDITORIAL_SUMMARY',
+      'PERSON_HEADLINE',
+      'PROBLEM_CHECKLIST',
+      'THREE_POINTS',
+      'EMPATHY_QUOTE',
+      'CTA',
+    ]),
+    headline: z.string(),
+    bodyLines: z.array(z.string()).max(5),
+    cta: z.string().nullable(),
+    accentColor: z.string(),
+  })
+  .strict();
 const createSchema = z
   .object({
     groupMembershipId: uuid,
@@ -45,22 +63,9 @@ const createSchema = z
     campaignId: uuid.nullable().optional(),
     productPackVersionId: uuid.nullable().optional(),
     idempotencyKey: z.string().trim().min(8).max(200),
-    layout: z
-      .object({
-        templateKey: z.enum([
-          'EDITORIAL_COVER',
-          'PERSON_HEADLINE',
-          'PROBLEM_CHECKLIST',
-          'THREE_POINTS',
-          'EMPATHY_QUOTE',
-          'CTA',
-        ]),
-        headline: z.string(),
-        bodyLines: z.array(z.string()).max(5),
-        cta: z.string().nullable(),
-        accentColor: z.string(),
-      })
-      .strict(),
+    layout: pageLayoutSchema.extend({
+      carouselPages: z.array(pageLayoutSchema).min(1).max(6).optional(),
+    }),
   })
   .strict();
 const decisionSchema = z
@@ -134,6 +139,8 @@ export async function createSocialImageResponse(
     const redemptions = new db.PrismaPointRedemptionRepository();
     const badgeEntitlements = new db.PrismaBadgeEntitlementConsumptionRepository(db.prisma);
     const serviceCredits = new db.PrismaServiceCreditConsumptionRepository();
+    const { carouselPages, ...pageLayout } = parsed.layout;
+    const layout = { ...pageLayout, ...(carouselPages ? { carouselPages } : {}) };
     let created = await new CreateSocialImageGenerationRequest(
       new db.PrismaSocialImageGenerationAuthorizationRepository(),
       requests,
@@ -147,7 +154,7 @@ export async function createSocialImageResponse(
       dailyMissionId: uuid.parse(dailyMissionId),
       campaignId: parsed.campaignId ?? null,
       productPackVersionId: parsed.productPackVersionId ?? null,
-      layout: parsed.layout,
+      layout,
       referenceImage: reference?.referenceImage ?? null,
       idempotencyKey: parsed.idempotencyKey,
     });
@@ -333,7 +340,7 @@ export async function getSocialImageResponse(
       actorUserId: actor,
       requestId: uuid.parse(requestResourceId),
     });
-    const media = await requests.findMediaOwned({
+    const mediaPages = await requests.listMediaOwned({
       workspaceId,
       groupId,
       actorUserId: actor,
@@ -343,15 +350,23 @@ export async function getSocialImageResponse(
       {
         data: {
           ...dto(value),
-          media: media
+          media: mediaPages[0]
             ? {
-                id: media.id,
-                status: media.status,
-                width: media.width,
-                height: media.height,
-                downloadPath: `${new URL(request.url).pathname}/download`,
+                id: mediaPages[0].id,
+                status: mediaPages[0].status,
+                width: mediaPages[0].width,
+                height: mediaPages[0].height,
+                downloadPath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}`,
               }
             : null,
+          mediaPages: mediaPages.map((media) => ({
+            id: media.id,
+            pageIndex: media.pageIndex,
+            status: media.status,
+            width: media.width,
+            height: media.height,
+            downloadPath: `${new URL(request.url).pathname}/download?mediaId=${media.id}`,
+          })),
         },
         requestId,
       },
@@ -412,12 +427,16 @@ export async function downloadSocialImageResponse(
     const actor = await actorUserId();
     const db = await import('@bunshin/database');
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
-    const media = await requests.findMediaOwned({
+    const mediaPages = await requests.listMediaOwned({
       workspaceId: uuid.parse(workspaceId),
       groupId: uuid.parse(groupId),
       actorUserId: actor,
       requestId: uuid.parse(requestResourceId),
     });
+    const requestedMediaId = new URL(request.url).searchParams.get('mediaId');
+    const media = requestedMediaId
+      ? mediaPages.find((item) => item.id === uuid.parse(requestedMediaId))
+      : mediaPages[0];
     if (!media) throw new ApplicationError('NOT_FOUND', 'social image not found');
     const signed = await new CreateSocialImageMediaReadUrl(
       requests,
