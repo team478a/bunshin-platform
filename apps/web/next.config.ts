@@ -38,6 +38,16 @@ const config: NextConfig = {
   headers() {
     return Promise.resolve([{ source: '/(.*)', headers: securityHeaders }]);
   },
+  redirects() {
+    return Promise.resolve([
+      {
+        source: '/groups/:groupId/videos/:videoProjectId',
+        destination: '/video-access/:videoProjectId',
+        missing: [{ type: 'query' as const, key: 'manage' }],
+        permanent: false,
+      },
+    ]);
+  },
 };
 
 export default config;

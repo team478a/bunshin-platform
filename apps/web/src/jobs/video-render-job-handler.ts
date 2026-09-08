@@ -71,7 +71,7 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
           completedAt,
         });
         const base = new URL(lineEndpointUrls().missionDeepLinkBaseUrl);
-        base.pathname = `/groups/${context.groupId}/videos/${context.videoProjectId}`;
+        base.pathname = `/video-access/${context.videoProjectId}`;
         base.search = '';
         const notification = await new SendVideoCompletionNotification(
           completions,

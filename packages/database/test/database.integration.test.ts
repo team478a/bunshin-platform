@@ -166,6 +166,46 @@ integration('database ownership boundaries', () => {
 
   afterAll(async () => client.$disconnect());
 
+  it('stores only a hashed viewing session and consumes video LINE proofs once under concurrency', async () => {
+    const stateHash = randomUUID().replaceAll('-', '').repeat(2);
+    const sessionHash = randomUUID().replaceAll('-', '').repeat(2);
+    await client.videoLineAccess.create({
+      data: {
+        stateHash,
+        projectId: randomUUID(),
+        ownerUserId: randomUUID(),
+        configurationId: randomUUID(),
+        providerHash: 'a'.repeat(64),
+        nonce: 'nonce',
+        verifier: 'verifier',
+        expiresAt: new Date(Date.now() + 600_000),
+      },
+    });
+    try {
+      const consume = () =>
+        client.videoLineAccess.updateMany({
+          where: { stateHash, consumedAt: null, expiresAt: { gt: new Date() } },
+          data: { consumedAt: new Date(), nonce: '', verifier: '' },
+        });
+      expect((await Promise.all([consume(), consume()])).map(({ count }) => count).sort()).toEqual([
+        0, 1,
+      ]);
+      await client.videoLineAccess.update({
+        where: { stateHash },
+        data: { sessionHash, sessionExpiresAt: new Date(Date.now() + 1800_000) },
+      });
+      expect(await client.videoLineAccess.findUnique({ where: { sessionHash } })).toMatchObject({
+        stateHash,
+        nonce: '',
+        verifier: '',
+        consumedAt: expect.any(Date),
+        sessionExpiresAt: expect.any(Date),
+      });
+    } finally {
+      await client.videoLineAccess.delete({ where: { stateHash } });
+    }
+  });
+
   it('allows consented group-only owners to receive notices while preserving service isolation', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const owner = await accounts.execute({ displayName: 'Service LINE owner' });
