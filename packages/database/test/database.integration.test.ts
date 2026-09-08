@@ -230,12 +230,12 @@ integration('database ownership boundaries', () => {
     ).resolves.toBe(false);
     await client.groupMembership.update({
       where: { groupId_userId: { groupId: group.id, userId: owner.user.id } },
-      data: { consentedAt: null },
+      data: { consentedAt: null, status: 'INVITED' },
     });
     await expect(preferences.isAllowed(scope)).resolves.toBe(false);
     await client.groupMembership.update({
       where: { groupId_userId: { groupId: group.id, userId: owner.user.id } },
-      data: { consentedAt: new Date(), status: 'REVOKED' },
+      data: { consentedAt: new Date(), status: 'REVOKED', revokedAt: new Date() },
     });
     await expect(preferences.isAllowed(scope)).resolves.toBe(false);
   });
