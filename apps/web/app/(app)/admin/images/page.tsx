@@ -299,6 +299,15 @@ export default async function ImagePilotAdminPage({
       </section>
       {selected ? (
         <>
+          {admin.role === 'SUPER_ADMIN' ? (
+            <section className="settings-card">
+              <h2>まず投稿画像を試作する</h2>
+              <p>自分の投稿パートナーで画像を作り、文字と雰囲気を確認できます。</p>
+              <Link href={{ pathname: '/admin/images/samples', query: { groupId: selected.id } }}>
+                投稿画像を1枚作る
+              </Link>
+            </section>
+          ) : null}
           <section className="settings-card">
             <h2>現在の状態</h2>
             <p>

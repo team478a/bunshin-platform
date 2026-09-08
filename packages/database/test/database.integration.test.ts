@@ -98,6 +98,7 @@ integration('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await client.socialImageSample.deleteMany();
     await client.campaignActivity.deleteMany();
     await client.campaignParticipation.deleteMany();
     await client.campaignAsset.deleteMany();
@@ -4177,6 +4178,53 @@ integration('database ownership boundaries', () => {
         where: { groupId: group.id, status: 'CONSUMED' },
       }),
     ).toBe(1);
+  });
+  it('persists private image samples with unique request IDs and preserves deleted attempt counts', async () => {
+    const owner = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Image sample owner' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Image samples' },
+    });
+    const bunshin = await client.bunshin.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        ownerUserId: owner.user.id,
+        name: 'Image partner',
+        slug: `sample-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Image trial',
+        audienceSummary: 'Owner',
+        personalitySummary: 'Helpful',
+      },
+    });
+    const data = {
+      id: randomUUID(),
+      workspaceId: owner.workspace.id,
+      groupId: group.id,
+      ownerUserId: owner.user.id,
+      bunshinId: bunshin.id,
+      inputHash: 'a'.repeat(64),
+      layout: { headline: '紹介' },
+      artDirection: '本と光',
+      model: 'gpt-image-1',
+      status: 'GENERATING',
+    };
+    const results = await Promise.allSettled([
+      client.socialImageSample.create({ data }),
+      client.socialImageSample.create({ data }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    await client.socialImageSample.update({
+      where: { id: data.id },
+      data: { status: 'DELETED', layout: {}, artDirection: '' },
+    });
+    expect(await client.socialImageSample.count({ where: { groupId: group.id } })).toBe(1);
+    const tables = await client.$queryRaw<
+      Array<{ relrowsecurity: boolean }>
+    >`SELECT relrowsecurity FROM pg_class WHERE relname = 'social_image_samples'`;
+    expect(tables[0]?.relrowsecurity).toBe(true);
   });
 });
 

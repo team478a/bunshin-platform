@@ -6245,6 +6245,26 @@ model ServiceLineLinkAttempt {
   @@map("service_line_link_attempts")
 }
 
+model SocialImageSample {
+  id           String   @id @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  groupId      String   @map("group_id") @db.Uuid
+  ownerUserId  String   @map("owner_user_id") @db.Uuid
+  bunshinId    String   @map("bunshin_id") @db.Uuid
+  inputHash    String   @map("input_hash") @db.Char(64)
+  layout       Json     @db.JsonB
+  artDirection String   @map("art_direction") @db.VarChar(1000)
+  model        String   @db.VarChar(120)
+  status       String   @db.VarChar(20)
+  errorCode    String?  @map("error_code") @db.VarChar(80)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([groupId, createdAt])
+  @@index([ownerUserId, createdAt])
+  @@map("social_image_samples")
+}
+
 model VideoLineAccess {
   stateHash String @id @map("state_hash") @db.Char(64)
   projectId String @map("project_id") @db.Uuid
