@@ -1,4 +1,9 @@
-import { GetPointUserDashboard, ListPointRewardCatalog } from '@bunshin/application';
+import {
+  GetPointUserDashboard,
+  ListPointRewardCatalog,
+  buildEditorialCarouselLayout,
+  type EditorialCarouselSlideInput,
+} from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
@@ -57,6 +62,7 @@ export default async function GroupImagesPage({
       bunshin: { select: { name: true } },
       contentLinkUsage: { select: { groupId: true, productPackVersionId: true } },
       campaign: { select: { groupId: true, productPackVersionId: true } },
+      content: { select: { contentJson: true } },
     },
     orderBy: { missionDate: 'desc' },
     take: 30,
@@ -74,6 +80,10 @@ export default async function GroupImagesPage({
     },
     select: { id: true, status: true, dailyMissionId: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
+  });
+  const brand = await db.prisma.serviceBrand.findFirst({
+    where: { workspaceId: membership.group.workspaceId, groupId: membership.group.id },
+    select: { primaryColor: true },
   });
   const creditAccount = await db.prisma.serviceCreditAccount.findFirst({
     where: {
@@ -127,20 +137,53 @@ export default async function GroupImagesPage({
         pointCost={imagePointCost}
         initialAvailablePoints={availablePoints}
         initialMissionId={z.uuid().safeParse(query.mission).data}
-        missions={available.map((mission) => ({
-          id: mission.id,
-          bunshinId: mission.bunshinId,
-          bunshinName: mission.bunshin.name,
-          topic: mission.topic,
-          angle: mission.angle,
-          format: mission.format as 'IMAGE' | 'SLIDE',
-          campaignId: mission.campaignId,
-          productPackVersionId:
-            mission.contentLinkUsage?.productPackVersionId ??
-            mission.campaign?.productPackVersionId ??
-            null,
-          request: requests.find((request) => request.dailyMissionId === mission.id) ?? null,
-        }))}
+        missions={available.map((mission) => {
+          const rawSlides = (mission.content?.contentJson as Record<string, unknown> | null)?.[
+            'slides'
+          ];
+          const slides: EditorialCarouselSlideInput[] = Array.isArray(rawSlides)
+            ? rawSlides.flatMap((value) => {
+                if (!value || typeof value !== 'object') return [];
+                const slide = value as Record<string, unknown>;
+                if (
+                  !['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'].includes(
+                    String(slide['role']),
+                  ) ||
+                  typeof slide['headline'] !== 'string' ||
+                  typeof slide['body'] !== 'string'
+                )
+                  return [];
+                return [
+                  {
+                    role: slide['role'] as EditorialCarouselSlideInput['role'],
+                    headline: slide['headline'],
+                    body: slide['body'],
+                  },
+                ];
+              })
+            : [];
+          return {
+            id: mission.id,
+            bunshinId: mission.bunshinId,
+            bunshinName: mission.bunshin.name,
+            topic: mission.topic,
+            angle: mission.angle,
+            format: mission.format as 'IMAGE' | 'SLIDE',
+            layout: buildEditorialCarouselLayout({
+              slides:
+                mission.format === 'SLIDE' && slides.length
+                  ? slides
+                  : [{ role: 'HOOK', headline: mission.topic, body: mission.angle }],
+              accentColor: brand?.primaryColor ?? '#EF6A63',
+            }),
+            campaignId: mission.campaignId,
+            productPackVersionId:
+              mission.contentLinkUsage?.productPackVersionId ??
+              mission.campaign?.productPackVersionId ??
+              null,
+            request: requests.find((request) => request.dailyMissionId === mission.id) ?? null,
+          };
+        })}
       />
     </main>
   );

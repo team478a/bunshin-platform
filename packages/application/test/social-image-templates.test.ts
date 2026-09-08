@@ -5,6 +5,7 @@ import {
   SOCIAL_IMAGE_TEMPLATE_KEYS,
   SOCIAL_IMAGE_WIDTH,
   buildSocialImageCompositionPlan,
+  buildEditorialCarouselLayout,
   normalizeSocialImageLayout,
   type SocialImageLayout,
   type SocialImageRect,
@@ -74,5 +75,23 @@ describe('Social image templates', () => {
       normalizeSocialImageLayout({ ...base, bodyLines: ['一つ目\n続き', '二つ目', '三つ目'] }),
     ).toThrow();
     expect(() => normalizeSocialImageLayout({ ...base, headline: '安全\u202E表示' })).toThrow();
+  });
+
+  it('turns structured slides into a bounded editorial carousel', () => {
+    const layout = buildEditorialCarouselLayout({
+      accentColor: '#ef6a63',
+      slides: [
+        { role: 'HOOK', headline: '投稿を続ける仕組み', body: '毎回ゼロから考えない' },
+        { role: 'INSIGHT', headline: 'テーマを先に決める', body: '迷う時間を減らせます。' },
+        { role: 'CTA', headline: '今日から小さく始める', body: '一つだけ選んで試しましょう。' },
+      ],
+    });
+    expect(layout.templateKey).toBe('EDITORIAL_COVER');
+    expect(layout.carouselPages).toHaveLength(2);
+    expect(layout.carouselPages?.map((page) => page.templateKey)).toEqual([
+      'EDITORIAL_POINT',
+      'EDITORIAL_SUMMARY',
+    ]);
+    expect(layout.accentColor).toBe('#EF6A63');
   });
 });

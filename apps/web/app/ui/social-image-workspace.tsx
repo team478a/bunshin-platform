@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
+import type { SocialImageLayout } from '@bunshin/application';
 
 type Mission = {
   id: string;
@@ -10,6 +11,7 @@ type Mission = {
   topic: string;
   angle: string;
   format: 'IMAGE' | 'SLIDE';
+  layout: SocialImageLayout;
   campaignId: string | null;
   productPackVersionId: string | null;
   request: { id: string; status: string } | null;
@@ -26,6 +28,14 @@ type RequestView = {
     height: number;
     downloadPath: string;
   } | null;
+  mediaPages: Array<{
+    id: string;
+    pageIndex: number;
+    status: 'READY' | 'ADOPTED';
+    width: number;
+    height: number;
+    downloadPath: string;
+  }>;
 };
 
 const statusText: Record<string, string> = {
@@ -144,13 +154,7 @@ export function SocialImageWorkspace({
           campaignId: selected.campaignId,
           productPackVersionId: selected.productPackVersionId,
           idempotencyKey: crypto.randomUUID(),
-          layout: {
-            templateKey: 'PERSON_HEADLINE',
-            headline: selected.topic,
-            bodyLines: [selected.angle],
-            cta: '詳しくは投稿文をご覧ください',
-            accentColor: '#FF3B30',
-          },
+          layout: selected.layout,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -194,8 +198,12 @@ export function SocialImageWorkspace({
         setRequestView({
           ...requestView,
           media: { ...requestView.media, status: 'ADOPTED' },
+          mediaPages: requestView.mediaPages.map((media) => ({
+            ...media,
+            status: 'ADOPTED',
+          })),
         });
-        setMessage('この画像を使うことにしました。下のボタンから保存できます。');
+        setMessage('この投稿画像を使うことにしました。各ページを下から保存できます。');
       } else {
         setRequestId(null);
         setRequestView(null);
@@ -216,7 +224,10 @@ export function SocialImageWorkspace({
     );
   }
 
-  const ready = requestView?.status === 'READY_FOR_REVIEW' && requestView.media;
+  const ready =
+    requestView?.status === 'READY_FOR_REVIEW' &&
+    requestView.media &&
+    requestView.mediaPages.length > 0;
   const canCreate = usesImageCredits
     ? (availableCredits ?? 0) >= 1
     : pointCost !== null && availablePoints >= pointCost;
@@ -291,18 +302,27 @@ export function SocialImageWorkspace({
         {ready ? (
           <>
             <div className="social-image-preview">
-              <Image
-                src={requestView.media!.downloadPath}
-                alt="作成したSNS投稿用画像"
-                width={1080}
-                height={1350}
-                unoptimized
-              />
+              {requestView.mediaPages.map((media) => (
+                <figure key={media.id}>
+                  <Image
+                    src={media.downloadPath}
+                    alt={`作成したSNS投稿用画像 ${media.pageIndex + 1}ページ目`}
+                    width={1080}
+                    height={1350}
+                    unoptimized
+                  />
+                  <figcaption>{media.pageIndex + 1}枚目</figcaption>
+                </figure>
+              ))}
             </div>
             {requestView.media!.status === 'ADOPTED' ? (
-              <a className="button" href={requestView.media!.downloadPath}>
-                画像を保存する
-              </a>
+              <div className="social-image-actions">
+                {requestView.mediaPages.map((media) => (
+                  <a className="button" href={media.downloadPath} key={media.id}>
+                    {media.pageIndex + 1}枚目を保存
+                  </a>
+                ))}
+              </div>
             ) : (
               <div className="social-image-actions">
                 <button

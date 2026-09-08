@@ -75,6 +75,7 @@ export interface SocialImageGeneratedMediaRecord {
   ownerUserId: string;
   dailyMissionId: string;
   requestId: string;
+  pageIndex: number;
   status: SocialImageMediaStatus;
   sourceStorageKey: string | null;
   completedStorageKey: string;
@@ -142,6 +143,12 @@ export interface SocialImageGenerationRequestRepository {
     actorUserId: string;
     requestId: string;
   }): Promise<SocialImageGeneratedMediaRecord | null>;
+  listMediaOwned(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+  }): Promise<SocialImageGeneratedMediaRecord[]>;
   setMediaStatus(input: {
     workspaceId: string;
     groupId: string;

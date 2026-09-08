@@ -5,6 +5,7 @@ const fakes = vi.hoisted(() => ({
   create: vi.fn(),
   transition: vi.fn(),
   findOwned: vi.fn(),
+  listMediaOwned: vi.fn(),
   setMediaStatus: vi.fn(),
   enqueue: vi.fn(),
   listCatalog: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock('@bunshin/database', () => ({
     create = fakes.create;
     transition = fakes.transition;
     findOwned = fakes.findOwned;
+    listMediaOwned = fakes.listMediaOwned;
     setMediaStatus = fakes.setMediaStatus;
   },
   PrismaJobRepository: class {
@@ -76,7 +78,11 @@ vi.mock('@bunshin/database', () => ({
   },
 }));
 
-import { createSocialImageResponse, decideSocialImageResponse } from '../src/http/social-images';
+import {
+  createSocialImageResponse,
+  decideSocialImageResponse,
+  getSocialImageResponse,
+} from '../src/http/social-images';
 
 const ids = {
   workspaceId: '00000000-0000-4000-8000-000000000001',
@@ -136,6 +142,7 @@ beforeEach(() => {
   fakes.transition.mockResolvedValue(row('QUEUED', 2));
   fakes.enqueue.mockResolvedValue({ id: 'job-1' });
   fakes.findOwned.mockResolvedValue(row('QUEUED', 2));
+  fakes.listMediaOwned.mockResolvedValue([]);
   fakes.listCatalog.mockResolvedValue([
     {
       id: '00000000-0000-4000-8000-000000000501',
@@ -167,6 +174,30 @@ beforeEach(() => {
 });
 
 describe('social image HTTP', () => {
+  it('returns every carousel page with an owned download path', async () => {
+    fakes.findOwned.mockResolvedValue({ ...row('QUEUED', 2), status: 'READY_FOR_REVIEW' });
+    fakes.listMediaOwned.mockResolvedValue(
+      [0, 1, 2].map((pageIndex) => ({
+        id: `00000000-0000-4000-8000-00000000010${pageIndex}`,
+        pageIndex,
+        status: 'READY',
+        width: 1080,
+        height: 1350,
+      })),
+    );
+    const response = await getSocialImageResponse(
+      new Request('https://example.com/api/images/request'),
+      ids.workspaceId,
+      ids.groupId,
+      ids.requestId,
+    );
+    const payload = (await response.json()) as {
+      data: { mediaPages: Array<{ pageIndex: number; downloadPath: string }> };
+    };
+    expect(payload.data.mediaPages.map((page) => page.pageIndex)).toEqual([0, 1, 2]);
+    expect(payload.data.mediaPages[1]?.downloadPath).toContain('mediaId=');
+  });
+
   it('creates, queues and returns only safe request fields', async () => {
     const response = await createSocialImageResponse(
       new Request('https://example.com/api/images', {

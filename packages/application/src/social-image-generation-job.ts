@@ -40,11 +40,14 @@ export interface SocialImageGenerationExecutionRepository {
   moveToComposing(input: { workspaceId: string; requestId: string }): Promise<boolean>;
   complete(input: {
     context: SocialImageGenerationExecutionContext;
-    mediaId: string;
-    sourceStorageKey: string | null;
-    completedStorageKey: string;
-    thumbnailStorageKey: string;
-    contentHash: string;
+    media: Array<{
+      mediaId: string;
+      pageIndex: number;
+      sourceStorageKey: string | null;
+      completedStorageKey: string;
+      thumbnailStorageKey: string;
+      contentHash: string;
+    }>;
     serviceMediaReservationId: string | null;
   }): Promise<boolean>;
   markFailed(input: {

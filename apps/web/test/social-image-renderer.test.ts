@@ -16,6 +16,20 @@ const layouts: Record<SocialImageTemplateKey, SocialImageLayout> = {
     cta: 'あとで見返せるように保存',
     accentColor: '#EF6A63',
   },
+  EDITORIAL_POINT: {
+    templateKey: 'EDITORIAL_POINT',
+    headline: '毎回ゼロから考えない',
+    bodyLines: ['テーマを先に決める', '型に沿って言葉を整える'],
+    cta: '次のページへ',
+    accentColor: '#EF6A63',
+  },
+  EDITORIAL_SUMMARY: {
+    templateKey: 'EDITORIAL_SUMMARY',
+    headline: '続ける仕組みを作ろう',
+    bodyLines: ['テーマを決める', '小さく始める', '反応より継続を見る'],
+    cta: 'あとで見返せるように保存',
+    accentColor: '#EF6A63',
+  },
   PERSON_HEADLINE: {
     templateKey: 'PERSON_HEADLINE',
     headline: '今日の一歩を始めよう',
