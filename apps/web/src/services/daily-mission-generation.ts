@@ -90,6 +90,7 @@ export class DailyMissionGenerationService {
     const assignments = new db.PrismaBunshinCapabilityAssignmentRepository();
     const missions = new db.PrismaDailyMissionRepository();
     let generationId: string | null = null;
+    let stage = 'preflight';
     try {
       await new RequireActiveBunshinCapability(assignments).execute({
         ...scope,
@@ -306,6 +307,7 @@ export class DailyMissionGenerationService {
           operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
           generate,
         });
+      stage = 'daily-brief';
       const brief = await generateWithQuota('daily-brief', () =>
         new GenerateDailyMissionBrief(new OpenAIDailyMissionPlanner({ apiKey, model })).execute({
           ...scope,
@@ -361,6 +363,7 @@ export class DailyMissionGenerationService {
         selectedMemories,
         campaign,
       };
+      stage = 'content:0';
       let content = await generateWithQuota('content:0', () => generator.execute(contentInput));
       await usage('content:0', 'CONTENT_GENERATOR', content);
       const checker = new CheckMissionQuality(
@@ -380,11 +383,13 @@ export class DailyMissionGenerationService {
       });
       let repairCount = 0;
       const qualityIssueCodes = new Set<string>();
+      stage = 'quality:0';
       let quality = await generateWithQuota('quality:0', () => checker.execute(qualityInput()));
       for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
       await usage('quality:0', 'QUALITY_CHECKER', quality);
       if (quality.output.verdict === 'REVISE') {
         repairCount = 1;
+        stage = 'content:1';
         content = await generateWithQuota('content:1', () =>
           generator.execute({
             ...contentInput,
@@ -394,6 +399,7 @@ export class DailyMissionGenerationService {
           }),
         );
         await usage('content:1', 'CONTENT_REPAIR', content);
+        stage = 'quality:1';
         quality = await generateWithQuota('quality:1', () => checker.execute(qualityInput()));
         for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
         await usage('quality:1', 'QUALITY_CHECKER', quality);
@@ -514,6 +520,7 @@ export class DailyMissionGenerationService {
             issueCodes: safety.inspected.issueCodes,
           });
       }
+      stage = 'persist';
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,
         ...brief.output,
@@ -584,6 +591,11 @@ export class DailyMissionGenerationService {
       }
       return created;
     } catch (error) {
+      logger.warn('daily mission generation pipeline failed', {
+        stage,
+        errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       if (generationId) {
         await recordAiUsageSafely({
           ...scope,

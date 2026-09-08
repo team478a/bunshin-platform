@@ -154,6 +154,25 @@ describe('GenerateMissionContent', () => {
     expect(generator.generate).not.toHaveBeenCalled();
   });
 
+  it('keeps generated work within the mission brief time budget', async () => {
+    const generator = {
+      generate: vi.fn().mockResolvedValue({
+        output: { ...contents.IMAGE, estimatedMinutes: 15 },
+        model: 'gpt-5.2',
+        promptVersion: 'v1',
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: 1,
+      }),
+    };
+    const result = await new GenerateMissionContent(generator).execute({
+      ...context,
+      platform: 'INSTAGRAM',
+      brief: { ...brief, format: 'IMAGE', estimatedMinutes: 5 },
+    });
+    expect(result.output).toMatchObject({ estimatedMinutes: 5 });
+  });
+
   it('passes only validated repair instructions to the provider', async () => {
     const generator = {
       generate: vi.fn().mockResolvedValue({
