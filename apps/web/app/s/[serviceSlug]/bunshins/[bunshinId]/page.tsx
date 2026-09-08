@@ -32,6 +32,8 @@ import { ServiceDailyMissionSection } from './service-daily-mission-section';
 import { SimpleFirstPostSetup } from './simple-first-post-setup';
 import { ServiceDeliverySettings } from './service-delivery-settings';
 import { dailyVideoProjectId } from '../../../../../src/services/automatic-daily-video';
+import { localDateInTimezone } from '../../../../../src/activity-progress';
+import { resolveDeliveryScheduleStatus } from '../../../../../src/services/delivery-schedule-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -221,6 +223,15 @@ export default async function ServiceBunshinDetailPage({
     service.configuration.registration.surveyConfig,
   ).dailyIdeaDelivery;
   const deliveryTime = notification.preference?.localTime ?? deliveryPolicy.defaultNotificationTime;
+  const deliveryTimezone = notification.preference?.timezone ?? 'Asia/Tokyo';
+  const today = localDateInTimezone(new Date(), deliveryTimezone);
+  const deliverySchedule = resolveDeliveryScheduleStatus({
+    today,
+    scheduledDates: weeklyPlans
+      .filter(({ status }) => status === 'CONFIRMED')
+      .flatMap(({ items }) => items.map(({ scheduledDate }) => scheduledDate)),
+    missionDates: dailyMissions.map(({ missionDate }) => missionDate),
+  });
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -240,6 +251,7 @@ export default async function ServiceBunshinDetailPage({
           strategies={accountStrategies}
           deliveryEnabled={deliveryEnabled}
           deliveryTime={deliveryTime}
+          deliverySchedule={deliverySchedule}
           deliveryPolicy={deliveryPolicy}
         />
         <details className="service-advanced-settings">
