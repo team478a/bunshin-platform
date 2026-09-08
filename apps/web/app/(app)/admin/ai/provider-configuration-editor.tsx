@@ -260,7 +260,7 @@ export function AiProviderConfigurationEditor(props: {
               Firecrawl：<a href="https://www.firecrawl.dev/app/api-keys">APIキー管理を開く</a>
             </li>
             <li>
-              Creatomate：<a href="https://creatomate.com/dashboard">管理画面を開く</a>
+              Creatomate：<a href="https://creatomate.com/projects">管理画面を開く</a>
             </li>
             <li>
               fal：<a href="https://fal.ai/dashboard/keys">APIキー管理を開く</a>

@@ -82,6 +82,10 @@ async function configuredWorker(): Promise<JobWorkerPort> {
   const jobs = new db.PrismaJobRepository();
   const complete = new CompleteJob(jobs);
   const fail = new FailJob(jobs);
+  // Creatomate also sends a webhook, but polling remains the recovery path when
+  // a callback is delayed or lost. Keep that recovery responsive while a render
+  // is pending instead of allowing the generic backoff to grow to one hour.
+  const videoFail = new FailJob(jobs, undefined, 30_000, 60_000);
   const missionExecutor = new ExecuteMissionAutomationJob(
     new db.PrismaMissionAutomationScopeRepository(),
     registry,
@@ -94,7 +98,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
-  const videoExecutor = new ExecuteVideoRenderJob(createVideoRenderJobHandler(), complete, fail);
+  const videoExecutor = new ExecuteVideoRenderJob(
+    createVideoRenderJobHandler(),
+    complete,
+    videoFail,
+  );
   const videoAiSceneExecutor = new ExecuteVideoAiSceneGenerationJob(
     createVideoAiSceneGenerationJobHandler(),
     complete,
