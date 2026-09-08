@@ -630,6 +630,7 @@ export default async function ServiceManagementHome({
           <p className="eyebrow">サービス管理者</p>
           <h1>{configuration.displayName}の開始準備と運営</h1>
           <p>開始準備の確認と、日々の運営に必要な設定をまとめました。</p>
+          <Link href={`/s/${configuration.slug}/help` as Route}>運営マニュアル・ヘルプを見る</Link>
         </header>
         <section className="settings-card">
           <h2>直近7日間の活動</h2>

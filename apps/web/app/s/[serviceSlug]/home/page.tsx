@@ -276,6 +276,9 @@ export default async function ServiceMemberHome({
             >
               投稿パートナーを作る・見る
             </Link>
+            <Link className="button" href={`/s/${service.configuration.slug}/help` as Route}>
+              使い方・困ったとき
+            </Link>
             <Link className="button" href={`/s/${service.configuration.slug}/credits` as Route}>
               画像作成回数を見る
             </Link>
@@ -383,6 +386,7 @@ export default async function ServiceMemberHome({
 
         <footer className="service-entry__details">
           <span>運営：{service.configuration.operatorName}</span>
+          <Link href={`/s/${service.configuration.slug}/help` as Route}>使い方・ヘルプ</Link>
           {service.configuration.contactEmail && (
             <a href={`mailto:${service.configuration.contactEmail}`}>お問い合わせ</a>
           )}

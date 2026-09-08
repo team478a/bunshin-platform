@@ -165,6 +165,7 @@ export default async function ServiceEntryPage({
 
         <footer className="service-entry__details">
           <span>運営：{configuration.operatorName}</span>
+          <Link href={`/s/${configuration.slug}/help` as Route}>使い方・ヘルプ</Link>
           {configuration.contactEmail && (
             <a href={`mailto:${configuration.contactEmail}`}>お問い合わせ</a>
           )}

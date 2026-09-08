@@ -6,6 +6,7 @@
 - [利用者マニュアル](USER_GUIDE.md)
 - [サービス管理者マニュアル](SERVICE_ADMIN_GUIDE.md)
 - [プラットフォーム管理者マニュアル](PLATFORM_ADMIN_GUIDE.md)
+- [サービス別設定マニュアル](SERVICE_CONFIGURATION_GUIDE.md)
 
 ## 正本
 
