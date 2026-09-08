@@ -4,6 +4,7 @@ export const SOCIAL_IMAGE_WIDTH = 1080 as const;
 export const SOCIAL_IMAGE_HEIGHT = 1350 as const;
 
 export const SOCIAL_IMAGE_TEMPLATE_KEYS = [
+  'EDITORIAL_COVER',
   'PERSON_HEADLINE',
   'PROBLEM_CHECKLIST',
   'THREE_POINTS',
@@ -70,6 +71,20 @@ const rule = (
 export const SOCIAL_IMAGE_TEMPLATE_DEFINITIONS: Readonly<
   Record<SocialImageTemplateKey, SocialImageTemplateDefinition>
 > = Object.freeze({
+  EDITORIAL_COVER: {
+    key: 'EDITORIAL_COVER',
+    version: 1,
+    canvas,
+    safeArea,
+    imageArea: { x: 404, y: 650, width: 604, height: 560 },
+    headlineArea: { x: 72, y: 130, width: 850, height: 330 },
+    bodyArea: { x: 72, y: 490, width: 460, height: 150 },
+    ctaArea: { x: 72, y: 1180, width: 936, height: 90 },
+    assetPlacement: 'FOREGROUND',
+    headline: rule(20, 1, 3, 76, 60),
+    body: rule(12, 1, 2, 34, 30),
+    cta: rule(28, 0, 1, 30, 28),
+  },
   PERSON_HEADLINE: {
     key: 'PERSON_HEADLINE',
     version: 1,

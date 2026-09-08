@@ -20,13 +20,14 @@ const schema = z
     id: z.uuid(),
     groupId: z.uuid(),
     bunshinId: z.uuid(),
+    templateKey: z.enum(['EDITORIAL_COVER', 'EMPATHY_QUOTE']),
     headline: z.string().trim().min(1).max(20),
     bodyLines: z.array(z.string().trim().min(1).max(28)).min(1).max(3),
     cta: z.string().trim().max(28),
     artDirection: z.string().trim().min(10).max(1000),
   })
   .strict();
-const promptVersion = 'social-image-admin-sample-v1';
+const promptVersion = 'social-image-admin-sample-v2';
 const model = 'gpt-image-1';
 const localDate = (now: Date) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -86,11 +87,11 @@ export async function createImageSample(request: Request) {
     if (!scope) throw new ApplicationError('FORBIDDEN', 'own administrator sample only');
     const { db, actor, member } = scope;
     const layout = normalizeSocialImageLayout({
-      templateKey: 'EMPATHY_QUOTE',
+      templateKey: input.templateKey,
       headline: input.headline,
       bodyLines: input.bodyLines,
       cta: input.cta || null,
-      accentColor: '#0B2D5C',
+      accentColor: input.templateKey === 'EDITORIAL_COVER' ? '#EF6A63' : '#0B2D5C',
     });
     const inputHash = createHash('sha256')
       .update(JSON.stringify({ ...input, layout }))
@@ -165,15 +166,26 @@ export async function createImageSample(request: Request) {
     }).generate({
       requestId: input.id,
       model,
-      quality: 'medium',
+      quality: 'high',
       width: 1080,
       height: 1350,
-      prompt: [
-        'Create a refined editorial illustration for a Japanese social media introduction. Portrait composition, coherent lighting and restrained navy, warm cream and soft gold palette.',
-        'No text, letters, logos, watermarks or interface elements. Follow the art direction literally and do not add objects that it excludes. Keep the headline area near the upper center, the body area through the middle, and the call-to-action area near the bottom uniformly quiet and low-detail for a separate Japanese text overlay. If the art direction requests a minimal background, use only the named colors, texture and border treatment; do not invent people, books, speech bubbles, buildings or devices.',
-        `Art direction: ${input.artDirection}`,
-        `Communication theme: ${input.headline}. ${input.bodyLines.join(' / ')}`,
-      ].join(' '),
+      prompt:
+        input.templateKey === 'EDITORIAL_COVER'
+          ? [
+              'Create one premium editorial lifestyle photograph for a Japanese social-media carousel cover.',
+              'Show one original Japanese adult professional in a warm, softly lit home workspace, framed from the waist or chest up, with a natural approachable expression and realistic hands and skin texture.',
+              'Use warm cream, soft coral and muted lavender styling with coherent commercial photography lighting. Keep the person clearly separated from a simple background.',
+              'This is a photo asset for a separate layout. Do not render any text, letters, numbers, logos, watermarks, interface elements, cards, icons, borders or decorative typography.',
+              'Create an original person. Do not imitate a real person, celebrity, or supplied example.',
+              `Additional art direction: ${input.artDirection}`,
+              `Communication theme only: ${input.headline}. ${input.bodyLines.join(' / ')}`,
+            ].join(' ')
+          : [
+              'Create a refined editorial illustration for a Japanese social media introduction. Portrait composition, coherent lighting and restrained navy, warm cream and soft gold palette.',
+              'No text, letters, logos, watermarks or interface elements. Follow the art direction literally and do not add objects that it excludes. Keep the headline area near the upper center, the body area through the middle, and the call-to-action area near the bottom uniformly quiet and low-detail for a separate Japanese text overlay. If the art direction requests a minimal background, use only the named colors, texture and border treatment; do not invent people, books, speech bubbles, buildings or devices.',
+              `Art direction: ${input.artDirection}`,
+              `Communication theme: ${input.headline}. ${input.bodyLines.join(' / ')}`,
+            ].join(' '),
     });
     await recordAiUsageSafely({
       workspaceId: member.workspaceId,

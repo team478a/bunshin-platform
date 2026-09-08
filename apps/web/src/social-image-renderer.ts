@@ -155,11 +155,204 @@ const assetElement = (plan: SocialImageCompositionPlan, dataUri: string | null):
     src: dataUri,
     width: area.width,
     height: area.height,
-    style: positioned(area, { objectFit: 'contain' }),
+    style: positioned(area, {
+      objectFit: plan.templateKey === 'EDITORIAL_COVER' ? 'cover' : 'contain',
+      ...(plan.templateKey === 'EDITORIAL_COVER'
+        ? { objectPosition: 'center center', borderRadius: 54 }
+        : {}),
+    }),
   });
 };
 
+const editorialCoverTree = (
+  plan: SocialImageCompositionPlan,
+  dataUri: string | null,
+): ReactNode => {
+  const ink = '#35251A';
+  const coral = plan.layout.accentColor;
+  const lavender = '#C9B5DF';
+  const headline = (() => {
+    const characters = Array.from(plan.layout.headline);
+    if (characters.length <= 11) return plan.layout.headline;
+    const punctuation = characters.findIndex(
+      (character, index) =>
+        index >= 6 && index <= 11 && ['、', '。', '！', '？'].includes(character),
+    );
+    const breakAt = punctuation >= 0 ? punctuation + 1 : 10;
+    return `${characters.slice(0, breakAt).join('')}\n${characters.slice(breakAt).join('')}`;
+  })();
+  const children: ReactNode[] = [
+    createElement('div', {
+      style: positioned(
+        { x: -82, y: -72, width: 330, height: 250 },
+        {
+          display: 'flex',
+          borderRadius: 150,
+          backgroundColor: '#F5A7A0',
+          transform: 'rotate(-12deg)',
+        },
+      ),
+    }),
+    createElement('div', {
+      style: positioned(
+        { x: 930, y: 180, width: 250, height: 410 },
+        {
+          display: 'flex',
+          borderRadius: 130,
+          backgroundColor: lavender,
+          transform: 'rotate(8deg)',
+        },
+      ),
+    }),
+    createElement('div', {
+      style: positioned(
+        { x: -110, y: 1050, width: 330, height: 360 },
+        {
+          display: 'flex',
+          borderRadius: 160,
+          backgroundColor: '#F18B84',
+          transform: 'rotate(14deg)',
+        },
+      ),
+    }),
+    createElement('div', {
+      style: positioned(
+        { x: 692, y: 1120, width: 470, height: 300 },
+        {
+          display: 'flex',
+          borderRadius: 180,
+          backgroundColor: '#D9C9E8',
+          transform: 'rotate(-7deg)',
+        },
+      ),
+    }),
+    createElement(
+      'div',
+      {
+        style: positioned(
+          { x: 72, y: 76, width: 264, height: 54 },
+          {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 27,
+            color: '#FFFFFF',
+            backgroundColor: coral,
+            fontFamily: FONT_FAMILY,
+            fontSize: 27,
+            fontWeight: 700,
+            letterSpacing: 2,
+          },
+        ),
+      },
+      '今日の投稿ヒント',
+    ),
+    textBlock(headline, plan.definition.headlineArea, {
+      fontSize: plan.definition.headline.fontSize,
+      weight: 700,
+      color: ink,
+    }),
+    createElement('div', {
+      style: positioned(
+        { x: 72, y: 458, width: 590, height: 6 },
+        { display: 'flex', borderRadius: 3, backgroundColor: lavender },
+      ),
+    }),
+    createElement(
+      'div',
+      {
+        style: positioned(plan.definition.bodyArea, {
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '18px 22px',
+          gap: 4,
+          border: `3px dashed ${coral}`,
+          borderRadius: 75,
+          color: coral,
+          backgroundColor: 'rgba(255,255,255,0.72)',
+          fontFamily: FONT_FAMILY,
+          fontSize: plan.definition.body.fontSize,
+          fontWeight: 700,
+          lineHeight: 1.25,
+          textAlign: 'center',
+        }),
+      },
+      ...plan.layout.bodyLines.map((line, index) =>
+        createElement('div', { key: `${index}-${line}`, style: { display: 'flex' } }, line),
+      ),
+    ),
+    createElement('div', {
+      style: positioned(
+        { x: 374, y: 620, width: 664, height: 620 },
+        {
+          display: 'flex',
+          borderRadius: 68,
+          backgroundColor: '#FFFFFF',
+          boxShadow: '0 20px 48px rgba(93,66,47,0.16)',
+        },
+      ),
+    }),
+  ];
+  if (dataUri) children.push(assetElement(plan, dataUri));
+  for (let index = 0; index < 12; index += 1)
+    children.push(
+      createElement('div', {
+        key: `dot-${index}`,
+        style: positioned(
+          { x: 83 + (index % 4) * 23, y: 930 + Math.floor(index / 4) * 23, width: 8, height: 8 },
+          { display: 'flex', borderRadius: 4, backgroundColor: lavender },
+        ),
+      }),
+    );
+  if (plan.layout.cta && plan.definition.ctaArea && plan.definition.cta)
+    children.push(
+      createElement(
+        'div',
+        {
+          style: positioned(plan.definition.ctaArea, {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: ink,
+            fontFamily: FONT_FAMILY,
+            fontSize: plan.definition.cta.fontSize,
+            fontWeight: 700,
+            letterSpacing: 1,
+          }),
+        },
+        createElement('span', {
+          style: {
+            display: 'flex',
+            width: 18,
+            height: 26,
+            marginRight: 14,
+            borderRadius: 4,
+            backgroundColor: coral,
+          },
+        }),
+        plan.layout.cta,
+      ),
+    );
+  return createElement(
+    'div',
+    {
+      style: {
+        position: 'relative',
+        display: 'flex',
+        width: plan.definition.canvas.width,
+        height: plan.definition.canvas.height,
+        overflow: 'hidden',
+        backgroundColor: '#FFF8EF',
+      },
+    },
+    ...children,
+  );
+};
+
 const composeTree = (plan: SocialImageCompositionPlan, dataUri: string | null): ReactNode => {
+  if (plan.templateKey === 'EDITORIAL_COVER') return editorialCoverTree(plan, dataUri);
   const dark = '#0B2D5C';
   const isBackground = plan.definition.assetPlacement === 'BACKGROUND';
   const foreground = isBackground ? '#FFFFFF' : dark;
@@ -261,7 +454,10 @@ const prepareAsset = async (plan: SocialImageCompositionPlan, sourceAsset: Buffe
   const prepared = await sharp(sourceAsset)
     .rotate()
     .resize(area.width, area.height, {
-      fit: plan.definition.assetPlacement === 'BACKGROUND' ? 'cover' : 'contain',
+      fit:
+        plan.definition.assetPlacement === 'BACKGROUND' || plan.templateKey === 'EDITORIAL_COVER'
+          ? 'cover'
+          : 'contain',
       position: 'attention',
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     })

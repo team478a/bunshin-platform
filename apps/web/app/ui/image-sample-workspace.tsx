@@ -33,6 +33,7 @@ export function ImageSampleWorkspace({
           id,
           groupId,
           bunshinId: form.get('bunshinId'),
+          templateKey: form.get('templateKey'),
           headline: form.get('headline'),
           bodyLines: bodyLines
             .split('\n')
@@ -104,24 +105,36 @@ export function ImageSampleWorkspace({
           </select>
         </label>
         <label className="field">
+          画像の型
+          <select
+            className="field__control"
+            name="templateKey"
+            defaultValue="EDITORIAL_COVER"
+            disabled={busy}
+          >
+            <option value="EDITORIAL_COVER">上質な人物入り表紙</option>
+            <option value="EMPATHY_QUOTE">シンプルな背景＋文字</option>
+          </select>
+        </label>
+        <label className="field">
           見出し（20文字まで）
           <input
             className="field__control"
             name="headline"
             maxLength={20}
             required
-            defaultValue="知識を、つながりに。"
+            defaultValue="投稿が続く人は、仕組みを持っている。"
             disabled={busy}
           />
         </label>
         <label className="field">
-          本文（1行28文字・3行まで）
+          補足（人物入り表紙は1行12文字・2行まで）
           <textarea
             className="field__control"
             name="bodyLines"
             required
             rows={3}
-            defaultValue={'千ノ国メディア\nあなたの経験が、誰かの一歩に。\n学びと実践を、一緒に。'}
+            defaultValue={'続ける3つのコツ\n今日から無理なく始める'}
             disabled={busy}
           />
         </label>
@@ -131,7 +144,7 @@ export function ImageSampleWorkspace({
             className="field__control"
             name="cta"
             maxLength={28}
-            defaultValue="あなたの知識を、発信しよう。"
+            defaultValue="あとで見返せるように保存"
             disabled={busy}
           />
         </label>
@@ -144,7 +157,7 @@ export function ImageSampleWorkspace({
             maxLength={1000}
             required
             rows={4}
-            defaultValue="深い紺色を基調に、四辺の内側へ細い金色の枠と、端にだけ小さな光の点とつながる線を置いた、上質で静かな和紙の抽象イラスト。見出し・本文・最後のひとことを置く領域は均一な濃紺の余白にする。人物、顔、手、本、吹き出し、建物、端末、ロゴ、記号、文字は描かない。"
+            defaultValue="30〜40代の日本人女性。淡いコーラル色のカーディガンと生成りのブラウス。明るい自宅の仕事机でスマートフォンを持ち、自然に微笑む。清潔感のある上質な雑誌写真。"
             disabled={busy}
           />
         </label>
