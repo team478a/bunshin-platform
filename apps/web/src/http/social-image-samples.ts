@@ -170,7 +170,7 @@ export async function createImageSample(request: Request) {
       height: 1350,
       prompt: [
         'Create a refined editorial illustration for a Japanese social media introduction. Portrait composition, coherent lighting and restrained navy, warm cream and soft gold palette.',
-        'No text, letters, logos, watermarks or interface elements. Keep the central area quiet and low-detail for a separate Japanese text overlay. Place the storytelling details around the edges. Avoid generic robots, floating UI and stock-photo handshakes.',
+        'No text, letters, logos, watermarks or interface elements. Follow the art direction literally and do not add objects that it excludes. Keep the headline area near the upper center, the body area through the middle, and the call-to-action area near the bottom uniformly quiet and low-detail for a separate Japanese text overlay. If the art direction requests a minimal background, use only the named colors, texture and border treatment; do not invent people, books, speech bubbles, buildings or devices.',
         `Art direction: ${input.artDirection}`,
         `Communication theme: ${input.headline}. ${input.bodyLines.join(' / ')}`,
       ].join(' '),
