@@ -34,6 +34,7 @@ import { ServiceDeliverySettings } from './service-delivery-settings';
 import { dailyVideoProjectId } from '../../../../../src/services/automatic-daily-video';
 import { localDateInTimezone } from '../../../../../src/activity-progress';
 import { resolveDeliveryScheduleStatus } from '../../../../../src/services/delivery-schedule-status';
+import { currentLineEnvironment } from '../../../../../src/line/secure-configuration';
 
 export const dynamic = 'force-dynamic';
 
@@ -233,6 +234,22 @@ export default async function ServiceBunshinDetailPage({
     missionDates: dailyMissions.map(({ missionDate }) => missionDate),
   });
 
+  const dedicatedLine = await db.prisma.groupLineChannelConfiguration.findFirst({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      environment: currentLineEnvironment(),
+      status: 'ACTIVE',
+      lastVerifiedAt: { not: null },
+      lastErrorCategory: null,
+      group: {
+        lineRoutingPolicies: {
+          some: { environment: currentLineEnvironment(), mode: 'DEDICATED', pilotEnabled: true },
+        },
+      },
+    },
+    select: { id: true },
+  });
   return (
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry service-member-home" style={style}>
@@ -241,6 +258,11 @@ export default async function ServiceBunshinDetailPage({
           <h1>{bunshin.name}</h1>
           <p>初回設定のあとは、投稿案を自動で準備してLINEでお知らせします。</p>
         </header>
+        {dedicatedLine ? (
+          <a href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}/line`}>
+            LINEの接続と動画の完成通知を確認する
+          </a>
+        ) : null}
         <SimpleFirstPostSetup
           serviceSlug={service.configuration.slug}
           bunshinId={bunshin.id}

@@ -73,6 +73,26 @@ const repository = (value: VideoRenderRecord): VideoRenderRepository => ({
 });
 
 describe('video render execution', () => {
+  it('reuses a completed render without provider calls when retrying its completion notice', async () => {
+    const completed = {
+      ...render('SUCCEEDED'),
+      outputStorageKey: 'safe/output.mp4',
+      completedAt: now,
+    };
+    const provider = { submit: vi.fn(), inspect: vi.fn() };
+    const storage = { store: vi.fn() };
+    const source = { createUrl: vi.fn() };
+    await expect(
+      new ExecuteVideoRenderStep(repository(completed), provider, storage, source, source).execute({
+        workspaceId,
+        renderId,
+      }),
+    ).resolves.toEqual({ status: 'SUCCEEDED', render: completed });
+    expect(provider.submit).not.toHaveBeenCalled();
+    expect(provider.inspect).not.toHaveBeenCalled();
+    expect(storage.store).not.toHaveBeenCalled();
+    expect(source.createUrl).not.toHaveBeenCalled();
+  });
   it('submits a queued render without downloading an output prematurely', async () => {
     const values = repository(render());
     const provider = {

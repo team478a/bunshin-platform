@@ -2052,8 +2052,21 @@ export class PrismaLineDeliveryPreferenceRepository implements LineDeliveryPrefe
         userId: input.userId,
         workspace: {
           status: 'ACTIVE',
-          memberships: { some: { userId: input.userId, status: 'ACTIVE' } },
         },
+        OR: [
+          { workspace: { memberships: { some: { userId: input.userId, status: 'ACTIVE' } } } },
+          {
+            bunshin: {
+              ownerUserId: input.userId,
+              group: {
+                status: 'ACTIVE',
+                memberships: {
+                  some: { userId: input.userId, status: 'ACTIVE', consentedAt: { not: null } },
+                },
+              },
+            },
+          },
+        ],
         bunshin: {
           status: { not: 'ARCHIVED' },
           OR: [
