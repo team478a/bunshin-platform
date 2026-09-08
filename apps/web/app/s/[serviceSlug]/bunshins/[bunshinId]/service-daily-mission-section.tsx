@@ -20,6 +20,7 @@ export function ServiceDailyMissionSection({
   variantPointCost,
   pointWorkspaceId,
   active,
+  generation,
   videos = {},
 }: {
   endpoint: string;
@@ -27,6 +28,7 @@ export function ServiceDailyMissionSection({
   variantPointCost: number | null;
   pointWorkspaceId: string;
   active: boolean;
+  generation?: { missionDate: string; timezone: string; socialProfileId: string };
   videos?: Record<string, { href: string; status: string }>;
 }) {
   const router = useRouter();
@@ -38,6 +40,32 @@ export function ServiceDailyMissionSection({
   const [variantInstructions, setVariantInstructions] = useState<Record<string, string>>({});
 
   const key = () => createClientRequestId();
+
+  async function generateToday() {
+    if (!generation || pendingAction) return;
+    const requestId = key();
+    setPendingAction('generate');
+    setMessage(null);
+    try {
+      const response = await fetch(`${endpoint}/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': requestId },
+        body: JSON.stringify({ ...generation, idempotencyKey: requestId }),
+      });
+      if (!response.ok) {
+        setMessage(
+          `今日の投稿案を準備できませんでした。もう一度お試しください。（受付番号: ${requestId}）`,
+        );
+        return;
+      }
+      setMessage('今日の投稿案を準備しました。');
+      router.refresh();
+    } catch {
+      setMessage(`通信できませんでした。もう一度お試しください。（受付番号: ${requestId}）`);
+    } finally {
+      setPendingAction(null);
+    }
+  }
 
   async function record(id: string, resource: string, payload: Record<string, unknown>) {
     if (pendingAction) return false;
@@ -208,7 +236,20 @@ export function ServiceDailyMissionSection({
         </p>
       ) : null}
       {missions.length === 0 ? (
-        <p>届いた投稿案はまだありません。自動のお届けを設定すると、投稿予定の日に届きます。</p>
+        <div>
+          <p>届いた投稿案はまだありません。自動のお届けを設定すると、投稿予定の日に届きます。</p>
+          {active && generation ? (
+            <button
+              type="button"
+              disabled={pendingAction !== null}
+              onClick={() => void generateToday()}
+            >
+              {pendingAction === 'generate'
+                ? '投稿案を準備しています…'
+                : '今日の投稿案を今すぐ準備する'}
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <ul className="mission-list">
         {missions.map((mission) => (

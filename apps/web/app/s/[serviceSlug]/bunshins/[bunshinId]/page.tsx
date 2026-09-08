@@ -233,6 +233,7 @@ export default async function ServiceBunshinDetailPage({
       .flatMap(({ items }) => items.map(({ scheduledDate }) => scheduledDate)),
     missionDates: dailyMissions.map(({ missionDate }) => missionDate),
   });
+  const generationProfile = socialProfiles.find(({ status }) => status === 'ACTIVE');
 
   const dedicatedLine = await db.prisma.groupLineChannelConfiguration.findFirst({
     where: {
@@ -350,6 +351,15 @@ export default async function ServiceBunshinDetailPage({
             missions={dailyMissions}
             variantPointCost={variantPointCost}
             pointWorkspaceId={service.workspaceId}
+            {...(deliverySchedule.state === 'PREPARING' && generationProfile
+              ? {
+                  generation: {
+                    missionDate: today,
+                    timezone: deliveryTimezone,
+                    socialProfileId: generationProfile.id,
+                  },
+                }
+              : {})}
             videos={videos}
             active={
               capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
