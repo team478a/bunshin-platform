@@ -20,6 +20,7 @@ const healthy = (): AdminAlertSnapshot => ({
     },
   ],
   line: {
+    required: true,
     active: true,
     verified: true,
     globallyPaused: false,
@@ -47,6 +48,21 @@ describe('admin alert center', () => {
     expect(alerts[0]).toMatchObject({ severity: 'CRITICAL' });
     expect(alerts.map((item) => item.code)).toEqual(
       expect.arrayContaining(['AI_OPENAI_BUDGET', 'LINE_DELIVERY_FAILURES', 'OPEN_SUPPORT_CASES']),
+    );
+  });
+
+  it('does not require the shared LINE configuration when no delivery uses it', () => {
+    const snapshot = healthy();
+    snapshot.line = {
+      ...snapshot.line,
+      required: false,
+      active: false,
+      verified: false,
+      globallyPaused: true,
+    };
+
+    expect(buildAdminAlerts(snapshot).map((item) => item.code)).not.toEqual(
+      expect.arrayContaining(['LINE_CONFIGURATION_UNAVAILABLE', 'LINE_GLOBALLY_PAUSED']),
     );
   });
 

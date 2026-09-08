@@ -10241,6 +10241,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
     const [
       configurations,
       lineConfiguration,
+      lineNotificationTargets,
       failedDeliveries,
       lineJobs,
       otherDeadJobs,
@@ -10254,6 +10255,16 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       }),
       this.client.lineChannelConfiguration.findFirst({
         where: { environment: input.environment, status: 'ACTIVE' },
+      }),
+      this.client.lineNotificationPreference.findMany({
+        where: {
+          enabled: true,
+          notificationConsentAt: { not: null },
+          workspace: { status: 'ACTIVE' },
+          user: { status: 'ACTIVE', memberships: { some: { status: 'ACTIVE' } } },
+          bunshin: { status: { not: 'ARCHIVED' } },
+        },
+        select: { bunshin: { select: { groupId: true } } },
       }),
       this.client.lineMessageDelivery.count({
         where: { environment: input.environment, status: 'FAILED' },
@@ -10278,6 +10289,30 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       this.client.supportCase.count({ where: { status: 'OPEN' } }),
       this.client.supportCase.count({ where: { status: 'OPEN', priority: 'URGENT' } }),
     ]);
+    const targetGroupIds = [
+      ...new Set(
+        lineNotificationTargets.flatMap(({ bunshin }) =>
+          bunshin.groupId === null ? [] : [bunshin.groupId],
+        ),
+      ),
+    ];
+    const groupRoutingPolicies =
+      targetGroupIds.length === 0
+        ? []
+        : await this.client.groupLineRoutingPolicy.findMany({
+            where: {
+              environment: input.environment,
+              groupId: { in: targetGroupIds },
+            },
+            select: { groupId: true, mode: true },
+          });
+    const groupRoutingModes = new Map(
+      groupRoutingPolicies.map(({ groupId, mode }) => [groupId, mode]),
+    );
+    const sharedLineRequired = lineNotificationTargets.some(({ bunshin }) => {
+      if (bunshin.groupId === null) return true;
+      return (groupRoutingModes.get(bunshin.groupId) ?? 'SHARED') === 'SHARED';
+    });
     const safeNumber = (value: bigint | null) =>
       value === null
         ? 0
@@ -10319,6 +10354,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
     return {
       ai,
       line: {
+        required: sharedLineRequired,
         active: Boolean(lineConfiguration),
         verified: Boolean(
           lineConfiguration?.lastVerifiedAt && !lineConfiguration.lastErrorCategory,
