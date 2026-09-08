@@ -65,6 +65,7 @@ export async function imageSampleScope(groupId: string, bunshinId?: string) {
       groupId,
       ownerUserId: actor.userId,
       status: { not: 'ARCHIVED' },
+      capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
     },
     select: { id: true, name: true },
   });
