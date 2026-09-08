@@ -115,7 +115,7 @@ export async function queueAutomaticDailyImage(input: {
       campaignId: mission.campaignId,
       productPackVersionId: mission.contentLinkUsage?.productPackVersionId ?? null,
       layout: {
-        templateKey: 'PERSON_HEADLINE',
+        templateKey: 'EDITORIAL_COVER',
         headline: input.mission.topic,
         bodyLines: [input.mission.angle],
         cta: '今日の投稿案を確認する',

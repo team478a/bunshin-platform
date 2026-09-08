@@ -20,14 +20,32 @@ import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../soci
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { reserveServiceMediaGeneration } from '../service-media-generation-quota';
 
-const promptFor = (layout: { headline: string; bodyLines: string[] }) =>
-  [
-    'Create one polished vertical social-media background image.',
-    'Do not render letters, words, logos, watermarks, UI, signs, or captions.',
-    'Leave generous uncluttered negative space for Japanese text overlay.',
-    `Visual theme: ${layout.headline}.`,
-    `Supporting concepts: ${layout.bodyLines.join(', ')}.`,
-  ].join(' ');
+const promptFor = (layout: {
+  templateKey: string;
+  headline: string;
+  bodyLines: string[];
+}, hasReference: boolean) =>
+  layout.templateKey === 'EDITORIAL_COVER'
+    ? [
+        'Create one premium editorial lifestyle photograph for a Japanese social-media carousel cover.',
+        'Show one original Japanese adult professional in a warm, softly lit home or work setting, framed from the waist or chest up, with a natural approachable expression and realistic hands and skin texture.',
+        'Use warm cream, soft coral and muted lavender styling with coherent commercial photography lighting. Keep the person clearly separated from a simple background.',
+        'This is a photo asset for a separate deterministic layout. Do not render text, letters, numbers, logos, watermarks, interface elements, cards, icons, borders or decorative typography.',
+        hasReference
+          ? 'Use the supplied consented photograph as the subject reference and preserve the person or product appearance. Do not change product labeling or invent product claims.'
+          : 'Create an original person. Do not imitate a real person or celebrity.',
+        `Communication theme only: ${layout.headline}.`,
+        `Supporting concepts only: ${layout.bodyLines.join(', ')}.`,
+      ].join(' ')
+    : [
+        'Create one polished vertical social-media background image.',
+        hasReference
+          ? 'Do not add captions, watermarks, interface elements or new logos. Preserve existing product labeling.'
+          : 'Do not render letters, words, logos, watermarks, UI, signs, or captions.',
+        'Leave generous uncluttered negative space for Japanese text overlay.',
+        `Visual theme: ${layout.headline}.`,
+        `Supporting concepts: ${layout.bodyLines.join(', ')}.`,
+      ].join(' ');
 
 const tokyoLocalDate = (value: Date) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -132,9 +150,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           : undefined;
         const generated = await provider.generate({
           requestId: context.requestId,
-          prompt: context.referenceImage
-            ? `${promptFor(context.layout).replace('Do not render letters, words, logos, watermarks, UI, signs, or captions.', 'Do not add captions, watermarks or new logos.')} Use the supplied photograph as the main subject reference. Preserve the person's appearance or product shape and colors. Do not invent product claims or change product labeling.`
-            : promptFor(context.layout),
+          prompt: promptFor(context.layout, Boolean(context.referenceImage)),
           ...(referenceImage ? { referenceImage } : {}),
           width: 1080,
           height: 1350,
@@ -149,8 +165,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           provider: generated.provider,
           model: generated.model,
           promptVersion: context.referenceImage
-            ? 'social-image-reference-v1'
-            : 'social-image-asset-v1',
+            ? 'social-image-reference-v2'
+            : 'social-image-asset-v2',
           status: 'SUCCESS',
           inputTokens: generated.inputTokens,
           outputTokens: generated.outputTokens,
@@ -203,8 +219,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
             provider: 'OPENAI',
             model: context.model,
             promptVersion: context.referenceImage
-              ? 'social-image-reference-v1'
-              : 'social-image-asset-v1',
+              ? 'social-image-reference-v2'
+              : 'social-image-asset-v2',
             status: 'FAILED',
             inputTokens: null,
             outputTokens: null,

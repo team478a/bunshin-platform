@@ -9,6 +9,13 @@ import {
 import type { SocialImageLayout, SocialImageTemplateKey } from '@bunshin/application';
 
 const layouts: Record<SocialImageTemplateKey, SocialImageLayout> = {
+  EDITORIAL_COVER: {
+    templateKey: 'EDITORIAL_COVER',
+    headline: '投稿が続く人の共通点',
+    bodyLines: ['続ける3つのコツ', '今日から無理なく始める'],
+    cta: 'あとで見返せるように保存',
+    accentColor: '#EF6A63',
+  },
   PERSON_HEADLINE: {
     templateKey: 'PERSON_HEADLINE',
     headline: '今日の一歩を始めよう',
@@ -65,7 +72,9 @@ describe('Managed social image renderer', () => {
       const renderer = new ManagedSocialImageRenderer(fonts);
       const result = await renderer.render({
         layout: layouts[key],
-        sourceAsset: ['PERSON_HEADLINE', 'EMPATHY_QUOTE', 'CTA'].includes(key) ? asset : null,
+        sourceAsset: ['EDITORIAL_COVER', 'PERSON_HEADLINE', 'EMPATHY_QUOTE', 'CTA'].includes(key)
+          ? asset
+          : null,
       });
       await expect(sharp(result.completedPng).metadata()).resolves.toMatchObject({
         format: 'png',
@@ -91,6 +100,17 @@ describe('Managed social image renderer', () => {
     const second = await renderer.render(input);
     expect(second.contentHash).toBe(first.contentHash);
     expect(second.completedPng.equals(first.completedPng)).toBe(true);
+  }, 30_000);
+
+  it('renders the editorial palette independently of the generated photo colors', async () => {
+    const renderer = new ManagedSocialImageRenderer(fonts);
+    const result = await renderer.render({
+      layout: layouts.EDITORIAL_COVER,
+      sourceAsset: asset,
+    });
+    const stats = await sharp(result.completedPng).stats();
+    expect(stats.channels[0]!.max).toBe(255);
+    expect(result.completedPng.byteLength).toBeGreaterThan(20_000);
   }, 30_000);
 
   it('rejects missing, extra, oversized, and unsupported assets', async () => {

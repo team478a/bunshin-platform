@@ -25,7 +25,7 @@ const isInside = (inner: SocialImageRect, outer: SocialImageRect) =>
   inner.y + inner.height <= outer.y + outer.height;
 
 describe('Social image templates', () => {
-  it('provides exactly five versioned 1080 by 1350 templates', () => {
+  it('provides the versioned 1080 by 1350 templates', () => {
     expect(Object.keys(SOCIAL_IMAGE_TEMPLATE_DEFINITIONS)).toEqual(SOCIAL_IMAGE_TEMPLATE_KEYS);
     for (const definition of Object.values(SOCIAL_IMAGE_TEMPLATE_DEFINITIONS)) {
       expect(definition.version).toBe(1);

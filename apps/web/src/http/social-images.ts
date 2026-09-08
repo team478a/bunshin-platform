@@ -48,6 +48,7 @@ const createSchema = z
     layout: z
       .object({
         templateKey: z.enum([
+          'EDITORIAL_COVER',
           'PERSON_HEADLINE',
           'PROBLEM_CHECKLIST',
           'THREE_POINTS',

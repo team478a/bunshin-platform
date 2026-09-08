@@ -83,6 +83,7 @@ const input = {
   id,
   groupId,
   bunshinId,
+  templateKey: 'EDITORIAL_COVER',
   headline: '知識を、つながりに。',
   bodyLines: ['千ノ国メディア'],
   cta: '一緒に学ぼう',
@@ -151,7 +152,7 @@ describe('administrator image quality samples', () => {
   it('creates one privately stored 1080x1350 composed image and records usage', async () => {
     expect((await createImageSample(request())).status).toBe(200);
     expect(m.generate).toHaveBeenCalledWith(
-      expect.objectContaining({ quality: 'medium', width: 1080, height: 1350 }),
+      expect.objectContaining({ quality: 'high', width: 1080, height: 1350 }),
     );
     expect(m.store).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -164,7 +165,7 @@ describe('administrator image quality samples', () => {
     );
     expect(m.update).toHaveBeenCalledWith({ where: { id }, data: { status: 'READY' } });
     expect(m.usage).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'SUCCESS', promptVersion: 'social-image-admin-sample-v1' }),
+      expect.objectContaining({ status: 'SUCCESS', promptVersion: 'social-image-admin-sample-v2' }),
     );
   });
   it('replays the same request without a second provider call and rejects changed inputs', async () => {
