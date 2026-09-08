@@ -23,6 +23,7 @@ export interface AdminAlertSnapshot {
     recentFailures: number;
   }>;
   line: {
+    required: boolean;
     active: boolean;
     verified: boolean;
     globallyPaused: boolean;
@@ -95,21 +96,23 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
         href: '/admin/ai',
       });
   }
-  if (!snapshot.line.active || !snapshot.line.verified)
+  if (snapshot.line.required && (!snapshot.line.active || !snapshot.line.verified))
     alerts.push({
       code: 'LINE_CONFIGURATION_UNAVAILABLE',
       severity: 'CRITICAL',
-      title: 'LINE通知を送れません',
-      guidance: 'LINEの設定画面を開き、表示される「次にすること」を行ってください。',
+      title: '共通LINEを使う通知を送れません',
+      guidance:
+        '共通LINEを使う参加者がいます。共通LINEの設定画面を開き、表示される「次にすること」を行ってください。サービス専用LINEの通知には影響しません。',
       count: null,
       href: '/admin/line',
     });
-  if (snapshot.line.globallyPaused)
+  if (snapshot.line.required && snapshot.line.globallyPaused)
     alerts.push({
       code: 'LINE_GLOBALLY_PAUSED',
       severity: 'WARNING',
-      title: 'LINE通知が全体停止中です',
-      guidance: '意図した停止か確認してください。',
+      title: '共通LINEの通知が停止中です',
+      guidance:
+        '共通LINEを意図して停止しているか確認してください。サービス専用LINEは別に管理されます。',
       count: null,
       href: '/admin/line',
     });
