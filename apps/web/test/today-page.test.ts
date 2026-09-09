@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   record: vi.fn(),
   findMission: vi.fn(),
   findLatestDelivery: vi.fn(),
+  findLatestBunshin: vi.fn(),
   findMemberships: vi.fn(),
   findEnrollment: vi.fn(),
   verifyToken: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock('@bunshin/database', () => ({
   prisma: {
     dailyMission: { findFirst: mocks.findMission },
     lineMessageDelivery: { findFirst: mocks.findLatestDelivery },
+    bunshin: { findFirst: mocks.findLatestBunshin },
     groupMembership: { findMany: mocks.findMemberships },
     socialImagePilotEnrollment: { findFirst: mocks.findEnrollment },
   },
@@ -64,6 +66,7 @@ describe('Mission Deep Link landing', () => {
     vi.clearAllMocks();
     mocks.findMission.mockResolvedValue({ format: 'TEXT', campaign: null, contentLinkUsage: null });
     mocks.findLatestDelivery.mockResolvedValue(null);
+    mocks.findLatestBunshin.mockResolvedValue(null);
     mocks.findMemberships.mockResolvedValue([]);
     mocks.findEnrollment.mockResolvedValue(null);
   });
@@ -153,25 +156,18 @@ describe('Mission Deep Link landing', () => {
     expect(mocks.consume).not.toHaveBeenCalled();
   });
 
-  it('uses the same not-found boundary for expired, reused or cross-scope state', async () => {
+  it('sends an authenticated user home when neither the link nor a current service can resolve', async () => {
     mocks.currentUser.mockResolvedValue({ userId: 'user-b' });
     mocks.consume.mockRejectedValue(new ApplicationError('FORBIDDEN', 'state is not usable'));
-    mocks.verifyToken.mockRejectedValue(new ApplicationError('FORBIDDEN', 'invalid signature'));
     await expect(TodayPage({ searchParams: Promise.resolve({ state: 'opaque' }) })).rejects.toThrow(
-      'NOT_FOUND',
+      'REDIRECT:/',
     );
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
-  it('recovers the signed link from the current user latest sent mission', async () => {
+  it('recovers the current user latest sent mission when stored link validation fails', async () => {
     mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
     mocks.consume.mockRejectedValue(new ApplicationError('FORBIDDEN', 'state scope changed'));
-    mocks.verifyToken.mockResolvedValue({
-      stateId: '033c8c61-b5e0-4d4e-bcbe-66c1516e58c6',
-      environment: 'PRODUCTION',
-      keyVersion: 1,
-      expiresAtEpochSeconds: Math.floor(Date.now() / 1_000),
-    });
     mocks.findLatestDelivery.mockResolvedValue({
       workspaceId: 'workspace-a',
       bunshinId: 'bunshin-a',
@@ -192,6 +188,19 @@ describe('Mission Deep Link landing', () => {
         orderBy: { sentAt: 'desc' },
       }),
     );
+  });
+
+  it('opens the current user service when no recent delivery can be recovered', async () => {
+    mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
+    mocks.consume.mockRejectedValue(new ApplicationError('FORBIDDEN', 'invalid signature'));
+    mocks.findLatestBunshin.mockResolvedValue({
+      id: 'bunshin-a',
+      group: { serviceConfiguration: { slug: 'my-service' } },
+    });
+
+    await expect(
+      TodayPage({ searchParams: Promise.resolve({ state: 'old-token' }) }),
+    ).rejects.toThrow('REDIRECT:/s/my-service/bunshins/bunshin-a#today-post');
   });
 
   it('sends an eligible image Mission to its group review page without starting generation', async () => {
