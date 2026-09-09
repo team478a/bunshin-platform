@@ -122,14 +122,18 @@ export function ServiceDailyMissionSection({
     return copied;
   }
 
-  async function writeToClipboard(value: string, keepUserGesture: boolean) {
-    if (keepUserGesture && copyWithSelection(value)) return true;
+  async function writeToClipboard(value: string) {
+    let clipboardAttempt: Promise<boolean> | null = null;
     try {
-      await navigator.clipboard.writeText(value);
-      return true;
+      clipboardAttempt = navigator.clipboard.writeText(value).then(
+        () => true,
+        () => false,
+      );
     } catch {
-      return copyWithSelection(value);
+      // LINE内ブラウザではClipboard API自体が提供されない場合がある。
     }
+    const selectedCopy = copyWithSelection(value);
+    return selectedCopy || (await clipboardAttempt) || false;
   }
 
   async function copy(
@@ -140,23 +144,13 @@ export function ServiceDailyMissionSection({
   ) {
     if (pendingAction) return;
     const id = mission.id;
-    setPendingAction(`${id}:copy-authorization`);
     setMessage(null);
     setManualCopy(null);
-    const authorization = await fetch(`${endpoint}/${encodeURIComponent(id)}/copy-authorization`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    }).catch(() => null);
-    if (!authorization?.ok) {
-      setMessage('専用URLを確認できませんでした。少し待ってから、もう一度お試しください。');
-      setPendingAction(null);
+    const authorizationData = mission.copyAuthorization;
+    if (!authorizationData) {
+      setMessage('コピーの準備を確認できませんでした。画面を開き直してください。');
       return;
     }
-    const authorizationResult = (await authorization.json().catch(() => null)) as {
-      data?: { allowed?: boolean; reason?: string; reviewNote?: string | null };
-    } | null;
-    const authorizationData = authorizationResult?.data;
     if (!authorizationData?.allowed) {
       setMessage(
         authorizationData?.reason === 'LINK_CHANGED'
@@ -167,10 +161,10 @@ export function ServiceDailyMissionSection({
               ? `この投稿案は見直しが必要です。${authorizationData.reviewNote ? `理由：${authorizationData.reviewNote}` : '運営者の案内を確認してください。'}`
               : 'この紹介URLは今は使えません。運営者へお問い合わせください。',
       );
-      setPendingAction(null);
       return;
     }
-    if (!(await writeToClipboard(value, false))) {
+    setPendingAction(`${id}:copy`);
+    if (!(await writeToClipboard(value))) {
       setManualCopy({
         title: type === 'COPIED_TEXT' ? '投稿文' : '画像用の文章',
         value,
@@ -302,8 +296,24 @@ export function ServiceDailyMissionSection({
           >
             もう一度コピーする
           </button>
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() => {
+              if (typeof navigator.share !== 'function') {
+                setMessage('下の文章を長押ししてコピーしてください。');
+                return;
+              }
+              void navigator
+                .share({ title: manualCopy.title, text: manualCopy.value })
+                .then(() => setMessage('共有メニューを閉じました。'))
+                .catch(() => setMessage('下の文章を長押ししてコピーしてください。'));
+            }}
+          >
+            iPhoneの共有メニューを開く
+          </button>
           <p>
-            コピーできない場合は、下の枠内を長押しし、「すべて選択」→「コピー」の順に押してください。
+            共有メニューでは「コピー」を選びます。それでも難しい場合は、下の枠内を長押しし、「すべて選択」→「コピー」の順に押してください。
           </p>
           <textarea
             aria-label={manualCopy.title}
