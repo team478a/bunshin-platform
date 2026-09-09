@@ -265,6 +265,28 @@ export const rejectionReasons = [
   ['NOT_TODAY', '今日は違う'],
 ] as const;
 
+export function imagePostHeadline(mission: DailyMissionView) {
+  return text(mission.content['overlayText']) ?? mission.topic;
+}
+
+export function imageCreationPrompt(mission: DailyMissionView) {
+  const instruction = text(mission.content['imageInstruction']);
+  const headline = imagePostHeadline(mission);
+  const lines = [
+    'Instagramにそのまま投稿できる、完成した縦長の投稿画像を1枚作ってください。',
+    '画像サイズは縦長4:5（1080×1350ピクセル）です。',
+    `投稿のテーマ：${mission.topic}`,
+    instruction ? `写真・イラストの内容：${instruction}` : null,
+    '画像内に、次の日本語の見出しを一字一句そのまま入れてください。',
+    `「${headline}」`,
+    '見出しは画像の上半分に大きく配置し、スマートフォンの小さな画面でも一目で読める太さと大きさにしてください。',
+    '背景と文字の色に十分な差をつけ、文字の周囲に余白を取ってください。',
+    '人物や写真だけで終わらせず、見出しと写真・イラストを組み合わせた、内容が一目で伝わるSNS投稿デザインに仕上げてください。',
+    '指定した見出し以外の文字、ロゴ、透かし、意味不明な文字は入れないでください。',
+  ];
+  return lines.filter((line): line is string => line !== null).join('\n');
+}
+
 export function copyOptions(mission: DailyMissionView) {
   const content = mission.content;
   const caption = text(content['caption']);
@@ -312,7 +334,7 @@ export function copyOptions(mission: DailyMissionView) {
   return [
     {
       label: '画像を作るための説明をコピー',
-      value: text(content['imageInstruction']),
+      value: imageCreationPrompt(mission),
       type: 'COPIED_IMAGE_INSTRUCTION' as const,
     },
     { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },

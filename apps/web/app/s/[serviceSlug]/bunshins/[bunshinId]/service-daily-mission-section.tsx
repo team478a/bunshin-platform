@@ -9,6 +9,7 @@ import {
   MissionIdea,
   MissionTrendContext,
   copyOptions,
+  imagePostHeadline,
   missionWithSelectedVariant,
   rejectionReasons,
   type DailyMissionView,
@@ -353,6 +354,7 @@ export function ServiceDailyMissionSection({
             (option) => option.type === 'COPIED_IMAGE_INSTRUCTION',
           );
           const postCaption = preparedCopyOptions.find((option) => option.type === 'COPIED_TEXT');
+          const imageHeadline = imagePostHeadline(preparedMission);
           return (
             <li
               className={`mission-card${isImageMission ? ' mission-card--simple' : ''}`}
@@ -399,7 +401,11 @@ export function ServiceDailyMissionSection({
                     <p className="mission-manual-image-flow__number">1</p>
                     <div>
                       <h4>画像を作る文章をコピー</h4>
-                      <p>下のボタンを押すと、文章がスマホにコピーされます。</p>
+                      <p>写真だけではなく、見出しまで入った完成画像を作る文章です。</p>
+                      <p>
+                        <strong>画像に入る見出し：</strong>
+                        <br />「{imageHeadline}」
+                      </p>
                       {imageInstruction ? (
                         <button
                           className="mission-copy-action"
