@@ -72,6 +72,13 @@ describe('service daily mission boundary', () => {
     expect(experience).not.toContain('画像作成機能を準備しています');
   });
 
+  it('supports LINE browsers that block the modern clipboard API', () => {
+    expect(experience).toContain("document.execCommand('copy')");
+    expect(experience).toContain('もう一度コピーする');
+    expect(experience).toContain('下の枠内を長押しし');
+    expect(experience).toContain('onFocus={(event) => event.currentTarget.select()}');
+  });
+
   it('keeps automatic delivery while allowing variants only for delivered missions', () => {
     expect(experience).not.toContain('/daily-missions/generate');
     expect(experience).toContain('async function generateVariant');

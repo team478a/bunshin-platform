@@ -39,6 +39,7 @@ export function ServiceDailyMissionSection({
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [manualCopy, setManualCopy] = useState<{ title: string; value: string } | null>(null);
   const [variantInstructions, setVariantInstructions] = useState<Record<string, string>>({});
 
   const key = () => createClientRequestId();
@@ -105,10 +106,43 @@ export function ServiceDailyMissionSection({
     }
   }
 
-  async function copy(id: string, value: string, type: string, metadata?: { slideIndex: number }) {
+  function copyWithSelection(value: string) {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.inset = '0';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    return copied;
+  }
+
+  async function writeToClipboard(value: string, keepUserGesture: boolean) {
+    if (keepUserGesture && copyWithSelection(value)) return true;
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      return copyWithSelection(value);
+    }
+  }
+
+  async function copy(
+    mission: DailyMissionView,
+    value: string,
+    type: string,
+    metadata?: { slideIndex: number },
+  ) {
     if (pendingAction) return;
+    const id = mission.id;
     setPendingAction(`${id}:copy-authorization`);
     setMessage(null);
+    setManualCopy(null);
     const authorization = await fetch(`${endpoint}/${encodeURIComponent(id)}/copy-authorization`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -136,10 +170,12 @@ export function ServiceDailyMissionSection({
       setPendingAction(null);
       return;
     }
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      setMessage('コピーできませんでした。ブラウザの設定を確認してください。');
+    if (!(await writeToClipboard(value, false))) {
+      setManualCopy({
+        title: type === 'COPIED_TEXT' ? '投稿文' : '画像用の文章',
+        value,
+      });
+      setMessage('自動コピーができないため、下の文章を長押ししてコピーしてください。');
       setPendingAction(null);
       return;
     }
@@ -249,6 +285,35 @@ export function ServiceDailyMissionSection({
           {message}
         </p>
       ) : null}
+      {manualCopy ? (
+        <section className="mission-manual-copy" aria-label={`${manualCopy.title}を手動でコピー`}>
+          <h3>{manualCopy.title}</h3>
+          <p>まず下のボタンを押してください。</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (copyWithSelection(manualCopy.value)) {
+                setManualCopy(null);
+                setMessage('コピーしました。次の手順へ進んでください。');
+              } else {
+                setMessage('下の文章を長押ししてコピーしてください。');
+              }
+            }}
+          >
+            もう一度コピーする
+          </button>
+          <p>
+            コピーできない場合は、下の枠内を長押しし、「すべて選択」→「コピー」の順に押してください。
+          </p>
+          <textarea
+            aria-label={manualCopy.title}
+            readOnly
+            rows={8}
+            value={manualCopy.value}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        </section>
+      ) : null}
       {missions.length === 0 ? (
         <div>
           <p>届いた投稿案はまだありません。自動のお届けを設定すると、投稿予定の日に届きます。</p>
@@ -331,7 +396,7 @@ export function ServiceDailyMissionSection({
                           type="button"
                           disabled={pendingAction !== null}
                           onClick={() =>
-                            void copy(mission.id, imageInstruction.value, imageInstruction.type)
+                            void copy(mission, imageInstruction.value, imageInstruction.type)
                           }
                         >
                           画像用の文章をコピー
@@ -367,7 +432,7 @@ export function ServiceDailyMissionSection({
                           className="mission-copy-action"
                           type="button"
                           disabled={pendingAction !== null}
-                          onClick={() => void copy(mission.id, postCaption.value, postCaption.type)}
+                          onClick={() => void copy(mission, postCaption.value, postCaption.type)}
                         >
                           投稿文をコピー
                         </button>
@@ -539,7 +604,7 @@ export function ServiceDailyMissionSection({
                           disabled={pendingAction !== null}
                           onClick={() =>
                             void copy(
-                              mission.id,
+                              mission,
                               option.value,
                               option.type,
                               'metadata' in option ? option.metadata : undefined,

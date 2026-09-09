@@ -2123,6 +2123,39 @@ a {
   font-size: 1rem;
   font-weight: 800;
 }
+.mission-manual-copy {
+  margin: 14px 0;
+  padding: 16px;
+  border: 2px solid var(--service-primary, var(--color-primary));
+  border-radius: 14px;
+  background: white;
+}
+.mission-manual-copy h3,
+.mission-manual-copy p {
+  margin-top: 0;
+}
+.mission-manual-copy textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+  line-height: 1.6;
+}
+.mission-manual-copy > button {
+  width: 100%;
+  min-height: 52px;
+  margin-bottom: 14px;
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  background: var(--service-primary, var(--color-primary));
+  font-size: 1rem;
+  font-weight: 800;
+}
 .mission-advanced-content {
   margin-bottom: 14px;
   padding: 14px;
