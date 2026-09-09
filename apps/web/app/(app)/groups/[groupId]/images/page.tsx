@@ -123,10 +123,9 @@ export default async function GroupImagesPage({
   return (
     <main className="app-page">
       <header className="app-page__heading">
-        <p className="eyebrow">SNS画像づくり</p>
-        <h1>投稿に使う画像</h1>
-        <p>{membership.group.name}の投稿案から、スマートフォンで使える画像を作ります。</p>
-        <p>内容を確認して「この画像を使う」を押すまで、採用にはなりません。</p>
+        <p className="eyebrow">今日やること</p>
+        <h1>投稿画像を作る</h1>
+        <p>青い「画像を作る」ボタンを押すと、投稿用の画像ができあがります。</p>
         <a href={serviceHome}>← 戻る</a>
       </header>
       <SocialImageWorkspace

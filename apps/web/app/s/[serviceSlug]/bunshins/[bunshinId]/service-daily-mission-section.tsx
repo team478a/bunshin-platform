@@ -22,6 +22,7 @@ export function ServiceDailyMissionSection({
   active,
   generation,
   videos = {},
+  imageCreationBaseHref,
 }: {
   endpoint: string;
   missions: DailyMissionView[];
@@ -30,6 +31,7 @@ export function ServiceDailyMissionSection({
   active: boolean;
   generation?: { missionDate: string; timezone: string; socialProfileId: string };
   videos?: Record<string, { href: string; status: string }>;
+  imageCreationBaseHref?: string;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -226,9 +228,9 @@ export function ServiceDailyMissionSection({
   return (
     <section className="mission-experience">
       <header className="mission-experience__header">
-        <p className="eyebrow">今日のおすすめ</p>
-        <h2>届いた投稿案</h2>
-        <p>投稿予定の日に、あなたに合った内容を自動で準備し、LINEでお知らせします。</p>
+        <p className="eyebrow">今日やること</p>
+        <h2>投稿画像を作りましょう</h2>
+        <p>むずかしい設定は必要ありません。下の青いボタンから始められます。</p>
       </header>
       {message ? (
         <p className="notice" role="status" aria-live="polite">
@@ -252,217 +254,271 @@ export function ServiceDailyMissionSection({
         </div>
       ) : null}
       <ul className="mission-list">
-        {missions.map((mission) => (
-          <li className="mission-card" key={mission.id}>
-            {videos[mission.id] ? (
-              <p>
-                <a href={videos[mission.id]!.href}>
-                  {['READY_FOR_REVIEW', 'COMPLETED'].includes(videos[mission.id]!.status)
-                    ? 'この投稿案の字幕動画を見る'
-                    : videos[mission.id]!.status === 'FAILED'
-                      ? '字幕動画の作成状況を確認する'
-                      : '字幕動画を準備しています — 状況を見る'}
-                </a>
-              </p>
-            ) : null}
-            <h3>
-              {mission.missionDate} — {mission.topic}
-            </h3>
-            <p>{mission.reason}</p>
-            <button
-              type="button"
-              onClick={() => {
-                const opening = expanded !== mission.id;
-                setExpanded(opening ? mission.id : null);
-                if (opening && active)
-                  void record(mission.id, 'activities', {
-                    type: 'VIEWED',
-                    idempotencyKey: key(),
-                  });
-              }}
+        {missions.map((mission) => {
+          const isImageMission = mission.format === 'IMAGE' || mission.format === 'SLIDE';
+          const imageCreationHref =
+            isImageMission && imageCreationBaseHref
+              ? `${imageCreationBaseHref}?mission=${encodeURIComponent(mission.id)}`
+              : null;
+          return (
+            <li
+              className={`mission-card${isImageMission ? ' mission-card--simple' : ''}`}
+              key={mission.id}
             >
-              {expanded === mission.id ? '閉じる' : '内容を見る'}
-            </button>
-            {expanded === mission.id ? (
-              <div className="mission-detail">
-                <MissionIdea mission={mission} />
-                <MissionTrendContext mission={mission} />
-                <MissionGuide mission={missionWithSelectedVariant(mission)} />
-                <MissionContent mission={missionWithSelectedVariant(mission)} />
-                {active && !mission.variants[0] ? (
-                  <div className="mission-variant-actions">
-                    <button
-                      type="button"
-                      disabled={pendingAction !== null || variantPointCost === null}
-                      onClick={() => void generateVariant(mission.id)}
-                    >
-                      {variantPointCost === null
-                        ? 'ポイント交換を利用できません'
-                        : `${variantPointCost} WPで別の案を見る`}
-                    </button>
-                    <label>
-                      直したいところ（任意）
-                      <textarea
-                        value={variantInstructions[mission.id] ?? ''}
-                        maxLength={500}
-                        onChange={(event) =>
-                          setVariantInstructions((current) => ({
-                            ...current,
-                            [mission.id]: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={
-                        pendingAction !== null ||
-                        variantPointCost === null ||
-                        !(variantInstructions[mission.id] ?? '').trim()
-                      }
-                      onClick={() =>
-                        void generateVariant(mission.id, variantInstructions[mission.id])
-                      }
-                    >
-                      {variantPointCost === null
-                        ? 'ポイント交換を利用できません'
-                        : `${variantPointCost} WPで内容を直す`}
-                    </button>
-                    <p>
-                      作成に使ったWPは、失敗した場合に戻ります。{' '}
-                      <a href={`/points?workspaceId=${encodeURIComponent(pointWorkspaceId)}`}>
-                        残高を見る
-                      </a>
-                    </p>
-                  </div>
-                ) : null}
-                {mission.variants[0] && !mission.variants[0].selectedAt ? (
-                  <aside className="mission-variant">
-                    <h4>別の案</h4>
-                    <MissionContent
-                      mission={{ ...mission, content: mission.variants[0].content }}
-                    />
-                    <button
-                      type="button"
-                      disabled={pendingAction !== null}
-                      onClick={() => void selectVariant(mission.id, mission.variants[0]!.id)}
-                    >
-                      この案を使う
-                    </button>
-                  </aside>
-                ) : null}
-                {mission.variants[0]?.selectedAt ? (
-                  <p className="mission-step-complete">✓ 別の案を使用中です</p>
-                ) : null}
-                {active && mission.decision !== 'ACCEPTED' ? (
-                  <div className="mission-decision-actions">
-                    <button
-                      type="button"
-                      disabled={pendingAction !== null}
-                      onClick={() => void decide(mission.id, 'ACCEPTED')}
-                    >
-                      採用する
-                    </button>{' '}
-                    <button
-                      type="button"
-                      disabled={pendingAction !== null}
-                      onClick={() => setRejecting(mission.id)}
-                    >
-                      今回は使わない
-                    </button>
-                  </div>
-                ) : null}
-                {active && rejecting === mission.id ? (
-                  <div className="mission-rejection">
-                    <p>近い理由を1つ選んでください。</p>
-                    {rejectionReasons.map(([value, label]) => (
+              {videos[mission.id] ? (
+                <p>
+                  <a href={videos[mission.id]!.href}>
+                    {['READY_FOR_REVIEW', 'COMPLETED'].includes(videos[mission.id]!.status)
+                      ? 'この投稿案の字幕動画を見る'
+                      : videos[mission.id]!.status === 'FAILED'
+                        ? '字幕動画の作成状況を確認する'
+                        : '字幕動画を準備しています — 状況を見る'}
+                  </a>
+                </p>
+              ) : null}
+              {isImageMission ? (
+                <p className="mission-card__date">{mission.missionDate}の投稿</p>
+              ) : null}
+              <h3>
+                {isImageMission ? mission.topic : `${mission.missionDate} — ${mission.topic}`}
+              </h3>
+              {isImageMission ? (
+                <div className="mission-simple-steps" aria-label="画像を作って保存する手順">
+                  <p>
+                    <strong>やることは3つだけです</strong>
+                  </p>
+                  <ol>
+                    <li>青い「画像作成へ進む」ボタンを押す</li>
+                    <li>次の画面で「画像を作る」を押す</li>
+                    <li>「この画像を使う」を押してスマホに保存する</li>
+                  </ol>
+                </div>
+              ) : (
+                <p>{mission.reason}</p>
+              )}
+              {imageCreationHref ? (
+                <a className="button mission-create-image" href={imageCreationHref}>
+                  画像作成へ進む
+                </a>
+              ) : isImageMission ? (
+                <p className="notice">
+                  画像作成機能を準備しています。利用できるようになると、ここに青いボタンが表示されます。
+                </p>
+              ) : null}
+              <button
+                className={isImageMission ? 'mission-detail-toggle' : undefined}
+                type="button"
+                onClick={() => {
+                  const opening = expanded !== mission.id;
+                  setExpanded(opening ? mission.id : null);
+                  if (opening && active)
+                    void record(mission.id, 'activities', {
+                      type: 'VIEWED',
+                      idempotencyKey: key(),
+                    });
+                }}
+              >
+                {expanded === mission.id
+                  ? isImageMission
+                    ? '詳しい内容を閉じる'
+                    : '閉じる'
+                  : isImageMission
+                    ? '内容を確認・変更する'
+                    : '内容を見る'}
+              </button>
+              {expanded === mission.id ? (
+                <div className="mission-detail">
+                  {isImageMission ? (
+                    <details className="mission-advanced-content">
+                      <summary>企画の理由や自分で作る方法を見る</summary>
+                      <MissionIdea mission={mission} />
+                      <MissionTrendContext mission={mission} />
+                      <MissionGuide mission={missionWithSelectedVariant(mission)} />
+                      <MissionContent mission={missionWithSelectedVariant(mission)} />
+                    </details>
+                  ) : (
+                    <>
+                      <MissionIdea mission={mission} />
+                      <MissionTrendContext mission={mission} />
+                      <MissionGuide mission={missionWithSelectedVariant(mission)} />
+                      <MissionContent mission={missionWithSelectedVariant(mission)} />
+                    </>
+                  )}
+                  {active && !mission.variants[0] ? (
+                    <div className="mission-variant-actions">
                       <button
-                        key={value}
                         type="button"
-                        disabled={pendingAction !== null}
-                        onClick={() => void decide(mission.id, 'REJECTED', value)}
+                        disabled={pendingAction !== null || variantPointCost === null}
+                        onClick={() => void generateVariant(mission.id)}
                       >
-                        {label}
+                        {variantPointCost === null
+                          ? 'ポイント交換を利用できません'
+                          : `${variantPointCost} WPで別の案を見る`}
                       </button>
-                    ))}
-                    <label>
-                      その他（書かなくても大丈夫です）
-                      <textarea
-                        value={otherDetail}
-                        maxLength={1000}
-                        onChange={(event) => setOtherDetail(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={pendingAction !== null}
-                      onClick={() => void decide(mission.id, 'REJECTED', 'OTHER')}
-                    >
-                      その他で決定
-                    </button>
-                  </div>
-                ) : null}
-                {mission.decision === 'REJECTED' ? <p>今回は使わないと記録しました。</p> : null}
-                {active && mission.decision === 'ACCEPTED' ? (
-                  <div className="mission-accepted">
-                    <p className="mission-step-complete">✓ 採用しました</p>
-                    {copyOptions(missionWithSelectedVariant(mission)).map((option, index) => (
+                      <label>
+                        直したいところ（任意）
+                        <textarea
+                          value={variantInstructions[mission.id] ?? ''}
+                          maxLength={500}
+                          onChange={(event) =>
+                            setVariantInstructions((current) => ({
+                              ...current,
+                              [mission.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
                       <button
-                        key={`${option.type}:${index}`}
                         type="button"
-                        disabled={pendingAction !== null}
+                        disabled={
+                          pendingAction !== null ||
+                          variantPointCost === null ||
+                          !(variantInstructions[mission.id] ?? '').trim()
+                        }
                         onClick={() =>
-                          void copy(
-                            mission.id,
-                            option.value,
-                            option.type,
-                            'metadata' in option ? option.metadata : undefined,
-                          )
+                          void generateVariant(mission.id, variantInstructions[mission.id])
                         }
                       >
-                        {option.label}
+                        {variantPointCost === null
+                          ? 'ポイント交換を利用できません'
+                          : `${variantPointCost} WPで内容を直す`}
                       </button>
-                    ))}
-                    {mission.postedAt === null ? (
+                      <p>
+                        作成に使ったWPは、失敗した場合に戻ります。{' '}
+                        <a href={`/points?workspaceId=${encodeURIComponent(pointWorkspaceId)}`}>
+                          残高を見る
+                        </a>
+                      </p>
+                    </div>
+                  ) : null}
+                  {mission.variants[0] && !mission.variants[0].selectedAt ? (
+                    <aside className="mission-variant">
+                      <h4>別の案</h4>
+                      <MissionContent
+                        mission={{ ...mission, content: mission.variants[0].content }}
+                      />
                       <button
                         type="button"
-                        disabled={pendingAction !== null || mission.platform === null}
-                        onClick={() => void markPosted(mission)}
+                        disabled={pendingAction !== null}
+                        onClick={() => void selectVariant(mission.id, mission.variants[0]!.id)}
                       >
-                        投稿しました
+                        この案を使う
                       </button>
-                    ) : (
-                      <div className="mission-feedback">
-                        <p className="mission-step-complete">✓ 投稿済み</p>
-                        <p>この投稿は、あなたらしかったですか？</p>
-                        <small>
-                          回答は、次週の投稿形式や切り口をあなたに合わせるために使います。
-                        </small>
-                        {(
-                          [
-                            ['GOOD', '👍 自分らしい'],
-                            ['NEUTRAL', '😐 普通'],
-                            ['BAD', '👎 違う'],
-                          ] as const
-                        ).map(([rating, label]) => (
-                          <button
-                            key={rating}
-                            type="button"
-                            aria-pressed={mission.feedback === rating}
-                            disabled={pendingAction !== null || mission.feedback === rating}
-                            onClick={() => void feedback(mission.id, rating)}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </li>
-        ))}
+                    </aside>
+                  ) : null}
+                  {mission.variants[0]?.selectedAt ? (
+                    <p className="mission-step-complete">✓ 別の案を使用中です</p>
+                  ) : null}
+                  {active && mission.decision !== 'ACCEPTED' ? (
+                    <div className="mission-decision-actions">
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => void decide(mission.id, 'ACCEPTED')}
+                      >
+                        採用する
+                      </button>{' '}
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => setRejecting(mission.id)}
+                      >
+                        今回は使わない
+                      </button>
+                    </div>
+                  ) : null}
+                  {active && rejecting === mission.id ? (
+                    <div className="mission-rejection">
+                      <p>近い理由を1つ選んでください。</p>
+                      {rejectionReasons.map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={pendingAction !== null}
+                          onClick={() => void decide(mission.id, 'REJECTED', value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <label>
+                        その他（書かなくても大丈夫です）
+                        <textarea
+                          value={otherDetail}
+                          maxLength={1000}
+                          onChange={(event) => setOtherDetail(event.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => void decide(mission.id, 'REJECTED', 'OTHER')}
+                      >
+                        その他で決定
+                      </button>
+                    </div>
+                  ) : null}
+                  {mission.decision === 'REJECTED' ? <p>今回は使わないと記録しました。</p> : null}
+                  {active && mission.decision === 'ACCEPTED' ? (
+                    <div className="mission-accepted">
+                      <p className="mission-step-complete">✓ 採用しました</p>
+                      {copyOptions(missionWithSelectedVariant(mission)).map((option, index) => (
+                        <button
+                          key={`${option.type}:${index}`}
+                          type="button"
+                          disabled={pendingAction !== null}
+                          onClick={() =>
+                            void copy(
+                              mission.id,
+                              option.value,
+                              option.type,
+                              'metadata' in option ? option.metadata : undefined,
+                            )
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                      {mission.postedAt === null ? (
+                        <button
+                          type="button"
+                          disabled={pendingAction !== null || mission.platform === null}
+                          onClick={() => void markPosted(mission)}
+                        >
+                          投稿しました
+                        </button>
+                      ) : (
+                        <div className="mission-feedback">
+                          <p className="mission-step-complete">✓ 投稿済み</p>
+                          <p>この投稿は、あなたらしかったですか？</p>
+                          <small>
+                            回答は、次週の投稿形式や切り口をあなたに合わせるために使います。
+                          </small>
+                          {(
+                            [
+                              ['GOOD', '👍 自分らしい'],
+                              ['NEUTRAL', '😐 普通'],
+                              ['BAD', '👎 違う'],
+                            ] as const
+                          ).map(([rating, label]) => (
+                            <button
+                              key={rating}
+                              type="button"
+                              aria-pressed={mission.feedback === rating}
+                              disabled={pendingAction !== null || mission.feedback === rating}
+                              onClick={() => void feedback(mission.id, rating)}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

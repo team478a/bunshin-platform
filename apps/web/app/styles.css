@@ -2027,6 +2027,82 @@ a {
   padding-top: 18px;
   border-top: 1px solid var(--color-border);
 }
+.mission-card--simple {
+  padding: 22px;
+}
+.mission-card__date {
+  margin: 0 0 6px;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+.mission-simple-steps {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--service-primary, var(--color-primary)) 7%, white);
+}
+.mission-simple-steps p {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+.mission-simple-steps ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 1.5rem;
+  line-height: 1.65;
+}
+.mission-card .mission-create-image {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  justify-content: center;
+  align-items: center;
+  margin: 14px 0 8px;
+  color: white;
+  border-color: var(--service-primary, var(--color-primary));
+  background: var(--service-primary, var(--color-primary));
+  font-size: 1.2rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+.mission-card > button.mission-detail-toggle {
+  width: 100%;
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  border: 0;
+  background: transparent;
+  font-size: 0.9rem;
+}
+.mission-advanced-content {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.mission-advanced-content > summary {
+  color: var(--service-primary, var(--color-primary));
+  font-weight: 750;
+  cursor: pointer;
+}
+.social-image-options {
+  margin-top: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+.social-image-options > summary {
+  color: var(--color-primary);
+  font-weight: 750;
+  cursor: pointer;
+}
+.social-image-options > label,
+.social-image-options > select,
+.social-image-options > input,
+.social-image-options > p {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+}
 .mission-assistance-picker {
   margin: 0 0 18px;
   padding: 0;
