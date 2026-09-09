@@ -20,30 +20,40 @@ export default async function TodayPage({
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect(`/login?returnTo=${encodeURIComponent(returnPath)}`);
   const db = await import('@bunshin/database');
+  let state;
   try {
-    const state = await new ConsumeMissionDeepLinkState(
+    state = await new ConsumeMissionDeepLinkState(
       new db.PrismaMissionDeepLinkStateRepository(),
       new HkdfMissionDeepLinkSigner(),
     ).execute({ token, environment: currentLineEnvironment(), actorUserId: user.userId });
-    const mission = await db.prisma.dailyMission.findFirst({
-      where: {
-        id: state.dailyMissionId,
-        workspaceId: state.workspaceId,
-        bunshinId: state.bunshinId,
-        bunshin: { ownerUserId: user.userId, status: { not: 'ARCHIVED' } },
-      },
-      select: {
-        format: true,
-        bunshin: {
-          select: {
-            groupId: true,
-            group: { select: { serviceConfiguration: { select: { slug: true } } } },
-          },
+  } catch (error) {
+    if (
+      error instanceof ApplicationError &&
+      (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+    )
+      notFound();
+    throw error;
+  }
+  const mission = await db.prisma.dailyMission.findFirst({
+    where: {
+      id: state.dailyMissionId,
+      workspaceId: state.workspaceId,
+      bunshinId: state.bunshinId,
+      bunshin: { ownerUserId: user.userId, status: { not: 'ARCHIVED' } },
+    },
+    select: {
+      format: true,
+      bunshin: {
+        select: {
+          groupId: true,
+          group: { select: { serviceConfiguration: { select: { slug: true } } } },
         },
-        campaign: { select: { groupId: true } },
-        contentLinkUsage: { select: { groupId: true } },
       },
-    });
+      campaign: { select: { groupId: true } },
+      contentLinkUsage: { select: { groupId: true } },
+    },
+  });
+  try {
     await new RecordMissionActivity(
       new db.PrismaDailyMissionRepository(),
       new db.PrismaBunshinCapabilityAssignmentRepository(),
@@ -58,31 +68,29 @@ export default async function TodayPage({
       idempotencyKey: `line-deep-link:${state.id}`,
       metadata: null,
     });
-    const serviceSlug = mission?.bunshin?.group?.serviceConfiguration?.slug;
-    if (serviceSlug)
-      redirect(`/s/${encodeURIComponent(serviceSlug)}/bunshins/${state.bunshinId}#today-post`);
-    if (mission && ['IMAGE', 'SLIDE'].includes(mission.format)) {
-      const now = new Date();
-      const preferredGroupId = mission.contentLinkUsage?.groupId ?? mission.campaign?.groupId;
-      const memberships = await db.prisma.groupMembership.findMany({
-        where: {
-          workspaceId: state.workspaceId,
-          userId: user.userId,
+  } catch (error) {
+    if (
+      !(error instanceof ApplicationError) ||
+      (error.code !== 'NOT_FOUND' && error.code !== 'FORBIDDEN')
+    )
+      throw error;
+  }
+  const serviceSlug = mission?.bunshin?.group?.serviceConfiguration?.slug;
+  if (serviceSlug)
+    redirect(`/s/${encodeURIComponent(serviceSlug)}/bunshins/${state.bunshinId}#today-post`);
+  if (mission && ['IMAGE', 'SLIDE'].includes(mission.format)) {
+    const now = new Date();
+    const preferredGroupId = mission.contentLinkUsage?.groupId ?? mission.campaign?.groupId;
+    const memberships = await db.prisma.groupMembership.findMany({
+      where: {
+        workspaceId: state.workspaceId,
+        userId: user.userId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+        ...(preferredGroupId ? { groupId: preferredGroupId } : {}),
+        group: {
           status: 'ACTIVE',
-          consentedAt: { not: null },
-          ...(preferredGroupId ? { groupId: preferredGroupId } : {}),
-          group: {
-            status: 'ACTIVE',
-            featurePolicies: {
-              some: {
-                featureKey: 'SOCIAL.IMAGE_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
-          },
-          featureAssignments: {
+          featurePolicies: {
             some: {
               featureKey: 'SOCIAL.IMAGE_GENERATION',
               status: 'ENABLED',
@@ -91,38 +99,39 @@ export default async function TodayPage({
             },
           },
         },
-        select: { id: true },
-      });
-      const enrollment = memberships.length
-        ? await db.prisma.socialImagePilotEnrollment.findFirst({
-            where: {
-              workspaceId: state.workspaceId,
-              groupMembershipId: { in: memberships.map(({ id }) => id) },
+        featureAssignments: {
+          some: {
+            featureKey: 'SOCIAL.IMAGE_GENERATION',
+            status: 'ENABLED',
+            OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+          },
+        },
+      },
+      select: { id: true },
+    });
+    const enrollment = memberships.length
+      ? await db.prisma.socialImagePilotEnrollment.findFirst({
+          where: {
+            workspaceId: state.workspaceId,
+            groupMembershipId: { in: memberships.map(({ id }) => id) },
+            status: 'ACTIVE',
+            revokedAt: null,
+            pilot: {
               status: 'ACTIVE',
-              revokedAt: null,
-              pilot: {
-                status: 'ACTIVE',
-                emergencyStop: false,
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
+              emergencyStop: false,
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
             },
-            select: { groupId: true },
-            orderBy: { createdAt: 'asc' },
-          })
-        : null;
-      if (enrollment)
-        redirect(
-          `/groups/${enrollment.groupId}/images?mission=${encodeURIComponent(state.dailyMissionId)}`,
-        );
-    }
-    redirect(`/bunshins/${state.bunshinId}#daily-mission`);
-  } catch (error) {
-    if (
-      error instanceof ApplicationError &&
-      (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
-    )
-      notFound();
-    throw error;
+          },
+          select: { groupId: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : null;
+    if (enrollment)
+      redirect(
+        `/groups/${enrollment.groupId}/images?mission=${encodeURIComponent(state.dailyMissionId)}`,
+      );
   }
+  redirect(`/bunshins/${state.bunshinId}#daily-mission`);
 }
