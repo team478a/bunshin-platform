@@ -234,56 +234,67 @@ export function SocialImageWorkspace({
   return (
     <div className="social-image-workspace">
       <section className="settings-card">
-        <label htmlFor="image-mission">
-          <strong>画像にする投稿案</strong>
-        </label>
-        <select
-          id="image-mission"
-          disabled={busy}
-          value={selectedId}
-          onChange={(event) => setSelectedId(event.target.value)}
-        >
-          {missions.map((mission) => (
-            <option key={mission.id} value={mission.id}>
-              {mission.topic}（{mission.bunshinName}）
-            </option>
-          ))}
-        </select>
-        {selected ? <p>{selected.angle}</p> : null}
-        <label htmlFor="image-reference">参考にする商品・本人写真（任意・1枚）</label>
-        <input
-          key={selectedId}
-          id="image-reference"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={busy}
-          onChange={(event) => {
-            setReferenceFile(event.target.files?.[0] ?? null);
-            setReferenceConsent(false);
-          }}
-        />
-        <p>JPEG・PNG・WebP、3MB以下。この画像作成にだけ使い、参考写真は7日後から順次削除します。</p>
-        {referenceFile ? (
-          <label>
-            <input
-              type="checkbox"
-              checked={referenceConsent}
+        <p className="eyebrow">作る内容</p>
+        <h2>{selected?.topic ?? '今日の投稿画像'}</h2>
+        <p>文章や配置は自動で整えます。</p>
+        {missions.length > 1 ? (
+          <details className="social-image-options">
+            <summary>別の投稿案を選ぶ</summary>
+            <label htmlFor="image-mission">画像にする投稿案</label>
+            <select
+              id="image-mission"
               disabled={busy}
-              onChange={(event) => setReferenceConsent(event.target.checked)}
-            />
-            この写真を使う権利と、写っている本人の同意があり、画像生成のためOpenAIへ送信することを確認しました。
-          </label>
+              value={selectedId}
+              onChange={(event) => setSelectedId(event.target.value)}
+            >
+              {missions.map((mission) => (
+                <option key={mission.id} value={mission.id}>
+                  {mission.topic}（{mission.bunshinName}）
+                </option>
+              ))}
+            </select>
+          </details>
         ) : null}
+        <details className="social-image-options">
+          <summary>商品や本人の写真を使いたい方</summary>
+          {selected ? <p>{selected.angle}</p> : null}
+          <label htmlFor="image-reference">参考にする写真（なくても作れます）</label>
+          <input
+            key={selectedId}
+            id="image-reference"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={busy}
+            onChange={(event) => {
+              setReferenceFile(event.target.files?.[0] ?? null);
+              setReferenceConsent(false);
+            }}
+          />
+          <p>
+            JPEG・PNG・WebP、3MB以下。この画像作成にだけ使い、参考写真は7日後から順次削除します。
+          </p>
+          {referenceFile ? (
+            <label>
+              <input
+                type="checkbox"
+                checked={referenceConsent}
+                disabled={busy}
+                onChange={(event) => setReferenceConsent(event.target.checked)}
+              />
+              この写真を使う権利と、写っている本人の同意があり、画像生成のためOpenAIへ送信することを確認しました。
+            </label>
+          ) : null}
+        </details>
       </section>
 
       <section className="settings-card social-image-review" aria-live="polite">
-        <h2>{ready ? 'できあがった画像を確認' : '画像を作る'}</h2>
+        <h2>{ready ? 'できあがった画像を確認' : '青いボタンを押してください'}</h2>
         {usesImageCredits ? (
-          <p>必要な画像作成回数：1回 ／ いま使える回数：{availableCredits}回</p>
+          <p>画像作成回数を1回使います。残り{availableCredits}回です。</p>
         ) : (
           <p>
-            必要なポイント：{pointCost === null ? '現在利用できません' : `${pointCost} WP`} ／
-            いま使えるポイント：{availablePoints} WP
+            この画像の作成：{pointCost === null ? '現在利用できません' : `${pointCost}ポイント`} ／
+            残り：{availablePoints}ポイント
           </p>
         )}
         {message ? <p className="notice">{message}</p> : null}

@@ -234,6 +234,38 @@ export default async function ServiceBunshinDetailPage({
     missionDates: dailyMissions.map(({ missionDate }) => missionDate),
   });
   const generationProfile = socialProfiles.find(({ status }) => status === 'ACTIVE');
+  const imageMembership = await db.prisma.groupMembership.findFirst({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      userId: actor.userId,
+      status: 'ACTIVE',
+      consentedAt: { not: null },
+      group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+    },
+    select: {
+      featureAssignments: {
+        where: { featureKey: 'SOCIAL.IMAGE_GENERATION', status: 'ENABLED' },
+        select: { startsAt: true, endsAt: true },
+      },
+      group: {
+        select: {
+          featurePolicies: {
+            where: { featureKey: 'SOCIAL.IMAGE_GENERATION', status: 'ENABLED' },
+            select: { startsAt: true, endsAt: true },
+          },
+        },
+      },
+    },
+  });
+  const entitlementNow = new Date();
+  const isCurrent = (value: { startsAt: Date | null; endsAt: Date | null }) =>
+    (!value.startsAt || value.startsAt <= entitlementNow) &&
+    (!value.endsAt || value.endsAt > entitlementNow);
+  const imageCreationAvailable = Boolean(
+    imageMembership?.featureAssignments.some(isCurrent) &&
+    imageMembership.group.featurePolicies.some(isCurrent),
+  );
 
   const dedicatedLine = await db.prisma.groupLineChannelConfiguration.findFirst({
     where: {
@@ -361,6 +393,9 @@ export default async function ServiceBunshinDetailPage({
                 }
               : {})}
             videos={videos}
+            {...(imageCreationAvailable
+              ? { imageCreationBaseHref: `/s/${service.configuration.slug}/images` }
+              : {})}
             active={
               capabilities.find(({ capabilityType }) => capabilityType === 'SOCIAL')?.status ===
               'ACTIVE'

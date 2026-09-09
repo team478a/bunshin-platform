@@ -20,6 +20,10 @@ const experience = readFileSync(
   ),
   'utf8',
 );
+const imageWorkspace = readFileSync(
+  new URL('../app/ui/social-image-workspace.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('service daily mission boundary', () => {
   it('derives service authority on the server', () => {
@@ -46,12 +50,23 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
+  it('gives image users one clear mobile action and hides technical directions by default', () => {
+    expect(detailPage).toContain('imageCreationBaseHref');
+    expect(detailPage).toContain("featureKey: 'SOCIAL.IMAGE_GENERATION'");
+    expect(experience).toContain('やることは3つだけです');
+    expect(experience).toContain('className="button mission-create-image"');
+    expect(experience).toContain('画像を作る');
+    expect(experience).toContain('<details className="mission-advanced-content">');
+    expect(experience).toContain('企画の理由や自分で作る方法を見る');
+    expect(imageWorkspace).toContain('青いボタンを押してください');
+    expect(imageWorkspace).toContain('<summary>別の投稿案を選ぶ</summary>');
+    expect(imageWorkspace).toContain('<summary>商品や本人の写真を使いたい方</summary>');
+  });
+
   it('keeps automatic delivery while allowing variants only for delivered missions', () => {
     expect(experience).not.toContain('/daily-missions/generate');
     expect(experience).toContain('async function generateVariant');
-    expect(experience).toContain(
-      '投稿予定の日に、あなたに合った内容を自動で準備し、LINEでお知らせします。',
-    );
+    expect(experience).toContain('むずかしい設定は必要ありません');
     expect(experience).toContain('aria-live="polite"');
   });
 
