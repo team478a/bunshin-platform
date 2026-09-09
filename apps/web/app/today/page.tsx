@@ -31,8 +31,38 @@ export default async function TodayPage({
       error instanceof ApplicationError &&
       (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
     )
-      notFound();
-    throw error;
+      try {
+        const claims = await new HkdfMissionDeepLinkSigner().verify(token);
+        const now = new Date();
+        if (
+          claims.environment !== currentLineEnvironment() ||
+          claims.expiresAtEpochSeconds * 1_000 + 24 * 60 * 60_000 < now.getTime()
+        )
+          notFound();
+        const delivery = await db.prisma.lineMessageDelivery.findFirst({
+          where: {
+            environment: currentLineEnvironment(),
+            userId: user.userId,
+            status: 'SENT',
+            sentAt: { gte: new Date(now.getTime() - 24 * 60 * 60_000) },
+            user: { status: 'ACTIVE' },
+            workspace: { status: 'ACTIVE' },
+            bunshin: { ownerUserId: user.userId, status: { not: 'ARCHIVED' } },
+          },
+          select: { workspaceId: true, bunshinId: true, dailyMissionId: true },
+          orderBy: { sentAt: 'desc' },
+        });
+        if (!delivery) notFound();
+        state = { id: claims.stateId, ...delivery };
+      } catch (fallbackError) {
+        if (
+          fallbackError instanceof ApplicationError &&
+          (fallbackError.code === 'NOT_FOUND' || fallbackError.code === 'FORBIDDEN')
+        )
+          notFound();
+        throw fallbackError;
+      }
+    else throw error;
   }
   const mission = await db.prisma.dailyMission.findFirst({
     where: {
