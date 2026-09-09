@@ -63,6 +63,15 @@ describe('service daily mission boundary', () => {
     expect(imageWorkspace).toContain('<summary>商品や本人の写真を使いたい方</summary>');
   });
 
+  it('guides free users through copying the prompt and caption themselves', () => {
+    expect(experience).toContain("imageCreationBaseHref ? '投稿画像を作りましょう'");
+    expect(experience).toContain('画像用の文章をコピー');
+    expect(experience).toContain('画像を作れるAIに貼り付ける');
+    expect(experience).toContain('できた画像をスマホへ保存');
+    expect(experience).toContain('投稿文をコピー');
+    expect(experience).not.toContain('画像作成機能を準備しています');
+  });
+
   it('keeps automatic delivery while allowing variants only for delivered missions', () => {
     expect(experience).not.toContain('/daily-missions/generate');
     expect(experience).toContain('async function generateVariant');

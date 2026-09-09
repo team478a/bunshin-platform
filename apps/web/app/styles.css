@@ -2074,6 +2074,55 @@ a {
   background: transparent;
   font-size: 0.9rem;
 }
+.mission-manual-image-flow {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.mission-manual-image-flow > section {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: white;
+}
+.mission-manual-image-flow__number {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  place-items: center;
+  color: white;
+  border-radius: 50%;
+  background: var(--service-primary, var(--color-primary));
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.mission-manual-image-flow h4,
+.mission-manual-image-flow p {
+  margin: 0;
+}
+.mission-manual-image-flow h4 {
+  font-size: 1.05rem;
+}
+.mission-manual-image-flow section div > p {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+.mission-manual-image-flow button.mission-copy-action {
+  width: 100%;
+  min-height: 52px;
+  margin: 12px 0 0;
+  color: white;
+  border-color: var(--service-primary, var(--color-primary));
+  background: var(--service-primary, var(--color-primary));
+  font-size: 1rem;
+  font-weight: 800;
+}
 .mission-advanced-content {
   margin-bottom: 14px;
   padding: 14px;

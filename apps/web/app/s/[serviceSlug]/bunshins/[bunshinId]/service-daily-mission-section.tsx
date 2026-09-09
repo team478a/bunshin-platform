@@ -149,7 +149,15 @@ export function ServiceDailyMissionSection({
       idempotencyKey: key(),
       ...(metadata ? { metadata } : {}),
     });
-    setMessage(ok ? 'コピーしました。SNSへ貼り付けて使えます。' : null);
+    setMessage(
+      ok
+        ? type === 'COPIED_IMAGE_INSTRUCTION'
+          ? 'コピーしました。次に、画像を作れるAIを開いて貼り付けてください。'
+          : type === 'COPIED_TEXT'
+            ? '投稿文をコピーしました。Instagramの投稿画面へ貼り付けてください。'
+            : 'コピーしました。SNSへ貼り付けて使えます。'
+        : null,
+    );
   }
 
   async function markPosted(mission: DailyMissionView) {
@@ -229,8 +237,12 @@ export function ServiceDailyMissionSection({
     <section className="mission-experience">
       <header className="mission-experience__header">
         <p className="eyebrow">今日やること</p>
-        <h2>投稿画像を作りましょう</h2>
-        <p>むずかしい設定は必要ありません。下の青いボタンから始められます。</p>
+        <h2>{imageCreationBaseHref ? '投稿画像を作りましょう' : '今日の投稿を準備しましょう'}</h2>
+        <p>
+          {imageCreationBaseHref
+            ? 'むずかしい設定は必要ありません。下の青いボタンから始められます。'
+            : '用意された文章を順番にコピーして使います。内容を考え直す必要はありません。'}
+        </p>
       </header>
       {message ? (
         <p className="notice" role="status" aria-live="polite">
@@ -260,6 +272,12 @@ export function ServiceDailyMissionSection({
             isImageMission && imageCreationBaseHref
               ? `${imageCreationBaseHref}?mission=${encodeURIComponent(mission.id)}`
               : null;
+          const preparedMission = missionWithSelectedVariant(mission);
+          const preparedCopyOptions = copyOptions(preparedMission);
+          const imageInstruction = preparedCopyOptions.find(
+            (option) => option.type === 'COPIED_IMAGE_INSTRUCTION',
+          );
+          const postCaption = preparedCopyOptions.find((option) => option.type === 'COPIED_TEXT');
           return (
             <li
               className={`mission-card${isImageMission ? ' mission-card--simple' : ''}`}
@@ -282,7 +300,7 @@ export function ServiceDailyMissionSection({
               <h3>
                 {isImageMission ? mission.topic : `${mission.missionDate} — ${mission.topic}`}
               </h3>
-              {isImageMission ? (
+              {isImageMission && imageCreationHref ? (
                 <div className="mission-simple-steps" aria-label="画像を作って保存する手順">
                   <p>
                     <strong>やることは3つだけです</strong>
@@ -293,17 +311,70 @@ export function ServiceDailyMissionSection({
                     <li>「この画像を使う」を押してスマホに保存する</li>
                   </ol>
                 </div>
-              ) : (
+              ) : !isImageMission ? (
                 <p>{mission.reason}</p>
-              )}
+              ) : null}
               {imageCreationHref ? (
                 <a className="button mission-create-image" href={imageCreationHref}>
                   画像作成へ進む
                 </a>
               ) : isImageMission ? (
-                <p className="notice">
-                  画像作成機能を準備しています。利用できるようになると、ここに青いボタンが表示されます。
-                </p>
+                <div className="mission-manual-image-flow">
+                  <section>
+                    <p className="mission-manual-image-flow__number">1</p>
+                    <div>
+                      <h4>画像を作る文章をコピー</h4>
+                      <p>下のボタンを押すと、文章がスマホにコピーされます。</p>
+                      {imageInstruction ? (
+                        <button
+                          className="mission-copy-action"
+                          type="button"
+                          disabled={pendingAction !== null}
+                          onClick={() =>
+                            void copy(mission.id, imageInstruction.value, imageInstruction.type)
+                          }
+                        >
+                          画像用の文章をコピー
+                        </button>
+                      ) : (
+                        <p>画像用の文章を準備できませんでした。</p>
+                      )}
+                    </div>
+                  </section>
+                  <section>
+                    <p className="mission-manual-image-flow__number">2</p>
+                    <div>
+                      <h4>画像を作れるAIに貼り付ける</h4>
+                      <p>
+                        ChatGPTなど普段使っている画像AIを開き、入力欄を長押しして「ペースト」を押します。
+                      </p>
+                    </div>
+                  </section>
+                  <section>
+                    <p className="mission-manual-image-flow__number">3</p>
+                    <div>
+                      <h4>できた画像をスマホへ保存</h4>
+                      <p>画像を長押しして「写真に保存」を押します。</p>
+                    </div>
+                  </section>
+                  <section>
+                    <p className="mission-manual-image-flow__number">4</p>
+                    <div>
+                      <h4>投稿文をコピー</h4>
+                      <p>画像と一緒に載せる文章です。コピーしてInstagramへ貼り付けます。</p>
+                      {postCaption ? (
+                        <button
+                          className="mission-copy-action"
+                          type="button"
+                          disabled={pendingAction !== null}
+                          onClick={() => void copy(mission.id, postCaption.value, postCaption.type)}
+                        >
+                          投稿文をコピー
+                        </button>
+                      ) : null}
+                    </div>
+                  </section>
+                </div>
               ) : null}
               <button
                 className={isImageMission ? 'mission-detail-toggle' : undefined}
