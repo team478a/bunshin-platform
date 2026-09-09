@@ -117,6 +117,25 @@ describe('Mission Deep Link landing', () => {
     );
   });
 
+  it('opens the verified mission when recording VIEWED is unavailable', async () => {
+    mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
+    mocks.consume.mockResolvedValue({
+      id: 'state-a',
+      workspaceId: 'workspace-a',
+      bunshinId: 'bunshin-a',
+      dailyMissionId: 'mission-a',
+    });
+    mocks.findMission.mockResolvedValue({
+      format: 'IMAGE',
+      bunshin: { groupId: 'group-a', group: { serviceConfiguration: { slug: 'my-service' } } },
+    });
+    mocks.record.mockRejectedValue(new ApplicationError('FORBIDDEN', 'assignment unavailable'));
+
+    await expect(TodayPage({ searchParams: Promise.resolve({ state: 'token' }) })).rejects.toThrow(
+      'REDIRECT:/s/my-service/bunshins/bunshin-a#today-post',
+    );
+  });
+
   it('rejects missing or oversized state before database access', async () => {
     mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
     await expect(TodayPage({ searchParams: Promise.resolve({}) })).rejects.toThrow('NOT_FOUND');
