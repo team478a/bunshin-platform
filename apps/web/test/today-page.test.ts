@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
   consume: vi.fn(),
   record: vi.fn(),
   findMission: vi.fn(),
+  findLatestDelivery: vi.fn(),
   findMemberships: vi.fn(),
   findEnrollment: vi.fn(),
+  verifyToken: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`);
   }),
@@ -43,11 +45,16 @@ vi.mock('@bunshin/database', () => ({
   PrismaMissionEngagementRepository: class {},
   prisma: {
     dailyMission: { findFirst: mocks.findMission },
+    lineMessageDelivery: { findFirst: mocks.findLatestDelivery },
     groupMembership: { findMany: mocks.findMemberships },
     socialImagePilotEnrollment: { findFirst: mocks.findEnrollment },
   },
 }));
-vi.mock('../src/line/mission-deep-link-signer', () => ({ HkdfMissionDeepLinkSigner: class {} }));
+vi.mock('../src/line/mission-deep-link-signer', () => ({
+  HkdfMissionDeepLinkSigner: class {
+    verify = mocks.verifyToken;
+  },
+}));
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
 
 import TodayPage from '../app/today/page';
@@ -56,6 +63,7 @@ describe('Mission Deep Link landing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.findMission.mockResolvedValue({ format: 'TEXT', campaign: null, contentLinkUsage: null });
+    mocks.findLatestDelivery.mockResolvedValue(null);
     mocks.findMemberships.mockResolvedValue([]);
     mocks.findEnrollment.mockResolvedValue(null);
   });
@@ -148,10 +156,42 @@ describe('Mission Deep Link landing', () => {
   it('uses the same not-found boundary for expired, reused or cross-scope state', async () => {
     mocks.currentUser.mockResolvedValue({ userId: 'user-b' });
     mocks.consume.mockRejectedValue(new ApplicationError('FORBIDDEN', 'state is not usable'));
+    mocks.verifyToken.mockRejectedValue(new ApplicationError('FORBIDDEN', 'invalid signature'));
     await expect(TodayPage({ searchParams: Promise.resolve({ state: 'opaque' }) })).rejects.toThrow(
       'NOT_FOUND',
     );
     expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it('recovers the signed link from the current user latest sent mission', async () => {
+    mocks.currentUser.mockResolvedValue({ userId: 'user-a' });
+    mocks.consume.mockRejectedValue(new ApplicationError('FORBIDDEN', 'state scope changed'));
+    mocks.verifyToken.mockResolvedValue({
+      stateId: '033c8c61-b5e0-4d4e-bcbe-66c1516e58c6',
+      environment: 'PRODUCTION',
+      keyVersion: 1,
+      expiresAtEpochSeconds: Math.floor(Date.now() / 1_000),
+    });
+    mocks.findLatestDelivery.mockResolvedValue({
+      workspaceId: 'workspace-a',
+      bunshinId: 'bunshin-a',
+      dailyMissionId: 'mission-a',
+    });
+    mocks.findMission.mockResolvedValue({
+      format: 'IMAGE',
+      bunshin: { groupId: 'group-a', group: { serviceConfiguration: { slug: 'my-service' } } },
+    });
+    mocks.record.mockResolvedValue({ id: 'activity-a' });
+
+    await expect(
+      TodayPage({ searchParams: Promise.resolve({ state: 'signed-token' }) }),
+    ).rejects.toThrow('REDIRECT:/s/my-service/bunshins/bunshin-a#today-post');
+    expect(mocks.findLatestDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: 'user-a', status: 'SENT' }),
+        orderBy: { sentAt: 'desc' },
+      }),
+    );
   });
 
   it('sends an eligible image Mission to its group review page without starting generation', async () => {
