@@ -32,13 +32,7 @@ export default async function TodayPage({
       (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
     )
       try {
-        const claims = await new HkdfMissionDeepLinkSigner().verify(token);
         const now = new Date();
-        if (
-          claims.environment !== currentLineEnvironment() ||
-          claims.expiresAtEpochSeconds * 1_000 + 24 * 60 * 60_000 < now.getTime()
-        )
-          notFound();
         const delivery = await db.prisma.lineMessageDelivery.findFirst({
           where: {
             environment: currentLineEnvironment(),
@@ -52,8 +46,25 @@ export default async function TodayPage({
           select: { workspaceId: true, bunshinId: true, dailyMissionId: true },
           orderBy: { sentAt: 'desc' },
         });
-        if (!delivery) notFound();
-        state = { id: claims.stateId, ...delivery };
+        if (delivery) state = { id: `recent-delivery:${delivery.dailyMissionId}`, ...delivery };
+        else {
+          const bunshin = await db.prisma.bunshin.findFirst({
+            where: {
+              ownerUserId: user.userId,
+              status: { not: 'ARCHIVED' },
+              group: { status: 'ACTIVE', serviceConfiguration: { isNot: null } },
+            },
+            select: {
+              id: true,
+              group: { select: { serviceConfiguration: { select: { slug: true } } } },
+            },
+            orderBy: { updatedAt: 'desc' },
+          });
+          const serviceSlug = bunshin?.group?.serviceConfiguration?.slug;
+          if (bunshin && serviceSlug)
+            redirect(`/s/${encodeURIComponent(serviceSlug)}/bunshins/${bunshin.id}#today-post`);
+          redirect('/');
+        }
       } catch (fallbackError) {
         if (
           fallbackError instanceof ApplicationError &&
