@@ -47,6 +47,7 @@ describe('service daily mission boundary', () => {
     expect(detailPage).toContain('<ServiceDailyMissionSection');
     expect(detailPage).toContain('/daily-missions`}');
     expect(detailPage).toContain('trendContext: mission.trendContext');
+    expect(detailPage).toContain('copyAuthorization: missionStates[index]!.copyAuthorization');
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
@@ -74,7 +75,10 @@ describe('service daily mission boundary', () => {
 
   it('supports LINE browsers that block the modern clipboard API', () => {
     expect(experience).toContain("document.execCommand('copy')");
+    expect(experience).toContain('mission.copyAuthorization');
     expect(experience).toContain('もう一度コピーする');
+    expect(experience).toContain('iPhoneの共有メニューを開く');
+    expect(experience).toContain('navigator.share');
     expect(experience).toContain('下の枠内を長押しし');
     expect(experience).toContain('onFocus={(event) => event.currentTarget.select()}');
   });
@@ -97,6 +101,6 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('copyOptions(missionWithSelectedVariant(mission))');
     expect(experience).toContain('投稿しました');
     expect(experience).toContain('この投稿は、あなたらしかったですか？');
-    expect(experience).toContain('copy-authorization');
+    expect(detailPage).toContain('new AuthorizeDailyMissionCopy(missionRepository)');
   });
 });

@@ -41,6 +41,11 @@ export type DailyMissionView = {
     campaignName: string | null;
     advertisingClassification: 'ORGANIC' | 'PRODUCT_RELATED' | 'ADVERTISEMENT';
   } | null;
+  copyAuthorization?: {
+    allowed: boolean;
+    reason: string;
+    reviewNote?: string | null;
+  };
   variants: Array<{
     id: string;
     sequence: number;

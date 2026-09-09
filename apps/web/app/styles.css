@@ -2156,6 +2156,11 @@ a {
   font-size: 1rem;
   font-weight: 800;
 }
+.mission-manual-copy > button.button--secondary {
+  color: var(--service-primary, var(--color-primary));
+  border: 1px solid var(--service-primary, var(--color-primary));
+  background: white;
+}
 .mission-advanced-content {
   margin-bottom: 14px;
   padding: 14px;

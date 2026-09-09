@@ -7,6 +7,7 @@ import {
   ListContentPillars,
   ListDailyMissions,
   ListMissionContentVariants,
+  AuthorizeDailyMissionCopy,
   GetMissionDecision,
   ListSocialAccountStrategies,
   ListSocialProfiles,
@@ -105,9 +106,8 @@ export default async function ServiceBunshinDetailPage({
       )
     ).flat();
     weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(scope);
-    const missionRecords = await new ListDailyMissions(
-      new db.PrismaDailyMissionRepository(),
-    ).execute(scope);
+    const missionRepository = new db.PrismaDailyMissionRepository();
+    const missionRecords = await new ListDailyMissions(missionRepository).execute(scope);
     const engagementRepository = new db.PrismaMissionEngagementRepository();
     const videoProjects = await db.prisma.videoProject.findMany({
       where: {
@@ -139,6 +139,10 @@ export default async function ServiceBunshinDetailPage({
         }),
         post: await outcomeRepository.getPost({ ...scope, dailyMissionId: mission.id }),
         feedback: await outcomeRepository.getFeedback({ ...scope, dailyMissionId: mission.id }),
+        copyAuthorization: await new AuthorizeDailyMissionCopy(missionRepository).execute({
+          ...scope,
+          dailyMissionId: mission.id,
+        }),
       })),
     );
     const missionVariants = await Promise.all(
@@ -176,6 +180,7 @@ export default async function ServiceBunshinDetailPage({
       platform: socialProfiles.find(({ id }) => id === mission.socialProfileId)?.platform ?? null,
       postedAt: missionStates[index]!.post?.postedAt.toISOString() ?? null,
       feedback: missionStates[index]!.feedback?.rating ?? null,
+      copyAuthorization: missionStates[index]!.copyAuthorization,
       trendContext: mission.trendContext
         ? {
             whyNow: mission.trendContext.snapshot.candidate.whyNow,
