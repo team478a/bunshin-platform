@@ -116,24 +116,43 @@ describe('Daily Mission copy UX', () => {
     expect(copyOptions(mission(format, content)).map(({ label }) => label)).toEqual(labels);
   });
 
-  it('copies only the image instruction and records it separately from the caption', () => {
-    expect(
-      copyOptions(
-        mission('IMAGE', {
-          imageInstruction: '白い背景に青い円を置く',
-          overlayText: '画像内の文字',
-          caption: '投稿文',
-          internalNote: 'コピー禁止',
-        }),
-      ),
-    ).toEqual([
-      {
-        label: '画像を作るための説明をコピー',
-        value: '白い背景に青い円を置く',
-        type: 'COPIED_IMAGE_INSTRUCTION',
-      },
-      { label: '投稿文をコピー', value: '投稿文', type: 'COPIED_TEXT' },
-    ]);
+  it('copies a content-ready image prompt separately from the caption', () => {
+    const options = copyOptions(
+      mission('IMAGE', {
+        imageInstruction: '白い背景に青い円を置く',
+        overlayText: '画像内の文字',
+        caption: '投稿文',
+        internalNote: 'コピー禁止',
+      }),
+    );
+
+    expect(options[0]).toMatchObject({
+      label: '画像を作るための説明をコピー',
+      type: 'COPIED_IMAGE_INSTRUCTION',
+    });
+    expect(options[0]?.value).toContain('Instagramにそのまま投稿できる');
+    expect(options[0]?.value).toContain('縦長4:5（1080×1350ピクセル）');
+    expect(options[0]?.value).toContain('写真・イラストの内容：白い背景に青い円を置く');
+    expect(options[0]?.value).toContain('「画像内の文字」');
+    expect(options[0]?.value).toContain('スマートフォンの小さな画面でも一目で読める');
+    expect(options[0]?.value).not.toContain('コピー禁止');
+    expect(options[1]).toEqual({
+      label: '投稿文をコピー',
+      value: '投稿文',
+      type: 'COPIED_TEXT',
+    });
+  });
+
+  it('uses the mission topic as the image headline when overlay text is absent', () => {
+    const [imagePrompt] = copyOptions(
+      mission('IMAGE', {
+        imageInstruction: '机の上のノートを写す',
+        overlayText: null,
+        caption: '投稿文',
+      }),
+    );
+
+    expect(imagePrompt?.value).toContain('「topic」');
   });
 
   it('uses selected variant content for display and copy without overwriting the original', () => {
