@@ -17430,17 +17430,41 @@ const socialImagePilotApprovalChecks = [
   'FINAL_APPROVAL',
 ] as const;
 
-async function socialImagePilotIsApproved(
+async function socialImagePilotCanGenerate(
   client: PrismaClient | Prisma.TransactionClient,
-  input: { workspaceId: string; groupId: string; pilotId: string },
+  input: {
+    workspaceId: string;
+    groupId: string;
+    pilotId: string;
+    pilotEnrollmentId: string;
+    currentRequestId?: string;
+  },
 ) {
   const rows = await client.socialImagePilotEvidence.findMany({
-    where: input,
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      pilotId: input.pilotId,
+    },
     orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     select: { checkKey: true, action: true },
   });
   const latest = new Map(rows.map((row) => [row.checkKey, row.action]));
-  return socialImagePilotApprovalChecks.every((key) => latest.get(key) === 'RECORDED');
+  if (socialImagePilotApprovalChecks.every((key) => latest.get(key) === 'RECORDED')) return true;
+  const preflightReady =
+    latest.get('PLAN_APPROVAL') === 'RECORDED' &&
+    latest.get('STORAGE_RETENTION') === 'RECORDED' &&
+    latest.get('FINAL_APPROVAL') === undefined;
+  if (!preflightReady) return false;
+
+  const otherPreflightRequests = await client.socialImageGenerationRequest.count({
+    where: {
+      pilotEnrollmentId: input.pilotEnrollmentId,
+      status: { notIn: ['FAILED', 'CANCELLED'] },
+      ...(input.currentRequestId ? { id: { not: input.currentRequestId } } : {}),
+    },
+  });
+  return otherPreflightRequests === 0;
 }
 
 export class PrismaSocialImagePilotEvidenceRepository implements SocialImagePilotEvidenceRepository {
@@ -17939,10 +17963,11 @@ export class PrismaSocialImageGenerationAuthorizationRepository implements Socia
     });
     if (!enrollment) return { allowed: false as const, reason: 'PILOT_UNAVAILABLE' as const };
     if (
-      !(await socialImagePilotIsApproved(this.client, {
+      !(await socialImagePilotCanGenerate(this.client, {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
         pilotId: enrollment.pilotId,
+        pilotEnrollmentId: enrollment.id,
       }))
     )
       return { allowed: false as const, reason: 'PILOT_UNAVAILABLE' as const };
@@ -18037,10 +18062,12 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
         )
           return { allowed: false as const, reason: 'PILOT_STOPPED' as const };
         if (
-          !(await socialImagePilotIsApproved(tx, {
+          !(await socialImagePilotCanGenerate(tx, {
             workspaceId: request.workspaceId,
             groupId: request.groupId,
             pilotId: pilot.id,
+            pilotEnrollmentId: request.pilotEnrollmentId,
+            currentRequestId: request.id,
           }))
         )
           return { allowed: false as const, reason: 'PILOT_STOPPED' as const };

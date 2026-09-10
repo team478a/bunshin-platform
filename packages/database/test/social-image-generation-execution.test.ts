@@ -152,6 +152,32 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
     expect(tx.socialImageGenerationRequest.updateMany).not.toHaveBeenCalled();
   });
 
+  it('claims the first preflight after budget and storage checks are current', async () => {
+    const tx = transaction({
+      socialImagePilotEvidence: {
+        findMany: vi.fn().mockResolvedValue(approvalEvidence.slice(0, 2)),
+      },
+    });
+    await expect(repository(tx).claim(input)).resolves.toMatchObject({
+      allowed: true,
+      context: { requestId: request.id },
+    });
+  });
+
+  it('blocks a preflight when another request already exists', async () => {
+    const tx = transaction({
+      socialImagePilotEvidence: {
+        findMany: vi.fn().mockResolvedValue(approvalEvidence.slice(0, 2)),
+      },
+    });
+    tx.socialImageGenerationRequest.count.mockResolvedValueOnce(1);
+    await expect(repository(tx).claim(input)).resolves.toEqual({
+      allowed: false,
+      reason: 'PILOT_STOPPED',
+    });
+    expect(tx.socialImageGenerationRequest.updateMany).not.toHaveBeenCalled();
+  });
+
   it('completes one request with ordered carousel pages atomically', async () => {
     const tx = transaction();
     await expect(
