@@ -66,6 +66,11 @@ const transactionClient = (overrides: Record<string, unknown> = {}) => ({
     create: vi.fn().mockResolvedValue(row),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
   },
+  socialImageGeneratedMedia: {
+    findFirst: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+  },
   ...overrides,
 });
 
@@ -179,5 +184,42 @@ describe('PrismaSocialImageGenerationRequestRepository', () => {
       },
       data: { status: 'QUEUED', errorCode: null, revision: { increment: 1 } },
     });
+  });
+
+  it('adopts the selected carousel marker without violating the one-adopted-per-mission rule', async () => {
+    const media = {
+      id: '00000000-0000-4000-8000-000000000009',
+      requestId: ids.requestId,
+      workspaceId: ids.workspaceId,
+      groupId: ids.groupId,
+      ownerUserId: ids.actorUserId,
+      dailyMissionId: ids.dailyMissionId,
+      pageIndex: 0,
+      status: 'READY' as const,
+    };
+    const tx = transactionClient();
+    tx.socialImageGenerationRequest.findFirst.mockResolvedValue({
+      ...row,
+      status: 'READY_FOR_REVIEW',
+    });
+    tx.socialImageGeneratedMedia.findFirst.mockResolvedValue(media);
+    tx.socialImageGeneratedMedia.update.mockResolvedValue({ ...media, status: 'ADOPTED' });
+
+    await expect(
+      repository(tx).setMediaStatus({
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        actorUserId: ids.actorUserId,
+        requestId: ids.requestId,
+        mediaId: media.id,
+        status: 'ADOPTED',
+      }),
+    ).resolves.toMatchObject({ id: media.id, status: 'ADOPTED' });
+
+    expect(tx.socialImageGeneratedMedia.update).toHaveBeenCalledWith({
+      where: { id: media.id },
+      data: { status: 'ADOPTED' },
+    });
+    expect(tx.socialImageGeneratedMedia.updateMany).toHaveBeenCalledTimes(1);
   });
 });
