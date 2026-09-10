@@ -32,16 +32,25 @@ export const socialImagePagePrompt = (
   hasReference: boolean,
   pageIndex: number,
   pageCount: number,
-) =>
-  [
+) => {
+  const carouselRoles = [
+    'cover: establish the one concrete topic and reader benefit',
+    'problem: show the reader struggling in a recognizable situation',
+    'insight: visualize the cause or key realization',
+    'solution: show the practical action being performed',
+    'call to action: show the improved result and a clear next step',
+  ];
+  const pageRole = pageCount === 5 ? carouselRoles[pageIndex] : undefined;
+  return [
     `Create page ${pageIndex + 1} of ${pageCount} for one premium Japanese social-media carousel.`,
+    pageRole ? `Narrative role for this page: ${pageRole}.` : '',
     'Create a realistic editorial lifestyle photograph with commercial-quality lighting, natural hands and skin texture, and a clear subject.',
     'Use a coherent warm cream, soft coral and muted lavender art direction across the carousel.',
     'This photograph will be placed inside a separate deterministic Japanese text layout. Do not render text, letters, numbers, logos, watermarks, interface elements, cards, icons, borders or decorative typography.',
     'Leave useful uncluttered negative space and keep important faces, hands, products and tools away from the outer edges.',
     hasReference
       ? 'Use the supplied image only as the identity and style reference. Preserve the person or product appearance, but create the new action, camera angle, props and background requested for this page. Do not copy the reference pose or composition. Do not change product labeling or invent product claims.'
-      : 'Create an original Japanese adult appropriate for the subject. Do not imitate a real person or celebrity.',
+      : 'Use the same fictional Japanese adult professional across all pages: age 40-50, short dark-brown hair, cream top with a soft-coral outer layer. Do not imitate a real person or celebrity.',
     layout.visualScene
       ? `Required scene, action and composition: ${layout.visualScene}.`
       : `Create a concrete scene that directly explains: ${layout.headline}.`,
@@ -50,7 +59,10 @@ export const socialImagePagePrompt = (
     pageIndex > 0
       ? 'This page must visibly differ from the cover and the other pages in action, camera angle, props and background while keeping the same referenced subject or visual identity and art direction.'
       : 'Make this an inviting cover scene that immediately establishes the topic.',
-  ].join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
 
 const tokyoLocalDate = (value: Date) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -190,8 +202,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
               provider: generated.provider,
               model: generated.model,
               promptVersion: pageReference
-                ? 'social-image-carousel-reference-v3'
-                : 'social-image-carousel-asset-v3',
+                ? 'social-image-carousel-reference-v4'
+                : 'social-image-carousel-asset-v4',
               status: 'SUCCESS',
               inputTokens: generated.inputTokens,
               outputTokens: generated.outputTokens,
@@ -211,8 +223,8 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 provider: 'OPENAI',
                 model: context.model,
                 promptVersion: pageReference
-                  ? 'social-image-carousel-reference-v3'
-                  : 'social-image-carousel-asset-v3',
+                  ? 'social-image-carousel-reference-v4'
+                  : 'social-image-carousel-asset-v4',
                 status: 'FAILED',
                 inputTokens: null,
                 outputTokens: null,
