@@ -68,7 +68,8 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain("imageCreationBaseHref ? '投稿画像を作りましょう'");
     expect(experience).toContain('画像用の文章をコピー');
     expect(experience).toContain('画像を作れるAIに貼り付ける');
-    expect(experience).toContain('できた画像をスマホへ保存');
+    expect(experience).toContain('5枚の画像をスマホへ保存');
+    expect(experience).toContain('動画にする場合はCapCutへ');
     expect(experience).toContain('投稿文をコピー');
     expect(experience).not.toContain('画像作成機能を準備しています');
   });

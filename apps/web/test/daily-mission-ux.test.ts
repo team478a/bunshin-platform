@@ -85,12 +85,14 @@ describe('Daily Mission copy UX', () => {
       }),
     );
     expect(options.map(({ label }) => label)).toEqual([
+      '5枚の画像を作る文章をコピー',
       '全部コピー',
       '1枚目をコピー',
       '2枚目をコピー',
     ]);
     expect(options[0]?.value).not.toContain('コピー禁止');
-    expect(options[1]).toMatchObject({
+    expect(options[0]?.value).toContain('1枚目：見出し「1枚目」／本文「本文1」');
+    expect(options[2]).toMatchObject({
       type: 'COPIED_SLIDE',
       metadata: { slideIndex: 1 },
     });
@@ -130,11 +132,14 @@ describe('Daily Mission copy UX', () => {
       label: '画像を作るための説明をコピー',
       type: 'COPIED_IMAGE_INSTRUCTION',
     });
-    expect(options[0]?.value).toContain('Instagramにそのまま投稿できる');
-    expect(options[0]?.value).toContain('縦長4:5（1080×1350ピクセル）');
+    expect(options[0]?.value).toContain('5枚で完結する投稿画像');
+    expect(options[0]?.value).toContain('別画像として作ってください');
     expect(options[0]?.value).toContain('写真・イラストの内容：白い背景に青い円を置く');
     expect(options[0]?.value).toContain('「画像内の文字」');
-    expect(options[0]?.value).toContain('スマートフォンの小さな画面でも一目で読める');
+    expect(options[0]?.value).toContain('2枚目（共感）');
+    expect(options[0]?.value).toContain('5枚目（まとめ）');
+    expect(options[0]?.value).toContain('内容を作る材料となる投稿文：投稿文');
+    expect(options[0]?.value).toContain('私が「次」と送るたびに');
     expect(options[0]?.value).not.toContain('コピー禁止');
     expect(options[1]).toEqual({
       label: '投稿文をコピー',

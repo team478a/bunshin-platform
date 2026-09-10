@@ -401,11 +401,18 @@ export function ServiceDailyMissionSection({
                     <p className="mission-manual-image-flow__number">1</p>
                     <div>
                       <h4>画像を作る文章をコピー</h4>
-                      <p>写真だけではなく、見出しまで入った完成画像を作る文章です。</p>
+                      <p>投稿テーマが5枚で完結する、画像と文章を作るための指示です。</p>
                       <p>
-                        <strong>画像に入る見出し：</strong>
+                        <strong>1枚目の見出し：</strong>
                         <br />「{imageHeadline}」
                       </p>
+                      <ol>
+                        <li>表紙</li>
+                        <li>読者の悩み・共感</li>
+                        <li>理由・気づき</li>
+                        <li>今日できる解決策</li>
+                        <li>まとめ・次の行動</li>
+                      </ol>
                       {imageInstruction ? (
                         <button
                           className="mission-copy-action"
@@ -429,17 +436,25 @@ export function ServiceDailyMissionSection({
                       <p>
                         ChatGPTなど普段使っている画像AIを開き、入力欄を長押しして「ペースト」を押します。
                       </p>
+                      <p>画像が1枚だけ出た場合は「次」と送ると、続きの画像を作れます。</p>
                     </div>
                   </section>
                   <section>
                     <p className="mission-manual-image-flow__number">3</p>
                     <div>
-                      <h4>できた画像をスマホへ保存</h4>
-                      <p>画像を長押しして「写真に保存」を押します。</p>
+                      <h4>5枚の画像をスマホへ保存</h4>
+                      <p>できた画像を1枚ずつ長押しして「写真に保存」を押します。</p>
                     </div>
                   </section>
                   <section>
                     <p className="mission-manual-image-flow__number">4</p>
+                    <div>
+                      <h4>動画にする場合はCapCutへ</h4>
+                      <p>5枚を順番に並べ、1枚を2〜3秒ずつ表示すると短い解説動画として使えます。</p>
+                    </div>
+                  </section>
+                  <section>
+                    <p className="mission-manual-image-flow__number">5</p>
                     <div>
                       <h4>投稿文をコピー</h4>
                       <p>画像と一緒に載せる文章です。コピーしてInstagramへ貼り付けます。</p>

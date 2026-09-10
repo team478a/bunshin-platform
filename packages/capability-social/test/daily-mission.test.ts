@@ -244,6 +244,35 @@ describe('Daily Mission core', () => {
         hashtags: [],
       }),
     ).not.toThrow();
+    const imageWithSlides = normalizeMissionContent('IMAGE', {
+      topic: '基礎',
+      angle: '3手',
+      reason: '初心者向け',
+      estimatedMinutes: 5,
+      imageInstruction: '同じデザインの図解',
+      overlayText: '5分から始める',
+      slides: [
+        { index: 1, role: 'HOOK', headline: '5分から始める', body: '続きは次へ' },
+        {
+          index: 2,
+          role: 'PROBLEM',
+          headline: '続かない悩み',
+          body: '最初から頑張りすぎていませんか',
+        },
+        { index: 3, role: 'INSIGHT', headline: '小さくていい', body: '続けられる量から始めます' },
+        { index: 4, role: 'SOLUTION', headline: '今日の一歩', body: 'まず5分だけ取り組みます' },
+        { index: 5, role: 'CTA', headline: 'やってみよう', body: 'あとで見返せるように保存' },
+      ],
+      caption: 'caption',
+      hashtags: [],
+    });
+    expect(imageWithSlides['slides']).toHaveLength(5);
+    expect(() =>
+      normalizeMissionContent('IMAGE', {
+        ...imageWithSlides,
+        slides: (imageWithSlides['slides'] as unknown[]).slice(0, 4),
+      }),
+    ).toThrow('image content requires five slides');
     expect(() =>
       normalizeMissionContent('TEXT', {
         body: '本文',

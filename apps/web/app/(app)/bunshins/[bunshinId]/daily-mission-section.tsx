@@ -266,23 +266,57 @@ export const rejectionReasons = [
 ] as const;
 
 export function imagePostHeadline(mission: DailyMissionView) {
-  return text(mission.content['overlayText']) ?? mission.topic;
+  const firstSlide = records(mission.content['slides'])[0];
+  return (
+    text(mission.content['overlayText']) ??
+    (firstSlide ? text(firstSlide['headline']) : null) ??
+    mission.topic
+  );
 }
 
 export function imageCreationPrompt(mission: DailyMissionView) {
   const instruction = text(mission.content['imageInstruction']);
   const headline = imagePostHeadline(mission);
+  const caption = text(mission.content['caption']);
+  const preparedSlides = records(mission.content['slides']).flatMap((slide, index) => {
+    const slideHeadline = text(slide['headline']);
+    const body = text(slide['body']);
+    return slideHeadline && body
+      ? [`${index + 1}枚目：見出し「${slideHeadline}」／本文「${body}」`]
+      : [];
+  });
+  const contentPlan = preparedSlides.length
+    ? [
+        '5枚に入れる文章：',
+        ...preparedSlides,
+        ...(preparedSlides.length < 5
+          ? [
+              '不足するページは投稿テーマと投稿文だけを材料にして、5枚で完結するよう補ってください。',
+            ]
+          : []),
+      ]
+    : [
+        '次の流れで、5枚だけで内容が完結する短い文章を作り、各画像に入れてください。',
+        `1枚目（表紙）：見出し「${headline}」で興味を引く`,
+        '2枚目（共感）：読者が「自分のことだ」と思える悩みを示す',
+        '3枚目（気づき）：悩みが起きる理由や大切な考え方を伝える',
+        '4枚目（解決）：今日すぐできる具体的な行動を1つ伝える',
+        '5枚目（まとめ）：要点を短くまとめ、保存や実行をやさしく促す',
+        caption ? `内容を作る材料となる投稿文：${caption}` : null,
+        `内容を作る材料となる切り口：${mission.angle}`,
+      ];
   const lines = [
-    'Instagramにそのまま投稿できる、完成した縦長の投稿画像を1枚作ってください。',
-    '画像サイズは縦長4:5（1080×1350ピクセル）です。',
+    'Instagramにそのまま投稿できる、5枚で完結する投稿画像を作ってください。',
+    '5枚はそれぞれ縦長4:5（1080×1350ピクセル）の別画像として作ってください。1枚の画像に5コマを並べないでください。',
     `投稿のテーマ：${mission.topic}`,
     instruction ? `写真・イラストの内容：${instruction}` : null,
-    '画像内に、次の日本語の見出しを一字一句そのまま入れてください。',
-    `「${headline}」`,
-    '見出しは画像の上半分に大きく配置し、スマートフォンの小さな画面でも一目で読める太さと大きさにしてください。',
+    ...contentPlan,
+    '見出しは短く大きく、本文は2〜4行にしてください。日本語は一字一句正確に表示してください。',
+    '5枚すべてで、同じ人物・色・書体・余白・写真の雰囲気を使い、連続したシリーズにしてください。',
     '背景と文字の色に十分な差をつけ、文字の周囲に余白を取ってください。',
-    '人物や写真だけで終わらせず、見出しと写真・イラストを組み合わせた、内容が一目で伝わるSNS投稿デザインに仕上げてください。',
-    '指定した見出し以外の文字、ロゴ、透かし、意味不明な文字は入れないでください。',
+    '人物や写真だけで終わらせず、見出し・本文と写真やイラストを組み合わせたSNS投稿デザインに仕上げてください。',
+    'ロゴ、透かし、意味不明な文字は入れないでください。',
+    '一度に1枚しか生成できない場合は、まず1枚目を作り、私が「次」と送るたびに同じデザインで2枚目から順番に作ってください。',
   ];
   return lines.filter((line): line is string => line !== null).join('\n');
 }
@@ -308,6 +342,14 @@ export function copyOptions(mission: DailyMissionView) {
       .filter(Boolean)
       .join('\n\n---\n\n');
     return [
+      {
+        label: '5枚の画像を作る文章をコピー',
+        value: imageCreationPrompt(mission),
+        type: 'COPIED_IMAGE_INSTRUCTION' as const,
+      },
+      ...(caption
+        ? [{ label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const }]
+        : []),
       ...(all ? [{ label: '全部コピー', value: all, type: 'COPIED_SLIDE' as const }] : []),
       ...slides,
     ];

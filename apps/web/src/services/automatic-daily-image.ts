@@ -32,6 +32,31 @@ export function isAutomaticDailyImageEligible(input: {
   );
 }
 
+export function editorialSlidesForMission(input: {
+  format: string;
+  content?: Record<string, unknown>;
+}) {
+  const rawSlides = input.content?.['slides'];
+  if (!['SLIDE', 'IMAGE'].includes(input.format) || !Array.isArray(rawSlides)) return [];
+  return rawSlides.flatMap((value): EditorialCarouselSlideInput[] => {
+    if (!value || typeof value !== 'object') return [];
+    const slide = value as Record<string, unknown>;
+    if (
+      !['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'].includes(String(slide['role'])) ||
+      typeof slide['headline'] !== 'string' ||
+      typeof slide['body'] !== 'string'
+    )
+      return [];
+    return [
+      {
+        role: slide['role'] as EditorialCarouselSlideInput['role'],
+        headline: slide['headline'],
+        body: slide['body'],
+      },
+    ];
+  });
+}
+
 export async function queueAutomaticDailyImage(input: {
   environment: JobEnvironment;
   workspaceId: string;
@@ -104,27 +129,7 @@ export async function queueAutomaticDailyImage(input: {
     await assertOrganizationGenerationQuota({ workspaceId: input.workspaceId, kind: 'IMAGE' });
 
     const requests = new db.PrismaSocialImageGenerationRequestRepository();
-    const rawSlides = input.mission.content?.['slides'];
-    const slides: EditorialCarouselSlideInput[] =
-      input.mission.format === 'SLIDE' && Array.isArray(rawSlides)
-        ? rawSlides.flatMap((value) => {
-            if (!value || typeof value !== 'object') return [];
-            const slide = value as Record<string, unknown>;
-            if (
-              !['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'].includes(String(slide['role'])) ||
-              typeof slide['headline'] !== 'string' ||
-              typeof slide['body'] !== 'string'
-            )
-              return [];
-            return [
-              {
-                role: slide['role'] as EditorialCarouselSlideInput['role'],
-                headline: slide['headline'],
-                body: slide['body'],
-              },
-            ];
-          })
-        : [];
+    const slides = editorialSlidesForMission(input.mission);
     const layout = buildEditorialCarouselLayout({
       slides: slides.length
         ? slides

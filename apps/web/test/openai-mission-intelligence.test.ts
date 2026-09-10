@@ -96,7 +96,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v7',
+      promptVersion: 'mission-content-generator-v8',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -120,6 +120,49 @@ describe('OpenAIMissionContentGenerator', () => {
       'caption',
       'hashtags',
     ]);
+  });
+
+  it('requires a five-part story for new image missions', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({ imageInstruction: '画像指示' }),
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await new OpenAIMissionContentGenerator({ apiKey: 'test-key', fetch: fetcher }).generate({
+      ...base,
+      platform: 'INSTAGRAM',
+      brief: { ...brief, format: 'IMAGE' },
+      contentPillar: { title: '実践', description: null },
+      grantedKnowledge: [],
+      groupKnowledge: [],
+    });
+    const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
+      input: Array<{ role: string; content: string }>;
+      text: {
+        format: {
+          schema: {
+            properties: { slides: { minItems: number; maxItems: number } };
+          };
+        };
+      };
+    };
+    expect(request.text.format.schema.properties.slides).toMatchObject({
+      minItems: 5,
+      maxItems: 5,
+    });
+    expect(request.input[0]?.content).toContain('HOOK、PROBLEM、INSIGHT、SOLUTION、CTAの順');
   });
 
   it('sends the original content and rewrite constraints when generating a variant', async () => {
