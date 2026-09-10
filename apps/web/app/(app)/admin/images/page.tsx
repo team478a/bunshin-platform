@@ -240,6 +240,7 @@ export default async function ImagePilotAdminPage({
   const count = (status: string) =>
     requestCounts.find((item) => item.status === status)?._count._all ?? 0;
   const total = requestCounts.reduce((sum, item) => sum + item._count._all, 0);
+  const preflightUsed = total - count('FAILED') - count('CANCELLED') > 0;
   const requestIds = selected
     ? await db.prisma.socialImageGenerationRequest.findMany({
         where: { workspaceId: selected.workspaceId, groupId: selected.id },
@@ -263,6 +264,13 @@ export default async function ImagePilotAdminPage({
       : sum;
   }, 0n);
   const costUsd = (Number(costMicros) / 1_000_000).toFixed(2);
+  const latestEvidence = new Map(evidence.map((item) => [item.checkKey, item.action]));
+  const preflightReady =
+    effectiveStatus.state === 'PREPARING' &&
+    latestEvidence.get('PLAN_APPROVAL') === 'RECORDED' &&
+    latestEvidence.get('STORAGE_RETENTION') === 'RECORDED' &&
+    latestEvidence.get('FINAL_APPROVAL') === undefined &&
+    !preflightUsed;
 
   return (
     <main className="app-page">
@@ -315,7 +323,16 @@ export default async function ImagePilotAdminPage({
               <strong>{effectiveStatus.label}</strong>
             </p>
             {effectiveStatus.state === 'PREPARING' ? (
-              <p>人による開始前確認があと{effectiveStatus.remainingChecks}件必要です。</p>
+              <>
+                <p>人による開始前確認があと{effectiveStatus.remainingChecks}件必要です。</p>
+                {preflightReady ? (
+                  <p>選択した参加者は、スマートフォン確認のための投稿画像を1件だけ作成できます。</p>
+                ) : preflightUsed ? (
+                  <p>確認用の生成は実施済みです。結果を確認して残りの項目を記録してください。</p>
+                ) : (
+                  <p>予算と画像の保存期間を確認すると、確認用の画像を1件だけ作成できます。</p>
+                )}
+              </>
             ) : null}
             <p>
               参加者：{enrolled.size}人 ／ 生成受付：{total}件 ／ 完成：{count('READY_FOR_REVIEW')}

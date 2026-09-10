@@ -112,16 +112,31 @@ describe('PrismaSocialImageGenerationAuthorizationRepository', () => {
     ).resolves.toEqual({ allowed: false, reason: 'LIMIT_REACHED' });
   });
 
-  it('blocks creation until all pilot checks and final approval are current', async () => {
+  it('allows the first preflight after budget and storage checks are current', async () => {
     const database = client({
       socialImagePilotEvidence: {
-        findMany: vi.fn().mockResolvedValue(approvalEvidence.slice(0, -1)),
+        findMany: vi.fn().mockResolvedValue(approvalEvidence.slice(0, 2)),
       },
     });
     await expect(
       new PrismaSocialImageGenerationAuthorizationRepository(database as never).authorize(input),
+    ).resolves.toEqual({
+      allowed: true,
+      pilotEnrollmentId: enrollment.id,
+      generationContextSnapshotId: null,
+    });
+  });
+
+  it('blocks another preflight before final approval', async () => {
+    const database = client({
+      socialImagePilotEvidence: {
+        findMany: vi.fn().mockResolvedValue(approvalEvidence.slice(0, 2)),
+      },
+      socialImageGenerationRequest: { count: vi.fn().mockResolvedValue(1) },
+    });
+    await expect(
+      new PrismaSocialImageGenerationAuthorizationRepository(database as never).authorize(input),
     ).resolves.toEqual({ allowed: false, reason: 'PILOT_UNAVAILABLE' });
-    expect(database.socialImageGenerationRequest.count).not.toHaveBeenCalled();
   });
 
   it('blocks creation when a prerequisite was revoked after final approval', async () => {
