@@ -17476,6 +17476,8 @@ const socialImageGenerationRequestRecord = (
   status: row.status,
   referenceImage:
     (row.referenceImage as SocialImageGenerationRequestRecord['referenceImage']) ?? null,
+  qualityReport:
+    (row.qualityReport as unknown as SocialImageGenerationRequestRecord['qualityReport']) ?? null,
   templateKey: row.templateKey as SocialImageGenerationRequestRecord['templateKey'],
   layout: row.layout as unknown as SocialImageGenerationRequestRecord['layout'],
 });

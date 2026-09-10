@@ -1,4 +1,5 @@
 import { ApplicationError } from '@bunshin/shared';
+import type { SocialImageQualityReportRecord } from './social-image-generation-job';
 import { normalizeSocialImageLayout } from './social-image-templates';
 import type {
   SOCIAL_IMAGE_HEIGHT,
@@ -64,7 +65,7 @@ export interface SocialImageGenerationRequestRecord {
   idempotencyKey: string;
   revision: number;
   errorCode: string | null;
-  qualityReport: unknown | null;
+  qualityReport: SocialImageQualityReportRecord | null;
   createdAt: Date;
   updatedAt: Date;
 }
