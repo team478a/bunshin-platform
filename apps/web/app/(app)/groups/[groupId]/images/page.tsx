@@ -24,7 +24,7 @@ export default async function GroupImagesPage({
   if (!parsedGroupId.success) notFound();
   const db = await import('@bunshin/database');
   const now = new Date();
-  const membership = await db.prisma.groupMembership.findFirst({
+  const memberships = await db.prisma.groupMembership.findMany({
     where: {
       groupId: parsedGroupId.data,
       userId: actor.userId,
@@ -33,7 +33,28 @@ export default async function GroupImagesPage({
       group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
     },
     select: { id: true, group: { select: { id: true, name: true, workspaceId: true } } },
+    orderBy: { createdAt: 'asc' },
   });
+  const enrolledMembership = memberships.length
+    ? await db.prisma.socialImagePilotEnrollment.findFirst({
+        where: {
+          groupMembershipId: { in: memberships.map((item) => item.id) },
+          status: 'ACTIVE',
+          revokedAt: null,
+          pilot: {
+            status: 'ACTIVE',
+            emergencyStop: false,
+            OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+          },
+        },
+        select: { id: true, groupMembershipId: true },
+        orderBy: { createdAt: 'desc' },
+      })
+    : null;
+  const membership =
+    memberships.find((item) => item.id === enrolledMembership?.groupMembershipId) ??
+    memberships.at(0);
   if (!membership) notFound();
 
   const access = await new db.PrismaGroupFeatureEntitlementRepository().resolveAccess({
@@ -160,20 +181,8 @@ export default async function GroupImagesPage({
   const initialMissionId = z.uuid().safeParse(query.mission).data;
   const initialMission =
     available.find((mission) => mission.id === initialMissionId) ?? available.at(0) ?? null;
-  const pilotEnrollment = initialMission
-    ? await db.prisma.socialImagePilotEnrollment.findFirst({
-        where: {
-          workspaceId: membership.group.workspaceId,
-          groupId: membership.group.id,
-          groupMembershipId: membership.id,
-          status: 'ACTIVE',
-          revokedAt: null,
-        },
-        select: { id: true },
-      })
-    : null;
   let pilotImageRemaining: number | null = null;
-  if (pilotEnrollment && initialMission) {
+  if (enrolledMembership && initialMission) {
     const authorization =
       await new db.PrismaSocialImageGenerationAuthorizationRepository().authorize({
         environment: 'PRODUCTION',
