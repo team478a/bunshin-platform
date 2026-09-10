@@ -113,6 +113,7 @@ describe('video render execution', () => {
       project: expect.objectContaining({ id: render().videoProjectId }),
       aiSceneSources: [],
       photoSceneSources: [],
+      generatedImageSceneSources: [],
       webhookUrl: 'https://app.example/webhook',
     });
     expect(values.markSubmitted).toHaveBeenCalledWith({
@@ -272,6 +273,58 @@ describe('video render execution', () => {
             videoSceneId: photoScene.id,
             url: 'https://storage.example/photo.jpg?short=1',
           },
+        ],
+      }),
+    );
+  });
+
+  it('uses a short-lived URL for each generated carousel page only when composition starts', async () => {
+    const values = repository(render());
+    const imageScene = {
+      id: '99999999-9999-4999-8999-999999999999',
+      videoProjectId: render().videoProjectId,
+      sceneNo: 1,
+      durationMs: 25_000,
+      narration: '説明',
+      caption: '画面',
+      visualType: 'GENERATED_IMAGE' as const,
+      visualPrompt: null,
+      keywords: ['88888888-8888-4888-8888-888888888888'],
+      aiProcessingTypes: [],
+      locked: true,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    values.findForExecution = vi.fn().mockResolvedValue({
+      render: render(),
+      project: { ...project(), durationSeconds: 25, scenes: [imageScene] },
+      aiSceneSources: [],
+      generatedImageSceneSources: [
+        { videoSceneId: imageScene.id, storageKey: 'private/carousel/page.png' },
+      ],
+    });
+    const provider = {
+      submit: vi.fn().mockResolvedValue({ externalJobId: 'job' }),
+      inspect: vi.fn(),
+    };
+    const generatedImages = {
+      createUrl: vi.fn().mockResolvedValue('https://storage.example/page.png?short=1'),
+    };
+    await new ExecuteVideoRenderStep(
+      values,
+      provider,
+      { store: vi.fn() },
+      { createUrl: vi.fn().mockResolvedValue('https://app.example/webhook') },
+      { createUrl: vi.fn() },
+      undefined,
+      generatedImages,
+    ).execute({ workspaceId, renderId });
+    expect(generatedImages.createUrl).toHaveBeenCalledWith('private/carousel/page.png');
+    expect(provider.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generatedImageSceneSources: [
+          { videoSceneId: imageScene.id, url: 'https://storage.example/page.png?short=1' },
         ],
       }),
     );

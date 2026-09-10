@@ -14,9 +14,10 @@ export default async function VideoAccessPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ result?: string }>;
+  searchParams: Promise<{ result?: string; decision?: string }>;
 }) {
   const { projectId } = await params;
+  const query = await searchParams;
   const scope = await authorizedVideoView(projectId);
   if (scope?.appOwner && !scope.project.renderAttempts.length)
     redirect(`/groups/${scope.project.groupId}/videos/${projectId}?manage=1`);
@@ -36,12 +37,40 @@ export default async function VideoAccessPage({
                   src={source}
                   style={{ width: '100%', maxHeight: '65vh', background: '#111' }}
                 />
-                <p>
-                  <a href={source} target="_blank" rel="noreferrer">
-                    動画を開く・保存する
-                  </a>
-                </p>
-                <p>スマートフォンでは、動画を開いて共有メニューから保存できます。</p>
+                {scope.project.reviewDecision === 'ADOPTED' ? (
+                  <>
+                    <p role="status">
+                      <strong>この動画を使うことを記録しました。</strong>
+                    </p>
+                    <p>
+                      <a href={source} target="_blank" rel="noreferrer">
+                        動画を開く・iPhoneへ保存する
+                      </a>
+                    </p>
+                    <p>動画を開き、共有メニューから「ビデオを保存」を押してください。</p>
+                  </>
+                ) : scope.project.reviewDecision === 'REJECTED' ? (
+                  <p role="status">
+                    <strong>今回は使わないことを記録しました。</strong>
+                  </p>
+                ) : query.decision === 'adopted' ? (
+                  <p role="status">この動画を使うことを記録しました。</p>
+                ) : null}
+                <div className="button-row">
+                  <form action={`/video-access/${projectId}/decision`} method="post">
+                    <input type="hidden" name="decision" value="ADOPTED" />
+                    <button type="submit">この動画を使う</button>
+                  </form>
+                  <form action={`/video-access/${projectId}/decision`} method="post">
+                    <input type="hidden" name="decision" value="REJECTED" />
+                    <button type="submit" className="button button--secondary">
+                      今回は使わない
+                    </button>
+                  </form>
+                </div>
+                {query.result === 'decision-failed' ? (
+                  <p role="alert">操作を記録できませんでした。もう一度お試しください。</p>
+                ) : null}
               </>
             ) : (
               <p>動画は準備中、または保存期限を過ぎています。</p>
@@ -56,7 +85,7 @@ export default async function VideoAccessPage({
           <>
             <h1>LINEで届いた動画を見る</h1>
             <p>通知を受け取ったLINEで本人確認すると、この動画を閲覧・保存できます。</p>
-            {(await searchParams).result === 'failed' ? (
+            {query.result === 'failed' ? (
               <p role="alert">
                 確認できませんでした。通知を受け取ったLINEで、もう一度確認してください。保存期限を過ぎた動画は開けません。
               </p>

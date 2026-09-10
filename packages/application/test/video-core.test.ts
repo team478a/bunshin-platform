@@ -143,6 +143,18 @@ describe('Video Core', () => {
     });
   });
 
+  it('accepts a five-page 25-second generated-image plan', async () => {
+    const input = planInput();
+    input.scenes = input.scenes.map((scene) => ({
+      ...scene,
+      durationMs: 5_000,
+      visualType: 'GENERATED_IMAGE',
+    }));
+    await expect(new ReplaceVideoPlan(repository()).execute(input)).resolves.toMatchObject({
+      status: 'WAITING_APPROVAL',
+    });
+  });
+
   it('rejects AI video scenes in standard composition', async () => {
     const input = planInput();
     const firstScene = input.scenes[0]!;

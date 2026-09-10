@@ -97,6 +97,19 @@ describe('social image private storage', () => {
     );
   });
 
+  it('signs only an exact completed carousel key for the video renderer', async () => {
+    const fake = storageClient();
+    const key = `${Object.values(ids).join('/')}/completed.png`;
+    await expect(
+      new SupabaseSocialImageStorage(fake.value as never).createDownloadUrl(key),
+    ).resolves.toBe('https://storage.example/signed');
+    await expect(
+      new SupabaseSocialImageStorage(fake.value as never).createDownloadUrl(
+        `${Object.values(ids).join('/')}/../completed.png`,
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
   it('asks storage to download with the safe per-page filename', async () => {
     const fake = storageClient();
     await new SupabaseSocialImageStorage(fake.value as never).createReadUrl({

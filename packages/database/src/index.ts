@@ -1,4 +1,5 @@
 import { authorizedVideoPhotos } from './video-photos';
+import { authorizedSocialImageVideoSources } from './social-image-video-sources';
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
 import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -15562,7 +15563,8 @@ const videoProjectRecord = (
 ): VideoProjectRecord => ({
   ...row,
   platform: row.platform as VideoPlatform,
-  durationSeconds: row.durationSeconds as 30 | 60,
+  durationSeconds: row.durationSeconds as 25 | 30 | 60,
+  reviewDecision: row.reviewDecision as 'ADOPTED' | 'REJECTED' | null,
   aiProcessingTypes: row.aiProcessingTypes as unknown as VideoAiProcessingType[],
   disclosureSnapshot: row.disclosureSnapshot as Record<string, unknown>,
   characterProfileSnapshot: row.characterProfileSnapshot as Record<string, unknown>,
@@ -15623,6 +15625,29 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         select: { id: true },
       });
       if (!bunshin) return null;
+      if (input.socialImageGenerationRequestId) {
+        await authorizedSocialImageVideoSources(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: input.groupMembershipId,
+            ownerUserId: input.actorUserId,
+            requestId: input.socialImageGenerationRequestId,
+          },
+          now,
+        );
+        const existing = await tx.videoProject.findUnique({
+          where: { socialImageGenerationRequestId: input.socialImageGenerationRequestId },
+          include: { scenes: { orderBy: { sceneNo: 'asc' } } },
+        });
+        if (existing)
+          return existing.ownerUserId === input.actorUserId &&
+            existing.workspaceId === input.workspaceId &&
+            existing.groupId === input.groupId
+            ? videoProjectRecord(existing)
+            : null;
+      }
       if (input.campaignId) {
         const campaign = await tx.campaign.findFirst({
           where: { id: input.campaignId, workspaceId: input.workspaceId, groupId: input.groupId },
@@ -15723,6 +15748,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           durationSeconds: input.durationSeconds,
           photoAssetIds: input.photoAssetIds ?? [],
           narrationEnabled: input.narrationEnabled ?? false,
+          socialImageGenerationRequestId: input.socialImageGenerationRequestId ?? null,
           standardComposition: input.standardComposition,
           aiProcessingTypes: input.aiProcessingTypes,
           disclosureSnapshot: input.disclosureSnapshot as Prisma.InputJsonValue,
@@ -15807,12 +15833,27 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         },
         select: {
           id: true,
+          groupMembershipId: true,
           durationSeconds: true,
           photoAssetIds: true,
           narrationEnabled: true,
+          socialImageGenerationRequestId: true,
         },
       });
       if (!project) return null;
+      const socialImages = project.socialImageGenerationRequestId
+        ? await authorizedSocialImageVideoSources(
+            tx,
+            {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              groupMembershipId: project.groupMembershipId,
+              ownerUserId: input.actorUserId,
+              requestId: project.socialImageGenerationRequestId,
+            },
+            now,
+          )
+        : [];
       if (
         input.scenes.some((scene, index) =>
           project.photoAssetIds.length > 0
@@ -15822,6 +15863,14 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         )
       )
         throw new ApplicationError('VALIDATION_ERROR', 'selected photos do not match the plan');
+      if (
+        socialImages.length > 0 &&
+        input.scenes.some(
+          (scene, index) =>
+            scene.visualType !== 'GENERATED_IMAGE' || scene.keywords[0] !== socialImages[index]?.id,
+        )
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'generated images do not match the plan');
       if (!project.narrationEnabled && input.projectAiProcessingTypes.includes('VOICE_SYNTHESIS'))
         throw new ApplicationError('VALIDATION_ERROR', 'narration consent required');
       const totalMs = input.scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
@@ -16493,6 +16542,18 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
       });
       if (!project) return null;
       await authorizedVideoPhotos(tx, project, project.photoAssetIds ?? [], now);
+      if (project.socialImageGenerationRequestId)
+        await authorizedSocialImageVideoSources(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: project.groupMembershipId,
+            ownerUserId: input.actorUserId,
+            requestId: project.socialImageGenerationRequestId,
+          },
+          now,
+        );
       assertSupportedVideoComposition(videoProjectRecord(project));
       const aiScenes = project.scenes.filter(
         (scene) =>
@@ -16610,11 +16671,38 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
               return { videoSceneId: scene.id, storageKey: photo.storageKey };
             })
         : [];
+    const generatedImages =
+      row.status === 'QUEUED' && row.project.socialImageGenerationRequestId
+        ? await authorizedSocialImageVideoSources(this.client, {
+            workspaceId: input.workspaceId,
+            groupId: row.groupId,
+            groupMembershipId: row.groupMembershipId,
+            ownerUserId: row.ownerUserId,
+            requestId: row.project.socialImageGenerationRequestId,
+          })
+        : [];
+    const generatedImageSceneSources =
+      row.status === 'QUEUED'
+        ? row.project.scenes
+            .filter((scene) => scene.visualType === 'GENERATED_IMAGE')
+            .map((scene) => {
+              const image = generatedImages.find(
+                (item) => item.id === (scene.keywords as string[])[0],
+              );
+              if (!image)
+                throw new ApplicationError(
+                  'VALIDATION_ERROR',
+                  '投稿画像を選び直して動画を再作成してください。',
+                );
+              return { videoSceneId: scene.id, storageKey: image.completedStorageKey };
+            })
+        : [];
     return {
       render: videoRenderRecord(row),
       project: videoProjectRecord(row.project),
       aiSceneSources,
       photoSceneSources,
+      generatedImageSceneSources,
     };
   }
 

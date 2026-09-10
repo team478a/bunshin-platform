@@ -237,6 +237,32 @@ export function SocialImageWorkspace({
     setBusy(false);
   }
 
+  async function createVideo() {
+    if (!endpoint || !requestId || busy) return;
+    setBusy(true);
+    setMessage('5枚の画像から25秒の動画を作り始めています。');
+    try {
+      const response = await fetch(`${endpoint}/${requestId}/video`, { method: 'POST' });
+      const payload = (await response.json().catch(() => null)) as {
+        data?: { projectId?: string };
+        error?: { code?: string };
+      } | null;
+      if (!response.ok || !payload?.data?.projectId) {
+        setMessage(
+          payload?.error?.code === 'FORBIDDEN'
+            ? '動画作成を利用できません。運営へご確認ください。'
+            : '動画を作り始められませんでした。少し待ってから、もう一度お試しください。',
+        );
+        return;
+      }
+      window.location.assign(`/groups/${groupId}/videos/${payload.data.projectId}`);
+    } catch {
+      setMessage('通信できませんでした。もう一度お試しください。');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (missions.length === 0) {
     return (
       <section className="settings-card">
@@ -362,6 +388,14 @@ export function SocialImageWorkspace({
                   </ol>
                 </div>
                 <div className="social-image-actions">
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={busy || requestView.mediaPages.length !== 5}
+                    onClick={() => void createVideo()}
+                  >
+                    この5枚を25秒の動画にする
+                  </button>
                   {requestView.mediaPages.map((media) => (
                     <a
                       className="button"
@@ -374,6 +408,9 @@ export function SocialImageWorkspace({
                     </a>
                   ))}
                 </div>
+                <p className="form-help">
+                  音声は入れません。文字が読みやすい速さで画像を切り替え、完成したらLINEでお知らせします。
+                </p>
               </>
             ) : (
               <div className="social-image-actions">
