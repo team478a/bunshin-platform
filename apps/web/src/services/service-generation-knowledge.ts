@@ -177,9 +177,23 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     resolveServiceContentAssistanceLevel(scope),
   ]);
   const knowledge = serviceKnowledgeForPrompt(chunks);
+  const normalizedBusinessProfile = businessProfile?.primaryIndustry
+    ? {
+        industry:
+          businessProfile.primaryIndustry.name === 'その他' && businessProfile.otherIndustryText
+            ? businessProfile.otherIndustryText
+            : businessProfile.primaryIndustry.name,
+        businessName: businessProfile.businessName,
+        region: businessProfile.region,
+        productService: businessProfile.productService,
+        primaryPurpose: businessProfile.primaryPurpose,
+        targetAudience: businessProfile.targetAudience,
+      }
+    : null;
   return {
     ...knowledge,
     contentAssistanceLevel,
+    businessProfile: normalizedBusinessProfile,
     officialKnowledge: [
       ...businessProfileKnowledgeForPrompt(
         businessProfile?.primaryIndustry

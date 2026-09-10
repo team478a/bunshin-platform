@@ -44,6 +44,14 @@ const input = {
   },
   contentPillar: { title: '実践', description: null },
   grantedKnowledge: [{ type: 'SKILL', title: '経験', content: '10年の経験' }],
+  businessProfile: {
+    industry: '飲食',
+    businessName: '千ノ国カフェ',
+    region: '千葉県',
+    productService: '自家焙煎コーヒーと初心者向け抽出教室',
+    primaryPurpose: '教室の体験予約を増やす',
+    targetAudience: '自宅のコーヒーをおいしくしたい50代以上の初心者',
+  },
 };
 
 describe('OpenAIDailyMissionPlanner', () => {
@@ -80,7 +88,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v5',
+      promptVersion: 'daily-mission-planner-v6',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -103,6 +111,8 @@ describe('OpenAIDailyMissionPlanner', () => {
     expect(request.input[1]?.content).toContain('10年の経験');
     expect(request.input[1]?.content).toContain('personality-version-2');
     expect(request.input[1]?.content).toContain('いっしょに');
+    expect(request.input[1]?.content).toContain('初心者向け抽出教室');
+    expect(request.input[0]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
   });
 
   it('maps provider errors without exposing credentials', async () => {

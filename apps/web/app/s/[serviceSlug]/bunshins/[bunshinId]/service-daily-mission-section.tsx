@@ -374,6 +374,7 @@ export function ServiceDailyMissionSection({
               {isImageMission ? (
                 <p className="mission-card__date">{mission.missionDate}の投稿</p>
               ) : null}
+              {isImageMission ? <p className="eyebrow">この5枚のテーマ</p> : null}
               <h3>
                 {isImageMission ? mission.topic : `${mission.missionDate} — ${mission.topic}`}
               </h3>

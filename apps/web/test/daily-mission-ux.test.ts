@@ -79,7 +79,7 @@ describe('Daily Mission copy UX', () => {
       mission('SLIDE', {
         slides: [
           { headline: '1枚目', body: '本文1' },
-          { headline: '2枚目', body: '本文2' },
+          { headline: '2枚目', body: '本文2', visualScene: 'お客様が商品を比べている場面' },
         ],
         internalNote: 'コピー禁止',
       }),
@@ -92,6 +92,9 @@ describe('Daily Mission copy UX', () => {
     ]);
     expect(options[0]?.value).not.toContain('コピー禁止');
     expect(options[0]?.value).toContain('1枚目：見出し「1枚目」／本文「本文1」');
+    expect(options[0]?.value).toContain('このページの場面');
+    expect(options[0]?.value).toContain('お客様が商品を比べている場面');
+    expect(options[0]?.value).toContain('同じ写真や、ほぼ同じ構図を繰り返さない');
     expect(options[2]).toMatchObject({
       type: 'COPIED_SLIDE',
       metadata: { slideIndex: 1 },

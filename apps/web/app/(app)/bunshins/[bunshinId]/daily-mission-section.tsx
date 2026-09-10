@@ -278,11 +278,21 @@ export function imageCreationPrompt(mission: DailyMissionView) {
   const instruction = text(mission.content['imageInstruction']);
   const headline = imagePostHeadline(mission);
   const caption = text(mission.content['caption']);
+  const fallbackScenes = [
+    '表紙としてテーマが一目で分かる完成イメージと主役を大きく見せる',
+    '対象読者が困っている具体的な場面を、表情や手元の動きで見せる',
+    '原因や違いを、比較・図解・小物の配置で分かりやすく見せる',
+    '解決策を実際に行っている手順や動作を近くから見せる',
+    '実行後の良い状態と、保存・次の行動につながる余白を見せる',
+  ];
   const preparedSlides = records(mission.content['slides']).flatMap((slide, index) => {
     const slideHeadline = text(slide['headline']);
     const body = text(slide['body']);
+    const visualScene = text(slide['visualScene']) ?? fallbackScenes[index % fallbackScenes.length];
     return slideHeadline && body
-      ? [`${index + 1}枚目：見出し「${slideHeadline}」／本文「${body}」`]
+      ? [
+          `${index + 1}枚目：見出し「${slideHeadline}」／本文「${body}」／このページの場面「${visualScene}」`,
+        ]
       : [];
   });
   const contentPlan = preparedSlides.length
@@ -309,10 +319,12 @@ export function imageCreationPrompt(mission: DailyMissionView) {
     'Instagramにそのまま投稿できる、5枚で完結する投稿画像を作ってください。',
     '5枚はそれぞれ縦長4:5（1080×1350ピクセル）の別画像として作ってください。1枚の画像に5コマを並べないでください。',
     `投稿のテーマ：${mission.topic}`,
+    '1枚目だけを見ても、何について誰に役立つ投稿か分かる表紙にしてください。',
     instruction ? `写真・イラストの内容：${instruction}` : null,
     ...contentPlan,
     '見出しは短く大きく、本文は2〜4行にしてください。日本語は一字一句正確に表示してください。',
-    '5枚すべてで、同じ人物・色・書体・余白・写真の雰囲気を使い、連続したシリーズにしてください。',
+    '5枚すべてで人物と色・書体・余白を統一し、連続したシリーズにしてください。',
+    '各ページは指定した場面に合わせて、構図・動作・小物・背景の見せ方を変えてください。同じ写真や、ほぼ同じ構図を繰り返さないでください。',
     '背景と文字の色に十分な差をつけ、文字の周囲に余白を取ってください。',
     '人物や写真だけで終わらせず、見出し・本文と写真やイラストを組み合わせたSNS投稿デザインに仕上げてください。',
     'ロゴ、透かし、意味不明な文字は入れないでください。',

@@ -6,7 +6,7 @@ import type {
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
-export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v5';
+export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v6';
 
 const schema = {
   type: 'object',
@@ -47,7 +47,7 @@ export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
           {
             role: 'system',
             content:
-              'あなたはBUNSHINのSNS当日企画担当です。確定済み週間計画の対象Itemを、ユーザーが今日実行できるMission Briefにしてください。指定されたBunshin、承認済み戦略、Content Pillar、Grant済みKnowledgeだけを使用します。campaignがある場合は本人が参加中の公式企画です。公式facts、rules、assetsだけを商品事実として使い、体験を捏造しません。ADVERTISEMENTでは#PR表記を前提にします。bunshin.personalityがある場合は、その最新版の口調、知識の伝え方、好む表現、避ける表現、顔と声の方針に合う企画にします。trendIdeasがある場合は、週間計画と対象者に自然に合うときだけ企画へ反映し、実際に反映した場合だけusedTrendIdeaをtrueにします。trendIdeasがない、または無視した場合はfalseにします。トレンドの成果を保証せず、根拠にない事実を追加しないでください。投稿本文、caption、スライド、台本、画像指示、動画Promptは生成せず、topic、angle、reason、estimatedMinutes、usedTrendIdeaだけを返してください。estimatedMinutesはavailableMinutes以内にします。',
+              'あなたはBUNSHINのSNS当日企画担当です。確定済み週間計画の対象Itemを、ユーザーが今日実行できるMission Briefにしてください。指定されたBunshin、承認済み戦略、Content Pillar、Grant済みKnowledgeだけを使用します。businessProfileがある場合は最優先の企画軸です。topicはproductServiceまたはindustryの専門性とtargetAudienceの悩みを直接結びつけ、primaryPurposeに役立つ内容にします。画像を見なくても何についての投稿か分かる、具体的で自己完結したtopicにしてください。登録事業そのものが該当しない限り、集中力、気分転換、習慣化などの一般的な生活・自己啓発テーマへ逸らしません。reasonには登録した商品・サービス、対象者、発信目的のどれに役立つ企画かを明記します。SLIDEまたはIMAGEでは5枚で説明でき、読者が一つ行動できるテーマを選びます。campaignがある場合は本人が参加中の公式企画です。公式facts、rules、assetsだけを商品事実として使い、体験を捏造しません。ADVERTISEMENTでは#PR表記を前提にします。bunshin.personalityがある場合は、その最新版の口調、知識の伝え方、好む表現、避ける表現、顔と声の方針に合う企画にします。trendIdeasがある場合は、週間計画、businessProfile、対象者に自然に合うときだけ企画へ反映し、実際に反映した場合だけusedTrendIdeaをtrueにします。trendIdeasがない、または無視した場合はfalseにします。トレンドの成果を保証せず、根拠にない事実を追加しないでください。投稿本文、caption、スライド、台本、画像指示、動画Promptは生成せず、topic、angle、reason、estimatedMinutes、usedTrendIdeaだけを返してください。estimatedMinutesはavailableMinutes以内にします。',
           },
           { role: 'user', content: JSON.stringify(input) },
         ],

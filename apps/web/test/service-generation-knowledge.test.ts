@@ -54,5 +54,6 @@ describe('service generation knowledge', () => {
     expect(strategySource).not.toContain('grantedKnowledge: []');
     expect(weeklySource).toContain('additionalKnowledge: serviceKnowledge.officialKnowledge');
     expect(dailySource).toContain('serviceKnowledge.groupKnowledge');
+    expect(dailySource).toContain('businessProfile: serviceKnowledge?.businessProfile ?? null');
   });
 });

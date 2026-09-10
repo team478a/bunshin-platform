@@ -1280,6 +1280,15 @@ export class ExpireWeeklyPlan extends WeeklyPlanMutation {
   }
 }
 
+export interface MissionBusinessProfileContext {
+  industry: string;
+  businessName: string;
+  region: string | null;
+  productService: string;
+  primaryPurpose: string;
+  targetAudience: string;
+}
+
 export interface DailyMissionPlannerInput {
   workspaceId: string;
   bunshinId: string;
@@ -1312,6 +1321,7 @@ export interface DailyMissionPlannerInput {
   weeklyPlan: WeeklyPlan;
   contentPillars: ContentPillar[];
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
+  businessProfile?: MissionBusinessProfileContext | null;
   trendIdeas?: TrendIdeaCandidate[];
   campaign?: CampaignPlanningContext | null;
 }
@@ -1392,6 +1402,7 @@ export interface DailyMissionPlannerProviderInput {
   campaign?: CampaignPlanningContext | null;
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+  businessProfile?: MissionBusinessProfileContext | null;
   trendIdeas?: Array<{
     topic: string;
     hook: string;
@@ -1520,6 +1531,7 @@ export class GenerateDailyMissionBrief {
       campaign: input.campaign ?? null,
       contentPillar: { title: pillar.title, description: pillar.description },
       grantedKnowledge: input.grantedKnowledge,
+      businessProfile: input.businessProfile ?? null,
       ...(trendIdeas.length > 0
         ? {
             trendIdeas: trendIdeas.map(({ topic, hook, whyNow, fitReason }) => ({
@@ -1567,6 +1579,7 @@ export interface MissionContentGeneratorInput {
   approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
+  businessProfile?: MissionBusinessProfileContext | null;
   groupKnowledge?: Array<{
     chunkId: string;
     sourceId: string;
@@ -1670,6 +1683,7 @@ export interface MissionQualityCheckerInput {
   content: MissionContent;
   bunshin: DailyMissionPlannerInput['bunshin'];
   approvedStrategy: DailyMissionPlannerProviderInput['approvedStrategy'];
+  businessProfile?: MissionBusinessProfileContext | null;
   selectedMemories: SelectedBunshinMemory[];
   groupKnowledge?: MissionContentGeneratorInput['groupKnowledge'];
 }
@@ -2170,17 +2184,19 @@ export function normalizeMissionContent(
     if (!Array.isArray(v['slides']) || v['slides'].length < 1 || v['slides'].length > 7)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid slides');
     const slides = v['slides'].map((entry, index) => {
-      const slide = strict(entry, ['index', 'role', 'headline', 'body'], 'slide');
+      const slide = strict(entry, ['index', 'role', 'headline', 'body', 'visualScene'], 'slide');
       const role = missionString(slide['role'], 20, 'slide role');
       if (!['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'].includes(role))
         throw new ApplicationError('VALIDATION_ERROR', 'invalid slide role');
       if (slide['index'] !== index + 1)
         throw new ApplicationError('VALIDATION_ERROR', 'slide index must be sequential');
+      const visualScene = missionNullableString(slide['visualScene'], 1000, 'visual scene');
       return {
         index: index + 1,
         role,
         headline: missionString(slide['headline'], 200, 'headline'),
         body: missionString(slide['body'], 2000, 'body'),
+        ...(visualScene ? { visualScene } : {}),
       };
     });
     if (slides[0]?.role !== 'HOOK' || slides.at(-1)?.role !== 'CTA')
@@ -2283,17 +2299,23 @@ export function normalizeMissionContent(
           if (!Array.isArray(v['slides']) || v['slides'].length !== 5)
             throw new ApplicationError('VALIDATION_ERROR', 'image content requires five slides');
           return v['slides'].map((entry, index) => {
-            const slide = strict(entry, ['index', 'role', 'headline', 'body'], 'image slide');
+            const slide = strict(
+              entry,
+              ['index', 'role', 'headline', 'body', 'visualScene'],
+              'image slide',
+            );
             if (slide['index'] !== index + 1 || slide['role'] !== expectedRoles[index])
               throw new ApplicationError(
                 'VALIDATION_ERROR',
                 'image slides require sequential roles',
               );
+            const visualScene = missionNullableString(slide['visualScene'], 1000, 'visual scene');
             return {
               index: index + 1,
               role: expectedRoles[index],
               headline: missionString(slide['headline'], 200, 'headline'),
               body: missionString(slide['body'], 2000, 'body'),
+              ...(visualScene ? { visualScene } : {}),
             };
           });
         })();
