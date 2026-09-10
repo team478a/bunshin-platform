@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSocialImagePayment } from '../src/social-image-payment';
+import {
+  resolveSocialImageExecutionPayment,
+  resolveSocialImagePayment,
+} from '../src/social-image-payment';
 
 describe('social image payment display', () => {
   it('uses a service plan before an empty personal credit account', () => {
@@ -57,5 +60,46 @@ describe('social image payment display', () => {
         availablePoints: 50,
       }),
     ).toEqual({ mode: 'POINTS', canCreate: true, pointCost: 50, availablePoints: 50 });
+  });
+});
+
+describe('social image execution payment', () => {
+  it('treats an enrolled image pilot request as the single payment source', () => {
+    expect(
+      resolveSocialImageExecutionPayment({
+        pilotPayment: true,
+        pointPayment: false,
+        badgePayment: false,
+        serviceCreditPayment: false,
+        planPayment: false,
+      }),
+    ).toEqual({ shouldReserveServiceMedia: false, errorCode: null });
+  });
+
+  it('reserves service media only when no direct payment exists', () => {
+    expect(
+      resolveSocialImageExecutionPayment({
+        pilotPayment: false,
+        pointPayment: false,
+        badgePayment: false,
+        serviceCreditPayment: false,
+        planPayment: false,
+      }),
+    ).toEqual({
+      shouldReserveServiceMedia: true,
+      errorCode: 'SOCIAL_IMAGE_PAYMENT_UNAVAILABLE',
+    });
+  });
+
+  it('rejects overlapping payment sources', () => {
+    expect(
+      resolveSocialImageExecutionPayment({
+        pilotPayment: true,
+        pointPayment: true,
+        badgePayment: false,
+        serviceCreditPayment: false,
+        planPayment: false,
+      }).errorCode,
+    ).toBe('SOCIAL_IMAGE_MULTIPLE_PAYMENTS_FOUND');
   });
 });
