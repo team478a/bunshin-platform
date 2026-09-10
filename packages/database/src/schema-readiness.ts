@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260909080000_enable_public_rls';
+export const LATEST_DATABASE_MIGRATION = '20260910100000_expand_social_image_template_check';
