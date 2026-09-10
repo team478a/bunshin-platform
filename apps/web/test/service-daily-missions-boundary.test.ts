@@ -55,6 +55,7 @@ describe('service daily mission boundary', () => {
     expect(detailPage).toContain('imageCreationBaseHref');
     expect(detailPage).toContain("featureKey: 'SOCIAL.IMAGE_GENERATION'");
     expect(experience).toContain('やることは3つだけです');
+    expect(experience).toContain('この5枚のテーマ');
     expect(experience).toContain('className="button mission-create-image"');
     expect(experience).toContain('画像を作る');
     expect(experience).toContain('<details className="mission-advanced-content">');

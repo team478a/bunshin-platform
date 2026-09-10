@@ -321,6 +321,7 @@ export class DailyMissionGenerationService {
           weeklyPlan,
           contentPillars: pillars,
           grantedKnowledge: knowledge,
+          businessProfile: serviceKnowledge?.businessProfile ?? null,
           trendIdeas,
           campaign,
         }),
@@ -359,6 +360,7 @@ export class DailyMissionGenerationService {
         approvedStrategy: strategyContext,
         contentPillar: { title: pillar.title, description: pillar.description },
         grantedKnowledge: knowledge,
+        businessProfile: serviceKnowledge?.businessProfile ?? null,
         groupKnowledge,
         selectedMemories,
         campaign,
@@ -378,6 +380,7 @@ export class DailyMissionGenerationService {
         content: content.output,
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
+        businessProfile: serviceKnowledge?.businessProfile ?? null,
         selectedMemories,
         groupKnowledge,
       });

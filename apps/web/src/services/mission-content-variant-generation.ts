@@ -328,6 +328,7 @@ export class MissionContentVariantGenerationService {
       let knowledge: MissionContentGeneratorInput['grantedKnowledge'] = exactKnowledge.map(
         ({ type, title, content }) => ({ type, title, content }),
       );
+      let businessProfile: MissionContentGeneratorInput['businessProfile'] = null;
       if (campaign) {
         const chunks = await new GroupKnowledgeService(
           new db.PrismaGroupKnowledgeRepository(),
@@ -351,6 +352,7 @@ export class MissionContentVariantGenerationService {
           groupId: input.groupId,
           actorUserId: input.actorUserId,
         });
+        businessProfile = serviceKnowledge.businessProfile;
         groupKnowledge = serviceKnowledge.groupKnowledge.filter(({ chunkId }) =>
           snapshotGroupKnowledgeIds.has(chunkId),
         );
@@ -460,6 +462,7 @@ export class MissionContentVariantGenerationService {
         approvedStrategy: strategyContext,
         contentPillar: { title: pillar.title, description: pillar.description },
         grantedKnowledge: knowledge,
+        businessProfile,
         groupKnowledge,
         selectedMemories,
         campaign,
@@ -487,6 +490,7 @@ export class MissionContentVariantGenerationService {
         content: content.output,
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
+        businessProfile,
         selectedMemories,
         groupKnowledge,
       });

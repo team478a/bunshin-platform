@@ -96,7 +96,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v8',
+      promptVersion: 'mission-content-generator-v9',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -153,7 +153,13 @@ describe('OpenAIMissionContentGenerator', () => {
       text: {
         format: {
           schema: {
-            properties: { slides: { minItems: number; maxItems: number } };
+            properties: {
+              slides: {
+                minItems: number;
+                maxItems: number;
+                items: { properties: Record<string, unknown> };
+              };
+            };
           };
         };
       };
@@ -162,7 +168,11 @@ describe('OpenAIMissionContentGenerator', () => {
       minItems: 5,
       maxItems: 5,
     });
+    expect(request.text.format.schema.properties.slides.items.properties).toHaveProperty(
+      'visualScene',
+    );
     expect(request.input[0]?.content).toContain('HOOK、PROBLEM、INSIGHT、SOLUTION、CTAの順');
+    expect(request.input[0]?.content).toContain('同じ写真やほぼ同じ構図を繰り返さず');
   });
 
   it('sends the original content and rewrite constraints when generating a variant', async () => {
@@ -291,13 +301,15 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v4',
+      promptVersion: 'mission-quality-checker-v5',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
       text: { format: { strict: boolean } };
     };
     expect(request).toMatchObject({ store: false, text: { format: { strict: true } } });
+    expect(JSON.stringify(request)).toContain('BUSINESS_PROFILE_MISMATCH');
+    expect(JSON.stringify(request)).toContain('REPEATED_VISUAL_SCENE');
   });
 
   it('surfaces provider failures without an approval result', async () => {

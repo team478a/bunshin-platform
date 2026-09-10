@@ -170,7 +170,7 @@ export default async function GroupImagesPage({
             format: mission.format as 'IMAGE' | 'SLIDE',
             layout: buildEditorialCarouselLayout({
               slides:
-                mission.format === 'SLIDE' && slides.length
+                ['SLIDE', 'IMAGE'].includes(mission.format) && slides.length
                   ? slides
                   : [{ role: 'HOOK', headline: mission.topic, body: mission.angle }],
               accentColor: brand?.primaryColor ?? '#EF6A63',
