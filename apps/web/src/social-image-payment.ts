@@ -4,6 +4,31 @@ export type SocialImagePayment =
   | { mode: 'SERVICE_CREDIT'; canCreate: boolean; remaining: number }
   | { mode: 'POINTS'; canCreate: boolean; availablePoints: number; pointCost: number | null };
 
+export function resolveSocialImageExecutionPayment(input: {
+  pilotPayment: boolean;
+  pointPayment: boolean;
+  badgePayment: boolean;
+  serviceCreditPayment: boolean;
+  planPayment: boolean;
+}) {
+  const directPaymentCount = [
+    input.pilotPayment,
+    input.pointPayment,
+    input.badgePayment,
+    input.serviceCreditPayment,
+  ].filter(Boolean).length;
+  const paymentCount = directPaymentCount + Number(input.planPayment);
+  return {
+    shouldReserveServiceMedia: directPaymentCount === 0,
+    errorCode:
+      paymentCount === 1
+        ? null
+        : paymentCount > 1
+          ? 'SOCIAL_IMAGE_MULTIPLE_PAYMENTS_FOUND'
+          : 'SOCIAL_IMAGE_PAYMENT_UNAVAILABLE',
+  } as const;
+}
+
 export function resolveSocialImagePayment(input: {
   servicePlanRemaining: number | null;
   pilotRemaining: number | null;
