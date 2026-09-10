@@ -58,4 +58,47 @@ describe('mission scheduler HTTP boundary', () => {
     expect(value.execute).toHaveBeenCalledWith('DEVELOPMENT');
     await expect(response.json()).resolves.toMatchObject({ dailyEnqueued: 1 });
   });
+
+  it('allows the scheduler result to report point and badge processing', async () => {
+    const value: MissionSchedulerPort = {
+      execute: vi.fn(() =>
+        Promise.resolve({
+          environment: 'DEVELOPMENT' as const,
+          candidates: 0,
+          due: 0,
+          weeklyEnqueued: 0,
+          dailyEnqueued: 0,
+          skipped: 0,
+          failures: 0,
+          truncated: false,
+          incentives: {
+            points: {
+              scanned: 1,
+              GRANTED: 1,
+              ALREADY_PROCESSED: 0,
+              NO_ACTIVE_RULE: 0,
+              NOT_ELIGIBLE: 0,
+              failures: 0,
+            },
+            badges: {
+              scanned: 1,
+              AWARDED: 1,
+              PROGRESSED: 0,
+              ALREADY_PROCESSED: 0,
+              NO_ACTIVE_BADGE: 0,
+              NOT_ELIGIBLE: 0,
+              failures: 0,
+            },
+          },
+        }),
+      ),
+    };
+    const response = await missionSchedulerResponse(
+      new Request('http://localhost', { headers: { authorization: `Bearer ${secret}` } }),
+      () => Promise.resolve(value),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      incentives: { points: { GRANTED: 1 }, badges: { AWARDED: 1 } },
+    });
+  });
 });
