@@ -175,7 +175,7 @@ export async function reviseSocialImagePageResponse(
       const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
       const generated = await provider.generate({
         requestId: `${imageRequest.id}:revision:${imageRequest.revision}:page:${pageIndex + 1}`,
-        prompt: socialImagePagePrompt(pageLayout, Boolean(reference), pageIndex, 5),
+        prompt: socialImagePagePrompt(pageLayout, Boolean(reference), pageIndex, 5, pages),
         ...(reference ? { referenceImage: reference } : {}),
         width: 1080,
         height: 1350,
@@ -190,7 +190,7 @@ export async function reviseSocialImagePageResponse(
         taskType: 'SOCIAL_IMAGE_GENERATION',
         provider: generated.provider,
         model: generated.model,
-        promptVersion: 'social-image-page-revision-v1',
+        promptVersion: 'social-image-page-revision-v2',
         status: 'SUCCESS',
         inputTokens: generated.inputTokens,
         outputTokens: generated.outputTokens,

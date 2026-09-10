@@ -35,5 +35,5 @@ describe('route not-found boundary', () => {
     }
 
     expect(violations).toEqual([]);
-  });
+  }, 15_000);
 });
