@@ -13,7 +13,9 @@ describe('video list entitlement boundary', () => {
     expect(videoListPage).toContain(
       'if (!videoGenerationAvailable && !imageGenerationAvailable) notFound()',
     );
-    expect(videoListPage).toContain("videoGenerationAvailable ? '動画の企画と台本' : '作成した動画'");
+    expect(videoListPage).toContain(
+      "videoGenerationAvailable ? '動画の企画と台本' : '作成した動画'",
+    );
     expect(videoListPage).toContain('{videoGenerationAvailable ? (\n        <VideoProjectCreator');
   });
 });

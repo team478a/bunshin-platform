@@ -66,9 +66,7 @@ export default async function VideosPage({
     membership.group.featurePolicies.some(
       (item) => item.featureKey === featureKey && active(item),
     ) &&
-    membership.featureAssignments.some(
-      (item) => item.featureKey === featureKey && active(item),
-    );
+    membership.featureAssignments.some((item) => item.featureKey === featureKey && active(item));
   const videoGenerationAvailable = available('VIDEO_GENERATION');
   const imageGenerationAvailable = available('SOCIAL.IMAGE_GENERATION');
   if (!videoGenerationAvailable && !imageGenerationAvailable) notFound();
@@ -178,9 +176,7 @@ export default async function VideosPage({
         {videoGenerationAvailable ? (
           <>
             <p>{membership.group.name}で使う短い動画を、分身と一緒に考えます。</p>
-            <p>
-              ここでは企画と台本を作ります。動画本体は、内容を確認したあとに作ります。
-            </p>
+            <p>ここでは企画と台本を作ります。動画本体は、内容を確認したあとに作ります。</p>
           </>
         ) : (
           <p>投稿画像から作った動画を確認できます。</p>
