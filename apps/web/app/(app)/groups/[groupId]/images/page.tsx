@@ -157,6 +157,41 @@ export default async function GroupImagesPage({
   }
 
   const query = await searchParams;
+  const initialMissionId = z.uuid().safeParse(query.mission).data;
+  const initialMission =
+    available.find((mission) => mission.id === initialMissionId) ?? available.at(0) ?? null;
+  const pilotEnrollment = initialMission
+    ? await db.prisma.socialImagePilotEnrollment.findFirst({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          groupMembershipId: membership.id,
+          status: 'ACTIVE',
+          revokedAt: null,
+        },
+        select: { id: true },
+      })
+    : null;
+  let pilotImageRemaining: number | null = null;
+  if (pilotEnrollment && initialMission) {
+    const authorization =
+      await new db.PrismaSocialImageGenerationAuthorizationRepository().authorize({
+        environment: 'PRODUCTION',
+        workspaceId: membership.group.workspaceId,
+        groupId: membership.group.id,
+        groupMembershipId: membership.id,
+        actorUserId: actor.userId,
+        bunshinId: initialMission.bunshinId,
+        dailyMissionId: initialMission.id,
+        campaignId: initialMission.campaignId,
+        productPackVersionId:
+          initialMission.contentLinkUsage?.productPackVersionId ??
+          initialMission.campaign?.productPackVersionId ??
+          null,
+        now,
+      });
+    pilotImageRemaining = authorization.allowed ? 1 : 0;
+  }
   const serviceHome = query.service ? `/s/${query.service}/home` : '/groups';
   return (
     <main className="app-page">
@@ -171,10 +206,11 @@ export default async function GroupImagesPage({
         groupId={membership.group.id}
         groupMembershipId={membership.id}
         servicePlanImageRemaining={servicePlanImageRemaining}
+        pilotImageRemaining={pilotImageRemaining}
         imageCreditAvailable={creditAccount?.availableCredits ?? null}
         pointCost={imagePointCost}
         initialAvailablePoints={availablePoints}
-        initialMissionId={z.uuid().safeParse(query.mission).data}
+        initialMissionId={initialMissionId}
         missions={available.map((mission) => {
           const rawSlides = (mission.content?.contentJson as Record<string, unknown> | null)?.[
             'slides'
