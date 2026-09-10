@@ -36,6 +36,67 @@ export interface EditorialCarouselSlideInput {
   visualScene?: string;
 }
 
+export const buildLegacyMissionCarouselSlides = (input: {
+  topic: string;
+  angle: string;
+}): EditorialCarouselSlideInput[] => {
+  const topic =
+    compactText(input.topic)
+      .replace(/[（(][^）)]*(?:秒|リール|動画用|投稿用)[^）)]*[）)]/gu, '')
+      .replace(/ワンポイント/gu, '')
+      .replace(/[：:\s]+$/gu, '') || '今日のポイント';
+  const angle = compactText(input.angle);
+  const numbered = Array.from(
+    angle.matchAll(/([①②③④⑤])\s*([^（→。]+?)\s*[（(]([^）)]+)[）)]/gu),
+  ).slice(0, 3);
+  const firstMessage = compactText(angle.split('→')[0] ?? '') || '最初に結論を伝えます。';
+  const pointSlides: EditorialCarouselSlideInput[] = numbered.map((match, index) => ({
+    role: index === numbered.length - 1 ? 'SOLUTION' : 'INSIGHT',
+    headline: `${match[1]} ${compactText(match[2] ?? '')}`,
+    body: compactText(match[3] ?? '') || '必要なことを短く整理します。',
+    visualScene: `${topic}について、${compactText(match[2] ?? '要点')}を一枚の資料と道具で分かりやすく整理する場面`,
+  }));
+  const defaults: EditorialCarouselSlideInput[] = [
+    {
+      role: 'PROBLEM',
+      headline: '最初に結論をひとこと',
+      body: '何を決めてほしいかを、短い一文で伝えます。',
+      visualScene: `${topic}について、提案書の最初の一文を指し示す手元`,
+    },
+    {
+      role: 'INSIGHT',
+      headline: '大切な点を3つに整理',
+      body: '要旨・期待できること・必要な準備の順でまとめます。',
+      visualScene: `${topic}の要点を三枚のカードに分けて机上に並べる場面`,
+    },
+    {
+      role: 'SOLUTION',
+      headline: '具体例は1つに絞る',
+      body: '相手が使う場面を想像できる例を、一つだけ添えます。',
+      visualScene: `${topic}の具体例を一枚の企画書で説明する場面`,
+    },
+  ];
+  const middle = pointSlides.length === 3 ? pointSlides : defaults;
+  const example = angle.match(/例[：:]([^）。]+)[）。]/u)?.[1];
+  return [
+    {
+      role: 'HOOK',
+      headline: topic,
+      body: firstMessage,
+      visualScene: `${topic}について、提案者が会議の参加者へ一枚の企画書を示して話し始める場面`,
+    },
+    ...middle,
+    {
+      role: 'CTA',
+      headline: '実践例は1つだけ',
+      body: example
+        ? `${compactText(example)}。具体的な場面を一つ示すと、判断しやすくなります。`
+        : '具体的な場面を一つ示すと、相手が判断しやすくなります。',
+      visualScene: `${topic}の具体例を一枚にまとめ、会議の参加者と確認する明るい場面`,
+    },
+  ];
+};
+
 export interface SocialImageRect {
   x: number;
   y: number;
