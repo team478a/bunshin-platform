@@ -27,6 +27,27 @@ export interface SocialImageGenerationExecutionContext {
   quality: string;
 }
 
+export interface SocialImageQualityReportRecord {
+  version: 1;
+  verdict: 'PASS' | 'REVISE';
+  checkedAt: string;
+  regeneratedPageIndexes: number[];
+  initialPages: Array<{
+    pageIndex: number;
+    verdict: 'PASS' | 'REVISE';
+    score: number;
+    issueCodes: string[];
+    repairInstruction: string;
+  }>;
+  finalPages: Array<{
+    pageIndex: number;
+    verdict: 'PASS' | 'REVISE';
+    score: number;
+    issueCodes: string[];
+    repairInstruction: string;
+  }>;
+}
+
 export interface SocialImageGenerationExecutionRepository {
   claim(input: {
     workspaceId: string;
@@ -39,6 +60,11 @@ export interface SocialImageGenerationExecutionRepository {
     | { allowed: false; reason: SocialImageGenerationExecutionBlockReason }
   >;
   moveToComposing(input: { workspaceId: string; requestId: string }): Promise<boolean>;
+  recordQualityReport(input: {
+    workspaceId: string;
+    requestId: string;
+    qualityReport: SocialImageQualityReportRecord;
+  }): Promise<boolean>;
   complete(input: {
     context: SocialImageGenerationExecutionContext;
     media: Array<{
@@ -50,6 +76,7 @@ export interface SocialImageGenerationExecutionRepository {
       contentHash: string;
     }>;
     serviceMediaReservationId: string | null;
+    qualityReport: SocialImageQualityReportRecord;
   }): Promise<boolean>;
   markFailed(input: {
     workspaceId: string;

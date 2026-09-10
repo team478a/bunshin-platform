@@ -205,6 +205,14 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
           contentHash: String(pageIndex).repeat(64),
         })),
         serviceMediaReservationId: null,
+        qualityReport: {
+          version: 1,
+          verdict: 'PASS',
+          checkedAt: '2026-09-11T00:00:00.000Z',
+          regeneratedPageIndexes: [],
+          initialPages: [],
+          finalPages: [],
+        },
       }),
     ).resolves.toBe(true);
     expect(tx.socialImageGeneratedMedia.createMany).toHaveBeenCalledWith(
@@ -215,5 +223,47 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
         ]),
       }),
     );
+  });
+
+  it('records a rejected quality review before marking the request failed', async () => {
+    const tx = transaction();
+    await expect(
+      repository(tx).recordQualityReport({
+        workspaceId: request.workspaceId,
+        requestId: request.id,
+        qualityReport: {
+          version: 1,
+          verdict: 'REVISE',
+          checkedAt: '2026-09-11T00:00:00.000Z',
+          regeneratedPageIndexes: [],
+          initialPages: [
+            {
+              pageIndex: 0,
+              verdict: 'REVISE',
+              score: 55,
+              issueCodes: ['UNWANTED_TEXT'],
+              repairInstruction: 'Remove visible lettering.',
+            },
+          ],
+          finalPages: [
+            {
+              pageIndex: 0,
+              verdict: 'REVISE',
+              score: 55,
+              issueCodes: ['UNWANTED_TEXT'],
+              repairInstruction: 'Remove visible lettering.',
+            },
+          ],
+        },
+      }),
+    ).resolves.toBe(true);
+    expect(tx.socialImageGenerationRequest.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: request.id,
+        workspaceId: request.workspaceId,
+        status: 'GENERATING_ASSET',
+      },
+      data: { qualityReport: expect.objectContaining({ verdict: 'REVISE' }) },
+    });
   });
 });

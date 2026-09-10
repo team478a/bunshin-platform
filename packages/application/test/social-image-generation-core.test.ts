@@ -44,6 +44,7 @@ const record = (status: SocialImageGenerationRequestRecord['status'] = 'DRAFT') 
     idempotencyKey: 'mission-image-1',
     revision: 1,
     errorCode: null,
+    qualityReport: null,
     createdAt: now,
     updatedAt: now,
   }) as SocialImageGenerationRequestRecord;

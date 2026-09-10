@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260911003500_allow_25_second_video';
+export const LATEST_DATABASE_MIGRATION = '20260911110000_add_social_image_quality_report';
