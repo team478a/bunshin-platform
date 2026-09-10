@@ -140,6 +140,21 @@ export class SupabaseSocialImageStorage implements SocialImageStoragePort {
   }
   constructor(private readonly storage: SupabaseClient = client()) {}
 
+  async createDownloadUrl(storageKey: string) {
+    if (
+      !/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/completed\.png$/i.test(
+        storageKey,
+      )
+    )
+      throw new ApplicationError('FORBIDDEN', 'social image storage scope mismatch');
+    const signed = await this.storage.storage
+      .from(BUCKET)
+      .createSignedUrl(storageKey, READ_SECONDS);
+    if (signed.error)
+      throw new ApplicationError('INTERNAL_ERROR', '画像を開く準備ができませんでした');
+    return signed.data.signedUrl;
+  }
+
   private async ensureBucket() {
     const found = await this.storage.storage.getBucket(BUCKET);
     if (found.data) return;

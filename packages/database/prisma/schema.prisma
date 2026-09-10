@@ -3930,6 +3930,9 @@ model ActivityContinuityRule {
 model VideoProject {
   photoAssetIds String[] @default([]) @map("photo_asset_ids") @db.Uuid
   narrationEnabled Boolean @default(false) @map("narration_enabled")
+  socialImageGenerationRequestId String? @unique @map("social_image_generation_request_id") @db.Uuid
+  reviewDecision String? @map("review_decision") @db.VarChar(16)
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(6)
   id                         String                 @id @default(uuid()) @db.Uuid
   workspaceId                String                 @map("workspace_id") @db.Uuid
   groupId                    String                 @map("group_id") @db.Uuid
@@ -3962,6 +3965,7 @@ model VideoProject {
   assets                     VideoAsset[]
   renderAttempts             VideoRender[]
   sceneGenerations           VideoSceneGeneration[]
+  socialImageGenerationRequest SocialImageGenerationRequest? @relation(fields: [socialImageGenerationRequestId], references: [id], onDelete: SetNull)
 
   @@unique([workspaceId, id])
   @@index([workspaceId, ownerUserId, status, updatedAt])
@@ -4289,6 +4293,7 @@ model SocialImageGenerationRequest {
   updatedAt                   DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
   pilotEnrollment             SocialImagePilotEnrollment         @relation(fields: [workspaceId, groupId, pilotEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Restrict)
   media                       SocialImageGeneratedMedia[]
+  videoProjects               VideoProject[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, groupId, id, ownerUserId, dailyMissionId])

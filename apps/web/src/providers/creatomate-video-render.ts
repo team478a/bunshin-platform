@@ -40,6 +40,7 @@ export function buildCreatomateRenderScript(
   aiSceneSources: Array<{ videoSceneId: string; url: string }> = [],
   photoSceneSources: Array<{ videoSceneId: string; url: string }> = [],
   narrationUrl?: string,
+  generatedImageSceneSources: Array<{ videoSceneId: string; url: string }> = [],
 ) {
   assertSupportedVideoComposition(project);
   if (project.aiProcessingTypes.includes('VOICE_SYNTHESIS') && !project.narrationEnabled)
@@ -47,12 +48,25 @@ export function buildCreatomateRenderScript(
   if (Boolean(project.narrationEnabled) !== Boolean(narrationUrl))
     throw new VideoRenderProviderError('INVALID_REQUEST', false);
   const photos = new Map(photoSceneSources.map((source) => [source.videoSceneId, source.url]));
+  const generatedImages = new Map(
+    generatedImageSceneSources.map((source) => [source.videoSceneId, source.url]),
+  );
   if (
     photos.size !== photoSceneSources.length ||
     photoSceneSources.some(
       (source) =>
         !project.scenes.some(
           (scene) => scene.id === source.videoSceneId && scene.visualType === 'USER_ASSET',
+        ),
+    )
+  )
+    throw new VideoRenderProviderError('INVALID_REQUEST', false);
+  if (
+    generatedImages.size !== generatedImageSceneSources.length ||
+    generatedImageSceneSources.some(
+      (source) =>
+        !project.scenes.some(
+          (scene) => scene.id === source.videoSceneId && scene.visualType === 'GENERATED_IMAGE',
         ),
     )
   )
@@ -72,18 +86,46 @@ export function buildCreatomateRenderScript(
     const source = sources.get(scene.id);
     if (requiresAiVideo && !source) throw new VideoRenderProviderError('INVALID_REQUEST', false);
     const photo = photos.get(scene.id);
+    const generatedImage = generatedImages.get(scene.id);
     if (scene.visualType === 'USER_ASSET' && !photo)
       throw new VideoRenderProviderError('INVALID_REQUEST', false);
-    const visualElement = photo
+    if (scene.visualType === 'GENERATED_IMAGE' && !generatedImage)
+      throw new VideoRenderProviderError('INVALID_REQUEST', false);
+    const image = generatedImage ?? photo;
+    const imageAnimations = [
+      ...(index === 0
+        ? []
+        : [
+            {
+              duration: 0.45,
+              easing: 'cubic-in-out',
+              transition: true,
+              type: 'slide',
+              fade: true,
+              direction: index % 2 === 0 ? '0°' : '180°',
+            },
+          ]),
+      {
+        easing: 'linear',
+        type: 'scale',
+        scope: 'element',
+        start_scale: index % 2 === 0 ? '104%' : '100%',
+        end_scale: index % 2 === 0 ? '100%' : '104%',
+        fade: false,
+      },
+    ];
+    const visualElement = image
       ? {
           type: 'image',
-          track: 1,
+          track: generatedImage ? 2 : 1,
           time,
           duration,
-          source: photo,
+          source: image,
           fit: 'contain',
           width: '100%',
           height: '100%',
+          clip: true,
+          animations: imageAnimations,
         }
       : source
         ? {
@@ -105,26 +147,47 @@ export function buildCreatomateRenderScript(
             fill_color: background,
           };
     const sceneElements = [
+      ...(generatedImage
+        ? [
+            {
+              type: 'image',
+              track: 1,
+              time,
+              duration,
+              source: generatedImage,
+              fit: 'cover',
+              width: '100%',
+              height: '100%',
+              blur_radius: 18,
+              opacity: '32%',
+              animations: imageAnimations,
+            },
+          ]
+        : []),
       visualElement,
-      {
-        type: 'text',
-        track: 2,
-        time,
-        duration,
-        text: scene.caption,
-        x: '50%',
-        y: photo ? '83%' : '50%',
-        width: '84%',
-        height: photo ? '24%' : '48%',
-        x_alignment: '50%',
-        y_alignment: '50%',
-        fill_color: source || photo ? '#ffffff' : '#0b3470',
-        stroke_color: source || photo ? '#0b3470' : undefined,
-        font_family: 'Noto Sans JP',
-        font_weight: '700',
-        font_size: '7.2 vmin',
-        animations: [{ type: 'text-appear', duration: Math.min(0.4, duration / 4) }],
-      },
+      ...(!generatedImage
+        ? [
+            {
+              type: 'text',
+              track: 3,
+              time,
+              duration,
+              text: scene.caption,
+              x: '50%',
+              y: photo ? '83%' : '50%',
+              width: '84%',
+              height: photo ? '24%' : '48%',
+              x_alignment: '50%',
+              y_alignment: '50%',
+              fill_color: source || photo ? '#ffffff' : '#0b3470',
+              stroke_color: source || photo ? '#0b3470' : undefined,
+              font_family: 'Noto Sans JP',
+              font_weight: '700',
+              font_size: '7.2 vmin',
+              animations: [{ type: 'text-appear', duration: Math.min(0.4, duration / 4) }],
+            },
+          ]
+        : []),
     ];
     time += duration;
     return sceneElements;
@@ -145,14 +208,14 @@ export function buildCreatomateRenderScript(
         ? [
             {
               type: 'audio',
-              track: 3,
+              track: 4,
               time: 0,
               duration: project.durationSeconds,
               source: narrationUrl,
             },
             {
               type: 'text',
-              track: 4,
+              track: 5,
               time: 0,
               duration: project.durationSeconds,
               text: 'AI音声',
@@ -236,6 +299,7 @@ export class CreatomateVideoRenderAdapter implements VideoRenderProviderPort {
           input.aiSceneSources,
           input.photoSceneSources,
           input.narrationUrl,
+          input.generatedImageSceneSources,
         ),
         metadata: input.renderId,
         webhook_url: input.webhookUrl,

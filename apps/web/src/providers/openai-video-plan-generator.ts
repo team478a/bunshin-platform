@@ -15,9 +15,9 @@ type ResponseValue = {
   error?: unknown;
 };
 
-function outputSchema(durationSeconds: 30 | 60, standardComposition: boolean) {
-  const minItems = durationSeconds === 30 ? 5 : 8;
-  const maxItems = durationSeconds === 30 ? 7 : 12;
+function outputSchema(durationSeconds: 25 | 30 | 60, standardComposition: boolean) {
+  const minItems = durationSeconds === 60 ? 8 : 5;
+  const maxItems = durationSeconds === 60 ? 12 : durationSeconds === 25 ? 5 : 7;
   return {
     type: 'object',
     additionalProperties: false,
@@ -94,7 +94,7 @@ export class OpenAIVideoPlanGenerator implements VideoPlanGeneratorPort {
         input: [
           {
             role: 'system',
-            content: `あなたはワタシワークスの縦型動画企画担当です。渡された本人の分身、対象者、AIキャラクター、許可済み商品情報、本人素材、承認済み素材だけを使い、日本語の場面構成を作ります。AIキャラクターがある場合は見た目・世界観・安全ルールに沿ったvisualPromptを作りますが、実在人物に似せたり、ルール外の設定を追加したりしません。企画ではTEXT_MOTIONとAI_VIDEOだけを返してください。利用者が選んだ写真への置換と、同意済みの音声生成は後段のシステムが行います。narrationは各場面のdurationMs/1000の3倍以下の文字数で短く作ってください。事実や体験を捏造せず、必須表記と禁止表現を守ってください。30秒は5〜7場面、60秒は8〜12場面とし、durationMsの合計を指定時間と完全一致させ、sceneNoを1から連番にします。${input.project.standardComposition ? '標準動画は単色背景、字幕、文字の動きで構成します。全場面をTEXT_MOTIONにしてください。' : 'AI動画を使える企画です。AI_VIDEOの場面は必ず5秒または10秒にし、visualPromptとVIDEO_GENERATIONを設定します。不要なAI_VIDEOは使いません。'}AI利用種別は実際に利用するものだけを返します。`,
+            content: `あなたはワタシワークスの縦型動画企画担当です。渡された本人の分身、対象者、AIキャラクター、許可済み商品情報、本人素材、承認済み素材だけを使い、日本語の場面構成を作ります。AIキャラクターがある場合は見た目・世界観・安全ルールに沿ったvisualPromptを作りますが、実在人物に似せたり、ルール外の設定を追加したりしません。企画ではTEXT_MOTIONとAI_VIDEOだけを返してください。利用者が選んだ写真への置換と、同意済みの音声生成は後段のシステムが行います。narrationは各場面のdurationMs/1000の3倍以下の文字数で短く作ってください。事実や体験を捏造せず、必須表記と禁止表現を守ってください。25秒は5場面、30秒は5〜7場面、60秒は8〜12場面とし、durationMsの合計を指定時間と完全一致させ、sceneNoを1から連番にします。${input.project.standardComposition ? '標準動画は単色背景、字幕、文字の動きで構成します。全場面をTEXT_MOTIONにしてください。' : 'AI動画を使える企画です。AI_VIDEOの場面は必ず5秒または10秒にし、visualPromptとVIDEO_GENERATIONを設定します。不要なAI_VIDEOは使いません。'}AI利用種別は実際に利用するものだけを返します。`,
           },
           { role: 'user', content: JSON.stringify(input) },
         ],

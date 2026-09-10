@@ -1,5 +1,6 @@
 import { prepareVideoNarration } from '../video/prepare-video-narration';
 import { SupabaseVideoAssetStorage } from '../video/video-asset-storage';
+import { SupabaseSocialImageStorage } from '../social-image-storage';
 import 'server-only';
 import {
   ExecuteVideoRenderStep,
@@ -58,6 +59,10 @@ export function createVideoRenderJobHandler(): VideoRenderJobHandler {
           new HkdfVideoRenderWebhookSigner(),
           { createUrl: (storageKey) => aiSceneStorage.createDownloadUrl(storageKey) },
           { createUrl: (storageKey) => photos.createDownloadUrl(storageKey) },
+          {
+            createUrl: (storageKey) =>
+              new SupabaseSocialImageStorage().createDownloadUrl(storageKey),
+          },
         ).execute(input);
         if (result.status !== 'SUCCEEDED') return result;
         const completedAt = result.render.completedAt ?? new Date();

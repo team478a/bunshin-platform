@@ -23,6 +23,8 @@ export type VideoAiProcessingType =
   | 'IMAGE_GENERATION'
   | 'VIDEO_GENERATION'
   | 'AUTOMATIC_ASSET_SELECTION';
+export type VideoDurationSeconds = 25 | 30 | 60;
+export type VideoReviewDecision = 'ADOPTED' | 'REJECTED';
 
 export interface VideoSceneRecord {
   id: string;
@@ -44,6 +46,9 @@ export interface VideoSceneRecord {
 export interface VideoProjectRecord {
   photoAssetIds?: string[];
   narrationEnabled?: boolean;
+  socialImageGenerationRequestId?: string | null;
+  reviewDecision?: VideoReviewDecision | null;
+  reviewedAt?: Date | null;
   id: string;
   workspaceId: string;
   groupId: string;
@@ -57,7 +62,7 @@ export interface VideoProjectRecord {
   title: string;
   platform: VideoPlatform;
   type: VideoProjectType;
-  durationSeconds: 30 | 60;
+  durationSeconds: VideoDurationSeconds;
   status: VideoProjectStatus;
   revision: number;
   aiProcessingTypes: VideoAiProcessingType[];
@@ -73,6 +78,7 @@ export interface VideoProjectRepository {
   create(input: {
     photoAssetIds?: string[];
     narrationEnabled?: boolean;
+    socialImageGenerationRequestId?: string | null;
     id?: string;
     workspaceId: string;
     groupId: string;
@@ -84,7 +90,7 @@ export interface VideoProjectRepository {
     title: string;
     platform: VideoPlatform;
     type: VideoProjectType;
-    durationSeconds: 30 | 60;
+    durationSeconds: VideoDurationSeconds;
     standardComposition: boolean;
     aiProcessingTypes: VideoAiProcessingType[];
     disclosureSnapshot: Record<string, unknown>;
@@ -182,6 +188,7 @@ export interface VideoRenderExecutionContext {
   project: VideoProjectRecord;
   aiSceneSources: Array<{ videoSceneId: string; storageKey: string }>;
   photoSceneSources?: Array<{ videoSceneId: string; storageKey: string }>;
+  generatedImageSceneSources?: Array<{ videoSceneId: string; storageKey: string }>;
 }
 
 export interface VideoSceneRenderSourcePort {
@@ -194,6 +201,7 @@ export interface VideoRenderProviderPort {
     project: VideoProjectRecord;
     aiSceneSources: Array<{ videoSceneId: string; url: string }>;
     photoSceneSources?: Array<{ videoSceneId: string; url: string }>;
+    generatedImageSceneSources?: Array<{ videoSceneId: string; url: string }>;
     narrationUrl?: string;
     webhookUrl: string;
   }): Promise<{ externalJobId: string }>;
@@ -273,7 +281,7 @@ export interface VideoPlanGeneratorInput {
     title: string;
     platform: VideoPlatform;
     type: VideoProjectType;
-    durationSeconds: 30 | 60;
+    durationSeconds: VideoDurationSeconds;
     standardComposition: boolean;
   };
   context: VideoPlanningContext;
@@ -334,14 +342,16 @@ const aiTypes = (values: VideoAiProcessingType[]) => {
 export class CreateVideoProject {
   constructor(private readonly repository: VideoProjectRepository) {}
   async execute(input: Parameters<VideoProjectRepository['create']>[0]) {
-    if (![30, 60].includes(input.durationSeconds))
+    if (![25, 30, 60].includes(input.durationSeconds))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid durationSeconds');
     const photoAssetIds = (input.photoAssetIds ?? []).map((value) => id(value, 'photoAssetId'));
     if (
       photoAssetIds.length > 5 ||
       new Set(photoAssetIds).size !== photoAssetIds.length ||
       (!input.standardComposition && photoAssetIds.length > 0) ||
-      (input.type === 'PHOTO_SLIDESHOW' && photoAssetIds.length === 0)
+      (input.type === 'PHOTO_SLIDESHOW' &&
+        photoAssetIds.length === 0 &&
+        !input.socialImageGenerationRequestId)
     )
       throw new ApplicationError(
         'VALIDATION_ERROR',
@@ -350,6 +360,9 @@ export class CreateVideoProject {
     const value = await this.repository.create({
       ...input,
       photoAssetIds,
+      socialImageGenerationRequestId: input.socialImageGenerationRequestId
+        ? id(input.socialImageGenerationRequestId, 'socialImageGenerationRequestId')
+        : null,
       ...(input.id ? { id: id(input.id, 'id') } : {}),
       workspaceId: id(input.workspaceId, 'workspaceId'),
       groupId: id(input.groupId, 'groupId'),
@@ -392,7 +405,7 @@ export function isSupportedVideoComposition(input: {
     input.aiProcessingTypes.every((type) => supported.has(type)) &&
     input.scenes.every(
       (scene) =>
-        ['TEXT_MOTION', 'AI_VIDEO', 'USER_ASSET'].includes(scene.visualType) &&
+        ['TEXT_MOTION', 'AI_VIDEO', 'USER_ASSET', 'GENERATED_IMAGE'].includes(scene.visualType) &&
         scene.aiProcessingTypes.every((type) => supported.has(type)),
     )
   );
@@ -415,12 +428,13 @@ export class ReplaceVideoPlan {
     const durationSeconds = input.scenes.reduce((sum, scene) => sum + scene.durationMs, 0) / 1000;
     if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
-    if (![30, 60].includes(durationSeconds))
+    if (![25, 30, 60].includes(durationSeconds))
       throw new ApplicationError(
         'VALIDATION_ERROR',
-        'scene duration total must be 30 or 60 seconds',
+        'scene duration total must be 25, 30 or 60 seconds',
       );
     if (
+      (durationSeconds === 25 && count !== 5) ||
       (durationSeconds === 30 && (count < 5 || count > 7)) ||
       (durationSeconds === 60 && (count < 8 || count > 12))
     )
@@ -535,6 +549,7 @@ export class ExecuteVideoRenderStep {
     private readonly webhook: VideoRenderWebhookPort,
     private readonly sceneSources: VideoSceneRenderSourcePort,
     private readonly photoSources?: VideoSceneRenderSourcePort,
+    private readonly generatedImageSources?: VideoSceneRenderSourcePort,
   ) {}
 
   async execute(input: {
@@ -573,11 +588,22 @@ export class ExecuteVideoRenderStep {
           };
         }),
       );
+      const generatedImageSceneSources = await Promise.all(
+        (value.generatedImageSceneSources ?? []).map(async (source) => {
+          if (!this.generatedImageSources)
+            throw new ApplicationError('CONFIGURATION_ERROR', 'generated image source unavailable');
+          return {
+            videoSceneId: source.videoSceneId,
+            url: await this.generatedImageSources.createUrl(source.storageKey),
+          };
+        }),
+      );
       const submitted = await this.provider.submit({
         renderId: render.id,
         project: value.project,
         aiSceneSources,
         photoSceneSources,
+        generatedImageSceneSources,
         webhookUrl,
       });
       const updated = await this.repository.markSubmitted({

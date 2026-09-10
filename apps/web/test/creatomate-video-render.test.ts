@@ -56,7 +56,7 @@ const project = (): VideoProjectRecord => ({
 });
 
 describe('Creatomate video render adapter', () => {
-  it.each(['APPROVED_ASSET', 'STOCK_IMAGE', 'GENERATED_IMAGE'] as const)(
+  it.each(['APPROVED_ASSET', 'STOCK_IMAGE'] as const)(
     'rejects unsupported %s instead of silently rendering a blank background',
     (visualType) => {
       const value = project();
@@ -64,6 +64,39 @@ describe('Creatomate video render adapter', () => {
       expect(() => buildCreatomateRenderScript(value)).toThrow('写真・音声');
     },
   );
+  it('turns five adopted carousel pages into a 25-second vertical slideshow', () => {
+    const value = project();
+    value.durationSeconds = 25;
+    value.type = 'PHOTO_SLIDESHOW';
+    value.scenes = value.scenes.map((scene, index) => ({
+      ...scene,
+      durationMs: 5_000,
+      visualType: 'GENERATED_IMAGE',
+      keywords: [`30000000-0000-4000-8000-00000000000${index + 1}`],
+    }));
+    const sources = value.scenes.map((scene, index) => ({
+      videoSceneId: scene.id,
+      url: `https://storage.example/page-${index + 1}.png?token=short`,
+    }));
+    const script = buildCreatomateRenderScript(value, [], [], undefined, sources);
+    expect(script).toMatchObject({ width: 1080, height: 1920, duration: 25 });
+    expect(script.elements.filter((element) => element.type === 'image')).toHaveLength(10);
+    expect(script.elements.filter((element) => element.type === 'text')).toHaveLength(0);
+    expect(script.elements).toContainEqual(
+      expect.objectContaining({
+        type: 'image',
+        fit: 'contain',
+        source: sources[0]!.url,
+        animations: expect.arrayContaining([expect.objectContaining({ type: 'scale' })]),
+      }),
+    );
+  });
+
+  it('fails closed when a generated carousel scene has no signed source', () => {
+    const value = project();
+    value.scenes[0] = { ...value.scenes[0]!, visualType: 'GENERATED_IMAGE' };
+    expect(() => buildCreatomateRenderScript(value)).toThrow(VideoRenderProviderError);
+  });
   it('rejects a voice promise before submitting a silent video', () => {
     const value = project();
     value.aiProcessingTypes = ['VOICE_SYNTHESIS'];

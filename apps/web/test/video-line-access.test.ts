@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   update: vi.fn(),
   verify: vi.fn(),
   download: vi.fn(),
+  review: vi.fn(),
 }));
 vi.mock('@bunshin/config', () => ({
   getServerEnvironment: () => ({ APP_URL: 'https://example.com' }),
@@ -40,7 +41,7 @@ vi.mock('../src/video/video-render-output-storage', () => ({
 }));
 vi.mock('@bunshin/database', () => ({
   prisma: {
-    videoProject: { findFirst: m.project },
+    videoProject: { findFirst: m.project, updateMany: m.review },
     groupLineConnection: { findFirst: m.connection },
     videoLineAccess: {
       findUnique: m.find,
@@ -55,6 +56,7 @@ import {
   authorizedVideoView,
   downloadVideoView,
   finishVideoLineAccess,
+  recordVideoReviewDecision,
   startVideoLineAccess,
 } from '../src/http/video-line-access';
 import config from '../next.config';
@@ -99,6 +101,7 @@ beforeEach(() => {
   m.claim.mockResolvedValue({ count: 1 });
   m.verify.mockResolvedValue({ providerUserId: subject, following: true });
   m.download.mockResolvedValue('https://storage.example/signed-video');
+  m.review.mockResolvedValue({ count: 1 });
 });
 describe('LINE video viewing without changing app login', () => {
   it('redirects the already-sent legacy URL before the authenticated layout, preserving management access', async () => {
@@ -139,6 +142,22 @@ describe('LINE video viewing without changing app login', () => {
     expect((await downloadVideoView(id)).headers.get('location')).toBe(
       'https://storage.example/signed-video',
     );
+  });
+  it('records the owner decision only through an authorized project view', async () => {
+    m.actor.mockResolvedValue({ userId: 'owner' });
+    const response = await recordVideoReviewDecision(
+      new Request(`https://example.com/video-access/${id}/decision`, {
+        method: 'POST',
+        headers: { origin: 'https://example.com' },
+        body: new URLSearchParams({ decision: 'ADOPTED' }),
+      }),
+      id,
+    );
+    expect(response.headers.get('location')).toContain('decision=adopted');
+    expect(m.review).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id, ownerUserId: 'owner' }),
+      data: { reviewDecision: 'ADOPTED', reviewedAt: expect.any(Date) },
+    });
   });
   it('creates a project-scoped, short-lived HttpOnly cookie only after matching the verified recipient', async () => {
     const response = await callback();

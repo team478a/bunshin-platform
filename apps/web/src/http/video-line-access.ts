@@ -54,6 +54,8 @@ export async function videoViewScope(id: string) {
       groupId: true,
       ownerUserId: true,
       title: true,
+      reviewDecision: true,
+      reviewedAt: true,
       renderAttempts: {
         where: {
           status: 'SUCCEEDED',
@@ -256,4 +258,31 @@ export async function downloadVideoView(id: string) {
   return redirectTo(
     await new SupabaseVideoRenderOutputStorage().createDownloadUrl(render.outputStorageKey),
   );
+}
+
+export async function recordVideoReviewDecision(request: Request, id: string) {
+  const destination = viewPath(id);
+  try {
+    requireSameOrigin(request);
+    const scope = await authorizedVideoView(id);
+    if (!scope?.project.renderAttempts.length) throw new Error('Unavailable');
+    const decision = z
+      .enum(['ADOPTED', 'REJECTED'])
+      .parse((await request.formData()).get('decision'));
+    const changed = await scope.db.prisma.videoProject.updateMany({
+      where: {
+        id: scope.project.id,
+        workspaceId: scope.project.workspaceId,
+        groupId: scope.project.groupId,
+        ownerUserId: scope.project.ownerUserId,
+        status: { in: ['READY_FOR_REVIEW', 'COMPLETED'] },
+      },
+      data: { reviewDecision: decision, reviewedAt: new Date() },
+    });
+    if (changed.count !== 1) throw new Error('Unavailable');
+    return redirectTo(`${destination}?decision=${decision.toLowerCase()}`);
+  } catch {
+    logger.warn('video_review_decision_failed', { operation: 'review', projectId: id });
+    return redirectTo(`${destination}?result=decision-failed`);
+  }
 }
