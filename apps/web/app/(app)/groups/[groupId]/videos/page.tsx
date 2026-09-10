@@ -9,6 +9,9 @@ const statusLabel: Record<string, string> = {
   DRAFT: '準備中',
   WAITING_APPROVAL: '内容を確認してください',
   APPROVED: '確認済み',
+  QUEUED: '作成中',
+  RENDERING: '作成中',
+  READY_FOR_REVIEW: '完成・確認できます',
   COMPLETED: '完成',
   FAILED: '作成できませんでした',
 };
@@ -206,7 +209,7 @@ export default async function VideosPage({
         />
       ) : null}
       <section className="settings-card">
-        <h2>作成中の動画</h2>
+        <h2>動画一覧</h2>
         {projects.length === 0 ? <p>まだありません。</p> : null}
         <div className="form-stack">
           {projects.map((project) => (
