@@ -3,6 +3,7 @@ import {
   CreateSocialImageGenerationRequest,
   DecideSocialImageMedia,
   GetSocialImageGenerationRequest,
+  ReplaceSocialImageMediaPage,
   SOCIAL_IMAGE_GENERATION_FEATURE_KEY,
   TransitionSocialImageGenerationRequest,
   assertSocialImageGenerationTransition,
@@ -65,6 +66,7 @@ const repository = (
   findMediaOwned: vi.fn().mockResolvedValue(null),
   listMediaOwned: vi.fn().mockResolvedValue([]),
   setMediaStatus: vi.fn().mockResolvedValue(null),
+  replaceMediaPage: vi.fn().mockResolvedValue(null),
   transition: vi.fn().mockResolvedValue({ ...record('QUEUED'), revision: 2 }),
   ...overrides,
 });
@@ -263,5 +265,64 @@ describe('Social image generation core', () => {
         decision: 'ADOPTED',
       }),
     ).resolves.toMatchObject({ status: 'ADOPTED' });
+  });
+
+  it('replaces only the requested page with optimistic revision control', async () => {
+    const fivePageLayout = {
+      ...layout,
+      carouselPages: Array.from({ length: 4 }, (_, index) => ({
+        ...layout,
+        headline: `見出し${index + 2}`,
+      })),
+    };
+    const media = {
+      id: '99999999-9999-4999-8999-999999999999',
+      workspaceId: ids.workspaceId,
+      groupId: ids.groupId,
+      ownerUserId: ids.actorUserId,
+      dailyMissionId: ids.dailyMissionId,
+      requestId: ids.requestId,
+      pageIndex: 2,
+      status: 'READY' as const,
+      sourceStorageKey: 'source.png',
+      completedStorageKey: 'completed.png',
+      thumbnailStorageKey: 'thumbnail.png',
+      width: 1080 as const,
+      height: 1350 as const,
+      contentHash: 'a'.repeat(64),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const requests = repository({
+      findOwned: vi.fn().mockResolvedValue({
+        ...record('READY_FOR_REVIEW'),
+        layout: fivePageLayout,
+        revision: 5,
+      }),
+      replaceMediaPage: vi.fn().mockResolvedValue(media),
+    });
+    await expect(
+      new ReplaceSocialImageMediaPage(requests).execute({
+        workspaceId: ids.workspaceId,
+        groupId: ids.groupId,
+        actorUserId: ids.actorUserId,
+        requestId: ids.requestId,
+        expectedRevision: 5,
+        currentMediaId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        pageIndex: 2,
+        layout: fivePageLayout,
+        replacement: {
+          mediaId: media.id,
+          sourceStorageKey: media.sourceStorageKey,
+          completedStorageKey: media.completedStorageKey,
+          thumbnailStorageKey: media.thumbnailStorageKey,
+          contentHash: media.contentHash,
+        },
+      }),
+    ).resolves.toMatchObject({ pageIndex: 2 });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(requests.replaceMediaPage).toHaveBeenCalledWith(
+      expect.objectContaining({ pageIndex: 2, expectedRevision: 5 }),
+    );
   });
 });

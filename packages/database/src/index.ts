@@ -17943,6 +17943,76 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
       };
     });
   }
+
+  async replaceMediaPage(
+    input: Parameters<SocialImageGenerationRequestRepository['replaceMediaPage']>[0],
+  ) {
+    return this.client.$transaction(async (tx) => {
+      const request = await tx.socialImageGenerationRequest.findFirst({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          status: 'READY_FOR_REVIEW',
+          revision: input.expectedRevision,
+        },
+      });
+      if (!request) return null;
+      if (
+        !(await this.activeScope(tx, {
+          workspaceId: request.workspaceId,
+          groupId: request.groupId,
+          groupMembershipId: request.groupMembershipId,
+          actorUserId: request.ownerUserId,
+          pilotEnrollmentId: request.pilotEnrollmentId,
+        }))
+      )
+        return null;
+      const current = await tx.socialImageGeneratedMedia.findFirst({
+        where: {
+          id: input.currentMediaId,
+          requestId: request.id,
+          pageIndex: input.pageIndex,
+          status: 'READY',
+        },
+      });
+      if (!current) return null;
+      const updated = await tx.socialImageGenerationRequest.updateMany({
+        where: {
+          id: request.id,
+          revision: input.expectedRevision,
+          status: 'READY_FOR_REVIEW',
+        },
+        data: {
+          layout: input.layout as unknown as Prisma.InputJsonValue,
+          templateKey: input.layout.templateKey,
+          revision: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) return null;
+      await tx.socialImageGeneratedMedia.delete({ where: { id: current.id } });
+      const replacement = await tx.socialImageGeneratedMedia.create({
+        data: {
+          id: input.replacement.mediaId,
+          workspaceId: request.workspaceId,
+          groupId: request.groupId,
+          ownerUserId: request.ownerUserId,
+          dailyMissionId: request.dailyMissionId,
+          requestId: request.id,
+          pageIndex: input.pageIndex,
+          sourceStorageKey: input.replacement.sourceStorageKey,
+          completedStorageKey: input.replacement.completedStorageKey,
+          thumbnailStorageKey: input.replacement.thumbnailStorageKey,
+          width: 1080,
+          height: 1350,
+          contentHash: input.replacement.contentHash,
+          expiresAt: assetRetentionExpiry(),
+        },
+      });
+      return { ...replacement, width: 1080 as const, height: 1350 as const };
+    });
+  }
 }
 
 export class PrismaSocialImageGenerationAuthorizationRepository implements SocialImageGenerationAuthorizationPort {

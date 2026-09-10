@@ -23,11 +23,13 @@ function storageClient() {
     data: { signedUrl: 'https://storage.example/signed' },
     error: null,
   });
-  const from = vi.fn(() => ({ upload, remove, createSignedUrl }));
+  const download = vi.fn();
+  const from = vi.fn(() => ({ upload, remove, createSignedUrl, download }));
   return {
     upload,
     remove,
     createSignedUrl,
+    download,
     from,
     value: {
       storage: {
@@ -122,6 +124,24 @@ describe('social image private storage', () => {
       300,
       { download: 'watashi-works-post-2.png' },
     );
+  });
+
+  it('reads only an exact stored PNG key for a page revision', async () => {
+    const fake = storageClient();
+    const source = await png(1080, 1350);
+    fake.download.mockResolvedValue({
+      data: new Blob([source], { type: 'image/png' }),
+      error: null,
+    });
+    const key = `${Object.values(ids).join('/')}/source.png`;
+    await expect(
+      new SupabaseSocialImageStorage(fake.value as never).readStoredPng(key),
+    ).resolves.toEqual(source);
+    await expect(
+      new SupabaseSocialImageStorage(fake.value as never).readStoredPng(
+        `${Object.values(ids).join('/')}/../source.png`,
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('removes files already stored when a later upload fails', async () => {

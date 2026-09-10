@@ -57,6 +57,7 @@
 
 .social-image-preview figure {
   margin: 0;
+  padding-bottom: 0.75rem;
 }
 
 .social-image-preview figcaption {
@@ -69,6 +70,56 @@
   display: block;
   width: 100%;
   height: auto;
+}
+
+.social-image-revise-button {
+  width: calc(100% - 1.5rem);
+  margin: 0 0.75rem;
+}
+
+.social-image-revision {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 2px solid var(--color-primary);
+  border-radius: 1rem;
+  background: var(--color-primary-soft);
+}
+
+.social-image-revision h3,
+.social-image-revision p {
+  margin-bottom: 0;
+}
+
+.social-image-revision input[type='text'],
+.social-image-revision input:not([type]),
+.social-image-revision textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.social-image-revision__choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.social-image-revision__choices label {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: #fff;
+  font-weight: 700;
+  text-align: center;
 }
 
 .social-image-actions {
@@ -121,6 +172,10 @@
 
 @media (max-width: 40rem) {
   .social-image-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .social-image-revision__choices {
     grid-template-columns: 1fr;
   }
 }
