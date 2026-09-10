@@ -6,6 +6,7 @@ import {
   SOCIAL_IMAGE_WIDTH,
   buildSocialImageCompositionPlan,
   buildEditorialCarouselLayout,
+  buildLegacyMissionCarouselSlides,
   normalizeSocialImageLayout,
   type SocialImageLayout,
   type SocialImageRect,
@@ -101,5 +102,24 @@ describe('Social image templates', () => {
     expect(layout.visualScene).toBe('カレンダーと投稿メモを並べる手元');
     expect(layout.carouselPages?.every((page) => Boolean(page.visualScene))).toBe(true);
     expect(layout.carouselPages?.[0]?.visualScene).not.toBe(layout.carouselPages?.[1]?.visualScene);
+  });
+
+  it('turns a legacy mission angle into a readable five-page carousel', () => {
+    const slides = buildLegacyMissionCarouselSlides({
+      topic: '評議会で通る「提案の伝え方」ワンポイント（30–45秒リール用）',
+      angle:
+        '冒頭1行で結論→テンプレ提示（要点3つ：①要旨（60秒で伝える核心）②期待効果（短く2点）③必要リソース（担当・期間・使用する要素））→実践例を1つだけ示す（例：地域イベントでNFT特典を使う案の骨子）。',
+    });
+    const layout = buildEditorialCarouselLayout({ slides, accentColor: '#ef6a63' });
+    expect(slides).toHaveLength(5);
+    expect(layout.carouselPages).toHaveLength(4);
+    expect(layout.headline).toBe('評議会で通る「提案の伝え方」');
+    expect(layout.carouselPages?.map((page) => page.headline)).toEqual([
+      '① 要旨',
+      '② 期待効果',
+      '③ 必要リソース',
+      '実践例は1つだけ',
+    ]);
+    expect(layout.carouselPages?.every((page) => !page.headline.includes('…'))).toBe(true);
   });
 });

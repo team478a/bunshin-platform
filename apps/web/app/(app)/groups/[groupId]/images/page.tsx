@@ -2,6 +2,7 @@ import {
   GetPointUserDashboard,
   ListPointRewardCatalog,
   buildEditorialCarouselLayout,
+  buildLegacyMissionCarouselSlides,
   type EditorialCarouselSlideInput,
 } from '@bunshin/application';
 import { notFound, redirect } from 'next/navigation';
@@ -259,7 +260,10 @@ export default async function GroupImagesPage({
               slides:
                 ['SLIDE', 'IMAGE'].includes(mission.format) && slides.length
                   ? slides
-                  : [{ role: 'HOOK', headline: mission.topic, body: mission.angle }],
+                  : buildLegacyMissionCarouselSlides({
+                      topic: mission.topic,
+                      angle: mission.angle,
+                    }),
               accentColor: brand?.primaryColor ?? '#EF6A63',
             }),
             campaignId: mission.campaignId,
