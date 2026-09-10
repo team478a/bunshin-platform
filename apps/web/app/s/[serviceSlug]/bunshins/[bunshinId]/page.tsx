@@ -36,6 +36,7 @@ import { dailyVideoProjectId } from '../../../../../src/services/automatic-daily
 import { localDateInTimezone } from '../../../../../src/activity-progress';
 import { resolveDeliveryScheduleStatus } from '../../../../../src/services/delivery-schedule-status';
 import { currentLineEnvironment } from '../../../../../src/line/secure-configuration';
+import { missionDecisionOrPending } from '../../../../../src/mission-decision-fallback';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,10 +134,12 @@ export default async function ServiceBunshinDetailPage({
     const outcomeRepository = new db.PrismaMissionOutcomeRepository();
     const missionStates = await Promise.all(
       missionRecords.map(async (mission) => ({
-        decision: await new GetMissionDecision(engagementRepository).execute({
-          ...scope,
-          dailyMissionId: mission.id,
-        }),
+        decision: await missionDecisionOrPending(() =>
+          new GetMissionDecision(engagementRepository).execute({
+            ...scope,
+            dailyMissionId: mission.id,
+          }),
+        ),
         post: await outcomeRepository.getPost({ ...scope, dailyMissionId: mission.id }),
         feedback: await outcomeRepository.getFeedback({ ...scope, dailyMissionId: mission.id }),
         copyAuthorization: await new AuthorizeDailyMissionCopy(missionRepository).execute({
