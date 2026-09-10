@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 const ruleLabels: Record<string, string> = {
   MISSION_VIEWED_DAILY: '今日の企画をはじめて見る',
   POSTED_DAILY: '「投稿しました」を押す',
-  THREE_POSTS_WEEKLY: '1週間に3回投稿する',
+  POSTED_WEEKLY_3: '1週間に3回投稿する',
 };
 
 const transactionLabels: Record<PointTransactionType, string> = {

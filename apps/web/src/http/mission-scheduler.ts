@@ -1,6 +1,8 @@
 import 'server-only';
 import {
   EnqueueJob,
+  ProcessCommonBadgeBatch,
+  ProcessPointActivityBatch,
   PrepareBadgeLineNotifications,
   RunMissionAutomationScheduler,
   RunTrendResearchScheduler,
@@ -41,6 +43,25 @@ export interface MissionSchedulerPort {
         truncated: boolean;
       };
       personalityLearning?: PersonalityLearningScheduleSummary;
+      incentives?: {
+        points: {
+          scanned: number;
+          GRANTED: number;
+          ALREADY_PROCESSED: number;
+          NO_ACTIVE_RULE: number;
+          NOT_ELIGIBLE: number;
+          failures: number;
+        };
+        badges: {
+          scanned: number;
+          AWARDED: number;
+          PROGRESSED: number;
+          ALREADY_PROCESSED: number;
+          NO_ACTIVE_BADGE: number;
+          NOT_ELIGIBLE: number;
+          failures: number;
+        };
+      };
     }
   >;
 }
@@ -60,6 +81,12 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
   );
   const badgePreparation = new PrepareBadgeLineNotifications(
     new db.PrismaBadgeLineNotificationPreparationRepository(db.prisma),
+  );
+  const pointActivity = new ProcessPointActivityBatch(
+    new db.PrismaPointActivityProcessorRepository(db.prisma),
+  );
+  const badgeActivity = new ProcessCommonBadgeBatch(
+    new db.PrismaCommonBadgeProcessorRepository(db.prisma),
   );
   const badgeJobs = new ScheduleBadgeLineDeliveryJobs(
     new db.PrismaBadgeLineJobCandidateRepository(db.prisma),
@@ -90,18 +117,57 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           ).execute();
         },
       } as RunPersonalityLearningProposalJob);
-      const [missionResult, trendResult, badgePrepared, personalityResult] = await Promise.all([
-        mission.execute(environment),
-        trend.execute(environment),
-        badgePreparation.execute({ environment }),
-        personalityLearning.execute(),
-      ]);
+      const pointProcessing = pointActivity
+        .execute({ limit: 50, timezone: 'Asia/Tokyo' })
+        .then((result) => ({ ...result, failures: 0 }))
+        .catch(() => {
+          logger.error('point activity processing failed', {
+            route: '/api/internal/jobs/schedule',
+            errorCode: 'POINT_ACTIVITY_PROCESSING_FAILED',
+          });
+          return {
+            scanned: 0,
+            GRANTED: 0,
+            ALREADY_PROCESSED: 0,
+            NO_ACTIVE_RULE: 0,
+            NOT_ELIGIBLE: 0,
+            failures: 1,
+          };
+        });
+      const badgeProcessing = badgeActivity
+        .execute({ limit: 50, timezone: 'Asia/Tokyo' })
+        .then((result) => ({ ...result, failures: 0 }))
+        .catch(() => {
+          logger.error('common badge processing failed', {
+            route: '/api/internal/jobs/schedule',
+            errorCode: 'COMMON_BADGE_PROCESSING_FAILED',
+          });
+          return {
+            scanned: 0,
+            AWARDED: 0,
+            PROGRESSED: 0,
+            ALREADY_PROCESSED: 0,
+            NO_ACTIVE_BADGE: 0,
+            NOT_ELIGIBLE: 0,
+            failures: 1,
+          };
+        });
+      const [missionResult, trendResult, personalityResult, pointResult, badgeResult] =
+        await Promise.all([
+          mission.execute(environment),
+          trend.execute(environment),
+          personalityLearning.execute(),
+          pointProcessing,
+          badgeProcessing,
+        ]);
+      const badgePrepared = await badgePreparation.execute({ environment });
       const badgeJobResult = await badgeJobs.execute(environment);
       return {
         ...missionResult,
         trend: trendResult,
         badgeLine: { ...badgePrepared, ...badgeJobResult },
         personalityLearning: personalityResult,
+        incentives: { points: pointResult, badges: badgeResult },
       };
     },
   };
