@@ -32,30 +32,46 @@ export default async function VideosPage({
       userId: actor.userId,
       status: 'ACTIVE',
       consentedAt: { not: null },
+      group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+    },
+    select: {
+      id: true,
+      featureAssignments: {
+        where: {
+          featureKey: { in: ['VIDEO_GENERATION', 'SOCIAL.IMAGE_GENERATION'] },
+          status: 'ENABLED',
+        },
+        select: { featureKey: true, startsAt: true, endsAt: true },
+      },
       group: {
-        status: 'ACTIVE',
-        workspace: { status: 'ACTIVE' },
-        featurePolicies: {
-          some: {
-            featureKey: 'VIDEO_GENERATION',
-            status: 'ENABLED',
-            OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-            AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        select: {
+          id: true,
+          name: true,
+          workspaceId: true,
+          featurePolicies: {
+            where: {
+              featureKey: { in: ['VIDEO_GENERATION', 'SOCIAL.IMAGE_GENERATION'] },
+              status: 'ENABLED',
+            },
+            select: { featureKey: true, startsAt: true, endsAt: true },
           },
         },
       },
-      featureAssignments: {
-        some: {
-          featureKey: 'VIDEO_GENERATION',
-          status: 'ENABLED',
-          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-        },
-      },
     },
-    select: { id: true, group: { select: { id: true, name: true, workspaceId: true } } },
   });
   if (!membership) notFound();
+  const active = (value: { startsAt: Date | null; endsAt: Date | null }) =>
+    (!value.startsAt || value.startsAt <= now) && (!value.endsAt || value.endsAt > now);
+  const available = (featureKey: 'VIDEO_GENERATION' | 'SOCIAL.IMAGE_GENERATION') =>
+    membership.group.featurePolicies.some(
+      (item) => item.featureKey === featureKey && active(item),
+    ) &&
+    membership.featureAssignments.some(
+      (item) => item.featureKey === featureKey && active(item),
+    );
+  const videoGenerationAvailable = available('VIDEO_GENERATION');
+  const imageGenerationAvailable = available('SOCIAL.IMAGE_GENERATION');
+  if (!videoGenerationAvailable && !imageGenerationAvailable) notFound();
 
   const [bunshins, campaigns, projects, characterVersions, characterReferences] = await Promise.all(
     [
@@ -158,29 +174,41 @@ export default async function VideosPage({
     <main className="app-page">
       <header className="app-page__heading">
         <p className="eyebrow">動画づくり</p>
-        <h1>動画の企画と台本</h1>
-        <p>{membership.group.name}で使う短い動画を、分身と一緒に考えます。</p>
-        <p>ここでは企画と台本を作ります。動画本体は、内容を確認したあとに作ります。</p>
+        <h1>{videoGenerationAvailable ? '動画の企画と台本' : '作成した動画'}</h1>
+        {videoGenerationAvailable ? (
+          <>
+            <p>{membership.group.name}で使う短い動画を、分身と一緒に考えます。</p>
+            <p>
+              ここでは企画と台本を作ります。動画本体は、内容を確認したあとに作ります。
+            </p>
+          </>
+        ) : (
+          <p>投稿画像から作った動画を確認できます。</p>
+        )}
         <a href={serviceBase ? `${serviceBase}/home` : '/groups'}>← 戻る</a>{' '}
-        <a
-          href={
-            serviceBase
-              ? `${serviceBase}/video-assets`
-              : `/groups/${membership.group.id}/video-assets`
-          }
-        >
-          写真・動画・ロゴを管理
-        </a>
+        {videoGenerationAvailable ? (
+          <a
+            href={
+              serviceBase
+                ? `${serviceBase}/video-assets`
+                : `/groups/${membership.group.id}/video-assets`
+            }
+          >
+            写真・動画・ロゴを管理
+          </a>
+        ) : null}
       </header>
-      <VideoProjectCreator
-        workspaceId={membership.group.workspaceId}
-        groupId={membership.group.id}
-        groupMembershipId={membership.id}
-        bunshins={bunshins}
-        campaigns={campaigns}
-        characters={characters}
-        photos={photos}
-      />
+      {videoGenerationAvailable ? (
+        <VideoProjectCreator
+          workspaceId={membership.group.workspaceId}
+          groupId={membership.group.id}
+          groupMembershipId={membership.id}
+          bunshins={bunshins}
+          campaigns={campaigns}
+          characters={characters}
+          photos={photos}
+        />
+      ) : null}
       <section className="settings-card">
         <h2>作成中の動画</h2>
         {projects.length === 0 ? <p>まだありません。</p> : null}
