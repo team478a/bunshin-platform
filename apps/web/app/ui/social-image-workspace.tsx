@@ -89,6 +89,7 @@ export function SocialImageWorkspace({
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referenceConsent, setReferenceConsent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [videoMessage, setVideoMessage] = useState<string | null>(null);
   const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
   const [servicePlanRemaining, setServicePlanRemaining] = useState(servicePlanImageRemaining);
   const [pilotRemaining, setPilotRemaining] = useState(pilotImageRemaining);
@@ -109,6 +110,7 @@ export function SocialImageWorkspace({
     setRequestId(selected?.request?.id ?? null);
     setRequestView(null);
     setMessage(null);
+    setVideoMessage(null);
     setReferenceFile(null);
     setReferenceConsent(false);
   }, [selected]);
@@ -240,7 +242,7 @@ export function SocialImageWorkspace({
   async function createVideo() {
     if (!endpoint || !requestId || busy) return;
     setBusy(true);
-    setMessage('5枚の画像から25秒の動画を作り始めています。');
+    setVideoMessage('5枚の画像から25秒の動画を作り始めています。');
     try {
       const response = await fetch(`${endpoint}/${requestId}/video`, { method: 'POST' });
       const payload = (await response.json().catch(() => null)) as {
@@ -248,7 +250,7 @@ export function SocialImageWorkspace({
         error?: { code?: string };
       } | null;
       if (!response.ok || !payload?.data?.projectId) {
-        setMessage(
+        setVideoMessage(
           payload?.error?.code === 'FORBIDDEN'
             ? '動画作成を利用できません。運営へご確認ください。'
             : '動画を作り始められませんでした。少し待ってから、もう一度お試しください。',
@@ -257,7 +259,7 @@ export function SocialImageWorkspace({
       }
       window.location.assign(`/groups/${groupId}/videos/${payload.data.projectId}`);
     } catch {
-      setMessage('通信できませんでした。もう一度お試しください。');
+      setVideoMessage('通信できませんでした。もう一度お試しください。');
     } finally {
       setBusy(false);
     }
@@ -394,8 +396,13 @@ export function SocialImageWorkspace({
                     disabled={busy || requestView.mediaPages.length !== 5}
                     onClick={() => void createVideo()}
                   >
-                    この5枚を25秒の動画にする
+                    {busy ? '動画を作り始めています…' : 'この5枚を25秒の動画にする'}
                   </button>
+                  {videoMessage ? (
+                    <p className="notice" role="status" aria-live="polite">
+                      {videoMessage}
+                    </p>
+                  ) : null}
                   {requestView.mediaPages.map((media) => (
                     <a
                       className="button"

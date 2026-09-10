@@ -1,5 +1,6 @@
 import { authorizedVideoPhotos } from './video-photos';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
+import { hasActiveVideoProjectEntitlement } from './video-project-entitlement';
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
 import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -15591,30 +15592,19 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         select: { id: true },
       });
       if (!membership) return null;
-      const groupPolicy = await tx.groupFeaturePolicy.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          featureKey: 'VIDEO_GENERATION',
-          status: 'ENABLED',
-          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-        },
-        select: { id: true },
-      });
-      const memberAssignment = await tx.groupMemberFeatureAssignment.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          groupMembershipId: membership.id,
-          featureKey: 'VIDEO_GENERATION',
-          status: 'ENABLED',
-          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-        },
-        select: { id: true },
-      });
-      if (!groupPolicy || !memberAssignment) return null;
+      if (
+        !(await hasActiveVideoProjectEntitlement(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: membership.id,
+            socialImageGenerationRequestId: input.socialImageGenerationRequestId ?? null,
+          },
+          now,
+        ))
+      )
+        return null;
       const bunshin = await tx.bunshin.findFirst({
         where: {
           id: input.bunshinId,
@@ -15767,33 +15757,29 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         workspaceId: input.workspaceId,
         groupId: input.groupId,
         ownerUserId: input.actorUserId,
-        group: {
-          status: 'ACTIVE',
-          featurePolicies: {
-            some: {
-              featureKey: 'VIDEO_GENERATION',
-              status: 'ENABLED',
-              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-            },
-          },
-        },
+        group: { status: 'ACTIVE' },
         groupMembership: {
           userId: input.actorUserId,
           status: 'ACTIVE',
-          featureAssignments: {
-            some: {
-              featureKey: 'VIDEO_GENERATION',
-              status: 'ENABLED',
-              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-            },
-          },
         },
       },
       include: { scenes: { orderBy: { sceneNo: 'asc' } } },
     });
-    return row ? videoProjectRecord(row) : null;
+    if (!row) return null;
+    if (
+      !(await hasActiveVideoProjectEntitlement(
+        this.client,
+        {
+          workspaceId: row.workspaceId,
+          groupId: row.groupId,
+          groupMembershipId: row.groupMembershipId,
+          socialImageGenerationRequestId: row.socialImageGenerationRequestId,
+        },
+        now,
+      ))
+    )
+      return null;
+    return videoProjectRecord(row);
   }
 
   async replacePlan(input: Parameters<VideoProjectRepository['replacePlan']>[0]) {
@@ -15807,28 +15793,10 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           ownerUserId: input.actorUserId,
           revision: input.expectedRevision,
           status: { in: ['DRAFT', 'PLANNING', 'WAITING_APPROVAL'] },
-          group: {
-            status: 'ACTIVE',
-            featurePolicies: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
-          },
+          group: { status: 'ACTIVE' },
           groupMembership: {
             userId: input.actorUserId,
             status: 'ACTIVE',
-            featureAssignments: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
           },
         },
         select: {
@@ -15841,6 +15809,19 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
         },
       });
       if (!project) return null;
+      if (
+        !(await hasActiveVideoProjectEntitlement(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: project.groupMembershipId,
+            socialImageGenerationRequestId: project.socialImageGenerationRequestId,
+          },
+          now,
+        ))
+      )
+        return null;
       const socialImages = project.socialImageGenerationRequestId
         ? await authorizedSocialImageVideoSources(
             tx,
@@ -15908,7 +15889,7 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
   async approvePlan(input: Parameters<VideoProjectRepository['approvePlan']>[0]) {
     return this.client.$transaction(async (tx) => {
       const now = new Date();
-      const changed = await tx.videoProject.updateMany({
+      const project = await tx.videoProject.findFirst({
         where: {
           id: input.videoProjectId,
           workspaceId: input.workspaceId,
@@ -15917,30 +15898,38 @@ export class PrismaVideoProjectRepository implements VideoProjectRepository {
           revision: input.expectedRevision,
           status: 'WAITING_APPROVAL',
           scenes: { some: {} },
-          group: {
-            status: 'ACTIVE',
-            featurePolicies: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
-          },
+          group: { status: 'ACTIVE' },
           groupMembership: {
             userId: input.actorUserId,
             status: 'ACTIVE',
             consentedAt: { not: null },
-            featureAssignments: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
           },
+        },
+        select: { id: true, groupMembershipId: true, socialImageGenerationRequestId: true },
+      });
+      if (
+        !project ||
+        !(await hasActiveVideoProjectEntitlement(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: project.groupMembershipId,
+            socialImageGenerationRequestId: project.socialImageGenerationRequestId,
+          },
+          now,
+        ))
+      )
+        return null;
+      const changed = await tx.videoProject.updateMany({
+        where: {
+          id: project.id,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          ownerUserId: input.actorUserId,
+          revision: input.expectedRevision,
+          status: 'WAITING_APPROVAL',
+          scenes: { some: {} },
         },
         data: { status: 'APPROVED', revision: { increment: 1 } },
       });
@@ -16272,34 +16261,29 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
           ownerUserId: input.actorUserId,
           revision: input.expectedRevision,
           status: { in: ['APPROVED', 'QUEUED'] },
-          group: {
-            status: 'ACTIVE',
-            featurePolicies: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
-          },
+          group: { status: 'ACTIVE' },
           groupMembership: {
             userId: input.actorUserId,
             status: 'ACTIVE',
             consentedAt: { not: null },
-            featureAssignments: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
           },
         },
         include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       if (!project) return null;
+      if (
+        !(await hasActiveVideoProjectEntitlement(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: project.groupMembershipId,
+            socialImageGenerationRequestId: null,
+          },
+          now,
+        ))
+      )
+        return null;
       const scenes = project.scenes.filter(
         (scene) =>
           scene.visualType === 'AI_VIDEO' ||
@@ -16513,34 +16497,29 @@ export class PrismaVideoRenderRepository implements VideoRenderRepository {
           ownerUserId: input.actorUserId,
           revision: input.expectedRevision,
           status: { in: ['APPROVED', 'QUEUED'] },
-          group: {
-            status: 'ACTIVE',
-            featurePolicies: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
-          },
+          group: { status: 'ACTIVE' },
           groupMembership: {
             userId: input.actorUserId,
             status: 'ACTIVE',
             consentedAt: { not: null },
-            featureAssignments: {
-              some: {
-                featureKey: 'VIDEO_GENERATION',
-                status: 'ENABLED',
-                OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-                AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-              },
-            },
           },
         },
         include: { scenes: { orderBy: { sceneNo: 'asc' } } },
       });
       if (!project) return null;
+      if (
+        !(await hasActiveVideoProjectEntitlement(
+          tx,
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: project.groupMembershipId,
+            socialImageGenerationRequestId: project.socialImageGenerationRequestId,
+          },
+          now,
+        ))
+      )
+        return null;
       await authorizedVideoPhotos(tx, project, project.photoAssetIds ?? [], now);
       if (project.socialImageGenerationRequestId)
         await authorizedSocialImageVideoSources(
