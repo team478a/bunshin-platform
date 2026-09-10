@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import type { SocialImageLayout } from '@bunshin/application';
+import { resolveSocialImagePayment } from '../../src/social-image-payment';
 
 type Mission = {
   id: string;
@@ -54,6 +55,7 @@ export function SocialImageWorkspace({
   workspaceId,
   groupId,
   groupMembershipId,
+  servicePlanImageRemaining,
   imageCreditAvailable,
   pointCost,
   initialAvailablePoints,
@@ -63,6 +65,7 @@ export function SocialImageWorkspace({
   workspaceId: string;
   groupId: string;
   groupMembershipId: string;
+  servicePlanImageRemaining: number | null;
   imageCreditAvailable: number | null;
   pointCost: number | null;
   initialAvailablePoints: number;
@@ -85,8 +88,14 @@ export function SocialImageWorkspace({
   const [referenceConsent, setReferenceConsent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
+  const [servicePlanRemaining, setServicePlanRemaining] = useState(servicePlanImageRemaining);
   const [availableCredits, setAvailableCredits] = useState(imageCreditAvailable);
-  const usesImageCredits = availableCredits !== null;
+  const payment = resolveSocialImagePayment({
+    servicePlanRemaining,
+    imageCreditAvailable: availableCredits,
+    pointCost,
+    availablePoints,
+  });
 
   const endpoint = selected
     ? `/api/workspaces/${workspaceId}/groups/${groupId}/bunshins/${selected.bunshinId}/daily-missions/${selected.id}/images`
@@ -164,7 +173,10 @@ export function SocialImageWorkspace({
         error?: { code?: string };
       } | null;
       if (response.ok && payload?.data?.id) {
-        if (usesImageCredits) setAvailableCredits((value) => Math.max(0, (value ?? 0) - 1));
+        if (payment.mode === 'SERVICE_PLAN')
+          setServicePlanRemaining((value) => Math.max(0, (value ?? 0) - 1));
+        else if (payment.mode === 'SERVICE_CREDIT')
+          setAvailableCredits((value) => Math.max(0, (value ?? 0) - 1));
         else if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
         setRequestId(payload.data.id);
         setRequestView(null);
@@ -172,9 +184,11 @@ export function SocialImageWorkspace({
       } else {
         setMessage(
           payload?.error?.code === 'FORBIDDEN'
-            ? usesImageCredits
-              ? '画像作成回数が足りないか、この機能を利用できません。画像作成回数の画面をご確認ください。'
-              : 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
+            ? payment.mode === 'SERVICE_PLAN'
+              ? '試験運用の画像作成枠が残っていないか、この機能を利用できません。運営へご確認ください。'
+              : payment.mode === 'SERVICE_CREDIT'
+                ? '画像作成回数が足りないか、この機能を利用できません。画像作成回数の画面をご確認ください。'
+                : 'ポイントが足りないか、この機能を利用できません。ポイント画面をご確認ください。'
             : payload?.error?.code === 'VALIDATION_ERROR'
               ? '写真の形式・サイズや入力内容を確認してください。写真は3MB以下のJPEG・PNG・WebPに対応しています。'
               : '画像づくりを始められませんでした。少し待ってから、もう一度お試しください。',
@@ -230,9 +244,7 @@ export function SocialImageWorkspace({
     requestView?.status === 'READY_FOR_REVIEW' &&
     requestView.media &&
     requestView.mediaPages.length > 0;
-  const canCreate = usesImageCredits
-    ? (availableCredits ?? 0) >= 1
-    : pointCost !== null && availablePoints >= pointCost;
+  const canCreate = payment.canCreate;
   return (
     <div className="social-image-workspace">
       <section className="settings-card">
@@ -291,12 +303,15 @@ export function SocialImageWorkspace({
 
       <section className="settings-card social-image-review" aria-live="polite">
         <h2>{ready ? 'できあがった画像を確認' : '青いボタンを押してください'}</h2>
-        {usesImageCredits ? (
-          <p>画像作成回数を1回使います。残り{availableCredits}回です。</p>
+        {payment.mode === 'SERVICE_PLAN' ? (
+          <p>試験運用の画像作成枠を1回使います。残り{payment.remaining}回です。</p>
+        ) : payment.mode === 'SERVICE_CREDIT' ? (
+          <p>画像作成回数を1回使います。残り{payment.remaining}回です。</p>
         ) : (
           <p>
-            この画像の作成：{pointCost === null ? '現在利用できません' : `${pointCost}ポイント`} ／
-            残り：{availablePoints}ポイント
+            この画像の作成：
+            {payment.pointCost === null ? '現在利用できません' : `${payment.pointCost}ポイント`} ／
+            残り：{payment.availablePoints}ポイント
           </p>
         )}
         {message ? <p className="notice">{message}</p> : null}
@@ -386,12 +401,17 @@ export function SocialImageWorkspace({
           </button>
         ) : null}
         <p className="form-help">画像を作る操作は、この画面で本人が押したときだけ始まります。</p>
-        {usesImageCredits && (availableCredits ?? 0) < 1 ? (
+        {payment.mode === 'SERVICE_PLAN' && !payment.canCreate ? (
+          <p className="form-help">試験運用の画像作成枠を使い切りました。運営へご確認ください。</p>
+        ) : null}
+        {payment.mode === 'SERVICE_CREDIT' && !payment.canCreate ? (
           <p className="form-help">
             画像作成回数が足りません。紹介特典や運営からの付与をお待ちください。
           </p>
         ) : null}
-        {!usesImageCredits && pointCost !== null && availablePoints < pointCost ? (
+        {payment.mode === 'POINTS' &&
+        payment.pointCost !== null &&
+        payment.availablePoints < payment.pointCost ? (
           <p className="form-help">
             ポイントが足りません。今日の企画確認や投稿完了でためられます。
           </p>
