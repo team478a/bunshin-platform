@@ -192,10 +192,13 @@ describe('social image HTTP', () => {
       ids.requestId,
     );
     const payload = (await response.json()) as {
-      data: { mediaPages: Array<{ pageIndex: number; downloadPath: string }> };
+      data: {
+        mediaPages: Array<{ pageIndex: number; downloadPath: string; savePath: string }>;
+      };
     };
     expect(payload.data.mediaPages.map((page) => page.pageIndex)).toEqual([0, 1, 2]);
     expect(payload.data.mediaPages[1]?.downloadPath).toContain('mediaId=');
+    expect(payload.data.mediaPages[1]?.savePath).toContain('download=1');
   });
 
   it('creates, queues and returns only safe request fields', async () => {

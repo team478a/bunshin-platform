@@ -14,9 +14,18 @@ describe('automatic daily image eligibility', () => {
       role: ['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'][index],
       headline: `見出し${index + 1}`,
       body: `本文${index + 1}`,
+      visualScene: `場面${index + 1}`,
     }));
 
-    expect(editorialSlidesForMission({ format: 'IMAGE', content: { slides } })).toHaveLength(5);
+    const result = editorialSlidesForMission({ format: 'IMAGE', content: { slides } });
+    expect(result).toHaveLength(5);
+    expect(result.map((slide) => slide.visualScene)).toEqual([
+      '場面1',
+      '場面2',
+      '場面3',
+      '場面4',
+      '場面5',
+    ]);
   });
 
   it('allows only opted-in, ready-to-use image Missions in production', () => {

@@ -202,9 +202,12 @@ export class SupabaseSocialImageStorage implements SocialImageStoragePort {
 
   async createReadUrl(input: Parameters<SocialImageStoragePort['createReadUrl']>[0]) {
     const storageKey = key(input, input.kind, input.sourceMimeType);
-    const signed = await this.storage.storage
-      .from(BUCKET)
-      .createSignedUrl(storageKey, READ_SECONDS);
+    const bucket = this.storage.storage.from(BUCKET);
+    const signed = input.downloadFilename
+      ? await bucket.createSignedUrl(storageKey, READ_SECONDS, {
+          download: input.downloadFilename,
+        })
+      : await bucket.createSignedUrl(storageKey, READ_SECONDS);
     if (signed.error)
       throw new ApplicationError('INTERNAL_ERROR', '画像を開く準備ができませんでした');
     return { url: signed.data.signedUrl, expiresAt: new Date(Date.now() + READ_SECONDS * 1000) };

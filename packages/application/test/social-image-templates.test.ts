@@ -81,7 +81,12 @@ describe('Social image templates', () => {
     const layout = buildEditorialCarouselLayout({
       accentColor: '#ef6a63',
       slides: [
-        { role: 'HOOK', headline: '投稿を続ける仕組み', body: '毎回ゼロから考えない' },
+        {
+          role: 'HOOK',
+          headline: '投稿を続ける仕組み',
+          body: '毎回ゼロから考えない',
+          visualScene: 'カレンダーと投稿メモを並べる手元',
+        },
         { role: 'INSIGHT', headline: 'テーマを先に決める', body: '迷う時間を減らせます。' },
         { role: 'CTA', headline: '今日から小さく始める', body: '一つだけ選んで試しましょう。' },
       ],
@@ -93,5 +98,8 @@ describe('Social image templates', () => {
       'EDITORIAL_SUMMARY',
     ]);
     expect(layout.accentColor).toBe('#EF6A63');
+    expect(layout.visualScene).toBe('カレンダーと投稿メモを並べる手元');
+    expect(layout.carouselPages?.every((page) => Boolean(page.visualScene))).toBe(true);
+    expect(layout.carouselPages?.[0]?.visualScene).not.toBe(layout.carouselPages?.[1]?.visualScene);
   });
 });

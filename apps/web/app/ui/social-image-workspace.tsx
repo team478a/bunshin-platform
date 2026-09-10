@@ -27,6 +27,7 @@ type RequestView = {
     width: number;
     height: number;
     downloadPath: string;
+    savePath: string;
   } | null;
   mediaPages: Array<{
     id: string;
@@ -35,6 +36,7 @@ type RequestView = {
     width: number;
     height: number;
     downloadPath: string;
+    savePath: string;
   }>;
 };
 
@@ -329,7 +331,12 @@ export function SocialImageWorkspace({
             {requestView.media!.status === 'ADOPTED' ? (
               <div className="social-image-actions">
                 {requestView.mediaPages.map((media) => (
-                  <a className="button" href={media.downloadPath} key={media.id}>
+                  <a
+                    className="button"
+                    href={media.savePath}
+                    download={`watashi-works-post-${media.pageIndex + 1}.png`}
+                    key={media.id}
+                  >
                     {media.pageIndex + 1}枚目を保存
                   </a>
                 ))}
