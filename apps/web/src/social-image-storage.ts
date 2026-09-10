@@ -155,6 +155,21 @@ export class SupabaseSocialImageStorage implements SocialImageStoragePort {
     return signed.data.signedUrl;
   }
 
+  async readStoredPng(storageKey: string) {
+    if (
+      !/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/(source|completed)\.png$/i.test(
+        storageKey,
+      )
+    )
+      throw new ApplicationError('FORBIDDEN', 'social image storage scope mismatch');
+    const result = await this.storage.storage.from(BUCKET).download(storageKey);
+    if (result.error || !result.data || result.data.size > MAX_SOURCE_BYTES)
+      throw new ApplicationError('INTERNAL_ERROR', '画像を読み込めませんでした');
+    const bytes = new Uint8Array(await result.data.arrayBuffer());
+    await assertBytes(bytes, MAX_SOURCE_BYTES, 'image/png');
+    return bytes;
+  }
+
   private async ensureBucket() {
     const found = await this.storage.storage.getBucket(BUCKET);
     if (found.data) return;

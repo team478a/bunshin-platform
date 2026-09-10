@@ -67,6 +67,11 @@ describe('service daily mission boundary', () => {
     expect(imageWorkspace).toContain('開いた画像を長押しする');
     expect(imageWorkspace).toContain('枚目を開いて保存');
     expect(imageWorkspace).toContain('href={media.downloadPath}');
+    expect(imageWorkspace).toContain('この1枚を直す');
+    expect(imageWorkspace).toContain("['TEXT', '文章だけ']");
+    expect(imageWorkspace).toContain("['PHOTO', '写真だけ']");
+    expect(imageWorkspace).toContain("['BOTH', '文章と写真']");
+    expect(imageWorkspace).toContain('他の4枚は変えていません');
     expect(imageWorkspace).not.toContain('download={`watashi-works-post-');
   });
 

@@ -375,8 +375,8 @@ export async function getSocialImageResponse(
                 status: mediaPages[0].status,
                 width: mediaPages[0].width,
                 height: mediaPages[0].height,
-                downloadPath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}`,
-                savePath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}&download=1`,
+                downloadPath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}&v=${value.revision}`,
+                savePath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}&download=1&v=${value.revision}`,
               }
             : null,
           mediaPages: mediaPages.map((media) => ({
@@ -385,8 +385,8 @@ export async function getSocialImageResponse(
             status: media.status,
             width: media.width,
             height: media.height,
-            downloadPath: `${new URL(request.url).pathname}/download?mediaId=${media.id}`,
-            savePath: `${new URL(request.url).pathname}/download?mediaId=${media.id}&download=1`,
+            downloadPath: `${new URL(request.url).pathname}/download?mediaId=${media.id}&v=${value.revision}`,
+            savePath: `${new URL(request.url).pathname}/download?mediaId=${media.id}&download=1&v=${value.revision}`,
           })),
         },
         requestId,

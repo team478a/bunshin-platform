@@ -157,6 +157,23 @@ export interface SocialImageGenerationRequestRepository {
     mediaId: string;
     status: 'ADOPTED' | 'REJECTED';
   }): Promise<SocialImageGeneratedMediaRecord | null>;
+  replaceMediaPage(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    requestId: string;
+    expectedRevision: number;
+    currentMediaId: string;
+    pageIndex: number;
+    layout: SocialImageLayout;
+    replacement: {
+      mediaId: string;
+      sourceStorageKey: string | null;
+      completedStorageKey: string;
+      thumbnailStorageKey: string;
+      contentHash: string;
+    };
+  }): Promise<SocialImageGeneratedMediaRecord | null>;
 }
 
 export interface SocialImageAssetGenerationProviderPort {
@@ -373,6 +390,47 @@ export class DecideSocialImageMedia {
       status: input.decision,
     });
     if (!value) throw new ApplicationError('CONFLICT', 'social image decision failed');
+    return value;
+  }
+}
+
+export class ReplaceSocialImageMediaPage {
+  constructor(private readonly requests: SocialImageGenerationRequestRepository) {}
+
+  async execute(input: Parameters<SocialImageGenerationRequestRepository['replaceMediaPage']>[0]) {
+    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
+    if (!Number.isInteger(input.pageIndex) || input.pageIndex < 0 || input.pageIndex > 4)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid pageIndex');
+    const requestId = uuid(input.requestId, 'requestId');
+    const currentMediaId = uuid(input.currentMediaId, 'currentMediaId');
+    const replacementMediaId = uuid(input.replacement.mediaId, 'replacementMediaId');
+    const request = await this.requests.findOwned({
+      workspaceId: uuid(input.workspaceId, 'workspaceId'),
+      groupId: uuid(input.groupId, 'groupId'),
+      actorUserId: uuid(input.actorUserId, 'actorUserId'),
+      requestId,
+    });
+    if (
+      !request ||
+      request.status !== 'READY_FOR_REVIEW' ||
+      request.revision !== input.expectedRevision
+    )
+      throw new ApplicationError('CONFLICT', 'social image revision is unavailable');
+    const pages = [input.layout, ...(input.layout.carouselPages ?? [])];
+    if (pages.length !== 5 || !pages[input.pageIndex])
+      throw new ApplicationError('VALIDATION_ERROR', 'five image pages are required');
+    const value = await this.requests.replaceMediaPage({
+      ...input,
+      workspaceId: request.workspaceId,
+      groupId: request.groupId,
+      actorUserId: request.ownerUserId,
+      requestId,
+      currentMediaId,
+      layout: normalizeSocialImageLayout(input.layout),
+      replacement: { ...input.replacement, mediaId: replacementMediaId },
+    });
+    if (!value) throw new ApplicationError('CONFLICT', 'social image page revision failed');
     return value;
   }
 }

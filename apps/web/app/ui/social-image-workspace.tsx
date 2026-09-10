@@ -21,6 +21,8 @@ type Mission = {
 type RequestView = {
   id: string;
   status: string;
+  layout: SocialImageLayout;
+  revision: number;
   errorCode: string | null;
   media: {
     id: string;
@@ -90,6 +92,11 @@ export function SocialImageWorkspace({
   const [referenceConsent, setReferenceConsent] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [videoMessage, setVideoMessage] = useState<string | null>(null);
+  const [editingPage, setEditingPage] = useState<number | null>(null);
+  const [revisionMode, setRevisionMode] = useState<'TEXT' | 'PHOTO' | 'BOTH'>('TEXT');
+  const [revisionHeadline, setRevisionHeadline] = useState('');
+  const [revisionBody, setRevisionBody] = useState('');
+  const [photoInstruction, setPhotoInstruction] = useState('');
   const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
   const [servicePlanRemaining, setServicePlanRemaining] = useState(servicePlanImageRemaining);
   const [pilotRemaining, setPilotRemaining] = useState(pilotImageRemaining);
@@ -113,6 +120,7 @@ export function SocialImageWorkspace({
     setVideoMessage(null);
     setReferenceFile(null);
     setReferenceConsent(false);
+    setEditingPage(null);
   }, [selected]);
 
   useEffect(() => {
@@ -134,6 +142,67 @@ export function SocialImageWorkspace({
       if (timer) clearTimeout(timer);
     };
   }, [endpoint, requestId]);
+
+  async function refreshRequest() {
+    if (!endpoint || !requestId) return null;
+    const response = await fetch(`${endpoint}/${requestId}`, { cache: 'no-store' });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { data: RequestView };
+    setRequestView(payload.data);
+    return payload.data;
+  }
+
+  function openRevision(pageIndex: number) {
+    if (!requestView) return;
+    const { carouselPages, ...cover } = requestView.layout;
+    const page = [cover, ...(carouselPages ?? [])][pageIndex];
+    if (!page) return;
+    setEditingPage(pageIndex);
+    setRevisionMode('TEXT');
+    setRevisionHeadline(page.headline);
+    setRevisionBody(page.bodyLines.join(''));
+    setPhotoInstruction('');
+    setMessage(`${pageIndex + 1}枚目の直したい内容を選んでください。`);
+  }
+
+  async function revisePage() {
+    if (editingPage === null || !endpoint || !requestId || !requestView || busy) return;
+    const media = requestView.mediaPages.find((item) => item.pageIndex === editingPage);
+    if (!media) return;
+    setBusy(true);
+    setMessage(revisionMode === 'TEXT' ? '文章を直しています…' : '写真を作り直しています…');
+    try {
+      const response = await fetch(`${endpoint}/${requestId}/pages/${editingPage}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: revisionMode,
+          expectedRevision: requestView.revision,
+          currentMediaId: media.id,
+          ...(revisionMode !== 'PHOTO' ? { headline: revisionHeadline, body: revisionBody } : {}),
+          ...(revisionMode !== 'TEXT' ? { photoInstruction } : {}),
+        }),
+      });
+      if (!response.ok) {
+        setMessage(
+          response.status === 403
+            ? 'この投稿で修正できる3回を使い切りました。必要なら「別の画像を作る」を押してください。'
+            : response.status === 409
+              ? '画像が更新されました。画面を読み直して、もう一度お試しください。'
+              : '修正できませんでした。入力内容を確認して、もう一度お試しください。',
+        );
+        await refreshRequest();
+        return;
+      }
+      await refreshRequest();
+      setEditingPage(null);
+      setMessage(`${editingPage + 1}枚目を直しました。他の4枚は変えていません。`);
+    } catch {
+      setMessage('通信できませんでした。もう一度お試しください。');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function create() {
     if (!selected || !endpoint || busy) return;
@@ -374,9 +443,111 @@ export function SocialImageWorkspace({
                     unoptimized
                   />
                   <figcaption>{media.pageIndex + 1}枚目</figcaption>
+                  {requestView.media!.status !== 'ADOPTED' ? (
+                    <button
+                      className="button button--secondary social-image-revise-button"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => openRevision(media.pageIndex)}
+                    >
+                      この1枚を直す
+                    </button>
+                  ) : null}
                 </figure>
               ))}
             </div>
+            {requestView.media!.status !== 'ADOPTED' && editingPage !== null ? (
+              <section className="social-image-revision" aria-labelledby="revision-title">
+                <h3 id="revision-title">{editingPage + 1}枚目を直す</h3>
+                <p>直したいものを1つ選んでください。</p>
+                <p className="form-help">
+                  この投稿はあと{Math.max(0, 8 - requestView.revision)}回修正できます。
+                </p>
+                <div className="social-image-revision__choices">
+                  {(
+                    [
+                      ['TEXT', '文章だけ'],
+                      ['PHOTO', '写真だけ'],
+                      ['BOTH', '文章と写真'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label key={value}>
+                      <input
+                        type="radio"
+                        name="revision-mode"
+                        value={value}
+                        checked={revisionMode === value}
+                        disabled={busy}
+                        onChange={() => setRevisionMode(value)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                {revisionMode !== 'PHOTO' ? (
+                  <>
+                    <label htmlFor="revision-headline">大きく見せる言葉</label>
+                    <input
+                      id="revision-headline"
+                      type="text"
+                      value={revisionHeadline}
+                      maxLength={20}
+                      disabled={busy}
+                      onChange={(event) => setRevisionHeadline(event.target.value)}
+                    />
+                    <label htmlFor="revision-body">その下の説明</label>
+                    <textarea
+                      id="revision-body"
+                      value={revisionBody}
+                      maxLength={editingPage === 0 ? 24 : 72}
+                      rows={4}
+                      disabled={busy}
+                      onChange={(event) => setRevisionBody(event.target.value)}
+                    />
+                  </>
+                ) : null}
+                {revisionMode !== 'TEXT' ? (
+                  <>
+                    <label htmlFor="revision-photo">写真をどう変えたいですか？</label>
+                    <textarea
+                      id="revision-photo"
+                      value={photoInstruction}
+                      maxLength={200}
+                      rows={4}
+                      disabled={busy}
+                      placeholder="例：女性が窓辺で深呼吸している写真にする"
+                      onChange={(event) => setPhotoInstruction(event.target.value)}
+                    />
+                    <p className="form-help">
+                      同じ人物と色合いを参考にして、この1枚だけ作り直します。
+                    </p>
+                  </>
+                ) : null}
+                <div className="social-image-actions">
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={
+                      busy ||
+                      (revisionMode !== 'PHOTO' &&
+                        (!revisionHeadline.trim() || revisionBody.trim().length < 3)) ||
+                      (revisionMode !== 'TEXT' && photoInstruction.trim().length < 3)
+                    }
+                    onClick={() => void revisePage()}
+                  >
+                    {busy ? '直しています…' : `${editingPage + 1}枚目を直す`}
+                  </button>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setEditingPage(null)}
+                  >
+                    やめる
+                  </button>
+                </div>
+              </section>
+            ) : null}
             {requestView.media!.status === 'ADOPTED' ? (
               <>
                 <div className="social-image-save-guide">
