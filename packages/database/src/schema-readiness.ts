@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260910130000_add_carousel_video_source';
+export const LATEST_DATABASE_MIGRATION = '20260911003500_allow_25_second_video';
