@@ -350,18 +350,31 @@ export function SocialImageWorkspace({
               ))}
             </div>
             {requestView.media!.status === 'ADOPTED' ? (
-              <div className="social-image-actions">
-                {requestView.mediaPages.map((media) => (
-                  <a
-                    className="button"
-                    href={media.savePath}
-                    download={`watashi-works-post-${media.pageIndex + 1}.png`}
-                    key={media.id}
-                  >
-                    {media.pageIndex + 1}枚目を保存
-                  </a>
-                ))}
-              </div>
+              <>
+                <div className="social-image-save-guide">
+                  <p>
+                    <strong>iPhoneで保存する方法</strong>
+                  </p>
+                  <ol>
+                    <li>下のボタンを押して画像を開く</li>
+                    <li>開いた画像を長押しする</li>
+                    <li>「写真に保存」を押す</li>
+                  </ol>
+                </div>
+                <div className="social-image-actions">
+                  {requestView.mediaPages.map((media) => (
+                    <a
+                      className="button"
+                      href={media.downloadPath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      key={media.id}
+                    >
+                      {media.pageIndex + 1}枚目を開いて保存
+                    </a>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="social-image-actions">
                 <button
