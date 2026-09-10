@@ -2,9 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { isAutomaticDailyImageEligible } from '../src/services/automatic-daily-image';
+import {
+  editorialSlidesForMission,
+  isAutomaticDailyImageEligible,
+} from '../src/services/automatic-daily-image';
 
 describe('automatic daily image eligibility', () => {
+  it('uses all five prepared pages for image-plan generation', () => {
+    const slides = Array.from({ length: 5 }, (_, index) => ({
+      index: index + 1,
+      role: ['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'][index],
+      headline: `見出し${index + 1}`,
+      body: `本文${index + 1}`,
+    }));
+
+    expect(editorialSlidesForMission({ format: 'IMAGE', content: { slides } })).toHaveLength(5);
+  });
+
   it('allows only opted-in, ready-to-use image Missions in production', () => {
     expect(
       isAutomaticDailyImageEligible({

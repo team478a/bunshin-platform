@@ -2269,11 +2269,34 @@ export function normalizeMissionContent(
       'estimatedMinutes',
       'imageInstruction',
       'overlayText',
+      'slides',
       'caption',
       'hashtags',
     ],
     'image content',
   );
+  const expectedRoles = ['HOOK', 'PROBLEM', 'INSIGHT', 'SOLUTION', 'CTA'] as const;
+  const imageSlides =
+    v['slides'] === undefined
+      ? null
+      : (() => {
+          if (!Array.isArray(v['slides']) || v['slides'].length !== 5)
+            throw new ApplicationError('VALIDATION_ERROR', 'image content requires five slides');
+          return v['slides'].map((entry, index) => {
+            const slide = strict(entry, ['index', 'role', 'headline', 'body'], 'image slide');
+            if (slide['index'] !== index + 1 || slide['role'] !== expectedRoles[index])
+              throw new ApplicationError(
+                'VALIDATION_ERROR',
+                'image slides require sequential roles',
+              );
+            return {
+              index: index + 1,
+              role: expectedRoles[index],
+              headline: missionString(slide['headline'], 200, 'headline'),
+              body: missionString(slide['body'], 2000, 'body'),
+            };
+          });
+        })();
   return {
     topic: missionString(v['topic'], 200, 'topic'),
     angle: missionString(v['angle'], 500, 'angle'),
@@ -2282,6 +2305,7 @@ export function normalizeMissionContent(
     imageInstruction: missionString(v['imageInstruction'], 5000, 'image instruction'),
     overlayText:
       v['overlayText'] === null ? null : missionString(v['overlayText'], 500, 'overlay text'),
+    ...(imageSlides ? { slides: imageSlides } : {}),
     caption: missionString(v['caption'], 2200, 'caption'),
     hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
   };
