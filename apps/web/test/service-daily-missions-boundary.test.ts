@@ -63,6 +63,11 @@ describe('service daily mission boundary', () => {
     expect(imageWorkspace).toContain('青いボタンを押してください');
     expect(imageWorkspace).toContain('<summary>別の投稿案を選ぶ</summary>');
     expect(imageWorkspace).toContain('<summary>商品や本人の写真を使いたい方</summary>');
+    expect(imageWorkspace).toContain('iPhoneで保存する方法');
+    expect(imageWorkspace).toContain('開いた画像を長押しする');
+    expect(imageWorkspace).toContain('枚目を開いて保存');
+    expect(imageWorkspace).toContain('href={media.downloadPath}');
+    expect(imageWorkspace).not.toContain('download={`watashi-works-post-');
   });
 
   it('guides free users through copying the prompt and caption themselves', () => {
