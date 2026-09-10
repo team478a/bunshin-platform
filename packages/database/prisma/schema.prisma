@@ -4289,6 +4289,7 @@ model SocialImageGenerationRequest {
   idempotencyKey              String                             @map("idempotency_key") @db.VarChar(200)
   revision                    Int                                @default(1)
   errorCode                   String?                            @map("error_code") @db.VarChar(80)
+  qualityReport               Json?                              @map("quality_report")
   createdAt                   DateTime                           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(6)
   pilotEnrollment             SocialImagePilotEnrollment         @relation(fields: [workspaceId, groupId, pilotEnrollmentId, groupMembershipId], references: [workspaceId, groupId, id, groupMembershipId], onDelete: Restrict)

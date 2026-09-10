@@ -64,6 +64,7 @@ export interface SocialImageGenerationRequestRecord {
   idempotencyKey: string;
   revision: number;
   errorCode: string | null;
+  qualityReport: unknown | null;
   createdAt: Date;
   updatedAt: Date;
 }

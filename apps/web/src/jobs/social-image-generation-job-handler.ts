@@ -9,6 +9,7 @@ import {
   SocialImageGenerationJobHandlerError,
   getSocialImageTemplateDefinition,
   type SocialImageGenerationJobHandler,
+  type SocialImageQualityReportRecord,
 } from '@bunshin/application';
 import { randomUUID } from 'node:crypto';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
@@ -17,6 +18,11 @@ import {
   OpenAiSocialImageGenerationAdapter,
   OpenAiSocialImageProviderError,
 } from '../providers/openai-social-image-generation';
+import {
+  OpenAiSocialImageQualityReviewer,
+  OpenAiSocialImageQualityReviewError,
+  type SocialImageQualityReview,
+} from '../providers/openai-social-image-quality-review';
 import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../social-image-renderer';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { reserveServiceMediaGeneration } from '../service-media-generation-quota';
@@ -78,6 +84,11 @@ export const socialImagePagePrompt = (
   ]
     .filter(Boolean)
     .join(' ');
+};
+
+export const socialImagePagesToRetry = (review: SocialImageQualityReview, maximum = 2) => {
+  const pages = review.pages.filter((page) => page.verdict === 'REVISE');
+  return pages.length <= maximum ? pages : null;
 };
 
 const tokyoLocalDate = (value: Date) =>
@@ -179,6 +190,10 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         throw new SocialImageGenerationJobHandlerError(`SOCIAL_IMAGE_${access.reason}`, false);
       const runtime = await resolveOpenAiRuntimeConfiguration();
       const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
+      const qualityReviewer = new OpenAiSocialImageQualityReviewer({
+        apiKey: runtime.apiKey,
+        model: runtime.model,
+      });
       const usageKey = `social-image:${context.requestId}:attempt:${input.attemptCount}`;
       try {
         const referenceImage = context.referenceImage
@@ -193,18 +208,27 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           layout: (typeof layouts)[number],
           pageIndex: number,
           pageReference: Uint8Array | undefined,
+          repairInstruction?: string,
         ) => {
-          const pageUsageKey = `${usageKey}:page:${pageIndex + 1}`;
+          const isQualityRetry = Boolean(repairInstruction);
+          const pageUsageKey = `${usageKey}:page:${pageIndex + 1}${isQualityRetry ? ':quality-retry' : ''}`;
           try {
             const generated = await provider.generate({
-              requestId: `${context.requestId}:page:${pageIndex + 1}`,
-              prompt: socialImagePagePrompt(
-                layout,
-                Boolean(pageReference),
-                pageIndex,
-                layouts.length,
-                layouts,
-              ),
+              requestId: `${context.requestId}:page:${pageIndex + 1}${isQualityRetry ? ':quality-retry' : ''}`,
+              prompt: [
+                socialImagePagePrompt(
+                  layout,
+                  Boolean(pageReference),
+                  pageIndex,
+                  layouts.length,
+                  layouts,
+                ),
+                repairInstruction
+                  ? `The previous image failed quality review. Correct only these defects in the new image: ${repairInstruction}`
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' '),
               ...(pageReference ? { referenceImage: pageReference } : {}),
               width: 1080,
               height: 1350,
@@ -219,8 +243,12 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
               provider: generated.provider,
               model: generated.model,
               promptVersion: pageReference
-                ? 'social-image-carousel-reference-v5'
-                : 'social-image-carousel-asset-v5',
+                ? isQualityRetry
+                  ? 'social-image-carousel-reference-quality-retry-v1'
+                  : 'social-image-carousel-reference-v5'
+                : isQualityRetry
+                  ? 'social-image-carousel-asset-quality-retry-v1'
+                  : 'social-image-carousel-asset-v5',
               status: 'SUCCESS',
               inputTokens: generated.inputTokens,
               outputTokens: generated.outputTokens,
@@ -240,8 +268,12 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 provider: 'OPENAI',
                 model: context.model,
                 promptVersion: pageReference
-                  ? 'social-image-carousel-reference-v5'
-                  : 'social-image-carousel-asset-v5',
+                  ? isQualityRetry
+                    ? 'social-image-carousel-reference-quality-retry-v1'
+                    : 'social-image-carousel-reference-v5'
+                  : isQualityRetry
+                    ? 'social-image-carousel-asset-quality-retry-v1'
+                    : 'social-image-carousel-asset-v5',
                 status: 'FAILED',
                 inputTokens: null,
                 outputTokens: null,
@@ -262,6 +294,109 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
             .map((layout, index) => generatePage(layout, index + 1, identityReference)),
         );
         const generatedPages = [coverAsset, ...remainingAssets];
+        const reviewPages = async (round: 'initial' | 'final') => {
+          const reviewUsageKey = `${usageKey}:quality-review:${round}`;
+          try {
+            const reviewed = await qualityReviewer.review({
+              pages: layouts.map((layout, pageIndex) => ({
+                pageIndex,
+                headline: layout.headline,
+                bodyLines: layout.bodyLines,
+                ...(layout.visualScene !== undefined ? { visualScene: layout.visualScene } : {}),
+                bytes: generatedPages[pageIndex]!.bytes,
+              })),
+            });
+            await recordAiUsageSafely({
+              workspaceId: context.workspaceId,
+              bunshinId: context.bunshinId,
+              actorUserId: context.ownerUserId,
+              taskType: 'SOCIAL_IMAGE_GENERATION',
+              provider: reviewed.provider,
+              model: reviewed.model,
+              promptVersion: reviewed.promptVersion,
+              status: 'SUCCESS',
+              inputTokens: reviewed.inputTokens,
+              outputTokens: reviewed.outputTokens,
+              latencyMs: reviewed.latencyMs,
+              estimatedCostUsdMicros: runtime.requestCostUsdMicros,
+              pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_REVIEW',
+              idempotencyKey: reviewUsageKey,
+            });
+            return reviewed.output;
+          } catch (error) {
+            if (error instanceof OpenAiSocialImageQualityReviewError)
+              await recordAiUsageSafely({
+                workspaceId: context.workspaceId,
+                bunshinId: context.bunshinId,
+                actorUserId: context.ownerUserId,
+                taskType: 'SOCIAL_IMAGE_GENERATION',
+                provider: 'OPENAI',
+                model: runtime.model,
+                promptVersion: 'social-image-quality-review-v1',
+                status: 'FAILED',
+                inputTokens: null,
+                outputTokens: null,
+                latencyMs: 0,
+                estimatedCostUsdMicros: null,
+                pricingVersion: null,
+                errorCode: error.category,
+                idempotencyKey: reviewUsageKey,
+              });
+            throw error;
+          }
+        };
+        const initialReview = await reviewPages('initial');
+        const pagesToRetry = socialImagePagesToRetry(initialReview);
+        const buildQualityReport = (
+          finalReview: SocialImageQualityReview,
+          regeneratedPageIndexes: number[],
+        ): SocialImageQualityReportRecord => ({
+          version: 1,
+          verdict: finalReview.verdict,
+          checkedAt: new Date().toISOString(),
+          regeneratedPageIndexes,
+          initialPages: initialReview.pages,
+          finalPages: finalReview.pages,
+        });
+        if (!pagesToRetry) {
+          await repository.recordQualityReport({
+            workspaceId: context.workspaceId,
+            requestId: context.requestId,
+            qualityReport: buildQualityReport(initialReview, []),
+          });
+          throw new SocialImageGenerationJobHandlerError('SOCIAL_IMAGE_QUALITY_REJECTED', false);
+        }
+        if (pagesToRetry.length) {
+          await Promise.all(
+            pagesToRetry.map(async (page) => {
+              const pageReference = page.pageIndex === 0 ? referenceImage : identityReference;
+              generatedPages[page.pageIndex] = await generatePage(
+                layouts[page.pageIndex]!,
+                page.pageIndex,
+                pageReference,
+                page.repairInstruction,
+              );
+            }),
+          );
+        }
+        const finalReview: SocialImageQualityReview = pagesToRetry.length
+          ? await reviewPages('final')
+          : initialReview;
+        if (finalReview.verdict !== 'PASS') {
+          await repository.recordQualityReport({
+            workspaceId: context.workspaceId,
+            requestId: context.requestId,
+            qualityReport: buildQualityReport(
+              finalReview,
+              pagesToRetry.map((page) => page.pageIndex),
+            ),
+          });
+          throw new SocialImageGenerationJobHandlerError('SOCIAL_IMAGE_QUALITY_REJECTED', false);
+        }
+        const qualityReport = buildQualityReport(
+          finalReview,
+          pagesToRetry.map((page) => page.pageIndex),
+        );
         const renderer = new ManagedSocialImageRenderer(await loadBundledSocialImageFonts());
         const renderedPages = await Promise.all(
           layouts.map((layout, pageIndex) =>
@@ -319,6 +454,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           context,
           media: storedPages,
           serviceMediaReservationId: planPayment ? serviceMediaReservation.id : null,
+          qualityReport,
         });
         if (!completed) {
           await Promise.allSettled(
@@ -339,6 +475,12 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         if (error instanceof OpenAiSocialImageProviderError) {
           throw new SocialImageGenerationJobHandlerError(
             `OPENAI_${error.category}`,
+            error.retryable,
+          );
+        }
+        if (error instanceof OpenAiSocialImageQualityReviewError) {
+          throw new SocialImageGenerationJobHandlerError(
+            `OPENAI_IMAGE_QUALITY_${error.category}`,
             error.retryable,
           );
         }

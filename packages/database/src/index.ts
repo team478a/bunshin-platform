@@ -18312,6 +18312,22 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
     return result.count === 1;
   }
 
+  async recordQualityReport(
+    input: Parameters<SocialImageGenerationExecutionRepository['recordQualityReport']>[0],
+  ) {
+    return this.client.$transaction(async (tx) => {
+      const result = await tx.socialImageGenerationRequest.updateMany({
+        where: {
+          id: input.requestId,
+          workspaceId: input.workspaceId,
+          status: 'GENERATING_ASSET',
+        },
+        data: { qualityReport: input.qualityReport as unknown as Prisma.InputJsonValue },
+      });
+      return result.count === 1;
+    });
+  }
+
   async complete(input: Parameters<SocialImageGenerationExecutionRepository['complete']>[0]) {
     return this.client.$transaction(async (tx) => {
       if (input.media.length < 1 || input.media.length > 7) return false;
@@ -18337,7 +18353,12 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           ownerUserId: input.context.ownerUserId,
           status: 'COMPOSING',
         },
-        data: { status: 'READY_FOR_REVIEW', revision: { increment: 1 }, errorCode: null },
+        data: {
+          status: 'READY_FOR_REVIEW',
+          revision: { increment: 1 },
+          errorCode: null,
+          qualityReport: input.qualityReport as unknown as Prisma.InputJsonValue,
+        },
       });
       if (changed.count !== 1) return false;
       await tx.socialImageGeneratedMedia.createMany({

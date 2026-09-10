@@ -16,6 +16,53 @@ const statusLabel: Record<string, string> = {
   CANCELLED: '中止',
 };
 
+const qualityIssueLabel: Record<string, string> = {
+  SCENE_MISMATCH: '内容と写真が不一致',
+  UNWANTED_TEXT: '写真内に不要な文字',
+  MALFORMED_SUBJECT: '人物・商品に崩れ',
+  POOR_COMPOSITION: '文字を重ねにくい構図',
+  REPEATED_COMPOSITION: '他ページと構図が重複',
+};
+
+const qualitySummary = (value: unknown) => {
+  if (!value || typeof value !== 'object') return null;
+  const report = value as {
+    verdict?: unknown;
+    regeneratedPageIndexes?: unknown;
+    initialPages?: unknown;
+    finalPages?: unknown;
+  };
+  if (
+    !['PASS', 'REVISE'].includes(String(report.verdict)) ||
+    !Array.isArray(report.regeneratedPageIndexes)
+  )
+    return null;
+  const retried = report.regeneratedPageIndexes.filter(Number.isInteger) as number[];
+  const reviewedPages = Array.isArray(
+    report.verdict === 'PASS' ? report.initialPages : report.finalPages,
+  )
+    ? ((report.verdict === 'PASS' ? report.initialPages : report.finalPages) as Array<{
+        pageIndex?: unknown;
+        verdict?: unknown;
+        issueCodes?: unknown;
+      }>)
+    : [];
+  const problemPages = reviewedPages.filter((page) => page.verdict === 'REVISE');
+  const reasons = [
+    ...new Set(
+      problemPages.flatMap((page) =>
+        Array.isArray(page.issueCodes)
+          ? page.issueCodes.map((code) => qualityIssueLabel[String(code)] ?? String(code))
+          : [],
+      ),
+    ),
+  ];
+  if (report.verdict === 'REVISE')
+    return `品質確認：不合格（${problemPages.map((page) => `${Number(page.pageIndex) + 1}枚目`).join('・')}${reasons.length ? `／理由：${reasons.join('、')}` : ''}）`;
+  if (!retried.length) return '品質確認：合格（作り直しなし）';
+  return `品質確認：合格（${retried.map((index) => `${index + 1}枚目`).join('・')}を自動修正${reasons.length ? `／理由：${reasons.join('、')}` : ''}）`;
+};
+
 export default async function GroupImageOperationsPage({
   params,
 }: {
@@ -86,6 +133,7 @@ export default async function GroupImageOperationsPage({
       dailyMissionId: true,
       status: true,
       errorCode: true,
+      qualityReport: true,
       createdAt: true,
       media: { select: { status: true } },
     },
@@ -207,12 +255,17 @@ export default async function GroupImageOperationsPage({
         <h2>最近の処理</h2>
         {requests.length ? (
           <ul>
-            {requests.slice(0, 30).map((item) => (
-              <li key={item.id}>
-                {item.createdAt.toLocaleString('ja-JP')}：{statusLabel[item.status] ?? item.status}
-                {item.errorCode ? `（理由：${item.errorCode}）` : ''}
-              </li>
-            ))}
+            {requests.slice(0, 30).map((item) => {
+              const quality = qualitySummary(item.qualityReport);
+              return (
+                <li key={item.id}>
+                  {item.createdAt.toLocaleString('ja-JP')}：
+                  {statusLabel[item.status] ?? item.status}
+                  {item.errorCode ? `（理由：${item.errorCode}）` : ''}
+                  {quality ? ` ／ ${quality}` : ''}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p>まだ画像生成は行われていません。</p>
