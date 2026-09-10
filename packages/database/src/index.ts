@@ -17848,6 +17848,15 @@ export class PrismaSocialImageGenerationRequestRepository implements SocialImage
           },
           data: { status: 'READY' },
         });
+        const adopted = await tx.socialImageGeneratedMedia.update({
+          where: { id: target.id },
+          data: { status: 'ADOPTED' },
+        });
+        return {
+          ...adopted,
+          width: 1080 as const,
+          height: 1350 as const,
+        };
       }
       await tx.socialImageGeneratedMedia.updateMany({
         where: {
