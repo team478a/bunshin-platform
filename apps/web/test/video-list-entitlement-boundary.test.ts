@@ -16,7 +16,7 @@ describe('video list entitlement boundary', () => {
     expect(videoListPage).toContain(
       "videoGenerationAvailable ? '動画の企画と台本' : '作成した動画'",
     );
-    expect(videoListPage).toContain('{videoGenerationAvailable ? (\n        <VideoProjectCreator');
+    expect(videoListPage).toMatch(/\{videoGenerationAvailable \? \(\s*<VideoProjectCreator/);
     expect(videoListPage).toContain("READY_FOR_REVIEW: '完成・確認できます'");
     expect(videoListPage).toContain('<h2>動画一覧</h2>');
   });
