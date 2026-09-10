@@ -94,6 +94,44 @@ export default async function GroupImagesPage({
     },
     select: { availableCredits: true },
   });
+  const commercialSetting = await db.prisma.serviceCommercialSetting.findFirst({
+    where: { workspaceId: membership.group.workspaceId, groupId: membership.group.id },
+    select: {
+      status: true,
+      monthlyImageGenerationLimit: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+  const servicePlanConfigured =
+    commercialSetting !== null &&
+    commercialSetting.status !== 'DRAFT' &&
+    commercialSetting.monthlyImageGenerationLimit !== null;
+  let servicePlanImageRemaining: number | null = null;
+  if (servicePlanConfigured) {
+    const servicePlanActive =
+      commercialSetting.status === 'ACTIVE' &&
+      (!commercialSetting.startsAt || commercialSetting.startsAt <= now) &&
+      (!commercialSetting.endsAt || commercialSetting.endsAt > now);
+    if (!servicePlanActive) {
+      servicePlanImageRemaining = 0;
+    } else {
+      const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+      const used = await db.prisma.serviceMediaGenerationReservation.count({
+        where: {
+          workspaceId: membership.group.workspaceId,
+          groupId: membership.group.id,
+          kind: 'IMAGE',
+          monthKey,
+          OR: [{ status: 'CONSUMED' }, { status: 'RESERVED', expiresAt: { gt: now } }],
+        },
+      });
+      servicePlanImageRemaining = Math.max(
+        0,
+        commercialSetting.monthlyImageGenerationLimit! - used,
+      );
+    }
+  }
   const redemptions = new db.PrismaPointRedemptionRepository();
   let imagePointCost: number | null = null;
   let availablePoints = 0;
@@ -132,6 +170,7 @@ export default async function GroupImagesPage({
         workspaceId={membership.group.workspaceId}
         groupId={membership.group.id}
         groupMembershipId={membership.id}
+        servicePlanImageRemaining={servicePlanImageRemaining}
         imageCreditAvailable={creditAccount?.availableCredits ?? null}
         pointCost={imagePointCost}
         initialAvailablePoints={availablePoints}
