@@ -114,7 +114,7 @@ const row = (status: 'DRAFT' | 'QUEUED', revision: number) => ({
   campaignId: null,
   productPackVersionId: null,
   generationContextSnapshotId: null,
-  pilotEnrollmentId: ids.pilotEnrollmentId,
+  pilotEnrollmentId: null,
   status,
   templateKey: layout.templateKey,
   layout,
@@ -330,6 +330,36 @@ describe('social image HTTP', () => {
         body: JSON.stringify({
           groupMembershipId: ids.groupMembershipId,
           idempotencyKey: 'client-operation-plan',
+          layout,
+        }),
+      }),
+      ids.workspaceId,
+      ids.groupId,
+      ids.bunshinId,
+      ids.dailyMissionId,
+    );
+    expect(response.status).toBe(202);
+    expect(fakes.consumeServiceCredit).not.toHaveBeenCalled();
+    expect(fakes.consumeBadgeEntitlement).not.toHaveBeenCalled();
+    expect(fakes.reservePoint).not.toHaveBeenCalled();
+  });
+
+  it('uses an approved pilot allowance when no commercial allowance is configured', async () => {
+    fakes.create.mockResolvedValueOnce({
+      ...row('DRAFT', 1),
+      pilotEnrollmentId: ids.pilotEnrollmentId,
+    });
+    fakes.transition.mockResolvedValueOnce({
+      ...row('QUEUED', 2),
+      pilotEnrollmentId: ids.pilotEnrollmentId,
+    });
+    const response = await createSocialImageResponse(
+      new Request('https://example.com/api/images', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          groupMembershipId: ids.groupMembershipId,
+          idempotencyKey: 'client-operation-pilot',
           layout,
         }),
       }),

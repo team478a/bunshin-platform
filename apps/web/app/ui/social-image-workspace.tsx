@@ -56,6 +56,7 @@ export function SocialImageWorkspace({
   groupId,
   groupMembershipId,
   servicePlanImageRemaining,
+  pilotImageRemaining,
   imageCreditAvailable,
   pointCost,
   initialAvailablePoints,
@@ -66,6 +67,7 @@ export function SocialImageWorkspace({
   groupId: string;
   groupMembershipId: string;
   servicePlanImageRemaining: number | null;
+  pilotImageRemaining: number | null;
   imageCreditAvailable: number | null;
   pointCost: number | null;
   initialAvailablePoints: number;
@@ -89,9 +91,11 @@ export function SocialImageWorkspace({
   const [message, setMessage] = useState<string | null>(null);
   const [availablePoints, setAvailablePoints] = useState(initialAvailablePoints);
   const [servicePlanRemaining, setServicePlanRemaining] = useState(servicePlanImageRemaining);
+  const [pilotRemaining, setPilotRemaining] = useState(pilotImageRemaining);
   const [availableCredits, setAvailableCredits] = useState(imageCreditAvailable);
   const payment = resolveSocialImagePayment({
     servicePlanRemaining,
+    pilotRemaining,
     imageCreditAvailable: availableCredits,
     pointCost,
     availablePoints,
@@ -175,6 +179,8 @@ export function SocialImageWorkspace({
       if (response.ok && payload?.data?.id) {
         if (payment.mode === 'SERVICE_PLAN')
           setServicePlanRemaining((value) => Math.max(0, (value ?? 0) - 1));
+        else if (payment.mode === 'PILOT')
+          setPilotRemaining((value) => Math.max(0, (value ?? 0) - 1));
         else if (payment.mode === 'SERVICE_CREDIT')
           setAvailableCredits((value) => Math.max(0, (value ?? 0) - 1));
         else if (pointCost !== null) setAvailablePoints((value) => Math.max(0, value - pointCost));
@@ -184,7 +190,7 @@ export function SocialImageWorkspace({
       } else {
         setMessage(
           payload?.error?.code === 'FORBIDDEN'
-            ? payment.mode === 'SERVICE_PLAN'
+            ? payment.mode === 'SERVICE_PLAN' || payment.mode === 'PILOT'
               ? '試験運用の画像作成枠が残っていないか、この機能を利用できません。運営へご確認ください。'
               : payment.mode === 'SERVICE_CREDIT'
                 ? '画像作成回数が足りないか、この機能を利用できません。画像作成回数の画面をご確認ください。'
@@ -303,7 +309,7 @@ export function SocialImageWorkspace({
 
       <section className="settings-card social-image-review" aria-live="polite">
         <h2>{ready ? 'できあがった画像を確認' : '青いボタンを押してください'}</h2>
-        {payment.mode === 'SERVICE_PLAN' ? (
+        {payment.mode === 'SERVICE_PLAN' || payment.mode === 'PILOT' ? (
           <p>試験運用の画像作成枠を1回使います。残り{payment.remaining}回です。</p>
         ) : payment.mode === 'SERVICE_CREDIT' ? (
           <p>画像作成回数を1回使います。残り{payment.remaining}回です。</p>
@@ -401,7 +407,7 @@ export function SocialImageWorkspace({
           </button>
         ) : null}
         <p className="form-help">画像を作る操作は、この画面で本人が押したときだけ始まります。</p>
-        {payment.mode === 'SERVICE_PLAN' && !payment.canCreate ? (
+        {(payment.mode === 'SERVICE_PLAN' || payment.mode === 'PILOT') && !payment.canCreate ? (
           <p className="form-help">試験運用の画像作成枠を使い切りました。運営へご確認ください。</p>
         ) : null}
         {payment.mode === 'SERVICE_CREDIT' && !payment.canCreate ? (

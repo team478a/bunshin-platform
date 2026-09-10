@@ -1,10 +1,12 @@
 export type SocialImagePayment =
   | { mode: 'SERVICE_PLAN'; canCreate: boolean; remaining: number }
+  | { mode: 'PILOT'; canCreate: boolean; remaining: number }
   | { mode: 'SERVICE_CREDIT'; canCreate: boolean; remaining: number }
   | { mode: 'POINTS'; canCreate: boolean; availablePoints: number; pointCost: number | null };
 
 export function resolveSocialImagePayment(input: {
   servicePlanRemaining: number | null;
+  pilotRemaining: number | null;
   imageCreditAvailable: number | null;
   pointCost: number | null;
   availablePoints: number;
@@ -14,6 +16,13 @@ export function resolveSocialImagePayment(input: {
       mode: 'SERVICE_PLAN',
       canCreate: input.servicePlanRemaining >= 1,
       remaining: input.servicePlanRemaining,
+    };
+  }
+  if (input.pilotRemaining !== null) {
+    return {
+      mode: 'PILOT',
+      canCreate: input.pilotRemaining >= 1,
+      remaining: input.pilotRemaining,
     };
   }
   if (input.imageCreditAvailable !== null) {

@@ -6,6 +6,7 @@ describe('social image payment display', () => {
     expect(
       resolveSocialImagePayment({
         servicePlanRemaining: 10,
+        pilotRemaining: 1,
         imageCreditAvailable: 0,
         pointCost: 50,
         availablePoints: 0,
@@ -17,6 +18,7 @@ describe('social image payment display', () => {
     expect(
       resolveSocialImagePayment({
         servicePlanRemaining: 0,
+        pilotRemaining: 1,
         imageCreditAvailable: 2,
         pointCost: 50,
         availablePoints: 100,
@@ -24,10 +26,23 @@ describe('social image payment display', () => {
     ).toEqual({ mode: 'SERVICE_PLAN', canCreate: false, remaining: 0 });
   });
 
-  it('falls back to credits and then points when no service plan is configured', () => {
+  it('uses an approved pilot generation before personal balances', () => {
     expect(
       resolveSocialImagePayment({
         servicePlanRemaining: null,
+        pilotRemaining: 1,
+        imageCreditAvailable: 0,
+        pointCost: 50,
+        availablePoints: 0,
+      }),
+    ).toEqual({ mode: 'PILOT', canCreate: true, remaining: 1 });
+  });
+
+  it('falls back to credits and then points when no organization allowance is configured', () => {
+    expect(
+      resolveSocialImagePayment({
+        servicePlanRemaining: null,
+        pilotRemaining: null,
         imageCreditAvailable: 1,
         pointCost: 50,
         availablePoints: 0,
@@ -36,6 +51,7 @@ describe('social image payment display', () => {
     expect(
       resolveSocialImagePayment({
         servicePlanRemaining: null,
+        pilotRemaining: null,
         imageCreditAvailable: null,
         pointCost: 50,
         availablePoints: 50,
