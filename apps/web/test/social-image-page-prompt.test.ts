@@ -19,9 +19,25 @@ describe('social image carousel page prompt', () => {
     );
 
     expect(prompt).toContain('page 3 of 5');
+    expect(prompt).toContain('insight: visualize the cause or key realization');
     expect(prompt).toContain('店主が店頭の黒板メニューを書き直す');
     expect(prompt).toContain('must visibly differ');
     expect(prompt).toContain('Do not render text');
     expect(prompt).toContain('identity and style reference');
+  });
+
+  it('keeps an original subject consistent when no reference image is supplied', () => {
+    const prompt = socialImagePagePrompt(
+      {
+        templateKey: 'EDITORIAL_COVER',
+        headline: '投稿を続けるコツ',
+        bodyLines: ['五枚の順番で迷いを減らす'],
+      },
+      false,
+      0,
+      5,
+    );
+    expect(prompt).toContain('cover: establish the one concrete topic and reader benefit');
+    expect(prompt).toContain('same fictional Japanese adult professional across all pages');
   });
 });
