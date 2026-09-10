@@ -157,6 +157,9 @@ export default async function GroupImagesPage({
                     role: slide['role'] as EditorialCarouselSlideInput['role'],
                     headline: slide['headline'],
                     body: slide['body'],
+                    ...(typeof slide['visualScene'] === 'string'
+                      ? { visualScene: slide['visualScene'] }
+                      : {}),
                   },
                 ];
               })

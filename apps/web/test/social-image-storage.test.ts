@@ -97,6 +97,20 @@ describe('social image private storage', () => {
     );
   });
 
+  it('asks storage to download with the safe per-page filename', async () => {
+    const fake = storageClient();
+    await new SupabaseSocialImageStorage(fake.value as never).createReadUrl({
+      ...ids,
+      kind: 'COMPLETED',
+      downloadFilename: 'watashi-works-post-2.png',
+    });
+    expect(fake.createSignedUrl).toHaveBeenCalledWith(
+      `${Object.values(ids).join('/')}/completed.png`,
+      300,
+      { download: 'watashi-works-post-2.png' },
+    );
+  });
+
   it('removes files already stored when a later upload fails', async () => {
     const fake = storageClient();
     fake.upload

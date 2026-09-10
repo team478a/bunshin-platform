@@ -206,6 +206,7 @@ export interface SocialImageStoragePort {
     mediaId: string;
     kind: SocialImageStorageObjectKind;
     sourceMimeType?: 'image/png' | 'image/jpeg' | 'image/webp';
+    downloadFilename?: string;
   }): Promise<{ url: string; expiresAt: Date }>;
   remove(input: {
     workspaceId: string;
@@ -440,6 +441,7 @@ export class CreateSocialImageMediaReadUrl {
     mediaId: string;
     kind: SocialImageStorageObjectKind;
     sourceMimeType?: 'image/png' | 'image/jpeg' | 'image/webp';
+    downloadFilename?: string;
   }) {
     const scope = storageScope(input);
     const request = await this.requests.findOwned({
@@ -454,6 +456,7 @@ export class CreateSocialImageMediaReadUrl {
       ...scope,
       kind: input.kind,
       ...(input.sourceMimeType ? { sourceMimeType: input.sourceMimeType } : {}),
+      ...(input.downloadFilename ? { downloadFilename: input.downloadFilename } : {}),
     };
     return this.storage.createReadUrl(storageInput);
   }

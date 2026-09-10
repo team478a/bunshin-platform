@@ -22,6 +22,7 @@ export type SocialImagePageLayout = {
   bodyLines: string[];
   cta: string | null;
   accentColor: string;
+  visualScene?: string | null | undefined;
 };
 
 export interface SocialImageLayout extends SocialImagePageLayout {
@@ -32,6 +33,7 @@ export interface EditorialCarouselSlideInput {
   role: 'HOOK' | 'PROBLEM' | 'INSIGHT' | 'SOLUTION' | 'CTA';
   headline: string;
   body: string;
+  visualScene?: string;
 }
 
 export interface SocialImageRect {
@@ -88,7 +90,7 @@ export const SOCIAL_IMAGE_TEMPLATE_DEFINITIONS: Readonly<
     version: 1,
     canvas,
     safeArea,
-    imageArea: { x: 404, y: 650, width: 604, height: 560 },
+    imageArea: { x: 404, y: 650, width: 604, height: 500 },
     headlineArea: { x: 72, y: 130, width: 850, height: 330 },
     bodyArea: { x: 72, y: 490, width: 460, height: 150 },
     ctaArea: { x: 72, y: 1180, width: 936, height: 90 },
@@ -102,13 +104,13 @@ export const SOCIAL_IMAGE_TEMPLATE_DEFINITIONS: Readonly<
     version: 1,
     canvas,
     safeArea,
-    imageArea: null,
-    headlineArea: { x: 88, y: 220, width: 850, height: 300 },
-    bodyArea: { x: 88, y: 580, width: 904, height: 430 },
+    imageArea: { x: 88, y: 748, width: 904, height: 350 },
+    headlineArea: { x: 88, y: 190, width: 850, height: 220 },
+    bodyArea: { x: 88, y: 430, width: 904, height: 270 },
     ctaArea: { x: 72, y: 1160, width: 936, height: 90 },
-    assetPlacement: 'NONE',
+    assetPlacement: 'FOREGROUND',
     headline: rule(20, 1, 3, 70, 56),
-    body: rule(26, 1, 4, 40, 34),
+    body: rule(24, 1, 3, 34, 30),
     cta: rule(28, 0, 1, 30, 28),
   },
   EDITORIAL_SUMMARY: {
@@ -116,13 +118,13 @@ export const SOCIAL_IMAGE_TEMPLATE_DEFINITIONS: Readonly<
     version: 1,
     canvas,
     safeArea,
-    imageArea: null,
-    headlineArea: { x: 88, y: 230, width: 904, height: 260 },
-    bodyArea: { x: 88, y: 560, width: 904, height: 440 },
+    imageArea: { x: 88, y: 748, width: 904, height: 350 },
+    headlineArea: { x: 88, y: 190, width: 904, height: 220 },
+    bodyArea: { x: 88, y: 430, width: 904, height: 270 },
     ctaArea: { x: 72, y: 1140, width: 936, height: 110 },
-    assetPlacement: 'NONE',
+    assetPlacement: 'FOREGROUND',
     headline: rule(20, 1, 3, 70, 56),
-    body: rule(26, 1, 4, 42, 34),
+    body: rule(24, 1, 3, 34, 30),
     cta: rule(28, 1, 1, 32, 28),
   },
   PERSON_HEADLINE: {
@@ -238,6 +240,9 @@ const normalizeSocialImagePageLayout = (input: SocialImagePageLayout): SocialIma
   const accentColor = input.accentColor.trim().toUpperCase();
   if (!/^#[0-9A-F]{6}$/.test(accentColor))
     throw new ApplicationError('VALIDATION_ERROR', 'invalid accentColor');
+  const visualScene = input.visualScene
+    ? normalizeLine(input.visualScene, 'visualScene', 300)
+    : null;
   return {
     templateKey: input.templateKey,
     headline: normalizeLine(input.headline, 'headline', definition.headline.maxCharactersPerLine),
@@ -246,6 +251,7 @@ const normalizeSocialImagePageLayout = (input: SocialImagePageLayout): SocialIma
     ),
     cta,
     accentColor,
+    ...(visualScene ? { visualScene } : {}),
   };
 };
 
@@ -292,14 +298,22 @@ export const buildEditorialCarouselLayout = (input: {
     throw new ApplicationError('VALIDATION_ERROR', 'invalid editorial carousel slides');
   const slides = input.slides.slice(0, 7);
   const first = slides[0]!;
+  const fallbackScenes: Record<EditorialCarouselSlideInput['role'], string> = {
+    HOOK: '対象読者がテーマの悩みを感じる瞬間を、人物と関連する道具で分かりやすく見せる表紙写真',
+    PROBLEM: '対象読者が問題に困っている具体的な場面を、表情と手元が分かる構図で見せる',
+    INSIGHT: 'テーマの仕組みや気づきを、道具の配置や比較で直感的に伝える',
+    SOLUTION: '解決策を実際に試している手元や作業風景を、上からの構図で見せる',
+    CTA: '解決後の明るい状態と次の一歩が分かる、余白のある完了シーン',
+  };
   const remaining = slides.slice(1).map((slide, index, values): SocialImagePageLayout => {
     const summary = slide.role === 'CTA' || index === values.length - 1;
     return {
       templateKey: summary ? 'EDITORIAL_SUMMARY' : 'EDITORIAL_POINT',
       headline: fitLine(slide.headline, 20),
-      bodyLines: splitLines(slide.body, 26, 4),
+      bodyLines: splitLines(slide.body, 24, 3),
       cta: summary ? 'あとで見返せるように保存' : '次のページへ',
       accentColor: input.accentColor,
+      visualScene: slide.visualScene?.trim() || fallbackScenes[slide.role],
     };
   });
   return normalizeSocialImageLayout({
@@ -308,6 +322,7 @@ export const buildEditorialCarouselLayout = (input: {
     bodyLines: splitLines(first.body, 12, 2),
     cta: remaining.length ? 'スワイプして続きを見る' : 'あとで見返せるように保存',
     accentColor: input.accentColor,
+    visualScene: first.visualScene?.trim() || fallbackScenes[first.role],
     ...(remaining.length ? { carouselPages: remaining } : {}),
   });
 };

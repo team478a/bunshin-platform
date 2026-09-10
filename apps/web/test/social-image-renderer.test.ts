@@ -91,7 +91,14 @@ describe('Managed social image renderer', () => {
       const renderer = new ManagedSocialImageRenderer(fonts);
       const result = await renderer.render({
         layout: layouts[key],
-        sourceAsset: ['EDITORIAL_COVER', 'PERSON_HEADLINE', 'EMPATHY_QUOTE', 'CTA'].includes(key)
+        sourceAsset: [
+          'EDITORIAL_COVER',
+          'EDITORIAL_POINT',
+          'EDITORIAL_SUMMARY',
+          'PERSON_HEADLINE',
+          'EMPATHY_QUOTE',
+          'CTA',
+        ].includes(key)
           ? asset
           : null,
       });

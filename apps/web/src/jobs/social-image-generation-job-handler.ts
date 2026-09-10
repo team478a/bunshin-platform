@@ -21,35 +21,35 @@ import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../soci
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { reserveServiceMediaGeneration } from '../service-media-generation-quota';
 
-const promptFor = (
+export const socialImagePagePrompt = (
   layout: {
     templateKey: string;
     headline: string;
     bodyLines: string[];
+    visualScene?: string | null | undefined;
   },
   hasReference: boolean,
+  pageIndex: number,
+  pageCount: number,
 ) =>
-  layout.templateKey === 'EDITORIAL_COVER'
-    ? [
-        'Create one premium editorial lifestyle photograph for a Japanese social-media carousel cover.',
-        'Show one original Japanese adult professional in a warm, softly lit home or work setting, framed from the waist or chest up, with a natural approachable expression and realistic hands and skin texture.',
-        'Use warm cream, soft coral and muted lavender styling with coherent commercial photography lighting. Keep the person clearly separated from a simple background.',
-        'This is a photo asset for a separate deterministic layout. Do not render text, letters, numbers, logos, watermarks, interface elements, cards, icons, borders or decorative typography.',
-        hasReference
-          ? 'Use the supplied consented photograph as the subject reference and preserve the person or product appearance. Do not change product labeling or invent product claims.'
-          : 'Create an original person. Do not imitate a real person or celebrity.',
-        `Communication theme only: ${layout.headline}.`,
-        `Supporting concepts only: ${layout.bodyLines.join(', ')}.`,
-      ].join(' ')
-    : [
-        'Create one polished vertical social-media background image.',
-        hasReference
-          ? 'Do not add captions, watermarks, interface elements or new logos. Preserve existing product labeling.'
-          : 'Do not render letters, words, logos, watermarks, UI, signs, or captions.',
-        'Leave generous uncluttered negative space for Japanese text overlay.',
-        `Visual theme: ${layout.headline}.`,
-        `Supporting concepts: ${layout.bodyLines.join(', ')}.`,
-      ].join(' ');
+  [
+    `Create page ${pageIndex + 1} of ${pageCount} for one premium Japanese social-media carousel.`,
+    'Create a realistic editorial lifestyle photograph with commercial-quality lighting, natural hands and skin texture, and a clear subject.',
+    'Use a coherent warm cream, soft coral and muted lavender art direction across the carousel.',
+    'This photograph will be placed inside a separate deterministic Japanese text layout. Do not render text, letters, numbers, logos, watermarks, interface elements, cards, icons, borders or decorative typography.',
+    'Leave useful uncluttered negative space and keep important faces, hands, products and tools away from the outer edges.',
+    hasReference
+      ? 'Use the supplied image only as the identity and style reference. Preserve the person or product appearance, but create the new action, camera angle, props and background requested for this page. Do not copy the reference pose or composition. Do not change product labeling or invent product claims.'
+      : 'Create an original Japanese adult appropriate for the subject. Do not imitate a real person or celebrity.',
+    layout.visualScene
+      ? `Required scene, action and composition: ${layout.visualScene}.`
+      : `Create a concrete scene that directly explains: ${layout.headline}.`,
+    `Communication theme only: ${layout.headline}.`,
+    `Supporting concepts only: ${layout.bodyLines.join(', ')}.`,
+    pageIndex > 0
+      ? 'This page must visibly differ from the cover and the other pages in action, camera angle, props and background while keeping the same referenced subject or visual identity and art direction.'
+      : 'Make this an inviting cover scene that immediately establishes the topic.',
+  ].join(' ');
 
 const tokyoLocalDate = (value: Date) =>
   new Intl.DateTimeFormat('en-CA', {
@@ -144,8 +144,6 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         throw new SocialImageGenerationJobHandlerError(`SOCIAL_IMAGE_${access.reason}`, false);
       const runtime = await resolveOpenAiRuntimeConfiguration();
       const provider = new OpenAiSocialImageGenerationAdapter({ apiKey: runtime.apiKey });
-      const assetQuality =
-        context.layout.templateKey === 'EDITORIAL_COVER' ? 'high' : context.quality;
       const usageKey = `social-image:${context.requestId}:attempt:${input.attemptCount}`;
       try {
         const referenceImage = context.referenceImage
@@ -154,44 +152,89 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
               sha256: context.referenceImage.sha256,
             })
           : undefined;
-        const generated = await provider.generate({
-          requestId: context.requestId,
-          prompt: promptFor(context.layout, Boolean(context.referenceImage)),
-          ...(referenceImage ? { referenceImage } : {}),
-          width: 1080,
-          height: 1350,
-          model: context.model,
-          quality: assetQuality,
-        });
-        await recordAiUsageSafely({
-          workspaceId: context.workspaceId,
-          bunshinId: context.bunshinId,
-          actorUserId: context.ownerUserId,
-          taskType: 'SOCIAL_IMAGE_GENERATION',
-          provider: generated.provider,
-          model: generated.model,
-          promptVersion: context.referenceImage
-            ? 'social-image-reference-v2'
-            : 'social-image-asset-v2',
-          status: 'SUCCESS',
-          inputTokens: generated.inputTokens,
-          outputTokens: generated.outputTokens,
-          latencyMs: generated.latencyMs,
-          estimatedCostUsdMicros: runtime.requestCostUsdMicros,
-          pricingVersion: 'ADMIN_FIXED_REQUEST_COST',
-          idempotencyKey: usageKey,
-        });
-        const renderer = new ManagedSocialImageRenderer(await loadBundledSocialImageFonts());
         const { carouselPages, ...coverLayout } = context.layout;
         const layouts = [coverLayout, ...(carouselPages ?? [])];
+        const generatePage = async (
+          layout: (typeof layouts)[number],
+          pageIndex: number,
+          pageReference: Uint8Array | undefined,
+        ) => {
+          const pageUsageKey = `${usageKey}:page:${pageIndex + 1}`;
+          try {
+            const generated = await provider.generate({
+              requestId: `${context.requestId}:page:${pageIndex + 1}`,
+              prompt: socialImagePagePrompt(
+                layout,
+                Boolean(pageReference),
+                pageIndex,
+                layouts.length,
+              ),
+              ...(pageReference ? { referenceImage: pageReference } : {}),
+              width: 1080,
+              height: 1350,
+              model: context.model,
+              quality: pageIndex === 0 ? 'high' : context.quality,
+            });
+            await recordAiUsageSafely({
+              workspaceId: context.workspaceId,
+              bunshinId: context.bunshinId,
+              actorUserId: context.ownerUserId,
+              taskType: 'SOCIAL_IMAGE_GENERATION',
+              provider: generated.provider,
+              model: generated.model,
+              promptVersion: pageReference
+                ? 'social-image-carousel-reference-v3'
+                : 'social-image-carousel-asset-v3',
+              status: 'SUCCESS',
+              inputTokens: generated.inputTokens,
+              outputTokens: generated.outputTokens,
+              latencyMs: generated.latencyMs,
+              estimatedCostUsdMicros: runtime.requestCostUsdMicros,
+              pricingVersion: 'ADMIN_FIXED_REQUEST_COST_PER_PAGE',
+              idempotencyKey: pageUsageKey,
+            });
+            return generated;
+          } catch (error) {
+            if (error instanceof OpenAiSocialImageProviderError)
+              await recordAiUsageSafely({
+                workspaceId: context.workspaceId,
+                bunshinId: context.bunshinId,
+                actorUserId: context.ownerUserId,
+                taskType: 'SOCIAL_IMAGE_GENERATION',
+                provider: 'OPENAI',
+                model: context.model,
+                promptVersion: pageReference
+                  ? 'social-image-carousel-reference-v3'
+                  : 'social-image-carousel-asset-v3',
+                status: 'FAILED',
+                inputTokens: null,
+                outputTokens: null,
+                latencyMs: 0,
+                estimatedCostUsdMicros: null,
+                pricingVersion: null,
+                errorCode: error.category,
+                idempotencyKey: pageUsageKey,
+              });
+            throw error;
+          }
+        };
+        const coverAsset = await generatePage(coverLayout, 0, referenceImage);
+        const identityReference = referenceImage ?? coverAsset.bytes;
+        const remainingAssets = await Promise.all(
+          layouts
+            .slice(1)
+            .map((layout, index) => generatePage(layout, index + 1, identityReference)),
+        );
+        const generatedPages = [coverAsset, ...remainingAssets];
+        const renderer = new ManagedSocialImageRenderer(await loadBundledSocialImageFonts());
         const renderedPages = await Promise.all(
-          layouts.map((layout) =>
+          layouts.map((layout, pageIndex) =>
             renderer.render({
               layout,
               sourceAsset:
                 getSocialImageTemplateDefinition(layout.templateKey).assetPlacement === 'NONE'
                   ? null
-                  : Buffer.from(generated.bytes),
+                  : Buffer.from(generatedPages[pageIndex]!.bytes),
             }),
           ),
         );
@@ -215,7 +258,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
               ownerUserId: context.ownerUserId,
               requestId: context.requestId,
               mediaId,
-              source: pageIndex === 0 ? { bytes: generated.bytes, mimeType: 'image/png' } : null,
+              source: { bytes: generatedPages[pageIndex]!.bytes, mimeType: 'image/png' },
               completed: rendered.completedPng,
               thumbnail: rendered.thumbnailPng,
             });
@@ -230,7 +273,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 ownerUserId: context.ownerUserId,
                 requestId: context.requestId,
                 mediaId: page.mediaId,
-                ...(page.pageIndex === 0 ? { sourceMimeType: 'image/png' as const } : {}),
+                sourceMimeType: 'image/png' as const,
               }),
             ),
           );
@@ -250,7 +293,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
                 ownerUserId: context.ownerUserId,
                 requestId: context.requestId,
                 mediaId: page.mediaId,
-                ...(page.pageIndex === 0 ? { sourceMimeType: 'image/png' as const } : {}),
+                sourceMimeType: 'image/png' as const,
               }),
             ),
           );
@@ -258,25 +301,6 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
         }
       } catch (error) {
         if (error instanceof OpenAiSocialImageProviderError) {
-          await recordAiUsageSafely({
-            workspaceId: context.workspaceId,
-            bunshinId: context.bunshinId,
-            actorUserId: context.ownerUserId,
-            taskType: 'SOCIAL_IMAGE_GENERATION',
-            provider: 'OPENAI',
-            model: context.model,
-            promptVersion: context.referenceImage
-              ? 'social-image-reference-v2'
-              : 'social-image-asset-v2',
-            status: 'FAILED',
-            inputTokens: null,
-            outputTokens: null,
-            latencyMs: 0,
-            estimatedCostUsdMicros: null,
-            pricingVersion: null,
-            errorCode: error.category,
-            idempotencyKey: usageKey,
-          });
           throw new SocialImageGenerationJobHandlerError(
             `OPENAI_${error.category}`,
             error.retryable,

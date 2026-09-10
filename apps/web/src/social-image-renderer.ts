@@ -151,14 +151,20 @@ const bodyBlock = (plan: SocialImageCompositionPlan, color: string) =>
 const assetElement = (plan: SocialImageCompositionPlan, dataUri: string | null): ReactNode => {
   const area = plan.definition.imageArea;
   if (!area || !dataUri) return null;
+  const editorial = ['EDITORIAL_COVER', 'EDITORIAL_POINT', 'EDITORIAL_SUMMARY'].includes(
+    plan.templateKey,
+  );
   return createElement('img', {
     src: dataUri,
     width: area.width,
     height: area.height,
     style: positioned(area, {
-      objectFit: plan.templateKey === 'EDITORIAL_COVER' ? 'cover' : 'contain',
-      ...(plan.templateKey === 'EDITORIAL_COVER'
-        ? { objectPosition: 'center center', borderRadius: 54 }
+      objectFit: editorial ? 'cover' : 'contain',
+      ...(editorial
+        ? {
+            objectPosition: 'center center',
+            borderRadius: plan.templateKey === 'EDITORIAL_COVER' ? 54 : 42,
+          }
         : {}),
     }),
   });
@@ -306,7 +312,7 @@ const editorialCoverTree = (
     ),
     createElement('div', {
       style: positioned(
-        { x: 374, y: 620, width: 664, height: 620 },
+        { x: 374, y: 620, width: 664, height: 560 },
         {
           display: 'flex',
           borderRadius: 68,
@@ -336,7 +342,10 @@ const editorialCoverTree = (
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            borderRadius: 45,
             color: ink,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            boxShadow: '0 10px 30px rgba(93,66,47,0.12)',
             fontFamily: FONT_FAMILY,
             fontSize: plan.definition.cta.fontSize,
             fontWeight: 700,
@@ -372,7 +381,10 @@ const editorialCoverTree = (
   );
 };
 
-const editorialTextPageTree = (plan: SocialImageCompositionPlan): ReactNode => {
+const editorialTextPageTree = (
+  plan: SocialImageCompositionPlan,
+  dataUri: string | null,
+): ReactNode => {
   const ink = '#35251A';
   const coral = plan.layout.accentColor;
   const lavender = '#C9B5DF';
@@ -444,8 +456,8 @@ const editorialTextPageTree = (plan: SocialImageCompositionPlan): ReactNode => {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: '54px 58px',
-          gap: 22,
+          padding: '26px 42px',
+          gap: 14,
           borderRadius: 54,
           color: ink,
           backgroundColor: '#FFFFFF',
@@ -476,6 +488,28 @@ const editorialTextPageTree = (plan: SocialImageCompositionPlan): ReactNode => {
       ),
     ),
   ];
+  if (dataUri) {
+    const imageArea = plan.definition.imageArea!;
+    children.push(
+      createElement('div', {
+        style: positioned(
+          {
+            x: imageArea.x - 10,
+            y: imageArea.y - 10,
+            width: imageArea.width + 20,
+            height: imageArea.height + 20,
+          },
+          {
+            display: 'flex',
+            borderRadius: 50,
+            backgroundColor: '#FFFFFF',
+            boxShadow: '0 16px 44px rgba(93,66,47,0.16)',
+          },
+        ),
+      }),
+      assetElement(plan, dataUri),
+    );
+  }
   if (plan.layout.cta && plan.definition.ctaArea && plan.definition.cta)
     children.push(
       createElement(
@@ -515,7 +549,7 @@ const editorialTextPageTree = (plan: SocialImageCompositionPlan): ReactNode => {
 const composeTree = (plan: SocialImageCompositionPlan, dataUri: string | null): ReactNode => {
   if (plan.templateKey === 'EDITORIAL_COVER') return editorialCoverTree(plan, dataUri);
   if (plan.templateKey === 'EDITORIAL_POINT' || plan.templateKey === 'EDITORIAL_SUMMARY')
-    return editorialTextPageTree(plan);
+    return editorialTextPageTree(plan, dataUri);
   const dark = '#0B2D5C';
   const isBackground = plan.definition.assetPlacement === 'BACKGROUND';
   const foreground = isBackground ? '#FFFFFF' : dark;

@@ -51,6 +51,7 @@ const pageLayoutSchema = z
     bodyLines: z.array(z.string()).max(5),
     cta: z.string().nullable(),
     accentColor: z.string(),
+    visualScene: z.string().max(300).nullable().optional(),
   })
   .strict();
 const createSchema = z
@@ -357,6 +358,7 @@ export async function getSocialImageResponse(
                 width: mediaPages[0].width,
                 height: mediaPages[0].height,
                 downloadPath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}`,
+                savePath: `${new URL(request.url).pathname}/download?mediaId=${mediaPages[0].id}&download=1`,
               }
             : null,
           mediaPages: mediaPages.map((media) => ({
@@ -366,6 +368,7 @@ export async function getSocialImageResponse(
             width: media.width,
             height: media.height,
             downloadPath: `${new URL(request.url).pathname}/download?mediaId=${media.id}`,
+            savePath: `${new URL(request.url).pathname}/download?mediaId=${media.id}&download=1`,
           })),
         },
         requestId,
@@ -434,6 +437,7 @@ export async function downloadSocialImageResponse(
       requestId: uuid.parse(requestResourceId),
     });
     const requestedMediaId = new URL(request.url).searchParams.get('mediaId');
+    const shouldDownload = new URL(request.url).searchParams.get('download') === '1';
     const media = requestedMediaId
       ? mediaPages.find((item) => item.id === uuid.parse(requestedMediaId))
       : mediaPages[0];
@@ -448,6 +452,9 @@ export async function downloadSocialImageResponse(
       requestId: requestResourceId,
       mediaId: media.id,
       kind: 'COMPLETED',
+      ...(shouldDownload
+        ? { downloadFilename: `watashi-works-post-${media.pageIndex + 1}.png` }
+        : {}),
     });
     return new Response(null, {
       status: 302,
