@@ -19,6 +19,7 @@ export interface SocialImageGenerationExecutionContext {
   ownerUserId: string;
   bunshinId: string;
   dailyMissionId: string;
+  pilotEnrollmentId: string | null;
   idempotencyKey: string;
   referenceImage?: SocialImageReference | null;
   layout: SocialImageLayout;

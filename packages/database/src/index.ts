@@ -18138,6 +18138,7 @@ export class PrismaSocialImageGenerationExecutionRepository implements SocialIma
           ownerUserId: request.ownerUserId,
           bunshinId: request.bunshinId,
           dailyMissionId: request.dailyMissionId,
+          pilotEnrollmentId: request.pilotEnrollmentId,
           idempotencyKey: request.idempotencyKey,
           referenceImage:
             (request.referenceImage as SocialImageGenerationExecutionContext['referenceImage']) ??

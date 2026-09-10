@@ -10,6 +10,7 @@ const request = {
   ownerUserId: '00000000-0000-4000-8000-000000000005',
   bunshinId: '00000000-0000-4000-8000-000000000006',
   dailyMissionId: '00000000-0000-4000-8000-000000000007',
+  pilotEnrollmentId: '00000000-0000-4000-8000-000000000009',
   campaignId: null,
   status: 'QUEUED',
   layout: {
@@ -189,6 +190,7 @@ describe('PrismaSocialImageGenerationExecutionRepository', () => {
           ownerUserId: request.ownerUserId,
           bunshinId: request.bunshinId,
           dailyMissionId: request.dailyMissionId,
+          pilotEnrollmentId: request.pilotEnrollmentId,
           idempotencyKey: 'carousel-1',
           layout: request.layout,
           model: 'gpt-image-1',

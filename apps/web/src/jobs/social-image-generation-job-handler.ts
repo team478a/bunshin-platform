@@ -20,6 +20,7 @@ import {
 import { loadBundledSocialImageFonts, ManagedSocialImageRenderer } from '../social-image-renderer';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
 import { reserveServiceMediaGeneration } from '../service-media-generation-quota';
+import { resolveSocialImageExecutionPayment } from '../social-image-payment';
 
 export const socialImagePagePrompt = (
   layout: {
@@ -84,6 +85,7 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
       });
       const pointPayment = redemption?.status === 'CONFIRMED';
       const badgePayment = badgeUsage?.status === 'CONSUMED';
+      const pilotPayment = context.pilotEnrollmentId !== null;
       const serviceCreditPayment = Boolean(
         await db.prisma.serviceCreditLedger.findFirst({
           where: {
@@ -101,10 +103,14 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           select: { id: true },
         }),
       );
-      const legacyPaymentCount = [pointPayment, badgePayment, serviceCreditPayment].filter(
-        Boolean,
-      ).length;
-      const serviceMediaReservation = legacyPaymentCount
+      const paymentBeforePlan = resolveSocialImageExecutionPayment({
+        pilotPayment,
+        pointPayment,
+        badgePayment,
+        serviceCreditPayment,
+        planPayment: false,
+      });
+      const serviceMediaReservation = !paymentBeforePlan.shouldReserveServiceMedia
         ? ({ status: 'NOT_CONFIGURED', id: null } as const)
         : await reserveServiceMediaGeneration({
             workspaceId: context.workspaceId,
@@ -120,14 +126,15 @@ export function createSocialImageGenerationJobHandler(): SocialImageGenerationJo
           false,
         );
       const planPayment = ['RESERVED', 'ALREADY_RESERVED'].includes(serviceMediaReservation.status);
-      const paymentCount = legacyPaymentCount + Number(planPayment);
-      if (paymentCount !== 1)
-        throw new SocialImageGenerationJobHandlerError(
-          paymentCount > 1
-            ? 'SOCIAL_IMAGE_MULTIPLE_PAYMENTS_FOUND'
-            : 'SOCIAL_IMAGE_PAYMENT_UNAVAILABLE',
-          false,
-        );
+      const payment = resolveSocialImageExecutionPayment({
+        pilotPayment,
+        pointPayment,
+        badgePayment,
+        serviceCreditPayment,
+        planPayment,
+      });
+      if (payment.errorCode)
+        throw new SocialImageGenerationJobHandlerError(payment.errorCode, false);
       const now = new Date();
       const access = await new GroupFeatureEntitlementService(
         new db.PrismaGroupFeatureEntitlementRepository(),
