@@ -15,8 +15,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function ServiceLinePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams: Promise<{ template?: string; week?: string }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
@@ -71,6 +73,12 @@ export default async function ServiceLinePage({
     }));
   const urls = lineEndpointUrls();
   const endpoint = `/api/services/${encodeURIComponent(service.configuration.slug)}/line-configurations`;
+  const template = await searchParams;
+  const weeklyReportTemplate = template.template === 'weekly-report';
+  const reportUrl = new URL(
+    `/s/${encodeURIComponent(service.configuration.slug)}/weekly-report${template.week ? `?week=${encodeURIComponent(template.week)}` : ''}`,
+    urls.callbackUrl,
+  ).toString();
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
@@ -111,7 +119,16 @@ export default async function ServiceLinePage({
           endpoint={endpoint}
           scopeLabel="サービス"
         />
-        <ServiceLineBroadcastEditor serviceSlug={service.configuration.slug} />
+        <ServiceLineBroadcastEditor
+          serviceSlug={service.configuration.slug}
+          initialTitle={weeklyReportTemplate ? '今週のふり返りができました' : ''}
+          initialMessage={
+            weeklyReportTemplate
+              ? `今週のふり返りができました。\nできたことと、次にやることを確認できます。\n\nくわしく見る\n${reportUrl}`
+              : ''
+          }
+          initialReason={weeklyReportTemplate ? '参加者へ週次レポートを案内' : ''}
+        />
         <section className="settings-card">
           <LineDeliveryRetryPanel
             failures={retryableFailures}

@@ -15,6 +15,11 @@ export const dynamic = 'force-dynamic';
 
 const sections = [
   {
+    title: '週次レポート',
+    description: '今週の利用状況と、声かけが役立ちそうな参加者を確認します。',
+    href: 'weekly-report',
+  },
+  {
     title: '参加者・運営者と利用権限',
     description: '参加者の招待、運営担当者の役割、参加者ごとの「利用する・停止する」を管理します。',
     href: 'members',
