@@ -38,6 +38,29 @@ export default async function PointsPage({
     : workspaces[0];
   if (!workspace) redirect('/bunshins');
 
+  if (
+    !(await db.hasActiveRewardsPilotAccess(db.prisma, {
+      workspaceId: workspace.id,
+      userId: user.userId,
+    }))
+  ) {
+    return (
+      <main className="app-page points-page">
+        <header className="app-page__heading">
+          <p className="eyebrow">ワタシポイント</p>
+          <h1>ポイント</h1>
+        </header>
+        <section className="settings-card point-unavailable">
+          <h2>現在は試験利用中です</h2>
+          <p>ポイントとバッジは、運営者から案内を受けた方だけ利用できます。</p>
+          <Link className="button button--secondary" href="/bunshins">
+            ホームへ戻る
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
   let dashboard;
   try {
     dashboard = await new GetPointUserDashboard(new db.PrismaPointLedgerRepository()).execute({

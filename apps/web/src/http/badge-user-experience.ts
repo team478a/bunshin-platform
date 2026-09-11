@@ -22,6 +22,13 @@ async function actorUserId() {
   return user.userId;
 }
 
+async function requireRewardsPilotAccess(workspaceId: string, userId: string) {
+  const db = await import('@bunshin/database');
+  if (!(await db.hasActiveRewardsPilotAccess(db.prisma, { workspaceId, userId })))
+    throw new ApplicationError('FORBIDDEN', 'rewards pilot access required');
+  return db;
+}
+
 async function respond(request: Request, operation: () => Promise<unknown>) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
@@ -55,11 +62,13 @@ const dto = (value: Awaited<ReturnType<GetBadgeUserDashboard['execute']>>) => ({
 
 export function getBadgeDashboardResponse(request: Request, workspaceId: string) {
   return respond(request, async () => {
-    const db = await import('@bunshin/database');
+    const parsedWorkspaceId = uuid.parse(workspaceId);
+    const userId = await actorUserId();
+    const db = await requireRewardsPilotAccess(parsedWorkspaceId, userId);
     return dto(
       await new GetBadgeUserDashboard(
         new db.PrismaBadgeUserExperienceRepository(db.prisma),
-      ).execute({ workspaceId: uuid.parse(workspaceId), actorUserId: await actorUserId() }),
+      ).execute({ workspaceId: parsedWorkspaceId, actorUserId: userId }),
     );
   });
 }
@@ -71,12 +80,14 @@ export function markBadgeNotificationReadResponse(
 ) {
   return respond(request, async () => {
     requireSameOrigin(request);
-    const db = await import('@bunshin/database');
+    const parsedWorkspaceId = uuid.parse(workspaceId);
+    const userId = await actorUserId();
+    const db = await requireRewardsPilotAccess(parsedWorkspaceId, userId);
     return new MarkBadgeNotificationRead(
       new db.PrismaBadgeUserExperienceRepository(db.prisma),
     ).execute({
-      workspaceId: uuid.parse(workspaceId),
-      actorUserId: await actorUserId(),
+      workspaceId: parsedWorkspaceId,
+      actorUserId: userId,
       notificationId: uuid.parse(notificationId),
     });
   });
@@ -93,12 +104,14 @@ export function updateBadgeVisibilityResponse(
       throw new ApplicationError('VALIDATION_ERROR', 'application/json is required');
     const body = visibilityBody.safeParse(await request.json());
     if (!body.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-    const db = await import('@bunshin/database');
+    const parsedWorkspaceId = uuid.parse(workspaceId);
+    const userId = await actorUserId();
+    const db = await requireRewardsPilotAccess(parsedWorkspaceId, userId);
     return new SetBadgeAwardVisibility(
       new db.PrismaBadgeUserExperienceRepository(db.prisma),
     ).execute({
-      workspaceId: uuid.parse(workspaceId),
-      actorUserId: await actorUserId(),
+      workspaceId: parsedWorkspaceId,
+      actorUserId: userId,
       badgeAwardId: uuid.parse(badgeAwardId),
       ...body.data,
     });

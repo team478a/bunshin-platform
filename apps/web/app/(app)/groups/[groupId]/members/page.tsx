@@ -115,9 +115,13 @@ async function saveMemberFeatureAssignment(formData: FormData) {
     const code =
       error instanceof ApplicationError && error.code === 'VALIDATION_ERROR'
         ? 'invalid'
-        : error instanceof ApplicationError && error.code === 'FORBIDDEN'
-          ? 'forbidden'
-          : 'failed';
+        : error instanceof ApplicationError &&
+            error.code === 'CONFLICT' &&
+            error.message === 'rewards pilot member limit reached'
+          ? 'pilot-limit'
+          : error instanceof ApplicationError && error.code === 'FORBIDDEN'
+            ? 'forbidden'
+            : 'failed';
     redirect(`${returnPath}&error=${code}` as Route);
   }
   revalidatePath(memberPath(input.data.groupId));
@@ -255,7 +259,8 @@ export default async function GroupMemberFeaturesPage({
   const groupId = z.uuid().safeParse((await params).groupId);
   if (!groupId.success) notFound();
   const db = await import('@bunshin/database');
-  const localDate = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const now = new Date();
+  const localDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   const localMonth = localDate.slice(0, 7);
   const groupScope = await db.prisma.group.findFirst({
     where: { id: groupId.data, status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
@@ -364,6 +369,15 @@ export default async function GroupMemberFeaturesPage({
       ? membership.serviceRole !== 'PARTICIPANT'
       : membership.role === 'MANAGER',
   );
+  const rewardsPilotCount = activeMemberships.filter((membership) =>
+    membership.featureAssignments.some(
+      (assignment) =>
+        assignment.featureKey === 'REWARDS.POINTS_BADGES' &&
+        assignment.status === 'ENABLED' &&
+        (!assignment.startsAt || assignment.startsAt <= now) &&
+        (!assignment.endsAt || assignment.endsAt > now),
+    ),
+  ).length;
   const assignments = new Map(
     (selectedMember?.featureAssignments ?? []).map((item) => [item.featureKey, item]),
   );
@@ -373,6 +387,7 @@ export default async function GroupMemberFeaturesPage({
   const errors: Record<string, string> = {
     invalid: '入力内容を確認してください。変更理由は5文字以上必要です。',
     forbidden: 'グループに許可された範囲を超えているため保存できません。',
+    'pilot-limit': '試験利用は30人までです。別の参加者を停止してから、もう一度設定してください。',
     failed: '設定を保存できませんでした。もう一度お試しください。',
     'member-invalid': '役割・状態・変更理由を確認してください。変更理由は5文字以上必要です。',
     'member-forbidden':
@@ -693,6 +708,11 @@ export default async function GroupMemberFeaturesPage({
                 <section className="settings-card" key={policy.id}>
                   <h2>{policy.feature.name}</h2>
                   <p>{policy.feature.description}</p>
+                  {policy.featureKey === 'REWARDS.POINTS_BADGES' ? (
+                    <p>
+                      試験利用中：<strong>{rewardsPilotCount}人／30人</strong>
+                    </p>
+                  ) : null}
                   <p>
                     グループ上限：1日 {policy.dailyLimit ?? '上限なし'} ／ 1か月{' '}
                     {policy.monthlyLimit ?? '上限なし'}

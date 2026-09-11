@@ -33,4 +33,10 @@ describe('point issuance emergency stop', () => {
     expect(repository).toContain("failureCode: 'POINT_ISSUANCE_STOPPED'");
     expect(repository).toContain("return 'NO_ACTIVE_RULE'");
   });
+
+  it('finishes grouped events when the participant is outside the rewards pilot', () => {
+    expect(repository).toContain('hasActiveRewardsPilotAccess');
+    expect(repository).toContain("failureCode: 'REWARDS_PILOT_UNAVAILABLE'");
+    expect(repository).toContain("return 'NOT_ELIGIBLE'");
+  });
 });

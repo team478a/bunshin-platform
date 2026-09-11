@@ -538,15 +538,38 @@ export default async function ServicePointSettingsPage({
       userId: true,
       user: { select: { displayName: true, email: true } },
       serviceRole: true,
+      featureAssignments: {
+        where: { featureKey: 'REWARDS.POINTS_BADGES' },
+        select: { status: true, startsAt: true, endsAt: true },
+      },
     },
     orderBy: { user: { displayName: 'asc' } },
   });
   const memberUserIds = memberships.map(({ userId }) => userId);
   const bonusRecipients = memberships.filter(({ userId }) => userId !== actor.userId);
-  const pointConfiguration = await db.prisma.serviceConfiguration.findFirstOrThrow({
-    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-    select: { pointIssuanceStopped: true },
-  });
+  const [pointConfiguration, rewardsPolicy, platformAdmin] = await Promise.all([
+    db.prisma.serviceConfiguration.findFirstOrThrow({
+      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+      select: { pointIssuanceStopped: true },
+    }),
+    db.prisma.groupFeaturePolicy.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        featureKey: 'REWARDS.POINTS_BADGES',
+        status: 'ENABLED',
+      },
+      select: { startsAt: true, endsAt: true },
+    }),
+    db.prisma.platformAdmin.findFirst({
+      where: {
+        userId: actor.userId,
+        status: 'ACTIVE',
+        role: { in: ['SUPER_ADMIN', 'OPERATOR'] },
+      },
+      select: { id: true },
+    }),
+  ]);
   const [versions, history, pointAccounts, servicePointTransactions, badgeAwards] =
     await Promise.all([
       db.prisma.pointRuleVersion.findMany({
@@ -615,6 +638,20 @@ export default async function ServicePointSettingsPage({
   for (const version of versions)
     if (!current.has(version.ruleKey)) current.set(version.ruleKey, version);
   const query = await searchParams;
+  const now = new Date();
+  const rewardsPolicyActive = Boolean(
+    rewardsPolicy &&
+    (!rewardsPolicy.startsAt || rewardsPolicy.startsAt <= now) &&
+    (!rewardsPolicy.endsAt || rewardsPolicy.endsAt > now),
+  );
+  const rewardsPilotCount = memberships.filter((membership) =>
+    membership.featureAssignments.some(
+      (assignment) =>
+        assignment.status === 'ENABLED' &&
+        (!assignment.startsAt || assignment.startsAt <= now) &&
+        (!assignment.endsAt || assignment.endsAt > now),
+    ),
+  ).length;
   const memberName = new Map(
     memberships.map((membership) => [
       membership.userId,
@@ -677,6 +714,30 @@ export default async function ServicePointSettingsPage({
                   : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
+
+        <section className="settings-card">
+          <h2>試験利用者を選ぶ</h2>
+          <p>
+            現在 <strong>{rewardsPilotCount}人／30人</strong> がポイントとバッジを利用できます。
+          </p>
+          {rewardsPolicyActive ? (
+            <p>参加者ごとに利用開始・停止と利用期間を設定できます。</p>
+          ) : (
+            <p>最初にシステム管理者が、このサービスの試験利用を許可してください。</p>
+          )}
+          <div className="form-actions">
+            {rewardsPolicyActive ? (
+              <a className="button" href={`/s/${serviceSlug}/manage/members`}>
+                試験利用者を選ぶ
+              </a>
+            ) : null}
+            {!rewardsPolicyActive && platformAdmin ? (
+              <a className="button" href={`/admin/groups/${service.serviceId}/features`}>
+                サービスの試験利用を許可する
+              </a>
+            ) : null}
+          </div>
+        </section>
 
         <section className="settings-card">
           <h2>ポイント付与の一括停止</h2>

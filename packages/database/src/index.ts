@@ -3,6 +3,7 @@ export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
 import { hasActiveVideoProjectEntitlement } from './video-project-entitlement';
+import { hasActiveRewardsPilotAccess } from './rewards-pilot-access';
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
 import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -249,6 +250,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { runtimeDatabaseUrl } from './runtime-database-url';
 import { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
+export { hasActiveRewardsPilotAccess, REWARDS_PILOT_FEATURE_KEY } from './rewards-pilot-access';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
 const databaseUrl = runtimeDatabaseUrl(process.env['DATABASE_URL']);
@@ -12873,70 +12875,86 @@ export class PrismaGroupFeatureEntitlementRepository implements GroupFeatureEnti
         input.monthlyLimit > policy.monthlyLimit)
     )
       return null;
-    return this.client.$transaction(async (tx) => {
-      const before = await tx.groupMemberFeatureAssignment.findUnique({
-        where: {
-          groupMembershipId_featureKey: {
+    return this.client.$transaction(
+      async (tx) => {
+        if (input.featureKey === 'REWARDS.POINTS_BADGES' && input.status === 'ENABLED') {
+          const otherEnabledMembers = await tx.groupMemberFeatureAssignment.count({
+            where: {
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              featureKey: input.featureKey,
+              status: 'ENABLED',
+              groupMembershipId: { not: input.groupMembershipId },
+            },
+          });
+          if (otherEnabledMembers >= 30)
+            throw new ApplicationError('CONFLICT', 'rewards pilot member limit reached');
+        }
+        const before = await tx.groupMemberFeatureAssignment.findUnique({
+          where: {
+            groupMembershipId_featureKey: {
+              groupMembershipId: input.groupMembershipId,
+              featureKey: input.featureKey,
+            },
+          },
+        });
+        const assignment = await tx.groupMemberFeatureAssignment.upsert({
+          where: {
+            groupMembershipId_featureKey: {
+              groupMembershipId: input.groupMembershipId,
+              featureKey: input.featureKey,
+            },
+          },
+          create: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
             groupMembershipId: input.groupMembershipId,
             featureKey: input.featureKey,
+            status: input.status,
+            dailyLimit: input.dailyLimit ?? null,
+            monthlyLimit: input.monthlyLimit ?? null,
+            config: input.config as Prisma.InputJsonValue,
+            startsAt: input.startsAt ?? null,
+            endsAt: input.endsAt ?? null,
+            assignedByUserId: input.actorUserId,
           },
-        },
-      });
-      const assignment = await tx.groupMemberFeatureAssignment.upsert({
-        where: {
-          groupMembershipId_featureKey: {
+          update: {
+            status: input.status,
+            dailyLimit: input.dailyLimit ?? null,
+            monthlyLimit: input.monthlyLimit ?? null,
+            config: input.config as Prisma.InputJsonValue,
+            startsAt: input.startsAt ?? null,
+            endsAt: input.endsAt ?? null,
+            assignedByUserId: input.actorUserId,
+          },
+        });
+        await tx.groupFeatureAuditLog.create({
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
             groupMembershipId: input.groupMembershipId,
             featureKey: input.featureKey,
+            action: 'MEMBER_ASSIGNMENT_SET',
+            beforeData: before
+              ? {
+                  status: before.status,
+                  dailyLimit: before.dailyLimit,
+                  monthlyLimit: before.monthlyLimit,
+                }
+              : Prisma.JsonNull,
+            afterData: {
+              status: assignment.status,
+              dailyLimit: assignment.dailyLimit,
+              monthlyLimit: assignment.monthlyLimit,
+            },
+            reason: input.reason,
+            performedByUserId: input.actorUserId,
           },
-        },
-        create: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          groupMembershipId: input.groupMembershipId,
-          featureKey: input.featureKey,
-          status: input.status,
-          dailyLimit: input.dailyLimit ?? null,
-          monthlyLimit: input.monthlyLimit ?? null,
-          config: input.config as Prisma.InputJsonValue,
-          startsAt: input.startsAt ?? null,
-          endsAt: input.endsAt ?? null,
-          assignedByUserId: input.actorUserId,
-        },
-        update: {
-          status: input.status,
-          dailyLimit: input.dailyLimit ?? null,
-          monthlyLimit: input.monthlyLimit ?? null,
-          config: input.config as Prisma.InputJsonValue,
-          startsAt: input.startsAt ?? null,
-          endsAt: input.endsAt ?? null,
-          assignedByUserId: input.actorUserId,
-        },
-      });
-      await tx.groupFeatureAuditLog.create({
-        data: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          groupMembershipId: input.groupMembershipId,
-          featureKey: input.featureKey,
-          action: 'MEMBER_ASSIGNMENT_SET',
-          beforeData: before
-            ? {
-                status: before.status,
-                dailyLimit: before.dailyLimit,
-                monthlyLimit: before.monthlyLimit,
-              }
-            : Prisma.JsonNull,
-          afterData: {
-            status: assignment.status,
-            dailyLimit: assignment.dailyLimit,
-            monthlyLimit: assignment.monthlyLimit,
-          },
-          reason: input.reason,
-          performedByUserId: input.actorUserId,
-        },
-      });
-      return memberFeatureAssignmentRecord(assignment);
-    });
+        });
+        return memberFeatureAssignmentRecord(assignment);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async resolveAccess(
@@ -20024,6 +20042,26 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
             groupId = campaign.groupId;
           }
           if (groupId) {
+            const pilotEnabled = await hasActiveRewardsPilotAccess(
+              tx,
+              {
+                workspaceId: input.workspaceId,
+                groupId,
+                userId: input.actorUserId,
+              },
+              input.occurredAt,
+            );
+            if (!pilotEnabled) {
+              await tx.pointProcessingEvent.update({
+                where: { id: processing.id },
+                data: {
+                  status: 'COMPLETED',
+                  failureCode: 'REWARDS_PILOT_UNAVAILABLE',
+                  processedAt: new Date(),
+                },
+              });
+              return 'NOT_ELIGIBLE';
+            }
             const pointControl = await tx.serviceConfiguration.findFirst({
               where: { workspaceId: input.workspaceId, groupId },
               select: { pointIssuanceStopped: true },
