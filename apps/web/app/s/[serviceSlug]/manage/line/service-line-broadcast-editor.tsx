@@ -19,7 +19,17 @@ const purposeOptions = [
   ['RETENTION', '継続'],
 ] as const;
 
-export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: string }) {
+export function ServiceLineBroadcastEditor({
+  serviceSlug,
+  initialTitle = '',
+  initialMessage = '',
+  initialReason = '',
+}: {
+  serviceSlug: string;
+  initialTitle?: string;
+  initialMessage?: string;
+  initialReason?: string;
+}) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
@@ -201,6 +211,7 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
             <input
               className="field__control"
               name="title"
+              defaultValue={initialTitle}
               required
               maxLength={120}
               placeholder="例：今週のお知らせ"
@@ -211,6 +222,7 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
             <textarea
               className="field__control line-broadcast-form__message"
               name="message"
+              defaultValue={initialMessage}
               required
               maxLength={5000}
               rows={7}
@@ -222,6 +234,7 @@ export function ServiceLineBroadcastEditor({ serviceSlug }: { serviceSlug: strin
             <input
               className="field__control"
               name="reason"
+              defaultValue={initialReason}
               required
               maxLength={1000}
               placeholder="例：公式のお知らせ"

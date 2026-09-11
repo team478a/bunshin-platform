@@ -260,6 +260,12 @@ export default async function ServiceMemberHome({
           <div className="service-home-actions">
             <Link
               className="button button--primary"
+              href={`/s/${service.configuration.slug}/weekly-report` as Route}
+            >
+              今週できたことを見る
+            </Link>
+            <Link
+              className="button button--primary"
               href={`/s/${service.configuration.slug}/activity` as Route}
             >
               活動・紹介を見る
