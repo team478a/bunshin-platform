@@ -37,6 +37,8 @@ describe('group badge admin boundaries', () => {
     expect(groupPage).toContain('サービス運営者による直接付与');
     expect(groupPage).toContain('RevokeGroupBadgeAward');
     expect(groupPage).toContain('誤って付与したバッジを取り消す');
+    expect(groupPage).toContain("serviceOperator ? '作成したバッジ' : '申請したバッジ'");
+    expect(groupPage).toContain('作成後すぐに参加者へ付与できます。');
   });
 
   it('limits badge publication review to super admins', () => {
