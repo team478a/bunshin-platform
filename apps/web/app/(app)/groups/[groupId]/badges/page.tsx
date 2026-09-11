@@ -360,9 +360,9 @@ export default async function GroupBadgesPage({
       </section>
 
       <section className="settings-card">
-        <h2>申請したバッジ</h2>
+        <h2>{serviceOperator ? '作成したバッジ' : '申請したバッジ'}</h2>
         {definitions.length === 0 ? (
-          <p>まだ申請はありません。</p>
+          <p>{serviceOperator ? 'まだバッジはありません。' : 'まだ申請はありません。'}</p>
         ) : (
           <ul>
             {definitions.map((definition) => {
@@ -382,7 +382,11 @@ export default async function GroupBadgesPage({
       <section className="settings-card">
         <h2>{serviceOperator ? '参加者へバッジを付与' : '参加者を付与候補にする'}</h2>
         {activeVersions.length === 0 ? (
-          <p>本部の承認が終わったバッジがありません。</p>
+          <p>
+            {serviceOperator
+              ? 'まず上のフォームでバッジを作成してください。作成後すぐに参加者へ付与できます。'
+              : '本部の承認が終わったバッジがありません。'}
+          </p>
         ) : (
           <form action={nominate} className="form-stack">
             {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
