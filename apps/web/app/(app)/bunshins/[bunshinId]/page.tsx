@@ -24,6 +24,7 @@ import {
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { localDateInTimezone, weekRange } from '../../../../src/activity-progress';
 import { currentActivityContinuityRule } from '../../../../src/activity-continuity-rule';
+import { missionDecisionOrPending } from '../../../../src/mission-decision-fallback';
 import { BunshinEditor } from './editor';
 
 export const dynamic = 'force-dynamic';
@@ -191,12 +192,14 @@ export default async function BunshinPage({
     });
     const missionDecisions = await Promise.all(
       dailyMissions.map((mission) =>
-        new GetMissionDecision(engagementRepository).execute({
-          workspaceId,
-          actorUserId: currentUser.userId,
-          bunshinId: bunshin.id,
-          dailyMissionId: mission.id,
-        }),
+        missionDecisionOrPending(() =>
+          new GetMissionDecision(engagementRepository).execute({
+            workspaceId,
+            actorUserId: currentUser.userId,
+            bunshinId: bunshin.id,
+            dailyMissionId: mission.id,
+          }),
+        ),
       ),
     );
     const outcomeRepository = new PrismaMissionOutcomeRepository();
