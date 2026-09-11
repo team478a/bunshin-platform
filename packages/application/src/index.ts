@@ -2474,6 +2474,7 @@ export * from './point-core';
 export * from './point-activity-processor';
 export * from './point-redemption';
 export * from './point-expiration';
+export * from './point-balance-reconciliation';
 export * from './badge-core';
 export * from './badge-common-processor';
 export * from './badge-user-experience';
