@@ -24,4 +24,12 @@ describe('service point settings boundaries', () => {
     expect(processor).toContain("status: { in: ['ACTIVE', 'SUSPENDED'] }");
     expect(processor).toContain("if (rule.status === 'SUSPENDED') continue");
   });
+
+  it('shows only service-scoped point activity and badge awards to the operator', () => {
+    expect(page).toContain('db.prisma.pointAccount.findMany');
+    expect(page).toContain('db.prisma.pointTransaction.groupBy');
+    expect(page).toContain('db.prisma.badgeAward.groupBy');
+    expect(page).toContain('groupId: service.serviceId');
+    expect(page).toContain('参加者のポイント・バッジ状況');
+  });
 });
