@@ -28,6 +28,15 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('運営者自身への付与はできません。');
   });
 
+  it('does not apply an operator point form twice when iPhone resends it', () => {
+    expect(page).toContain('operationId: z.uuid()');
+    expect(page).toContain('name="operationId" value={randomUUID()}');
+    expect(page).toContain('`operator-bonus:${parsed.data.operationId}`');
+    expect(page).toContain('`operator-correction:${parsed.data.operationId}`');
+    expect(page).toContain('accountId_idempotencyKey');
+    expect(page).toContain('if (existing) return;');
+  });
+
   it('lets a scoped suspended rule override the global default', () => {
     expect(processor).toContain("status: { in: ['ACTIVE', 'SUSPENDED'] }");
     expect(processor).toContain("if (rule.status === 'SUSPENDED') continue");
