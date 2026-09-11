@@ -58,6 +58,16 @@ export interface BadgeGroupWorkflowRepository {
     reason: string;
     now: Date;
   }): Promise<{ id: string; status: 'ACTIVE' | 'SUSPENDED' } | null>;
+  reviseDefinition(input: {
+    definitionId: string;
+    actorUserId: string;
+    category: string;
+    title: string;
+    description: string;
+    altText: string;
+    reason: string;
+    now: Date;
+  }): Promise<{ definitionId: string; badgeVersionId: string; version: number } | null>;
 }
 
 const required = (value: string, field: string, max = 1000) => {
@@ -175,6 +185,27 @@ export class SetGroupBadgeAvailability {
     });
     if (!result)
       throw new ApplicationError('FORBIDDEN', 'badge availability change is not allowed');
+    return result;
+  }
+}
+
+export class ReviseGroupBadge {
+  constructor(private readonly repository: BadgeGroupWorkflowRepository) {}
+  async execute(
+    input: Omit<Parameters<BadgeGroupWorkflowRepository['reviseDefinition']>[0], 'now'> & {
+      now?: Date;
+    },
+  ) {
+    const result = await this.repository.reviseDefinition({
+      ...input,
+      category: required(input.category, 'category', 80),
+      title: required(input.title, 'title', 120),
+      description: required(input.description, 'description', 500),
+      altText: required(input.altText, 'alt text', 200),
+      reason: required(input.reason, 'reason'),
+      now: input.now ?? new Date(),
+    });
+    if (!result) throw new ApplicationError('FORBIDDEN', 'badge revision is not allowed');
     return result;
   }
 }

@@ -154,6 +154,101 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
     );
   }
 
+  async reviseDefinition(input: Parameters<BadgeGroupWorkflowRepository['reviseDefinition']>[0]) {
+    return this.client.$transaction(
+      async (tx) => {
+        const definition = await tx.badgeDefinition.findFirst({
+          where: {
+            id: input.definitionId,
+            ownerType: 'GROUP',
+            status: { in: ['ACTIVE', 'SUSPENDED'] },
+            workspace: { status: 'ACTIVE' },
+            group: {
+              status: 'ACTIVE',
+              memberships: {
+                some: {
+                  userId: input.actorUserId,
+                  role: 'MANAGER',
+                  serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+                  status: 'ACTIVE',
+                },
+              },
+            },
+          },
+          include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
+        });
+        const previous = definition?.versions[0];
+        if (!definition?.workspaceId || !definition.groupId || !previous?.publishedAt) return null;
+        const nextVersion = definition.currentVersion + 1;
+        const version = await tx.badgeVersion.create({
+          data: {
+            definitionId: definition.id,
+            version: nextVersion,
+            title: input.title,
+            description: input.description,
+            imageKey: previous.imageKey,
+            lockedImageKey: previous.lockedImageKey,
+            altText: input.altText,
+            backgroundColor: previous.backgroundColor,
+            conditionType: previous.conditionType,
+            conditionConfig: previous.conditionConfig as Prisma.InputJsonValue,
+            visibilityPolicy: previous.visibilityPolicy,
+            rewardPolicy: previous.rewardPolicy as Prisma.InputJsonValue,
+            startsAt: previous.startsAt,
+            endsAt: previous.endsAt,
+            publishedAt: input.now,
+          },
+        });
+        await tx.badgeApprovalRequest.create({
+          data: {
+            workspaceId: definition.workspaceId,
+            groupId: definition.groupId,
+            badgeVersionId: version.id,
+            status: 'APPROVED',
+            requestedByUserId: input.actorUserId,
+            reviewedByUserId: input.actorUserId,
+            requestReason: input.reason,
+            reviewReason: `サービス運営者による変更: ${input.reason}`,
+            requestedAt: input.now,
+            reviewedAt: input.now,
+          },
+        });
+        await tx.badgeDefinition.update({
+          where: { id: definition.id },
+          data: { category: input.category, currentVersion: nextVersion },
+        });
+        await tx.badgeAdminAuditLog.create({
+          data: {
+            workspaceId: definition.workspaceId,
+            groupId: definition.groupId,
+            badgeDefinitionId: definition.id,
+            badgeVersionId: version.id,
+            action: 'GROUP_BADGE_REVISED_BY_SERVICE_OPERATOR',
+            beforeData: {
+              version: previous.version,
+              category: definition.category,
+              title: previous.title,
+              description: previous.description,
+              altText: previous.altText,
+            },
+            afterData: {
+              version: nextVersion,
+              category: input.category,
+              title: input.title,
+              description: input.description,
+              altText: input.altText,
+            },
+            reason: input.reason,
+            performedByUserId: input.actorUserId,
+            occurredAt: input.now,
+          },
+        });
+        return { definitionId: definition.id, badgeVersionId: version.id, version: nextVersion };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
   async submit(input: Parameters<BadgeGroupWorkflowRepository['submit']>[0]) {
     if (!(await this.manager(input.workspaceId, input.groupId, input.actorUserId))) return null;
     const version = await this.client.badgeVersion.findFirst({
@@ -288,6 +383,7 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
             status: 'ACTIVE',
           },
         },
+        include: { definition: { select: { currentVersion: true } } },
       }),
       this.client.groupMembership.findFirst({
         where: {
@@ -299,7 +395,18 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
         select: { id: true },
       }),
     ]);
-    if (!version || !member) return null;
+    if (!version || !member || version.version !== version.definition.currentVersion) return null;
+    const existingAward = await this.client.badgeAward.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.userId,
+        status: 'ACTIVE',
+        badgeVersion: { definitionId: version.definitionId },
+      },
+      select: { id: true },
+    });
+    if (existingAward) return null;
     return this.client.$transaction(async (tx) => {
       const candidate = await tx.badgeAwardCandidate.upsert({
         where: {
@@ -371,6 +478,19 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
       return null;
     return this.client.$transaction(
       async (tx) => {
+        if (input.decision === 'APPROVED') {
+          const existingAward = await tx.badgeAward.findFirst({
+            where: {
+              workspaceId: candidate.workspaceId,
+              groupId: candidate.groupId,
+              userId: candidate.userId,
+              status: 'ACTIVE',
+              badgeVersion: { definitionId: candidate.badgeVersion.definitionId },
+            },
+            select: { id: true },
+          });
+          if (existingAward) return null;
+        }
         const updated = await tx.badgeAwardCandidate.update({
           where: { id: candidate.id },
           data: {

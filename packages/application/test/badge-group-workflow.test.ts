@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CreateAndSubmitGroupBadge,
   RevokeGroupBadgeAward,
+  ReviseGroupBadge,
   ReviewGroupBadgeCandidate,
   SetGroupBadgeAvailability,
   SubmitGroupBadge,
@@ -16,6 +17,7 @@ const repository = (): BadgeGroupWorkflowRepository => ({
   reviewCandidate: vi.fn(),
   revokeAward: vi.fn(),
   setDefinitionStatus: vi.fn(),
+  reviseDefinition: vi.fn(),
 });
 
 describe('group badge workflow', () => {
@@ -100,6 +102,33 @@ describe('group badge workflow', () => {
         actorUserId: 'u',
         status: 'SUSPENDED',
         reason: '企画が終了したため',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('validates revisions and fails closed outside the service operator scope', async () => {
+    await expect(
+      new ReviseGroupBadge(repository()).execute({
+        definitionId: 'd',
+        actorUserId: 'u',
+        category: '活動',
+        title: ' ',
+        description: '参加へのお礼',
+        altText: '星のバッジ',
+        reason: '表記を直すため',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    const reviseDefinition = vi.fn().mockResolvedValue(null);
+    await expect(
+      new ReviseGroupBadge({ ...repository(), reviseDefinition }).execute({
+        definitionId: 'd',
+        actorUserId: 'u',
+        category: '活動',
+        title: '参加ありがとう',
+        description: '参加へのお礼',
+        altText: '星のバッジ',
+        reason: '表記を直すため',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });

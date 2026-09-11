@@ -2,6 +2,7 @@ import {
   CreateAndSubmitGroupBadge,
   NominateGroupBadgeCandidate,
   RevokeGroupBadgeAward,
+  ReviseGroupBadge,
   ReviewGroupBadge,
   ReviewGroupBadgeCandidate,
   SetGroupBadgeAvailability,
@@ -54,6 +55,16 @@ const availabilitySchema = z.object({
   groupId: z.uuid(),
   definitionId: z.uuid(),
   status: z.enum(['ACTIVE', 'SUSPENDED']),
+  reason: z.string().trim().min(3).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
+});
+const revisionSchema = z.object({
+  groupId: z.uuid(),
+  definitionId: z.uuid(),
+  category: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(500),
+  altText: z.string().trim().min(1).max(200),
   reason: z.string().trim().min(3).max(1000),
   serviceSlug: z.string().trim().max(120).optional(),
 });
@@ -214,6 +225,32 @@ async function setBadgeAvailability(formData: FormData) {
   redirect(`${returnPath}?availability=${parsed.data.status.toLowerCase()}` as Route);
 }
 
+async function reviseBadge(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = revisionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: parsed.data.groupId,
+    serviceSlug: parsed.data.serviceSlug,
+    section: 'badges',
+  });
+  try {
+    const db = await import('@bunshin/database');
+    await new ReviseGroupBadge(new db.PrismaBadgeGroupWorkflowRepository(db.prisma)).execute({
+      ...parsed.data,
+      actorUserId: actor.userId,
+    });
+  } catch (error) {
+    redirect(`${returnPath}?error=${errorCode(error)}` as Route);
+  }
+  revalidatePath(path(parsed.data.groupId));
+  revalidatePath('/badges');
+  if (parsed.data.serviceSlug) revalidatePath(`/s/${parsed.data.serviceSlug}/activity`);
+  redirect(`${returnPath}?revised=1` as Route);
+}
+
 const approvalLabel = {
   PENDING: '本部の確認待ち',
   APPROVED: '使用できます',
@@ -231,6 +268,7 @@ export default async function GroupBadgesPage({
     reviewed?: string;
     revoked?: string;
     availability?: string;
+    revised?: string;
     error?: string;
     service?: string;
   }>;
@@ -350,6 +388,11 @@ export default async function GroupBadgesPage({
             : 'バッジの新しい付与を停止しました。過去の獲得履歴は残ります。'}
         </p>
       ) : null}
+      {query.revised ? (
+        <p className="notice notice--success">
+          バッジの表示を変更しました。これからの付与には新しい表示を使います。
+        </p>
+      ) : null}
       {query.error ? (
         <p className="notice notice--danger">
           保存できませんでした。権限と入力内容を確認してください。
@@ -426,33 +469,98 @@ export default async function GroupBadgesPage({
                       : '準備中'}
                   {serviceOperator &&
                   (definition.status === 'ACTIVE' || definition.status === 'SUSPENDED') ? (
-                    <form action={setBadgeAvailability} className="form-stack">
-                      {query.service && (
-                        <input type="hidden" name="serviceSlug" value={query.service} />
-                      )}
-                      <input type="hidden" name="groupId" value={group.id} />
-                      <input type="hidden" name="definitionId" value={definition.id} />
-                      <input
-                        type="hidden"
-                        name="status"
-                        value={definition.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'}
-                      />
-                      <label className="field">
-                        <span className="field__label">
-                          {definition.status === 'ACTIVE' ? '停止する理由' : '再開する理由'}
-                        </span>
-                        <textarea
-                          className="field__control"
-                          name="reason"
-                          minLength={3}
-                          maxLength={1000}
-                          required
+                    <>
+                      {version ? (
+                        <details>
+                          <summary>名前や説明を変更する</summary>
+                          <form action={reviseBadge} className="form-stack">
+                            {query.service && (
+                              <input type="hidden" name="serviceSlug" value={query.service} />
+                            )}
+                            <input type="hidden" name="groupId" value={group.id} />
+                            <input type="hidden" name="definitionId" value={definition.id} />
+                            <label className="field">
+                              <span className="field__label">種類</span>
+                              <input
+                                className="field__control"
+                                name="category"
+                                defaultValue={definition.category}
+                                required
+                              />
+                            </label>
+                            <label className="field">
+                              <span className="field__label">バッジ名</span>
+                              <input
+                                className="field__control"
+                                name="title"
+                                defaultValue={version.title}
+                                required
+                              />
+                            </label>
+                            <label className="field">
+                              <span className="field__label">もらえる理由</span>
+                              <textarea
+                                className="field__control"
+                                name="description"
+                                defaultValue={version.description}
+                                required
+                              />
+                            </label>
+                            <label className="field">
+                              <span className="field__label">画像の説明</span>
+                              <input
+                                className="field__control"
+                                name="altText"
+                                defaultValue={version.altText}
+                                required
+                              />
+                            </label>
+                            <label className="field">
+                              <span className="field__label">変更する理由</span>
+                              <textarea
+                                className="field__control"
+                                name="reason"
+                                minLength={3}
+                                maxLength={1000}
+                                required
+                              />
+                            </label>
+                            <button className="button button--secondary" type="submit">
+                              変更を保存する
+                            </button>
+                          </form>
+                        </details>
+                      ) : null}
+                      <form action={setBadgeAvailability} className="form-stack">
+                        {query.service && (
+                          <input type="hidden" name="serviceSlug" value={query.service} />
+                        )}
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="definitionId" value={definition.id} />
+                        <input
+                          type="hidden"
+                          name="status"
+                          value={definition.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'}
                         />
-                      </label>
-                      <button className="button button--secondary" type="submit">
-                        {definition.status === 'ACTIVE' ? '新しい付与を停止する' : '付与を再開する'}
-                      </button>
-                    </form>
+                        <label className="field">
+                          <span className="field__label">
+                            {definition.status === 'ACTIVE' ? '停止する理由' : '再開する理由'}
+                          </span>
+                          <textarea
+                            className="field__control"
+                            name="reason"
+                            minLength={3}
+                            maxLength={1000}
+                            required
+                          />
+                        </label>
+                        <button className="button button--secondary" type="submit">
+                          {definition.status === 'ACTIVE'
+                            ? '新しい付与を停止する'
+                            : '付与を再開する'}
+                        </button>
+                      </form>
+                    </>
                   ) : null}
                 </li>
               );
