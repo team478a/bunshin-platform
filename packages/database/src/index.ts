@@ -1,4 +1,5 @@
 import { authorizedVideoPhotos } from './video-photos';
+export { PrismaPointExpirationRepository } from './point-expiration';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
 import { hasActiveVideoProjectEntitlement } from './video-project-entitlement';
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
