@@ -5,7 +5,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { resolveManagedServiceContext } from '../services/public-service';
 import { csv } from './admin-report-export';
 
-const exportKinds = ['summary', 'points', 'badges'] as const;
+const exportKinds = ['summary', 'points', 'badges', 'audit'] as const;
 type ExportKind = (typeof exportKinds)[number];
 
 const displayName = (user: { displayName: string; email: string | null }) =>
@@ -21,6 +21,32 @@ const serviceRoleLabel = (role: string) =>
         : '参加者';
 
 const timestamp = (value: Date | null) => value?.toISOString() ?? '';
+
+const jsonCell = (value: unknown) =>
+  value === null || value === undefined ? '' : JSON.stringify(value);
+
+const pointAuditActionLabel = (action: string) =>
+  action === 'POINT_RULES_UPDATED'
+    ? 'ポイント獲得条件を変更'
+    : action === 'POINT_BONUS_GRANTED'
+      ? 'ボーナスポイントを付与'
+      : action === 'POINT_BALANCE_CORRECTED'
+        ? 'ポイント残高を訂正'
+        : action;
+
+const badgeAuditActionLabels: Record<string, string> = {
+  GROUP_BADGE_CREATED_AND_SUBMITTED: 'バッジを作成',
+  GROUP_BADGE_REVISED_BY_SERVICE_OPERATOR: 'バッジを編集',
+  GROUP_BADGE_SUSPENDED_BY_SERVICE_OPERATOR: 'バッジを停止',
+  GROUP_BADGE_REACTIVATED_BY_SERVICE_OPERATOR: 'バッジを再開',
+  GROUP_BADGE_SUBMITTED: 'バッジを審査へ提出',
+  GROUP_BADGE_APPROVED: 'バッジを承認',
+  GROUP_BADGE_REJECTED: 'バッジを却下',
+  GROUP_BADGE_CANDIDATE_NOMINATED: '参加者をバッジ候補に追加',
+  BADGE_CANDIDATE_APPROVED: '参加者へバッジを付与',
+  BADGE_CANDIDATE_REJECTED: 'バッジ候補を却下',
+  BADGE_AWARD_REVOKED_BY_SERVICE_OPERATOR: 'バッジ付与を取り消し',
+};
 
 async function summaryRows(workspaceId: string, groupId: string) {
   const db = await import('@bunshin/database');
@@ -192,6 +218,158 @@ async function badgeRows(workspaceId: string, groupId: string) {
   ];
 }
 
+async function auditRows(workspaceId: string, groupId: string) {
+  const db = await import('@bunshin/database');
+  const [pointAudits, badgeAudits] = await Promise.all([
+    db.prisma.serviceConfigurationAudit.findMany({
+      where: {
+        workspaceId,
+        groupId,
+        action: {
+          in: ['POINT_RULES_UPDATED', 'POINT_BONUS_GRANTED', 'POINT_BALANCE_CORRECTED'],
+        },
+      },
+      select: {
+        id: true,
+        action: true,
+        beforeData: true,
+        afterData: true,
+        reason: true,
+        occurredAt: true,
+        performedBy: { select: { displayName: true, email: true } },
+      },
+    }),
+    db.prisma.badgeAdminAuditLog.findMany({
+      where: { workspaceId, groupId },
+      select: {
+        id: true,
+        action: true,
+        beforeData: true,
+        afterData: true,
+        reason: true,
+        occurredAt: true,
+        badgeDefinition: {
+          select: {
+            code: true,
+            versions: { select: { title: true }, orderBy: { version: 'desc' }, take: 1 },
+          },
+        },
+        badgeVersion: {
+          select: { title: true, definition: { select: { code: true } } },
+        },
+        badgeAward: {
+          select: {
+            userId: true,
+            user: { select: { displayName: true, email: true } },
+          },
+        },
+        performedBy: { select: { displayName: true, email: true } },
+      },
+    }),
+  ]);
+  const targetUserIds = new Set<string>();
+  for (const audit of [...pointAudits, ...badgeAudits]) {
+    const data =
+      audit.afterData && typeof audit.afterData === 'object' && !Array.isArray(audit.afterData)
+        ? (audit.afterData as Record<string, unknown>)
+        : {};
+    const userId =
+      typeof data.targetUserId === 'string'
+        ? data.targetUserId
+        : typeof data.userId === 'string'
+          ? data.userId
+          : null;
+    if (userId) targetUserIds.add(userId);
+  }
+  const users = await db.prisma.user.findMany({
+    where: { id: { in: [...targetUserIds] } },
+    select: { id: true, displayName: true, email: true },
+  });
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const rows = [
+    ...pointAudits.map((audit) => {
+      const data =
+        audit.afterData && typeof audit.afterData === 'object' && !Array.isArray(audit.afterData)
+          ? (audit.afterData as Record<string, unknown>)
+          : {};
+      const targetUserId = typeof data.userId === 'string' ? data.userId : '';
+      const target = targetUserId ? userById.get(targetUserId) : null;
+      return {
+        id: audit.id,
+        occurredAt: audit.occurredAt,
+        category: 'ポイント',
+        action: pointAuditActionLabel(audit.action),
+        actor: displayName(audit.performedBy),
+        targetUserId,
+        target: target ? displayName(target) : '',
+        badgeCode: '',
+        badgeTitle: '',
+        reason: audit.reason,
+        beforeData: audit.beforeData,
+        afterData: audit.afterData,
+      };
+    }),
+    ...badgeAudits.map((audit) => {
+      const data =
+        audit.afterData && typeof audit.afterData === 'object' && !Array.isArray(audit.afterData)
+          ? (audit.afterData as Record<string, unknown>)
+          : {};
+      const targetUserId =
+        audit.badgeAward?.userId ??
+        (typeof data.targetUserId === 'string'
+          ? data.targetUserId
+          : typeof data.userId === 'string'
+            ? data.userId
+            : '');
+      const target = audit.badgeAward?.user ?? (targetUserId ? userById.get(targetUserId) : null);
+      return {
+        id: audit.id,
+        occurredAt: audit.occurredAt,
+        category: 'バッジ',
+        action: badgeAuditActionLabels[audit.action] ?? audit.action,
+        actor: displayName(audit.performedBy),
+        targetUserId,
+        target: target ? displayName(target) : '',
+        badgeCode: audit.badgeVersion?.definition.code ?? audit.badgeDefinition?.code ?? '',
+        badgeTitle: audit.badgeVersion?.title ?? audit.badgeDefinition?.versions[0]?.title ?? '',
+        reason: audit.reason,
+        beforeData: audit.beforeData,
+        afterData: audit.afterData,
+      };
+    }),
+  ].sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
+  return [
+    [
+      '履歴ID',
+      '日時',
+      '分類',
+      '操作',
+      '実行者',
+      '対象参加者ID',
+      '対象参加者名',
+      'バッジコード',
+      'バッジ名',
+      '理由',
+      '変更前',
+      '変更後',
+    ],
+    ...rows.map((row) => [
+      row.id,
+      timestamp(row.occurredAt),
+      row.category,
+      row.action,
+      row.actor,
+      row.targetUserId,
+      row.target,
+      row.badgeCode,
+      row.badgeTitle,
+      row.reason,
+      jsonCell(row.beforeData),
+      jsonCell(row.afterData),
+    ]),
+  ];
+}
+
 export async function serviceRewardExportResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
@@ -203,11 +381,13 @@ export async function serviceRewardExportResponse(request: Request, serviceSlug:
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reward export kind');
     const kind = requestedKind as ExportKind;
     const rows =
-      kind === 'points'
-        ? await pointRows(service.workspaceId, service.serviceId)
-        : kind === 'badges'
-          ? await badgeRows(service.workspaceId, service.serviceId)
-          : await summaryRows(service.workspaceId, service.serviceId);
+      kind === 'audit'
+        ? await auditRows(service.workspaceId, service.serviceId)
+        : kind === 'points'
+          ? await pointRows(service.workspaceId, service.serviceId)
+          : kind === 'badges'
+            ? await badgeRows(service.workspaceId, service.serviceId)
+            : await summaryRows(service.workspaceId, service.serviceId);
     return new Response(csv(rows), {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
