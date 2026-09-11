@@ -3,6 +3,7 @@ import type {
   PointBalanceReconciliationRepository,
   PointBalanceReconciliationResult,
 } from '@bunshin/application';
+import { ApplicationError } from '@bunshin/shared';
 
 interface PointBalanceRow {
   accountId: string;
@@ -11,6 +12,7 @@ interface PointBalanceRow {
   storedBalance: number;
   ledgerBalance: bigint;
   mismatchCount: bigint;
+  revision: number;
 }
 
 function safeNumber(value: bigint, field: string) {
@@ -32,6 +34,7 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             account."workspace_id" AS "workspaceId",
             account."user_id" AS "userId",
             account."available_points" AS "storedBalance",
+            account."revision" AS "revision",
             COALESCE(SUM(ledger."amount"), 0)::bigint AS "ledgerBalance"
           FROM "point_accounts" account
           LEFT JOIN "point_transactions" ledger
@@ -40,7 +43,8 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             account."id",
             account."workspace_id",
             account."user_id",
-            account."available_points"
+            account."available_points",
+            account."revision"
         )
         SELECT balances.*, COUNT(*) OVER() AS "mismatchCount"
         FROM balances
@@ -58,6 +62,7 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
         storedBalance: row.storedBalance,
         ledgerBalance,
         difference: row.storedBalance - ledgerBalance,
+        revision: row.revision,
       };
     });
     return {
@@ -65,5 +70,83 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
       mismatchCount: rows[0] ? safeNumber(rows[0].mismatchCount, 'mismatch count') : 0,
       mismatches,
     };
+  }
+
+  async repair(input: {
+    accountId: string;
+    workspaceId: string;
+    userId: string;
+    actorUserId: string;
+    expectedStoredBalance: number;
+    expectedLedgerBalance: number;
+    expectedRevision: number;
+    reason: string;
+  }) {
+    return this.client.$transaction(
+      async (tx) => {
+        const admin = await tx.platformAdmin.findFirst({
+          where: { userId: input.actorUserId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+          select: { id: true },
+        });
+        if (!admin)
+          throw new ApplicationError('FORBIDDEN', 'point balance repair requires super admin');
+        const account = await tx.pointAccount.findFirst({
+          where: {
+            id: input.accountId,
+            workspaceId: input.workspaceId,
+            userId: input.userId,
+          },
+          select: { id: true, availablePoints: true, revision: true },
+        });
+        if (!account) return null;
+        const ledger = await tx.pointTransaction.aggregate({
+          where: {
+            accountId: input.accountId,
+            workspaceId: input.workspaceId,
+            userId: input.userId,
+          },
+          _sum: { amount: true },
+        });
+        const ledgerBalance = ledger._sum.amount ?? 0;
+        if (
+          account.availablePoints !== input.expectedStoredBalance ||
+          account.revision !== input.expectedRevision ||
+          ledgerBalance !== input.expectedLedgerBalance ||
+          ledgerBalance < 0 ||
+          account.availablePoints === ledgerBalance
+        )
+          throw new ApplicationError('CONFLICT', 'point balance repair conflict');
+        const changed = await tx.pointAccount.updateMany({
+          where: {
+            id: input.accountId,
+            workspaceId: input.workspaceId,
+            userId: input.userId,
+            availablePoints: input.expectedStoredBalance,
+            revision: input.expectedRevision,
+          },
+          data: { availablePoints: ledgerBalance, revision: { increment: 1 } },
+        });
+        if (changed.count !== 1)
+          throw new ApplicationError('CONFLICT', 'point balance repair conflict');
+        await tx.pointBalanceRepairAudit.create({
+          data: {
+            accountId: input.accountId,
+            workspaceId: input.workspaceId,
+            userId: input.userId,
+            previousBalance: account.availablePoints,
+            repairedBalance: ledgerBalance,
+            ledgerBalance,
+            reason: input.reason,
+            performedByUserId: input.actorUserId,
+          },
+        });
+        return {
+          accountId: input.accountId,
+          previousBalance: account.availablePoints,
+          repairedBalance: ledgerBalance,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 }

@@ -1708,6 +1708,7 @@ model User {
   videoProjects                     VideoProject[]                      @relation("VideoProjectOwner")
   videoAssets                       VideoAsset[]                        @relation("VideoAssetOwner")
   pointAccounts                     PointAccount[]
+  pointBalanceRepairsPerformed      PointBalanceRepairAudit[]           @relation("PointBalanceRepairActor")
   pointTransactions                 PointTransaction[]
   pointProcessingEvents             PointProcessingEvent[]
   pointRedemptions                  PointRedemption[]
@@ -1895,6 +1896,7 @@ model Workspace {
   videoProjects                   VideoProject[]
   videoAssets                     VideoAsset[]
   pointAccounts                   PointAccount[]
+  pointBalanceRepairAudits        PointBalanceRepairAudit[]
   pointRuleVersions               PointRuleVersion[]
   pointTransactions               PointTransaction[]
   pointProcessingEvents           PointProcessingEvent[]
@@ -2943,11 +2945,33 @@ model PointAccount {
   user            User               @relation(fields: [userId], references: [id], onDelete: Restrict)
   transactions    PointTransaction[]
   redemptions     PointRedemption[]
+  repairAudits    PointBalanceRepairAudit[]
 
   @@unique([workspaceId, userId])
   @@unique([workspaceId, id, userId])
   @@index([userId])
   @@map("point_accounts")
+}
+
+model PointBalanceRepairAudit {
+  id                String       @id @default(uuid()) @db.Uuid
+  workspaceId       String       @map("workspace_id") @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  accountId         String       @map("account_id") @db.Uuid
+  previousBalance   Int          @map("previous_balance")
+  repairedBalance   Int          @map("repaired_balance")
+  ledgerBalance     Int          @map("ledger_balance")
+  reason            String       @db.VarChar(1000)
+  performedByUserId String       @map("performed_by_user_id") @db.Uuid
+  occurredAt        DateTime     @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  account           PointAccount @relation(fields: [workspaceId, accountId, userId], references: [workspaceId, id, userId], onDelete: Restrict)
+  performedBy       User         @relation("PointBalanceRepairActor", fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, occurredAt])
+  @@index([accountId, occurredAt])
+  @@index([performedByUserId, occurredAt])
+  @@map("point_balance_repair_audits")
 }
 
 model PointRuleVersion {
