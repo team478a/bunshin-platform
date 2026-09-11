@@ -43,6 +43,8 @@ describe('group badge workflow boundaries', () => {
     expect(source).toContain('!serviceOperator');
     expect(source).toContain('input.actorUserId === candidate.userId');
     expect(source).toContain('input.actorUserId === candidate.nominatedByUserId');
+    expect(source).toContain('input.actorUserId === input.userId');
+    expect(source).toContain('if (serviceOperator) return null');
     expect(source).toContain('GROUP_BADGE_CANDIDATE_NOMINATED');
     expect(source).toContain('BADGE_AWARD_REVOKED_BY_SERVICE_OPERATOR');
     expect(source).toContain("status: 'REVOKED', revokedAt: input.now");

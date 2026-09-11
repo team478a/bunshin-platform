@@ -23,6 +23,9 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('availablePoints: { gte: parsed.data.amount }');
     expect(page).toContain('recoveryDue: 0');
     expect(page).toContain('tx.pointConsumptionLink.create');
+    expect(page).toContain('parsed.data.userId === actor.userId');
+    expect(page).toContain('memberships.filter(({ userId }) => userId !== actor.userId)');
+    expect(page).toContain('運営者自身への付与はできません。');
   });
 
   it('lets a scoped suspended rule override the global default', () => {

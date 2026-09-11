@@ -47,6 +47,8 @@ describe('group badge admin boundaries', () => {
     expect(groupPage).toContain('これからの付与には新しい表示を使います。');
     expect(groupPage).toContain('badgeAppearanceImageKey(parsed.data.badgeStyle)');
     expect(groupPage).toContain('name="badgeStyle"');
+    expect(groupPage).toContain('membership.userId !== actor.userId');
+    expect(groupPage).toContain('運営者自身への付与はできません。');
   });
 
   it('limits badge publication review to super admins', () => {

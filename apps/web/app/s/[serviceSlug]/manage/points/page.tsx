@@ -166,6 +166,7 @@ async function grantBonus(formData: FormData) {
   if (!parsed.success) redirect('/groups');
   const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
   try {
+    if (parsed.data.userId === actor.userId) throw new Error('SELF_REWARD_NOT_ALLOWED');
     const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const now = new Date();
@@ -403,6 +404,7 @@ export default async function ServicePointSettingsPage({
     orderBy: { user: { displayName: 'asc' } },
   });
   const memberUserIds = memberships.map(({ userId }) => userId);
+  const bonusRecipients = memberships.filter(({ userId }) => userId !== actor.userId);
   const [versions, history, pointAccounts, servicePointTransactions, badgeAwards] =
     await Promise.all([
       db.prisma.pointRuleVersion.findMany({
@@ -660,43 +662,48 @@ export default async function ServicePointSettingsPage({
         <section className="settings-card">
           <h2>参加者へボーナスを付与</h2>
           <p>イベントやお礼など、運営判断でポイントを追加できます。理由と実行者を記録します。</p>
-          <form action={grantBonus} className="form-stack">
-            <input type="hidden" name="serviceSlug" value={serviceSlug} />
-            <label className="field">
-              <span className="field__label">参加者</span>
-              <select className="field__control" name="userId" required>
-                {memberships.map((membership) => (
-                  <option key={membership.userId} value={membership.userId}>
-                    {membership.user.displayName || membership.user.email || membership.userId}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span className="field__label">追加するポイント</span>
-              <input
-                className="field__control"
-                name="amount"
-                type="number"
-                min="1"
-                max="10000"
-                required
-              />
-            </label>
-            <label className="field">
-              <span className="field__label">付与する理由</span>
-              <textarea
-                className="field__control"
-                name="reason"
-                minLength={3}
-                maxLength={1000}
-                required
-              />
-            </label>
-            <button className="button" type="submit">
-              ボーナスを付与
-            </button>
-          </form>
+          <p>運営者自身への付与はできません。</p>
+          {bonusRecipients.length === 0 ? (
+            <p>付与できる参加者はまだいません。</p>
+          ) : (
+            <form action={grantBonus} className="form-stack">
+              <input type="hidden" name="serviceSlug" value={serviceSlug} />
+              <label className="field">
+                <span className="field__label">参加者</span>
+                <select className="field__control" name="userId" required>
+                  {bonusRecipients.map((membership) => (
+                    <option key={membership.userId} value={membership.userId}>
+                      {membership.user.displayName || membership.user.email || membership.userId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">追加するポイント</span>
+                <input
+                  className="field__control"
+                  name="amount"
+                  type="number"
+                  min="1"
+                  max="10000"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span className="field__label">付与する理由</span>
+                <textarea
+                  className="field__control"
+                  name="reason"
+                  minLength={3}
+                  maxLength={1000}
+                  required
+                />
+              </label>
+              <button className="button" type="submit">
+                ボーナスを付与
+              </button>
+            </form>
+          )}
         </section>
 
         <section className="settings-card">

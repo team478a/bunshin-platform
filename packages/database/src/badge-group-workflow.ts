@@ -373,6 +373,19 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
 
   async nominate(input: Parameters<BadgeGroupWorkflowRepository['nominate']>[0]) {
     if (!(await this.manager(input.workspaceId, input.groupId, input.actorUserId))) return null;
+    if (input.actorUserId === input.userId) {
+      const serviceOperator = await this.client.groupMembership.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        },
+        select: { id: true },
+      });
+      if (serviceOperator) return null;
+    }
     const [version, member] = await Promise.all([
       this.client.badgeVersion.findFirst({
         where: {
