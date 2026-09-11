@@ -26,4 +26,8 @@ describe('service help page', () => {
     expect(home).toContain('/help');
     expect(management).toContain('/help');
   });
+
+  it('explains that posting completion is self-reported', () => {
+    expect(source).toContain('この記録は自己申告で、SNSへの投稿は自動確認されません。');
+  });
 });

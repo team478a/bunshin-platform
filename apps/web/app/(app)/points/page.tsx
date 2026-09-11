@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic';
 
 const ruleLabels: Record<string, string> = {
   MISSION_VIEWED_DAILY: '今日の企画をはじめて見る',
-  POSTED_DAILY: '「投稿しました」を押す',
-  POSTED_WEEKLY_3: '1週間に3回投稿する',
+  POSTED_DAILY: 'SNSへ投稿した後に「投稿しました」を押す',
+  POSTED_WEEKLY_3: '「投稿しました」の記録が1週間に3回になる',
 };
 
 const transactionLabels: Record<PointTransactionType, string> = {
@@ -141,6 +141,9 @@ export default async function PointsPage({
         ) : (
           <p>いま利用できる、ため方はありません。</p>
         )}
+        <p>
+          「投稿しました」は自己申告です。SNSへの実際の投稿は自動確認されません。実際に投稿した後で記録してください。
+        </p>
       </section>
 
       <section className="settings-card" aria-labelledby="point-history-title">

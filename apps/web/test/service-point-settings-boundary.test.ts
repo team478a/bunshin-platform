@@ -53,6 +53,7 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('この設定で発行できる合計上限');
     expect(page).toContain('空欄なら上限なし');
     expect(page).toContain('saved.budget.grantedPoints');
+    expect(page).toContain('SNSへの実際の投稿は自動確認されません。');
   });
 
   it('shows only service-scoped point activity and badge awards to the operator', () => {
