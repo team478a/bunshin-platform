@@ -154,11 +154,6 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
   }
 
   async review(input: Parameters<BadgeGroupWorkflowRepository['review']>[0]) {
-    const admin = await this.client.platformAdmin.findFirst({
-      where: { userId: input.actorUserId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
-      select: { id: true },
-    });
-    if (!admin) return null;
     return this.client.$transaction(
       async (tx) => {
         const request = await tx.badgeApprovalRequest.findFirst({
@@ -171,6 +166,23 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
           request.badgeVersion.definition.groupId !== request.groupId
         )
           return null;
+        const [admin, serviceOperator] = await Promise.all([
+          tx.platformAdmin.findFirst({
+            where: { userId: input.actorUserId, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+            select: { id: true },
+          }),
+          tx.groupMembership.findFirst({
+            where: {
+              workspaceId: request.workspaceId,
+              groupId: request.groupId,
+              userId: input.actorUserId,
+              status: 'ACTIVE',
+              serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+            },
+            select: { id: true },
+          }),
+        ]);
+        if (!admin && !serviceOperator) return null;
         const updated = await tx.badgeApprovalRequest.update({
           where: { id: request.id },
           data: {
@@ -283,11 +295,25 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
       where: { id: input.candidateId, status: 'PENDING' },
       include: { badgeVersion: { include: { definition: true } } },
     });
+    if (!candidate) return null;
+    const [manager, serviceOperator] = await Promise.all([
+      this.manager(candidate.workspaceId, candidate.groupId, input.actorUserId),
+      this.client.groupMembership.findFirst({
+        where: {
+          workspaceId: candidate.workspaceId,
+          groupId: candidate.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          role: 'MANAGER',
+          serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!manager) return null;
     if (
-      !candidate ||
-      !(await this.manager(candidate.workspaceId, candidate.groupId, input.actorUserId)) ||
-      input.actorUserId === candidate.userId ||
-      input.actorUserId === candidate.nominatedByUserId
+      !serviceOperator &&
+      (input.actorUserId === candidate.userId || input.actorUserId === candidate.nominatedByUserId)
     )
       return null;
     return this.client.$transaction(

@@ -11,6 +11,15 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const serviceOperatorMigration = readFileSync(
+  fileURLToPath(
+    new URL(
+      '../prisma/migrations/20260911010000_allow_service_operator_badge_award/migration.sql',
+      import.meta.url,
+    ),
+  ),
+  'utf8',
+);
 const source = readFileSync(
   fileURLToPath(new URL('../src/badge-group-workflow.ts', import.meta.url)),
   'utf8',
@@ -28,12 +37,17 @@ describe('group badge workflow boundaries', () => {
     expect(migration).toContain('badge_approval_review_state_check');
     expect(migration).toContain('badge_candidate_review_state_check');
   });
-  it('requires super admin approval and a separate candidate reviewer', () => {
+  it('allows an audited service operator path while preserving separation for group managers', () => {
     expect(source).toContain("role: 'SUPER_ADMIN'");
+    expect(source).toContain("serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] }");
+    expect(source).toContain('!serviceOperator');
     expect(source).toContain('input.actorUserId === candidate.userId');
     expect(source).toContain('input.actorUserId === candidate.nominatedByUserId');
     expect(source).toContain('GROUP_BADGE_CANDIDATE_NOMINATED');
     expect(badgeCoreSource).toContain("definition?.ownerType === 'GROUP'");
+    expect(serviceOperatorMigration).toContain(
+      'DROP CONSTRAINT IF EXISTS "badge_candidate_separate_reviewer_check"',
+    );
   });
   it('creates group drafts with fixed safe policies in one transaction', () => {
     expect(source).toContain("conditionType: 'MANUAL_APPROVAL'");

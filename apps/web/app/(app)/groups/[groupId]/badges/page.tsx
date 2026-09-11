@@ -1,6 +1,7 @@
 import {
   CreateAndSubmitGroupBadge,
   NominateGroupBadgeCandidate,
+  ReviewGroupBadge,
   ReviewGroupBadgeCandidate,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
@@ -59,13 +60,20 @@ async function createBadge(formData: FormData) {
   });
   try {
     const db = await import('@bunshin/database');
-    await new CreateAndSubmitGroupBadge(
-      new db.PrismaBadgeGroupWorkflowRepository(db.prisma),
-    ).execute({
+    const repository = new db.PrismaBadgeGroupWorkflowRepository(db.prisma);
+    const created = await new CreateAndSubmitGroupBadge(repository).execute({
       ...parsed.data,
       imageKey: `badges/groups/${parsed.data.groupId}/${parsed.data.code.toLowerCase()}.svg`,
       actorUserId: actor.userId,
     });
+    if (parsed.data.serviceSlug) {
+      await new ReviewGroupBadge(repository).execute({
+        approvalRequestId: created.approvalRequestId,
+        actorUserId: actor.userId,
+        decision: 'APPROVED',
+        reason: `サービス運営者による公開: ${parsed.data.reason}`,
+      });
+    }
   } catch (error) {
     redirect(`${returnPath}?error=${errorCode(error)}` as Route);
   }
@@ -86,9 +94,19 @@ async function nominate(formData: FormData) {
   });
   try {
     const db = await import('@bunshin/database');
-    await new NominateGroupBadgeCandidate(
-      new db.PrismaBadgeGroupWorkflowRepository(db.prisma),
-    ).execute({ ...parsed.data, actorUserId: actor.userId });
+    const repository = new db.PrismaBadgeGroupWorkflowRepository(db.prisma);
+    const candidate = await new NominateGroupBadgeCandidate(repository).execute({
+      ...parsed.data,
+      actorUserId: actor.userId,
+    });
+    if (parsed.data.serviceSlug) {
+      await new ReviewGroupBadgeCandidate(repository).execute({
+        candidateId: candidate.id,
+        actorUserId: actor.userId,
+        decision: 'APPROVED',
+        reason: `サービス運営者による直接付与: ${parsed.data.reason}`,
+      });
+    }
   } catch (error) {
     redirect(`${returnPath}?error=${errorCode(error)}` as Route);
   }
@@ -160,7 +178,11 @@ export default async function GroupBadgesPage({
       name: true,
       memberships: {
         where: { status: 'ACTIVE' },
-        select: { userId: true, user: { select: { displayName: true, email: true } } },
+        select: {
+          userId: true,
+          serviceRole: true,
+          user: { select: { displayName: true, email: true } },
+        },
         orderBy: { user: { displayName: 'asc' } },
       },
     },
@@ -189,12 +211,21 @@ export default async function GroupBadgesPage({
     definition.versions.filter((version) => version.publishedAt !== null),
   );
   const query = await searchParams;
+  const serviceOperator = group.memberships.some(
+    (membership) =>
+      membership.userId === actor.userId &&
+      (membership.serviceRole === 'SERVICE_OWNER' || membership.serviceRole === 'SERVICE_ADMIN'),
+  );
   return (
     <main className="app-page">
       <header className="app-page__heading">
         <p className="eyebrow">サービス管理者</p>
         <h1>{group.name}のバッジ</h1>
-        <p>サービスで使うバッジを本部へ申請し、参加者への付与を二人で確認します。</p>
+        <p>
+          {serviceOperator
+            ? 'このサービス専用のバッジを作り、参加者を選んで付与できます。操作理由は履歴に残ります。'
+            : 'サービスで使うバッジを本部へ申請し、参加者への付与を二人で確認します。'}
+        </p>
         {query.service ? (
           <a href={`/s/${query.service}/manage/members`}>← 参加者管理へ戻る</a>
         ) : (
@@ -202,9 +233,15 @@ export default async function GroupBadgesPage({
         )}
       </header>
       {query.created ? (
-        <p className="notice notice--success">バッジ案を本部へ送りました。</p>
+        <p className="notice notice--success">
+          {serviceOperator ? 'バッジを作成しました。' : 'バッジ案を本部へ送りました。'}
+        </p>
       ) : null}
-      {query.nominated ? <p className="notice notice--success">付与候補を登録しました。</p> : null}
+      {query.nominated ? (
+        <p className="notice notice--success">
+          {serviceOperator ? 'バッジを付与しました。' : '付与候補を登録しました。'}
+        </p>
+      ) : null}
       {query.reviewed ? (
         <p className="notice notice--success">候補者の確認を保存しました。</p>
       ) : null}
@@ -215,8 +252,12 @@ export default async function GroupBadgesPage({
       ) : null}
 
       <section className="settings-card">
-        <h2>新しいバッジを本部へ申請</h2>
-        <p>申請後、本部が内容を確認するまで参加者には付与できません。</p>
+        <h2>{serviceOperator ? '新しいバッジを作る' : '新しいバッジを本部へ申請'}</h2>
+        <p>
+          {serviceOperator
+            ? '保存すると、このサービスですぐに付与できるようになります。'
+            : '申請後、本部が内容を確認するまで参加者には付与できません。'}
+        </p>
         <form action={createBadge} className="form-stack">
           {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
           <input type="hidden" name="workspaceId" value={group.workspaceId} />
@@ -256,7 +297,7 @@ export default async function GroupBadgesPage({
             <textarea className="field__control" name="reason" minLength={3} required />
           </label>
           <button className="button" type="submit">
-            本部へ申請する
+            {serviceOperator ? 'バッジを作成する' : '本部へ申請する'}
           </button>
         </form>
       </section>
@@ -282,7 +323,7 @@ export default async function GroupBadgesPage({
       </section>
 
       <section className="settings-card">
-        <h2>参加者を付与候補にする</h2>
+        <h2>{serviceOperator ? '参加者へバッジを付与' : '参加者を付与候補にする'}</h2>
         {activeVersions.length === 0 ? (
           <p>本部の承認が終わったバッジがありません。</p>
         ) : (
@@ -315,7 +356,7 @@ export default async function GroupBadgesPage({
               <textarea className="field__control" name="reason" minLength={3} required />
             </label>
             <button className="button" type="submit">
-              候補として登録
+              {serviceOperator ? 'このバッジを付与する' : '候補として登録'}
             </button>
           </form>
         )}
@@ -324,8 +365,12 @@ export default async function GroupBadgesPage({
       <BadgeCsvImporter workspaceId={group.workspaceId} groupId={group.id} />
 
       <section className="settings-card">
-        <h2>候補者を別の管理者が確認</h2>
-        <p>推薦した本人と候補者本人は承認できません。</p>
+        <h2>{serviceOperator ? 'バッジを付与する' : '候補者を別の管理者が確認'}</h2>
+        <p>
+          {serviceOperator
+            ? '1人運営の場合も、運営者自身で確認して付与できます。付与理由を必ず記録します。'
+            : '推薦した本人と候補者本人は承認できません。'}
+        </p>
         {candidates.length === 0 ? (
           <p>候補者はまだいません。</p>
         ) : (

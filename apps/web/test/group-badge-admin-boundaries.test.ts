@@ -31,6 +31,12 @@ describe('group badge admin boundaries', () => {
     expect(groupPage).not.toContain('bunshinMemory');
   });
 
+  it('lets a service operator create and award within the service route', () => {
+    expect(groupPage).toContain('ReviewGroupBadge(repository).execute');
+    expect(groupPage).toContain('ReviewGroupBadgeCandidate(repository).execute');
+    expect(groupPage).toContain('サービス運営者による直接付与');
+  });
+
   it('limits badge publication review to super admins', () => {
     expect(adminPage).toContain("role: 'SUPER_ADMIN'");
     expect(adminPage).toContain("status: 'ACTIVE'");

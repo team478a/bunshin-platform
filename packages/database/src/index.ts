@@ -19157,6 +19157,17 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
     });
     if (!membership) return null;
 
+    const groupMemberships = await this.client.groupMembership.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        group: { status: 'ACTIVE' },
+      },
+      select: { groupId: true },
+    });
+    const groupIds = groupMemberships.map(({ groupId }) => groupId);
+
     const account = await this.client.pointAccount.findUnique({
       where: {
         workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId },
@@ -19202,11 +19213,11 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
         : [],
       this.client.pointRuleVersion.findMany({
         where: {
-          status: 'ACTIVE',
-          groupId: null,
+          status: { in: ['ACTIVE', 'SUSPENDED'] },
+          OR: [{ groupId: null }, { groupId: { in: groupIds } }],
           campaignId: null,
-          OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }],
           AND: [
+            { OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }] },
             { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
             { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
           ],
@@ -19217,6 +19228,8 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
           dailyLimit: true,
           weeklyLimit: true,
           workspaceId: true,
+          groupId: true,
+          status: true,
           version: true,
         },
         orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
@@ -19233,8 +19246,10 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
     rules
       .sort(
         (left, right) =>
+          Number(Boolean(right.groupId)) - Number(Boolean(left.groupId)) ||
           Number(right.workspaceId === input.workspaceId) -
-            Number(left.workspaceId === input.workspaceId) || right.version - left.version,
+            Number(left.workspaceId === input.workspaceId) ||
+          right.version - left.version,
       )
       .forEach((rule) => {
         if (!uniqueRules.has(rule.ruleKey)) uniqueRules.set(rule.ruleKey, rule);
@@ -19253,7 +19268,7 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
       recentTransactions: transactions.map(pointTransactionRecord),
       expiringWithin30Days: expiringBalances.reduce((sum, item) => sum + item.amount, 0),
       nextExpiryAt: expiringBalances[0]?.expiresAt ?? null,
-      earningMethods: [...uniqueRules.values()],
+      earningMethods: [...uniqueRules.values()].filter((rule) => rule.status === 'ACTIVE'),
       weeklyPosts: posts.filter((post) => pointWeekKey(post.postedAt, input.timezone) === weekKey)
         .length,
       weeklyPostGoal: 3,
@@ -20031,7 +20046,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
             const rules = await tx.pointRuleVersion.findMany({
               where: {
                 ruleKey: request.key,
-                status: 'ACTIVE',
+                status: { in: ['ACTIVE', 'SUSPENDED'] },
                 OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }],
                 AND: [
                   { OR: [{ groupId: null }, { groupId }] },
@@ -20049,6 +20064,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
                 Number(Boolean(right.workspaceId)) - Number(Boolean(left.workspaceId)),
             )[0];
             if (!rule) continue;
+            if (rule.status === 'SUSPENDED') continue;
             activeRuleFound = true;
             const idempotencyKey = `rule:${rule.id}:${request.period}`;
             const existing = await tx.pointTransaction.findUnique({
