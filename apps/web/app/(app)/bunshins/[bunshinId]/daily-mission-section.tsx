@@ -1133,6 +1133,9 @@ export function DailyMissionSection({
                         ))}
                       {mission.postedAt === null ? (
                         <div className="mission-post-action">
+                          <p className="mission-self-report-notice">
+                            SNSへ実際に投稿した後で押してください。投稿したかどうかは自動では確認されず、自己申告で記録されます。
+                          </p>
                           <button
                             type="button"
                             disabled={busy || mission.platform === null}

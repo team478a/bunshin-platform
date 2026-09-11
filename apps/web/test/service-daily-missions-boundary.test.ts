@@ -112,6 +112,7 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('今回は使わない');
     expect(experience).toContain('copyOptions(missionWithSelectedVariant(mission))');
     expect(experience).toContain('投稿しました');
+    expect(experience).toContain('投稿したかどうかは自動では確認されず、自己申告で記録されます。');
     expect(experience).toContain('この投稿は、あなたらしかったですか？');
     expect(detailPage).toContain('new AuthorizeDailyMissionCopy(missionRepository)');
   });

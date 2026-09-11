@@ -647,13 +647,21 @@ export function ServiceDailyMissionSection({
                         </button>
                       ))}
                       {mission.postedAt === null ? (
-                        <button
-                          type="button"
-                          disabled={pendingAction !== null || mission.platform === null}
-                          onClick={() => void markPosted(mission)}
-                        >
-                          投稿しました
-                        </button>
+                        <div className="mission-post-action">
+                          <p className="mission-self-report-notice">
+                            SNSへ実際に投稿した後で押してください。投稿したかどうかは自動では確認されず、自己申告で記録されます。
+                          </p>
+                          <button
+                            type="button"
+                            disabled={pendingAction !== null || mission.platform === null}
+                            onClick={() => void markPosted(mission)}
+                          >
+                            投稿しました
+                          </button>
+                          {mission.platform === null && (
+                            <p>投稿したことを記録するには、使うSNSを先に決めてください。</p>
+                          )}
+                        </div>
                       ) : (
                         <div className="mission-feedback">
                           <p className="mission-step-complete">✓ 投稿済み</p>

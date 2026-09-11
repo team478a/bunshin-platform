@@ -74,6 +74,14 @@ describe('mission content variant HTTP and UI boundary', () => {
     },
   );
 
+  it.each([personalExperience, serviceExperience])(
+    'explains that a completed post is recorded by self-report',
+    (source) => {
+      expect(source).toContain('SNSへ実際に投稿した後で押してください。');
+      expect(source).toContain('投稿したかどうかは自動では確認されず、自己申告で記録されます。');
+    },
+  );
+
   it('opens the balance for the workspace charged by the variant', () => {
     expect(personalExperience).toContain('/points?workspaceId=');
     expect(serviceExperience).toContain('pointWorkspaceId');

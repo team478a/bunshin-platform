@@ -23,8 +23,8 @@ const RULES = [
   {
     key: 'POSTED_DAILY',
     budgetKey: 'budget_POSTED_DAILY',
-    label: '「投稿しました」を押す',
-    help: '1日1回まで付与します。',
+    label: 'SNSへ投稿した後に「投稿しました」を押す',
+    help: '利用者の自己申告で、1日1回まで付与します。SNSへの実際の投稿は自動確認されません。',
     defaultAmount: 5,
     dailyLimit: 5,
     weeklyLimit: null,
@@ -32,8 +32,8 @@ const RULES = [
   {
     key: 'POSTED_WEEKLY_3',
     budgetKey: 'budget_POSTED_WEEKLY_3',
-    label: '1週間に3回投稿する',
-    help: '1週間に1回まで付与します。',
+    label: '「投稿しました」の記録が1週間に3回になる',
+    help: '自己申告の投稿記録を数え、1週間に1回まで付与します。',
     defaultAmount: 10,
     dailyLimit: null,
     weeklyLimit: 10,

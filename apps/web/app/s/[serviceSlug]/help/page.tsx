@@ -175,7 +175,9 @@ export default async function ServiceHelpPage({
             <li>内容を読み、「採用する」または「今回は使わない」を選びます。</li>
             <li>採用した投稿文や指示文をコピーし、必要に応じて整えます。</li>
             <li>ご自身のSNSへ投稿します。SNSへの自動公開は行われません。</li>
-            <li>「投稿しました」と感想を記録します。次回以降の提案改善に使われます。</li>
+            <li>
+              SNSへ実際に投稿した後で「投稿しました」を押し、感想を記録します。この記録は自己申告で、SNSへの投稿は自動確認されません。
+            </li>
           </ol>
           <details className="service-help__details">
             <summary>紹介URL・ポイント・バッジについて</summary>
