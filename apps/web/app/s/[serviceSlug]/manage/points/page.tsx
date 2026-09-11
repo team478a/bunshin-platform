@@ -542,6 +542,12 @@ export default async function ServicePointSettingsPage({
             >
               バッジ履歴を保存
             </a>
+            <a
+              className="button button--secondary"
+              href={`/api/services/${encodeURIComponent(serviceSlug)}/rewards-export?kind=audit`}
+            >
+              運営操作履歴を保存
+            </a>
           </div>
           {memberships.length === 0 ? (
             <p>参加者はまだいません。</p>
