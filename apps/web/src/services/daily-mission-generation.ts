@@ -207,9 +207,10 @@ export class DailyMissionGenerationService {
         : await new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
             scope,
           );
-      const memoryRepository = input.serviceSafeMode && input.allowServiceOwnerMemories
-        ? new db.PrismaOwnerBunshinMemoryRepository()
-        : new db.PrismaBunshinMemoryRepository();
+      const memoryRepository =
+        input.serviceSafeMode && input.allowServiceOwnerMemories
+          ? new db.PrismaOwnerBunshinMemoryRepository()
+          : new db.PrismaBunshinMemoryRepository();
       const ownerMemories =
         input.serviceSafeMode && !input.allowServiceOwnerMemories
           ? []
