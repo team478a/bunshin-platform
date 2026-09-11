@@ -14,6 +14,9 @@ describe('point expiration operations', () => {
     expect(operations).toContain('ReleaseExpiredPointReservations');
     expect(operations).toContain('ExpireAvailablePointGrants');
     expect(operations).toContain('PrismaPointExpirationRepository');
+    expect(operations).toContain('InspectPointBalances');
+    expect(operations).toContain('PrismaPointBalanceReconciliationRepository');
+    expect(operations).toContain('point balance mismatch detected');
     expect(vercel).toContain('/api/internal/points/release-expired');
   });
 });

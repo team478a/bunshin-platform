@@ -1,6 +1,7 @@
 import {
   CheckLineOperationalReadiness,
   GetAdminAlerts,
+  InspectPointBalances,
   ListAiProviderConfigurations,
   ListLegalDocuments,
   ListProductionGateEvidence,
@@ -37,6 +38,9 @@ export default async function OperationsAdminPage() {
   if (!admin) notFound();
 
   const environment = getServerEnvironment();
+  const pointBalances = await new InspectPointBalances(
+    new db.PrismaPointBalanceReconciliationRepository(db.prisma),
+  ).execute({ limit: 100 });
   const alertCenter = await new GetAdminAlerts(new db.PrismaAdminAlertRepository()).execute({
     actorUserId: user.userId,
     environment: currentLineEnvironment(),
@@ -234,6 +238,25 @@ export default async function OperationsAdminPage() {
         <p>週の目標回数、休眠と判断する日数、成長段階、バッジの条件を版として管理します。</p>
         <Link href="/admin/activity-rules" className="button button--secondary">
           継続ルールを開く
+        </Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="point-balance-title">
+        <h2 id="point-balance-title">ポイント残高の確認</h2>
+        <p>
+          {pointBalances.mismatchCount === 0 ? (
+            <strong className="status-success">
+              {pointBalances.accountsChecked}件の残高に問題はありません
+            </strong>
+          ) : (
+            <strong className="status-warning">
+              {pointBalances.mismatchCount}件の残高を確認してください
+            </strong>
+          )}
+        </p>
+        <p>利用者に表示する残高と、ポイント履歴の合計が一致しているかを確認します。</p>
+        <Link href="/admin/points" className="button button--secondary">
+          確認結果を開く
         </Link>
       </section>
 
