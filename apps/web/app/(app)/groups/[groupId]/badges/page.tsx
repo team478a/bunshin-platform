@@ -359,6 +359,9 @@ export default async function GroupBadgesPage({
       membership.userId === actor.userId &&
       (membership.serviceRole === 'SERVICE_OWNER' || membership.serviceRole === 'SERVICE_ADMIN'),
   );
+  const awardableMemberships = serviceOperator
+    ? group.memberships.filter((membership) => membership.userId !== actor.userId)
+    : group.memberships;
   return (
     <main className="app-page">
       <header className="app-page__heading">
@@ -612,12 +615,15 @@ export default async function GroupBadgesPage({
 
       <section className="settings-card">
         <h2>{serviceOperator ? '参加者へバッジを付与' : '参加者を付与候補にする'}</h2>
+        {serviceOperator ? <p>運営者自身への付与はできません。</p> : null}
         {activeVersions.length === 0 ? (
           <p>
             {serviceOperator
               ? 'まず上のフォームでバッジを作成してください。作成後すぐに参加者へ付与できます。'
               : '本部の承認が終わったバッジがありません。'}
           </p>
+        ) : awardableMemberships.length === 0 ? (
+          <p>付与できる参加者はまだいません。</p>
         ) : (
           <form action={nominate} className="form-stack">
             {query.service && <input type="hidden" name="serviceSlug" value={query.service} />}
@@ -636,7 +642,7 @@ export default async function GroupBadgesPage({
             <label className="field">
               <span className="field__label">参加者</span>
               <select className="field__control" name="userId">
-                {group.memberships.map((membership) => (
+                {awardableMemberships.map((membership) => (
                   <option key={membership.userId} value={membership.userId}>
                     {membership.user.displayName}（{membership.user.email ?? 'メールなし'}）
                   </option>
