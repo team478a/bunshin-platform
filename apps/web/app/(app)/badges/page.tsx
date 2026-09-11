@@ -44,11 +44,19 @@ function Progress({ item }: { item: BadgeUserItem }) {
   );
 }
 
-export default async function BadgesPage() {
+export default async function BadgesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ workspaceId?: string }>;
+}) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
-  const workspace = (await db.listActiveWorkspacesForUser(user.userId))[0];
+  const workspaces = await db.listActiveWorkspacesForUser(user.userId);
+  const requestedWorkspaceId = (await searchParams).workspaceId;
+  const workspace = requestedWorkspaceId
+    ? workspaces.find(({ id }) => id === requestedWorkspaceId)
+    : workspaces[0];
   if (!workspace) redirect('/bunshins');
   let dashboard;
   try {
@@ -72,6 +80,23 @@ export default async function BadgesPage() {
         <p className="eyebrow">がんばったしるし</p>
         <h1>バッジ</h1>
         <p>できたことが増えると、バッジが集まります。</p>
+        {workspaces.length > 1 ? (
+          <form action="/badges" method="get" className="form-stack">
+            <label className="field">
+              <span className="field__label">表示するサービス</span>
+              <select className="field__control" name="workspaceId" defaultValue={workspace.id}>
+                {workspaces.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="button button--secondary" type="submit">
+              このサービスのバッジを見る
+            </button>
+          </form>
+        ) : null}
       </header>
 
       <BadgeNotificationList
