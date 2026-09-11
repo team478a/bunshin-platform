@@ -16,6 +16,13 @@ import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { serviceManagementReturnPath } from '../../../../../src/services/service-management-return';
 import { BadgeCsvImporter } from './badge-csv-importer';
+import {
+  BADGE_APPEARANCE_KEYS,
+  BADGE_APPEARANCES,
+  badgeAppearanceFromImageKey,
+  badgeAppearanceImageKey,
+} from '../../../../../src/badges/badge-appearance';
+import { BadgeMark } from '../../../../ui/badge-mark';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +33,7 @@ const draftSchema = z.object({
   category: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(500),
+  badgeStyle: z.enum(BADGE_APPEARANCE_KEYS),
   altText: z.string().trim().min(1).max(200),
   reason: z.string().trim().min(3).max(1000),
   serviceSlug: z.string().trim().max(120).optional(),
@@ -64,6 +72,7 @@ const revisionSchema = z.object({
   category: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(500),
+  badgeStyle: z.enum(BADGE_APPEARANCE_KEYS),
   altText: z.string().trim().min(1).max(200),
   reason: z.string().trim().min(3).max(1000),
   serviceSlug: z.string().trim().max(120).optional(),
@@ -89,7 +98,7 @@ async function createBadge(formData: FormData) {
     const repository = new db.PrismaBadgeGroupWorkflowRepository(db.prisma);
     const created = await new CreateAndSubmitGroupBadge(repository).execute({
       ...parsed.data,
-      imageKey: `badges/groups/${parsed.data.groupId}/${parsed.data.code.toLowerCase()}.svg`,
+      imageKey: badgeAppearanceImageKey(parsed.data.badgeStyle),
       actorUserId: actor.userId,
     });
     if (parsed.data.serviceSlug) {
@@ -240,6 +249,7 @@ async function reviseBadge(formData: FormData) {
     const db = await import('@bunshin/database');
     await new ReviseGroupBadge(new db.PrismaBadgeGroupWorkflowRepository(db.prisma)).execute({
       ...parsed.data,
+      imageKey: badgeAppearanceImageKey(parsed.data.badgeStyle),
       actorUserId: actor.userId,
     });
   } catch (error) {
@@ -432,6 +442,17 @@ export default async function GroupBadgesPage({
             <textarea className="field__control" name="description" required />
           </label>
           <label className="field">
+            <span className="field__label">絵柄</span>
+            <select className="field__control" name="badgeStyle" defaultValue="STAR">
+              {BADGE_APPEARANCES.map((appearance) => (
+                <option key={appearance.key} value={appearance.key}>
+                  {appearance.mark} {appearance.label}
+                </option>
+              ))}
+            </select>
+            <small>選んだ絵柄が、参加者のバッジ一覧に表示されます。</small>
+          </label>
+          <label className="field">
             <span className="field__label">画像の説明</span>
             <input
               className="field__control"
@@ -459,8 +480,13 @@ export default async function GroupBadgesPage({
             {definitions.map((definition) => {
               const version = definition.versions[0];
               const approval = version?.approvalRequests[0];
+              const appearance = badgeAppearanceFromImageKey(version?.imageKey ?? '');
               return (
                 <li key={definition.id}>
+                  <BadgeMark
+                    imageKey={version?.imageKey ?? ''}
+                    label={version?.altText ?? `${definition.code}のバッジ`}
+                  />{' '}
                   <strong>{version?.title ?? definition.code}</strong>（{definition.code}）—{' '}
                   {definition.status === 'SUSPENDED'
                     ? '停止中'
@@ -505,6 +531,21 @@ export default async function GroupBadgesPage({
                                 defaultValue={version.description}
                                 required
                               />
+                            </label>
+                            <label className="field">
+                              <span className="field__label">絵柄</span>
+                              <select
+                                className="field__control"
+                                name="badgeStyle"
+                                defaultValue={appearance.key}
+                              >
+                                {BADGE_APPEARANCES.map((item) => (
+                                  <option key={item.key} value={item.key}>
+                                    {item.mark} {item.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <small>変更後の絵柄は、参加者のバッジ一覧に表示されます。</small>
                             </label>
                             <label className="field">
                               <span className="field__label">画像の説明</span>

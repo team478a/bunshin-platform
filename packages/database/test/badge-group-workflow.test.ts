@@ -50,6 +50,8 @@ describe('group badge workflow boundaries', () => {
     expect(source).toContain('GROUP_BADGE_SUSPENDED_BY_SERVICE_OPERATOR');
     expect(source).toContain('GROUP_BADGE_REACTIVATED_BY_SERVICE_OPERATOR');
     expect(source).toContain('GROUP_BADGE_REVISED_BY_SERVICE_OPERATOR');
+    expect(source).toContain('imageKey: input.imageKey');
+    expect(source).toContain('imageKey: previous.imageKey');
     expect(source).toContain('version.version !== version.definition.currentVersion');
     expect(source).toContain('badgeVersion: { definitionId: version.definitionId }');
     expect(badgeCoreSource).toContain("definition?.ownerType === 'GROUP'");
