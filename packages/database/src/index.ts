@@ -250,7 +250,12 @@ import { ApplicationError } from '@bunshin/shared';
 import { runtimeDatabaseUrl } from './runtime-database-url';
 import { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
-export { hasActiveRewardsPilotAccess, REWARDS_PILOT_FEATURE_KEY } from './rewards-pilot-access';
+export {
+  getActiveRewardsPilotAccess,
+  hasActiveRewardsPilotAccess,
+  REWARDS_PILOT_FEATURE_KEY,
+  type RewardsPilotAccess,
+} from './rewards-pilot-access';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };
 const databaseUrl = runtimeDatabaseUrl(process.env['DATABASE_URL']);

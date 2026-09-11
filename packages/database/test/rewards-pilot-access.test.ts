@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
   REWARDS_PILOT_FEATURE_KEY,
 } from '../src/rewards-pilot-access';
@@ -9,7 +10,12 @@ const repository = readFileSync(new URL('../src/index.ts', import.meta.url), 'ut
 
 describe('rewards pilot access', () => {
   it('requires an active group policy and an active assignment for the same member', async () => {
-    const findFirst = vi.fn().mockResolvedValue({ id: 'membership-1' });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 'membership-1',
+      groupId: 'group-1',
+      group: { featurePolicies: [{ endsAt: new Date('2026-09-18T00:00:00.000Z') }] },
+      featureAssignments: [{ endsAt: new Date('2026-09-16T00:00:00.000Z') }],
+    });
     const at = new Date('2026-09-11T00:00:00.000Z');
 
     await expect(
@@ -39,6 +45,29 @@ describe('rewards pilot access', () => {
         }),
       }),
     );
+  });
+
+  it('returns the earliest end of the service and participant settings', async () => {
+    const access = await getActiveRewardsPilotAccess(
+      {
+        groupMembership: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'membership-1',
+            groupId: 'group-1',
+            group: { featurePolicies: [{ endsAt: new Date('2026-09-18T00:00:00.000Z') }] },
+            featureAssignments: [{ endsAt: new Date('2026-09-16T00:00:00.000Z') }],
+          }),
+        },
+      } as never,
+      { workspaceId: 'workspace-1', userId: 'user-1' },
+      new Date('2026-09-11T00:00:00.000Z'),
+    );
+
+    expect(access).toEqual({
+      membershipId: 'membership-1',
+      groupId: 'group-1',
+      endsAt: new Date('2026-09-16T00:00:00.000Z'),
+    });
   });
 
   it('denies access when no exact active membership matches', async () => {
