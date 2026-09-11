@@ -19969,7 +19969,12 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
                 actorUserId: input.actorUserId,
                 type: 'VIEWED',
               },
-              select: { occurredAt: true, dailyMission: { select: { campaignId: true } } },
+              select: {
+                occurredAt: true,
+                dailyMission: {
+                  select: { campaignId: true, bunshin: { select: { groupId: true } } },
+                },
+              },
             });
             if (!event) {
               await tx.pointProcessingEvent.update({
@@ -19979,6 +19984,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
               return 'NOT_ELIGIBLE';
             }
             campaignId = event.dailyMission.campaignId;
+            groupId = event.dailyMission.bunshin.groupId;
           } else {
             const event = await tx.postRecord.findFirst({
               where: {
@@ -19986,7 +19992,12 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
                 workspaceId: input.workspaceId,
                 actorUserId: input.actorUserId,
               },
-              select: { postedAt: true, dailyMission: { select: { campaignId: true } } },
+              select: {
+                postedAt: true,
+                dailyMission: {
+                  select: { campaignId: true, bunshin: { select: { groupId: true } } },
+                },
+              },
             });
             if (!event) {
               await tx.pointProcessingEvent.update({
@@ -19996,6 +20007,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
               return 'NOT_ELIGIBLE';
             }
             campaignId = event.dailyMission.campaignId;
+            groupId = event.dailyMission.bunshin.groupId;
           }
           if (campaignId) {
             const campaign = await tx.campaign.findFirst({
@@ -20010,6 +20022,23 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
               return 'NOT_ELIGIBLE';
             }
             groupId = campaign.groupId;
+          }
+          if (groupId) {
+            const pointControl = await tx.serviceConfiguration.findFirst({
+              where: { workspaceId: input.workspaceId, groupId },
+              select: { pointIssuanceStopped: true },
+            });
+            if (pointControl?.pointIssuanceStopped) {
+              await tx.pointProcessingEvent.update({
+                where: { id: processing.id },
+                data: {
+                  status: 'COMPLETED',
+                  failureCode: 'POINT_ISSUANCE_STOPPED',
+                  processedAt: new Date(),
+                },
+              });
+              return 'NO_ACTIVE_RULE';
+            }
           }
           const dayKey = pointDayKey(input.occurredAt, input.timezone);
           const weekKey = pointWeekKey(input.occurredAt, input.timezone);

@@ -63,4 +63,16 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('参加者のポイント・バッジ状況');
     expect(page).toContain("status: 'ACTIVE'");
   });
+
+  it('lets the operator stop and resume all point issuance with an audit reason', () => {
+    expect(page).toContain("target: z.enum(['stop', 'resume'])");
+    expect(page).toContain(
+      "action: targetStopped ? 'POINT_ISSUANCE_STOPPED' : 'POINT_ISSUANCE_RESUMED'",
+    );
+    expect(page).toContain('pointIssuanceStopped: targetStopped');
+    expect(page).toContain('ポイント付与を一括停止');
+    expect(page).toContain('ポイント付与を再開');
+    expect(page).toContain('disabled={pointConfiguration.pointIssuanceStopped}');
+    expect(page).toContain("throw new Error('POINT_ISSUANCE_STOPPED')");
+  });
 });
