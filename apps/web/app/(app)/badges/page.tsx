@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { BadgeVisibilityControl } from './badge-visibility-control';
 import { BadgeNotificationList } from './badge-notification-list';
+import { BadgeMark } from '../../ui/badge-mark';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,17 +16,6 @@ const acquiredReason: Record<string, string> = {
   FEEDBACK_RECORDED: '投稿の感想を伝えたため',
   IMAGE_COMPLETED: '投稿用の画像を作ったため',
 };
-
-function BadgeMark({ item }: { item: BadgeUserItem }) {
-  return (
-    <span
-      className={`badge-mark${item.state === 'AWARDED' ? ' is-earned' : ''}`}
-      aria-hidden="true"
-    >
-      ★
-    </span>
-  );
-}
 
 function Progress({ item }: { item: BadgeUserItem }) {
   return (
@@ -114,7 +104,11 @@ export default async function BadgesPage({
           <div className="badge-list">
             {dashboard.acquired.map((item) => (
               <article className="badge-card" key={item.badgeVersionId}>
-                <BadgeMark item={item} />
+                <BadgeMark
+                  imageKey={item.imageKey}
+                  earned={item.state === 'AWARDED'}
+                  label={item.altText}
+                />
                 <div>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
@@ -143,7 +137,11 @@ export default async function BadgesPage({
           <div className="badge-list">
             {dashboard.inProgress.map((item) => (
               <article className="badge-card" key={item.badgeVersionId}>
-                <BadgeMark item={item} />
+                <BadgeMark
+                  imageKey={item.lockedImageKey ?? item.imageKey}
+                  earned={false}
+                  label={item.altText}
+                />
                 <div>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
@@ -163,7 +161,11 @@ export default async function BadgesPage({
           <div className="badge-list">
             {dashboard.recommended.map((item) => (
               <article className="badge-card badge-card--compact" key={item.badgeVersionId}>
-                <BadgeMark item={item} />
+                <BadgeMark
+                  imageKey={item.lockedImageKey ?? item.imageKey}
+                  earned={false}
+                  label={item.altText}
+                />
                 <div>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>

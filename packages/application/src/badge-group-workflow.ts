@@ -64,6 +64,7 @@ export interface BadgeGroupWorkflowRepository {
     category: string;
     title: string;
     description: string;
+    imageKey: string;
     altText: string;
     reason: string;
     now: Date;
@@ -201,6 +202,7 @@ export class ReviseGroupBadge {
       category: required(input.category, 'category', 80),
       title: required(input.title, 'title', 120),
       description: required(input.description, 'description', 500),
+      imageKey: required(input.imageKey, 'image key', 255),
       altText: required(input.altText, 'alt text', 200),
       reason: required(input.reason, 'reason'),
       now: input.now ?? new Date(),

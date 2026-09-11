@@ -5228,6 +5228,25 @@ body:has(.app-shell) > .site-footer {
   background: linear-gradient(145deg, #ff5a36, #ff9d2e);
   box-shadow: 0 0.35rem 0.8rem rgb(255 90 54 / 22%);
 }
+.badge-mark--trophy.is-earned {
+  background: linear-gradient(145deg, #b7791f, #f6c453);
+}
+.badge-mark--heart.is-earned {
+  background: linear-gradient(145deg, #d83f6a, #ff7b9c);
+}
+.badge-mark--spark.is-earned {
+  background: linear-gradient(145deg, #6546c7, #a783ef);
+}
+.badge-mark--crown.is-earned {
+  background: linear-gradient(145deg, #7a4b20, #d79a3b);
+}
+.badge-mark--flag.is-earned {
+  background: linear-gradient(145deg, #087f5b, #38b989);
+}
+.badge-mark:not(.is-earned) {
+  filter: grayscale(1);
+  opacity: 0.72;
+}
 .badge-sharing {
   display: grid;
   gap: 0.55rem;
