@@ -35,4 +35,13 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('/s/${serviceSlug}/manage/members');
     expect(servicePointsPage).toContain('/admin/groups/${service.serviceId}/features');
   });
+
+  it('shows operators a plain-language pilot report and review candidates', () => {
+    expect(servicePointsPage).toContain('試験運用の結果');
+    expect(servicePointsPage).toContain('投稿した人');
+    expect(servicePointsPage).toContain('3日以上続けた人');
+    expect(servicePointsPage).toContain('ポイントを使った人');
+    expect(servicePointsPage).toContain('確認候補');
+    expect(servicePointsPage).toContain('自動判定は不正を断定するものではありません');
+  });
 });
