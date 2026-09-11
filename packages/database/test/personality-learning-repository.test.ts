@@ -29,4 +29,8 @@ describe('Prisma personality learning proposal repository', () => {
     expect(repository).toContain("status: 'APPROVED'");
     expect(repository).toContain('pending learning proposal already exists');
   });
+
+  it('returns an empty list for an accessible legacy Bunshin without personality data', () => {
+    expect(repository).toContain('if (!access.personality) return [];');
+  });
 });
