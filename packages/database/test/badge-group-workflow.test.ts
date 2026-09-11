@@ -47,6 +47,8 @@ describe('group badge workflow boundaries', () => {
     expect(source).toContain('BADGE_AWARD_REVOKED_BY_SERVICE_OPERATOR');
     expect(source).toContain("status: 'REVOKED', revokedAt: input.now");
     expect(source).toContain("status: 'CANCELLED', cancelledAt: input.now");
+    expect(source).toContain('GROUP_BADGE_SUSPENDED_BY_SERVICE_OPERATOR');
+    expect(source).toContain('GROUP_BADGE_REACTIVATED_BY_SERVICE_OPERATOR');
     expect(badgeCoreSource).toContain("definition?.ownerType === 'GROUP'");
     expect(serviceOperatorMigration).toContain(
       'DROP CONSTRAINT IF EXISTS "badge_candidate_separate_reviewer_check"',

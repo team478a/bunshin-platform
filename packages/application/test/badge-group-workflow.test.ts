@@ -3,6 +3,7 @@ import {
   CreateAndSubmitGroupBadge,
   RevokeGroupBadgeAward,
   ReviewGroupBadgeCandidate,
+  SetGroupBadgeAvailability,
   SubmitGroupBadge,
   type BadgeGroupWorkflowRepository,
 } from '../src/badge-group-workflow';
@@ -14,6 +15,7 @@ const repository = (): BadgeGroupWorkflowRepository => ({
   nominate: vi.fn(),
   reviewCandidate: vi.fn(),
   revokeAward: vi.fn(),
+  setDefinitionStatus: vi.fn(),
 });
 
 describe('group badge workflow', () => {
@@ -77,6 +79,27 @@ describe('group badge workflow', () => {
         awardId: 'a',
         actorUserId: 'u',
         reason: '誤って付与したため',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('requires a reason and fails closed when changing badge availability', async () => {
+    await expect(
+      new SetGroupBadgeAvailability(repository()).execute({
+        definitionId: 'd',
+        actorUserId: 'u',
+        status: 'SUSPENDED',
+        reason: ' ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    const setDefinitionStatus = vi.fn().mockResolvedValue(null);
+    await expect(
+      new SetGroupBadgeAvailability({ ...repository(), setDefinitionStatus }).execute({
+        definitionId: 'd',
+        actorUserId: 'u',
+        status: 'SUSPENDED',
+        reason: '企画が終了したため',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
