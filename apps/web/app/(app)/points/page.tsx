@@ -70,7 +70,23 @@ export default async function PointsPage({
         <p className="eyebrow">ワタシポイント</p>
         <h1>ポイント</h1>
         <p>投稿を続けると、ポイントがたまります。</p>
-        {workspaces.length > 1 ? <p>{workspace.name}のポイントを表示しています。</p> : null}
+        {workspaces.length > 1 ? (
+          <form action="/points" method="get" className="form-stack">
+            <label className="field">
+              <span className="field__label">表示するサービス</span>
+              <select className="field__control" name="workspaceId" defaultValue={workspace.id}>
+                {workspaces.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="button button--secondary" type="submit">
+              このサービスのポイントを見る
+            </button>
+          </form>
+        ) : null}
       </header>
 
       <section className="point-balance" aria-labelledby="point-balance-title">
