@@ -837,6 +837,14 @@ export class DeleteContentPillar extends ContentPillarMutation {
 
 export const WEEKLY_PLAN_STATUSES = ['DRAFT', 'CONFIRMED', 'EXPIRED'] as const;
 export type WeeklyPlanStatus = (typeof WEEKLY_PLAN_STATUSES)[number];
+export const BUSINESS_CONTENT_CATEGORIES = [
+  'HELPFUL_EXPERTISE',
+  'COMPANY_STAFF',
+  'FAQ_PROBLEM',
+  'CASE_STUDY',
+  'PRODUCT_SERVICE',
+] as const;
+export type BusinessContentCategory = (typeof BUSINESS_CONTENT_CATEGORIES)[number];
 
 export interface WeeklyPlanItem {
   id: string;
@@ -851,6 +859,7 @@ export interface WeeklyPlanItem {
   notes: string | null;
   campaignId: string | null;
   classification: CampaignContentClassification;
+  businessContentCategory?: BusinessContentCategory | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -896,6 +905,7 @@ export interface WeeklyPlanRepository {
         notes: string | null;
         campaignId: string | null;
         classification: CampaignContentClassification;
+        businessContentCategory?: BusinessContentCategory | null;
       }>;
     },
   ): Promise<WeeklyPlan | null>;
@@ -966,6 +976,10 @@ export interface WeeklyPlannerInput {
       badFeedbackCount: number;
     }>;
   };
+  businessContentSchedule?: Array<{
+    scheduledDate: string;
+    category: BusinessContentCategory;
+  }>;
 }
 export interface WeeklyPlannerOutput {
   strategySummary: string;
@@ -978,6 +992,7 @@ export interface WeeklyPlannerOutput {
     notes: string | null;
     campaignId: string | null;
     classification: CampaignContentClassification;
+    businessContentCategory: BusinessContentCategory | null;
   }>;
 }
 export interface WeeklyPlannerResult {
@@ -1039,6 +1054,14 @@ export class GenerateWeeklyPlan {
         throw new ApplicationError('VALIDATION_ERROR', 'organic item cannot use campaign');
       if (classification !== 'ORGANIC' && !campaign)
         throw new ApplicationError('VALIDATION_ERROR', 'campaign item is outside context');
+      const scheduledBusinessCategory = input.businessContentSchedule?.find(
+        (entry) => entry.scheduledDate === scheduledDate,
+      )?.category;
+      if (
+        input.businessContentSchedule &&
+        (!scheduledBusinessCategory || item.businessContentCategory !== scheduledBusinessCategory)
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'generated business content mix is invalid');
       return {
         scheduledDate,
         contentPillarId: item.contentPillarId,
@@ -1048,8 +1071,19 @@ export class GenerateWeeklyPlan {
         notes: weeklyNullable(item.notes, 1000) ?? null,
         campaignId,
         classification,
+        businessContentCategory: input.businessContentSchedule
+          ? (scheduledBusinessCategory ?? null)
+          : null,
       };
     });
+    if (
+      input.businessContentSchedule &&
+      (items.length !== input.businessContentSchedule.length ||
+        input.businessContentSchedule.some(
+          (entry) => !items.some((item) => item.scheduledDate === entry.scheduledDate),
+        ))
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'generated business schedule is incomplete');
     for (const campaign of campaignValues) {
       const related = items.filter(
         (item) => item.campaignId === campaign.id && item.classification === 'PRODUCT_RELATED',
@@ -1287,6 +1321,12 @@ export interface MissionBusinessProfileContext {
   productService: string;
   primaryPurpose: string;
   targetAudience: string;
+  websiteUrl?: string | null;
+  businessFeatures?: string | null;
+  priceInformation?: string | null;
+  preferredTone?: string | null;
+  requiredContent?: string | null;
+  forbiddenContent?: string | null;
 }
 
 export interface DailyMissionPlannerInput {
@@ -1398,6 +1438,7 @@ export interface DailyMissionPlannerProviderInput {
     notes: string | null;
     campaignId: string | null;
     classification: CampaignContentClassification;
+    businessContentCategory?: BusinessContentCategory | null;
   };
   campaign?: CampaignPlanningContext | null;
   contentPillar: { title: string; description: string | null };
@@ -1527,6 +1568,7 @@ export class GenerateDailyMissionBrief {
         notes: item.notes,
         campaignId: item.campaignId,
         classification: item.classification,
+        businessContentCategory: item.businessContentCategory ?? null,
       },
       campaign: input.campaign ?? null,
       contentPillar: { title: pillar.title, description: pillar.description },
@@ -2270,13 +2312,18 @@ export function normalizeMissionContent(
   value: unknown,
 ): MissionContent {
   if (format === 'TEXT') {
-    const v = strict(value, ['body', 'threadParts', 'cta', 'caption', 'hashtags'], 'text content');
+    const v = strict(
+      value,
+      ['body', 'threadParts', 'cta', 'caption', 'hashtags', 'photoInstruction'],
+      'text content',
+    );
     return {
       body: missionString(v['body'], 10000, 'body'),
       threadParts: strings(v['threadParts'], 25, 2000, 'thread parts'),
       cta: missionNullableString(v['cta'], 1000, 'cta'),
       caption: missionNullableString(v['caption'], 2200, 'caption'),
       hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+      photoInstruction: missionNullableString(v['photoInstruction'], 2000, 'photo instruction'),
     };
   }
   if (format === 'SLIDE') {

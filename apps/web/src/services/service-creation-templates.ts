@@ -50,8 +50,8 @@ export const SERVICE_CREATION_TEMPLATES = {
     },
   },
   BUSINESS_DAILY_IDEAS: {
-    label: '企業向け毎日発信アイデア',
-    description: '業種と目的に合う発信アイデアを、毎日LINEで受け取る無料サービス向けです。',
+    label: '企業向け毎日投稿サポート',
+    description: '業種と目的に合う完成投稿文を、毎日LINEで受け取る無料サービス向けです。',
     registrationMode: 'PUBLIC',
     emailEnabled: false,
     lineEnabled: true,
@@ -63,12 +63,13 @@ export const SERVICE_CREATION_TEMPLATES = {
       cadence: 'DAILY',
       defaultNotificationTime: '08:00',
       lockCadence: true,
-      contentMode: 'IDEA',
+      contentMode: 'READY_TO_USE',
       mediaMode: 'TEXT_ONLY',
     },
     onboarding: {
-      welcomeTitle: 'あなたの事業に合う発信アイデアをお届けします',
-      welcomeMessage: '業種や商品について教えてください。設定後は毎日LINEにアイデアが届きます。',
+      welcomeTitle: 'あなたの事業に合う投稿文をお届けします',
+      welcomeMessage:
+        '業種や商品について教えてください。設定後は毎日LINEに、コピーして使える投稿文が届きます。',
       questions: ['発信するときに大切にしたいことを教えてください。'],
     },
   },

@@ -94,6 +94,7 @@ export class WeeklyPlanGenerationService {
       includeGrantedKnowledge?: boolean;
       includeCampaigns?: boolean;
       additionalKnowledge?: Array<{ type: string; title: string; content: string }>;
+      businessContentSchedule?: WeeklyPlannerInput['businessContentSchedule'];
     },
   ) {
     const started = this.dependencies.now();
@@ -188,6 +189,9 @@ export class WeeklyPlanGenerationService {
             ],
             campaigns,
             ...(recentPerformance ? { recentPerformance } : {}),
+            ...(input.businessContentSchedule
+              ? { businessContentSchedule: input.businessContentSchedule }
+              : {}),
           }),
       });
       stage = 'SAVE_PLAN';

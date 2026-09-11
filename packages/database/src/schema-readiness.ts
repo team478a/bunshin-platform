@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260911200000_add_rewards_pilot_feature';
+export const LATEST_DATABASE_MIGRATION = '20260912100000_business_free_content_completion';

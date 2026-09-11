@@ -25,6 +25,12 @@ export function ServiceOnboardingForm({
     productService: string;
     primaryPurpose: string;
     targetAudience: string;
+    websiteUrl: string | null;
+    businessFeatures: string | null;
+    priceInformation: string | null;
+    preferredTone: string | null;
+    requiredContent: string | null;
+    forbiddenContent: string | null;
   } | null;
 }) {
   const router = useRouter();
@@ -40,6 +46,12 @@ export function ServiceOnboardingForm({
     productService: initialBusinessProfile?.productService ?? '',
     primaryPurpose: initialBusinessProfile?.primaryPurpose ?? 'AWARENESS',
     targetAudience: initialBusinessProfile?.targetAudience ?? '',
+    websiteUrl: initialBusinessProfile?.websiteUrl ?? '',
+    businessFeatures: initialBusinessProfile?.businessFeatures ?? '',
+    priceInformation: initialBusinessProfile?.priceInformation ?? '',
+    preferredTone: initialBusinessProfile?.preferredTone ?? 'やさしく親しみやすい',
+    requiredContent: initialBusinessProfile?.requiredContent ?? '',
+    forbiddenContent: initialBusinessProfile?.forbiddenContent ?? '',
   }));
 
   const answers = questions.map((question, index) => {
@@ -55,7 +67,9 @@ export function ServiceOnboardingForm({
       Boolean(businessProfile.businessName.trim()) &&
       Boolean(businessProfile.productService.trim()) &&
       Boolean(businessProfile.primaryPurpose) &&
-      Boolean(businessProfile.targetAudience.trim()));
+      Boolean(businessProfile.targetAudience.trim()) &&
+      Boolean(businessProfile.businessFeatures.trim()) &&
+      Boolean(businessProfile.preferredTone.trim()));
   const complete = answers.every(Boolean) && businessComplete;
   const updateBusiness = (key: keyof typeof businessProfile, value: string) =>
     setBusinessProfile((current) => ({ ...current, [key]: value }));
@@ -78,6 +92,10 @@ export function ServiceOnboardingForm({
               primaryIndustryId: businessProfile.primaryIndustryId,
               otherIndustryText: businessProfile.otherIndustryText || null,
               region: businessProfile.region || null,
+              websiteUrl: businessProfile.websiteUrl || null,
+              priceInformation: businessProfile.priceInformation || null,
+              requiredContent: businessProfile.requiredContent || null,
+              forbiddenContent: businessProfile.forbiddenContent || null,
             }
           : null,
       }),
@@ -150,6 +168,38 @@ export function ServiceOnboardingForm({
             />
           </label>
           <label>
+            商品・サービスの特徴
+            <textarea
+              value={businessProfile.businessFeatures}
+              onChange={(event) => updateBusiness('businessFeatures', event.target.value)}
+              required
+              maxLength={1000}
+              rows={3}
+              placeholder="例：予約なしでも利用でき、初めての方へ使い方を丁寧に説明します"
+            />
+          </label>
+          <label>
+            Webサイト（任意）
+            <input
+              type="url"
+              inputMode="url"
+              value={businessProfile.websiteUrl}
+              onChange={(event) => updateBusiness('websiteUrl', event.target.value)}
+              maxLength={2048}
+              placeholder="https://example.jp"
+            />
+          </label>
+          <label>
+            価格・料金（任意）
+            <textarea
+              value={businessProfile.priceInformation}
+              onChange={(event) => updateBusiness('priceInformation', event.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="例：初回相談は無料、通常プランは月額5,000円"
+            />
+          </label>
+          <label>
             発信の目的
             <select
               value={businessProfile.primaryPurpose}
@@ -172,6 +222,40 @@ export function ServiceOnboardingForm({
               required
               maxLength={500}
               rows={3}
+            />
+          </label>
+          <label>
+            投稿文の雰囲気
+            <select
+              value={businessProfile.preferredTone}
+              onChange={(event) => updateBusiness('preferredTone', event.target.value)}
+              required
+            >
+              <option value="やさしく親しみやすい">やさしく親しみやすい</option>
+              <option value="信頼感のある丁寧な文章">信頼感のある丁寧な文章</option>
+              <option value="明るく元気な文章">明るく元気な文章</option>
+              <option value="落ち着いた専門的な文章">落ち着いた専門的な文章</option>
+              <option value="短く簡潔で分かりやすい文章">短く簡潔で分かりやすい文章</option>
+            </select>
+          </label>
+          <label>
+            毎回必ず入れたい内容（任意）
+            <textarea
+              value={businessProfile.requiredContent}
+              onChange={(event) => updateBusiness('requiredContent', event.target.value)}
+              maxLength={1000}
+              rows={2}
+              placeholder="例：予約はプロフィールのリンクから、と案内する"
+            />
+          </label>
+          <label>
+            投稿に入れたくない内容（任意）
+            <textarea
+              value={businessProfile.forbiddenContent}
+              onChange={(event) => updateBusiness('forbiddenContent', event.target.value)}
+              maxLength={1000}
+              rows={2}
+              placeholder="例：必ず効果が出る、地域最安などの断定表現"
             />
           </label>
         </fieldset>

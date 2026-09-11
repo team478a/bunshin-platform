@@ -38,6 +38,12 @@ export async function serviceBunshinProposalsResponse(request: Request, serviceS
             productService: true,
             primaryPurpose: true,
             targetAudience: true,
+            websiteUrl: true,
+            businessFeatures: true,
+            priceInformation: true,
+            preferredTone: true,
+            requiredContent: true,
+            forbiddenContent: true,
             primaryIndustry: { select: { name: true } },
           },
         },
@@ -57,6 +63,12 @@ export async function serviceBunshinProposalsResponse(request: Request, serviceS
           `商品・サービス：${profile.productService}`,
           `発信目的：${profile.primaryPurpose}`,
           `対象顧客：${profile.targetAudience}`,
+          profile.websiteUrl ? `Webサイト：${profile.websiteUrl}` : null,
+          profile.businessFeatures ? `特徴・選ばれる理由：${profile.businessFeatures}` : null,
+          profile.priceInformation ? `価格・料金：${profile.priceInformation}` : null,
+          profile.preferredTone ? `文章の雰囲気：${profile.preferredTone}` : null,
+          profile.requiredContent ? `必ず入れる内容：${profile.requiredContent}` : null,
+          profile.forbiddenContent ? `使わない内容・表現：${profile.forbiddenContent}` : null,
         ]
           .filter(Boolean)
           .join('\n')

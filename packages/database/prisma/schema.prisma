@@ -2412,6 +2412,12 @@ model ServiceMemberBusinessProfile {
   productService    String          @map("product_service") @db.VarChar(1000)
   primaryPurpose    String          @map("primary_purpose") @db.VarChar(80)
   targetAudience    String          @map("target_audience") @db.VarChar(500)
+  websiteUrl        String?         @map("website_url") @db.VarChar(2048)
+  businessFeatures  String?         @map("business_features") @db.VarChar(1000)
+  priceInformation  String?         @map("price_information") @db.VarChar(500)
+  preferredTone     String?         @map("preferred_tone") @db.VarChar(80)
+  requiredContent   String?         @map("required_content") @db.VarChar(1000)
+  forbiddenContent  String?         @map("forbidden_content") @db.VarChar(1000)
   createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -5381,6 +5387,7 @@ model WeeklyPlanItem {
   notes             String?                   @db.VarChar(1000)
   campaignId        String?                   @map("campaign_id") @db.Uuid
   classification    AdvertisingClassification @default(ORGANIC)
+  businessContentCategory BusinessContentCategory? @map("business_content_category")
   createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
@@ -5395,7 +5402,16 @@ model WeeklyPlanItem {
   @@index([workspaceId, bunshinId, scheduledDate])
   @@index([contentPillarId])
   @@index([campaignId, classification])
+  @@index([businessContentCategory])
   @@map("weekly_plan_items")
+}
+
+enum BusinessContentCategory {
+  HELPFUL_EXPERTISE
+  COMPANY_STAFF
+  FAQ_PROBLEM
+  CASE_STUDY
+  PRODUCT_SERVICE
 }
 
 model DailyMission {

@@ -10,6 +10,7 @@ import {
   serviceDeliveryDefaultAssistanceLevel,
   type ServiceContentAssistanceLevel,
 } from './service-onboarding-settings';
+import { businessContentMixKnowledge } from './business-content-mix';
 
 export interface ServiceGenerationKnowledgeScope {
   workspaceId: string;
@@ -26,6 +27,12 @@ export interface ServiceBusinessProfileForGeneration {
   productService: string;
   primaryPurpose: string;
   targetAudience: string;
+  websiteUrl: string | null;
+  businessFeatures: string | null;
+  priceInformation: string | null;
+  preferredTone: string | null;
+  requiredContent: string | null;
+  forbiddenContent: string | null;
 }
 
 export function industrySafetyKnowledgeForPrompt(industryKey: string) {
@@ -65,6 +72,12 @@ export function businessProfileKnowledgeForPrompt(
         `商品・サービス: ${profile.productService}`,
         `発信目的: ${profile.primaryPurpose}`,
         `対象顧客: ${profile.targetAudience}`,
+        profile.websiteUrl ? `Webサイト: ${profile.websiteUrl}` : null,
+        profile.businessFeatures ? `特徴・選ばれる理由: ${profile.businessFeatures}` : null,
+        profile.priceInformation ? `価格・料金の情報: ${profile.priceInformation}` : null,
+        profile.preferredTone ? `文章の雰囲気: ${profile.preferredTone}` : null,
+        profile.requiredContent ? `必ず入れる内容: ${profile.requiredContent}` : null,
+        profile.forbiddenContent ? `使わない内容・表現: ${profile.forbiddenContent}` : null,
       ]
         .filter(Boolean)
         .join('\n'),
@@ -150,7 +163,7 @@ export async function resolveServiceContentAssistanceLevel(
 
 export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKnowledgeScope) {
   const db = await import('@bunshin/database');
-  const [chunks, businessProfile, contentAssistanceLevel] = await Promise.all([
+  const [chunks, businessProfile, contentAssistanceLevel, registrationPolicy] = await Promise.all([
     new GroupKnowledgeService(
       new db.PrismaGroupKnowledgeRepository(),
     ).listApprovedChunksForGeneration({
@@ -171,11 +184,26 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
         productService: true,
         primaryPurpose: true,
         targetAudience: true,
+        websiteUrl: true,
+        businessFeatures: true,
+        priceInformation: true,
+        preferredTone: true,
+        requiredContent: true,
+        forbiddenContent: true,
         primaryIndustry: { select: { key: true, name: true } },
       },
     }),
     resolveServiceContentAssistanceLevel(scope),
+    db.prisma.serviceRegistrationPolicy.findFirst({
+      where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+      select: { onboardingConfig: true, surveyConfig: true },
+    }),
   ]);
+  const dailyIdeaDelivery = readServiceOnboardingSettings(
+    registrationPolicy?.onboardingConfig,
+    registrationPolicy?.surveyConfig,
+  ).dailyIdeaDelivery;
+  const businessContentMixEnabled = Boolean(businessProfile && dailyIdeaDelivery.enabled);
   const knowledge = serviceKnowledgeForPrompt(chunks);
   const normalizedBusinessProfile = businessProfile?.primaryIndustry
     ? {
@@ -188,11 +216,19 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
         productService: businessProfile.productService,
         primaryPurpose: businessProfile.primaryPurpose,
         targetAudience: businessProfile.targetAudience,
+        websiteUrl: businessProfile.websiteUrl,
+        businessFeatures: businessProfile.businessFeatures,
+        priceInformation: businessProfile.priceInformation,
+        preferredTone: businessProfile.preferredTone,
+        requiredContent: businessProfile.requiredContent,
+        forbiddenContent: businessProfile.forbiddenContent,
       }
     : null;
   return {
     ...knowledge,
     contentAssistanceLevel,
+    dailyIdeaDelivery,
+    businessContentMixEnabled,
     businessProfile: normalizedBusinessProfile,
     officialKnowledge: [
       ...businessProfileKnowledgeForPrompt(
@@ -206,9 +242,16 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
               productService: businessProfile.productService,
               primaryPurpose: businessProfile.primaryPurpose,
               targetAudience: businessProfile.targetAudience,
+              websiteUrl: businessProfile.websiteUrl,
+              businessFeatures: businessProfile.businessFeatures,
+              priceInformation: businessProfile.priceInformation,
+              preferredTone: businessProfile.preferredTone,
+              requiredContent: businessProfile.requiredContent,
+              forbiddenContent: businessProfile.forbiddenContent,
             }
           : null,
       ),
+      ...(businessContentMixEnabled ? [businessContentMixKnowledge()] : []),
       ...knowledge.officialKnowledge,
     ],
   };

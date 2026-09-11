@@ -209,6 +209,12 @@ export function MissionContent({ mission }: { mission: DailyMissionView }) {
           <p key={index}>{part}</p>
         ))}
         {text(content['cta']) && <p>CTA: {text(content['cta'])}</p>}
+        {strings(content['hashtags']).length > 0 && (
+          <p>ハッシュタグ: {strings(content['hashtags']).join(' ')}</p>
+        )}
+        {text(content['photoInstruction']) && (
+          <p>写真の撮り方: {text(content['photoInstruction'])}</p>
+        )}
       </div>
     );
   }
@@ -338,7 +344,13 @@ export function copyOptions(mission: DailyMissionView) {
   const content = mission.content;
   const caption = text(content['caption']);
   if (mission.format === 'TEXT') {
-    const value = [text(content['body']), ...strings(content['threadParts']), text(content['cta'])]
+    const hashtags = strings(content['hashtags']).join(' ');
+    const value = [
+      text(content['body']),
+      ...strings(content['threadParts']),
+      text(content['cta']),
+      hashtags || null,
+    ]
       .filter(Boolean)
       .join('\n\n');
     return value ? [{ label: '投稿文をコピー', value, type: 'COPIED_TEXT' as const }] : [];

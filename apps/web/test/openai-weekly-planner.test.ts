@@ -45,6 +45,9 @@ describe('OpenAIWeeklyPlanner', () => {
                         angle: '失敗談',
                         recommendedFormat: 'TEXT',
                         notes: null,
+                        campaignId: null,
+                        classification: 'ORGANIC',
+                        businessContentCategory: null,
                       },
                     ],
                   }),
@@ -61,13 +64,19 @@ describe('OpenAIWeeklyPlanner', () => {
     );
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'weekly-planner-v3',
+      promptVersion: 'weekly-planner-v4-business-mix',
       inputTokens: 100,
       outputTokens: 50,
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
-      text: { format: { type: string; strict: boolean } };
+      text: {
+        format: {
+          type: string;
+          strict: boolean;
+          schema: { properties: { items: { items: { properties: object } } } };
+        };
+      };
       input: Array<{ content: string }>;
     };
     expect(request).toMatchObject({
@@ -75,6 +84,9 @@ describe('OpenAIWeeklyPlanner', () => {
       text: { format: { type: 'json_schema', strict: true } },
     });
     expect(request.input[1]?.content).toContain('10年の経験');
+    expect(Object.keys(request.text.format.schema.properties.items.items.properties)).toContain(
+      'businessContentCategory',
+    );
   });
 
   it('maps provider errors without exposing credentials', async () => {

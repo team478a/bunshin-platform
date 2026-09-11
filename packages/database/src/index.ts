@@ -3955,6 +3955,7 @@ export class PrismaWeeklyPlanRepository implements WeeklyPlanRepository {
             notes: item.notes,
             campaignId: item.campaignId,
             classification: item.classification,
+            businessContentCategory: item.businessContentCategory ?? null,
           })),
         });
         return weeklyPlan((await this.plan(tx, { ...input, weeklyPlanId: plan.id }))!);

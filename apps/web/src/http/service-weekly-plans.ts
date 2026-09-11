@@ -13,6 +13,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { createWeeklyPlanGenerationService } from '../services/weekly-plan-generation';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
+import { buildBusinessContentSchedule } from '../services/business-content-mix';
 import { weeklyPlanDto } from './weekly-plans';
 
 const uuidSchema = z.string().uuid();
@@ -138,6 +139,14 @@ export function generateServiceWeeklyPlanResponse(
         includeGrantedKnowledge: false,
         includeCampaigns: true,
         additionalKnowledge: serviceKnowledge.officialKnowledge,
+        ...(serviceKnowledge.businessContentMixEnabled
+          ? {
+              businessContentSchedule: buildBusinessContentSchedule({
+                weekStartDate: parsed.data.weekStartDate,
+                cadence: serviceKnowledge.dailyIdeaDelivery.cadence,
+              }),
+            }
+          : {}),
       });
       return weeklyPlanDto(result.plan, result.titles);
     },

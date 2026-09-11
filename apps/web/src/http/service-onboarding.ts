@@ -26,6 +26,12 @@ const businessProfileSchema = z
     productService: z.string().trim().min(1).max(1000),
     primaryPurpose: z.enum(purposes),
     targetAudience: z.string().trim().min(1).max(500),
+    websiteUrl: z.string().trim().url().max(2048).nullable(),
+    businessFeatures: z.string().trim().min(1).max(1000),
+    priceInformation: z.string().trim().max(500).nullable(),
+    preferredTone: z.string().trim().min(1).max(80),
+    requiredContent: z.string().trim().max(1000).nullable(),
+    forbiddenContent: z.string().trim().max(1000).nullable(),
   })
   .strict();
 const answersSchema = z

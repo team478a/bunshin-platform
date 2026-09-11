@@ -41,6 +41,7 @@ const input = {
     notes: null,
     campaignId: null,
     classification: 'ORGANIC' as const,
+    businessContentCategory: 'HELPFUL_EXPERTISE' as const,
   },
   contentPillar: { title: '実践', description: null },
   grantedKnowledge: [{ type: 'SKILL', title: '経験', content: '10年の経験' }],
@@ -88,7 +89,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v6',
+      promptVersion: 'daily-mission-planner-v7-business-mix',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -112,6 +113,7 @@ describe('OpenAIDailyMissionPlanner', () => {
     expect(request.input[1]?.content).toContain('personality-version-2');
     expect(request.input[1]?.content).toContain('いっしょに');
     expect(request.input[1]?.content).toContain('初心者向け抽出教室');
+    expect(request.input[1]?.content).toContain('HELPFUL_EXPERTISE');
     expect(request.input[0]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
   });
 

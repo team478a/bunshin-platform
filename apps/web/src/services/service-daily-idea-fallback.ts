@@ -1,8 +1,8 @@
 import 'server-only';
-import { CreateDailyMission } from '@bunshin/capability-social';
+import { CreateDailyMission, type BusinessContentCategory } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
-const FALLBACK_VERSION = 'business-daily-idea-fallback-v1';
+const FALLBACK_VERSION = 'business-daily-ready-fallback-v2';
 
 const angles = [
   'お客様からよく聞かれる質問を一つ選び、短く答える',
@@ -14,22 +14,51 @@ const angles = [
   'スタッフや事業の価値観が伝わる小さな出来事を紹介する',
 ] as const;
 
+const categoryAngles: Record<BusinessContentCategory, string> = {
+  HELPFUL_EXPERTISE: 'お客様が今日から使える、商品・サービス選びの小さなコツ',
+  COMPANY_STAFF: '商品やサービスを届ける前に大切にしている準備や仕事の様子',
+  FAQ_PROBLEM: 'お客様からよく聞かれる質問への、分かりやすい答え',
+  CASE_STUDY: '商品やサービスが役立つ具体的な場面と、利用前に確認したいこと',
+  PRODUCT_SERVICE: '商品やサービスの特徴と、どんな方に向いているか',
+};
+
+function hashtag(value: string) {
+  const normalized = value.replace(/[\s#・、。,.!！?？()（）/\\]+/g, '');
+  return normalized ? `#${normalized.slice(0, 40)}` : null;
+}
+
 export function buildServiceDailyIdeaFallback(input: {
   missionDate: string;
   industry: string;
   businessName: string;
   productService: string;
   targetAudience: string;
+  businessFeatures?: string | null;
+  preferredTone?: string | null;
+  category?: BusinessContentCategory | null;
 }) {
   const day = Number(input.missionDate.slice(-2));
-  const angle = angles[Number.isFinite(day) ? day % angles.length : 0]!;
-  const topic = `${input.industry}の発信アイデア`;
+  const angle = input.category
+    ? categoryAngles[input.category]
+    : angles[Number.isFinite(day) ? day % angles.length : 0]!;
+  const topic = `${input.targetAudience}へ伝える「${input.productService}」の話`;
+  const feature = input.businessFeatures?.trim()
+    ? `私たちは、${input.businessFeatures.trim()}を大切にしています。`
+    : `${input.businessName}では、分かりやすいご案内を大切にしています。`;
+  const hashtags = [
+    hashtag(input.businessName),
+    hashtag(input.industry),
+    hashtag(input.productService),
+  ].filter((value): value is string => Boolean(value));
+  const body = `${input.targetAudience}の皆さまへ。\n\n今日は「${angle}」をご紹介します。\n\n${feature}\n\n${input.productService}について気になることがあれば、いつでもお気軽にご相談ください。`;
   return {
     version: FALLBACK_VERSION,
     topic,
     angle,
     reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。`,
-    body: `${input.businessName}の今日の発信アイデアです。\n\nテーマ：${angle}\n\n「${input.productService}」について、${input.targetAudience}が理解しやすい具体例を一つ添えて紹介しましょう。効果を断定せず、実際に確認できる事実だけを使ってください。`,
+    body,
+    hashtags,
+    photoInstruction: `「${input.productService}」が分かる商品、道具、店内の場所のいずれか一つを、明るい場所で正面から撮ります。画面の中央に主役を置き、周りの不要な物は片付けます。`,
   };
 }
 
@@ -63,6 +92,8 @@ export async function createServiceDailyIdeaFallback(input: {
         businessName: true,
         productService: true,
         targetAudience: true,
+        businessFeatures: true,
+        preferredTone: true,
         primaryIndustry: { select: { name: true } },
       },
     }),
@@ -87,7 +118,7 @@ export async function createServiceDailyIdeaFallback(input: {
         },
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true },
+      select: { id: true, businessContentCategory: true },
     }),
   ]);
   if (!profile?.primaryIndustry || !socialProfile) {
@@ -99,6 +130,9 @@ export async function createServiceDailyIdeaFallback(input: {
     businessName: profile.businessName,
     productService: profile.productService,
     targetAudience: profile.targetAudience,
+    businessFeatures: profile.businessFeatures,
+    preferredTone: profile.preferredTone,
+    category: weeklyItem?.businessContentCategory ?? null,
   });
   return new CreateDailyMission(
     new db.PrismaDailyMissionRepository(),
@@ -118,9 +152,10 @@ export async function createServiceDailyIdeaFallback(input: {
     content: {
       body: idea.body,
       threadParts: [],
-      cta: '伝えたい内容に合わせて整え、ご自身のSNSで投稿してください。',
+      cta: '気になることがあれば、コメントやメッセージでお気軽にお尋ねください。',
       caption: idea.body,
-      hashtags: [],
+      hashtags: idea.hashtags,
+      photoInstruction: idea.photoInstruction,
     },
   });
 }
