@@ -14,8 +14,16 @@ export async function GET(
     if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const { workspaceId } = await params;
     const db = await import('@bunshin/database');
+    const parsedWorkspaceId = z.string().uuid().parse(workspaceId);
+    if (
+      !(await db.hasActiveRewardsPilotAccess(db.prisma, {
+        workspaceId: parsedWorkspaceId,
+        userId: user.userId,
+      }))
+    )
+      throw new ApplicationError('FORBIDDEN', 'rewards pilot access required');
     const data = await new GetPointUserDashboard(new db.PrismaPointLedgerRepository()).execute({
-      workspaceId: z.string().uuid().parse(workspaceId),
+      workspaceId: parsedWorkspaceId,
       actorUserId: user.userId,
       timezone: 'Asia/Tokyo',
     });

@@ -7,6 +7,7 @@ import {
   type CommonBadgeProcessorRepository,
   type CommonBadgeProcessResult,
 } from '@bunshin/application';
+import { hasActiveRewardsPilotAccess } from './rewards-pilot-access';
 
 export class PrismaCommonBadgeProcessorRepository implements CommonBadgeProcessorRepository {
   constructor(private readonly client: PrismaClient) {}
@@ -151,6 +152,33 @@ export class PrismaCommonBadgeProcessorRepository implements CommonBadgeProcesso
             await tx.badgeProcessingEvent.update({
               where: { id: processing.id },
               data: { status: 'COMPLETED', processedAt: new Date() },
+            });
+            return 'NOT_ELIGIBLE';
+          }
+          const source = await tx.bunshin.findFirst({
+            where: {
+              id: input.sourceBunshinId ?? '',
+              workspaceId: input.workspaceId,
+              ownerUserId: input.userId,
+            },
+            select: { groupId: true },
+          });
+          const groupId = source?.groupId ?? null;
+          if (
+            groupId &&
+            !(await hasActiveRewardsPilotAccess(
+              tx,
+              { workspaceId: input.workspaceId, groupId, userId: input.userId },
+              input.occurredAt,
+            ))
+          ) {
+            await tx.badgeProcessingEvent.update({
+              where: { id: processing.id },
+              data: {
+                status: 'COMPLETED',
+                failureCode: 'REWARDS_PILOT_UNAVAILABLE',
+                processedAt: new Date(),
+              },
             });
             return 'NOT_ELIGIBLE';
           }

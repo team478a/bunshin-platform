@@ -4,6 +4,7 @@ import { currentUserProvider } from '../../../src/auth/current-user';
 import { BadgeVisibilityControl } from './badge-visibility-control';
 import { BadgeNotificationList } from './badge-notification-list';
 import { BadgeMark } from '../../ui/badge-mark';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,28 @@ export default async function BadgesPage({
     ? workspaces.find(({ id }) => id === requestedWorkspaceId)
     : workspaces[0];
   if (!workspace) redirect('/bunshins');
+  if (
+    !(await db.hasActiveRewardsPilotAccess(db.prisma, {
+      workspaceId: workspace.id,
+      userId: user.userId,
+    }))
+  ) {
+    return (
+      <main className="app-page badge-page">
+        <header className="app-page__heading">
+          <p className="eyebrow">がんばったしるし</p>
+          <h1>バッジ</h1>
+        </header>
+        <section className="settings-card">
+          <h2>現在は試験利用中です</h2>
+          <p>ポイントとバッジは、運営者から案内を受けた方だけ利用できます。</p>
+          <Link className="button button--secondary" href="/bunshins">
+            ホームへ戻る
+          </Link>
+        </section>
+      </main>
+    );
+  }
   let dashboard;
   try {
     dashboard = await new GetBadgeUserDashboard(

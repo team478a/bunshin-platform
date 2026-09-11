@@ -34,4 +34,9 @@ describe('common badge processor boundaries', () => {
     expect(source).not.toContain('contentJson');
     expect(source).not.toContain('personalitySummary');
   });
+
+  it('only processes grouped activity for participants in the rewards pilot', () => {
+    expect(source).toContain('hasActiveRewardsPilotAccess');
+    expect(source).toContain("failureCode: 'REWARDS_PILOT_UNAVAILABLE'");
+  });
 });
