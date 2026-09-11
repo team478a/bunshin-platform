@@ -47,6 +47,7 @@ const settingsSchema = z.object({
 
 const bonusSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
+  operationId: z.uuid(),
   userId: z.uuid(),
   amount: z.coerce.number().int().min(1).max(10000),
   reason: z.string().trim().min(3).max(1000),
@@ -54,6 +55,7 @@ const bonusSchema = z.object({
 
 const correctionSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
+  operationId: z.uuid(),
   userId: z.uuid(),
   amount: z.coerce.number().int().min(1).max(10000),
   reason: z.string().trim().min(3).max(1000),
@@ -197,7 +199,27 @@ async function grantBonus(formData: FormData) {
         create: { workspaceId: service.workspaceId, userId: member.userId },
         update: {},
       });
-      const idempotencyKey = `operator-bonus:${randomUUID()}`;
+      const idempotencyKey = `operator-bonus:${parsed.data.operationId}`;
+      const existing = await tx.pointTransaction.findUnique({
+        where: {
+          accountId_idempotencyKey: {
+            accountId: account.id,
+            idempotencyKey,
+          },
+        },
+      });
+      if (
+        existing &&
+        (existing.type !== 'GRANT' ||
+          existing.amount !== parsed.data.amount ||
+          existing.workspaceId !== service.workspaceId ||
+          existing.userId !== member.userId ||
+          existing.groupId !== service.serviceId ||
+          existing.sourceType !== 'OPERATOR_BONUS' ||
+          existing.sourceId !== actor.userId)
+      )
+        throw new Error('IDEMPOTENCY_KEY_PAYLOAD_MISMATCH');
+      if (existing) return;
       await tx.pointTransaction.create({
         data: {
           accountId: account.id,
@@ -284,6 +306,27 @@ async function correctPoints(formData: FormData) {
         }),
       ]);
       if (!member || !configuration || !account) throw new Error('MEMBER_OR_ACCOUNT_NOT_FOUND');
+      const idempotencyKey = `operator-correction:${parsed.data.operationId}`;
+      const existing = await tx.pointTransaction.findUnique({
+        where: {
+          accountId_idempotencyKey: {
+            accountId: account.id,
+            idempotencyKey,
+          },
+        },
+      });
+      if (
+        existing &&
+        (existing.type !== 'REVERSAL' ||
+          existing.amount !== -parsed.data.amount ||
+          existing.workspaceId !== service.workspaceId ||
+          existing.userId !== member.userId ||
+          existing.groupId !== service.serviceId ||
+          existing.sourceType !== 'OPERATOR_CORRECTION' ||
+          existing.sourceId !== actor.userId)
+      )
+        throw new Error('IDEMPOTENCY_KEY_PAYLOAD_MISMATCH');
+      if (existing) return;
       const changed = await tx.pointAccount.updateMany({
         where: {
           id: account.id,
@@ -300,7 +343,6 @@ async function correctPoints(formData: FormData) {
         where: { id: account.id },
         select: { availablePoints: true },
       });
-      const idempotencyKey = `operator-correction:${randomUUID()}`;
       const transaction = await tx.pointTransaction.create({
         data: {
           accountId: account.id,
@@ -668,6 +710,7 @@ export default async function ServicePointSettingsPage({
           ) : (
             <form action={grantBonus} className="form-stack">
               <input type="hidden" name="serviceSlug" value={serviceSlug} />
+              <input type="hidden" name="operationId" value={randomUUID()} />
               <label className="field">
                 <span className="field__label">参加者</span>
                 <select className="field__control" name="userId" required>
@@ -713,6 +756,7 @@ export default async function ServicePointSettingsPage({
           </p>
           <form action={correctPoints} className="form-stack">
             <input type="hidden" name="serviceSlug" value={serviceSlug} />
+            <input type="hidden" name="operationId" value={randomUUID()} />
             <label className="field">
               <span className="field__label">参加者</span>
               <select className="field__control" name="userId" required>
