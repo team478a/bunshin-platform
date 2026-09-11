@@ -1,5 +1,5 @@
 import 'server-only';
-import { ReleaseExpiredPointReservations } from '@bunshin/application';
+import { ExpireAvailablePointGrants, ReleaseExpiredPointReservations } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
@@ -16,16 +16,20 @@ export async function pointRedemptionOperationsResponse(request: Request): Promi
     const released = await new ReleaseExpiredPointReservations(
       new db.PrismaPointRedemptionRepository(),
     ).execute({ limit: 100 });
-    logger.info('expired point reservations released', {
+    const expiration = await new ExpireAvailablePointGrants(
+      new db.PrismaPointExpirationRepository(db.prisma),
+    ).execute({ limit: 100 });
+    logger.info('point expiration maintenance completed', {
       requestId,
       route: '/api/internal/points/release-expired',
       released,
+      ...expiration,
       latency: Date.now() - started,
     });
-    return Response.json({ released, requestId });
+    return Response.json({ released, ...expiration, requestId });
   } catch (error) {
     const mapped = toApiError(error, requestId);
-    logger.error('expired point reservation release failed', {
+    logger.error('point expiration maintenance failed', {
       requestId,
       route: '/api/internal/points/release-expired',
       status: mapped.status,
