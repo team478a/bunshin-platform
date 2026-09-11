@@ -2,6 +2,7 @@ import 'server-only';
 import { ConfirmWeeklyPlan } from '@bunshin/capability-social';
 import { createWeeklyPlanGenerationService } from '../services/weekly-plan-generation';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
+import { buildBusinessContentSchedule } from '../services/business-content-mix';
 
 export function mondayForDate(localDate: string) {
   const date = new Date(`${localDate}T00:00:00.000Z`);
@@ -27,6 +28,14 @@ export async function prepareServiceAutomaticWeek(input: {
     includeGrantedKnowledge: false,
     includeCampaigns: true,
     additionalKnowledge: knowledge.officialKnowledge,
+    ...(knowledge.businessContentMixEnabled
+      ? {
+          businessContentSchedule: buildBusinessContentSchedule({
+            weekStartDate: input.weekStartDate,
+            cadence: knowledge.dailyIdeaDelivery.cadence,
+          }),
+        }
+      : {}),
   });
   return plan.status === 'CONFIRMED'
     ? plan

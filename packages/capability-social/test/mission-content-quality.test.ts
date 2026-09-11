@@ -50,7 +50,14 @@ const context = {
 };
 
 const contents: Record<SocialPreferredFormat, MissionContent> = {
-  TEXT: { body: '本文', threadParts: [], cta: null, caption: null, hashtags: [] },
+  TEXT: {
+    body: '本文',
+    threadParts: [],
+    cta: null,
+    caption: null,
+    hashtags: [],
+    photoInstruction: null,
+  },
   SLIDE: {
     topic: 'テーマ',
     angle: '切り口',

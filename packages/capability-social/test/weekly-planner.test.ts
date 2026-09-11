@@ -36,6 +36,7 @@ const output: WeeklyPlannerOutput = {
       notes: ' ',
       campaignId: null,
       classification: 'ORGANIC',
+      businessContentCategory: null,
     },
   ],
 };
@@ -103,6 +104,25 @@ describe('GenerateWeeklyPlan', () => {
       classification: 'ORGANIC',
       campaignId: null,
     });
+  });
+
+  it('keeps the business content category assigned to each scheduled date', async () => {
+    const businessOutput = {
+      ...output,
+      items: [{ ...output.items[0]!, businessContentCategory: 'HELPFUL_EXPERTISE' as const }],
+    };
+    const result = await new GenerateWeeklyPlan(planner(businessOutput)).execute({
+      ...input,
+      businessContentSchedule: [{ scheduledDate: '2026-08-17', category: 'HELPFUL_EXPERTISE' }],
+    });
+    expect(result.output.items[0]?.businessContentCategory).toBe('HELPFUL_EXPERTISE');
+
+    await expect(
+      new GenerateWeeklyPlan(planner(output)).execute({
+        ...input,
+        businessContentSchedule: [{ scheduledDate: '2026-08-17', category: 'HELPFUL_EXPERTISE' }],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   const campaign = {

@@ -41,7 +41,7 @@ describe('service creation templates', () => {
         cadence: 'DAILY',
         defaultNotificationTime: '08:00',
         lockCadence: true,
-        contentMode: 'IDEA',
+        contentMode: 'READY_TO_USE',
       },
     });
   });

@@ -41,6 +41,12 @@ export default async function ServiceOnboardingPage({
           productService: true,
           primaryPurpose: true,
           targetAudience: true,
+          websiteUrl: true,
+          businessFeatures: true,
+          priceInformation: true,
+          preferredTone: true,
+          requiredContent: true,
+          forbiddenContent: true,
         },
       },
     },
@@ -52,7 +58,11 @@ export default async function ServiceOnboardingPage({
   );
   const onboardingComplete =
     (settings.questions.length === 0 || Boolean(membership.serviceOnboardingResponse)) &&
-    (!settings.businessProfileEnabled || Boolean(membership.serviceMemberBusinessProfile));
+    (!settings.businessProfileEnabled ||
+      Boolean(
+        membership.serviceMemberBusinessProfile?.businessFeatures &&
+        membership.serviceMemberBusinessProfile.preferredTone,
+      ));
   if (onboardingComplete) {
     redirect(`/s/${serviceSlug}/home` as Route);
   }

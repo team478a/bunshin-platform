@@ -96,7 +96,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v10',
+      promptVersion: 'mission-content-generator-v11-business-ready',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -119,6 +119,7 @@ describe('OpenAIMissionContentGenerator', () => {
       'cta',
       'caption',
       'hashtags',
+      'photoInstruction',
     ]);
   });
 
