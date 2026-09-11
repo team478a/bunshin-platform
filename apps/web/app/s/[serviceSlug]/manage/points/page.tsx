@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { buildRewardsPilotMetrics } from '../../../../../src/rewards/rewards-pilot-metrics';
+import { getRewardsPilotExpiryNotice } from '../../../../../src/rewards/rewards-pilot-expiry';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 
@@ -655,6 +656,19 @@ export default async function ServicePointSettingsPage({
     ),
   );
   const rewardsPilotCount = rewardsPilotMembers.length;
+  const policyExpiryNotice = getRewardsPilotExpiryNotice(rewardsPolicy?.endsAt ?? null, now);
+  const expiringPilotMembers = rewardsPilotMembers
+    .map((membership) => ({
+      membership,
+      notice: getRewardsPilotExpiryNotice(
+        membership.featureAssignments
+          .map(({ endsAt }) => endsAt)
+          .filter((endsAt): endsAt is Date => endsAt !== null)
+          .sort((left, right) => left.getTime() - right.getTime())[0] ?? null,
+        now,
+      ),
+    }))
+    .filter(({ notice }) => notice !== null);
   const rewardsPilotUserIds = rewardsPilotMembers.map(({ userId }) => userId);
   const [pilotPosts, pilotGrantTransactions, pilotRedemptions] = await Promise.all([
     db.prisma.postRecord.findMany({
@@ -768,6 +782,39 @@ export default async function ServicePointSettingsPage({
                   ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
                   : '保存できませんでした。入力内容を確認してください。'}
           </p>
+        ) : null}
+
+        {policyExpiryNotice ? (
+          <section className="settings-card" aria-labelledby="pilot-policy-expiry-title">
+            <h2 id="pilot-policy-expiry-title">サービスの試験利用終了日が近づいています</h2>
+            <p>
+              あと<strong>{policyExpiryNotice.daysRemaining}日</strong>（
+              {policyExpiryNotice.endLabel}）で、このサービスのポイントとバッジが停止します。
+            </p>
+            {platformAdmin ? (
+              <a
+                className="button button--secondary"
+                href={`/admin/groups/${service.serviceId}/features/${db.REWARDS_PILOT_FEATURE_KEY}`}
+              >
+                サービスの終了日を変更する
+              </a>
+            ) : (
+              <p>継続する場合は、システム管理者へ終了日の変更を依頼してください。</p>
+            )}
+          </section>
+        ) : null}
+
+        {expiringPilotMembers.length ? (
+          <section className="settings-card" aria-labelledby="pilot-members-expiry-title">
+            <h2 id="pilot-members-expiry-title">参加者の試験利用終了日が近づいています</h2>
+            <p>
+              7日以内に<strong>{expiringPilotMembers.length}人</strong>
+              の参加者設定が終了します。継続する人の終了日を確認してください。
+            </p>
+            <a className="button button--secondary" href={`/s/${serviceSlug}/manage/members`}>
+              参加者の終了日を確認する
+            </a>
+          </section>
         ) : null}
 
         <section className="settings-card">

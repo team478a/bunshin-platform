@@ -2,6 +2,8 @@ import { GetPointUserDashboard, type PointTransactionType } from '@bunshin/appli
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
+import { getRewardsPilotExpiryNotice } from '../../../src/rewards/rewards-pilot-expiry';
+import { RewardsPilotExpiryNoticeCard } from '../../ui/rewards-pilot-expiry-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,12 +40,11 @@ export default async function PointsPage({
     : workspaces[0];
   if (!workspace) redirect('/bunshins');
 
-  if (
-    !(await db.hasActiveRewardsPilotAccess(db.prisma, {
-      workspaceId: workspace.id,
-      userId: user.userId,
-    }))
-  ) {
+  const pilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
+    workspaceId: workspace.id,
+    userId: user.userId,
+  });
+  if (!pilotAccess) {
     return (
       <main className="app-page points-page">
         <header className="app-page__heading">
@@ -60,6 +61,7 @@ export default async function PointsPage({
       </main>
     );
   }
+  const pilotExpiryNotice = getRewardsPilotExpiryNotice(pilotAccess.endsAt);
 
   let dashboard;
   try {
@@ -111,6 +113,8 @@ export default async function PointsPage({
           </form>
         ) : null}
       </header>
+
+      <RewardsPilotExpiryNoticeCard notice={pilotExpiryNotice} />
 
       <section className="point-balance" aria-labelledby="point-balance-title">
         <span id="point-balance-title">いま使えるポイント</span>

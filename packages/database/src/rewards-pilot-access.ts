@@ -4,11 +4,22 @@ export const REWARDS_PILOT_FEATURE_KEY = 'REWARDS.POINTS_BADGES';
 
 type RewardsPilotAccessClient = Pick<Prisma.TransactionClient, 'groupMembership'>;
 
-export async function hasActiveRewardsPilotAccess(
+export type RewardsPilotAccess = {
+  membershipId: string;
+  groupId: string;
+  endsAt: Date | null;
+};
+
+const earliestDate = (values: Array<Date | null>) => {
+  const dates = values.filter((value): value is Date => value !== null);
+  return dates.length ? new Date(Math.min(...dates.map((value) => value.getTime()))) : null;
+};
+
+export async function getActiveRewardsPilotAccess(
   client: RewardsPilotAccessClient,
   scope: { workspaceId: string; userId: string; groupId?: string },
   at = new Date(),
-) {
+): Promise<RewardsPilotAccess | null> {
   const activeWindow = {
     status: 'ENABLED' as const,
     OR: [{ startsAt: null }, { startsAt: { lte: at } }],
@@ -32,7 +43,38 @@ export async function hasActiveRewardsPilotAccess(
         some: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
       },
     },
-    select: { id: true },
+    select: {
+      id: true,
+      groupId: true,
+      group: {
+        select: {
+          featurePolicies: {
+            where: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
+            select: { endsAt: true },
+          },
+        },
+      },
+      featureAssignments: {
+        where: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
+        select: { endsAt: true },
+      },
+    },
   });
-  return Boolean(membership);
+  if (!membership) return null;
+  return {
+    membershipId: membership.id,
+    groupId: membership.groupId,
+    endsAt: earliestDate([
+      ...membership.group.featurePolicies.map(({ endsAt }) => endsAt),
+      ...membership.featureAssignments.map(({ endsAt }) => endsAt),
+    ]),
+  };
+}
+
+export async function hasActiveRewardsPilotAccess(
+  client: RewardsPilotAccessClient,
+  scope: { workspaceId: string; userId: string; groupId?: string },
+  at = new Date(),
+) {
+  return Boolean(await getActiveRewardsPilotAccess(client, scope, at));
 }

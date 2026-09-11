@@ -12,7 +12,7 @@ describe('rewards pilot web boundary', () => {
   it.each([pointsPage, badgesPage])(
     'shows a clear pilot message outside the selected users',
     (source) => {
-      expect(source).toContain('hasActiveRewardsPilotAccess');
+      expect(source).toContain('getActiveRewardsPilotAccess');
       expect(source).toContain('現在は試験利用中です');
       expect(source).toContain('運営者から案内を受けた方だけ利用できます。');
     },
@@ -22,6 +22,14 @@ describe('rewards pilot web boundary', () => {
     expect(source).toContain('hasActiveRewardsPilotAccess');
     expect(source).toContain('rewards pilot access required');
   });
+
+  it.each([pointsPage, badgesPage])(
+    'warns selected users during the final seven days',
+    (source) => {
+      expect(source).toContain('getRewardsPilotExpiryNotice');
+      expect(source).toContain('RewardsPilotExpiryNoticeCard');
+    },
+  );
 
   it('shows operators the 30-person pilot count and a clear limit error', () => {
     expect(membersPage).toContain('試験利用中：');
@@ -43,5 +51,11 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('ポイントを使った人');
     expect(servicePointsPage).toContain('確認候補');
     expect(servicePointsPage).toContain('自動判定は不正を断定するものではありません');
+  });
+
+  it('warns operators about service and participant expiration separately', () => {
+    expect(servicePointsPage).toContain('サービスの試験利用終了日が近づいています');
+    expect(servicePointsPage).toContain('参加者の試験利用終了日が近づいています');
+    expect(servicePointsPage).toContain('参加者の終了日を確認する');
   });
 });

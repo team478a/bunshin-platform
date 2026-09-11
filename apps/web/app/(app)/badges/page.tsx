@@ -5,6 +5,8 @@ import { BadgeVisibilityControl } from './badge-visibility-control';
 import { BadgeNotificationList } from './badge-notification-list';
 import { BadgeMark } from '../../ui/badge-mark';
 import Link from 'next/link';
+import { getRewardsPilotExpiryNotice } from '../../../src/rewards/rewards-pilot-expiry';
+import { RewardsPilotExpiryNoticeCard } from '../../ui/rewards-pilot-expiry-notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,12 +51,11 @@ export default async function BadgesPage({
     ? workspaces.find(({ id }) => id === requestedWorkspaceId)
     : workspaces[0];
   if (!workspace) redirect('/bunshins');
-  if (
-    !(await db.hasActiveRewardsPilotAccess(db.prisma, {
-      workspaceId: workspace.id,
-      userId: user.userId,
-    }))
-  ) {
+  const pilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
+    workspaceId: workspace.id,
+    userId: user.userId,
+  });
+  if (!pilotAccess) {
     return (
       <main className="app-page badge-page">
         <header className="app-page__heading">
@@ -71,6 +72,7 @@ export default async function BadgesPage({
       </main>
     );
   }
+  const pilotExpiryNotice = getRewardsPilotExpiryNotice(pilotAccess.endsAt);
   let dashboard;
   try {
     dashboard = await new GetBadgeUserDashboard(
@@ -111,6 +113,8 @@ export default async function BadgesPage({
           </form>
         ) : null}
       </header>
+
+      <RewardsPilotExpiryNoticeCard notice={pilotExpiryNotice} />
 
       <BadgeNotificationList
         workspaceId={workspace.id}
