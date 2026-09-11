@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260911110000_add_social_image_quality_report';
+export const LATEST_DATABASE_MIGRATION = '20260911122000_assign_sennokuni_line_service_admin';
