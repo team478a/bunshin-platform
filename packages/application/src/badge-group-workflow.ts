@@ -51,6 +51,13 @@ export interface BadgeGroupWorkflowRepository {
     reason: string;
     now: Date;
   }): Promise<{ id: string; status: 'REVOKED' } | null>;
+  setDefinitionStatus(input: {
+    definitionId: string;
+    actorUserId: string;
+    status: 'ACTIVE' | 'SUSPENDED';
+    reason: string;
+    now: Date;
+  }): Promise<{ id: string; status: 'ACTIVE' | 'SUSPENDED' } | null>;
 }
 
 const required = (value: string, field: string, max = 1000) => {
@@ -150,6 +157,24 @@ export class RevokeGroupBadgeAward {
       now: input.now ?? new Date(),
     });
     if (!result) throw new ApplicationError('FORBIDDEN', 'badge award revocation is not allowed');
+    return result;
+  }
+}
+
+export class SetGroupBadgeAvailability {
+  constructor(private readonly repository: BadgeGroupWorkflowRepository) {}
+  async execute(
+    input: Omit<Parameters<BadgeGroupWorkflowRepository['setDefinitionStatus']>[0], 'now'> & {
+      now?: Date;
+    },
+  ) {
+    const result = await this.repository.setDefinitionStatus({
+      ...input,
+      reason: required(input.reason, 'reason'),
+      now: input.now ?? new Date(),
+    });
+    if (!result)
+      throw new ApplicationError('FORBIDDEN', 'badge availability change is not allowed');
     return result;
   }
 }

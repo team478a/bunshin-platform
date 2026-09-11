@@ -4,6 +4,7 @@ import {
   RevokeGroupBadgeAward,
   ReviewGroupBadge,
   ReviewGroupBadgeCandidate,
+  SetGroupBadgeAvailability,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
 import Link from 'next/link';
@@ -46,6 +47,13 @@ const reviewSchema = z.object({
 const revokeSchema = z.object({
   groupId: z.uuid(),
   awardId: z.uuid(),
+  reason: z.string().trim().min(3).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
+});
+const availabilitySchema = z.object({
+  groupId: z.uuid(),
+  definitionId: z.uuid(),
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
   reason: z.string().trim().min(3).max(1000),
   serviceSlug: z.string().trim().max(120).optional(),
 });
@@ -176,6 +184,36 @@ async function revokeAward(formData: FormData) {
   redirect(`${returnPath}?revoked=1` as Route);
 }
 
+async function setBadgeAvailability(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = availabilitySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: parsed.data.groupId,
+    serviceSlug: parsed.data.serviceSlug,
+    section: 'badges',
+  });
+  try {
+    const db = await import('@bunshin/database');
+    await new SetGroupBadgeAvailability(
+      new db.PrismaBadgeGroupWorkflowRepository(db.prisma),
+    ).execute({
+      definitionId: parsed.data.definitionId,
+      actorUserId: actor.userId,
+      status: parsed.data.status,
+      reason: parsed.data.reason,
+    });
+  } catch (error) {
+    redirect(`${returnPath}?error=${errorCode(error)}` as Route);
+  }
+  revalidatePath(path(parsed.data.groupId));
+  revalidatePath('/badges');
+  if (parsed.data.serviceSlug) revalidatePath(`/s/${parsed.data.serviceSlug}/activity`);
+  redirect(`${returnPath}?availability=${parsed.data.status.toLowerCase()}` as Route);
+}
+
 const approvalLabel = {
   PENDING: '本部の確認待ち',
   APPROVED: '使用できます',
@@ -192,6 +230,7 @@ export default async function GroupBadgesPage({
     nominated?: string;
     reviewed?: string;
     revoked?: string;
+    availability?: string;
     error?: string;
     service?: string;
   }>;
@@ -262,7 +301,9 @@ export default async function GroupBadgesPage({
     }),
   ]);
   const activeVersions = definitions.flatMap((definition) =>
-    definition.versions.filter((version) => version.publishedAt !== null),
+    definition.status === 'ACTIVE'
+      ? definition.versions.filter((version) => version.publishedAt !== null)
+      : [],
   );
   const query = await searchParams;
   const serviceOperator = group.memberships.some(
@@ -301,6 +342,13 @@ export default async function GroupBadgesPage({
       ) : null}
       {query.revoked ? (
         <p className="notice notice--success">バッジの付与を取り消しました。</p>
+      ) : null}
+      {query.availability ? (
+        <p className="notice notice--success">
+          {query.availability === 'active'
+            ? 'バッジの付与を再開しました。'
+            : 'バッジの新しい付与を停止しました。過去の獲得履歴は残ります。'}
+        </p>
       ) : null}
       {query.error ? (
         <p className="notice notice--danger">
@@ -371,7 +419,41 @@ export default async function GroupBadgesPage({
               return (
                 <li key={definition.id}>
                   <strong>{version?.title ?? definition.code}</strong>（{definition.code}）—{' '}
-                  {approval ? approvalLabel[approval.status] : '準備中'}
+                  {definition.status === 'SUSPENDED'
+                    ? '停止中'
+                    : approval
+                      ? approvalLabel[approval.status]
+                      : '準備中'}
+                  {serviceOperator &&
+                  (definition.status === 'ACTIVE' || definition.status === 'SUSPENDED') ? (
+                    <form action={setBadgeAvailability} className="form-stack">
+                      {query.service && (
+                        <input type="hidden" name="serviceSlug" value={query.service} />
+                      )}
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="definitionId" value={definition.id} />
+                      <input
+                        type="hidden"
+                        name="status"
+                        value={definition.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'}
+                      />
+                      <label className="field">
+                        <span className="field__label">
+                          {definition.status === 'ACTIVE' ? '停止する理由' : '再開する理由'}
+                        </span>
+                        <textarea
+                          className="field__control"
+                          name="reason"
+                          minLength={3}
+                          maxLength={1000}
+                          required
+                        />
+                      </label>
+                      <button className="button button--secondary" type="submit">
+                        {definition.status === 'ACTIVE' ? '新しい付与を停止する' : '付与を再開する'}
+                      </button>
+                    </form>
+                  ) : null}
                 </li>
               );
             })}
