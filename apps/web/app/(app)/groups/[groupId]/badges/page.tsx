@@ -1,6 +1,7 @@
 import {
   CreateAndSubmitGroupBadge,
   NominateGroupBadgeCandidate,
+  RevokeGroupBadgeAward,
   ReviewGroupBadge,
   ReviewGroupBadgeCandidate,
 } from '@bunshin/application';
@@ -39,6 +40,12 @@ const reviewSchema = z.object({
   groupId: z.uuid(),
   candidateId: z.uuid(),
   decision: z.enum(['APPROVED', 'REJECTED']),
+  reason: z.string().trim().min(3).max(1000),
+  serviceSlug: z.string().trim().max(120).optional(),
+});
+const revokeSchema = z.object({
+  groupId: z.uuid(),
+  awardId: z.uuid(),
   reason: z.string().trim().min(3).max(1000),
   serviceSlug: z.string().trim().max(120).optional(),
 });
@@ -142,6 +149,33 @@ async function reviewCandidate(formData: FormData) {
   redirect(`${returnPath}?reviewed=1` as Route);
 }
 
+async function revokeAward(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = revokeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = await serviceManagementReturnPath({
+    groupId: parsed.data.groupId,
+    serviceSlug: parsed.data.serviceSlug,
+    section: 'badges',
+  });
+  try {
+    const db = await import('@bunshin/database');
+    await new RevokeGroupBadgeAward(new db.PrismaBadgeGroupWorkflowRepository(db.prisma)).execute({
+      awardId: parsed.data.awardId,
+      actorUserId: actor.userId,
+      reason: parsed.data.reason,
+    });
+  } catch (error) {
+    redirect(`${returnPath}?error=${errorCode(error)}` as Route);
+  }
+  revalidatePath(path(parsed.data.groupId));
+  revalidatePath('/badges');
+  if (parsed.data.serviceSlug) revalidatePath(`/s/${parsed.data.serviceSlug}/activity`);
+  redirect(`${returnPath}?revoked=1` as Route);
+}
+
 const approvalLabel = {
   PENDING: '本部の確認待ち',
   APPROVED: '使用できます',
@@ -157,6 +191,7 @@ export default async function GroupBadgesPage({
     created?: string;
     nominated?: string;
     reviewed?: string;
+    revoked?: string;
     error?: string;
     service?: string;
   }>;
@@ -188,7 +223,7 @@ export default async function GroupBadgesPage({
     },
   });
   if (!group) notFound();
-  const [definitions, candidates] = await Promise.all([
+  const [definitions, candidates, activeAwards] = await Promise.all([
     db.prisma.badgeDefinition.findMany({
       where: { workspaceId: group.workspaceId, groupId: group.id, ownerType: 'GROUP' },
       include: {
@@ -204,6 +239,25 @@ export default async function GroupBadgesPage({
         badgeVersion: { select: { title: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
+    }),
+    db.prisma.badgeAward.findMany({
+      where: {
+        workspaceId: group.workspaceId,
+        groupId: group.id,
+        status: 'ACTIVE',
+        sourceType: 'GROUP_APPROVAL',
+        badgeVersion: {
+          definition: { ownerType: 'GROUP', workspaceId: group.workspaceId, groupId: group.id },
+        },
+      },
+      select: {
+        id: true,
+        awardedAt: true,
+        user: { select: { displayName: true, email: true } },
+        badgeVersion: { select: { title: true } },
+      },
+      orderBy: { awardedAt: 'desc' },
       take: 100,
     }),
   ]);
@@ -244,6 +298,9 @@ export default async function GroupBadgesPage({
       ) : null}
       {query.reviewed ? (
         <p className="notice notice--success">候補者の確認を保存しました。</p>
+      ) : null}
+      {query.revoked ? (
+        <p className="notice notice--success">バッジの付与を取り消しました。</p>
       ) : null}
       {query.error ? (
         <p className="notice notice--danger">
@@ -363,6 +420,46 @@ export default async function GroupBadgesPage({
       </section>
 
       <BadgeCsvImporter workspaceId={group.workspaceId} groupId={group.id} />
+
+      {serviceOperator ? (
+        <section className="settings-card">
+          <h2>誤って付与したバッジを取り消す</h2>
+          <p>付与記録は削除せず、取消理由と操作した運営者を履歴に残します。</p>
+          {activeAwards.length === 0 ? (
+            <p>取り消せるバッジはありません。</p>
+          ) : (
+            activeAwards.map((award) => (
+              <article key={award.id} className="settings-card">
+                <h3>
+                  {award.user.displayName || award.user.email || '参加者'}：
+                  {award.badgeVersion.title}
+                </h3>
+                <p>付与日：{award.awardedAt.toLocaleString('ja-JP')}</p>
+                <form action={revokeAward} className="form-stack">
+                  {query.service && (
+                    <input type="hidden" name="serviceSlug" value={query.service} />
+                  )}
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="awardId" value={award.id} />
+                  <label className="field">
+                    <span className="field__label">取り消す理由</span>
+                    <textarea
+                      className="field__control"
+                      name="reason"
+                      minLength={3}
+                      maxLength={1000}
+                      required
+                    />
+                  </label>
+                  <button className="button button--secondary" type="submit">
+                    この付与を取り消す
+                  </button>
+                </form>
+              </article>
+            ))
+          )}
+        </section>
+      ) : null}
 
       <section className="settings-card">
         <h2>{serviceOperator ? 'バッジを付与する' : '候補者を別の管理者が確認'}</h2>

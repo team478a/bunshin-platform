@@ -351,7 +351,17 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
               evidenceHash,
               idempotencyKey: `group-candidate:${candidate.id}`,
             },
-            update: {},
+            update: {
+              groupId: candidate.groupId,
+              awardedAt: input.now,
+              sourceType: 'GROUP_APPROVAL',
+              sourceId: candidate.id,
+              evidenceHash,
+              idempotencyKey: `group-candidate:${candidate.id}`,
+              status: 'ACTIVE',
+              revokedAt: null,
+              expiredAt: null,
+            },
           });
           awardId = award.id;
           await tx.badgeProgress.upsert({
@@ -396,6 +406,80 @@ export class PrismaBadgeGroupWorkflowRepository implements BadgeGroupWorkflowRep
           },
         });
         return { id: updated.id, status: updated.status as 'APPROVED' | 'REJECTED', awardId };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async revokeAward(input: Parameters<BadgeGroupWorkflowRepository['revokeAward']>[0]) {
+    return this.client.$transaction(
+      async (tx) => {
+        const award = await tx.badgeAward.findFirst({
+          where: {
+            id: input.awardId,
+            status: 'ACTIVE',
+            sourceType: 'GROUP_APPROVAL',
+            groupId: { not: null },
+            badgeVersion: { definition: { ownerType: 'GROUP' } },
+          },
+          include: { badgeVersion: { include: { definition: true } } },
+        });
+        if (!award?.groupId || award.badgeVersion.definition.groupId !== award.groupId) return null;
+        const operator = await tx.groupMembership.findFirst({
+          where: {
+            workspaceId: award.workspaceId,
+            groupId: award.groupId,
+            userId: input.actorUserId,
+            role: 'MANAGER',
+            status: 'ACTIVE',
+            serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+            group: { status: 'ACTIVE' },
+            workspace: { status: 'ACTIVE' },
+          },
+          select: { id: true },
+        });
+        if (!operator) return null;
+
+        const updated = await tx.badgeAward.updateMany({
+          where: { id: award.id, status: 'ACTIVE' },
+          data: { status: 'REVOKED', revokedAt: input.now },
+        });
+        if (updated.count !== 1) return null;
+        await tx.badgeProgress.updateMany({
+          where: {
+            workspaceId: award.workspaceId,
+            userId: award.userId,
+            badgeVersionId: award.badgeVersionId,
+            groupId: award.groupId,
+            status: 'AWARDED',
+          },
+          data: { status: 'ELIGIBLE', revision: { increment: 1 } },
+        });
+        await tx.badgeLineNotificationDelivery.updateMany({
+          where: {
+            workspaceId: award.workspaceId,
+            groupId: award.groupId,
+            userId: award.userId,
+            status: { in: ['PENDING', 'FAILED'] },
+            badgeNotification: { badgeAwardId: award.id },
+          },
+          data: { status: 'CANCELLED', cancelledAt: input.now },
+        });
+        await tx.badgeAdminAuditLog.create({
+          data: {
+            workspaceId: award.workspaceId,
+            groupId: award.groupId,
+            badgeDefinitionId: award.badgeVersion.definitionId,
+            badgeVersionId: award.badgeVersionId,
+            badgeAwardId: award.id,
+            action: 'BADGE_AWARD_REVOKED_BY_SERVICE_OPERATOR',
+            beforeData: { status: 'ACTIVE', targetUserId: award.userId },
+            afterData: { status: 'REVOKED', targetUserId: award.userId },
+            reason: input.reason,
+            performedByUserId: input.actorUserId,
+          },
+        });
+        return { id: award.id, status: 'REVOKED' as const };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
