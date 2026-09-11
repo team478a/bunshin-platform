@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { buildRewardsPilotMetrics } from '../../../../../src/rewards/rewards-pilot-metrics';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 
@@ -639,19 +640,73 @@ export default async function ServicePointSettingsPage({
     if (!current.has(version.ruleKey)) current.set(version.ruleKey, version);
   const query = await searchParams;
   const now = new Date();
+  const pilotFrom = new Date(now.valueOf() - 28 * 86_400_000);
   const rewardsPolicyActive = Boolean(
     rewardsPolicy &&
     (!rewardsPolicy.startsAt || rewardsPolicy.startsAt <= now) &&
     (!rewardsPolicy.endsAt || rewardsPolicy.endsAt > now),
   );
-  const rewardsPilotCount = memberships.filter((membership) =>
+  const rewardsPilotMembers = memberships.filter((membership) =>
     membership.featureAssignments.some(
       (assignment) =>
         assignment.status === 'ENABLED' &&
         (!assignment.startsAt || assignment.startsAt <= now) &&
         (!assignment.endsAt || assignment.endsAt > now),
     ),
-  ).length;
+  );
+  const rewardsPilotCount = rewardsPilotMembers.length;
+  const rewardsPilotUserIds = rewardsPilotMembers.map(({ userId }) => userId);
+  const [pilotPosts, pilotGrantTransactions, pilotRedemptions] = await Promise.all([
+    db.prisma.postRecord.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        actorUserId: { in: rewardsPilotUserIds },
+        postedAt: { gte: pilotFrom, lte: now },
+        bunshin: { groupId: service.serviceId },
+      },
+      select: { actorUserId: true, postedAt: true },
+    }),
+    db.prisma.pointTransaction.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        userId: { in: rewardsPilotUserIds },
+        type: 'GRANT',
+        createdAt: { gte: pilotFrom, lte: now },
+      },
+      select: { userId: true, amount: true },
+    }),
+    db.prisma.pointRedemption.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        userId: { in: rewardsPilotUserIds },
+        status: 'CONFIRMED',
+        confirmedAt: { gte: pilotFrom, lte: now },
+      },
+      select: { userId: true, pointCost: true },
+    }),
+  ]);
+  const rewardsPilotMetrics = buildRewardsPilotMetrics({
+    participantIds: rewardsPilotUserIds,
+    posts: pilotPosts.map((post) => ({ userId: post.actorUserId, postedAt: post.postedAt })),
+    transactions: [
+      ...pilotGrantTransactions.map((transaction) => ({
+        userId: transaction.userId,
+        type: 'GRANT' as const,
+        amount: transaction.amount,
+      })),
+      ...pilotRedemptions.map((redemption) => ({
+        userId: redemption.userId,
+        type: 'CONSUME' as const,
+        amount: -redemption.pointCost,
+      })),
+    ],
+  });
+  const pilotPercentage = (count: number) =>
+    rewardsPilotCount === 0 ? '—' : `${Math.round((count / rewardsPilotCount) * 100)}%`;
+  const pilotPeriodLabel = `${pilotFrom.toLocaleDateString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+  })}〜${now.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`;
   const memberName = new Map(
     memberships.map((membership) => [
       membership.userId,
@@ -737,6 +792,73 @@ export default async function ServicePointSettingsPage({
               </a>
             ) : null}
           </div>
+        </section>
+
+        <section className="settings-card">
+          <h2>試験運用の結果</h2>
+          <p>現在の試験利用者について、直近28日間（{pilotPeriodLabel}）を集計しています。</p>
+          <div className="table-scroll">
+            <table>
+              <tbody>
+                <tr>
+                  <th>試験利用者</th>
+                  <td>{rewardsPilotMetrics.participantCount}人</td>
+                  <td>現在ポイントとバッジを利用できる人数</td>
+                </tr>
+                <tr>
+                  <th>投稿した人</th>
+                  <td>
+                    {rewardsPilotMetrics.postingUserCount}人（
+                    {pilotPercentage(rewardsPilotMetrics.postingUserCount)}）
+                  </td>
+                  <td>「投稿しました」を1回以上記録した人</td>
+                </tr>
+                <tr>
+                  <th>3日以上続けた人</th>
+                  <td>
+                    {rewardsPilotMetrics.continuedUserCount}人（
+                    {pilotPercentage(rewardsPilotMetrics.continuedUserCount)}）
+                  </td>
+                  <td>別々の日に3回以上、投稿完了を記録した人</td>
+                </tr>
+                <tr>
+                  <th>ポイントを使った人</th>
+                  <td>
+                    {rewardsPilotMetrics.redemptionUserCount}人（
+                    {pilotPercentage(rewardsPilotMetrics.redemptionUserCount)}）
+                  </td>
+                  <td>ポイント交換を1回以上行った人</td>
+                </tr>
+                <tr>
+                  <th>期間中の記録</th>
+                  <td>{rewardsPilotMetrics.postCount}投稿</td>
+                  <td>
+                    付与 {rewardsPilotMetrics.grantedPoints}WP／利用{' '}
+                    {rewardsPilotMetrics.consumedPoints}WP
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>確認候補</h3>
+          {rewardsPilotMetrics.reviewCandidates.length === 0 ? (
+            <p>現在、確認が必要な記録はありません。</p>
+          ) : (
+            <ul>
+              {rewardsPilotMetrics.reviewCandidates.map((candidate) => (
+                <li key={candidate.userId}>
+                  <strong>{memberName.get(candidate.userId) ?? '参加者'}</strong>：
+                  {candidate.reasons.join('、')}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p>
+            <small>
+              1日に5件以上、または10分以内に3件以上の投稿完了がある場合に表示します。自動判定は不正を断定するものではありません。入力間違いや操作状況を確認してください。
+            </small>
+          </p>
         </section>
 
         <section className="settings-card">
