@@ -7526,13 +7526,13 @@ export class PrismaPersonalityLearningProposalRepository implements PersonalityL
       !canManageBunshin(membership.role, input.actorUserId, row.ownerUserId)
     )
       return null;
-    return row.personality;
+    return { personality: row.personality };
   }
 
   async create(input: Parameters<PersonalityLearningProposalRepository['create']>[0]) {
     try {
       return await this.client.$transaction(async (tx) => {
-        const personality = await this.access(tx, input);
+        const personality = (await this.access(tx, input))?.personality;
         if (!personality) return null;
         const base = await tx.bunshinPersonalityVersion.findFirst({
           where: {
@@ -7566,7 +7566,9 @@ export class PrismaPersonalityLearningProposalRepository implements PersonalityL
 
   async list(input: Parameters<PersonalityLearningProposalRepository['list']>[0]) {
     return this.client.$transaction(async (tx) => {
-      if (!(await this.access(tx, input))) return null;
+      const access = await this.access(tx, input);
+      if (!access) return null;
+      if (!access.personality) return [];
       const rows = await tx.personalityLearningProposal.findMany({
         where: { workspaceId: input.workspaceId, bunshinId: input.bunshinId },
         orderBy: { createdAt: 'desc' },
@@ -7597,7 +7599,7 @@ export class PrismaPersonalityLearningProposalRepository implements PersonalityL
 
   async approve(input: Parameters<PersonalityLearningProposalRepository['approve']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const personality = await this.access(tx, input);
+      const personality = (await this.access(tx, input))?.personality;
       if (!personality) return null;
       const proposal = await tx.personalityLearningProposal.findFirst({
         where: {
@@ -7651,7 +7653,7 @@ export class PrismaPersonalityLearningProposalRepository implements PersonalityL
 
   async revoke(input: Parameters<PersonalityLearningProposalRepository['revoke']>[0]) {
     return this.client.$transaction(async (tx) => {
-      const personality = await this.access(tx, input);
+      const personality = (await this.access(tx, input))?.personality;
       if (!personality) return null;
       const proposal = await tx.personalityLearningProposal.findFirst({
         where: {
