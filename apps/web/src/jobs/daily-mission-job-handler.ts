@@ -61,6 +61,7 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
         mission = await createDailyMissionGenerationService().execute({
           ...scope,
           serviceSafeMode: Boolean(scope.groupId),
+          ...(scope.groupId ? { allowServiceOwnerMemories: true } : {}),
           missionDate: localDate,
           generationIdempotencyKey: job.idempotencyKey,
           usageIdempotencyPrefix: `job:${job.id}:daily-mission`,

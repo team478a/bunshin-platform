@@ -21,6 +21,7 @@ export interface PointFundedMissionContentVariantInput {
   usageIdempotencyPrefix: string;
   acceptedPointCost: number;
   serviceSafeMode?: boolean;
+  allowServiceOwnerMemories?: boolean;
   variantInstructions?: string[];
 }
 
@@ -73,6 +74,9 @@ export async function executePointFundedMissionContentVariant(
       generationIdempotencyKey: input.generationIdempotencyKey,
       usageIdempotencyPrefix: input.usageIdempotencyPrefix,
       ...(input.serviceSafeMode === undefined ? {} : { serviceSafeMode: input.serviceSafeMode }),
+      ...(input.allowServiceOwnerMemories === undefined
+        ? {}
+        : { allowServiceOwnerMemories: input.allowServiceOwnerMemories }),
       ...(input.variantInstructions === undefined
         ? {}
         : { variantInstructions: input.variantInstructions }),

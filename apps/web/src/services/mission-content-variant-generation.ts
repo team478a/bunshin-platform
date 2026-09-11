@@ -51,6 +51,7 @@ interface Input {
   generationIdempotencyKey: string;
   usageIdempotencyPrefix: string;
   serviceSafeMode?: boolean;
+  allowServiceOwnerMemories?: boolean;
   variantInstructions?: string[];
 }
 
@@ -240,9 +241,13 @@ export class MissionContentVariantGenerationService {
             : new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
                 scope,
               ),
-          input.serviceSafeMode
+          input.serviceSafeMode && !input.allowServiceOwnerMemories
             ? Promise.resolve([])
-            : new ListBunshinMemories(new db.PrismaBunshinMemoryRepository()).execute(scope),
+            : new ListBunshinMemories(
+                input.serviceSafeMode
+                  ? new db.PrismaOwnerBunshinMemoryRepository()
+                  : new db.PrismaBunshinMemoryRepository(),
+              ).execute(scope),
         ]);
       const profile = requireSnapshotValue(
         profiles.find(

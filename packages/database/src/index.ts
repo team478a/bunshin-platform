@@ -7997,12 +7997,16 @@ function memory(row: Prisma.BunshinMemoryGetPayload<object>): BunshinMemory {
 }
 
 export class PrismaBunshinMemoryRepository implements BunshinMemoryRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(
+    private readonly client: PrismaClient = prisma,
+    private readonly ownerOnly = false,
+  ) {}
   private async managed(input: { workspaceId: string; actorUserId: string; bunshinId: string }) {
     const bunshin = await this.client.bunshin.findFirst({
       where: {
         id: input.bunshinId,
         workspaceId: input.workspaceId,
+        ...(this.ownerOnly ? { ownerUserId: input.actorUserId } : {}),
         status: { not: 'ARCHIVED' },
         workspace: {
           status: 'ACTIVE',
@@ -8120,6 +8124,12 @@ export class PrismaBunshinMemoryRepository implements BunshinMemoryRepository {
         data: { active: false, deletedAt: new Date() },
       }),
     );
+  }
+}
+
+export class PrismaOwnerBunshinMemoryRepository extends PrismaBunshinMemoryRepository {
+  constructor(client: PrismaClient = prisma) {
+    super(client, true);
   }
 }
 

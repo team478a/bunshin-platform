@@ -32,6 +32,7 @@ import { ServiceBunshinEditor } from './service-bunshin-editor';
 import { ServiceDailyMissionSection } from './service-daily-mission-section';
 import { SimpleFirstPostSetup } from './simple-first-post-setup';
 import { ServiceDeliverySettings } from './service-delivery-settings';
+import { DailyActionSection, type DailyActionView } from './daily-action-section';
 import { dailyVideoProjectId } from '../../../../../src/services/automatic-daily-video';
 import { localDateInTimezone } from '../../../../../src/activity-progress';
 import { resolveDeliveryScheduleStatus } from '../../../../../src/services/delivery-schedule-status';
@@ -301,6 +302,43 @@ export default async function ServiceBunshinDetailPage({
     },
     select: { id: true },
   });
+  const dailyActions: DailyActionView[] = (
+    await db.prisma.bunshinMemory.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        bunshinId,
+        bunshin: { ownerUserId: actor.userId, groupId: service.serviceId },
+        sourceType: 'USER_INPUT',
+        sourceId: { startsWith: 'daily-action:' },
+        active: true,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    })
+  ).flatMap((memory) => {
+    const type = memory.sourceId?.split(':')[1];
+    const labels: Record<string, string> = {
+      PHOTO: '今日撮った写真',
+      CUSTOMER_QUESTION: 'お客様から聞かれた質問',
+      VOICE_MEMO: '30秒メモ',
+      COMMENT_REPLY: 'コメントへの返信',
+      POST_IMPROVEMENT: '過去投稿の改善案',
+      REST_REASON: '今日は投稿しない理由',
+    };
+    if (!type || !labels[type]) return [];
+    return [
+      {
+        id: memory.id,
+        type: type as DailyActionView['type'],
+        text: memory.content,
+        label: labels[type],
+        hasPhoto: memory.attachmentStatus === 'READY',
+        attachmentStatus: memory.attachmentStatus,
+        createdAt: memory.createdAt.toISOString(),
+      },
+    ];
+  });
   return (
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry service-member-home" style={style}>
@@ -395,6 +433,14 @@ export default async function ServiceBunshinDetailPage({
             </section>
           </div>
         </details>
+        {bunshin.ownerUserId === actor.userId ? (
+          <section className="service-entry__card" id="daily-action">
+            <DailyActionSection
+              endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-actions`}
+              initialActions={dailyActions}
+            />
+          </section>
+        ) : null}
         <section className="service-entry__card" id="today-post">
           <ServiceDailyMissionSection
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-missions`}
