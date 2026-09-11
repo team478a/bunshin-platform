@@ -183,6 +183,7 @@ export function generateServiceDailyMissionResponse(
           usageIdempotencyPrefix: requestId,
           existingPolicy: 'CONFLICT',
           serviceSafeMode: true,
+          allowServiceOwnerMemories: true,
         }),
       );
     },
@@ -232,6 +233,7 @@ export function generateServiceMissionContentVariantResponse(
           usageIdempotencyPrefix: requestId,
           acceptedPointCost: parsed.data.acceptedPointCost,
           serviceSafeMode: true,
+          allowServiceOwnerMemories: true,
           ...(parsed.data.instruction ? { variantInstructions: [parsed.data.instruction] } : {}),
         }),
       );

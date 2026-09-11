@@ -1891,6 +1891,133 @@ a {
 .mission-experience {
   padding: 0;
 }
+
+.daily-action {
+  display: grid;
+  gap: 1rem;
+}
+
+.daily-action__header h2,
+.daily-action__header p,
+.daily-action__question p,
+.daily-action__form h3,
+.daily-action__form p {
+  margin: 0;
+}
+
+.daily-action__question {
+  padding: 1rem;
+  border-radius: 1rem;
+  background: #f1f5ff;
+  color: #17233d;
+}
+
+.daily-action__question p {
+  margin-top: 0.4rem;
+  font-size: 1.05rem;
+}
+
+.daily-action__choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.daily-action__choices button {
+  display: grid;
+  gap: 0.3rem;
+  min-height: 9rem;
+  padding: 1rem 0.75rem;
+  border: 2px solid #dce2ec;
+  border-radius: 1rem;
+  background: #fff;
+  color: #17233d;
+  text-align: left;
+}
+
+.daily-action__choices button.is-selected {
+  border-color: #1769e0;
+  background: #f3f7ff;
+}
+
+.daily-action__choices button > span {
+  font-size: 1.65rem;
+}
+
+.daily-action__choices button strong {
+  font-size: 1rem;
+}
+
+.daily-action__choices button small,
+.daily-action__form small {
+  color: #5c677a;
+  line-height: 1.55;
+}
+
+.daily-action__form {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 2px solid #1769e0;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.daily-action__hint,
+.daily-action__privacy {
+  color: #5c677a;
+  font-size: 0.92rem;
+}
+
+.daily-action__history summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.daily-action__history ul {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.daily-action__history li {
+  padding: 0.9rem;
+  border: 1px solid #dce2ec;
+  border-radius: 0.85rem;
+}
+
+.daily-action__history time {
+  float: right;
+  color: #687386;
+}
+
+.daily-action__history li p {
+  white-space: pre-wrap;
+}
+
+.daily-action__history li div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.daily-action__history li button {
+  border: 0;
+  background: transparent;
+  color: #a33;
+  text-decoration: underline;
+}
+
+@media (max-width: 420px) {
+  .daily-action__choices {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-action__choices button {
+    min-height: 7rem;
+  }
+}
 .mission-experience__header {
   margin-bottom: 18px;
 }

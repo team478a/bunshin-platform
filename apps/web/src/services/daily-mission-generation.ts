@@ -51,6 +51,7 @@ interface Input {
   usageIdempotencyPrefix: string;
   existingPolicy: 'RETURN' | 'CONFLICT';
   serviceSafeMode?: boolean;
+  allowServiceOwnerMemories?: boolean;
 }
 
 const errorCategory = (error: unknown) => {
@@ -206,6 +207,27 @@ export class DailyMissionGenerationService {
         : await new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
             scope,
           );
+      const memoryRepository = input.serviceSafeMode && input.allowServiceOwnerMemories
+        ? new db.PrismaOwnerBunshinMemoryRepository()
+        : new db.PrismaBunshinMemoryRepository();
+      const ownerMemories =
+        input.serviceSafeMode && !input.allowServiceOwnerMemories
+          ? []
+          : await memoryRepository.list(scope);
+      const personalMaterials = ownerMemories
+        .filter(
+          (memory) =>
+            memory.active &&
+            memory.deletedAt === null &&
+            memory.sourceType === 'USER_INPUT' &&
+            memory.sourceId?.startsWith('daily-action:'),
+        )
+        .slice(0, 3)
+        .map((memory) => ({
+          type: 'PERSONAL_MATERIAL',
+          title: memory.summary?.trim() || '本人が残した素材',
+          content: memory.content,
+        }));
       const generations = new db.PrismaDailyMissionGenerationRepository();
       const claim = await generations.claim({
         ...scope,
@@ -255,9 +277,11 @@ export class DailyMissionGenerationService {
         ctaStrategy: strategy.ctaStrategy,
         postingPolicy: strategy.postingPolicy,
       };
-      const knowledge =
-        serviceKnowledge?.officialKnowledge ??
-        granted.map(({ type, title, content }) => ({ type, title, content }));
+      const knowledge = [
+        ...(serviceKnowledge?.officialKnowledge ??
+          granted.map(({ type, title, content }) => ({ type, title, content }))),
+        ...personalMaterials,
+      ];
       const groupKnowledge = campaign
         ? selectGroupKnowledgeChunksForPrompt(
             await new GroupKnowledgeService(
@@ -332,21 +356,41 @@ export class DailyMissionGenerationService {
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
-      const selectedMemories = input.serviceSafeMode
-        ? []
-        : await new SelectBunshinMemories(new db.PrismaBunshinMemoryRepository()).execute({
-            ...scope,
-            query: [
-              brief.output.topic,
-              brief.output.angle,
-              brief.output.reason,
-              pillar.title,
-              pillar.description ?? '',
-              strategy.targetSummary,
-            ].join('\n'),
-            maxItems: 5,
-            maxCharacters: 3000,
-          });
+      const relevantMemories =
+        input.serviceSafeMode && !input.allowServiceOwnerMemories
+          ? []
+          : await new SelectBunshinMemories(memoryRepository).execute({
+              ...scope,
+              query: [
+                brief.output.topic,
+                brief.output.angle,
+                brief.output.reason,
+                pillar.title,
+                pillar.description ?? '',
+                strategy.targetSummary,
+              ].join('\n'),
+              maxItems: 5,
+              maxCharacters: 3000,
+            });
+      const selectedMemories =
+        relevantMemories.length > 0
+          ? relevantMemories
+          : ownerMemories
+              .filter(
+                (memory) =>
+                  memory.active &&
+                  memory.deletedAt === null &&
+                  memory.sourceType === 'USER_INPUT' &&
+                  memory.sourceId?.startsWith('daily-action:'),
+              )
+              .slice(0, 1)
+              .map((memory) => ({
+                id: memory.id,
+                type: memory.type,
+                summary: memory.summary?.trim() || memory.content.slice(0, 200),
+                content: memory.content,
+                selectionReason: '本人がDaily Actionで残した最近の素材',
+              }));
       const generator = new GenerateMissionContent(
         new OpenAIMissionContentGenerator({
           apiKey,

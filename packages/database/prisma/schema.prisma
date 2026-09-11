@@ -1318,6 +1318,12 @@ enum BunshinMemorySourceType {
   SYSTEM
 }
 
+enum BunshinMemoryAttachmentStatus {
+  PENDING_UPLOAD
+  READY
+  REJECTED
+}
+
 enum CapabilityType {
   SOCIAL
   BLOG
@@ -5142,6 +5148,12 @@ model BunshinMemory {
   summary     String?                 @db.VarChar(1000)
   sourceType  BunshinMemorySourceType @default(USER_INPUT) @map("source_type")
   sourceId    String?                 @map("source_id") @db.VarChar(255)
+  attachmentStatus     BunshinMemoryAttachmentStatus? @map("attachment_status")
+  attachmentStorageKey String?                        @unique @map("attachment_storage_key") @db.VarChar(512)
+  attachmentMimeType   String?                        @map("attachment_mime_type") @db.VarChar(100)
+  attachmentSizeBytes  Int?                           @map("attachment_size_bytes")
+  attachmentWidth      Int?                           @map("attachment_width")
+  attachmentHeight     Int?                           @map("attachment_height")
   confidence  Decimal                 @db.Decimal(4, 3)
   importance  Int
   active      Boolean                 @default(true)
@@ -5152,6 +5164,7 @@ model BunshinMemory {
   bunshin     Bunshin                 @relation(fields: [bunshinId], references: [id], onDelete: Restrict)
 
   @@index([workspaceId, bunshinId, active, deletedAt, updatedAt])
+  @@index([workspaceId, bunshinId, sourceType, sourceId])
   @@map("bunshin_memories")
 }
 
