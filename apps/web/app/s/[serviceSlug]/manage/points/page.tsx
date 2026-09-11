@@ -252,48 +252,74 @@ export default async function ServicePointSettingsPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [versions, memberships, history] = await Promise.all([
-    db.prisma.pointRuleVersion.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        campaignId: null,
-        ruleKey: { in: RULES.map((rule) => rule.key) },
-        status: { in: ['ACTIVE', 'SUSPENDED'] },
-      },
-      orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
-    }),
-    db.prisma.groupMembership.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        status: 'ACTIVE',
-      },
-      select: {
-        userId: true,
-        user: { select: { displayName: true, email: true } },
-        serviceRole: true,
-      },
-      orderBy: { user: { displayName: 'asc' } },
-    }),
-    db.prisma.serviceConfigurationAudit.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        action: { in: ['POINT_RULES_UPDATED', 'POINT_BONUS_GRANTED'] },
-      },
-      select: {
-        id: true,
-        action: true,
-        afterData: true,
-        reason: true,
-        occurredAt: true,
-        performedBy: { select: { displayName: true, email: true } },
-      },
-      orderBy: { occurredAt: 'desc' },
-      take: 30,
-    }),
-  ]);
+  const memberships = await db.prisma.groupMembership.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      status: 'ACTIVE',
+    },
+    select: {
+      userId: true,
+      user: { select: { displayName: true, email: true } },
+      serviceRole: true,
+    },
+    orderBy: { user: { displayName: 'asc' } },
+  });
+  const memberUserIds = memberships.map(({ userId }) => userId);
+  const [versions, history, pointAccounts, servicePointTransactions, badgeAwards] =
+    await Promise.all([
+      db.prisma.pointRuleVersion.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          campaignId: null,
+          ruleKey: { in: RULES.map((rule) => rule.key) },
+          status: { in: ['ACTIVE', 'SUSPENDED'] },
+        },
+        orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
+      }),
+      db.prisma.serviceConfigurationAudit.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          action: { in: ['POINT_RULES_UPDATED', 'POINT_BONUS_GRANTED'] },
+        },
+        select: {
+          id: true,
+          action: true,
+          afterData: true,
+          reason: true,
+          occurredAt: true,
+          performedBy: { select: { displayName: true, email: true } },
+        },
+        orderBy: { occurredAt: 'desc' },
+        take: 30,
+      }),
+      db.prisma.pointAccount.findMany({
+        where: { workspaceId: service.workspaceId, userId: { in: memberUserIds } },
+        select: { userId: true, availablePoints: true, updatedAt: true },
+      }),
+      db.prisma.pointTransaction.groupBy({
+        by: ['userId'],
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: { in: memberUserIds },
+        },
+        _sum: { amount: true },
+        _max: { createdAt: true },
+      }),
+      db.prisma.badgeAward.groupBy({
+        by: ['userId'],
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: { in: memberUserIds },
+        },
+        _count: { _all: true },
+        _max: { awardedAt: true },
+      }),
+    ]);
   const current = new Map<string, (typeof versions)[number]>();
   for (const version of versions)
     if (!current.has(version.ruleKey)) current.set(version.ruleKey, version);
@@ -304,6 +330,26 @@ export default async function ServicePointSettingsPage({
       membership.user.displayName || membership.user.email || '参加者',
     ]),
   );
+  const pointAccountByUser = new Map(pointAccounts.map((account) => [account.userId, account]));
+  const pointChangeByUser = new Map<string, number>();
+  const badgeCountByUser = new Map<string, number>();
+  const latestActivityByUser = new Map<string, Date>();
+  for (const transaction of servicePointTransactions) {
+    pointChangeByUser.set(transaction.userId, transaction._sum.amount ?? 0);
+    if (transaction._max.createdAt)
+      latestActivityByUser.set(transaction.userId, transaction._max.createdAt);
+  }
+  for (const award of badgeAwards) {
+    badgeCountByUser.set(award.userId, award._count._all);
+    const latest = latestActivityByUser.get(award.userId);
+    if (award._max.awardedAt && (!latest || award._max.awardedAt > latest))
+      latestActivityByUser.set(award.userId, award._max.awardedAt);
+  }
+  for (const account of pointAccounts) {
+    const latest = latestActivityByUser.get(account.userId);
+    if (!latest || account.updatedAt > latest)
+      latestActivityByUser.set(account.userId, account.updatedAt);
+  }
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -325,6 +371,65 @@ export default async function ServicePointSettingsPage({
             保存できませんでした。入力内容を確認してください。
           </p>
         ) : null}
+
+        <section className="settings-card">
+          <h2>参加者のポイント・バッジ状況</h2>
+          <p>
+            現在のWPは、この参加者が同じワークスペースで使える共通残高です。「サービス内の増減」とバッジは、このサービスの活動だけを表示します。
+          </p>
+          {memberships.length === 0 ? (
+            <p>参加者はまだいません。</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>参加者</th>
+                    <th>現在のWP</th>
+                    <th>サービス内の増減</th>
+                    <th>獲得バッジ</th>
+                    <th>最終更新</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberships.map((membership) => {
+                    const account = pointAccountByUser.get(membership.userId);
+                    const change = pointChangeByUser.get(membership.userId) ?? 0;
+                    const latest = latestActivityByUser.get(membership.userId);
+                    return (
+                      <tr key={membership.userId}>
+                        <td>
+                          <strong>
+                            {membership.user.displayName ||
+                              membership.user.email ||
+                              membership.userId}
+                          </strong>
+                          <br />
+                          <small>
+                            {membership.serviceRole === 'SERVICE_OWNER'
+                              ? 'サービス所有者'
+                              : membership.serviceRole === 'SERVICE_ADMIN'
+                                ? '運営管理者'
+                                : membership.serviceRole === 'CONTENT_EDITOR'
+                                  ? 'コンテンツ担当者'
+                                  : '参加者'}
+                          </small>
+                        </td>
+                        <td>{(account?.availablePoints ?? 0).toLocaleString('ja-JP')} WP</td>
+                        <td>
+                          {change > 0 ? '+' : ''}
+                          {change.toLocaleString('ja-JP')} WP
+                        </td>
+                        <td>{badgeCountByUser.get(membership.userId) ?? 0}個</td>
+                        <td>{latest ? latest.toLocaleString('ja-JP') : 'まだありません'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <section className="settings-card">
           <h2>ポイントのため方を設定</h2>
