@@ -77,6 +77,7 @@ export default async function ServiceBunshinDetailPage({
   let weeklyPlans;
   let dailyMissions: DailyMissionView[];
   let variantPointCost: number | null = null;
+  let rewardsPilotActive = false;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -164,6 +165,15 @@ export default async function ServiceBunshinDetailPage({
             ?.pointCost ?? null,
       )
       .catch(() => null);
+    rewardsPilotActive = Boolean(
+      await db
+        .getActiveRewardsPilotAccess(db.prisma, {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: actor.userId,
+        })
+        .catch(() => null),
+    );
     dailyMissions = missionRecords.map((mission, index) => ({
       id: mission.id,
       missionDate: mission.missionDate,
@@ -391,6 +401,7 @@ export default async function ServiceBunshinDetailPage({
             missions={dailyMissions}
             variantPointCost={variantPointCost}
             pointWorkspaceId={service.workspaceId}
+            rewardsPilotActive={rewardsPilotActive}
             {...(deliverySchedule.state === 'PREPARING' && generationProfile
               ? {
                   generation: {
