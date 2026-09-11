@@ -522,6 +522,27 @@ export default async function ServicePointSettingsPage({
           <p>
             現在のWPは、この参加者が同じワークスペースで使える共通残高です。「サービス内の増減」とバッジは、このサービスの活動だけを表示します。
           </p>
+          <p>運用記録はCSVで保存できます。ExcelやGoogleスプレッドシートで開けます。</p>
+          <div className="button-row">
+            <a
+              className="button button--secondary"
+              href={`/api/services/${encodeURIComponent(serviceSlug)}/rewards-export?kind=summary`}
+            >
+              参加者一覧を保存
+            </a>
+            <a
+              className="button button--secondary"
+              href={`/api/services/${encodeURIComponent(serviceSlug)}/rewards-export?kind=points`}
+            >
+              ポイント履歴を保存
+            </a>
+            <a
+              className="button button--secondary"
+              href={`/api/services/${encodeURIComponent(serviceSlug)}/rewards-export?kind=badges`}
+            >
+              バッジ履歴を保存
+            </a>
+          </div>
           {memberships.length === 0 ? (
             <p>参加者はまだいません。</p>
           ) : (
