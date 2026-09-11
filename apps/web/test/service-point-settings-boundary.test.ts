@@ -42,6 +42,19 @@ describe('service point settings boundaries', () => {
     expect(processor).toContain("if (rule.status === 'SUSPENDED') continue");
   });
 
+  it('lets the operator set and monitor an issuance cap for each earning rule', () => {
+    expect(page).toContain('budget_MISSION_VIEWED_DAILY: optionalBudgetSchema');
+    expect(page).toContain('budget_POSTED_DAILY: optionalBudgetSchema');
+    expect(page).toContain('budget_POSTED_WEEKLY_3: optionalBudgetSchema');
+    expect(page).toContain("throw new Error('BUDGET_BELOW_GRANTED')");
+    expect(page).toContain('{ budget: { create: { maximumPoints, grantedPoints } } }');
+    expect(page).toContain("type: 'GRANT'");
+    expect(page).toContain('ruleVersion: { ruleKey: rule.key, campaignId: null }');
+    expect(page).toContain('この設定で発行できる合計上限');
+    expect(page).toContain('空欄なら上限なし');
+    expect(page).toContain('saved.budget.grantedPoints');
+  });
+
   it('shows only service-scoped point activity and badge awards to the operator', () => {
     expect(page).toContain('db.prisma.pointAccount.findMany');
     expect(page).toContain('db.prisma.pointTransaction.groupBy');

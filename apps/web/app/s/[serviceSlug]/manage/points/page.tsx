@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const RULES = [
   {
     key: 'MISSION_VIEWED_DAILY',
+    budgetKey: 'budget_MISSION_VIEWED_DAILY',
     label: '今日の企画をはじめて見る',
     help: '1日1回まで付与します。',
     defaultAmount: 1,
@@ -21,6 +22,7 @@ const RULES = [
   },
   {
     key: 'POSTED_DAILY',
+    budgetKey: 'budget_POSTED_DAILY',
     label: '「投稿しました」を押す',
     help: '1日1回まで付与します。',
     defaultAmount: 5,
@@ -29,6 +31,7 @@ const RULES = [
   },
   {
     key: 'POSTED_WEEKLY_3',
+    budgetKey: 'budget_POSTED_WEEKLY_3',
     label: '1週間に3回投稿する',
     help: '1週間に1回まで付与します。',
     defaultAmount: 10,
@@ -37,12 +40,20 @@ const RULES = [
   },
 ] as const;
 
+const optionalBudgetSchema = z.preprocess(
+  (value) => (value === '' ? null : value),
+  z.coerce.number().int().min(1).max(10_000_000).nullable(),
+);
+
 const settingsSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
   reason: z.string().trim().min(3).max(1000),
   MISSION_VIEWED_DAILY: z.coerce.number().int().min(1).max(10000),
   POSTED_DAILY: z.coerce.number().int().min(1).max(10000),
   POSTED_WEEKLY_3: z.coerce.number().int().min(1).max(10000),
+  budget_MISSION_VIEWED_DAILY: optionalBudgetSchema,
+  budget_POSTED_DAILY: optionalBudgetSchema,
+  budget_POSTED_WEEKLY_3: optionalBudgetSchema,
 });
 
 const bonusSchema = z.object({
@@ -93,20 +104,38 @@ async function saveRules(formData: FormData) {
           ruleKey: { in: RULES.map((rule) => rule.key) },
           status: { in: ['ACTIVE', 'SUSPENDED'] },
         },
+        include: { budget: true },
         orderBy: { version: 'desc' },
       });
+      const grantedPointsByRule = new Map<string, number>();
       for (const rule of RULES) {
         const amount = parsed.data[rule.key];
+        const maximumPoints = parsed.data[rule.budgetKey];
         const enabled = formData.get(`enabled_${rule.key}`) === 'on';
-        const latest = await tx.pointRuleVersion.aggregate({
-          where: {
-            workspaceId: service.workspaceId,
-            groupId: service.serviceId,
-            campaignId: null,
-            ruleKey: rule.key,
-          },
-          _max: { version: true },
-        });
+        const [latest, issued] = await Promise.all([
+          tx.pointRuleVersion.aggregate({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              campaignId: null,
+              ruleKey: rule.key,
+            },
+            _max: { version: true },
+          }),
+          tx.pointTransaction.aggregate({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              type: 'GRANT',
+              ruleVersion: { ruleKey: rule.key, campaignId: null },
+            },
+            _sum: { amount: true },
+          }),
+        ]);
+        const grantedPoints = issued._sum.amount ?? 0;
+        grantedPointsByRule.set(rule.key, grantedPoints);
+        if (maximumPoints !== null && maximumPoints < grantedPoints)
+          throw new Error('BUDGET_BELOW_GRANTED');
         await tx.pointRuleVersion.updateMany({
           where: {
             workspaceId: service.workspaceId,
@@ -128,6 +157,9 @@ async function saveRules(formData: FormData) {
             dailyLimit: rule.dailyLimit === null ? null : amount,
             weeklyLimit: rule.weeklyLimit === null ? null : amount,
             startsAt: now,
+            ...(maximumPoints === null
+              ? {}
+              : { budget: { create: { maximumPoints, grantedPoints } } }),
           },
         });
       }
@@ -141,11 +173,16 @@ async function saveRules(formData: FormData) {
             ruleKey: rule.ruleKey,
             status: rule.status,
             grantAmount: rule.grantAmount,
+            maximumPoints: rule.budget?.maximumPoints ?? null,
+            grantedPoints: rule.budget?.grantedPoints ?? null,
           })),
           afterData: RULES.map((rule) => ({
             ruleKey: rule.key,
             status: formData.get(`enabled_${rule.key}`) === 'on' ? 'ACTIVE' : 'SUSPENDED',
             grantAmount: parsed.data[rule.key],
+            maximumPoints: parsed.data[rule.budgetKey],
+            grantedPoints:
+              parsed.data[rule.budgetKey] === null ? null : grantedPointsByRule.get(rule.key),
           })),
           reason: parsed.data.reason,
           performedByUserId: actor.userId,
@@ -153,8 +190,10 @@ async function saveRules(formData: FormData) {
         },
       });
     });
-  } catch {
-    redirect(`${returnPath}?error=settings` as Route);
+  } catch (error) {
+    redirect(
+      `${returnPath}?error=${error instanceof Error && error.message === 'BUDGET_BELOW_GRANTED' ? 'budget' : 'settings'}` as Route,
+    );
   }
   revalidatePath(returnPath);
   redirect(`${returnPath}?saved=1` as Route);
@@ -457,6 +496,7 @@ export default async function ServicePointSettingsPage({
           ruleKey: { in: RULES.map((rule) => rule.key) },
           status: { in: ['ACTIVE', 'SUSPENDED'] },
         },
+        include: { budget: true },
         orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
       }),
       db.prisma.serviceConfigurationAudit.findMany({
@@ -557,7 +597,9 @@ export default async function ServicePointSettingsPage({
           <p className="notice notice--danger">
             {query.error === 'correction'
               ? '訂正できませんでした。現在の残高以下のポイント数を入力してください。'
-              : '保存できませんでした。入力内容を確認してください。'}
+              : query.error === 'budget'
+                ? '発行上限は、すでに発行したポイント以上にしてください。'
+                : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
 
@@ -682,6 +724,29 @@ export default async function ServicePointSettingsPage({
                     />
                   </label>
                   <small>{rule.help}</small>
+                  <label className="field">
+                    <span className="field__label">この設定で発行できる合計上限</span>
+                    <input
+                      className="field__control"
+                      name={rule.budgetKey}
+                      type="number"
+                      min="1"
+                      max="10000000"
+                      defaultValue={saved?.budget?.maximumPoints ?? ''}
+                      placeholder="空欄なら上限なし"
+                    />
+                  </label>
+                  {saved?.budget ? (
+                    <small>
+                      現在 {saved.budget.grantedPoints.toLocaleString('ja-JP')} WP発行済み／残り
+                      {(saved.budget.maximumPoints - saved.budget.grantedPoints).toLocaleString(
+                        'ja-JP',
+                      )}{' '}
+                      WP
+                    </small>
+                  ) : (
+                    <small>上限なしで発行します。</small>
+                  )}
                 </fieldset>
               );
             })}
