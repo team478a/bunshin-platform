@@ -72,6 +72,12 @@ const correctionSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+const pointControlSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(80),
+  target: z.enum(['stop', 'resume']),
+  reason: z.string().trim().min(3).max(1000),
+});
+
 const expiryFrom = (now: Date) => {
   const after180Days = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000);
   return new Date(
@@ -224,10 +230,11 @@ async function grantBonus(formData: FormData) {
         }),
         tx.serviceConfiguration.findFirst({
           where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-          select: { id: true },
+          select: { id: true, pointIssuanceStopped: true },
         }),
       ]);
       if (!member || !configuration) throw new Error('MEMBER_NOT_FOUND');
+      if (configuration.pointIssuanceStopped) throw new Error('POINT_ISSUANCE_STOPPED');
       const account = await tx.pointAccount.upsert({
         where: {
           workspaceId_userId: {
@@ -301,8 +308,10 @@ async function grantBonus(formData: FormData) {
         },
       });
     });
-  } catch {
-    redirect(`${returnPath}?error=bonus` as Route);
+  } catch (error) {
+    redirect(
+      `${returnPath}?error=${error instanceof Error && error.message === 'POINT_ISSUANCE_STOPPED' ? 'stopped' : 'bonus'}` as Route,
+    );
   }
   revalidatePath(returnPath);
   redirect(`${returnPath}?bonus=1` as Route);
@@ -458,12 +467,60 @@ async function correctPoints(formData: FormData) {
   redirect(`${returnPath}?corrected=1` as Route);
 }
 
+async function changePointIssuance(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = pointControlSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
+  try {
+    const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const targetStopped = parsed.data.target === 'stop';
+    await db.prisma.$transaction(async (tx) => {
+      const configuration = await tx.serviceConfiguration.findFirst({
+        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+        select: { id: true, pointIssuanceStopped: true },
+      });
+      if (!configuration) throw new Error('SERVICE_NOT_FOUND');
+      if (configuration.pointIssuanceStopped === targetStopped) return;
+      await tx.serviceConfiguration.update({
+        where: { id: configuration.id },
+        data: { pointIssuanceStopped: targetStopped, updatedByUserId: actor.userId },
+      });
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          configurationId: configuration.id,
+          action: targetStopped ? 'POINT_ISSUANCE_STOPPED' : 'POINT_ISSUANCE_RESUMED',
+          beforeData: { pointIssuanceStopped: configuration.pointIssuanceStopped },
+          afterData: { pointIssuanceStopped: targetStopped },
+          reason: parsed.data.reason,
+          performedByUserId: actor.userId,
+        },
+      });
+    });
+  } catch {
+    redirect(`${returnPath}?error=control` as Route);
+  }
+  revalidatePath(returnPath);
+  redirect(`${returnPath}?control=${parsed.data.target}` as Route);
+}
+
 export default async function ServicePointSettingsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
-  searchParams: Promise<{ saved?: string; bonus?: string; corrected?: string; error?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    bonus?: string;
+    corrected?: string;
+    control?: string;
+    error?: string;
+  }>;
 }) {
   const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -486,6 +543,10 @@ export default async function ServicePointSettingsPage({
   });
   const memberUserIds = memberships.map(({ userId }) => userId);
   const bonusRecipients = memberships.filter(({ userId }) => userId !== actor.userId);
+  const pointConfiguration = await db.prisma.serviceConfiguration.findFirstOrThrow({
+    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+    select: { pointIssuanceStopped: true },
+  });
   const [versions, history, pointAccounts, servicePointTransactions, badgeAwards] =
     await Promise.all([
       db.prisma.pointRuleVersion.findMany({
@@ -504,7 +565,13 @@ export default async function ServicePointSettingsPage({
           workspaceId: service.workspaceId,
           groupId: service.serviceId,
           action: {
-            in: ['POINT_RULES_UPDATED', 'POINT_BONUS_GRANTED', 'POINT_BALANCE_CORRECTED'],
+            in: [
+              'POINT_RULES_UPDATED',
+              'POINT_BONUS_GRANTED',
+              'POINT_BALANCE_CORRECTED',
+              'POINT_ISSUANCE_STOPPED',
+              'POINT_ISSUANCE_RESUMED',
+            ],
           },
         },
         select: {
@@ -593,15 +660,61 @@ export default async function ServicePointSettingsPage({
         {query.corrected ? (
           <p className="notice notice--success">ポイントを訂正しました。</p>
         ) : null}
+        {query.control === 'stop' ? (
+          <p className="notice notice--success">ポイント付与を一括停止しました。</p>
+        ) : null}
+        {query.control === 'resume' ? (
+          <p className="notice notice--success">ポイント付与を再開しました。</p>
+        ) : null}
         {query.error ? (
           <p className="notice notice--danger">
             {query.error === 'correction'
               ? '訂正できませんでした。現在の残高以下のポイント数を入力してください。'
               : query.error === 'budget'
                 ? '発行上限は、すでに発行したポイント以上にしてください。'
-                : '保存できませんでした。入力内容を確認してください。'}
+                : query.error === 'stopped'
+                  ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
+                  : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
+
+        <section className="settings-card">
+          <h2>ポイント付与の一括停止</h2>
+          <p>
+            現在は
+            <strong>{pointConfiguration.pointIssuanceStopped ? '停止中' : '稼働中'}</strong>
+            です。停止中は、行動による自動付与と運営者ボーナスが新しく発行されません。
+          </p>
+          <p>残高確認、履歴、訂正、失効や返却は継続します。</p>
+          <form action={changePointIssuance} className="form-stack">
+            <input type="hidden" name="serviceSlug" value={serviceSlug} />
+            <input
+              type="hidden"
+              name="target"
+              value={pointConfiguration.pointIssuanceStopped ? 'resume' : 'stop'}
+            />
+            <label className="field">
+              <span className="field__label">
+                {pointConfiguration.pointIssuanceStopped ? '再開する理由' : '停止する理由'}
+              </span>
+              <textarea
+                className="field__control"
+                name="reason"
+                minLength={3}
+                maxLength={1000}
+                required
+              />
+            </label>
+            <button
+              className={`button${pointConfiguration.pointIssuanceStopped ? '' : ' button--secondary'}`}
+              type="submit"
+            >
+              {pointConfiguration.pointIssuanceStopped
+                ? 'ポイント付与を再開'
+                : 'ポイント付与を一括停止'}
+            </button>
+          </form>
+        </section>
 
         <section className="settings-card">
           <h2>参加者のポイント・バッジ状況</h2>
@@ -807,8 +920,12 @@ export default async function ServicePointSettingsPage({
                   required
                 />
               </label>
-              <button className="button" type="submit">
-                ボーナスを付与
+              <button
+                className="button"
+                type="submit"
+                disabled={pointConfiguration.pointIssuanceStopped}
+              >
+                {pointConfiguration.pointIssuanceStopped ? '一括停止中' : 'ボーナスを付与'}
               </button>
             </form>
           )}
@@ -889,9 +1006,13 @@ export default async function ServicePointSettingsPage({
                     <strong>
                       {item.action === 'POINT_RULES_UPDATED'
                         ? '獲得条件を変更'
-                        : item.action === 'POINT_BALANCE_CORRECTED'
-                          ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
-                          : `${target ?? '参加者'}へ ${amount} WP付与`}
+                        : item.action === 'POINT_ISSUANCE_STOPPED'
+                          ? 'ポイント付与を一括停止'
+                          : item.action === 'POINT_ISSUANCE_RESUMED'
+                            ? 'ポイント付与を再開'
+                            : item.action === 'POINT_BALANCE_CORRECTED'
+                              ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
+                              : `${target ?? '参加者'}へ ${amount} WP付与`}
                     </strong>
                     <br />
                     {item.occurredAt.toLocaleString('ja-JP')}／

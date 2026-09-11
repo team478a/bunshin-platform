@@ -2182,6 +2182,7 @@ model ServiceConfiguration {
   visibility           ServiceVisibility           @default(PRIVATE)
   poweredByEnabled     Boolean                     @default(true) @map("powered_by_enabled")
   trendResearchEnabled Boolean                     @default(true) @map("trend_research_enabled")
+  pointIssuanceStopped Boolean                     @default(false) @map("point_issuance_stopped")
   startsAt             DateTime?                   @map("starts_at") @db.Timestamptz(6)
   endsAt               DateTime?                   @map("ends_at") @db.Timestamptz(6)
   termsUrl             String?                     @map("terms_url") @db.VarChar(2048)

@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260911163000_add_point_balance_repair_audit';
+export const LATEST_DATABASE_MIGRATION = '20260911180000_add_point_issuance_emergency_stop';
