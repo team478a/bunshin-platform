@@ -46,8 +46,8 @@ const sections = [
   },
   {
     title: 'ポイントとバッジ',
-    description: '投稿の継続を応援するポイント・バッジを設定します。',
-    href: 'badges',
+    description: 'ポイント数や獲得条件を決め、参加者へのボーナスとバッジを管理します。',
+    href: 'points',
   },
   {
     title: '紹介特典',
