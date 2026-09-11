@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CreateAndSubmitGroupBadge,
+  RevokeGroupBadgeAward,
   ReviewGroupBadgeCandidate,
   SubmitGroupBadge,
   type BadgeGroupWorkflowRepository,
@@ -12,6 +13,7 @@ const repository = (): BadgeGroupWorkflowRepository => ({
   review: vi.fn(),
   nominate: vi.fn(),
   reviewCandidate: vi.fn(),
+  revokeAward: vi.fn(),
 });
 
 describe('group badge workflow', () => {
@@ -56,6 +58,25 @@ describe('group badge workflow', () => {
         actorUserId: 'u',
         decision: 'APPROVED',
         reason: '別の管理者が確認',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('requires a reason and fails closed when revoking an award', async () => {
+    await expect(
+      new RevokeGroupBadgeAward(repository()).execute({
+        awardId: 'a',
+        actorUserId: 'u',
+        reason: ' ',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    const revokeAward = vi.fn().mockResolvedValue(null);
+    await expect(
+      new RevokeGroupBadgeAward({ ...repository(), revokeAward }).execute({
+        awardId: 'a',
+        actorUserId: 'u',
+        reason: '誤って付与したため',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });

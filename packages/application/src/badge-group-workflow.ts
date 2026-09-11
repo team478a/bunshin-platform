@@ -45,6 +45,12 @@ export interface BadgeGroupWorkflowRepository {
     reason: string;
     now: Date;
   }): Promise<{ id: string; status: BadgeCandidateDecision; awardId: string | null } | null>;
+  revokeAward(input: {
+    awardId: string;
+    actorUserId: string;
+    reason: string;
+    now: Date;
+  }): Promise<{ id: string; status: 'REVOKED' } | null>;
 }
 
 const required = (value: string, field: string, max = 1000) => {
@@ -127,6 +133,23 @@ export class ReviewGroupBadgeCandidate {
       now: input.now ?? new Date(),
     });
     if (!result) throw new ApplicationError('FORBIDDEN', 'badge candidate review is not allowed');
+    return result;
+  }
+}
+
+export class RevokeGroupBadgeAward {
+  constructor(private readonly repository: BadgeGroupWorkflowRepository) {}
+  async execute(
+    input: Omit<Parameters<BadgeGroupWorkflowRepository['revokeAward']>[0], 'now'> & {
+      now?: Date;
+    },
+  ) {
+    const result = await this.repository.revokeAward({
+      ...input,
+      reason: required(input.reason, 'reason'),
+      now: input.now ?? new Date(),
+    });
+    if (!result) throw new ApplicationError('FORBIDDEN', 'badge award revocation is not allowed');
     return result;
   }
 }

@@ -35,6 +35,8 @@ describe('group badge admin boundaries', () => {
     expect(groupPage).toContain('ReviewGroupBadge(repository).execute');
     expect(groupPage).toContain('ReviewGroupBadgeCandidate(repository).execute');
     expect(groupPage).toContain('サービス運営者による直接付与');
+    expect(groupPage).toContain('RevokeGroupBadgeAward');
+    expect(groupPage).toContain('誤って付与したバッジを取り消す');
   });
 
   it('limits badge publication review to super admins', () => {

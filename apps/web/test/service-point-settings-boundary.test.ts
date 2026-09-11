@@ -18,6 +18,11 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('groupId: service.serviceId');
     expect(page).toContain("action: 'POINT_RULES_UPDATED'");
     expect(page).toContain("action: 'POINT_BONUS_GRANTED'");
+    expect(page).toContain("action: 'POINT_BALANCE_CORRECTED'");
+    expect(page).toContain("type: 'REVERSAL'");
+    expect(page).toContain('availablePoints: { gte: parsed.data.amount }');
+    expect(page).toContain('recoveryDue: 0');
+    expect(page).toContain('tx.pointConsumptionLink.create');
   });
 
   it('lets a scoped suspended rule override the global default', () => {
@@ -31,5 +36,6 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('db.prisma.badgeAward.groupBy');
     expect(page).toContain('groupId: service.serviceId');
     expect(page).toContain('参加者のポイント・バッジ状況');
+    expect(page).toContain("status: 'ACTIVE'");
   });
 });
