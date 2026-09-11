@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClientRequestId } from '../../../ui/client-request-id';
+import { RewardsActionFeedback, type RewardsAction } from '../../../ui/rewards-action-feedback';
 import { missionGenerationResult } from '../../../ui/mission-generation-result';
 import {
   progressStatusLabel,
@@ -413,6 +414,7 @@ export function DailyMissionSection({
   profiles,
   missions,
   variantPointCost,
+  rewardsPilotActive,
   progress,
   motivation,
   localDate,
@@ -427,6 +429,7 @@ export function DailyMissionSection({
   }>;
   missions: DailyMissionView[];
   variantPointCost: number | null;
+  rewardsPilotActive: boolean;
   progress: MissionProgressView;
   motivation: ActivityMotivationView;
   localDate: string;
@@ -437,6 +440,7 @@ export function DailyMissionSection({
     Record<string, ContentAssistanceLevel>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [pointNotice, setPointNotice] = useState<RewardsAction | null>(null);
   const [resubmitMissionId, setResubmitMissionId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
@@ -508,7 +512,10 @@ export function DailyMissionSection({
       if (!(await transition(mission.id, 'viewed'))) return;
     }
     setExpanded(mission.id);
-    if (active) void activity(mission.id, 'VIEWED');
+    if (active) {
+      const recorded = await activity(mission.id, 'VIEWED');
+      if (recorded && rewardsPilotActive) setPointNotice('VIEWED');
+    }
   }
 
   function key() {
@@ -636,7 +643,10 @@ export function DailyMissionSection({
       platform: mission.platform,
       idempotencyKey: key(),
     });
-    if (ok) router.refresh();
+    if (ok) {
+      if (rewardsPilotActive) setPointNotice('POSTED');
+      router.refresh();
+    }
   }
   async function feedback(id: string, rating: 'GOOD' | 'NEUTRAL' | 'BAD') {
     setError(null);
@@ -811,6 +821,7 @@ export function DailyMissionSection({
           {error}
         </div>
       )}
+      <RewardsActionFeedback action={pointNotice} workspaceId={workspaceId} />
       {resubmitMissionId && (
         <div className="notice">
           <p>案内を確認したら、運営者へもう一度確認をお願いできます。</p>

@@ -60,6 +60,8 @@ export default async function BunshinPage({
       PrismaPersonalityVersionRepository,
       PrismaPersonalityLearningProposalRepository,
       PrismaPointRedemptionRepository,
+      getActiveRewardsPilotAccess,
+      prisma,
     } = await import('@bunshin/database');
     const bunshin = await new GetBunshin(new PrismaBunshinRepository()).execute({
       workspaceId,
@@ -237,6 +239,15 @@ export default async function BunshinPage({
             ?.pointCost ?? null,
       )
       .catch(() => null);
+    const rewardsPilotActive = bunshin.groupId
+      ? Boolean(
+          await getActiveRewardsPilotAccess(prisma, {
+            workspaceId,
+            groupId: bunshin.groupId,
+            userId: currentUser.userId,
+          }).catch(() => null),
+        )
+      : false;
     return (
       <>
         <p>
@@ -466,6 +477,7 @@ export default async function BunshinPage({
             }),
           )}
           variantPointCost={variantPointCost}
+          rewardsPilotActive={rewardsPilotActive}
           progress={progress}
           motivation={motivation}
           localDate={localDate}

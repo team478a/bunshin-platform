@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClientRequestId } from '../../../../ui/client-request-id';
+import { RewardsActionFeedback, type RewardsAction } from '../../../../ui/rewards-action-feedback';
 import {
   MissionContent,
   MissionGuide,
@@ -20,6 +21,7 @@ export function ServiceDailyMissionSection({
   missions,
   variantPointCost,
   pointWorkspaceId,
+  rewardsPilotActive,
   active,
   generation,
   videos = {},
@@ -29,6 +31,7 @@ export function ServiceDailyMissionSection({
   missions: DailyMissionView[];
   variantPointCost: number | null;
   pointWorkspaceId: string;
+  rewardsPilotActive: boolean;
   active: boolean;
   generation?: { missionDate: string; timezone: string; socialProfileId: string };
   videos?: Record<string, { href: string; status: string }>;
@@ -40,6 +43,7 @@ export function ServiceDailyMissionSection({
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [pointNotice, setPointNotice] = useState<RewardsAction | null>(null);
   const [manualCopy, setManualCopy] = useState<{ title: string; value: string } | null>(null);
   const [variantInstructions, setVariantInstructions] = useState<Record<string, string>>({});
 
@@ -193,13 +197,25 @@ export function ServiceDailyMissionSection({
 
   async function markPosted(mission: DailyMissionView) {
     if (!mission.platform) return;
-    if (
-      await record(mission.id, 'post-record', {
-        platform: mission.platform,
-        idempotencyKey: key(),
-      })
-    )
+    const recorded = await record(mission.id, 'post-record', {
+      platform: mission.platform,
+      idempotencyKey: key(),
+    });
+    if (recorded) {
+      if (rewardsPilotActive) setPointNotice('POSTED');
       router.refresh();
+    }
+  }
+
+  async function openMission(mission: DailyMissionView) {
+    const opening = expanded !== mission.id;
+    setExpanded(opening ? mission.id : null);
+    if (!opening || !active) return;
+    const recorded = await record(mission.id, 'activities', {
+      type: 'VIEWED',
+      idempotencyKey: key(),
+    });
+    if (recorded && rewardsPilotActive) setPointNotice('VIEWED');
   }
 
   async function feedback(id: string, rating: 'GOOD' | 'NEUTRAL' | 'BAD') {
@@ -280,6 +296,7 @@ export function ServiceDailyMissionSection({
           {message}
         </p>
       ) : null}
+      <RewardsActionFeedback action={pointNotice} workspaceId={pointWorkspaceId} />
       {manualCopy ? (
         <section className="mission-manual-copy" aria-label={`${manualCopy.title}を手動でコピー`}>
           <h3>{manualCopy.title}</h3>
@@ -476,15 +493,7 @@ export function ServiceDailyMissionSection({
               <button
                 className={isImageMission ? 'mission-detail-toggle' : undefined}
                 type="button"
-                onClick={() => {
-                  const opening = expanded !== mission.id;
-                  setExpanded(opening ? mission.id : null);
-                  if (opening && active)
-                    void record(mission.id, 'activities', {
-                      type: 'VIEWED',
-                      idempotencyKey: key(),
-                    });
-                }}
+                onClick={() => void openMission(mission)}
               >
                 {expanded === mission.id
                   ? isImageMission

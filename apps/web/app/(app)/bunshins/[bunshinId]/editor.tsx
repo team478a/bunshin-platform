@@ -40,6 +40,7 @@ export function BunshinEditor({
   weeklyPlans,
   dailyMissions,
   variantPointCost,
+  rewardsPilotActive,
   progress,
   motivation,
   localDate,
@@ -58,6 +59,7 @@ export function BunshinEditor({
   weeklyPlans: WeeklyPlanView[];
   dailyMissions: DailyMissionView[];
   variantPointCost: number | null;
+  rewardsPilotActive: boolean;
   progress: MissionProgressView;
   motivation: ActivityMotivationView;
   localDate: string;
@@ -116,6 +118,7 @@ export function BunshinEditor({
           profiles={socialProfiles.map(({ id, platform, status }) => ({ id, platform, status }))}
           missions={dailyMissions}
           variantPointCost={variantPointCost}
+          rewardsPilotActive={rewardsPilotActive}
           progress={progress}
           motivation={motivation}
           localDate={localDate}
