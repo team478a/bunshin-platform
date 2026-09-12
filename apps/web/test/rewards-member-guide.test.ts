@@ -43,7 +43,18 @@ describe('rewards member guide', () => {
     expect(activity).toContain('バッジの進み具合を見る');
     expect(points).toContain('ポイントが増えるまで');
     expect(points).toContain('最近の履歴');
+    expect(points).toContain('ポイントの使い道');
+    expect(points).toContain('このページを見ただけではポイントは減りません');
+    expect(points).toContain('あと ${option.pointsNeeded} WP たまると使えます');
+    expect(points).toContain('今日の投稿案を開く');
     expect(badges).toContain('バッジが増えるまで');
+  });
+
+  it('shows only usable destinations from the active point catalog', () => {
+    expect(points).toContain('ListPointRewardCatalog');
+    expect(points).toContain('buildPointUseOptions');
+    expect(points).toContain('PrismaGroupFeatureEntitlementRepository');
+    expect(points).toContain("featureKey: 'SOCIAL.IMAGE_GENERATION'");
   });
 
   it('adds the same plain-language instructions to service help for eligible members', () => {

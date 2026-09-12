@@ -1,10 +1,15 @@
-import { GetPointUserDashboard, type PointTransactionType } from '@bunshin/application';
+import {
+  GetPointUserDashboard,
+  ListPointRewardCatalog,
+  type PointTransactionType,
+} from '@bunshin/application';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { getRewardsPilotExpiryNotice } from '../../../src/rewards/rewards-pilot-expiry';
 import { RewardsPilotExpiryNoticeCard } from '../../ui/rewards-pilot-expiry-notice';
+import { buildPointUseOptions } from '../../../src/rewards/point-use-options';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,6 +95,65 @@ export default async function PointsPage({
   }
 
   const progress = Math.min(100, (dashboard.weeklyPosts / dashboard.weeklyPostGoal) * 100);
+  const service = await db.prisma.group.findFirst({
+    where: {
+      id: pilotAccess.groupId,
+      workspaceId: workspace.id,
+      status: 'ACTIVE',
+    },
+    select: {
+      serviceConfiguration: { select: { slug: true } },
+      bunshins: {
+        where: { ownerUserId: user.userId, status: { not: 'ARCHIVED' } },
+        select: { id: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 1,
+      },
+    },
+  });
+  const serviceSlug = service?.serviceConfiguration?.slug;
+  const bunshinId = service?.bunshins[0]?.id;
+  const alternativePlanHref = serviceSlug
+    ? bunshinId
+      ? `/s/${encodeURIComponent(serviceSlug)}/bunshins/${bunshinId}#today-post`
+      : `/s/${encodeURIComponent(serviceSlug)}/bunshins`
+    : null;
+  const imageAccess = serviceSlug
+    ? await new db.PrismaGroupFeatureEntitlementRepository()
+        .resolveAccess({
+          workspaceId: workspace.id,
+          groupId: pilotAccess.groupId,
+          actorUserId: user.userId,
+          featureKey: 'SOCIAL.IMAGE_GENERATION',
+          now: new Date(),
+        })
+        .catch(() => null)
+    : null;
+  const catalog = await new ListPointRewardCatalog(new db.PrismaPointRedemptionRepository())
+    .execute({ workspaceId: workspace.id, actorUserId: user.userId })
+    .catch(() => []);
+  const pointUseOptions = buildPointUseOptions({
+    catalog,
+    availablePoints: dashboard.account.availablePoints,
+    destinations: {
+      ...(alternativePlanHref
+        ? {
+            ALTERNATIVE_PLAN_GENERATION: {
+              href: alternativePlanHref,
+              actionLabel: bunshinId ? '今日の投稿案を開く' : '投稿パートナーを作る',
+            },
+          }
+        : {}),
+      ...(serviceSlug && imageAccess?.allowed
+        ? {
+            SOCIAL_IMAGE_GENERATION: {
+              href: `/s/${encodeURIComponent(serviceSlug)}/images`,
+              actionLabel: '画像を作る画面を開く',
+            },
+          }
+        : {}),
+    },
+  });
   return (
     <main className="app-page points-page">
       <header className="app-page__heading">
@@ -172,6 +236,36 @@ export default async function PointsPage({
         <p>
           「投稿しました」は自己申告です。SNSへの実際の投稿は自動確認されません。実際に投稿した後で記録してください。
         </p>
+      </section>
+
+      <section className="settings-card" aria-labelledby="use-points-title">
+        <h2 id="use-points-title">ポイントの使い道</h2>
+        <p>
+          使いたいものを選び、次の画面で内容を確認します。このページを見ただけではポイントは減りません。
+        </p>
+        {pointUseOptions.length ? (
+          <ul className="point-use-options">
+            {pointUseOptions.map((option) => (
+              <li key={option.id}>
+                <div className="point-use-options__heading">
+                  <strong>{option.title}</strong>
+                  <b>{option.pointCost} WP</b>
+                </div>
+                <p>{option.description}</p>
+                <p className={option.pointsNeeded === 0 ? 'is-ready' : 'is-waiting'}>
+                  {option.pointsNeeded === 0
+                    ? 'いま使えます'
+                    : `あと ${option.pointsNeeded} WP たまると使えます`}
+                </p>
+                <Link className="button button--secondary button--full" href={option.href as Route}>
+                  {option.actionLabel}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>いま利用できる使い道はありません。利用できるようになると、ここに表示されます。</p>
+        )}
       </section>
 
       <section className="settings-card" aria-labelledby="point-reflection-title">
