@@ -475,97 +475,101 @@ async function grantBonus(formData: FormData) {
     const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const now = new Date();
-    await db.prisma.$transaction(async (tx) => {
-      const [member, configuration] = await Promise.all([
-        tx.groupMembership.findFirst({
+    await db.prisma.$transaction(
+      async (tx) => {
+        const [member, configuration] = await Promise.all([
+          tx.groupMembership.findFirst({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              userId: parsed.data.userId,
+              status: 'ACTIVE',
+            },
+            select: { userId: true },
+          }),
+          tx.serviceConfiguration.findFirst({
+            where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+            select: { id: true, pointIssuanceStopped: true },
+          }),
+        ]);
+        if (!member || !configuration) throw new Error('MEMBER_NOT_FOUND');
+        if (configuration.pointIssuanceStopped) throw new Error('POINT_ISSUANCE_STOPPED');
+        const account = await tx.pointAccount.upsert({
           where: {
+            workspaceId_userId: {
+              workspaceId: service.workspaceId,
+              userId: member.userId,
+            },
+          },
+          create: { workspaceId: service.workspaceId, userId: member.userId },
+          update: {},
+        });
+        const idempotencyKey = `operator-bonus:${parsed.data.operationId}`;
+        const existing = await tx.pointTransaction.findUnique({
+          where: {
+            accountId_idempotencyKey: {
+              accountId: account.id,
+              idempotencyKey,
+            },
+          },
+        });
+        if (
+          existing &&
+          (existing.type !== 'GRANT' ||
+            existing.amount !== parsed.data.amount ||
+            existing.workspaceId !== service.workspaceId ||
+            existing.userId !== member.userId ||
+            existing.groupId !== service.serviceId ||
+            existing.sourceType !== 'OPERATOR_BONUS' ||
+            existing.sourceId !== actor.userId)
+        )
+          throw new Error('IDEMPOTENCY_KEY_PAYLOAD_MISMATCH');
+        if (existing) return;
+        const transaction = await tx.pointTransaction.create({
+          data: {
+            accountId: account.id,
+            workspaceId: service.workspaceId,
+            userId: member.userId,
+            groupId: service.serviceId,
+            type: 'GRANT',
+            amount: parsed.data.amount,
+            idempotencyKey,
+            sourceType: 'OPERATOR_BONUS',
+            sourceId: actor.userId,
+            expiresAt: expiryFrom(now),
+            createdAt: now,
+          },
+        });
+        const updated = await db.applyPointCreditToAccount(tx, {
+          accountId: account.id,
+          transactionId: transaction.id,
+          amount: parsed.data.amount,
+        });
+        await tx.serviceConfigurationAudit.create({
+          data: {
             workspaceId: service.workspaceId,
             groupId: service.serviceId,
-            userId: parsed.data.userId,
-            status: 'ACTIVE',
+            configurationId: configuration.id,
+            action: 'POINT_BONUS_GRANTED',
+            beforeData: {
+              availablePoints: account.availablePoints,
+              recoveryDue: account.recoveryDue,
+            },
+            afterData: {
+              userId: member.userId,
+              amount: parsed.data.amount,
+              availablePoints: updated.availablePoints,
+              recoveryDue: updated.recoveryDue,
+              idempotencyKey,
+            },
+            reason: parsed.data.reason,
+            performedByUserId: actor.userId,
+            occurredAt: now,
           },
-          select: { userId: true },
-        }),
-        tx.serviceConfiguration.findFirst({
-          where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-          select: { id: true, pointIssuanceStopped: true },
-        }),
-      ]);
-      if (!member || !configuration) throw new Error('MEMBER_NOT_FOUND');
-      if (configuration.pointIssuanceStopped) throw new Error('POINT_ISSUANCE_STOPPED');
-      const account = await tx.pointAccount.upsert({
-        where: {
-          workspaceId_userId: {
-            workspaceId: service.workspaceId,
-            userId: member.userId,
-          },
-        },
-        create: { workspaceId: service.workspaceId, userId: member.userId },
-        update: {},
-      });
-      const idempotencyKey = `operator-bonus:${parsed.data.operationId}`;
-      const existing = await tx.pointTransaction.findUnique({
-        where: {
-          accountId_idempotencyKey: {
-            accountId: account.id,
-            idempotencyKey,
-          },
-        },
-      });
-      if (
-        existing &&
-        (existing.type !== 'GRANT' ||
-          existing.amount !== parsed.data.amount ||
-          existing.workspaceId !== service.workspaceId ||
-          existing.userId !== member.userId ||
-          existing.groupId !== service.serviceId ||
-          existing.sourceType !== 'OPERATOR_BONUS' ||
-          existing.sourceId !== actor.userId)
-      )
-        throw new Error('IDEMPOTENCY_KEY_PAYLOAD_MISMATCH');
-      if (existing) return;
-      await tx.pointTransaction.create({
-        data: {
-          accountId: account.id,
-          workspaceId: service.workspaceId,
-          userId: member.userId,
-          groupId: service.serviceId,
-          type: 'GRANT',
-          amount: parsed.data.amount,
-          idempotencyKey,
-          sourceType: 'OPERATOR_BONUS',
-          sourceId: actor.userId,
-          expiresAt: expiryFrom(now),
-          createdAt: now,
-        },
-      });
-      const updated = await tx.pointAccount.update({
-        where: { id: account.id },
-        data: {
-          availablePoints: { increment: parsed.data.amount },
-          revision: { increment: 1 },
-        },
-        select: { availablePoints: true },
-      });
-      await tx.serviceConfigurationAudit.create({
-        data: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          configurationId: configuration.id,
-          action: 'POINT_BONUS_GRANTED',
-          beforeData: { availablePoints: account.availablePoints },
-          afterData: {
-            userId: member.userId,
-            amount: parsed.data.amount,
-            availablePoints: updated.availablePoints,
-            idempotencyKey,
-          },
-          reason: parsed.data.reason,
-          performedByUserId: actor.userId,
-          occurredAt: now,
-        },
-      });
-    });
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
   } catch (error) {
     redirect(
       `${returnPath}?error=${error instanceof Error && error.message === 'POINT_ISSUANCE_STOPPED' ? 'stopped' : 'bonus'}` as Route,
@@ -586,138 +590,65 @@ async function correctPoints(formData: FormData) {
     const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const now = new Date();
-    await db.prisma.$transaction(async (tx) => {
-      const [member, configuration, account] = await Promise.all([
-        tx.groupMembership.findFirst({
-          where: {
+    await db.prisma.$transaction(
+      async (tx) => {
+        const [member, configuration] = await Promise.all([
+          tx.groupMembership.findFirst({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              userId: parsed.data.userId,
+              status: 'ACTIVE',
+            },
+            select: { userId: true },
+          }),
+          tx.serviceConfiguration.findFirst({
+            where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+            select: { id: true },
+          }),
+        ]);
+        if (!member || !configuration) throw new Error('MEMBER_OR_ACCOUNT_NOT_FOUND');
+        const idempotencyKey = `operator-recovery:${parsed.data.operationId}`;
+        const recovery = await db.registerPointRecovery(tx, {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: member.userId,
+          actorUserId: actor.userId,
+          amount: parsed.data.amount,
+          idempotencyKey,
+          now,
+        });
+        if (!recovery) throw new Error('MEMBER_OR_ACCOUNT_NOT_FOUND');
+        if (!recovery.applied) return;
+        await tx.serviceConfigurationAudit.create({
+          data: {
             workspaceId: service.workspaceId,
             groupId: service.serviceId,
-            userId: parsed.data.userId,
-            status: 'ACTIVE',
-          },
-          select: { userId: true },
-        }),
-        tx.serviceConfiguration.findFirst({
-          where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-          select: { id: true },
-        }),
-        tx.pointAccount.findUnique({
-          where: {
-            workspaceId_userId: {
-              workspaceId: service.workspaceId,
-              userId: parsed.data.userId,
+            configurationId: configuration.id,
+            action: 'POINT_RECOVERY_REGISTERED',
+            beforeData: {
+              availablePoints: recovery.before.availablePoints,
+              recoveryDue: recovery.before.recoveryDue,
             },
-          },
-          select: { id: true },
-        }),
-      ]);
-      if (!member || !configuration || !account) throw new Error('MEMBER_OR_ACCOUNT_NOT_FOUND');
-      const idempotencyKey = `operator-correction:${parsed.data.operationId}`;
-      const existing = await tx.pointTransaction.findUnique({
-        where: {
-          accountId_idempotencyKey: {
-            accountId: account.id,
-            idempotencyKey,
-          },
-        },
-      });
-      if (
-        existing &&
-        (existing.type !== 'REVERSAL' ||
-          existing.amount !== -parsed.data.amount ||
-          existing.workspaceId !== service.workspaceId ||
-          existing.userId !== member.userId ||
-          existing.groupId !== service.serviceId ||
-          existing.sourceType !== 'OPERATOR_CORRECTION' ||
-          existing.sourceId !== actor.userId)
-      )
-        throw new Error('IDEMPOTENCY_KEY_PAYLOAD_MISMATCH');
-      if (existing) return;
-      const changed = await tx.pointAccount.updateMany({
-        where: {
-          id: account.id,
-          availablePoints: { gte: parsed.data.amount },
-          recoveryDue: 0,
-        },
-        data: {
-          availablePoints: { decrement: parsed.data.amount },
-          revision: { increment: 1 },
-        },
-      });
-      if (changed.count !== 1) throw new Error('INSUFFICIENT_POINTS');
-      const updated = await tx.pointAccount.findUniqueOrThrow({
-        where: { id: account.id },
-        select: { availablePoints: true },
-      });
-      const transaction = await tx.pointTransaction.create({
-        data: {
-          accountId: account.id,
-          workspaceId: service.workspaceId,
-          userId: member.userId,
-          groupId: service.serviceId,
-          type: 'REVERSAL',
-          amount: -parsed.data.amount,
-          idempotencyKey,
-          sourceType: 'OPERATOR_CORRECTION',
-          sourceId: actor.userId,
-          createdAt: now,
-        },
-      });
-      const grants = await tx.pointTransaction.findMany({
-        where: {
-          accountId: account.id,
-          type: { in: ['GRANT', 'REFUND'] },
-          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-        },
-        include: { consumptions: true },
-      });
-      grants.sort((left, right) =>
-        left.expiresAt === null
-          ? right.expiresAt === null
-            ? left.createdAt.getTime() - right.createdAt.getTime()
-            : 1
-          : right.expiresAt === null
-            ? -1
-            : left.expiresAt.getTime() - right.expiresAt.getTime(),
-      );
-      let remaining = parsed.data.amount;
-      for (const grant of grants) {
-        const used = grant.consumptions.reduce((sum, link) => sum + link.amount, 0);
-        const available = grant.amount - used;
-        if (available <= 0) continue;
-        const amount = Math.min(remaining, available);
-        await tx.pointConsumptionLink.create({
-          data: {
-            consumptionTransactionId: transaction.id,
-            grantTransactionId: grant.id,
-            amount,
+            afterData: {
+              userId: member.userId,
+              amount: -parsed.data.amount,
+              recoveredPoints: recovery.recoveredPoints,
+              recoveryAdded: recovery.recoveryAdded,
+              availablePoints: recovery.account.availablePoints,
+              recoveryDue: recovery.account.recoveryDue,
+              idempotencyKey,
+            },
+            reason: parsed.data.reason,
+            performedByUserId: actor.userId,
+            occurredAt: now,
           },
         });
-        remaining -= amount;
-        if (remaining === 0) break;
-      }
-      if (remaining !== 0) throw new Error('POINT_LEDGER_BALANCE_MISMATCH');
-      await tx.serviceConfigurationAudit.create({
-        data: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          configurationId: configuration.id,
-          action: 'POINT_BALANCE_CORRECTED',
-          beforeData: { availablePoints: updated.availablePoints + parsed.data.amount },
-          afterData: {
-            userId: member.userId,
-            amount: -parsed.data.amount,
-            availablePoints: updated.availablePoints,
-            idempotencyKey,
-          },
-          reason: parsed.data.reason,
-          performedByUserId: actor.userId,
-          occurredAt: now,
-        },
-      });
-    });
+      },
+      { isolationLevel: 'Serializable' },
+    );
   } catch {
-    redirect(`${returnPath}?error=correction` as Route);
+    redirect(`${returnPath}?error=recovery` as Route);
   }
   revalidatePath(returnPath);
   revalidatePath('/points');
@@ -898,6 +829,7 @@ export default async function ServicePointSettingsPage({
             'CAMPAIGN_POINT_RULES_UPDATED',
             'POINT_BONUS_GRANTED',
             'POINT_BALANCE_CORRECTED',
+            'POINT_RECOVERY_REGISTERED',
             'POINT_ISSUANCE_STOPPED',
             'POINT_ISSUANCE_RESUMED',
             'POINT_REWARDS_UPDATED',
@@ -917,7 +849,7 @@ export default async function ServicePointSettingsPage({
     }),
     db.prisma.pointAccount.findMany({
       where: { workspaceId: service.workspaceId, userId: { in: memberUserIds } },
-      select: { userId: true, availablePoints: true, updatedAt: true },
+      select: { userId: true, availablePoints: true, recoveryDue: true, updatedAt: true },
     }),
     db.prisma.pointTransaction.groupBy({
       by: ['userId'],
@@ -1125,7 +1057,7 @@ export default async function ServicePointSettingsPage({
           <p className="notice notice--success">ボーナスポイントを付与しました。</p>
         ) : null}
         {query.corrected ? (
-          <p className="notice notice--success">ポイントを訂正しました。</p>
+          <p className="notice notice--success">誤付与ポイントの回収を記録しました。</p>
         ) : null}
         {query.rewards ? (
           <p className="notice notice--success">ポイントの使い道を保存しました。</p>
@@ -1138,8 +1070,8 @@ export default async function ServicePointSettingsPage({
         ) : null}
         {query.error ? (
           <p className="notice notice--danger">
-            {query.error === 'correction'
-              ? '訂正できませんでした。現在の残高以下のポイント数を入力してください。'
+            {query.error === 'recovery'
+              ? '回収を記録できませんでした。画面を更新し、入力内容を確認してください。'
               : query.error === 'budget'
                 ? '発行上限は、すでに発行したポイント以上にしてください。'
                 : query.error === 'campaign-budget'
@@ -1442,6 +1374,7 @@ export default async function ServicePointSettingsPage({
                   <tr>
                     <th>参加者</th>
                     <th>現在のWP</th>
+                    <th>回収未済</th>
                     <th>サービス内の増減</th>
                     <th>獲得バッジ</th>
                     <th>最終更新</th>
@@ -1472,6 +1405,15 @@ export default async function ServicePointSettingsPage({
                           </small>
                         </td>
                         <td>{(account?.availablePoints ?? 0).toLocaleString('ja-JP')} WP</td>
+                        <td>
+                          {account?.recoveryDue ? (
+                            <strong className="status-warning">
+                              {account.recoveryDue.toLocaleString('ja-JP')} WP
+                            </strong>
+                          ) : (
+                            'なし'
+                          )}
+                        </td>
                         <td>
                           {change > 0 ? '+' : ''}
                           {change.toLocaleString('ja-JP')} WP
@@ -1782,11 +1724,12 @@ export default async function ServicePointSettingsPage({
           )}
         </section>
 
-        <section className="settings-card">
-          <h2>ポイントの誤付与を訂正</h2>
+        <section className="settings-card" id="point-recovery">
+          <h2>誤付与ポイントを回収</h2>
           <p>
-            間違えて多く付与した分を減らします。元の履歴は削除されず、訂正理由と操作した運営者が記録されます。
+            誤って付与した合計額を入力します。残高で足りない分は「回収未済」として残り、解消するまでポイント交換を停止します。
           </p>
+          <p>その後にもらうポイントは、回収未済分へ自動で充てられます。</p>
           <form action={correctPoints} className="form-stack">
             <input type="hidden" name="serviceSlug" value={serviceSlug} />
             <input type="hidden" name="operationId" value={randomUUID()} />
@@ -1797,13 +1740,14 @@ export default async function ServicePointSettingsPage({
                   <option key={membership.userId} value={membership.userId}>
                     {membership.user.displayName || membership.user.email || membership.userId}
                     （現在
-                    {pointAccountByUser.get(membership.userId)?.availablePoints ?? 0} WP）
+                    {pointAccountByUser.get(membership.userId)?.availablePoints ?? 0} WP／回収未済
+                    {pointAccountByUser.get(membership.userId)?.recoveryDue ?? 0} WP）
                   </option>
                 ))}
               </select>
             </label>
             <label className="field">
-              <span className="field__label">減らすポイント</span>
+              <span className="field__label">誤って付与したポイント</span>
               <input
                 className="field__control"
                 name="amount"
@@ -1814,7 +1758,7 @@ export default async function ServicePointSettingsPage({
               />
             </label>
             <label className="field">
-              <span className="field__label">訂正する理由</span>
+              <span className="field__label">回収する理由（本人にも表示されます）</span>
               <textarea
                 className="field__control"
                 name="reason"
@@ -1824,7 +1768,7 @@ export default async function ServicePointSettingsPage({
               />
             </label>
             <button className="button button--secondary" type="submit">
-              ポイントを訂正
+              回収を記録
             </button>
           </form>
         </section>
@@ -1867,7 +1811,9 @@ export default async function ServicePointSettingsPage({
                                 ? 'ポイント付与を再開'
                                 : item.action === 'POINT_BALANCE_CORRECTED'
                                   ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
-                                  : `${target ?? '参加者'}へ ${amount} WP付与`}
+                                  : item.action === 'POINT_RECOVERY_REGISTERED'
+                                    ? `${target ?? '参加者'}から ${Math.abs(Number(amount))} WP回収`
+                                    : `${target ?? '参加者'}へ ${amount} WP付与`}
                     </strong>
                     <br />
                     {item.occurredAt.toLocaleString('ja-JP')}／

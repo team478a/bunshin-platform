@@ -37,7 +37,9 @@ const pointAuditActionLabel = (action: string) =>
       ? 'ボーナスポイントを付与'
       : action === 'POINT_BALANCE_CORRECTED'
         ? 'ポイント残高を訂正'
-        : action;
+        : action === 'POINT_RECOVERY_REGISTERED'
+          ? '誤付与ポイントを回収'
+          : action;
 
 const badgeAuditActionLabels: Record<string, string> = {
   GROUP_BADGE_CREATED_AND_SUBMITTED: 'バッジを作成',
@@ -68,7 +70,7 @@ async function summaryRows(workspaceId: string, groupId: string) {
   const [accounts, pointChanges, badgeAwards] = await Promise.all([
     db.prisma.pointAccount.findMany({
       where: { workspaceId, userId: { in: userIds } },
-      select: { userId: true, availablePoints: true, updatedAt: true },
+      select: { userId: true, availablePoints: true, recoveryDue: true, updatedAt: true },
     }),
     db.prisma.pointTransaction.groupBy({
       by: ['userId'],
@@ -93,6 +95,7 @@ async function summaryRows(workspaceId: string, groupId: string) {
       'メール',
       '役割',
       '現在のWP',
+      '回収未済WP',
       'サービス内の増減',
       '獲得バッジ数',
       '最終更新',
@@ -111,6 +114,7 @@ async function summaryRows(workspaceId: string, groupId: string) {
         membership.user.email ?? '',
         serviceRoleLabel(membership.serviceRole),
         account?.availablePoints ?? 0,
+        account?.recoveryDue ?? 0,
         point?._sum.amount ?? 0,
         badge?._count._all ?? 0,
         timestamp(latest),
@@ -231,7 +235,12 @@ async function auditRows(workspaceId: string, groupId: string) {
         workspaceId,
         groupId,
         action: {
-          in: ['POINT_RULES_UPDATED', 'POINT_BONUS_GRANTED', 'POINT_BALANCE_CORRECTED'],
+          in: [
+            'POINT_RULES_UPDATED',
+            'POINT_BONUS_GRANTED',
+            'POINT_BALANCE_CORRECTED',
+            'POINT_RECOVERY_REGISTERED',
+          ],
         },
       },
       select: {

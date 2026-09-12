@@ -56,4 +56,17 @@ describe('point use options', () => {
       expect.objectContaining({ id: 'image', pointsNeeded: 8 }),
     ]);
   });
+
+  it('marks every use as blocked while points are still awaiting recovery', () => {
+    expect(
+      buildPointUseOptions({
+        catalog,
+        availablePoints: 100,
+        recoveryDue: 5,
+        destinations: {
+          ALTERNATIVE_PLAN_GENERATION: { href: '/today', actionLabel: '投稿案を開く' },
+        },
+      }),
+    ).toEqual([expect.objectContaining({ id: 'variant', blockedByRecovery: true })]);
+  });
 });

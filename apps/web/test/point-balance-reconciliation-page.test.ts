@@ -14,7 +14,9 @@ describe('point balance reconciliation admin page', () => {
   it('requires a reason and the inspected revision before repairing a balance', () => {
     expect(page).toContain('InspectPointBalances');
     expect(page).toContain('RepairPointBalance');
-    expect(page).toContain('表示残高');
+    expect(page).toContain('利用可能');
+    expect(page).toContain('回収未済');
+    expect(page).toContain('差引残高');
     expect(page).toContain('履歴の合計');
     expect(page).toContain('reason: z.string().trim().min(10).max(1000)');
     expect(page).toContain('name="expectedRevision"');

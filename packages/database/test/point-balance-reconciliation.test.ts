@@ -30,7 +30,8 @@ describe('point balance reconciliation persistence boundaries', () => {
     expect(source).toContain("role: 'SUPER_ADMIN'");
     expect(source).toContain('revision: input.expectedRevision');
     expect(source).toContain('ledgerBalance !== input.expectedLedgerBalance');
-    expect(source).toContain('availablePoints: ledgerBalance');
+    expect(source).toContain('availablePoints: Math.max(0, ledgerBalance)');
+    expect(source).toContain('recoveryDue: Math.max(0, -ledgerBalance)');
     expect(source).toContain('pointBalanceRepairAudit.create');
     expect(source).toContain('Prisma.TransactionIsolationLevel.Serializable');
     expect(schema).toContain('model PointBalanceRepairAudit');
@@ -44,7 +45,9 @@ describe('point balance reconciliation persistence boundaries', () => {
     const tx = {
       platformAdmin: { findFirst: vi.fn().mockResolvedValue({ id: 'admin-1' }) },
       pointAccount: {
-        findFirst: vi.fn().mockResolvedValue({ id: 'account-1', availablePoints: 20, revision: 3 }),
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 'account-1', availablePoints: 20, recoveryDue: 0, revision: 3 }),
         updateMany,
       },
       pointTransaction: { aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 15 } }) },
@@ -69,13 +72,49 @@ describe('point balance reconciliation persistence boundaries', () => {
     ).resolves.toEqual({ accountId: 'account-1', previousBalance: 20, repairedBalance: 15 });
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ availablePoints: 20, revision: 3 }),
-        data: { availablePoints: 15, revision: { increment: 1 } },
+        where: expect.objectContaining({ availablePoints: 20, recoveryDue: 0, revision: 3 }),
+        data: { availablePoints: 15, recoveryDue: 0, revision: { increment: 1 } },
       }),
     );
     expect(createAudit).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ previousBalance: 20, repairedBalance: 15 }),
+      }),
+    );
+  });
+
+  it('repairs a negative ledger total as recovery due without making the balance negative', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const tx = {
+      platformAdmin: { findFirst: vi.fn().mockResolvedValue({ id: 'admin-1' }) },
+      pointAccount: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 'account-1', availablePoints: 0, recoveryDue: 10, revision: 3 }),
+        updateMany,
+      },
+      pointTransaction: { aggregate: vi.fn().mockResolvedValue({ _sum: { amount: -15 } }) },
+      pointBalanceRepairAudit: { create: vi.fn().mockResolvedValue({ id: 'audit-1' }) },
+    };
+    type TransactionCallback = (transaction: typeof tx) => Promise<unknown>;
+    const client = {
+      $transaction: vi.fn((callback: TransactionCallback) => callback(tx)),
+    } as unknown as PrismaClient;
+
+    await new PrismaPointBalanceReconciliationRepository(client).repair({
+      accountId: 'account-1',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      actorUserId: 'admin-1',
+      expectedStoredBalance: -10,
+      expectedLedgerBalance: -15,
+      expectedRevision: 3,
+      reason: '回収未済額と履歴の差を確認したため',
+    });
+
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { availablePoints: 0, recoveryDue: 15, revision: { increment: 1 } },
       }),
     );
   });
