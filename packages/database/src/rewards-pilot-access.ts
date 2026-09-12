@@ -8,6 +8,120 @@ type RewardsPilotAssignmentClient = Pick<
   'groupMembership' | 'groupFeaturePolicy' | 'groupMemberFeatureAssignment' | 'groupFeatureAuditLog'
 >;
 
+type RewardsPilotPeriodClient = Pick<
+  Prisma.TransactionClient,
+  'groupMembership' | 'groupFeaturePolicy' | 'featureDefinition' | 'groupFeatureAuditLog'
+>;
+
+export async function startFourWeekRewardsPilot(
+  client: RewardsPilotPeriodClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    reason: string;
+    now: Date;
+  },
+) {
+  const reason = input.reason.trim();
+  if (reason.length < 1 || reason.length > 1000)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+  const [manager, feature, previous] = await Promise.all([
+    client.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        OR: [
+          { role: 'MANAGER' },
+          {
+            serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+            group: { serviceConfiguration: { isNot: null } },
+          },
+        ],
+        group: {
+          status: 'ACTIVE',
+          serviceConfiguration: { isNot: null },
+          workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
+        },
+      },
+      select: { id: true },
+    }),
+    client.featureDefinition.findFirst({
+      where: { key: REWARDS_PILOT_FEATURE_KEY, status: 'ACTIVE' },
+      select: { key: true },
+    }),
+    client.groupFeaturePolicy.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+      },
+    }),
+  ]);
+  if (!manager || !feature)
+    throw new ApplicationError('FORBIDDEN', 'rewards pilot period denied');
+  if (
+    previous?.status === 'ENABLED' &&
+    previous.startsAt &&
+    previous.startsAt <= input.now &&
+    previous.endsAt &&
+    previous.endsAt > input.now &&
+    previous.endsAt.getTime() - previous.startsAt.getTime() >= 28 * 24 * 60 * 60 * 1000
+  )
+    throw new ApplicationError('CONFLICT', 'rewards pilot already active');
+
+  const endsAt = new Date(input.now.getTime() + 28 * 24 * 60 * 60 * 1000);
+  const policy = await client.groupFeaturePolicy.upsert({
+    where: {
+      groupId_featureKey: {
+        groupId: input.groupId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+      },
+    },
+    create: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      featureKey: REWARDS_PILOT_FEATURE_KEY,
+      status: 'ENABLED',
+      startsAt: input.now,
+      endsAt,
+      setByUserId: input.actorUserId,
+    },
+    update: {
+      status: 'ENABLED',
+      startsAt: input.now,
+      endsAt,
+      setByUserId: input.actorUserId,
+    },
+  });
+  await client.groupFeatureAuditLog.create({
+    data: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      featureKey: REWARDS_PILOT_FEATURE_KEY,
+      action: 'GROUP_POLICY_SET',
+      beforeData: previous
+        ? {
+            status: previous.status,
+            startsAt: previous.startsAt?.toISOString() ?? null,
+            endsAt: previous.endsAt?.toISOString() ?? null,
+          }
+        : Prisma.JsonNull,
+      afterData: {
+        status: policy.status,
+        startsAt: policy.startsAt?.toISOString() ?? null,
+        endsAt: policy.endsAt?.toISOString() ?? null,
+      },
+      reason,
+      performedByUserId: input.actorUserId,
+      occurredAt: input.now,
+    },
+  });
+  return policy;
+}
+
 export async function replaceRewardsPilotMemberAssignments(
   client: RewardsPilotAssignmentClient,
   input: {
