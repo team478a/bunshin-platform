@@ -60,8 +60,7 @@ export async function startFourWeekRewardsPilot(
       },
     }),
   ]);
-  if (!manager || !feature)
-    throw new ApplicationError('FORBIDDEN', 'rewards pilot period denied');
+  if (!manager || !feature) throw new ApplicationError('FORBIDDEN', 'rewards pilot period denied');
   if (
     previous?.status === 'ENABLED' &&
     previous.startsAt &&
