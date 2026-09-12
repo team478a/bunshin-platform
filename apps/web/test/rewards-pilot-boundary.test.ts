@@ -69,6 +69,7 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('この設定を直す');
     expect(servicePointsPage).toContain("'#point-control'");
     expect(servicePointsPage).toContain("'#point-rules'");
+    expect(servicePointsPage).toContain('configuredPilotPeriodLabel ?? pilotPeriodLabel');
   });
 
   it('shows operators a plain-language pilot report and review candidates', () => {
