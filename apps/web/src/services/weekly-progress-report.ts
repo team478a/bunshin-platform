@@ -17,6 +17,8 @@ export type WeeklyProgressMetrics = {
   variantsUsed: number;
   pointsEarned: number;
   pointsUsed: number;
+  expiringPoints: number;
+  nextPointExpiryAt: Date | null;
   badges: string[];
 };
 
@@ -39,8 +41,34 @@ const emptyMetrics = (): WeeklyProgressMetrics => ({
   variantsUsed: 0,
   pointsEarned: 0,
   pointsUsed: 0,
+  expiringPoints: 0,
+  nextPointExpiryAt: null,
   badges: [],
 });
+
+export function summarizeExpiringPointGrants(
+  grants: {
+    amount: number;
+    expiresAt: Date | null;
+    consumptions: { amount: number }[];
+  }[],
+) {
+  const available = grants
+    .filter((grant): grant is typeof grant & { expiresAt: Date } => grant.expiresAt !== null)
+    .map((grant) => ({
+      expiresAt: grant.expiresAt,
+      amount: Math.max(
+        0,
+        grant.amount - grant.consumptions.reduce((sum, consumption) => sum + consumption.amount, 0),
+      ),
+    }))
+    .filter(({ amount }) => amount > 0)
+    .sort((left, right) => left.expiresAt.getTime() - right.expiresAt.getTime());
+  return {
+    expiringPoints: available.reduce((sum, grant) => sum + grant.amount, 0),
+    nextPointExpiryAt: available[0]?.expiresAt ?? null,
+  };
+}
 
 export function buildWeeklyProgressSummary(
   input: Partial<WeeklyProgressMetrics>,

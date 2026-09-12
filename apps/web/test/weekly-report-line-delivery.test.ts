@@ -55,4 +55,18 @@ describe('weekly report LINE delivery', () => {
       '投稿サポートの1週間のふり返りです。\n\n今週は2件、投稿できました\n\n次にやること\n今日あったことを一つ残す\n\n今週できたことを見る\nhttps://example.com/s/demo/weekly-report?week=2026-09-07',
     );
   });
+
+  it('adds an expiry warning only when unused points expire within 30 days', () => {
+    expect(
+      buildWeeklyReportLineMessage({
+        serviceName: '投稿サポート',
+        headline: '今週は2件、投稿できました',
+        nextStep: '今日あったことを一つ残す',
+        reportUrl: 'https://example.com/report',
+        pointExpiry: { amount: 25, dateLabel: '9月30日' },
+      }),
+    ).toContain(
+      'ポイントのお知らせ\n今後30日以内に25 WPが期限を迎えます。最も近い期限は9月30日です。',
+    );
+  });
 });

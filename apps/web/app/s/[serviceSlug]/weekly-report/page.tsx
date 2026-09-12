@@ -129,13 +129,38 @@ export default async function ServiceWeeklyReportPage({
           </div>
         </section>
 
-        {(report.pointsEarned > 0 || report.pointsUsed > 0 || report.badges.length > 0) && (
+        {(report.pointsEarned > 0 ||
+          report.pointsUsed > 0 ||
+          report.expiringPoints > 0 ||
+          report.badges.length > 0) && (
           <section className="service-entry__card" aria-labelledby="weekly-rewards">
             <h2 id="weekly-rewards">ポイント・バッジ</h2>
-            <p>
-              獲得 <strong>{report.pointsEarned}ポイント</strong>
-              {report.pointsUsed > 0 ? `／利用 ${report.pointsUsed}ポイント` : ''}
-            </p>
+            {(report.pointsEarned > 0 || report.pointsUsed > 0) && (
+              <p>
+                獲得 <strong>{report.pointsEarned}ポイント</strong>
+                {report.pointsUsed > 0 ? `／利用 ${report.pointsUsed}ポイント` : ''}
+              </p>
+            )}
+            {report.expiringPoints > 0 && report.nextPointExpiryAt && (
+              <div className="notice notice--warning" role="status">
+                <strong>期限が近いポイントがあります</strong>
+                <p>
+                  今後30日以内に {report.expiringPoints} WPが期限を迎えます。最も近い期限は
+                  {new Intl.DateTimeFormat('ja-JP', {
+                    timeZone: 'Asia/Tokyo',
+                    month: 'long',
+                    day: 'numeric',
+                  }).format(report.nextPointExpiryAt)}
+                  です。
+                </p>
+                <Link
+                  className="button button--secondary"
+                  href={`/points?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+                >
+                  ポイントの期限と履歴を見る
+                </Link>
+              </div>
+            )}
             {report.badges.length > 0 && (
               <ul className="weekly-report__badges">
                 {report.badges.map((badge) => (

@@ -13,6 +13,8 @@ describe('service weekly report boundaries', () => {
     );
     expect(participant).toContain('resolvePublicServiceContext');
     expect(participant).toContain('userId: actor.userId');
+    expect(participant).toContain('期限が近いポイントがあります');
+    expect(participant).toContain('ポイントの期限と履歴を見る');
     expect(manager).toContain('resolveManagedServiceContext');
     expect(manager).toContain('投稿本文や本人の素材内容は表示しません');
   });

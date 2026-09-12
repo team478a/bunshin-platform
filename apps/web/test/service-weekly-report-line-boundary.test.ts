@@ -21,4 +21,11 @@ describe('service weekly report LINE boundary', () => {
     expect(route).toContain('updateServiceWeeklyReportDeliveryResponse');
     expect(route).not.toContain('GET(');
   });
+
+  it('includes the participant expiry amount and nearest date in the existing weekly message', () => {
+    expect(scheduler).toContain('asOf: now');
+    expect(scheduler).toContain('report.expiringPoints');
+    expect(scheduler).toContain('report.nextPointExpiryAt');
+    expect(scheduler).toContain('pointExpiry:');
+  });
 });

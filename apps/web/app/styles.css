@@ -3705,6 +3705,12 @@ a {
   background: var(--color-success-soft);
 }
 
+.notice--warning {
+  border-color: #e8c76f;
+  background: #fff8df;
+  color: #5e4300;
+}
+
 .notice--danger {
   color: #8c1d14;
   border-color: #f2c3be;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildWeeklyProgressSummary,
   resolveWeeklyReportWindow,
+  summarizeExpiringPointGrants,
 } from '../src/services/weekly-progress-report';
 
 describe('weekly progress report', () => {
@@ -36,5 +37,17 @@ describe('weekly progress report', () => {
     expect(resolveWeeklyReportWindow('2026-09-07', now).weekStart).toBe('2026-09-07');
     expect(resolveWeeklyReportWindow('2026-09-08', now).weekStart).toBe('2026-09-07');
     expect(resolveWeeklyReportWindow('2027-01-04', now).weekStart).toBe('2026-09-07');
+  });
+
+  it('counts only the unused part of grants and selects the nearest expiry', () => {
+    const later = new Date('2026-10-20T14:59:59.000Z');
+    const sooner = new Date('2026-09-30T14:59:59.000Z');
+    expect(
+      summarizeExpiringPointGrants([
+        { amount: 20, expiresAt: later, consumptions: [{ amount: 5 }] },
+        { amount: 10, expiresAt: sooner, consumptions: [{ amount: 10 }] },
+        { amount: 12, expiresAt: sooner, consumptions: [{ amount: 2 }] },
+      ]),
+    ).toEqual({ expiringPoints: 25, nextPointExpiryAt: sooner });
   });
 });

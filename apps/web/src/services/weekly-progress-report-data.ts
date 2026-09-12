@@ -2,6 +2,7 @@ import 'server-only';
 import type { prisma } from '@bunshin/database';
 import {
   buildWeeklyProgressSummary,
+  summarizeExpiringPointGrants,
   WEEKLY_COPY_ACTIVITY_TYPES,
   type WeeklyProgressMetrics,
 } from './weekly-progress-report';
@@ -35,6 +36,7 @@ export async function loadServiceWeeklyProgressReports(input: {
   groupId: string;
   window: Window;
   userId?: string;
+  asOf?: Date;
 }) {
   const memberships = await input.client.groupMembership.findMany({
     where: {
@@ -70,77 +72,95 @@ export async function loadServiceWeeklyProgressReports(input: {
       .map(({ id, name }) => ({ id, name })),
   }));
   if (!participants.length) return [];
+  const asOf = input.asOf ?? new Date();
+  const pointExpiryWarningEnd = new Date(asOf.getTime() + 30 * 24 * 60 * 60 * 1000);
   const bunshinIds = bunshins.map(({ id }) => id);
   const timestamp = { gte: input.window.startAt, lt: input.window.endAt };
   const missionDate = {
     gte: new Date(`${input.window.weekStart}T00:00:00.000Z`),
     lte: new Date(`${input.window.weekEnd}T00:00:00.000Z`),
   };
-  const [missions, activities, posts, materials, variants, points, badges] = await Promise.all([
-    input.client.dailyMission.findMany({
-      where: { workspaceId: input.workspaceId, bunshinId: { in: bunshinIds }, missionDate },
-      select: { id: true, bunshinId: true },
-    }),
-    input.client.missionActivity.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        bunshinId: { in: bunshinIds },
-        actorUserId: { in: userIds },
-        occurredAt: timestamp,
-      },
-      select: { actorUserId: true, bunshinId: true, dailyMissionId: true, type: true },
-    }),
-    input.client.postRecord.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        bunshinId: { in: bunshinIds },
-        actorUserId: { in: userIds },
-        postedAt: timestamp,
-      },
-      select: { actorUserId: true, bunshinId: true, dailyMissionId: true },
-    }),
-    input.client.bunshinMemory.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        bunshinId: { in: bunshinIds },
-        sourceType: 'USER_INPUT',
-        sourceId: { startsWith: 'daily-action:' },
-        active: true,
-        deletedAt: null,
-        createdAt: timestamp,
-      },
-      select: { bunshin: { select: { ownerUserId: true } } },
-    }),
-    input.client.missionContentVariantSelection.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        bunshinId: { in: bunshinIds },
-        actorUserId: { in: userIds },
-        selectedAt: timestamp,
-      },
-      select: { actorUserId: true, bunshinId: true, variantId: true },
-    }),
-    input.client.pointTransaction.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        userId: { in: userIds },
-        createdAt: timestamp,
-        type: { in: ['GRANT', 'CONSUME'] },
-      },
-      select: { userId: true, type: true, amount: true },
-    }),
-    input.client.badgeAward.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        userId: { in: userIds },
-        status: 'ACTIVE',
-        awardedAt: timestamp,
-      },
-      select: { userId: true, badgeVersion: { select: { title: true } } },
-    }),
-  ]);
+  const [missions, activities, posts, materials, variants, points, expiringGrants, badges] =
+    await Promise.all([
+      input.client.dailyMission.findMany({
+        where: { workspaceId: input.workspaceId, bunshinId: { in: bunshinIds }, missionDate },
+        select: { id: true, bunshinId: true },
+      }),
+      input.client.missionActivity.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: { in: bunshinIds },
+          actorUserId: { in: userIds },
+          occurredAt: timestamp,
+        },
+        select: { actorUserId: true, bunshinId: true, dailyMissionId: true, type: true },
+      }),
+      input.client.postRecord.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: { in: bunshinIds },
+          actorUserId: { in: userIds },
+          postedAt: timestamp,
+        },
+        select: { actorUserId: true, bunshinId: true, dailyMissionId: true },
+      }),
+      input.client.bunshinMemory.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: { in: bunshinIds },
+          sourceType: 'USER_INPUT',
+          sourceId: { startsWith: 'daily-action:' },
+          active: true,
+          deletedAt: null,
+          createdAt: timestamp,
+        },
+        select: { bunshin: { select: { ownerUserId: true } } },
+      }),
+      input.client.missionContentVariantSelection.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: { in: bunshinIds },
+          actorUserId: { in: userIds },
+          selectedAt: timestamp,
+        },
+        select: { actorUserId: true, bunshinId: true, variantId: true },
+      }),
+      input.client.pointTransaction.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: { in: userIds },
+          createdAt: timestamp,
+          type: { in: ['GRANT', 'CONSUME'] },
+        },
+        select: { userId: true, type: true, amount: true },
+      }),
+      input.client.pointTransaction.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          userId: { in: userIds },
+          type: 'GRANT',
+          expiresAt: { gt: asOf, lte: pointExpiryWarningEnd },
+        },
+        select: {
+          userId: true,
+          amount: true,
+          expiresAt: true,
+          consumptions: { select: { amount: true } },
+        },
+        orderBy: { expiresAt: 'asc' },
+      }),
+      input.client.badgeAward.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: { in: userIds },
+          status: 'ACTIVE',
+          awardedAt: timestamp,
+        },
+        select: { userId: true, badgeVersion: { select: { title: true } } },
+      }),
+    ]);
   const missionOwner = new Map(bunshins.map(({ id, ownerUserId }) => [id, ownerUserId] as const));
   return participants.map((participant): ServiceWeeklyProgressReport => {
     const ownsBunshin = (bunshinId: string) => missionOwner.get(bunshinId) === participant.userId;
@@ -149,6 +169,9 @@ export async function loadServiceWeeklyProgressReports(input: {
     );
     const byType = (types: string[]) => ownActivities.filter(({ type }) => types.includes(type));
     const ownPoints = points.filter(({ userId }) => userId === participant.userId);
+    const pointExpiry = summarizeExpiringPointGrants(
+      expiringGrants.filter(({ userId }) => userId === participant.userId),
+    );
     const metrics: WeeklyProgressMetrics = {
       missions: missions.filter(
         ({ bunshinId }) => missionOwner.get(bunshinId) === participant.userId,
@@ -181,6 +204,7 @@ export async function loadServiceWeeklyProgressReports(input: {
           .filter(({ type }) => type === 'CONSUME')
           .reduce((sum, { amount }) => sum + amount, 0),
       ),
+      ...pointExpiry,
       badges: badges
         .filter(({ userId }) => userId === participant.userId)
         .map(({ badgeVersion }) => badgeVersion.title),
