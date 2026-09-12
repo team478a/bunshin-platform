@@ -19,13 +19,23 @@ describe('service reward export boundaries', () => {
     expect(source).toContain("'x-content-type-options': 'nosniff'");
   });
 
-  it('exports participant, point, badge, and operator audit records through explicit links', () => {
-    expect(source).toContain("['summary', 'points', 'badges', 'audit']");
+  it('exports participant, point, badge, audit, and pilot result records through explicit links', () => {
+    expect(source).toContain("['summary', 'points', 'badges', 'audit', 'pilot']");
     expect(source).toContain('csv(rows)');
+    expect(page).toContain('4週間の試験結果を保存');
     expect(page).toContain('参加者一覧を保存');
     expect(page).toContain('ポイント履歴を保存');
     expect(page).toContain('バッジ履歴を保存');
     expect(page).toContain('運営操作履歴を保存');
+  });
+
+  it('uses the configured pilot period and exports an aggregate plus participant results', () => {
+    expect(source).toContain('resolveRewardsPilotMeasurementPeriod');
+    expect(source).toContain('participatedInRewardsPilotPeriod');
+    expect(source).toContain("'全体'");
+    expect(source).toContain("'参加者'");
+    expect(source).toContain("'3日以上続けた'");
+    expect(source).toContain("'確認候補'");
   });
 
   it('combines point and badge audit logs without dropping immutable change details', () => {

@@ -933,6 +933,12 @@ export default async function ServicePointSettingsPage({
               </tbody>
             </table>
           </div>
+          <a
+            className="button button--secondary"
+            href={`/api/services/${encodeURIComponent(serviceSlug)}/rewards-export?kind=pilot`}
+          >
+            4週間の試験結果を保存
+          </a>
 
           <h3>確認候補</h3>
           {rewardsPilotMetrics.reviewCandidates.length === 0 ? (
