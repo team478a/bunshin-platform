@@ -257,7 +257,7 @@ export default async function ServiceMemberActivityPage({
               <p>今日の投稿案を確認したり、投稿を記録したりすると自動で増えます。</p>
             </div>
             <ol className="service-reward-guide">
-              <li>今日の投稿案を開く</li>
+              <li>その日に初めて投稿案を開く</li>
               <li>SNSへ投稿したら「投稿しました」を押す</li>
               <li>通常1分ほど待って、この画面を開き直す</li>
             </ol>

@@ -21,7 +21,7 @@ const RULES = [
   {
     key: 'MISSION_VIEWED_DAILY',
     budgetKey: 'budget_MISSION_VIEWED_DAILY',
-    label: '今日の企画をはじめて見る',
+    label: 'その日に初めて投稿案を見る',
     help: '1日1回まで付与します。',
     defaultAmount: 1,
     dailyLimit: 1,
@@ -51,7 +51,7 @@ const REWARDS = [
   {
     type: 'ALTERNATIVE_PLAN_GENERATION',
     label: '別の投稿案を1回作る',
-    help: '今日の投稿案の画面で、違う内容の案を作れます。',
+    help: '最新の投稿案の画面で、違う内容の案を作れます。',
     defaultCost: 30,
   },
   {
@@ -61,6 +61,13 @@ const REWARDS = [
     defaultCost: 50,
   },
 ] as const;
+
+const redemptionStatusLabels = {
+  RESERVED: '処理中',
+  CONFIRMED: '交換完了',
+  RELEASED: '取り消し・ポイント返却',
+  REFUNDED: 'ポイント返却済み',
+} as const;
 
 const optionalBudgetSchema = z.preprocess(
   (value) => (value === '' ? null : value),
@@ -1225,6 +1232,23 @@ export default async function ServicePointSettingsPage({
       })),
     ],
   });
+  const recentRedemptions = await db.prisma.pointRedemption.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      consumptionTransaction: { groupId: service.serviceId },
+    },
+    select: {
+      id: true,
+      status: true,
+      pointCost: true,
+      createdAt: true,
+      confirmedAt: true,
+      user: { select: { displayName: true, email: true } },
+      catalogItem: { select: { title: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
   const pilotPercentage = (count: number) =>
     rewardsPilotCount === 0 ? '—' : `${Math.round((count / rewardsPilotCount) * 100)}%`;
   const pilotPeriodEnd = new Date(
@@ -1637,6 +1661,41 @@ export default async function ServicePointSettingsPage({
                 : 'ポイント付与を一括停止'}
             </button>
           </form>
+        </section>
+
+        <section className="settings-card" id="redemption-history">
+          <h2>最近のポイント交換</h2>
+          <p>誰が、何に、何WPを使ったかを確認できます。失敗して返却された処理も残ります。</p>
+          {recentRedemptions.length === 0 ? (
+            <p>ポイント交換の履歴はまだありません。</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>参加者</th>
+                    <th>交換内容</th>
+                    <th>使用WP</th>
+                    <th>状態</th>
+                    <th>日時</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRedemptions.map((redemption) => (
+                    <tr key={redemption.id}>
+                      <td>{redemption.user.displayName || redemption.user.email || '参加者'}</td>
+                      <td>{redemption.catalogItem.title}</td>
+                      <td>{redemption.pointCost.toLocaleString('ja-JP')} WP</td>
+                      <td>{redemptionStatusLabels[redemption.status]}</td>
+                      <td>
+                        {(redemption.confirmedAt ?? redemption.createdAt).toLocaleString('ja-JP')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className="settings-card">

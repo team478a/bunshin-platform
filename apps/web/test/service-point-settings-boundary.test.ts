@@ -106,6 +106,9 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('db.prisma.badgeAward.groupBy');
     expect(page).toContain('groupId: service.serviceId');
     expect(page).toContain('参加者のポイント・バッジ状況');
+    expect(page).toContain('最近のポイント交換');
+    expect(page).toContain('redemption.catalogItem.title');
+    expect(page).toContain('redemptionStatusLabels[redemption.status]');
     expect(page).toContain("status: 'ACTIVE'");
   });
 

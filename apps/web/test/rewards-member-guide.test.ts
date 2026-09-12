@@ -43,10 +43,13 @@ describe('rewards member guide', () => {
     expect(activity).toContain('バッジの進み具合を見る');
     expect(points).toContain('ポイントが増えるまで');
     expect(points).toContain('最近の履歴');
+    expect(points).toContain('最近のポイント交換');
+    expect(points).toContain('redemption.catalogItem.title');
+    expect(points).toContain('redemptionStatusLabels[redemption.status]');
     expect(points).toContain('ポイントの使い道');
     expect(points).toContain('このページを見ただけではポイントは減りません');
     expect(points).toContain('あと ${option.pointsNeeded} WP たまると使えます');
-    expect(points).toContain('今日の投稿案を開く');
+    expect(points).toContain('最新の投稿案を開く');
     expect(points).toContain('ポイントの利用を一時停止しています');
     expect(points).toContain('新しくポイントを受け取ると、この回収未済分へ自動で充てられます');
     expect(points).toContain('運営者からの説明：');
