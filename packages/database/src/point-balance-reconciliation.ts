@@ -9,6 +9,8 @@ interface PointBalanceRow {
   accountId: string;
   workspaceId: string;
   userId: string;
+  availablePoints: number;
+  recoveryDue: number;
   storedBalance: number;
   ledgerBalance: bigint;
   mismatchCount: bigint;
@@ -33,7 +35,9 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             account."id" AS "accountId",
             account."workspace_id" AS "workspaceId",
             account."user_id" AS "userId",
-            account."available_points" AS "storedBalance",
+            account."available_points" AS "availablePoints",
+            account."recovery_due" AS "recoveryDue",
+            account."available_points" - account."recovery_due" AS "storedBalance",
             account."revision" AS "revision",
             COALESCE(SUM(ledger."amount"), 0)::bigint AS "ledgerBalance"
           FROM "point_accounts" account
@@ -44,6 +48,7 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             account."workspace_id",
             account."user_id",
             account."available_points",
+            account."recovery_due",
             account."revision"
         )
         SELECT balances.*, COUNT(*) OVER() AS "mismatchCount"
@@ -59,6 +64,8 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
         accountId: row.accountId,
         workspaceId: row.workspaceId,
         userId: row.userId,
+        availablePoints: row.availablePoints,
+        recoveryDue: row.recoveryDue,
         storedBalance: row.storedBalance,
         ledgerBalance,
         difference: row.storedBalance - ledgerBalance,
@@ -96,7 +103,7 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             workspaceId: input.workspaceId,
             userId: input.userId,
           },
-          select: { id: true, availablePoints: true, revision: true },
+          select: { id: true, availablePoints: true, recoveryDue: true, revision: true },
         });
         if (!account) return null;
         const ledger = await tx.pointTransaction.aggregate({
@@ -109,11 +116,10 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
         });
         const ledgerBalance = ledger._sum.amount ?? 0;
         if (
-          account.availablePoints !== input.expectedStoredBalance ||
+          account.availablePoints - account.recoveryDue !== input.expectedStoredBalance ||
           account.revision !== input.expectedRevision ||
           ledgerBalance !== input.expectedLedgerBalance ||
-          ledgerBalance < 0 ||
-          account.availablePoints === ledgerBalance
+          account.availablePoints - account.recoveryDue === ledgerBalance
         )
           throw new ApplicationError('CONFLICT', 'point balance repair conflict');
         const changed = await tx.pointAccount.updateMany({
@@ -121,10 +127,15 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             id: input.accountId,
             workspaceId: input.workspaceId,
             userId: input.userId,
-            availablePoints: input.expectedStoredBalance,
+            availablePoints: account.availablePoints,
+            recoveryDue: account.recoveryDue,
             revision: input.expectedRevision,
           },
-          data: { availablePoints: ledgerBalance, revision: { increment: 1 } },
+          data: {
+            availablePoints: Math.max(0, ledgerBalance),
+            recoveryDue: Math.max(0, -ledgerBalance),
+            revision: { increment: 1 },
+          },
         });
         if (changed.count !== 1)
           throw new ApplicationError('CONFLICT', 'point balance repair conflict');
@@ -133,7 +144,7 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
             accountId: input.accountId,
             workspaceId: input.workspaceId,
             userId: input.userId,
-            previousBalance: account.availablePoints,
+            previousBalance: account.availablePoints - account.recoveryDue,
             repairedBalance: ledgerBalance,
             ledgerBalance,
             reason: input.reason,
@@ -142,7 +153,7 @@ export class PrismaPointBalanceReconciliationRepository implements PointBalanceR
         });
         return {
           accountId: input.accountId,
-          previousBalance: account.availablePoints,
+          previousBalance: account.availablePoints - account.recoveryDue,
           repairedBalance: ledgerBalance,
         };
       },

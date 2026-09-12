@@ -18703,6 +18703,158 @@ const pointAccountRecord = (row: Prisma.PointAccountGetPayload<object>): PointAc
   updatedAt: row.updatedAt,
 });
 
+export async function applyPointCreditToAccount(
+  tx: Prisma.TransactionClient,
+  input: { accountId: string; transactionId: string; amount: number },
+) {
+  const account = await tx.pointAccount.findUniqueOrThrow({ where: { id: input.accountId } });
+  const recoveryApplied = Math.min(account.recoveryDue, input.amount);
+  if (recoveryApplied > 0) {
+    const recoveries = await tx.pointTransaction.findMany({
+      where: { accountId: account.id, type: 'RECOVERY' },
+      include: { consumptionFor: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    let remaining = recoveryApplied;
+    for (const recovery of recoveries) {
+      const linked = recovery.consumptionFor.reduce((sum, item) => sum + item.amount, 0);
+      const outstanding = Math.max(0, Math.abs(recovery.amount) - linked);
+      const amount = Math.min(remaining, outstanding);
+      if (amount === 0) continue;
+      await tx.pointConsumptionLink.create({
+        data: {
+          consumptionTransactionId: recovery.id,
+          grantTransactionId: input.transactionId,
+          amount,
+        },
+      });
+      remaining -= amount;
+      if (remaining === 0) break;
+    }
+    if (remaining !== 0)
+      throw new ApplicationError('CONFLICT', 'point recovery attribution mismatch');
+  }
+  return tx.pointAccount.update({
+    where: { id: account.id },
+    data: {
+      recoveryDue: { decrement: recoveryApplied },
+      availablePoints: { increment: input.amount - recoveryApplied },
+      revision: { increment: 1 },
+    },
+  });
+}
+
+export async function registerPointRecovery(
+  tx: Prisma.TransactionClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    userId: string;
+    actorUserId: string;
+    amount: number;
+    idempotencyKey: string;
+    now: Date;
+  },
+) {
+  const account = await tx.pointAccount.findFirst({
+    where: { workspaceId: input.workspaceId, userId: input.userId },
+  });
+  if (!account) return null;
+  const existing = await tx.pointTransaction.findUnique({
+    where: {
+      accountId_idempotencyKey: {
+        accountId: account.id,
+        idempotencyKey: input.idempotencyKey,
+      },
+    },
+  });
+  if (
+    existing &&
+    (!['REVERSAL', 'RECOVERY'].includes(existing.type) ||
+      existing.amount !== -input.amount ||
+      existing.workspaceId !== input.workspaceId ||
+      existing.userId !== input.userId ||
+      existing.groupId !== input.groupId ||
+      existing.sourceType !== 'OPERATOR_RECOVERY' ||
+      existing.sourceId !== input.actorUserId)
+  )
+    throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
+  if (existing) return { applied: false as const };
+  const recoveredPoints = Math.min(account.availablePoints, input.amount);
+  const recoveryAdded = input.amount - recoveredPoints;
+  const changed = await tx.pointAccount.updateMany({
+    where: {
+      id: account.id,
+      availablePoints: account.availablePoints,
+      recoveryDue: account.recoveryDue,
+      revision: account.revision,
+    },
+    data: {
+      availablePoints: { decrement: recoveredPoints },
+      recoveryDue: { increment: recoveryAdded },
+      revision: { increment: 1 },
+    },
+  });
+  if (changed.count !== 1) throw new ApplicationError('CONFLICT', 'point account changed');
+  const transaction = await tx.pointTransaction.create({
+    data: {
+      accountId: account.id,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      groupId: input.groupId,
+      type: recoveryAdded > 0 ? 'RECOVERY' : 'REVERSAL',
+      amount: -input.amount,
+      idempotencyKey: input.idempotencyKey,
+      sourceType: 'OPERATOR_RECOVERY',
+      sourceId: input.actorUserId,
+      createdAt: input.now,
+    },
+  });
+  const grants = await tx.pointTransaction.findMany({
+    where: {
+      accountId: account.id,
+      type: { in: ['GRANT', 'REFUND'] },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
+    },
+    include: { consumptions: true },
+  });
+  grants.sort((left, right) =>
+    left.expiresAt === null
+      ? right.expiresAt === null
+        ? left.createdAt.getTime() - right.createdAt.getTime()
+        : 1
+      : right.expiresAt === null
+        ? -1
+        : left.expiresAt.getTime() - right.expiresAt.getTime(),
+  );
+  let remaining = recoveredPoints;
+  for (const grant of grants) {
+    const linked = grant.consumptions.reduce((sum, item) => sum + item.amount, 0);
+    const amount = Math.min(remaining, Math.max(0, grant.amount - linked));
+    if (amount === 0) continue;
+    await tx.pointConsumptionLink.create({
+      data: {
+        consumptionTransactionId: transaction.id,
+        grantTransactionId: grant.id,
+        amount,
+      },
+    });
+    remaining -= amount;
+    if (remaining === 0) break;
+  }
+  if (remaining !== 0)
+    throw new ApplicationError('CONFLICT', 'point recovery attribution mismatch');
+  const updated = await tx.pointAccount.findUniqueOrThrow({ where: { id: account.id } });
+  return {
+    applied: true as const,
+    before: pointAccountRecord(account),
+    account: pointAccountRecord(updated),
+    recoveredPoints,
+    recoveryAdded,
+    transaction: pointTransactionRecord(transaction),
+  };
+}
+
 const badgeDefinitionRecord = (
   row: Prisma.BadgeDefinitionGetPayload<object>,
 ): BadgeDefinitionRecord => ({
@@ -19444,9 +19596,10 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
               expiresAt: input.expiresAt,
             },
           });
-          const updated = await tx.pointAccount.update({
-            where: { id: account.id },
-            data: { availablePoints: { increment: input.amount }, revision: { increment: 1 } },
+          const updated = await applyPointCreditToAccount(tx, {
+            accountId: account.id,
+            transactionId: transaction.id,
+            amount: input.amount,
           });
           return {
             account: pointAccountRecord(updated),
@@ -19627,9 +19780,10 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
             sourceId: consumption.id,
           },
         });
-        const account = await tx.pointAccount.update({
-          where: { id: consumption.accountId },
-          data: { availablePoints: { increment: amount }, revision: { increment: 1 } },
+        const account = await applyPointCreditToAccount(tx, {
+          accountId: consumption.accountId,
+          transactionId: transaction.id,
+          amount,
         });
         return {
           account: pointAccountRecord(account),
@@ -19926,7 +20080,7 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
           return null;
         if (input.targetStatus !== 'CONFIRMED') {
           const refundKey = `redemption:${redemption.id}:${input.targetStatus}`;
-          await tx.pointTransaction.create({
+          const refund = await tx.pointTransaction.create({
             data: {
               accountId: redemption.accountId,
               workspaceId: redemption.workspaceId,
@@ -19938,12 +20092,10 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
               sourceId: redemption.consumptionTransactionId,
             },
           });
-          await tx.pointAccount.update({
-            where: { id: redemption.accountId },
-            data: {
-              availablePoints: { increment: redemption.pointCost },
-              revision: { increment: 1 },
-            },
+          await applyPointCreditToAccount(tx, {
+            accountId: redemption.accountId,
+            transactionId: refund.id,
+            amount: redemption.pointCost,
           });
         }
         const updated = await tx.pointRedemption.update({
@@ -19988,7 +20140,7 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
             },
           });
           if (claimed.count !== 1) return false;
-          await tx.pointTransaction.create({
+          const refund = await tx.pointTransaction.create({
             data: {
               accountId: redemption.accountId,
               workspaceId: redemption.workspaceId,
@@ -20000,12 +20152,10 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
               sourceId: redemption.consumptionTransactionId,
             },
           });
-          await tx.pointAccount.update({
-            where: { id: redemption.accountId },
-            data: {
-              availablePoints: { increment: redemption.pointCost },
-              revision: { increment: 1 },
-            },
+          await applyPointCreditToAccount(tx, {
+            accountId: redemption.accountId,
+            transactionId: refund.id,
+            amount: redemption.pointCost,
           });
           return true;
         },
@@ -20332,7 +20482,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
               });
               if (reserved.count !== 1) continue;
             }
-            await tx.pointTransaction.create({
+            const transaction = await tx.pointTransaction.create({
               data: {
                 accountId: account.id,
                 workspaceId: input.workspaceId,
@@ -20348,12 +20498,10 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
                 expiresAt: pointExpiry(input.occurredAt),
               },
             });
-            await tx.pointAccount.update({
-              where: { id: account.id },
-              data: {
-                availablePoints: { increment: rule.grantAmount },
-                revision: { increment: 1 },
-              },
+            await applyPointCreditToAccount(tx, {
+              accountId: account.id,
+              transactionId: transaction.id,
+              amount: rule.grantAmount,
             });
             granted = true;
           }

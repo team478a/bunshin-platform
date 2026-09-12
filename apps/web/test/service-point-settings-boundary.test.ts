@@ -22,11 +22,14 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('groupId: service.serviceId');
     expect(page).toContain("action: 'POINT_RULES_UPDATED'");
     expect(page).toContain("action: 'POINT_BONUS_GRANTED'");
-    expect(page).toContain("action: 'POINT_BALANCE_CORRECTED'");
-    expect(page).toContain("type: 'REVERSAL'");
-    expect(page).toContain('availablePoints: { gte: parsed.data.amount }');
-    expect(page).toContain('recoveryDue: 0');
-    expect(page).toContain('tx.pointConsumptionLink.create');
+    expect(page).toContain("action: 'POINT_RECOVERY_REGISTERED'");
+    expect(processor).toContain("type: recoveryAdded > 0 ? 'RECOVERY' : 'REVERSAL'");
+    expect(processor).toContain('recoveryDue: { increment: recoveryAdded }');
+    expect(processor).toContain(
+      'recoveredPoints = Math.min(account.availablePoints, input.amount)',
+    );
+    expect(processor).toContain('tx.pointConsumptionLink.create');
+    expect(page).toContain('db.registerPointRecovery');
     expect(page).toContain('parsed.data.userId === actor.userId');
     expect(page).toContain('memberships.filter(({ userId }) => userId !== actor.userId)');
     expect(page).toContain('運営者自身への付与はできません。');
@@ -36,9 +39,19 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('operationId: z.uuid()');
     expect(page).toContain('name="operationId" value={randomUUID()}');
     expect(page).toContain('`operator-bonus:${parsed.data.operationId}`');
-    expect(page).toContain('`operator-correction:${parsed.data.operationId}`');
+    expect(page).toContain('`operator-recovery:${parsed.data.operationId}`');
     expect(page).toContain('accountId_idempotencyKey');
     expect(page).toContain('if (existing) return;');
+  });
+
+  it('shows recovery debt and explains that future points settle it before redemption', () => {
+    expect(page).toContain('誤付与ポイントを回収');
+    expect(page).toContain('回収未済');
+    expect(page).toContain('その後にもらうポイントは、回収未済分へ自動で充てられます。');
+    expect(page).toContain('recoveryDue: true');
+    expect(processor).toContain('applyPointCreditToAccount');
+    expect(processor).toContain("type: 'RECOVERY'");
+    expect(processor).toContain('recoveryDue: { decrement: recoveryApplied }');
   });
 
   it('lets a scoped suspended rule override the global default', () => {

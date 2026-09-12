@@ -70,4 +70,26 @@ describe('point balance reconciliation', () => {
       }),
     ).rejects.toThrow('invalid point balance repair');
   });
+
+  it('allows a negative ledger total that represents outstanding recovery', async () => {
+    const repair = vi.fn().mockResolvedValue({
+      accountId: 'account-1',
+      previousBalance: -10,
+      repairedBalance: -15,
+    });
+    const repository: PointBalanceReconciliationRepository = { inspect: vi.fn(), repair };
+
+    await expect(
+      new RepairPointBalance(repository).execute({
+        accountId: 'account-1',
+        workspaceId: 'workspace-1',
+        userId: 'user-1',
+        actorUserId: 'admin-1',
+        expectedStoredBalance: -10,
+        expectedLedgerBalance: -15,
+        expectedRevision: 3,
+        reason: '回収未済額と履歴の差を確認したため',
+      }),
+    ).resolves.toEqual({ accountId: 'account-1', previousBalance: -10, repairedBalance: -15 });
+  });
 });

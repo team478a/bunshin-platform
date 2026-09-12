@@ -152,9 +152,23 @@ export default async function PointsPage({
       actorUserId: user.userId,
     })
     .catch(() => []);
+  const recoveryNotice =
+    dashboard.account.recoveryDue > 0
+      ? await db.prisma.serviceConfigurationAudit.findFirst({
+          where: {
+            workspaceId: workspace.id,
+            groupId: serviceContext.groupId,
+            action: 'POINT_RECOVERY_REGISTERED',
+            afterData: { path: ['userId'], equals: user.userId },
+          },
+          select: { reason: true, occurredAt: true },
+          orderBy: { occurredAt: 'desc' },
+        })
+      : null;
   const pointUseOptions = buildPointUseOptions({
     catalog,
     availablePoints: dashboard.account.availablePoints,
+    recoveryDue: dashboard.account.recoveryDue,
     destinations: {
       ...(alternativePlanHref
         ? {
@@ -189,6 +203,18 @@ export default async function PointsPage({
       />
 
       <RewardsPilotExpiryNoticeCard notice={pilotExpiryNotice} />
+
+      {dashboard.account.recoveryDue > 0 ? (
+        <section className="notice notice--danger" aria-labelledby="point-recovery-title">
+          <h2 id="point-recovery-title">ポイントの利用を一時停止しています</h2>
+          <p>
+            訂正対象のうち、まだ回収できていないポイントが
+            <strong>{dashboard.account.recoveryDue.toLocaleString('ja-JP')} WP</strong>あります。
+          </p>
+          <p>新しくポイントを受け取ると、この回収未済分へ自動で充てられます。</p>
+          {recoveryNotice ? <p>運営者からの説明：{recoveryNotice.reason}</p> : null}
+        </section>
+      ) : null}
 
       <section className="point-balance" aria-labelledby="point-balance-title">
         <span id="point-balance-title">いま使えるポイント</span>
@@ -265,14 +291,29 @@ export default async function PointsPage({
                   <b>{option.pointCost} WP</b>
                 </div>
                 <p>{option.description}</p>
-                <p className={option.pointsNeeded === 0 ? 'is-ready' : 'is-waiting'}>
-                  {option.pointsNeeded === 0
-                    ? 'いま使えます'
-                    : `あと ${option.pointsNeeded} WP たまると使えます`}
+                <p
+                  className={
+                    option.blockedByRecovery
+                      ? 'is-waiting'
+                      : option.pointsNeeded === 0
+                        ? 'is-ready'
+                        : 'is-waiting'
+                  }
+                >
+                  {option.blockedByRecovery
+                    ? 'ポイントの訂正が終わるまで利用できません'
+                    : option.pointsNeeded === 0
+                      ? 'いま使えます'
+                      : `あと ${option.pointsNeeded} WP たまると使えます`}
                 </p>
-                <Link className="button button--secondary button--full" href={option.href as Route}>
-                  {option.actionLabel}
-                </Link>
+                {option.blockedByRecovery ? null : (
+                  <Link
+                    className="button button--secondary button--full"
+                    href={option.href as Route}
+                  >
+                    {option.actionLabel}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

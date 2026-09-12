@@ -14,7 +14,7 @@ const repairSchema = z.object({
   workspaceId: z.uuid(),
   userId: z.uuid(),
   expectedStoredBalance: z.coerce.number().int(),
-  expectedLedgerBalance: z.coerce.number().int().nonnegative(),
+  expectedLedgerBalance: z.coerce.number().int(),
   expectedRevision: z.coerce.number().int().nonnegative(),
   reason: z.string().trim().min(10).max(1000),
 });
@@ -113,36 +113,32 @@ export default async function PointBalanceAdminPage({
               <article className="settings-card" key={item.accountId}>
                 <h3>利用者ID：{item.userId}</h3>
                 <p>
-                  表示残高：<strong>{item.storedBalance} WP</strong>／履歴の合計：
+                  利用可能：<strong>{item.availablePoints} WP</strong>／回収未済：
+                  <strong>{item.recoveryDue} WP</strong>／差引残高：
+                  <strong>{item.storedBalance} WP</strong>／履歴の合計：
                   <strong>{item.ledgerBalance} WP</strong>／差：{item.difference} WP
                 </p>
-                {item.ledgerBalance < 0 ? (
-                  <p className="notice notice--danger">
-                    履歴の合計がマイナスのため、この画面では修復できません。
-                  </p>
-                ) : (
-                  <form action={repairBalance} className="form-stack">
-                    <input type="hidden" name="accountId" value={item.accountId} />
-                    <input type="hidden" name="workspaceId" value={item.workspaceId} />
-                    <input type="hidden" name="userId" value={item.userId} />
-                    <input type="hidden" name="expectedStoredBalance" value={item.storedBalance} />
-                    <input type="hidden" name="expectedLedgerBalance" value={item.ledgerBalance} />
-                    <input type="hidden" name="expectedRevision" value={item.revision} />
-                    <label className="field">
-                      <span className="field__label">修復する理由（10文字以上）</span>
-                      <textarea
-                        className="field__control"
-                        name="reason"
-                        minLength={10}
-                        maxLength={1000}
-                        required
-                      />
-                    </label>
-                    <button className="button" type="submit">
-                      表示残高を{item.ledgerBalance} WPへ修復する
-                    </button>
-                  </form>
-                )}
+                <form action={repairBalance} className="form-stack">
+                  <input type="hidden" name="accountId" value={item.accountId} />
+                  <input type="hidden" name="workspaceId" value={item.workspaceId} />
+                  <input type="hidden" name="userId" value={item.userId} />
+                  <input type="hidden" name="expectedStoredBalance" value={item.storedBalance} />
+                  <input type="hidden" name="expectedLedgerBalance" value={item.ledgerBalance} />
+                  <input type="hidden" name="expectedRevision" value={item.revision} />
+                  <label className="field">
+                    <span className="field__label">修復する理由（10文字以上）</span>
+                    <textarea
+                      className="field__control"
+                      name="reason"
+                      minLength={10}
+                      maxLength={1000}
+                      required
+                    />
+                  </label>
+                  <button className="button" type="submit">
+                    差引残高を{item.ledgerBalance} WPへ修復する
+                  </button>
+                </form>
               </article>
             ))}
             {result.mismatchCount > result.mismatches.length ? (

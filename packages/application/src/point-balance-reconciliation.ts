@@ -4,6 +4,8 @@ export interface PointBalanceMismatch {
   accountId: string;
   workspaceId: string;
   userId: string;
+  availablePoints: number;
+  recoveryDue: number;
   storedBalance: number;
   ledgerBalance: number;
   difference: number;
@@ -57,7 +59,6 @@ export class RepairPointBalance {
       !input.actorUserId ||
       !Number.isSafeInteger(input.expectedStoredBalance) ||
       !Number.isSafeInteger(input.expectedLedgerBalance) ||
-      input.expectedLedgerBalance < 0 ||
       !Number.isSafeInteger(input.expectedRevision) ||
       input.expectedRevision < 0 ||
       reason.length < 10 ||
