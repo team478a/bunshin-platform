@@ -16,7 +16,7 @@ import { RewardsServiceSelector } from '../../ui/rewards-service-selector';
 export const dynamic = 'force-dynamic';
 
 const ruleLabels: Record<string, string> = {
-  MISSION_VIEWED_DAILY: '今日の企画をはじめて見る',
+  MISSION_VIEWED_DAILY: 'その日に初めて投稿案を見る',
   POSTED_DAILY: 'SNSへ投稿した後に「投稿しました」を押す',
   POSTED_WEEKLY_3: '「投稿しました」の記録が1週間に3回になる',
 };
@@ -29,6 +29,13 @@ const transactionLabels: Record<PointTransactionType, string> = {
   EXPIRE: '期限が切れました',
   RECOVERY: '不足分を回収しました',
 };
+
+const redemptionStatusLabels = {
+  RESERVED: '処理中',
+  CONFIRMED: '交換完了',
+  RELEASED: '取り消し・ポイント返却',
+  REFUNDED: 'ポイント返却済み',
+} as const;
 
 const date = (value: Date) =>
   new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' }).format(value);
@@ -129,9 +136,28 @@ export default async function PointsPage({
   });
   const serviceSlug = serviceContext.serviceSlug;
   const bunshinId = service?.bunshins[0]?.id;
+  const latestMission = serviceSlug
+    ? await db.prisma.dailyMission.findFirst({
+        where: {
+          workspaceId: workspace.id,
+          bunshin: {
+            ownerUserId: user.userId,
+            groupId: serviceContext.groupId,
+            status: { not: 'ARCHIVED' },
+          },
+        },
+        select: { id: true },
+        orderBy: [{ missionDate: 'desc' }, { createdAt: 'desc' }],
+      })
+    : null;
+  const latestMissionHref =
+    serviceSlug && latestMission
+      ? (`/points/open-mission?serviceSlug=${encodeURIComponent(serviceSlug)}` as Route)
+      : null;
   const alternativePlanHref = serviceSlug
     ? bunshinId
-      ? `/s/${encodeURIComponent(serviceSlug)}/bunshins/${bunshinId}#today-post`
+      ? (latestMissionHref ??
+        `/s/${encodeURIComponent(serviceSlug)}/bunshins/${bunshinId}#today-post`)
       : `/s/${encodeURIComponent(serviceSlug)}/bunshins`
     : null;
   const imageAccess = serviceSlug
@@ -152,6 +178,23 @@ export default async function PointsPage({
       actorUserId: user.userId,
     })
     .catch(() => []);
+  const recentRedemptions = await db.prisma.pointRedemption.findMany({
+    where: {
+      workspaceId: workspace.id,
+      userId: user.userId,
+      consumptionTransaction: { groupId: serviceContext.groupId },
+    },
+    select: {
+      id: true,
+      status: true,
+      pointCost: true,
+      createdAt: true,
+      confirmedAt: true,
+      catalogItem: { select: { title: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  });
   const recoveryNotice = await db.prisma.serviceConfigurationAudit.findFirst({
     where: {
       workspaceId: workspace.id,
@@ -171,7 +214,11 @@ export default async function PointsPage({
         ? {
             ALTERNATIVE_PLAN_GENERATION: {
               href: alternativePlanHref,
-              actionLabel: bunshinId ? '今日の投稿案を開く' : '投稿パートナーを作る',
+              actionLabel: latestMissionHref
+                ? '最新の投稿案を開く'
+                : bunshinId
+                  ? '投稿案を準備する'
+                  : '投稿パートナーを作る',
             },
           }
         : {}),
@@ -281,6 +328,12 @@ export default async function PointsPage({
         ) : (
           <p>いま利用できる、ため方はありません。</p>
         )}
+        {latestMissionHref &&
+        dashboard.earningMethods.some(({ ruleKey }) => ruleKey === 'MISSION_VIEWED_DAILY') ? (
+          <Link className="button button--primary button--full" href={latestMissionHref}>
+            最新の投稿案を開いてポイントをためる
+          </Link>
+        ) : null}
         <p>
           「投稿しました」は自己申告です。SNSへの実際の投稿は自動確認されません。実際に投稿した後で記録してください。
         </p>
@@ -334,7 +387,7 @@ export default async function PointsPage({
       <section className="settings-card" aria-labelledby="point-reflection-title">
         <h2 id="point-reflection-title">ポイントが増えるまで</h2>
         <ol className="reward-help-steps">
-          <li>今日の投稿案を開く、またはSNSへの投稿を記録します。</li>
+          <li>最新の投稿案を開く、またはSNSへの投稿を記録します。</li>
           <li>通常1分ほど待ち、このページを開き直します。</li>
           <li>増えた内容は、下の「最近の履歴」で確認できます。</li>
         </ol>
@@ -349,6 +402,28 @@ export default async function PointsPage({
         >
           バッジの進み具合を見る
         </Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="redemption-history-title">
+        <h2 id="redemption-history-title">最近のポイント交換</h2>
+        {recentRedemptions.length ? (
+          <ul className="point-history">
+            {recentRedemptions.map((redemption) => (
+              <li key={redemption.id}>
+                <span>
+                  <strong>{redemption.catalogItem.title}</strong>
+                  <small>
+                    {redemptionStatusLabels[redemption.status]}・
+                    {date(redemption.confirmedAt ?? redemption.createdAt)}
+                  </small>
+                </span>
+                <b>-{redemption.pointCost} WP</b>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>ポイント交換の履歴はまだありません。</p>
+        )}
       </section>
 
       <section className="settings-card" aria-labelledby="point-history-title">

@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 const acquiredReason: Record<string, string> = {
   BUNSHIN_CREATED: 'はじめて分身を作ったため',
   STRATEGY_APPROVED: '発信の作戦を決めたため',
-  MISSION_VIEWED: '今日の企画を確認したため',
+  MISSION_VIEWED: '投稿案を確認したため',
   MISSION_ACCEPTED: '企画を使うと決めたため',
   POSTED: '投稿を完了したため',
   FEEDBACK_RECORDED: '投稿の感想を伝えたため',
@@ -130,7 +130,7 @@ export default async function BadgesPage({
       <section className="settings-card" aria-labelledby="badge-reflection-title">
         <h2 id="badge-reflection-title">バッジが増えるまで</h2>
         <ol className="reward-help-steps">
-          <li>今日の投稿案を確認し、投稿などの行動を記録します。</li>
+          <li>最新の投稿案を確認し、投稿などの行動を記録します。</li>
           <li>通常1分ほど待ち、このページを開き直します。</li>
           <li>獲得したバッジと、次の目標を下で確認します。</li>
         </ol>
@@ -182,7 +182,7 @@ export default async function BadgesPage({
             ))}
           </div>
         ) : (
-          <p>最初のバッジを目指して、今日の企画を見てみましょう。</p>
+          <p>最初のバッジを目指して、最新の投稿案を見てみましょう。</p>
         )}
       </section>
 

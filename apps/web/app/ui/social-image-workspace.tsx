@@ -646,9 +646,7 @@ export function SocialImageWorkspace({
         {payment.mode === 'POINTS' &&
         payment.pointCost !== null &&
         payment.availablePoints < payment.pointCost ? (
-          <p className="form-help">
-            ポイントが足りません。今日の企画確認や投稿完了でためられます。
-          </p>
+          <p className="form-help">ポイントが足りません。投稿案の確認や投稿完了でためられます。</p>
         ) : null}
       </section>
     </div>

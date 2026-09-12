@@ -140,6 +140,13 @@ async function pointRows(workspaceId: string, groupId: string) {
       createdAt: true,
       user: { select: { displayName: true, email: true } },
       ruleVersion: { select: { ruleKey: true, version: true } },
+      redemption: {
+        select: {
+          status: true,
+          pointCost: true,
+          catalogItem: { select: { title: true } },
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -156,6 +163,9 @@ async function pointRows(workspaceId: string, groupId: string) {
       'ルール版',
       '発生元',
       '発生元ID',
+      '交換内容',
+      '交換状態',
+      '交換WP',
       '有効期限',
     ],
     ...transactions.map((transaction) => [
@@ -170,6 +180,9 @@ async function pointRows(workspaceId: string, groupId: string) {
       transaction.ruleVersion?.version ?? '',
       transaction.sourceType,
       transaction.sourceId ?? '',
+      transaction.redemption?.catalogItem.title ?? '',
+      transaction.redemption?.status ?? '',
+      transaction.redemption?.pointCost ?? '',
       timestamp(transaction.expiresAt),
     ]),
   ];

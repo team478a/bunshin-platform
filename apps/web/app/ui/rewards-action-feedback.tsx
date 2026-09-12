@@ -14,7 +14,7 @@ export function RewardsActionFeedback({
     <div className="notice notice--success" role="status" aria-live="polite">
       <strong>ポイント対象として記録しました。</strong>
       <p>
-        {action === 'POSTED' ? '投稿完了' : '今日の企画確認'}
+        {action === 'POSTED' ? '投稿完了' : '投稿案の確認'}
         のポイントは通常1分以内に反映されます。1日1回までのため、今日すでに受け取っている場合は増えません。
       </p>
       <a
