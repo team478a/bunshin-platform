@@ -58,11 +58,25 @@ describe('PrismaProductionGateEvidenceRepository', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('専用URL確認まで揃った場合だけ最終承認を保存する', async () => {
+  it('無料運用開始の実機確認が不足していれば最終承認を保存しない', async () => {
     const { subject, create } = repository([
       ...legacyChecks,
       'TREND_RESEARCH_SMOKE',
       'EXTERNAL_TRACKING_SMOKE',
+    ]);
+    await expect(subject.append(input)).resolves.toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('無料運用開始の実機確認まで揃った場合だけ最終承認を保存する', async () => {
+    const { subject, create } = repository([
+      ...legacyChecks,
+      'TREND_RESEARCH_SMOKE',
+      'EXTERNAL_TRACKING_SMOKE',
+      'DAILY_MISSION_LINE_SMOKE',
+      'TRACKING_LINK_NOTIFICATION_SMOKE',
+      'REFERRAL_SHARE_SMOKE',
+      'DUPLICATE_PREVENTION_SMOKE',
     ]);
     await expect(subject.append(input)).resolves.toMatchObject({ checkKey: 'FINAL_APPROVAL' });
     expect(create).toHaveBeenCalledOnce();

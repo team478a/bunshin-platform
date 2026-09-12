@@ -15,6 +15,7 @@ import {
   normalizePersonalityVersionContent,
   GENERATION_CONTEXT_SNAPSHOT_SCHEMA_VERSION,
   LINE_ADMIN_RETRYABLE_FAILURES,
+  PRODUCTION_GATE_REQUIRED_CHECK_KEYS,
   VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES,
   VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
@@ -10475,17 +10476,8 @@ export class PrismaProductionGateEvidenceRepository implements ProductionGateEvi
           select: { checkKey: true, action: true },
         });
         const latest = new Map(rows.map((row) => [row.checkKey, row.action]));
-        const required = [
-          'BACKUP_RESTORE',
-          'MIGRATION_HEALTH',
-          'AUTH_SMOKE',
-          'FREE_MVP_SMOKE',
-          'ACCOUNT_DELETION_DRY_RUN',
-          'LINE_GO_NO_GO',
-          'TREND_RESEARCH_SMOKE',
-          'EXTERNAL_TRACKING_SMOKE',
-        ] as const;
-        if (!required.every((key) => latest.get(key) === 'RECORDED')) return null;
+        if (!PRODUCTION_GATE_REQUIRED_CHECK_KEYS.every((key) => latest.get(key) === 'RECORDED'))
+          return null;
       }
       return productionGateEvidence(await tx.productionGateEvidence.create({ data: input }));
     });

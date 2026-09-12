@@ -31,7 +31,7 @@ export default async function OperationsGuidePage() {
       </section>
 
       <section className="settings-card" id="production-gate">
-        <h2>100人検証を始める前の手順</h2>
+        <h2>無料運用を始める前の手順</h2>
         <p>次の項目は、管理画面だけでは安全を確認できません。結果を運用記録へ残します。</p>
         <ol>
           <li>最新mainのMigrationとHealth Smokeが成功していることを確認する</li>
@@ -44,6 +44,10 @@ export default async function OperationsGuidePage() {
           <li>
             テスト用の専用URLを登録し、スマートフォンで投稿案への挿入、コピー、使用履歴、停止後の拒否を確認する
           </li>
+          <li>今日やることを1件作り、共通LINEの案内から同じ投稿案を開く</li>
+          <li>専用URLの使用開始と修正依頼を各1回行い、本人のLINEへ届くことを確認する</li>
+          <li>紹介URLをLINEへ共有し、QRコードを別端末で読み取って参加画面を開く</li>
+          <li>同じ日付の定期処理を再実行し、投稿案とLINE通知が1件だけであることを確認する</li>
           <li>対象commit、実施日時、担当者、結果を記録し、責任者が承認する</li>
         </ol>
         <p>すべて終わるまでは、管理画面の自動確認が緑でも利用者募集を開始しません。</p>

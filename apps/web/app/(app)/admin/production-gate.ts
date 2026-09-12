@@ -152,6 +152,38 @@ export function productionGateChecklist(input: {
       href: '/admin/guide',
     },
     {
+      code: 'DAILY_MISSION_LINE_SMOKE',
+      title: '今日やることを共通LINEで受け取る',
+      status: manualStatus('DAILY_MISSION_LINE_SMOKE'),
+      guidance:
+        'テスト参加者で今日やることを1件作り、共通LINEへ届いた案内から同じ内容を開けることを確認します。',
+      href: '/admin/guide',
+    },
+    {
+      code: 'TRACKING_LINK_NOTIFICATION_SMOKE',
+      title: '専用URLの開始・修正通知を受け取る',
+      status: manualStatus('TRACKING_LINK_NOTIFICATION_SMOKE'),
+      guidance:
+        'テスト用の専用URLで、使用開始と修正依頼を各1回行い、対象参加者へLINE通知が届くことを確認します。',
+      href: '/admin/guide',
+    },
+    {
+      code: 'REFERRAL_SHARE_SMOKE',
+      title: '紹介URLをLINE共有・QR読取する',
+      status: manualStatus('REFERRAL_SHARE_SMOKE'),
+      guidance:
+        '紹介URLをLINEへ共有し、QRコードを別端末で読み取り、どちらも正しい参加画面を開くことを確認します。',
+      href: '/admin/guide',
+    },
+    {
+      code: 'DUPLICATE_PREVENTION_SMOKE',
+      title: '同じ日の重複作成・重複配信がない',
+      status: manualStatus('DUPLICATE_PREVENTION_SMOKE'),
+      guidance:
+        '同じ参加者・サービス・日付で定期処理を再実行し、今日やることもLINE通知も1件だけであることを確認します。',
+      href: '/admin/guide',
+    },
+    {
       code: 'HUMAN_APPROVAL',
       title: '責任者の最終承認',
       status: manualStatus('FINAL_APPROVAL'),

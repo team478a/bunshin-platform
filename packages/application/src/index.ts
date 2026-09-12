@@ -1439,9 +1439,16 @@ export const PRODUCTION_GATE_CHECK_KEYS = [
   'LINE_GO_NO_GO',
   'TREND_RESEARCH_SMOKE',
   'EXTERNAL_TRACKING_SMOKE',
+  'DAILY_MISSION_LINE_SMOKE',
+  'TRACKING_LINK_NOTIFICATION_SMOKE',
+  'REFERRAL_SHARE_SMOKE',
+  'DUPLICATE_PREVENTION_SMOKE',
   'FINAL_APPROVAL',
 ] as const;
 export type ProductionGateCheckKey = (typeof PRODUCTION_GATE_CHECK_KEYS)[number];
+export const PRODUCTION_GATE_REQUIRED_CHECK_KEYS = PRODUCTION_GATE_CHECK_KEYS.filter(
+  (key) => key !== 'FINAL_APPROVAL',
+);
 export interface ProductionGateEvidence {
   id: string;
   environment: 'PRODUCTION';
@@ -1452,6 +1459,29 @@ export interface ProductionGateEvidence {
   evidenceUrl: string | null;
   actorUserId: string;
   occurredAt: Date;
+}
+export function currentProductionGateRecordedChecks(
+  events: ReadonlyArray<
+    Pick<ProductionGateEvidence, 'checkKey' | 'action'> & { occurredAt: Date | string }
+  >,
+) {
+  const latest = new Map(events.map((event) => [event.checkKey, event] as const));
+  const recorded = new Set(
+    [...latest].filter(([, event]) => event.action === 'RECORDED').map(([checkKey]) => checkKey),
+  );
+  const finalApproval = latest.get('FINAL_APPROVAL');
+  const finalApprovalTime = finalApproval ? new Date(finalApproval.occurredAt).getTime() : 0;
+  const finalApprovalIsCurrent =
+    finalApproval?.action === 'RECORDED' &&
+    Number.isFinite(finalApprovalTime) &&
+    PRODUCTION_GATE_REQUIRED_CHECK_KEYS.every((checkKey) => {
+      const event = latest.get(checkKey);
+      return (
+        event?.action === 'RECORDED' && new Date(event.occurredAt).getTime() <= finalApprovalTime
+      );
+    });
+  if (!finalApprovalIsCurrent) recorded.delete('FINAL_APPROVAL');
+  return recorded;
 }
 export interface ProductionGateEvidenceRepository {
   list(input: {

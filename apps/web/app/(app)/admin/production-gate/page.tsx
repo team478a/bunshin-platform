@@ -19,9 +19,9 @@ export default async function ProductionGateEvidencePage() {
   return (
     <main className="app-page">
       <p className="eyebrow">運用管理</p>
-      <h1>本番開始の確認記録</h1>
+      <h1>無料運用開始の確認記録</h1>
       <p>
-        実際に確認した項目だけを記録してください。最終承認は、それ以外の確認がすべて有効な場合だけ保存できます。
+        本番のスマートフォンとLINEで実際に確認した項目だけを記録してください。最終承認は、それ以外の確認がすべて有効な場合だけ保存できます。
       </p>
       <ProductionGateEvidenceEditor
         commitSha={commitSha}
