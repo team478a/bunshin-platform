@@ -448,6 +448,7 @@ async function pilotRows(workspaceId: string, groupId: string, now: Date) {
       where: {
         workspaceId,
         userId: { in: participantIds },
+        consumptionTransaction: { groupId },
         status: 'CONFIRMED',
         confirmedAt: timestampRange,
       },

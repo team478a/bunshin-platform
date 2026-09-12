@@ -159,7 +159,11 @@ export default async function ServiceBunshinDetailPage({
       ),
     );
     variantPointCost = await new ListPointRewardCatalog(new db.PrismaPointRedemptionRepository())
-      .execute({ workspaceId: service.workspaceId, actorUserId: actor.userId })
+      .execute({
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        actorUserId: actor.userId,
+      })
       .then(
         (catalog) =>
           catalog.find(({ rewardType }) => rewardType === 'ALTERNATIVE_PLAN_GENERATION')

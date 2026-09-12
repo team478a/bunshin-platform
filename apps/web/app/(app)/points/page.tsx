@@ -130,7 +130,11 @@ export default async function PointsPage({
         .catch(() => null)
     : null;
   const catalog = await new ListPointRewardCatalog(new db.PrismaPointRedemptionRepository())
-    .execute({ workspaceId: workspace.id, actorUserId: user.userId })
+    .execute({
+      workspaceId: workspace.id,
+      groupId: pilotAccess.groupId,
+      actorUserId: user.userId,
+    })
     .catch(() => []);
   const pointUseOptions = buildPointUseOptions({
     catalog,

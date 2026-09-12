@@ -20,6 +20,7 @@ import {
   VIDEO_RENDER_ADMIN_RETRYABLE_FAILURES,
   selectExternalTrackingLink,
   isLineNotificationSuppressed,
+  applyPointRewardSettings,
 } from '@bunshin/application';
 import type {
   AccountTransaction,
@@ -19640,7 +19641,19 @@ const pointRedemptionRecord = (
 export class PrismaPointRedemptionRepository implements PointRedemptionRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  private async activeMember(workspaceId: string, userId: string) {
+  private async activeMember(workspaceId: string, userId: string, groupId?: string | null) {
+    if (groupId)
+      return this.client.groupMembership.findFirst({
+        where: {
+          workspaceId,
+          groupId,
+          userId,
+          status: 'ACTIVE',
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+          user: { status: 'ACTIVE' },
+        },
+        select: { id: true },
+      });
     return this.client.workspaceMembership.findFirst({
       where: {
         workspaceId,
@@ -19654,35 +19667,63 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
   }
 
   async listCatalog(input: Parameters<PointRedemptionRepository['listCatalog']>[0]) {
-    if (!(await this.activeMember(input.workspaceId, input.actorUserId))) return null;
-    const rows = await this.client.pointRewardCatalogItem.findMany({
-      where: {
-        status: 'ACTIVE',
-        OR: [{ startsAt: null }, { startsAt: { lte: input.now } }],
-        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] }],
-      },
-      orderBy: [{ rewardKey: 'asc' }, { version: 'desc' }],
-    });
+    if (!(await this.activeMember(input.workspaceId, input.actorUserId, input.groupId)))
+      return null;
+    const [rows, settings] = await Promise.all([
+      this.client.pointRewardCatalogItem.findMany({
+        where: {
+          status: 'ACTIVE',
+          OR: [{ startsAt: null }, { startsAt: { lte: input.now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] }],
+        },
+        orderBy: [{ rewardKey: 'asc' }, { version: 'desc' }],
+      }),
+      input.groupId
+        ? this.client.servicePointRewardSetting.findMany({
+            where: { workspaceId: input.workspaceId, groupId: input.groupId },
+            select: { rewardType: true, status: true, pointCost: true },
+          })
+        : Promise.resolve([]),
+    ]);
     const unique = new Map<string, (typeof rows)[number]>();
     rows.forEach((row) => {
       if (!unique.has(row.rewardKey)) unique.set(row.rewardKey, row);
     });
-    return [...unique.values()].map(pointCatalogItemRecord);
+    return applyPointRewardSettings(
+      [...unique.values()].map(pointCatalogItemRecord),
+      settings.map((setting) => ({
+        rewardType: setting.rewardType,
+        status: setting.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+        pointCost: setting.pointCost,
+      })),
+    );
   }
 
   async reserve(input: Parameters<PointRedemptionRepository['reserve']>[0]) {
     return this.client.$transaction(
       async (tx) => {
-        const member = await tx.workspaceMembership.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            userId: input.actorUserId,
-            status: 'ACTIVE',
-            workspace: { status: 'ACTIVE' },
-            user: { status: 'ACTIVE' },
-          },
-          select: { id: true },
-        });
+        const member = input.groupId
+          ? await tx.groupMembership.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                userId: input.actorUserId,
+                status: 'ACTIVE',
+                group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+                user: { status: 'ACTIVE' },
+              },
+              select: { id: true },
+            })
+          : await tx.workspaceMembership.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                userId: input.actorUserId,
+                status: 'ACTIVE',
+                workspace: { status: 'ACTIVE' },
+                user: { status: 'ACTIVE' },
+              },
+              select: { id: true },
+            });
         if (!member) return null;
         const account = await tx.pointAccount.findUnique({
           where: {
@@ -19697,12 +19738,15 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
               idempotencyKey: input.idempotencyKey,
             },
           },
+          include: { consumptionTransaction: { select: { groupId: true } } },
         });
         if (existing) {
           if (
             existing.catalogItemId !== input.catalogItemId ||
             existing.resourceType !== input.resourceType ||
-            existing.resourceId !== input.resourceId
+            existing.resourceId !== input.resourceId ||
+            (existing.consumptionTransaction.groupId !== null &&
+              existing.consumptionTransaction.groupId !== (input.groupId ?? null))
           )
             throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
           return pointRedemptionRecord(existing);
@@ -19716,9 +19760,27 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
           },
         });
         if (!item) return null;
+        const setting = input.groupId
+          ? await tx.servicePointRewardSetting.findUnique({
+              where: {
+                workspaceId_groupId_rewardType: {
+                  workspaceId: input.workspaceId,
+                  groupId: input.groupId,
+                  rewardType: item.rewardType,
+                },
+              },
+              select: { status: true, pointCost: true },
+            })
+          : null;
+        if (setting && setting.status !== 'ACTIVE') return null;
+        const pointCost = setting?.pointCost ?? item.pointCost;
+        if (input.expectedPointCost !== undefined && input.expectedPointCost !== pointCost)
+          throw new ApplicationError('CONFLICT', 'point reward cost changed', {
+            currentPointCost: pointCost,
+          });
         const changed = await tx.pointAccount.updateMany({
-          where: { id: account.id, availablePoints: { gte: item.pointCost }, recoveryDue: 0 },
-          data: { availablePoints: { decrement: item.pointCost }, revision: { increment: 1 } },
+          where: { id: account.id, availablePoints: { gte: pointCost }, recoveryDue: 0 },
+          data: { availablePoints: { decrement: pointCost }, revision: { increment: 1 } },
         });
         if (changed.count !== 1) return null;
         const consumption = await tx.pointTransaction.create({
@@ -19726,8 +19788,9 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
             accountId: account.id,
             workspaceId: input.workspaceId,
             userId: input.actorUserId,
+            groupId: input.groupId ?? null,
             type: 'CONSUME',
-            amount: -item.pointCost,
+            amount: -pointCost,
             idempotencyKey: `redemption:${input.idempotencyKey}`,
             sourceType: 'POINT_REDEMPTION',
             sourceId: null,
@@ -19746,7 +19809,7 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
           if (right.expiresAt === null) return -1;
           return left.expiresAt.getTime() - right.expiresAt.getTime();
         });
-        let remaining = item.pointCost;
+        let remaining = pointCost;
         for (const grant of grants) {
           const used = grant.consumptions.reduce((sum, link) => sum + link.amount, 0);
           const amount = Math.min(remaining, Math.max(0, grant.amount - used));
@@ -19770,7 +19833,7 @@ export class PrismaPointRedemptionRepository implements PointRedemptionRepositor
             accountId: account.id,
             catalogItemId: item.id,
             consumptionTransactionId: consumption.id,
-            pointCost: item.pointCost,
+            pointCost,
             idempotencyKey: input.idempotencyKey,
             resourceType: input.resourceType,
             resourceId: input.resourceId,

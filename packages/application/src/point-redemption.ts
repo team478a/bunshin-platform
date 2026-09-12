@@ -19,6 +19,24 @@ export interface PointRewardCatalogItemRecord {
   pointCost: number;
 }
 
+export interface PointRewardSettingRecord {
+  rewardType: PointRewardType;
+  status: 'ACTIVE' | 'SUSPENDED';
+  pointCost: number;
+}
+
+export const applyPointRewardSettings = (
+  catalog: PointRewardCatalogItemRecord[],
+  settings: PointRewardSettingRecord[],
+) => {
+  const byType = new Map(settings.map((setting) => [setting.rewardType, setting]));
+  return catalog.flatMap((item) => {
+    const setting = byType.get(item.rewardType);
+    if (setting?.status === 'SUSPENDED') return [];
+    return [{ ...item, pointCost: setting?.pointCost ?? item.pointCost }];
+  });
+};
+
 export interface PointRedemptionRecord {
   id: string;
   workspaceId: string;
@@ -42,13 +60,16 @@ export interface PointRedemptionRecord {
 export interface PointRedemptionRepository {
   listCatalog(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     now: Date;
   }): Promise<PointRewardCatalogItemRecord[] | null>;
   reserve(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     catalogItemId: string;
+    expectedPointCost?: number;
     idempotencyKey: string;
     resourceType: string | null;
     resourceId: string | null;
@@ -110,8 +131,18 @@ const required = (value: string, field: string, max = 200) => {
 
 export class ListPointRewardCatalog {
   constructor(private readonly repository: PointRedemptionRepository) {}
-  async execute(input: { workspaceId: string; actorUserId: string; now?: Date }) {
-    const value = await this.repository.listCatalog({ ...input, now: input.now ?? new Date() });
+  async execute(input: {
+    workspaceId: string;
+    groupId?: string | null;
+    actorUserId: string;
+    now?: Date;
+  }) {
+    const value = await this.repository.listCatalog({
+      workspaceId: required(input.workspaceId, 'workspace id'),
+      ...(input.groupId ? { groupId: required(input.groupId, 'group id') } : {}),
+      actorUserId: required(input.actorUserId, 'actor user id'),
+      now: input.now ?? new Date(),
+    });
     if (!value) throw new ApplicationError('FORBIDDEN', 'point catalog is not available');
     return value;
   }
@@ -121,8 +152,10 @@ export class ReservePointReward {
   constructor(private readonly repository: PointRedemptionRepository) {}
   async execute(input: {
     workspaceId: string;
+    groupId?: string | null;
     actorUserId: string;
     catalogItemId: string;
+    expectedPointCost?: number;
     idempotencyKey: string;
     resourceType?: string | null;
     resourceId?: string | null;
@@ -133,10 +166,19 @@ export class ReservePointReward {
     const minutes = input.reservationMinutes ?? 15;
     if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid reservation minutes');
+    if (
+      input.expectedPointCost !== undefined &&
+      (!Number.isSafeInteger(input.expectedPointCost) || input.expectedPointCost < 1)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid expected point cost');
     const value = await this.repository.reserve({
       workspaceId: required(input.workspaceId, 'workspace id'),
+      ...(input.groupId ? { groupId: required(input.groupId, 'group id') } : {}),
       actorUserId: required(input.actorUserId, 'actor user id'),
       catalogItemId: required(input.catalogItemId, 'catalog item id'),
+      ...(input.expectedPointCost === undefined
+        ? {}
+        : { expectedPointCost: input.expectedPointCost }),
       idempotencyKey: required(input.idempotencyKey, 'idempotency key', 160),
       resourceType: input.resourceType ? required(input.resourceType, 'resource type', 100) : null,
       resourceId: input.resourceId ? required(input.resourceId, 'resource id') : null,

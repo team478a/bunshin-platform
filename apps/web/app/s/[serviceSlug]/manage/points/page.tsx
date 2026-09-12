@@ -47,6 +47,21 @@ const RULES = [
   },
 ] as const;
 
+const REWARDS = [
+  {
+    type: 'ALTERNATIVE_PLAN_GENERATION',
+    label: '別の投稿案を1回作る',
+    help: '今日の投稿案の画面で、違う内容の案を作れます。',
+    defaultCost: 30,
+  },
+  {
+    type: 'SOCIAL_IMAGE_GENERATION',
+    label: '投稿画像を1回作る',
+    help: '画像作成機能を利用できる参加者だけに表示されます。',
+    defaultCost: 50,
+  },
+] as const;
+
 const optionalBudgetSchema = z.preprocess(
   (value) => (value === '' ? null : value),
   z.coerce.number().int().min(1).max(10_000_000).nullable(),
@@ -83,6 +98,13 @@ const pointControlSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
   target: z.enum(['stop', 'resume']),
   reason: z.string().trim().min(3).max(1000),
+});
+
+const rewardSettingsSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(80),
+  reason: z.string().trim().min(3).max(1000),
+  ALTERNATIVE_PLAN_GENERATION: z.coerce.number().int().min(1).max(10000),
+  SOCIAL_IMAGE_GENERATION: z.coerce.number().int().min(1).max(10000),
 });
 
 const expiryFrom = (now: Date) => {
@@ -210,6 +232,75 @@ async function saveRules(formData: FormData) {
   }
   revalidatePath(returnPath);
   redirect(`${returnPath}?saved=1` as Route);
+}
+
+async function saveRewardSettings(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = rewardSettingsSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
+  try {
+    const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    await db.prisma.$transaction(async (tx) => {
+      const [configuration, previous] = await Promise.all([
+        tx.serviceConfiguration.findFirst({
+          where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+          select: { id: true },
+        }),
+        tx.servicePointRewardSetting.findMany({
+          where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+          select: { rewardType: true, status: true, pointCost: true },
+        }),
+      ]);
+      if (!configuration) throw new Error('SERVICE_NOT_FOUND');
+      const after = [];
+      for (const reward of REWARDS) {
+        const status = formData.get(`enabled_${reward.type}`) === 'on' ? 'ACTIVE' : 'SUSPENDED';
+        const pointCost = parsed.data[reward.type];
+        await tx.servicePointRewardSetting.upsert({
+          where: {
+            workspaceId_groupId_rewardType: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              rewardType: reward.type,
+            },
+          },
+          create: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            rewardType: reward.type,
+            status,
+            pointCost,
+            updatedByUserId: actor.userId,
+          },
+          update: { status, pointCost, updatedByUserId: actor.userId },
+        });
+        after.push({ rewardType: reward.type, status, pointCost });
+      }
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          configurationId: configuration.id,
+          action: 'POINT_REWARDS_UPDATED',
+          beforeData: previous,
+          afterData: after,
+          reason: parsed.data.reason,
+          performedByUserId: actor.userId,
+        },
+      });
+    });
+  } catch {
+    redirect(`${returnPath}?error=rewards` as Route);
+  }
+  revalidatePath(returnPath);
+  revalidatePath('/points');
+  revalidatePath(`/s/${parsed.data.serviceSlug}/bunshins`);
+  revalidatePath(`/s/${parsed.data.serviceSlug}/images`);
+  redirect(`${returnPath}?rewards=1` as Route);
 }
 
 async function grantBonus(formData: FormData) {
@@ -525,6 +616,7 @@ export default async function ServicePointSettingsPage({
     saved?: string;
     bonus?: string;
     corrected?: string;
+    rewards?: string;
     control?: string;
     error?: string;
   }>;
@@ -577,73 +669,101 @@ export default async function ServicePointSettingsPage({
       select: { id: true },
     }),
   ]);
-  const [versions, history, pointAccounts, servicePointTransactions, badgeAwards] =
-    await Promise.all([
-      db.prisma.pointRuleVersion.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          campaignId: null,
-          ruleKey: { in: RULES.map((rule) => rule.key) },
-          status: { in: ['ACTIVE', 'SUSPENDED'] },
+  const [
+    versions,
+    rewardSettings,
+    globalRewardCatalog,
+    history,
+    pointAccounts,
+    servicePointTransactions,
+    badgeAwards,
+  ] = await Promise.all([
+    db.prisma.pointRuleVersion.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        campaignId: null,
+        ruleKey: { in: RULES.map((rule) => rule.key) },
+        status: { in: ['ACTIVE', 'SUSPENDED'] },
+      },
+      include: { budget: true },
+      orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
+    }),
+    db.prisma.servicePointRewardSetting.findMany({
+      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+      select: { rewardType: true, status: true, pointCost: true },
+    }),
+    db.prisma.pointRewardCatalogItem.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+      },
+      select: { rewardType: true, pointCost: true, version: true },
+      orderBy: [{ rewardType: 'asc' }, { version: 'desc' }],
+    }),
+    db.prisma.serviceConfigurationAudit.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        action: {
+          in: [
+            'POINT_RULES_UPDATED',
+            'POINT_BONUS_GRANTED',
+            'POINT_BALANCE_CORRECTED',
+            'POINT_ISSUANCE_STOPPED',
+            'POINT_ISSUANCE_RESUMED',
+            'POINT_REWARDS_UPDATED',
+          ],
         },
-        include: { budget: true },
-        orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
-      }),
-      db.prisma.serviceConfigurationAudit.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          action: {
-            in: [
-              'POINT_RULES_UPDATED',
-              'POINT_BONUS_GRANTED',
-              'POINT_BALANCE_CORRECTED',
-              'POINT_ISSUANCE_STOPPED',
-              'POINT_ISSUANCE_RESUMED',
-            ],
-          },
-        },
-        select: {
-          id: true,
-          action: true,
-          afterData: true,
-          reason: true,
-          occurredAt: true,
-          performedBy: { select: { displayName: true, email: true } },
-        },
-        orderBy: { occurredAt: 'desc' },
-        take: 30,
-      }),
-      db.prisma.pointAccount.findMany({
-        where: { workspaceId: service.workspaceId, userId: { in: memberUserIds } },
-        select: { userId: true, availablePoints: true, updatedAt: true },
-      }),
-      db.prisma.pointTransaction.groupBy({
-        by: ['userId'],
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          userId: { in: memberUserIds },
-        },
-        _sum: { amount: true },
-        _max: { createdAt: true },
-      }),
-      db.prisma.badgeAward.groupBy({
-        by: ['userId'],
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          userId: { in: memberUserIds },
-          status: 'ACTIVE',
-        },
-        _count: { _all: true },
-        _max: { awardedAt: true },
-      }),
-    ]);
+      },
+      select: {
+        id: true,
+        action: true,
+        afterData: true,
+        reason: true,
+        occurredAt: true,
+        performedBy: { select: { displayName: true, email: true } },
+      },
+      orderBy: { occurredAt: 'desc' },
+      take: 30,
+    }),
+    db.prisma.pointAccount.findMany({
+      where: { workspaceId: service.workspaceId, userId: { in: memberUserIds } },
+      select: { userId: true, availablePoints: true, updatedAt: true },
+    }),
+    db.prisma.pointTransaction.groupBy({
+      by: ['userId'],
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        userId: { in: memberUserIds },
+      },
+      _sum: { amount: true },
+      _max: { createdAt: true },
+    }),
+    db.prisma.badgeAward.groupBy({
+      by: ['userId'],
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        userId: { in: memberUserIds },
+        status: 'ACTIVE',
+      },
+      _count: { _all: true },
+      _max: { awardedAt: true },
+    }),
+  ]);
   const current = new Map<string, (typeof versions)[number]>();
   for (const version of versions)
     if (!current.has(version.ruleKey)) current.set(version.ruleKey, version);
+  const currentRewardSettings = new Map(
+    rewardSettings.map((setting) => [setting.rewardType, setting]),
+  );
+  const globalRewardDefaults = new Map<string, number>();
+  for (const reward of globalRewardCatalog)
+    if (!globalRewardDefaults.has(reward.rewardType))
+      globalRewardDefaults.set(reward.rewardType, reward.pointCost);
   const query = await searchParams;
   const pilotPeriod = resolveRewardsPilotMeasurementPeriod({
     startsAt: rewardsPolicy?.startsAt ?? null,
@@ -741,6 +861,7 @@ export default async function ServicePointSettingsPage({
       where: {
         workspaceId: service.workspaceId,
         userId: { in: rewardsPilotUserIds },
+        consumptionTransaction: { groupId: service.serviceId },
         status: 'CONFIRMED',
         confirmedAt: { gte: pilotPeriod.from, lt: pilotPeriod.toExclusive },
       },
@@ -816,6 +937,9 @@ export default async function ServicePointSettingsPage({
         {query.corrected ? (
           <p className="notice notice--success">ポイントを訂正しました。</p>
         ) : null}
+        {query.rewards ? (
+          <p className="notice notice--success">ポイントの使い道を保存しました。</p>
+        ) : null}
         {query.control === 'stop' ? (
           <p className="notice notice--success">ポイント付与を一括停止しました。</p>
         ) : null}
@@ -830,7 +954,9 @@ export default async function ServicePointSettingsPage({
                 ? '発行上限は、すでに発行したポイント以上にしてください。'
                 : query.error === 'stopped'
                   ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
-                  : '保存できませんでした。入力内容を確認してください。'}
+                  : query.error === 'rewards'
+                    ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
+                    : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
 
@@ -1244,6 +1370,64 @@ export default async function ServicePointSettingsPage({
           </form>
         </section>
 
+        <section className="settings-card" id="point-rewards">
+          <h2>ポイントの使い道を設定</h2>
+          <p>
+            チェックを外すと、参加者の画面から消え、新しい交換もできなくなります。すでに完了した交換の履歴は残ります。
+          </p>
+          <form action={saveRewardSettings} className="form-stack">
+            <input type="hidden" name="serviceSlug" value={serviceSlug} />
+            {REWARDS.map((reward) => {
+              const saved = currentRewardSettings.get(reward.type);
+              return (
+                <fieldset className="settings-card" key={reward.type}>
+                  <legend>
+                    <strong>{reward.label}</strong>
+                  </legend>
+                  <label className="field">
+                    <span className="field__label">利用する</span>
+                    <input
+                      name={`enabled_${reward.type}`}
+                      type="checkbox"
+                      defaultChecked={!saved || saved.status === 'ACTIVE'}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">必要なポイント</span>
+                    <input
+                      className="field__control"
+                      name={reward.type}
+                      type="number"
+                      min="1"
+                      max="10000"
+                      defaultValue={
+                        saved?.pointCost ??
+                        globalRewardDefaults.get(reward.type) ??
+                        reward.defaultCost
+                      }
+                      required
+                    />
+                  </label>
+                  <small>{reward.help}</small>
+                </fieldset>
+              );
+            })}
+            <label className="field">
+              <span className="field__label">変更理由</span>
+              <textarea
+                className="field__control"
+                name="reason"
+                minLength={3}
+                maxLength={1000}
+                required
+              />
+            </label>
+            <button className="button" type="submit">
+              使い道の設定を保存
+            </button>
+          </form>
+        </section>
+
         <section className="settings-card">
           <h2>参加者へボーナスを付与</h2>
           <p>イベントやお礼など、運営判断でポイントを追加できます。理由と実行者を記録します。</p>
@@ -1371,13 +1555,15 @@ export default async function ServicePointSettingsPage({
                     <strong>
                       {item.action === 'POINT_RULES_UPDATED'
                         ? '獲得条件を変更'
-                        : item.action === 'POINT_ISSUANCE_STOPPED'
-                          ? 'ポイント付与を一括停止'
-                          : item.action === 'POINT_ISSUANCE_RESUMED'
-                            ? 'ポイント付与を再開'
-                            : item.action === 'POINT_BALANCE_CORRECTED'
-                              ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
-                              : `${target ?? '参加者'}へ ${amount} WP付与`}
+                        : item.action === 'POINT_REWARDS_UPDATED'
+                          ? 'ポイントの使い道を変更'
+                          : item.action === 'POINT_ISSUANCE_STOPPED'
+                            ? 'ポイント付与を一括停止'
+                            : item.action === 'POINT_ISSUANCE_RESUMED'
+                              ? 'ポイント付与を再開'
+                              : item.action === 'POINT_BALANCE_CORRECTED'
+                                ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
+                                : `${target ?? '参加者'}へ ${amount} WP付与`}
                     </strong>
                     <br />
                     {item.occurredAt.toLocaleString('ja-JP')}／

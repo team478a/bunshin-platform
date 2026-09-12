@@ -232,7 +232,11 @@ export default async function BunshinPage({
       ),
     );
     const variantPointCost = await new ListPointRewardCatalog(new PrismaPointRedemptionRepository())
-      .execute({ workspaceId, actorUserId: currentUser.userId })
+      .execute({
+        workspaceId,
+        ...(bunshin.groupId === undefined ? {} : { groupId: bunshin.groupId }),
+        actorUserId: currentUser.userId,
+      })
       .then(
         (catalog) =>
           catalog.find(({ rewardType }) => rewardType === 'ALTERNATIVE_PLAN_GENERATION')

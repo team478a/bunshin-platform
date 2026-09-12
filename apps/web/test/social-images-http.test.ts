@@ -230,6 +230,8 @@ describe('social image HTTP', () => {
     );
     expect(fakes.reservePoint).toHaveBeenCalledWith(
       expect.objectContaining({
+        groupId: ids.groupId,
+        expectedPointCost: 50,
         resourceType: 'SOCIAL_IMAGE_REQUEST',
         resourceId: ids.requestId,
       }),

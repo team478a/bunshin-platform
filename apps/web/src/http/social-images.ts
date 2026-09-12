@@ -235,6 +235,7 @@ export async function createSocialImageResponse(
     ) {
       const catalog = await new ListPointRewardCatalog(redemptions).execute({
         workspaceId,
+        groupId,
         actorUserId: actor,
       });
       const imageReward = catalog.find((item) => item.rewardType === 'SOCIAL_IMAGE_GENERATION');
@@ -242,8 +243,10 @@ export async function createSocialImageResponse(
         throw new ApplicationError('CONFIGURATION_ERROR', 'image point reward is unavailable');
       reservation = await new ReservePointReward(redemptions).execute({
         workspaceId,
+        groupId,
         actorUserId: actor,
         catalogItemId: imageReward.id,
+        expectedPointCost: imageReward.pointCost,
         idempotencyKey: `social-image:${created.id}`,
         resourceType: 'SOCIAL_IMAGE_REQUEST',
         resourceId: created.id,
