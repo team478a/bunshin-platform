@@ -8,6 +8,8 @@ import { BadgeMark } from '../../ui/badge-mark';
 import Link from 'next/link';
 import { getRewardsPilotExpiryNotice } from '../../../src/rewards/rewards-pilot-expiry';
 import { RewardsPilotExpiryNoticeCard } from '../../ui/rewards-pilot-expiry-notice';
+import { selectRewardsServiceContext } from '../../../src/rewards/rewards-service-context';
+import { RewardsServiceSelector } from '../../ui/rewards-service-selector';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,44 +43,63 @@ function Progress({ item }: { item: BadgeUserItem }) {
 export default async function BadgesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ workspaceId?: string }>;
+  searchParams: Promise<{ workspaceId?: string; serviceSlug?: string }>;
 }) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
   const workspaces = await db.listActiveWorkspacesForUser(user.userId);
-  const requestedWorkspaceId = (await searchParams).workspaceId;
-  const workspace = requestedWorkspaceId
-    ? workspaces.find(({ id }) => id === requestedWorkspaceId)
-    : workspaces[0];
-  if (!workspace) redirect('/bunshins');
-  const pilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
-    workspaceId: workspace.id,
-    userId: user.userId,
+  if (!workspaces.length) redirect('/bunshins');
+  const params = await searchParams;
+  const serviceContexts = (
+    await Promise.all(
+      workspaces.map(async (workspace) =>
+        (
+          await db.listActiveRewardsPilotServiceAccesses(db.prisma, {
+            workspaceId: workspace.id,
+            userId: user.userId,
+          })
+        ).map((access) => ({ ...access, workspaceName: workspace.name })),
+      ),
+    )
+  ).flat();
+  const serviceContext = selectRewardsServiceContext({
+    contexts: serviceContexts,
+    ...(params.workspaceId ? { requestedWorkspaceId: params.workspaceId } : {}),
+    ...(params.serviceSlug ? { requestedServiceSlug: params.serviceSlug } : {}),
   });
-  if (!pilotAccess) {
+  if (!serviceContext) {
     return (
       <main className="app-page badge-page">
         <header className="app-page__heading">
           <p className="eyebrow">がんばったしるし</p>
           <h1>バッジ</h1>
         </header>
-        <section className="settings-card">
-          <h2>現在は試験利用中です</h2>
-          <p>ポイントとバッジは、運営者から案内を受けた方だけ利用できます。</p>
-          <Link className="button button--secondary" href="/bunshins">
-            ホームへ戻る
-          </Link>
-        </section>
+        {serviceContexts.length > 1 ? (
+          <RewardsServiceSelector destination="badges" contexts={serviceContexts} />
+        ) : (
+          <section className="settings-card">
+            <h2>現在は試験利用中です</h2>
+            <p>ポイントとバッジは、運営者から案内を受けた方だけ利用できます。</p>
+            <Link className="button button--secondary" href="/bunshins">
+              ホームへ戻る
+            </Link>
+          </section>
+        )}
       </main>
     );
   }
-  const pilotExpiryNotice = getRewardsPilotExpiryNotice(pilotAccess.endsAt);
+  const workspace = workspaces.find(({ id }) => id === serviceContext.workspaceId)!;
+  const pilotExpiryNotice = getRewardsPilotExpiryNotice(serviceContext.endsAt);
   let dashboard;
   try {
     dashboard = await new GetBadgeUserDashboard(
       new db.PrismaBadgeUserExperienceRepository(db.prisma),
-    ).execute({ workspaceId: workspace.id, actorUserId: user.userId });
+    ).execute({
+      workspaceId: workspace.id,
+      groupId: serviceContext.groupId,
+      actorUserId: user.userId,
+    });
   } catch {
     return (
       <main className="app-page">
@@ -95,25 +116,14 @@ export default async function BadgesPage({
       <header className="app-page__heading">
         <p className="eyebrow">がんばったしるし</p>
         <h1>バッジ</h1>
-        <p>できたことが増えると、バッジが集まります。</p>
-        {workspaces.length > 1 ? (
-          <form action="/badges" method="get" className="form-stack">
-            <label className="field">
-              <span className="field__label">表示するサービス</span>
-              <select className="field__control" name="workspaceId" defaultValue={workspace.id}>
-                {workspaces.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="button button--secondary" type="submit">
-              このサービスのバッジを見る
-            </button>
-          </form>
-        ) : null}
+        <p>{serviceContext.serviceName}でできたことが増えると、バッジが集まります。</p>
       </header>
+
+      <RewardsServiceSelector
+        destination="badges"
+        contexts={serviceContexts}
+        selected={serviceContext}
+      />
 
       <RewardsPilotExpiryNoticeCard notice={pilotExpiryNotice} />
 
@@ -126,7 +136,9 @@ export default async function BadgesPage({
         </ol>
         <Link
           className="button button--secondary"
-          href={`/points?workspaceId=${encodeURIComponent(workspace.id)}` as Route}
+          href={
+            `/points?workspaceId=${encodeURIComponent(workspace.id)}&serviceSlug=${encodeURIComponent(serviceContext.serviceSlug)}` as Route
+          }
         >
           ポイントの履歴を見る
         </Link>

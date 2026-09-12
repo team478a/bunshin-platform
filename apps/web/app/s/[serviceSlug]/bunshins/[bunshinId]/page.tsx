@@ -451,6 +451,7 @@ export default async function ServiceBunshinDetailPage({
             missions={dailyMissions}
             variantPointCost={variantPointCost}
             pointWorkspaceId={service.workspaceId}
+            serviceSlug={service.configuration.slug}
             rewardsPilotActive={rewardsPilotActive}
             {...(deliverySchedule.state === 'PREPARING' && generationProfile
               ? {

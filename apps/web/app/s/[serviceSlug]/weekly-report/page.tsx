@@ -155,7 +155,9 @@ export default async function ServiceWeeklyReportPage({
                 </p>
                 <Link
                   className="button button--secondary"
-                  href={`/points?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+                  href={
+                    `/points?workspaceId=${encodeURIComponent(service.workspaceId)}&serviceSlug=${encodeURIComponent(service.configuration.slug)}` as Route
+                  }
                 >
                   ポイントの期限と履歴を見る
                 </Link>

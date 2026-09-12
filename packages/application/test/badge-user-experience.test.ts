@@ -45,6 +45,27 @@ describe('badge user experience', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('forwards the selected service group to the dashboard repository', async () => {
+    const dashboard = {
+      acquired: [],
+      inProgress: [],
+      recommended: [],
+      shareableGroups: [],
+      notifications: [],
+    };
+    const getDashboard = vi.fn().mockResolvedValue(dashboard);
+    const result = await new GetBadgeUserDashboard({ ...repository(), getDashboard }).execute({
+      workspaceId: 'workspace',
+      groupId: 'group',
+      actorUserId: 'user',
+    });
+
+    expect(result).toBe(dashboard);
+    expect(getDashboard).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'workspace', groupId: 'group', actorUserId: 'user' }),
+    );
+  });
+
   it('marks only an available notification as read', async () => {
     const markNotificationRead = vi.fn().mockResolvedValue(true);
     const result = await new MarkBadgeNotificationRead({

@@ -21,6 +21,7 @@ export function ServiceDailyMissionSection({
   missions,
   variantPointCost,
   pointWorkspaceId,
+  serviceSlug,
   rewardsPilotActive,
   active,
   generation,
@@ -31,6 +32,7 @@ export function ServiceDailyMissionSection({
   missions: DailyMissionView[];
   variantPointCost: number | null;
   pointWorkspaceId: string;
+  serviceSlug: string;
   rewardsPilotActive: boolean;
   active: boolean;
   generation?: { missionDate: string; timezone: string; socialProfileId: string };
@@ -296,7 +298,11 @@ export function ServiceDailyMissionSection({
           {message}
         </p>
       ) : null}
-      <RewardsActionFeedback action={pointNotice} workspaceId={pointWorkspaceId} />
+      <RewardsActionFeedback
+        action={pointNotice}
+        workspaceId={pointWorkspaceId}
+        serviceSlug={serviceSlug}
+      />
       {manualCopy ? (
         <section className="mission-manual-copy" aria-label={`${manualCopy.title}を手動でコピー`}>
           <h3>{manualCopy.title}</h3>
@@ -562,7 +568,9 @@ export function ServiceDailyMissionSection({
                       </button>
                       <p>
                         作成に使ったWPは、失敗した場合に戻ります。{' '}
-                        <a href={`/points?workspaceId=${encodeURIComponent(pointWorkspaceId)}`}>
+                        <a
+                          href={`/points?workspaceId=${encodeURIComponent(pointWorkspaceId)}&serviceSlug=${encodeURIComponent(serviceSlug)}`}
+                        >
                           残高を見る
                         </a>
                       </p>

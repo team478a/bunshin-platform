@@ -10,6 +10,12 @@ export type RewardsPilotAccess = {
   endsAt: Date | null;
 };
 
+export type RewardsPilotServiceAccess = RewardsPilotAccess & {
+  workspaceId: string;
+  serviceSlug: string;
+  serviceName: string;
+};
+
 const earliestDate = (values: Array<Date | null>) => {
   const dates = values.filter((value): value is Date => value !== null);
   return dates.length ? new Date(Math.min(...dates.map((value) => value.getTime()))) : null;
@@ -77,4 +83,71 @@ export async function hasActiveRewardsPilotAccess(
   at = new Date(),
 ) {
   return Boolean(await getActiveRewardsPilotAccess(client, scope, at));
+}
+
+export async function listActiveRewardsPilotServiceAccesses(
+  client: RewardsPilotAccessClient,
+  scope: { workspaceId: string; userId: string },
+  at = new Date(),
+): Promise<RewardsPilotServiceAccess[]> {
+  const activeWindow = {
+    status: 'ENABLED' as const,
+    OR: [{ startsAt: null }, { startsAt: { lte: at } }],
+    AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: at } }] }],
+  };
+  const memberships = await client.groupMembership.findMany({
+    where: {
+      workspaceId: scope.workspaceId,
+      userId: scope.userId,
+      status: 'ACTIVE',
+      consentedAt: { not: null },
+      group: {
+        status: 'ACTIVE',
+        workspace: { status: 'ACTIVE' },
+        serviceConfiguration: { isNot: null },
+        featurePolicies: {
+          some: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
+        },
+      },
+      featureAssignments: {
+        some: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
+      },
+    },
+    select: {
+      id: true,
+      workspaceId: true,
+      groupId: true,
+      group: {
+        select: {
+          serviceConfiguration: { select: { slug: true, displayName: true } },
+          featurePolicies: {
+            where: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
+            select: { endsAt: true },
+          },
+        },
+      },
+      featureAssignments: {
+        where: { featureKey: REWARDS_PILOT_FEATURE_KEY, ...activeWindow },
+        select: { endsAt: true },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  return memberships.flatMap((membership) => {
+    const service = membership.group.serviceConfiguration;
+    if (!service) return [];
+    return [
+      {
+        membershipId: membership.id,
+        workspaceId: membership.workspaceId,
+        groupId: membership.groupId,
+        serviceSlug: service.slug,
+        serviceName: service.displayName,
+        endsAt: earliestDate([
+          ...membership.group.featurePolicies.map(({ endsAt }) => endsAt),
+          ...membership.featureAssignments.map(({ endsAt }) => endsAt),
+        ]),
+      },
+    ];
+  });
 }

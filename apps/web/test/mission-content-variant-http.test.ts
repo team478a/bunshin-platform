@@ -85,7 +85,9 @@ describe('mission content variant HTTP and UI boundary', () => {
   it('opens the balance for the workspace charged by the variant', () => {
     expect(personalExperience).toContain('/points?workspaceId=');
     expect(serviceExperience).toContain('pointWorkspaceId');
+    expect(serviceExperience).toContain('&serviceSlug=');
     expect(servicePage).toContain('pointWorkspaceId={service.workspaceId}');
-    expect(pointsPage).toContain('workspaces.find(({ id }) => id === requestedWorkspaceId)');
+    expect(servicePage).toContain('serviceSlug={service.configuration.slug}');
+    expect(pointsPage).toContain('selectRewardsServiceContext');
   });
 });

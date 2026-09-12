@@ -12,7 +12,7 @@ describe('rewards pilot web boundary', () => {
   it.each([pointsPage, badgesPage])(
     'shows a clear pilot message outside the selected users',
     (source) => {
-      expect(source).toContain('getActiveRewardsPilotAccess');
+      expect(source).toContain('listActiveRewardsPilotServiceAccesses');
       expect(source).toContain('現在は試験利用中です');
       expect(source).toContain('運営者から案内を受けた方だけ利用できます。');
     },

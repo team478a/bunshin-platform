@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
+  listActiveRewardsPilotServiceAccesses,
   REWARDS_PILOT_FEATURE_KEY,
 } from '../src/rewards-pilot-access';
 import { readFileSync } from 'node:fs';
@@ -77,6 +78,65 @@ describe('rewards pilot access', () => {
         { workspaceId: 'workspace-1', userId: 'user-1' },
       ),
     ).resolves.toBe(false);
+  });
+
+  it('lists each eligible service without choosing an arbitrary membership', async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: 'membership-1',
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        group: {
+          serviceConfiguration: { slug: 'service-a', displayName: 'サービスA' },
+          featurePolicies: [{ endsAt: new Date('2026-10-01T00:00:00.000Z') }],
+        },
+        featureAssignments: [{ endsAt: new Date('2026-09-30T00:00:00.000Z') }],
+      },
+      {
+        id: 'membership-2',
+        workspaceId: 'workspace-1',
+        groupId: 'group-2',
+        group: {
+          serviceConfiguration: { slug: 'service-b', displayName: 'サービスB' },
+          featurePolicies: [{ endsAt: null }],
+        },
+        featureAssignments: [{ endsAt: null }],
+      },
+    ]);
+
+    await expect(
+      listActiveRewardsPilotServiceAccesses(
+        { groupMembership: { findMany } } as never,
+        { workspaceId: 'workspace-1', userId: 'user-1' },
+        new Date('2026-09-12T00:00:00.000Z'),
+      ),
+    ).resolves.toEqual([
+      {
+        membershipId: 'membership-1',
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        serviceSlug: 'service-a',
+        serviceName: 'サービスA',
+        endsAt: new Date('2026-09-30T00:00:00.000Z'),
+      },
+      {
+        membershipId: 'membership-2',
+        workspaceId: 'workspace-1',
+        groupId: 'group-2',
+        serviceSlug: 'service-b',
+        serviceName: 'サービスB',
+        endsAt: null,
+      },
+    ]);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: 'workspace-1',
+          userId: 'user-1',
+          group: expect.objectContaining({ serviceConfiguration: { isNot: null } }),
+        }),
+      }),
+    );
   });
 
   it('limits the pilot to 30 enabled participant assignments', () => {

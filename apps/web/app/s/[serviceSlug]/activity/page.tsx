@@ -274,13 +274,17 @@ export default async function ServiceMemberActivityPage({
             <div className="service-home-actions">
               <Link
                 className="button button--primary"
-                href={`/points?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+                href={
+                  `/points?workspaceId=${encodeURIComponent(service.workspaceId)}&serviceSlug=${encodeURIComponent(service.configuration.slug)}` as Route
+                }
               >
                 ポイントの履歴を見る
               </Link>
               <Link
                 className="button"
-                href={`/badges?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+                href={
+                  `/badges?workspaceId=${encodeURIComponent(service.workspaceId)}&serviceSlug=${encodeURIComponent(service.configuration.slug)}` as Route
+                }
               >
                 バッジの進み具合を見る
               </Link>

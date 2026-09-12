@@ -44,6 +44,7 @@ export interface BadgeAwardNotificationItem {
 export interface BadgeUserExperienceRepository {
   getDashboard(input: {
     workspaceId: string;
+    groupId?: string;
     actorUserId: string;
     now: Date;
   }): Promise<BadgeUserDashboard | null>;
@@ -90,9 +91,10 @@ const required = (value: string, field: string) => {
 
 export class GetBadgeUserDashboard {
   constructor(private readonly repository: BadgeUserExperienceRepository) {}
-  async execute(input: { workspaceId: string; actorUserId: string; now?: Date }) {
+  async execute(input: { workspaceId: string; groupId?: string; actorUserId: string; now?: Date }) {
     const result = await this.repository.getDashboard({
       workspaceId: required(input.workspaceId, 'workspace id'),
+      ...(input.groupId ? { groupId: required(input.groupId, 'group id') } : {}),
       actorUserId: required(input.actorUserId, 'actor user id'),
       now: input.now ?? new Date(),
     });
