@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ConfirmPointRedemption,
+  applyPointRewardSettings,
   GetPointRedemptionByResource,
   ListPointRewardCatalog,
   RefundPointRedemption,
@@ -50,14 +51,48 @@ const repository = (): PointRedemptionRepository => ({
 });
 
 describe('point redemption use cases', () => {
+  it('applies an active service price and hides a suspended service reward', () => {
+    const source = [
+      {
+        id: 'catalog-1',
+        rewardKey: 'IMAGE',
+        version: 1,
+        rewardType: 'SOCIAL_IMAGE_GENERATION' as const,
+        title: '画像を1回作る',
+        description: '投稿用画像',
+        pointCost: 50,
+      },
+      {
+        id: 'catalog-2',
+        rewardKey: 'VARIANT',
+        version: 1,
+        rewardType: 'ALTERNATIVE_PLAN_GENERATION' as const,
+        title: '別案を作る',
+        description: '投稿の別案',
+        pointCost: 30,
+      },
+    ];
+    expect(
+      applyPointRewardSettings(source, [
+        { rewardType: 'SOCIAL_IMAGE_GENERATION', status: 'ACTIVE', pointCost: 80 },
+        { rewardType: 'ALTERNATIVE_PLAN_GENERATION', status: 'SUSPENDED', pointCost: 30 },
+      ]),
+    ).toEqual([expect.objectContaining({ id: 'catalog-1', pointCost: 80 })]);
+  });
+
   it('lists the catalog through the verified actor scope', async () => {
     const port = repository();
     await expect(
       new ListPointRewardCatalog(port).execute({
         workspaceId: 'workspace-1',
+        groupId: 'group-1',
         actorUserId: 'user-1',
       }),
     ).resolves.toHaveLength(1);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(port.listCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: 'group-1', actorUserId: 'user-1' }),
+    );
   });
 
   it('finds a redemption only through the owner resource scope', async () => {
@@ -76,8 +111,10 @@ describe('point redemption use cases', () => {
     const port = repository();
     await new ReservePointReward(port).execute({
       workspaceId: ' workspace-1 ',
+      groupId: ' group-1 ',
       actorUserId: ' user-1 ',
       catalogItemId: ' catalog-1 ',
+      expectedPointCost: 50,
       idempotencyKey: ' request-1 ',
       now: record.reservedAt,
     });
@@ -85,7 +122,9 @@ describe('point redemption use cases', () => {
     expect(port.reserve).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'workspace-1',
+        groupId: 'group-1',
         actorUserId: 'user-1',
+        expectedPointCost: 50,
         reservationExpiresAt: record.reservationExpiresAt,
       }),
     );

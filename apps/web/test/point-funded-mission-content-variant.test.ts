@@ -10,6 +10,7 @@ import {
 
 const input: PointFundedMissionContentVariantInput = {
   workspaceId: 'workspace-1',
+  groupId: 'group-1',
   bunshinId: 'bunshin-1',
   actorUserId: 'user-1',
   dailyMissionId: 'mission-1',
@@ -96,10 +97,16 @@ describe('point funded mission content variant', () => {
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(redemptions.reserve).toHaveBeenCalledWith(
       expect.objectContaining({
+        groupId: 'group-1',
         catalogItemId: 'catalog-1',
+        expectedPointCost: 30,
         resourceType: MISSION_CONTENT_VARIANT_REDEMPTION_RESOURCE,
         resourceId: `${input.dailyMissionId}:${input.generationIdempotencyKey}`,
       }),
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(redemptions.listCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: 'group-1' }),
     );
     expect(generate).toHaveBeenCalledOnce();
     // eslint-disable-next-line @typescript-eslint/unbound-method

@@ -10,6 +10,10 @@ const processor = readFileSync(
   fileURLToPath(new URL('../../../packages/database/src/index.ts', import.meta.url)),
   'utf8',
 );
+const schema = readFileSync(
+  fileURLToPath(new URL('../../../packages/database/prisma/schema.prisma', import.meta.url)),
+  'utf8',
+);
 
 describe('service point settings boundaries', () => {
   it('requires service management context and scopes every mutation', () => {
@@ -75,5 +79,20 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('ポイント付与を再開');
     expect(page).toContain('disabled={pointConfiguration.pointIssuanceStopped}');
     expect(page).toContain("throw new Error('POINT_ISSUANCE_STOPPED')");
+  });
+
+  it('lets the operator set service-specific reward prices and availability', () => {
+    expect(schema).toContain('model ServicePointRewardSetting');
+    expect(schema).toContain('@@unique([workspaceId, groupId, rewardType])');
+    expect(page).toContain('saveRewardSettings');
+    expect(page).toContain('ポイントの使い道を設定');
+    expect(page).toContain('使い道の設定を保存');
+    expect(page).toContain('tx.servicePointRewardSetting.upsert');
+    expect(page).toContain("action: 'POINT_REWARDS_UPDATED'");
+    expect(page).toContain('updatedByUserId: actor.userId');
+    expect(processor).toContain('applyPointRewardSettings');
+    expect(processor).toContain('servicePointRewardSetting.findUnique');
+    expect(processor).toContain('expectedPointCost !== pointCost');
+    expect(processor).toContain('groupId: input.groupId ?? null');
   });
 });

@@ -41,6 +41,7 @@ export async function executePointFundedMissionContentVariant(
 ) {
   const catalog = await new ListPointRewardCatalog(dependencies.redemptions).execute({
     workspaceId: input.workspaceId,
+    ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
     actorUserId: input.actorUserId,
   });
   const reward = catalog.find(({ rewardType }) => rewardType === 'ALTERNATIVE_PLAN_GENERATION');
@@ -53,8 +54,10 @@ export async function executePointFundedMissionContentVariant(
 
   const reservation = await new ReservePointReward(dependencies.redemptions).execute({
     workspaceId: input.workspaceId,
+    ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
     actorUserId: input.actorUserId,
     catalogItemId: reward.id,
+    expectedPointCost: reward.pointCost,
     idempotencyKey: `mission-content-variant:${input.generationIdempotencyKey}`,
     resourceType: MISSION_CONTENT_VARIANT_REDEMPTION_RESOURCE,
     resourceId: redemptionResourceId(input),

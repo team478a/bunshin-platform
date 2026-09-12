@@ -161,6 +161,7 @@ export default async function GroupImagesPage({
     const [catalog, pointDashboard] = await Promise.all([
       new ListPointRewardCatalog(redemptions).execute({
         workspaceId: membership.group.workspaceId,
+        groupId: membership.group.id,
         actorUserId: actor.userId,
         now,
       }),

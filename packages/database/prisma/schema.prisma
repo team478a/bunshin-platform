@@ -1722,6 +1722,7 @@ model User {
   pointTransactions                 PointTransaction[]
   pointProcessingEvents             PointProcessingEvent[]
   pointRedemptions                  PointRedemption[]
+  servicePointRewardSettingsUpdated ServicePointRewardSetting[]       @relation("ServicePointRewardSettingUpdater")
   badgeProgress                     BadgeProgress[]
   badgeAwards                       BadgeAward[]
   badgeAwardNotifications           BadgeAwardNotification[]
@@ -1911,6 +1912,7 @@ model Workspace {
   pointTransactions               PointTransaction[]
   pointProcessingEvents           PointProcessingEvent[]
   pointRedemptions                PointRedemption[]
+  servicePointRewardSettings      ServicePointRewardSetting[]
   badgeDefinitions                BadgeDefinition[]
   badgeProgress                   BadgeProgress[]
   badgeAwards                     BadgeAward[]
@@ -2149,6 +2151,7 @@ model Group {
   serviceReferralRewards          ServiceReferralReward[]
   pointRuleVersions               PointRuleVersion[]
   pointTransactions               PointTransaction[]
+  servicePointRewardSettings      ServicePointRewardSetting[]
   badgeDefinitions                BadgeDefinition[]
   badgeProgress                   BadgeProgress[]
   badgeAwards                     BadgeAward[]
@@ -3077,6 +3080,25 @@ model PointRewardCatalogItem {
   @@unique([rewardKey, version])
   @@index([status, startsAt, endsAt])
   @@map("point_reward_catalog_items")
+}
+
+model ServicePointRewardSetting {
+  id              String             @id @default(uuid()) @db.Uuid
+  workspaceId     String             @map("workspace_id") @db.Uuid
+  groupId         String             @map("group_id") @db.Uuid
+  rewardType      PointRewardType    @map("reward_type")
+  status          PointCatalogStatus @default(ACTIVE)
+  pointCost       Int                @map("point_cost")
+  updatedByUserId String             @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           Group              @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  updatedBy       User               @relation("ServicePointRewardSettingUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId, rewardType])
+  @@index([groupId, status])
+  @@map("service_point_reward_settings")
 }
 
 model PointRedemption {
