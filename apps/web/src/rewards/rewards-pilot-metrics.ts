@@ -1,4 +1,51 @@
 const TEN_MINUTES_MS = 10 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type RewardsPilotMeasurementPeriod = {
+  from: Date;
+  toExclusive: Date;
+  status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'ROLLING';
+};
+
+export function resolveRewardsPilotMeasurementPeriod(input: {
+  startsAt: Date | null;
+  endsAt: Date | null;
+  now: Date;
+}): RewardsPilotMeasurementPeriod {
+  if (!input.startsAt && !input.endsAt) {
+    return {
+      from: new Date(input.now.getTime() - 28 * DAY_MS),
+      toExclusive: new Date(input.now.getTime() + 1),
+      status: 'ROLLING',
+    };
+  }
+  const from = input.startsAt ?? new Date((input.endsAt ?? input.now).getTime() - 28 * DAY_MS);
+  if (from > input.now) return { from, toExclusive: from, status: 'UPCOMING' };
+  if (input.endsAt && input.endsAt <= input.now) {
+    return {
+      from,
+      toExclusive: input.endsAt > from ? input.endsAt : from,
+      status: 'COMPLETED',
+    };
+  }
+  return {
+    from,
+    toExclusive: new Date(input.now.getTime() + 1),
+    status: 'ACTIVE',
+  };
+}
+
+export function participatedInRewardsPilotPeriod(
+  assignment: { status: 'ENABLED' | 'DISABLED'; startsAt: Date | null; endsAt: Date | null },
+  period: Pick<RewardsPilotMeasurementPeriod, 'from' | 'toExclusive'>,
+) {
+  return (
+    assignment.status === 'ENABLED' &&
+    period.toExclusive > period.from &&
+    (!assignment.startsAt || assignment.startsAt < period.toExclusive) &&
+    (!assignment.endsAt || assignment.endsAt > period.from)
+  );
+}
 
 export type RewardsPilotPost = {
   userId: string;

@@ -38,7 +38,7 @@ describe('rewards pilot web boundary', () => {
   });
 
   it('links the service operator from point settings to pilot enrollment', () => {
-    expect(servicePointsPage).toContain('現在 <strong>{rewardsPilotCount}人／30人</strong>');
+    expect(servicePointsPage).toContain('現在 <strong>{rewardsPilotActiveCount}人／30人</strong>');
     expect(servicePointsPage).toContain('試験利用者を選ぶ');
     expect(servicePointsPage).toContain('/s/${serviceSlug}/manage/members');
     expect(servicePointsPage).toContain('/admin/groups/${service.serviceId}/features');
@@ -46,6 +46,8 @@ describe('rewards pilot web boundary', () => {
 
   it('shows operators a plain-language pilot report and review candidates', () => {
     expect(servicePointsPage).toContain('試験運用の結果');
+    expect(servicePointsPage).toContain('resolveRewardsPilotMeasurementPeriod');
+    expect(servicePointsPage).toContain('集計期間中にポイントとバッジを利用できた人数');
     expect(servicePointsPage).toContain('投稿した人');
     expect(servicePointsPage).toContain('3日以上続けた人');
     expect(servicePointsPage).toContain('ポイントを使った人');

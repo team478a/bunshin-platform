@@ -1,6 +1,61 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildRewardsPilotMetrics } from '../src/rewards/rewards-pilot-metrics';
+import {
+  buildRewardsPilotMetrics,
+  participatedInRewardsPilotPeriod,
+  resolveRewardsPilotMeasurementPeriod,
+} from '../src/rewards/rewards-pilot-metrics';
+
+describe('rewards pilot measurement period', () => {
+  it('freezes an ended pilot at its configured dates', () => {
+    const period = resolveRewardsPilotMeasurementPeriod({
+      startsAt: new Date('2026-08-01T00:00:00Z'),
+      endsAt: new Date('2026-08-29T00:00:00Z'),
+      now: new Date('2026-09-12T00:00:00Z'),
+    });
+    expect(period).toEqual({
+      from: new Date('2026-08-01T00:00:00Z'),
+      toExclusive: new Date('2026-08-29T00:00:00Z'),
+      status: 'COMPLETED',
+    });
+  });
+
+  it('keeps expired enabled assignments in the completed pilot cohort', () => {
+    const period = resolveRewardsPilotMeasurementPeriod({
+      startsAt: new Date('2026-08-01T00:00:00Z'),
+      endsAt: new Date('2026-08-29T00:00:00Z'),
+      now: new Date('2026-09-12T00:00:00Z'),
+    });
+    expect(
+      participatedInRewardsPilotPeriod(
+        {
+          status: 'ENABLED',
+          startsAt: new Date('2026-08-01T00:00:00Z'),
+          endsAt: new Date('2026-08-29T00:00:00Z'),
+        },
+        period,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not count an assignment that never overlapped the measured period', () => {
+    const period = resolveRewardsPilotMeasurementPeriod({
+      startsAt: new Date('2026-08-01T00:00:00Z'),
+      endsAt: new Date('2026-08-29T00:00:00Z'),
+      now: new Date('2026-09-12T00:00:00Z'),
+    });
+    expect(
+      participatedInRewardsPilotPeriod(
+        {
+          status: 'ENABLED',
+          startsAt: new Date('2026-09-01T00:00:00Z'),
+          endsAt: null,
+        },
+        period,
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('buildRewardsPilotMetrics', () => {
   it('counts adoption, three-day continuation, redemption, and point totals', () => {
