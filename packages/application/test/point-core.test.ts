@@ -41,7 +41,14 @@ const repository = (): PointLedgerRepository => ({
     expiringWithin30Days: 10,
     nextExpiryAt: new Date('2026-09-01T00:00:00Z'),
     earningMethods: [
-      { ruleKey: 'MISSION_VIEWED_DAILY', grantAmount: 1, dailyLimit: 1, weeklyLimit: null },
+      {
+        ruleKey: 'MISSION_VIEWED_DAILY',
+        campaignId: null,
+        campaignName: null,
+        grantAmount: 1,
+        dailyLimit: 1,
+        weeklyLimit: null,
+      },
     ],
     weeklyPosts: 2,
     weeklyPostGoal: 3,

@@ -60,6 +60,19 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('SNSへの実際の投稿は自動確認されません。');
   });
 
+  it('lets the operator override, stop or inherit point rules for one campaign', () => {
+    expect(page).toContain('saveCampaignRules');
+    expect(page).toContain('募集ごとのポイントを設定');
+    expect(page).toContain("z.enum(['INHERIT', 'ACTIVE', 'SUSPENDED'])");
+    expect(page).toContain("status: { in: ['DRAFT', 'OPEN'] }");
+    expect(page).toContain('campaignId: campaign.id');
+    expect(page).toContain("action: 'CAMPAIGN_POINT_RULES_UPDATED'");
+    expect(page).toContain("if (mode !== 'INHERIT')");
+    expect(page).toContain('この募集では付与しない');
+    expect(page).toContain('この募集で発行できる合計上限');
+    expect(processor).toContain('Number(Boolean(right.campaignId))');
+  });
+
   it('shows only service-scoped point activity and badge awards to the operator', () => {
     expect(page).toContain('db.prisma.pointAccount.findMany');
     expect(page).toContain('db.prisma.pointTransaction.groupBy');

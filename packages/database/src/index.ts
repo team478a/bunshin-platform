@@ -19246,6 +19246,22 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
     });
     if (!groupMembership) return null;
 
+    const campaignParticipations = await this.client.campaignParticipation.findMany({
+      where: {
+        userId: input.actorUserId,
+        status: 'ACCEPTED',
+        campaign: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          status: 'OPEN',
+          startsAt: { lte: input.now },
+          endsAt: { gt: input.now },
+        },
+      },
+      select: { campaignId: true, campaign: { select: { name: true } } },
+    });
+    const campaignIds = campaignParticipations.map(({ campaignId }) => campaignId);
+
     const account = await this.client.pointAccount.findUnique({
       where: {
         workspaceId_userId: { workspaceId: input.workspaceId, userId: input.actorUserId },
@@ -19294,9 +19310,9 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
         where: {
           status: { in: ['ACTIVE', 'SUSPENDED'] },
           OR: [{ groupId: null }, { groupId: input.groupId }],
-          campaignId: null,
           AND: [
             { OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }] },
+            { OR: [{ campaignId: null }, { campaignId: { in: campaignIds } }] },
             { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
             { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
           ],
@@ -19308,6 +19324,8 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
           weeklyLimit: true,
           workspaceId: true,
           groupId: true,
+          campaignId: true,
+          campaign: { select: { name: true } },
           status: true,
           version: true,
         },
@@ -19335,7 +19353,8 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
           right.version - left.version,
       )
       .forEach((rule) => {
-        if (!uniqueRules.has(rule.ruleKey)) uniqueRules.set(rule.ruleKey, rule);
+        const key = `${rule.campaignId ?? 'service'}:${rule.ruleKey}`;
+        if (!uniqueRules.has(key)) uniqueRules.set(key, rule);
       });
     const expiringBalances = expiring
       .map((item) => ({
@@ -19351,7 +19370,16 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
       recentTransactions: transactions.map(pointTransactionRecord),
       expiringWithin30Days: expiringBalances.reduce((sum, item) => sum + item.amount, 0),
       nextExpiryAt: expiringBalances[0]?.expiresAt ?? null,
-      earningMethods: [...uniqueRules.values()].filter((rule) => rule.status === 'ACTIVE'),
+      earningMethods: [...uniqueRules.values()]
+        .filter((rule) => rule.status === 'ACTIVE')
+        .map((rule) => ({
+          ruleKey: rule.ruleKey,
+          campaignId: rule.campaignId,
+          campaignName: rule.campaign?.name ?? null,
+          grantAmount: rule.grantAmount,
+          dailyLimit: rule.dailyLimit,
+          weeklyLimit: rule.weeklyLimit,
+        })),
       weeklyPosts: posts.filter((post) => pointWeekKey(post.postedAt, input.timezone) === weekKey)
         .length,
       weeklyPostGoal: 3,

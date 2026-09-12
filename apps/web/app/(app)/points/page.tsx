@@ -234,8 +234,11 @@ export default async function PointsPage({
         {dashboard.earningMethods.length ? (
           <ul className="point-methods">
             {dashboard.earningMethods.map((method) => (
-              <li key={method.ruleKey}>
-                <span>{ruleLabels[method.ruleKey] ?? '決められた行動をする'}</span>
+              <li key={`${method.campaignId ?? 'service'}:${method.ruleKey}`}>
+                <span>
+                  {method.campaignName ? `${method.campaignName}：` : ''}
+                  {ruleLabels[method.ruleKey] ?? '決められた行動をする'}
+                </span>
                 <strong>+{method.grantAmount} WP</strong>
               </li>
             ))}

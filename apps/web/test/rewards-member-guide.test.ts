@@ -57,6 +57,11 @@ describe('rewards member guide', () => {
     expect(points).toContain("featureKey: 'SOCIAL.IMAGE_GENERATION'");
   });
 
+  it('labels point earning methods that belong to an accepted campaign', () => {
+    expect(points).toContain("method.campaignName ? `${method.campaignName}：` : ''");
+    expect(points).toContain("`${method.campaignId ?? 'service'}:${method.ruleKey}`");
+  });
+
   it('adds the same plain-language instructions to service help for eligible members', () => {
     expect(help).toContain('rewardsPilotAccess && <a href="#rewards">');
     expect(help).toContain('ポイントとバッジの確認方法');
