@@ -115,6 +115,16 @@ const pointControlSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+const pilotPeriodPresetSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(80),
+  reason: z.string().trim().min(5).max(1000),
+});
+
+const pilotMemberSelectionSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(80),
+  reason: z.string().trim().min(5).max(1000),
+});
+
 const rewardSettingsSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
   reason: z.string().trim().min(3).max(1000),
@@ -783,6 +793,109 @@ async function changePointIssuance(formData: FormData) {
   redirect(`${returnPath}?control=${parsed.data.target}` as Route);
 }
 
+async function startFourWeekPilot(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = pilotPeriodPresetSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
+  try {
+    const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const { GroupFeatureEntitlementService } = await import('@bunshin/application');
+    const previous = await db.prisma.groupFeaturePolicy.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        featureKey: db.REWARDS_PILOT_FEATURE_KEY,
+      },
+      select: {
+        status: true,
+        dailyLimit: true,
+        monthlyLimit: true,
+        config: true,
+        startsAt: true,
+        endsAt: true,
+      },
+    });
+    const startsAt = new Date();
+    if (
+      previous?.status === 'ENABLED' &&
+      previous.startsAt &&
+      previous.startsAt <= startsAt &&
+      previous.endsAt &&
+      previous.endsAt > startsAt &&
+      previous.endsAt.getTime() - previous.startsAt.getTime() >= 28 * 24 * 60 * 60 * 1000
+    )
+      throw new Error('PILOT_ALREADY_ACTIVE');
+    const endsAt = new Date(startsAt.getTime() + 28 * 24 * 60 * 60 * 1000);
+    await new GroupFeatureEntitlementService(
+      new db.PrismaGroupFeatureEntitlementRepository(),
+    ).setGroupPolicy({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      featureKey: db.REWARDS_PILOT_FEATURE_KEY,
+      status: 'ENABLED',
+      dailyLimit: previous?.dailyLimit ?? null,
+      monthlyLimit: previous?.monthlyLimit ?? null,
+      config: previous?.config ?? {},
+      startsAt,
+      endsAt,
+      reason: parsed.data.reason,
+      actorUserId: actor.userId,
+    });
+  } catch {
+    redirect(`${returnPath}?error=pilot-period` as Route);
+  }
+  revalidatePath(returnPath);
+  revalidatePath(`/s/${parsed.data.serviceSlug}/manage/members`);
+  redirect(`${returnPath}?pilotPeriod=1` as Route);
+}
+
+async function replacePilotMembers(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = pilotMemberSelectionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const membershipIds = [
+    ...new Set(
+      formData
+        .getAll('membershipIds')
+        .flatMap((value) =>
+          typeof value === 'string' && z.uuid().safeParse(value).success ? [value] : [],
+        ),
+    ),
+  ];
+  const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
+  if (membershipIds.length < 1 || membershipIds.length > 30)
+    redirect(`${returnPath}?error=pilot-members` as Route);
+  try {
+    const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    await db.prisma.$transaction(
+      (tx) =>
+        db.replaceRewardsPilotMemberAssignments(tx, {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          actorUserId: actor.userId,
+          membershipIds,
+          reason: parsed.data.reason,
+          now: new Date(),
+        }),
+      { isolationLevel: 'Serializable' },
+    );
+  } catch {
+    redirect(`${returnPath}?error=pilot-members` as Route);
+  }
+  revalidatePath(returnPath);
+  revalidatePath(`/s/${parsed.data.serviceSlug}/manage/members`);
+  revalidatePath('/points');
+  revalidatePath('/badges');
+  redirect(`${returnPath}?pilotMembers=1` as Route);
+}
+
 export default async function ServicePointSettingsPage({
   params,
   searchParams,
@@ -796,6 +909,8 @@ export default async function ServicePointSettingsPage({
     recoveryCancelled?: string;
     rewards?: string;
     control?: string;
+    pilotPeriod?: string;
+    pilotMembers?: string;
     error?: string;
   }>;
 }) {
@@ -813,9 +928,11 @@ export default async function ServicePointSettingsPage({
       status: 'ACTIVE',
     },
     select: {
+      id: true,
       userId: true,
       user: { select: { displayName: true, email: true } },
       serviceRole: true,
+      consentedAt: true,
       featureAssignments: {
         where: { featureKey: 'REWARDS.POINTS_BADGES' },
         select: { status: true, startsAt: true, endsAt: true },
@@ -1018,15 +1135,27 @@ export default async function ServicePointSettingsPage({
     (!rewardsPolicy.startsAt || rewardsPolicy.startsAt <= now) &&
     (!rewardsPolicy.endsAt || rewardsPolicy.endsAt > now),
   );
+  const configuredFourWeekPilot = Boolean(
+    rewardsPolicy?.status === 'ENABLED' &&
+    rewardsPolicy.startsAt &&
+    rewardsPolicy.endsAt &&
+    rewardsPolicy.endsAt > now &&
+    rewardsPolicy.endsAt.getTime() - rewardsPolicy.startsAt.getTime() >= 28 * 24 * 60 * 60 * 1000,
+  );
   const activeRewardsPilotMembers = memberships.filter((membership) =>
-    membership.featureAssignments.some(
-      (assignment) =>
-        assignment.status === 'ENABLED' &&
-        (!assignment.startsAt || assignment.startsAt <= now) &&
-        (!assignment.endsAt || assignment.endsAt > now),
+    Boolean(
+      membership.consentedAt &&
+      membership.featureAssignments.some(
+        (assignment) =>
+          assignment.status === 'ENABLED' &&
+          (!assignment.startsAt || assignment.startsAt <= now) &&
+          (!assignment.endsAt || assignment.endsAt > now),
+      ),
     ),
   );
   const rewardsPilotActiveCount = activeRewardsPilotMembers.length;
+  const consentedPilotCandidates = memberships.filter(({ consentedAt }) => consentedAt !== null);
+  const activePilotMembershipIds = new Set(activeRewardsPilotMembers.map(({ id }) => id));
   const activePointRuleCount = RULES.filter((rule) => {
     const saved = current.get(rule.key);
     return !saved || saved.status === 'ACTIVE';
@@ -1188,6 +1317,12 @@ export default async function ServicePointSettingsPage({
         {query.rewards ? (
           <p className="notice notice--success">ポイントの使い道を保存しました。</p>
         ) : null}
+        {query.pilotPeriod ? (
+          <p className="notice notice--success">今日から4週間の試験期間を設定しました。</p>
+        ) : null}
+        {query.pilotMembers ? (
+          <p className="notice notice--success">試験利用者をまとめて保存しました。</p>
+        ) : null}
         {query.control === 'stop' ? (
           <p className="notice notice--success">ポイント付与を一括停止しました。</p>
         ) : null}
@@ -1198,19 +1333,23 @@ export default async function ServicePointSettingsPage({
           <p className="notice notice--danger">
             {query.error === 'recovery-cancellation'
               ? '回収を取り消せませんでした。すでに取り消されていないか確認してください。'
-              : query.error === 'recovery'
-                ? '回収を記録できませんでした。画面を更新し、入力内容を確認してください。'
-                : query.error === 'budget'
-                  ? '発行上限は、すでに発行したポイント以上にしてください。'
-                  : query.error === 'campaign-budget'
-                    ? '募集の発行上限は、すでに発行したポイント以上にしてください。'
-                    : query.error === 'campaign-rules'
-                      ? '募集ごとのポイント設定を保存できませんでした。募集の期間と入力内容を確認してください。'
-                      : query.error === 'stopped'
-                        ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
-                        : query.error === 'rewards'
-                          ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
-                          : '保存できませんでした。入力内容を確認してください。'}
+              : query.error === 'pilot-period'
+                ? '4週間の試験期間を設定できませんでした。システム管理者の権限を確認してください。'
+                : query.error === 'pilot-members'
+                  ? '試験利用者を保存できませんでした。同意済みの人を1〜30人選んでください。'
+                  : query.error === 'recovery'
+                    ? '回収を記録できませんでした。画面を更新し、入力内容を確認してください。'
+                    : query.error === 'budget'
+                      ? '発行上限は、すでに発行したポイント以上にしてください。'
+                      : query.error === 'campaign-budget'
+                        ? '募集の発行上限は、すでに発行したポイント以上にしてください。'
+                        : query.error === 'campaign-rules'
+                          ? '募集ごとのポイント設定を保存できませんでした。募集の期間と入力内容を確認してください。'
+                          : query.error === 'stopped'
+                            ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
+                            : query.error === 'rewards'
+                              ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
+                              : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
 
@@ -1280,6 +1419,85 @@ export default async function ServicePointSettingsPage({
                 })}
               </ul>
             </>
+          )}
+        </section>
+
+        <section className="settings-card" aria-labelledby="pilot-quick-start-title">
+          <h2 id="pilot-quick-start-title">無料試験をまとめて準備する</h2>
+          <p>スマートフォンでは、次の順番で設定すると開始できます。</p>
+          <ol>
+            <li>今日から4週間の期間を設定します。</li>
+            <li>試験に参加する人を1〜30人選びます。</li>
+            <li>上の開始確認がすべて「準備済み」になったら完了です。</li>
+          </ol>
+
+          {configuredFourWeekPilot ? (
+            <p className="notice notice--success">
+              4週間の期間は設定済みです。下で参加者を選んでください。
+            </p>
+          ) : platformAdmin ? (
+            <form action={startFourWeekPilot} className="form-stack">
+              <input type="hidden" name="serviceSlug" value={serviceSlug} />
+              <input
+                type="hidden"
+                name="reason"
+                value="無料のポイント・バッジ試験を今日から4週間実施するため"
+              />
+              <button className="button button--secondary" type="submit">
+                今日から4週間に設定する
+              </button>
+            </form>
+          ) : (
+            <p>期間の設定はシステム管理者へ依頼してください。</p>
+          )}
+
+          {configuredFourWeekPilot ? (
+            consentedPilotCandidates.length ? (
+              <form action={replacePilotMembers} className="form-stack">
+                <input type="hidden" name="serviceSlug" value={serviceSlug} />
+                <fieldset className="field">
+                  <legend className="field__label">
+                    試験に参加する人（{rewardsPilotActiveCount}人選択中）
+                  </legend>
+                  <div className="checkbox-stack">
+                    {consentedPilotCandidates.map((membership) => (
+                      <label key={membership.id}>
+                        <input
+                          type="checkbox"
+                          name="membershipIds"
+                          value={membership.id}
+                          defaultChecked={activePilotMembershipIds.has(membership.id)}
+                        />{' '}
+                        {membership.user.displayName || membership.user.email || '参加者'}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <label className="field">
+                  <span className="field__label">選んだ理由</span>
+                  <textarea
+                    className="field__control"
+                    name="reason"
+                    minLength={5}
+                    maxLength={1000}
+                    required
+                    defaultValue="無料試験の参加者として本人の同意を確認したため"
+                  />
+                </label>
+                <button className="button" type="submit">
+                  選んだ人を試験利用者として保存する
+                </button>
+                <p>
+                  <small>
+                    チェックを外した人は試験対象から外れます。過去のポイント・バッジ履歴は削除されません。
+                  </small>
+                </p>
+              </form>
+            ) : (
+              <p>利用規約への同意が完了した参加者がまだいません。先に参加者を招待してください。</p>
+            )
+          ) : (
+            <p>先に4週間の期間を設定すると、参加者をまとめて選べます。</p>
           )}
         </section>
 

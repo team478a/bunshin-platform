@@ -49,6 +49,16 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('/admin/groups/${service.serviceId}/features');
   });
 
+  it('lets a phone operator set four weeks and select all pilot members in one form', () => {
+    expect(servicePointsPage).toContain('startFourWeekPilot');
+    expect(servicePointsPage).toContain('今日から4週間に設定する');
+    expect(servicePointsPage).toContain('replacePilotMembers');
+    expect(servicePointsPage).toContain('replaceRewardsPilotMemberAssignments');
+    expect(servicePointsPage).toContain('name="membershipIds"');
+    expect(servicePointsPage).toContain('選んだ人を試験利用者として保存する');
+    expect(servicePointsPage).toContain('membership.consentedAt');
+  });
+
   it('shows operators whether the 4-week pilot is ready to start', () => {
     expect(servicePointsPage).toContain('buildRewardsPilotReadiness');
     expect(servicePointsPage).toContain('4週間の試験を始める前の確認');
