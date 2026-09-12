@@ -256,6 +256,14 @@ export default async function OperationsAdminPage() {
         </Link>
       </section>
 
+      <section className="settings-card" aria-labelledby="rewards-processing-title">
+        <h2 id="rewards-processing-title">ポイント・バッジの自動反映</h2>
+        <p>付与処理の失敗、処理の停滞、ポイント付与を停止しているサービスを確認します。</p>
+        <Link href="/admin/rewards" className="button button--secondary">
+          自動反映の状態を開く
+        </Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="product-pack-title">
         <h2 id="product-pack-title">公式商品パック</h2>
         <p>グループへ提供する公式情報の下書き、公開、停止、利用状況を管理します。</p>

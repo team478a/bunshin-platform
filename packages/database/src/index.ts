@@ -10299,6 +10299,11 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       failedDeliveries,
       lineJobs,
       otherDeadJobs,
+      failedPointProcessing,
+      stalePointProcessing,
+      failedBadgeProcessing,
+      staleBadgeProcessing,
+      stoppedPointServices,
       blockedDeletions,
       openSupportCases,
       urgentSupportCases,
@@ -10338,6 +10343,39 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
           jobType: { notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
           status: 'DEAD',
         },
+      }),
+      this.client.pointProcessingEvent.count({
+        where: {
+          status: 'FAILED',
+          workspace: { status: 'ACTIVE' },
+          user: { status: 'ACTIVE' },
+        },
+      }),
+      this.client.pointProcessingEvent.count({
+        where: {
+          status: 'PROCESSING',
+          updatedAt: { lt: new Date(input.now.getTime() - 10 * 60 * 1000) },
+          workspace: { status: 'ACTIVE' },
+          user: { status: 'ACTIVE' },
+        },
+      }),
+      this.client.badgeProcessingEvent.count({
+        where: {
+          status: 'FAILED',
+          workspace: { status: 'ACTIVE' },
+          user: { status: 'ACTIVE' },
+        },
+      }),
+      this.client.badgeProcessingEvent.count({
+        where: {
+          status: 'PROCESSING',
+          updatedAt: { lt: new Date(input.now.getTime() - 10 * 60 * 1000) },
+          workspace: { status: 'ACTIVE' },
+          user: { status: 'ACTIVE' },
+        },
+      }),
+      this.client.serviceConfiguration.count({
+        where: { pointIssuanceStopped: true, group: { status: 'ACTIVE' } },
       }),
       this.client.accountDeletionRequest.count({ where: { status: 'BLOCKED' } }),
       this.client.supportCase.count({ where: { status: 'OPEN' } }),
@@ -10419,6 +10457,13 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         deadJobs: lineJobCount('DEAD'),
       },
       otherDeadJobs,
+      rewards: {
+        failedPointProcessing,
+        stalePointProcessing,
+        failedBadgeProcessing,
+        staleBadgeProcessing,
+        stoppedServices: stoppedPointServices,
+      },
       blockedDeletions,
       openSupportCases,
       urgentSupportCases,

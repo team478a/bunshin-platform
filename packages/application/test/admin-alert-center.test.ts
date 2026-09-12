@@ -29,6 +29,13 @@ const healthy = (): AdminAlertSnapshot => ({
     deadJobs: 0,
   },
   otherDeadJobs: 0,
+  rewards: {
+    failedPointProcessing: 0,
+    stalePointProcessing: 0,
+    failedBadgeProcessing: 0,
+    staleBadgeProcessing: 0,
+    stoppedServices: 0,
+  },
   blockedDeletions: 0,
   openSupportCases: 0,
   urgentSupportCases: 0,
@@ -63,6 +70,34 @@ describe('admin alert center', () => {
 
     expect(buildAdminAlerts(snapshot).map((item) => item.code)).not.toEqual(
       expect.arrayContaining(['LINE_CONFIGURATION_UNAVAILABLE', 'LINE_GLOBALLY_PAUSED']),
+    );
+  });
+
+  it('reports reward processing failures and intentional service stops separately', () => {
+    const snapshot = healthy();
+    snapshot.rewards = {
+      failedPointProcessing: 2,
+      stalePointProcessing: 1,
+      failedBadgeProcessing: 3,
+      staleBadgeProcessing: 0,
+      stoppedServices: 2,
+    };
+
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'REWARDS_PROCESSING_FAILURES',
+          severity: 'WARNING',
+          count: 6,
+          href: '/admin/rewards',
+        }),
+        expect.objectContaining({
+          code: 'POINT_ISSUANCE_STOPPED_SERVICES',
+          severity: 'INFO',
+          count: 2,
+          href: '/admin/rewards',
+        }),
+      ]),
     );
   });
 
