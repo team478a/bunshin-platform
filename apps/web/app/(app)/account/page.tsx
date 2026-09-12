@@ -1,4 +1,5 @@
 import { GetAccountDeletionRequest } from '@bunshin/application';
+import type { Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
@@ -8,7 +9,7 @@ export default async function AccountPage() {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
   const db = await import('@bunshin/database');
-  const [request, managedOrganizationCount] = await Promise.all([
+  const [request, managedOrganizationCount, managedServices] = await Promise.all([
     new GetAccountDeletionRequest(new db.PrismaAccountDeletionRequestRepository()).execute(
       user.userId,
     ),
@@ -20,6 +21,27 @@ export default async function AccountPage() {
         workspace: { type: 'ORGANIZATION', status: 'ACTIVE' },
       },
     }),
+    db.prisma.groupMembership.findMany({
+      where: {
+        userId: user.userId,
+        status: 'ACTIVE',
+        serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        group: {
+          status: 'ACTIVE',
+          workspace: { status: 'ACTIVE' },
+          serviceConfiguration: { isNot: null },
+        },
+      },
+      select: {
+        group: {
+          select: {
+            name: true,
+            serviceConfiguration: { select: { slug: true, displayName: true } },
+          },
+        },
+      },
+      orderBy: { group: { name: 'asc' } },
+    }),
   ]);
   return (
     <main className="app-page account-page">
@@ -29,17 +51,36 @@ export default async function AccountPage() {
         <p>利用情報や通知、セキュリティに関する設定を確認できます。</p>
       </header>
 
-      {managedOrganizationCount > 0 ? (
+      {managedOrganizationCount > 0 || managedServices.length > 0 ? (
         <section className="settings-card" aria-labelledby="operator-settings-title">
           <h2 id="operator-settings-title">運営者メニュー</h2>
           <nav className="settings-list" aria-label="運営者メニュー">
-            <Link href="/organizations" className="settings-row">
-              <span>
-                <strong>運営団体・サービスを管理</strong>
-                <small>{managedOrganizationCount}件の運営団体を管理できます</small>
-              </span>
-              <span aria-hidden="true">›</span>
-            </Link>
+            {managedServices.map(({ group }) => {
+              const service = group.serviceConfiguration;
+              if (!service) return null;
+              return (
+                <Link
+                  href={`/s/${service.slug}/manage` as Route}
+                  className="settings-row"
+                  key={service.slug}
+                >
+                  <span>
+                    <strong>{service.displayName || group.name}を運営する</strong>
+                    <small>参加者、ポイント、バッジ、LINEなどを管理</small>
+                  </span>
+                  <span aria-hidden="true">›</span>
+                </Link>
+              );
+            })}
+            {managedOrganizationCount > 0 ? (
+              <Link href="/organizations" className="settings-row">
+                <span>
+                  <strong>運営団体・サービスを管理</strong>
+                  <small>{managedOrganizationCount}件の運営団体を管理できます</small>
+                </span>
+                <span aria-hidden="true">›</span>
+              </Link>
+            ) : null}
           </nav>
         </section>
       ) : null}

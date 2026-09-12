@@ -1,6 +1,74 @@
 import type { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { replaceRewardsPilotMemberAssignments } from '../src/rewards-pilot-access';
+import {
+  replaceRewardsPilotMemberAssignments,
+  startFourWeekRewardsPilot,
+} from '../src/rewards-pilot-access';
+
+describe('startFourWeekRewardsPilot', () => {
+  it('allows a service manager to start an audited 28-day pilot for their service', async () => {
+    const now = new Date('2026-09-12T00:00:00.000Z');
+    const endsAt = new Date('2026-10-10T00:00:00.000Z');
+    const upsert = vi.fn().mockResolvedValue({ status: 'ENABLED', startsAt: now, endsAt });
+    const audit = vi.fn().mockResolvedValue({});
+    const client = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'manager-1' }) },
+      featureDefinition: { findFirst: vi.fn().mockResolvedValue({ key: 'REWARDS.POINTS_BADGES' }) },
+      groupFeaturePolicy: { findFirst: vi.fn().mockResolvedValue(null), upsert },
+      groupFeatureAuditLog: { create: audit },
+    } as unknown as Pick<
+      Prisma.TransactionClient,
+      'groupMembership' | 'featureDefinition' | 'groupFeaturePolicy' | 'groupFeatureAuditLog'
+    >;
+
+    await startFourWeekRewardsPilot(client, {
+      workspaceId: 'workspace-1',
+      groupId: 'group-1',
+      actorUserId: 'operator-1',
+      reason: 'free pilot period',
+      now,
+    });
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ status: 'ENABLED', startsAt: now, endsAt }),
+        update: expect.objectContaining({ status: 'ENABLED', startsAt: now, endsAt }),
+      }),
+    );
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'GROUP_POLICY_SET',
+          performedByUserId: 'operator-1',
+        }),
+      }),
+    );
+  });
+
+  it('rejects callers who do not manage the service', async () => {
+    const upsert = vi.fn();
+    const client = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue(null) },
+      featureDefinition: { findFirst: vi.fn().mockResolvedValue({ key: 'REWARDS.POINTS_BADGES' }) },
+      groupFeaturePolicy: { findFirst: vi.fn().mockResolvedValue(null), upsert },
+      groupFeatureAuditLog: { create: vi.fn() },
+    } as unknown as Pick<
+      Prisma.TransactionClient,
+      'groupMembership' | 'featureDefinition' | 'groupFeaturePolicy' | 'groupFeatureAuditLog'
+    >;
+
+    await expect(
+      startFourWeekRewardsPilot(client, {
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        actorUserId: 'member-1',
+        reason: 'free pilot period',
+        now: new Date('2026-09-12T00:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+});
 
 describe('replaceRewardsPilotMemberAssignments', () => {
   it('disables removed members before enabling the selected consented members', async () => {

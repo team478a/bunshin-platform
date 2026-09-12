@@ -7,6 +7,18 @@ const root = join(process.cwd(), 'app');
 const source = (path: string) => readFileSync(join(root, path), 'utf8');
 
 describe('service manager entry boundary', () => {
+  it('links service-only managers directly to the service operations screen', () => {
+    const groups = source('(app)/groups/page.tsx');
+    const account = source('(app)/account/page.tsx');
+    for (const page of [groups, account]) {
+      expect(page).toContain('serviceConfiguration');
+      expect(page).toContain('SERVICE_ADMIN');
+      expect(page).toContain('/manage');
+    }
+    expect(groups).toContain('サービス運営画面を開く');
+    expect(account).toContain('を運営する');
+  });
+
   it('keeps management links under the public service slug', () => {
     const home = source('s/[serviceSlug]/home/page.tsx');
     for (const section of ['members', 'knowledge', 'legal', 'badges']) {

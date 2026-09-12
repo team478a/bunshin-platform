@@ -803,48 +803,18 @@ async function startFourWeekPilot(formData: FormData) {
   try {
     const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
-    const { GroupFeatureEntitlementService } = await import('@bunshin/application');
-    const previous = await db.prisma.groupFeaturePolicy.findFirst({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        featureKey: db.REWARDS_PILOT_FEATURE_KEY,
-      },
-      select: {
-        status: true,
-        dailyLimit: true,
-        monthlyLimit: true,
-        config: true,
-        startsAt: true,
-        endsAt: true,
-      },
-    });
     const startsAt = new Date();
-    if (
-      previous?.status === 'ENABLED' &&
-      previous.startsAt &&
-      previous.startsAt <= startsAt &&
-      previous.endsAt &&
-      previous.endsAt > startsAt &&
-      previous.endsAt.getTime() - previous.startsAt.getTime() >= 28 * 24 * 60 * 60 * 1000
-    )
-      throw new Error('PILOT_ALREADY_ACTIVE');
-    const endsAt = new Date(startsAt.getTime() + 28 * 24 * 60 * 60 * 1000);
-    await new GroupFeatureEntitlementService(
-      new db.PrismaGroupFeatureEntitlementRepository(),
-    ).setGroupPolicy({
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-      featureKey: db.REWARDS_PILOT_FEATURE_KEY,
-      status: 'ENABLED',
-      dailyLimit: previous?.dailyLimit ?? null,
-      monthlyLimit: previous?.monthlyLimit ?? null,
-      config: previous?.config ?? {},
-      startsAt,
-      endsAt,
-      reason: parsed.data.reason,
-      actorUserId: actor.userId,
-    });
+    await db.prisma.$transaction(
+      (tx) =>
+        db.startFourWeekRewardsPilot(tx, {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          actorUserId: actor.userId,
+          reason: parsed.data.reason,
+          now: startsAt,
+        }),
+      { isolationLevel: 'Serializable' },
+    );
   } catch {
     redirect(`${returnPath}?error=pilot-period` as Route);
   }
@@ -1381,7 +1351,7 @@ export default async function ServicePointSettingsPage({
                     item.key === 'POLICY' || item.key === 'PERIOD'
                       ? platformAdmin
                         ? `/admin/groups/${service.serviceId}/features/${db.REWARDS_PILOT_FEATURE_KEY}`
-                        : null
+                        : '#pilot-quick-start-title'
                       : item.key === 'PARTICIPANTS'
                         ? `/s/${serviceSlug}/manage/members`
                         : item.key === 'ISSUANCE'
@@ -1406,14 +1376,6 @@ export default async function ServicePointSettingsPage({
                           <a href={settingsHref}>この設定を直す</a>
                         </>
                       ) : null}
-                      {!item.ready &&
-                      (item.key === 'POLICY' || item.key === 'PERIOD') &&
-                      !platformAdmin ? (
-                        <>
-                          <br />
-                          <span>システム管理者へ設定を依頼してください。</span>
-                        </>
-                      ) : null}
                     </li>
                   );
                 })}
@@ -1435,7 +1397,7 @@ export default async function ServicePointSettingsPage({
             <p className="notice notice--success">
               4週間の期間は設定済みです。下で参加者を選んでください。
             </p>
-          ) : platformAdmin ? (
+          ) : (
             <form action={startFourWeekPilot} className="form-stack">
               <input type="hidden" name="serviceSlug" value={serviceSlug} />
               <input
@@ -1447,8 +1409,6 @@ export default async function ServicePointSettingsPage({
                 今日から4週間に設定する
               </button>
             </form>
-          ) : (
-            <p>期間の設定はシステム管理者へ依頼してください。</p>
           )}
 
           {configuredFourWeekPilot ? (

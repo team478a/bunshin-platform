@@ -51,12 +51,14 @@ describe('rewards pilot web boundary', () => {
 
   it('lets a phone operator set four weeks and select all pilot members in one form', () => {
     expect(servicePointsPage).toContain('startFourWeekPilot');
+    expect(servicePointsPage).toContain('startFourWeekRewardsPilot');
     expect(servicePointsPage).toContain('今日から4週間に設定する');
     expect(servicePointsPage).toContain('replacePilotMembers');
     expect(servicePointsPage).toContain('replaceRewardsPilotMemberAssignments');
     expect(servicePointsPage).toContain('name="membershipIds"');
     expect(servicePointsPage).toContain('選んだ人を試験利用者として保存する');
     expect(servicePointsPage).toContain('membership.consentedAt');
+    expect(servicePointsPage).not.toContain('期間の設定はシステム管理者へ依頼してください。');
   });
 
   it('shows operators whether the 4-week pilot is ready to start', () => {

@@ -26,6 +26,7 @@ export default async function GroupsPage({
     select: {
       id: true,
       role: true,
+      serviceRole: true,
       featureAssignments: {
         where: {
           featureKey: { in: ['VIDEO_GENERATION', 'SOCIAL.IMAGE_GENERATION'] },
@@ -37,6 +38,7 @@ export default async function GroupsPage({
         select: {
           id: true,
           name: true,
+          serviceConfiguration: { select: { slug: true } },
           workspace: { select: { name: true } },
           featurePolicies: {
             where: {
@@ -70,7 +72,15 @@ export default async function GroupsPage({
           <div>
             <span>運営できるもの</span>
             <strong>
-              {memberships.filter((membership) => membership.role === 'MANAGER').length}件
+              {
+                memberships.filter((membership) =>
+                  Boolean(
+                    membership.role === 'MANAGER' ||
+                    ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole),
+                  ),
+                ).length
+              }
+              件
             </strong>
           </div>
         </section>
@@ -117,6 +127,9 @@ export default async function GroupsPage({
           membership.featureAssignments.some(
             (item) => item.featureKey === 'SOCIAL.IMAGE_GENERATION' && active(item),
           );
+        const canManageService =
+          ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole) &&
+          membership.group.serviceConfiguration;
         return (
           <section className="group-dashboard-card" key={membership.id}>
             <div className="group-dashboard-card__heading">
@@ -138,6 +151,14 @@ export default async function GroupsPage({
               </span>
             </div>
             <div className="group-dashboard-card__actions">
+              {canManageService ? (
+                <Link
+                  className="button"
+                  href={`/s/${membership.group.serviceConfiguration!.slug}/manage`}
+                >
+                  サービス運営画面を開く
+                </Link>
+              ) : null}
               {videoAvailable ? (
                 <>
                   <Link className="button" href={`/groups/${membership.group.id}/videos`}>
