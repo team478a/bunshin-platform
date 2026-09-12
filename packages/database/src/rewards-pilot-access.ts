@@ -1,6 +1,168 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { ApplicationError } from '@bunshin/shared';
 
 export const REWARDS_PILOT_FEATURE_KEY = 'REWARDS.POINTS_BADGES';
+
+type RewardsPilotAssignmentClient = Pick<
+  Prisma.TransactionClient,
+  'groupMembership' | 'groupFeaturePolicy' | 'groupMemberFeatureAssignment' | 'groupFeatureAuditLog'
+>;
+
+export async function replaceRewardsPilotMemberAssignments(
+  client: RewardsPilotAssignmentClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    membershipIds: string[];
+    reason: string;
+    now: Date;
+  },
+) {
+  const reason = input.reason.trim();
+  if (reason.length < 1 || reason.length > 1000)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid reason');
+  const membershipIds = [...new Set(input.membershipIds)];
+  if (membershipIds.length < 1 || membershipIds.length > 30)
+    throw new ApplicationError('VALIDATION_ERROR', 'rewards pilot requires 1 to 30 members');
+  const [manager, policy, targets, currentAssignments] = await Promise.all([
+    client.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        OR: [
+          { role: 'MANAGER' },
+          {
+            serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+            group: { serviceConfiguration: { isNot: null } },
+          },
+        ],
+      },
+      select: { id: true },
+    }),
+    client.groupFeaturePolicy.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+        status: 'ENABLED',
+      },
+      select: { startsAt: true, endsAt: true },
+    }),
+    client.groupMembership.findMany({
+      where: {
+        id: { in: membershipIds },
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+      },
+      select: { id: true },
+    }),
+    client.groupMemberFeatureAssignment.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+      },
+    }),
+  ]);
+  if (!manager || !policy)
+    throw new ApplicationError('FORBIDDEN', 'rewards pilot assignment denied');
+  if (targets.length !== membershipIds.length)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid rewards pilot member');
+  if (
+    !policy.startsAt ||
+    policy.startsAt > input.now ||
+    !policy.endsAt ||
+    policy.endsAt <= input.now ||
+    policy.endsAt.getTime() - policy.startsAt.getTime() < 28 * 24 * 60 * 60 * 1000
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid rewards pilot period');
+
+  const selected = new Set(membershipIds);
+  let disabledCount = 0;
+  let enabledCount = 0;
+  for (const assignment of currentAssignments) {
+    if (assignment.status !== 'ENABLED' || selected.has(assignment.groupMembershipId)) continue;
+    await client.groupMemberFeatureAssignment.update({
+      where: { id: assignment.id },
+      data: { status: 'DISABLED', assignedByUserId: input.actorUserId },
+    });
+    await client.groupFeatureAuditLog.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: assignment.groupMembershipId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+        action: 'MEMBER_ASSIGNMENT_SET',
+        beforeData: { status: assignment.status },
+        afterData: { status: 'DISABLED' },
+        reason,
+        performedByUserId: input.actorUserId,
+        occurredAt: input.now,
+      },
+    });
+    disabledCount += 1;
+  }
+  for (const membershipId of membershipIds) {
+    const before = currentAssignments.find(
+      (assignment) => assignment.groupMembershipId === membershipId,
+    );
+    await client.groupMemberFeatureAssignment.upsert({
+      where: {
+        groupMembershipId_featureKey: {
+          groupMembershipId: membershipId,
+          featureKey: REWARDS_PILOT_FEATURE_KEY,
+        },
+      },
+      create: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membershipId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+        status: 'ENABLED',
+        startsAt: policy.startsAt,
+        endsAt: policy.endsAt,
+        assignedByUserId: input.actorUserId,
+      },
+      update: {
+        status: 'ENABLED',
+        startsAt: policy.startsAt,
+        endsAt: policy.endsAt,
+        assignedByUserId: input.actorUserId,
+      },
+    });
+    await client.groupFeatureAuditLog.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membershipId,
+        featureKey: REWARDS_PILOT_FEATURE_KEY,
+        action: 'MEMBER_ASSIGNMENT_SET',
+        beforeData: before
+          ? {
+              status: before.status,
+              startsAt: before.startsAt?.toISOString() ?? null,
+              endsAt: before.endsAt?.toISOString() ?? null,
+            }
+          : Prisma.JsonNull,
+        afterData: {
+          status: 'ENABLED',
+          startsAt: policy.startsAt?.toISOString() ?? null,
+          endsAt: policy.endsAt?.toISOString() ?? null,
+        },
+        reason,
+        performedByUserId: input.actorUserId,
+        occurredAt: input.now,
+      },
+    });
+    enabledCount += 1;
+  }
+  return { enabledCount, disabledCount };
+}
 
 type RewardsPilotAccessClient = Pick<Prisma.TransactionClient, 'groupMembership'>;
 

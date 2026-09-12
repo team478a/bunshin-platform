@@ -256,6 +256,7 @@ export {
   getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
   listActiveRewardsPilotServiceAccesses,
+  replaceRewardsPilotMemberAssignments,
   REWARDS_PILOT_FEATURE_KEY,
   type RewardsPilotAccess,
   type RewardsPilotServiceAccess,
