@@ -1,4 +1,5 @@
 import { GetBadgeUserDashboard, type BadgeUserItem } from '@bunshin/application';
+import type { Route } from 'next';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { BadgeVisibilityControl } from './badge-visibility-control';
@@ -115,6 +116,21 @@ export default async function BadgesPage({
       </header>
 
       <RewardsPilotExpiryNoticeCard notice={pilotExpiryNotice} />
+
+      <section className="settings-card" aria-labelledby="badge-reflection-title">
+        <h2 id="badge-reflection-title">バッジが増えるまで</h2>
+        <ol className="reward-help-steps">
+          <li>今日の投稿案を確認し、投稿などの行動を記録します。</li>
+          <li>通常1分ほど待ち、このページを開き直します。</li>
+          <li>獲得したバッジと、次の目標を下で確認します。</li>
+        </ol>
+        <Link
+          className="button button--secondary"
+          href={`/points?workspaceId=${encodeURIComponent(workspace.id)}` as Route}
+        >
+          ポイントの履歴を見る
+        </Link>
+      </section>
 
       <BadgeNotificationList
         workspaceId={workspace.id}

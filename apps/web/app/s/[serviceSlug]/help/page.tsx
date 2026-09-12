@@ -69,6 +69,14 @@ export default async function ServiceHelpPage({
   const delivery = settings.dailyIdeaDelivery;
   const isManager = ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership?.serviceRole ?? '');
   const isContentEditor = membership?.serviceRole === 'CONTENT_EDITOR';
+  const rewardsPilotAccess =
+    user && membership
+      ? await db.getActiveRewardsPilotAccess(db.prisma, {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: user.userId,
+        })
+      : null;
   const serviceBase = `/s/${service.configuration.slug}`;
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
@@ -106,6 +114,7 @@ export default async function ServiceHelpPage({
           <a href="#start">はじめ方</a>
           <a href="#delivery">配信の違い</a>
           <a href="#daily">毎日の使い方</a>
+          {rewardsPilotAccess && <a href="#rewards">ポイント・バッジ</a>}
           <a href="#media">画像・動画</a>
           <a href="#trouble">困ったとき</a>
           {(isManager || isContentEditor) && <a href="#operation">運営マニュアル</a>}
@@ -184,11 +193,47 @@ export default async function ServiceHelpPage({
             <div>
               <p>紹介機能が有効なサービスでは、活動ページに専用URLやQRコードが表示されます。</p>
               <p>
-                ポイント、バッジ、画像作成回数はサービスごとに管理され、別サービスへ移すことはできません。
+                ポイント残高は同じ運営元の対応サービスで共通です。バッジと画像作成回数はサービスごとに管理されます。
               </p>
             </div>
           </details>
         </section>
+
+        {rewardsPilotAccess && (
+          <section className="service-entry__card service-help__section" id="rewards">
+            <p className="eyebrow">続けた記録</p>
+            <h2>ポイントとバッジの確認方法</h2>
+            <p>特別な申請は必要ありません。いつもの投稿作業を記録すると自動で反映されます。</p>
+            <ol className="service-help__steps">
+              <li>今日の投稿案を開きます。初めて開いた日はポイントの対象になります。</li>
+              <li>SNSへ実際に投稿した後で「投稿しました」を押します。</li>
+              <li>通常1分ほど待ち、「活動・紹介」からポイントとバッジを確認します。</li>
+            </ol>
+            <p className="service-help__note">
+              同じ行動でもらえるポイントは原則1日1回です。すでに受け取った日は、もう一度押しても増えません。
+            </p>
+            <div className="service-home-actions">
+              <Link
+                className="button button--primary"
+                href={`${serviceBase}/activity#rewards` as Route}
+              >
+                ポイント・バッジを確認する
+              </Link>
+              <Link
+                className="button"
+                href={`/points?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+              >
+                ポイントの履歴を見る
+              </Link>
+              <Link
+                className="button"
+                href={`/badges?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+              >
+                バッジの進み具合を見る
+              </Link>
+            </div>
+          </section>
+        )}
 
         <section className="service-entry__card service-help__section" id="media">
           <p className="eyebrow">画像・動画</p>

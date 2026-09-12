@@ -3163,6 +3163,8 @@ a {
 }
 
 .service-help__steps,
+.service-reward-guide,
+.reward-help-steps,
 .service-help__list {
   display: grid;
   gap: 10px;
@@ -3422,6 +3424,10 @@ a {
 
 .service-activity-dashboard__stats--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.service-activity-dashboard__stats--single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .service-activity-dashboard__stats > div {

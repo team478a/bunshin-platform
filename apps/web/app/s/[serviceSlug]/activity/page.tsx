@@ -63,8 +63,14 @@ export default async function ServiceMemberActivityPage({
   });
   if (!membership) redirect(`/s/${serviceSlug}` as Route);
 
-  const [referralCode, creditAccount, pointAccount, badgeAwards, badgeProgress] = await Promise.all(
-    [
+  const rewardsPilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    userId: actor.userId,
+  });
+
+  const [referralCode, creditAccount, pointAccount, badgeAwards, badgeProgress, badgeAwardCount] =
+    await Promise.all([
       service.configuration.registration.referralEnabled
         ? db.prisma.serviceReferralCode.findFirst({
             where: {
@@ -95,43 +101,58 @@ export default async function ServiceMemberActivityPage({
         },
         select: { availableCredits: true },
       }),
-      db.prisma.pointAccount.findFirst({
-        where: { workspaceId: service.workspaceId, userId: actor.userId },
-        select: { availablePoints: true },
-      }),
-      db.prisma.badgeAward.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          userId: actor.userId,
-          groupId: service.serviceId,
-          status: 'ACTIVE',
-        },
-        select: {
-          id: true,
-          awardedAt: true,
-          badgeVersion: { select: { title: true, description: true } },
-        },
-        orderBy: { awardedAt: 'desc' },
-        take: 6,
-      }),
-      db.prisma.badgeProgress.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          userId: actor.userId,
-          groupId: service.serviceId,
-          status: { in: ['IN_PROGRESS', 'ELIGIBLE'] },
-        },
-        select: {
-          id: true,
-          currentValue: true,
-          targetValue: true,
-          badgeVersion: { select: { title: true, description: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 3,
-      }),
-    ],
-  );
+      rewardsPilotAccess
+        ? db.prisma.pointAccount.findFirst({
+            where: { workspaceId: service.workspaceId, userId: actor.userId },
+            select: { availablePoints: true },
+          })
+        : null,
+      rewardsPilotAccess
+        ? db.prisma.badgeAward.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              userId: actor.userId,
+              groupId: service.serviceId,
+              status: 'ACTIVE',
+            },
+            select: {
+              id: true,
+              awardedAt: true,
+              badgeVersion: { select: { title: true, description: true } },
+            },
+            orderBy: { awardedAt: 'desc' },
+            take: 6,
+          })
+        : [],
+      rewardsPilotAccess
+        ? db.prisma.badgeProgress.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              userId: actor.userId,
+              groupId: service.serviceId,
+              status: { in: ['IN_PROGRESS', 'ELIGIBLE'] },
+            },
+            select: {
+              id: true,
+              currentValue: true,
+              targetValue: true,
+              badgeVersion: { select: { title: true, description: true } },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 3,
+          })
+        : [],
+      rewardsPilotAccess
+        ? db.prisma.badgeAward.count({
+            where: {
+              workspaceId: service.workspaceId,
+              userId: actor.userId,
+              groupId: service.serviceId,
+              status: 'ACTIVE',
+            },
+          })
+        : 0,
+    ]);
 
   const referralCounts = referralCode
     ? await db.prisma.serviceReferral.groupBy({
@@ -178,7 +199,11 @@ export default async function ServiceMemberActivityPage({
         <header className="service-entry__header">
           <p className="eyebrow">あなたの記録</p>
           <h1>活動・紹介</h1>
-          <p>紹介、ポイント、画像作成回数、バッジをここで確認できます。</p>
+          <p>
+            {rewardsPilotAccess
+              ? 'ポイント、バッジ、紹介、画像作成回数をここで確認できます。'
+              : '紹介と画像作成回数をここで確認できます。'}
+          </p>
         </header>
 
         {service.configuration.registration.referralEnabled && (
@@ -224,77 +249,102 @@ export default async function ServiceMemberActivityPage({
           </section>
         )}
 
+        {rewardsPilotAccess && (
+          <section className="service-entry__card service-activity-dashboard__section" id="rewards">
+            <div>
+              <p className="eyebrow">続けた記録</p>
+              <h2>ポイント・バッジ</h2>
+              <p>今日の投稿案を確認したり、投稿を記録したりすると自動で増えます。</p>
+            </div>
+            <ol className="service-reward-guide">
+              <li>今日の投稿案を開く</li>
+              <li>SNSへ投稿したら「投稿しました」を押す</li>
+              <li>通常1分ほど待って、この画面を開き直す</li>
+            </ol>
+            <div className="service-activity-dashboard__stats service-activity-dashboard__stats--two">
+              <div>
+                <small>いま使えるポイント</small>
+                <strong>{pointAccount?.availablePoints ?? 0} WP</strong>
+              </div>
+              <div>
+                <small>もらったバッジ</small>
+                <strong>{badgeAwardCount}個</strong>
+              </div>
+            </div>
+            <div className="service-home-actions">
+              <Link
+                className="button button--primary"
+                href={`/points?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+              >
+                ポイントの履歴を見る
+              </Link>
+              <Link
+                className="button"
+                href={`/badges?workspaceId=${encodeURIComponent(service.workspaceId)}` as Route}
+              >
+                バッジの進み具合を見る
+              </Link>
+            </div>
+            {badgeAwards.length === 0 ? (
+              <p>最初のバッジを目指して、今日の投稿案を見てみましょう。</p>
+            ) : (
+              <div className="service-activity-dashboard__badges">
+                {badgeAwards.map((award) => (
+                  <article key={award.id}>
+                    <span aria-hidden="true">★</span>
+                    <div>
+                      <h3>{award.badgeVersion.title}</h3>
+                      <p>{award.badgeVersion.description}</p>
+                      <small>{award.awardedAt.toLocaleDateString('ja-JP')}</small>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+            {badgeProgress.length > 0 && (
+              <div className="service-activity-dashboard__progress">
+                <h3>もう少しでもらえるバッジ</h3>
+                {badgeProgress.map((progress) => {
+                  const percent = Math.min(
+                    100,
+                    Math.round((progress.currentValue / Math.max(1, progress.targetValue)) * 100),
+                  );
+                  return (
+                    <div key={progress.id}>
+                      <p>{progress.badgeVersion.title}</p>
+                      <div
+                        className="progress-bar"
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={percent}
+                      >
+                        <span style={{ width: `${percent}%` }} />
+                      </div>
+                      <small>
+                        {progress.currentValue} / {progress.targetValue}
+                      </small>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="service-entry__card service-activity-dashboard__section">
           <div>
-            <p className="eyebrow">使える特典</p>
-            <h2>ポイント・画像作成回数</h2>
+            <p className="eyebrow">画像を作れる回数</p>
+            <h2>画像作成回数</h2>
           </div>
-          <div className="service-activity-dashboard__stats service-activity-dashboard__stats--two">
+          <div className="service-activity-dashboard__stats service-activity-dashboard__stats--single">
             <div>
-              <small>ワタシポイント（共通）</small>
-              <strong>{pointAccount?.availablePoints ?? 0} WP</strong>
-            </div>
-            <div>
-              <small>画像作成回数</small>
+              <small>現在の残り</small>
               <strong>{creditAccount?.availableCredits ?? 0}回</strong>
             </div>
           </div>
           <Link className="button" href={`/s/${serviceSlug}/credits` as Route}>
             画像作成回数の履歴を見る
-          </Link>
-        </section>
-
-        <section className="service-entry__card service-activity-dashboard__section">
-          <div>
-            <p className="eyebrow">がんばったしるし</p>
-            <h2>バッジ</h2>
-          </div>
-          {badgeAwards.length === 0 ? (
-            <p>このサービスでもらったバッジはまだありません。</p>
-          ) : (
-            <div className="service-activity-dashboard__badges">
-              {badgeAwards.map((award) => (
-                <article key={award.id}>
-                  <span aria-hidden="true">★</span>
-                  <div>
-                    <h3>{award.badgeVersion.title}</h3>
-                    <p>{award.badgeVersion.description}</p>
-                    <small>{award.awardedAt.toLocaleDateString('ja-JP')}</small>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-          {badgeProgress.length > 0 && (
-            <div className="service-activity-dashboard__progress">
-              <h3>もう少しでもらえるバッジ</h3>
-              {badgeProgress.map((progress) => {
-                const percent = Math.min(
-                  100,
-                  Math.round((progress.currentValue / Math.max(1, progress.targetValue)) * 100),
-                );
-                return (
-                  <div key={progress.id}>
-                    <p>{progress.badgeVersion.title}</p>
-                    <div
-                      className="progress-bar"
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={percent}
-                    >
-                      <span style={{ width: `${percent}%` }} />
-                    </div>
-                    <small>
-                      {progress.currentValue} / {progress.targetValue}
-                    </small>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <Link className="button" href="/badges">
-            すべてのバッジを見る
           </Link>
         </section>
 
