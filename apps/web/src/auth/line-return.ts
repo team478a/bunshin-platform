@@ -45,6 +45,21 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
       url.search === ''
     )
       return url.pathname;
+    if (/^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*\/weekly-report$/.test(url.pathname)) {
+      if ([...url.searchParams.keys()].some((key) => key !== 'week')) return null;
+      const week = url.searchParams.get('week');
+      if (week === null) return url.pathname;
+      if (url.searchParams.getAll('week').length !== 1 || !/^\d{4}-\d{2}-\d{2}$/.test(week))
+        return null;
+      const date = new Date(`${week}T00:00:00.000Z`);
+      if (
+        Number.isNaN(date.valueOf()) ||
+        date.toISOString().slice(0, 10) !== week ||
+        date.getUTCDay() !== 1
+      )
+        return null;
+      return `${url.pathname}?week=${week}`;
+    }
     if (/^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname) && url.search === '')
       return url.pathname;
     if (/^\/s\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname)) {

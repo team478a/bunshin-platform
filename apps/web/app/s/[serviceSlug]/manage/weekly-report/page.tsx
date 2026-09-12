@@ -4,12 +4,15 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { loadServiceWeeklyProgressReports } from '../../../../../src/services/weekly-progress-report-data';
+import { readWeeklyReportDeliverySetting } from '../../../../../src/services/weekly-report-line-delivery';
+import { currentLineEnvironment } from '../../../../../src/line/secure-configuration';
 import {
   nextWeek,
   previousWeek,
   resolveWeeklyReportWindow,
 } from '../../../../../src/services/weekly-progress-report';
 import { PublicShell } from '../../../../ui/public-shell';
+import { WeeklyReportDeliveryEditor } from './weekly-report-delivery-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +20,13 @@ const dateLabel = (value: string) =>
   new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric' }).format(
     new Date(`${value}T00:00:00.000Z`),
   );
+
+const deliveryStatusLabel = {
+  DRAFT: '下書き',
+  SCHEDULED: '配信待ち',
+  CANCELLED: '取消済み',
+  COMPLETED: '配信処理完了',
+} as const;
 
 export default async function ManagedWeeklyReportPage({
   params,
@@ -32,12 +42,45 @@ export default async function ManagedWeeklyReportPage({
   if (!service) notFound();
   const window = resolveWeeklyReportWindow((await searchParams).week);
   const db = await import('@bunshin/database');
-  const reports = await loadServiceWeeklyProgressReports({
-    client: db.prisma,
-    workspaceId: service.workspaceId,
-    groupId: service.serviceId,
-    window,
-  });
+  const environment = currentLineEnvironment();
+  const [reports, lineConfiguration, deliveryHistory] = await Promise.all([
+    loadServiceWeeklyProgressReports({
+      client: db.prisma,
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      window,
+    }),
+    db.prisma.groupLineChannelConfiguration.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        environment,
+        status: 'ACTIVE',
+      },
+      select: { lastVerifiedAt: true, lastErrorCategory: true, globallyPaused: true },
+    }),
+    db.prisma.serviceLineBroadcast.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        automationKey: { startsWith: 'weekly-report:' },
+      },
+      select: {
+        id: true,
+        status: true,
+        scheduledAt: true,
+        recipients: { select: { status: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+    }),
+  ]);
+  const lineReady = Boolean(
+    service.configuration.registration.lineEnabled &&
+    lineConfiguration?.lastVerifiedAt &&
+    !lineConfiguration.lastErrorCategory &&
+    !lineConfiguration.globallyPaused,
+  );
   const support = reports.filter(({ needsSupport }) => needsSupport);
   const totals = reports.reduce(
     (result, report) => ({
@@ -150,6 +193,55 @@ export default async function ManagedWeeklyReportPage({
                 </article>
               ))}
             </div>
+          )}
+        </section>
+
+        <section className="settings-card">
+          <p className="eyebrow">自動でお知らせ</p>
+          <h2>週次レポートをLINEで届ける</h2>
+          <p>
+            参加者ごとに今週できたことと次の一歩をまとめ、本人だけが開けるレポート画面を案内します。
+          </p>
+          <WeeklyReportDeliveryEditor
+            serviceSlug={service.configuration.slug}
+            initialSetting={readWeeklyReportDeliverySetting(
+              service.configuration.registration.onboardingConfig,
+            )}
+            lineReady={lineReady}
+          />
+          {deliveryHistory.length > 0 ? (
+            <div className="weekly-report__delivery-history">
+              <h3>最近の自動配信</h3>
+              <ul>
+                {deliveryHistory.map((delivery) => {
+                  const sent = delivery.recipients.filter(({ status }) => status === 'SENT').length;
+                  const failed = delivery.recipients.filter(
+                    ({ status }) => status === 'FAILED',
+                  ).length;
+                  return (
+                    <li key={delivery.id}>
+                      <span>
+                        {delivery.scheduledAt
+                          ? new Intl.DateTimeFormat('ja-JP', {
+                              month: 'numeric',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              timeZone: 'Asia/Tokyo',
+                            }).format(delivery.scheduledAt)
+                          : '日時未定'}
+                      </span>
+                      <strong>{deliveryStatusLabel[delivery.status]}</strong>
+                      <small>
+                        送信 {sent}件／失敗 {failed}件
+                      </small>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <p>自動配信の履歴はまだありません。</p>
           )}
         </section>
 

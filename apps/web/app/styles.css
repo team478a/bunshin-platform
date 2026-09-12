@@ -6022,6 +6022,72 @@ body:has(.app-shell) > .site-footer {
   font-weight: 700;
 }
 
+.weekly-report__delivery-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.weekly-report__delivery-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+.weekly-report__delivery-form input,
+.weekly-report__delivery-form select {
+  min-height: 3rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #dfe4ec;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.weekly-report__delivery-toggle {
+  grid-template-columns: auto 1fr !important;
+  align-items: center;
+  font-size: 1.05rem;
+}
+
+.weekly-report__delivery-toggle input {
+  width: 1.4rem;
+  min-height: 1.4rem;
+}
+
+.weekly-report__delivery-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.weekly-report__delivery-history {
+  margin-top: 1.5rem;
+}
+
+.weekly-report__delivery-history ul {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.weekly-report__delivery-history li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.75rem;
+  padding: 0.8rem;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.weekly-report__delivery-history li small {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+}
+
 .weekly-report__next h2 {
   font-size: clamp(1.25rem, 5vw, 1.7rem);
 }
@@ -6029,5 +6095,9 @@ body:has(.app-shell) > .site-footer {
 @media (min-width: 720px) {
   .weekly-report__metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .weekly-report__delivery-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

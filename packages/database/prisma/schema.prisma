@@ -6188,6 +6188,7 @@ model ServiceLineBroadcast {
   groupId         String                          @map("group_id") @db.Uuid
   title           String                          @db.VarChar(120)
   message         String                          @db.Text
+  automationKey   String?                         @unique @map("automation_key") @db.VarChar(200)
   audience        ServiceLineBroadcastAudience    @default(ACTIVE_PARTICIPANTS)
   segmentCriteria Json                            @default("{}") @map("segment_criteria")
   status          ServiceLineBroadcastStatus      @default(DRAFT)
@@ -6214,6 +6215,7 @@ model ServiceLineBroadcastRecipient {
   broadcastId       String                              @map("broadcast_id") @db.Uuid
   groupMembershipId String                              @map("group_membership_id") @db.Uuid
   userId            String                              @map("user_id") @db.Uuid
+  message           String?                             @db.Text
   status            ServiceLineBroadcastRecipientStatus @default(PENDING)
   deliveredAt       DateTime?                           @map("delivered_at") @db.Timestamptz(6)
   errorCategory     String?                             @map("error_category") @db.VarChar(80)
