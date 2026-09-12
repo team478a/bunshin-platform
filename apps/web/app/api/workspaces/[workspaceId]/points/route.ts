@@ -15,15 +15,20 @@ export async function GET(
     const { workspaceId } = await params;
     const db = await import('@bunshin/database');
     const parsedWorkspaceId = z.string().uuid().parse(workspaceId);
-    if (
-      !(await db.hasActiveRewardsPilotAccess(db.prisma, {
-        workspaceId: parsedWorkspaceId,
-        userId: user.userId,
-      }))
-    )
-      throw new ApplicationError('FORBIDDEN', 'rewards pilot access required');
+    const requestedGroupId = z
+      .string()
+      .uuid()
+      .optional()
+      .parse(new URL(request.url).searchParams.get('groupId') ?? undefined);
+    const access = await db.getActiveRewardsPilotAccess(db.prisma, {
+      workspaceId: parsedWorkspaceId,
+      userId: user.userId,
+      ...(requestedGroupId ? { groupId: requestedGroupId } : {}),
+    });
+    if (!access) throw new ApplicationError('FORBIDDEN', 'rewards pilot access required');
     const data = await new GetPointUserDashboard(new db.PrismaPointLedgerRepository()).execute({
       workspaceId: parsedWorkspaceId,
+      groupId: access.groupId,
       actorUserId: user.userId,
       timezone: 'Asia/Tokyo',
     });

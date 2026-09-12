@@ -19,8 +19,13 @@ describe('rewards pilot web boundary', () => {
   );
 
   it.each([pointsApi, badgesApi])('rejects direct API use outside the pilot', (source) => {
-    expect(source).toContain('hasActiveRewardsPilotAccess');
+    expect(source).toMatch(/(?:has|get)ActiveRewardsPilotAccess/);
     expect(source).toContain('rewards pilot access required');
+  });
+
+  it('resolves the point API to one authorized service before loading its dashboard', () => {
+    expect(pointsApi).toContain('getActiveRewardsPilotAccess');
+    expect(pointsApi).toContain('groupId: access.groupId');
   });
 
   it.each([pointsPage, badgesPage])(

@@ -167,6 +167,7 @@ export default async function GroupImagesPage({
       }),
       new GetPointUserDashboard(new db.PrismaPointLedgerRepository()).execute({
         workspaceId: membership.group.workspaceId,
+        groupId: membership.group.id,
         actorUserId: actor.userId,
         now,
         timezone: 'Asia/Tokyo',
