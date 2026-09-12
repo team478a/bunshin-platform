@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { PrismaBadgeUserExperienceRepository } from '../src/badge-user-experience';
 
 const migration = readFileSync(
   fileURLToPath(
@@ -34,5 +35,48 @@ describe('badge user visibility boundaries', () => {
     expect(repository).toContain('groupMembership.findFirst');
     expect(repository).toContain("group: { status: 'ACTIVE' }");
     expect(repository).not.toContain('PUBLIC');
+  });
+
+  it('limits service badge definitions and sharing choices to the selected group', async () => {
+    const badgeVersionFindMany = vi.fn().mockResolvedValue([]);
+    const notificationFindMany = vi.fn().mockResolvedValue([]);
+    const client = {
+      groupMembership: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'membership-1' }),
+        findMany: vi.fn().mockResolvedValue([{ group: { id: 'group-1', name: 'サービス1' } }]),
+      },
+      workspaceMembership: { findFirst: vi.fn() },
+      badgeAward: { findMany: vi.fn().mockResolvedValue([]) },
+      badgeAwardNotification: { createMany: vi.fn(), findMany: notificationFindMany },
+      badgeVersion: { findMany: badgeVersionFindMany },
+    };
+
+    const dashboard = await new PrismaBadgeUserExperienceRepository(client as never).getDashboard({
+      workspaceId: 'workspace-1',
+      groupId: 'group-1',
+      actorUserId: 'user-1',
+      now: new Date('2026-09-12T00:00:00.000Z'),
+    });
+
+    expect(client.groupMembership.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ groupId: 'group-1' }) }),
+    );
+    expect(client.workspaceMembership.findFirst).not.toHaveBeenCalled();
+    expect(badgeVersionFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              definition: expect.objectContaining({
+                OR: expect.arrayContaining([
+                  expect.objectContaining({ groupId: { in: ['group-1'] } }),
+                ]),
+              }),
+            }),
+          ]),
+        }),
+      }),
+    );
+    expect(dashboard?.shareableGroups).toEqual([{ id: 'group-1', name: 'サービス1' }]);
   });
 });

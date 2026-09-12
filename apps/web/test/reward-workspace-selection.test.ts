@@ -5,15 +5,14 @@ const pointsPage = readFileSync(new URL('../app/(app)/points/page.tsx', import.m
 const badgesPage = readFileSync(new URL('../app/(app)/badges/page.tsx', import.meta.url), 'utf8');
 
 describe('reward workspace selection', () => {
-  it.each([
-    [pointsPage, '/points', 'このサービスのポイントを見る'],
-    [badgesPage, '/badges', 'このサービスのバッジを見る'],
-  ])('selects only from the signed-in user active workspaces', (source, action, button) => {
-    expect(source).toContain('listActiveWorkspacesForUser(user.userId)');
-    expect(source).toContain('workspaces.find(({ id }) => id === requestedWorkspaceId)');
-    expect(source).toContain('workspaces.length > 1');
-    expect(source).toContain(`action="${action}"`);
-    expect(source).toContain('name="workspaceId"');
-    expect(source).toContain(button);
-  });
+  it.each([pointsPage, badgesPage])(
+    'selects only an eligible service belonging to the signed-in user',
+    (source) => {
+      expect(source).toContain('listActiveWorkspacesForUser(user.userId)');
+      expect(source).toContain('listActiveRewardsPilotServiceAccesses');
+      expect(source).toContain('selectRewardsServiceContext');
+      expect(source).toContain('params.serviceSlug');
+      expect(source).toContain('RewardsServiceSelector');
+    },
+  );
 });

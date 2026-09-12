@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type {
   BadgeUserDashboard,
   BadgeUserExperienceRepository,
@@ -9,23 +9,59 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
   constructor(private readonly client: PrismaClient) {}
 
   async getDashboard(input: Parameters<BadgeUserExperienceRepository['getDashboard']>[0]) {
-    const membership = await this.client.workspaceMembership.findFirst({
+    const membership = input.groupId
+      ? await this.client.groupMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+            user: { status: 'ACTIVE' },
+          },
+          select: { id: true },
+        })
+      : await this.client.workspaceMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            workspace: { status: 'ACTIVE' },
+            user: { status: 'ACTIVE' },
+          },
+          select: { id: true },
+        });
+    if (!membership) return null;
+    const groups = await this.client.groupMembership.findMany({
       where: {
         workspaceId: input.workspaceId,
+        ...(input.groupId ? { groupId: input.groupId } : {}),
         userId: input.actorUserId,
         status: 'ACTIVE',
-        workspace: { status: 'ACTIVE' },
-        user: { status: 'ACTIVE' },
+        group: { status: 'ACTIVE' },
       },
-      select: { id: true },
+      select: { group: { select: { id: true, name: true } } },
+      orderBy: { group: { name: 'asc' } },
     });
-    if (!membership) return null;
+    const groupIds = groups.map(({ group }) => group.id);
+    const definitionScope = {
+      OR: [
+        { ownerType: 'SYSTEM', status: 'ACTIVE' },
+        {
+          ownerType: 'GROUP',
+          status: 'ACTIVE',
+          workspaceId: input.workspaceId,
+          groupId: { in: groupIds },
+        },
+      ],
+    } satisfies Prisma.BadgeDefinitionWhereInput;
     const activeAwards = await this.client.badgeAward.findMany({
       where: {
         workspaceId: input.workspaceId,
         userId: input.actorUserId,
         status: 'ACTIVE',
         notification: null,
+        badgeVersion: { definition: definitionScope },
       },
       select: { id: true, awardedAt: true },
     });
@@ -40,17 +76,6 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
         skipDuplicates: true,
       });
     }
-    const groups = await this.client.groupMembership.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        userId: input.actorUserId,
-        status: 'ACTIVE',
-        group: { status: 'ACTIVE' },
-      },
-      select: { group: { select: { id: true, name: true } } },
-      orderBy: { group: { name: 'asc' } },
-    });
-    const groupIds = groups.map(({ group }) => group.id);
     const versions = await this.client.badgeVersion.findMany({
       where: {
         publishedAt: { not: null, lte: input.now },
@@ -58,17 +83,7 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
         AND: [
           { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
           {
-            OR: [
-              { definition: { ownerType: 'SYSTEM', status: 'ACTIVE' } },
-              {
-                definition: {
-                  ownerType: 'GROUP',
-                  status: 'ACTIVE',
-                  workspaceId: input.workspaceId,
-                  groupId: { in: groupIds },
-                },
-              },
-            ],
+            definition: definitionScope,
           },
         ],
       },
@@ -87,7 +102,7 @@ export class PrismaBadgeUserExperienceRepository implements BadgeUserExperienceR
       where: {
         workspaceId: input.workspaceId,
         userId: input.actorUserId,
-        badgeAward: { status: 'ACTIVE' },
+        badgeAward: { status: 'ACTIVE', badgeVersion: { definition: definitionScope } },
       },
       select: {
         id: true,

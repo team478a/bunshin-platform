@@ -255,8 +255,10 @@ export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export {
   getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
+  listActiveRewardsPilotServiceAccesses,
   REWARDS_PILOT_FEATURE_KEY,
   type RewardsPilotAccess,
+  type RewardsPilotServiceAccess,
 } from './rewards-pilot-access';
 
 const globalPrisma = globalThis as unknown as { bunshinPrisma?: PrismaClient };

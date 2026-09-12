@@ -32,5 +32,7 @@ describe('rewards action feedback', () => {
     expect(feedback).toContain('通常1分以内に反映されます');
     expect(feedback).toContain('1日1回まで');
     expect(feedback).toContain('/points?workspaceId=');
+    expect(serviceMission).toContain('serviceSlug={serviceSlug}');
+    expect(serviceMission).toContain('&serviceSlug=');
   });
 });
