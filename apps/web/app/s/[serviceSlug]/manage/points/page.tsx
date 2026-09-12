@@ -78,6 +78,14 @@ const settingsSchema = z.object({
   budget_POSTED_WEEKLY_3: optionalBudgetSchema,
 });
 
+const campaignSettingsSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(80),
+  campaignId: z.uuid(),
+  reason: z.string().trim().min(3).max(1000),
+});
+const campaignRuleModeSchema = z.enum(['INHERIT', 'ACTIVE', 'SUSPENDED']);
+const campaignRuleAmountSchema = z.coerce.number().int().min(1).max(10000);
+
 const bonusSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
   operationId: z.uuid(),
@@ -232,6 +240,158 @@ async function saveRules(formData: FormData) {
   }
   revalidatePath(returnPath);
   redirect(`${returnPath}?saved=1` as Route);
+}
+
+async function saveCampaignRules(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = campaignSettingsSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
+  const settings = RULES.map((rule) => {
+    const mode = campaignRuleModeSchema.safeParse(formData.get(`mode_${rule.key}`));
+    const amount = campaignRuleAmountSchema.safeParse(formData.get(rule.key));
+    const budget = optionalBudgetSchema.safeParse(formData.get(rule.budgetKey));
+    return mode.success && amount.success && budget.success
+      ? { rule, mode: mode.data, amount: amount.data, maximumPoints: budget.data }
+      : null;
+  });
+  if (settings.some((setting) => setting === null))
+    redirect(`${returnPath}?error=campaign-rules` as Route);
+  try {
+    const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const now = new Date();
+    await db.prisma.$transaction(async (tx) => {
+      const [campaign, configuration] = await Promise.all([
+        tx.campaign.findFirst({
+          where: {
+            id: parsed.data.campaignId,
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            status: { in: ['DRAFT', 'OPEN'] },
+            endsAt: { gt: now },
+          },
+          select: { id: true, name: true, startsAt: true, endsAt: true },
+        }),
+        tx.serviceConfiguration.findFirst({
+          where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+          select: { id: true },
+        }),
+      ]);
+      if (!campaign || !configuration) throw new Error('CAMPAIGN_NOT_FOUND');
+      const previous = await tx.pointRuleVersion.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          campaignId: campaign.id,
+          ruleKey: { in: RULES.map((rule) => rule.key) },
+          status: { in: ['ACTIVE', 'SUSPENDED'] },
+        },
+        include: { budget: true },
+        orderBy: { version: 'desc' },
+      });
+      const after = [];
+      for (const setting of settings) {
+        if (!setting) continue;
+        const { rule, mode, amount, maximumPoints } = setting;
+        const [latest, issued] = await Promise.all([
+          tx.pointRuleVersion.aggregate({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              campaignId: campaign.id,
+              ruleKey: rule.key,
+            },
+            _max: { version: true },
+          }),
+          tx.pointTransaction.aggregate({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              campaignId: campaign.id,
+              type: 'GRANT',
+              ruleVersion: { ruleKey: rule.key },
+            },
+            _sum: { amount: true },
+          }),
+        ]);
+        const grantedPoints = issued._sum.amount ?? 0;
+        if (mode === 'ACTIVE' && maximumPoints !== null && maximumPoints < grantedPoints)
+          throw new Error('BUDGET_BELOW_GRANTED');
+        await tx.pointRuleVersion.updateMany({
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            campaignId: campaign.id,
+            ruleKey: rule.key,
+            status: { in: ['DRAFT', 'ACTIVE', 'SUSPENDED'] },
+          },
+          data: { status: 'SUPERSEDED' },
+        });
+        if (mode !== 'INHERIT') {
+          await tx.pointRuleVersion.create({
+            data: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              campaignId: campaign.id,
+              ruleKey: rule.key,
+              version: (latest._max.version ?? 0) + 1,
+              status: mode,
+              grantAmount: amount,
+              dailyLimit: rule.dailyLimit === null ? null : amount,
+              weeklyLimit: rule.weeklyLimit === null ? null : amount,
+              startsAt: campaign.startsAt > now ? campaign.startsAt : now,
+              endsAt: campaign.endsAt,
+              ...(mode === 'ACTIVE' && maximumPoints !== null
+                ? { budget: { create: { maximumPoints, grantedPoints } } }
+                : {}),
+            },
+          });
+        }
+        after.push({
+          ruleKey: rule.key,
+          mode,
+          grantAmount: amount,
+          maximumPoints: mode === 'ACTIVE' ? maximumPoints : null,
+          grantedPoints: mode === 'ACTIVE' && maximumPoints !== null ? grantedPoints : null,
+        });
+      }
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          configurationId: configuration.id,
+          action: 'CAMPAIGN_POINT_RULES_UPDATED',
+          beforeData: {
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            rules: previous.map((rule) => ({
+              ruleKey: rule.ruleKey,
+              status: rule.status,
+              grantAmount: rule.grantAmount,
+              maximumPoints: rule.budget?.maximumPoints ?? null,
+              grantedPoints: rule.budget?.grantedPoints ?? null,
+            })),
+          },
+          afterData: { campaignId: campaign.id, campaignName: campaign.name, rules: after },
+          reason: parsed.data.reason,
+          performedByUserId: actor.userId,
+          occurredAt: now,
+        },
+      });
+    });
+  } catch (error) {
+    const code =
+      error instanceof Error && error.message === 'BUDGET_BELOW_GRANTED'
+        ? 'campaign-budget'
+        : 'campaign-rules';
+    redirect(`${returnPath}?error=${code}` as Route);
+  }
+  revalidatePath(returnPath);
+  revalidatePath('/points');
+  redirect(`${returnPath}?campaignRules=1` as Route);
 }
 
 async function saveRewardSettings(formData: FormData) {
@@ -614,6 +774,7 @@ export default async function ServicePointSettingsPage({
   params: Promise<{ serviceSlug: string }>;
   searchParams: Promise<{
     saved?: string;
+    campaignRules?: string;
     bonus?: string;
     corrected?: string;
     rewards?: string;
@@ -671,6 +832,7 @@ export default async function ServicePointSettingsPage({
   ]);
   const [
     versions,
+    campaigns,
     rewardSettings,
     globalRewardCatalog,
     history,
@@ -688,6 +850,30 @@ export default async function ServicePointSettingsPage({
       },
       include: { budget: true },
       orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
+    }),
+    db.prisma.campaign.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: { in: ['DRAFT', 'OPEN'] },
+        endsAt: { gt: now },
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startsAt: true,
+        endsAt: true,
+        pointRuleVersions: {
+          where: {
+            status: { in: ['ACTIVE', 'SUSPENDED'] },
+            ruleKey: { in: RULES.map((rule) => rule.key) },
+          },
+          include: { budget: true },
+          orderBy: { version: 'desc' },
+        },
+      },
+      orderBy: [{ startsAt: 'asc' }, { name: 'asc' }],
     }),
     db.prisma.servicePointRewardSetting.findMany({
       where: { workspaceId: service.workspaceId, groupId: service.serviceId },
@@ -709,6 +895,7 @@ export default async function ServicePointSettingsPage({
         action: {
           in: [
             'POINT_RULES_UPDATED',
+            'CAMPAIGN_POINT_RULES_UPDATED',
             'POINT_BONUS_GRANTED',
             'POINT_BALANCE_CORRECTED',
             'POINT_ISSUANCE_STOPPED',
@@ -931,6 +1118,9 @@ export default async function ServicePointSettingsPage({
         {query.saved ? (
           <p className="notice notice--success">ポイント設定を保存しました。</p>
         ) : null}
+        {query.campaignRules ? (
+          <p className="notice notice--success">募集ごとのポイント設定を保存しました。</p>
+        ) : null}
         {query.bonus ? (
           <p className="notice notice--success">ボーナスポイントを付与しました。</p>
         ) : null}
@@ -952,11 +1142,15 @@ export default async function ServicePointSettingsPage({
               ? '訂正できませんでした。現在の残高以下のポイント数を入力してください。'
               : query.error === 'budget'
                 ? '発行上限は、すでに発行したポイント以上にしてください。'
-                : query.error === 'stopped'
-                  ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
-                  : query.error === 'rewards'
-                    ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
-                    : '保存できませんでした。入力内容を確認してください。'}
+                : query.error === 'campaign-budget'
+                  ? '募集の発行上限は、すでに発行したポイント以上にしてください。'
+                  : query.error === 'campaign-rules'
+                    ? '募集ごとのポイント設定を保存できませんでした。募集の期間と入力内容を確認してください。'
+                    : query.error === 'stopped'
+                      ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
+                      : query.error === 'rewards'
+                        ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
+                        : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
 
@@ -1370,6 +1564,114 @@ export default async function ServicePointSettingsPage({
           </form>
         </section>
 
+        <section className="settings-card" id="campaign-point-rules">
+          <h2>募集ごとのポイントを設定</h2>
+          <p>
+            特定の募集だけポイント数を変えられます。「サービス設定を使う」を選ぶと、上の通常設定に戻ります。
+          </p>
+          {campaigns.length === 0 ? (
+            <>
+              <p>設定できる募集中・準備中の企画はありません。</p>
+              <a className="button button--secondary" href={`/s/${serviceSlug}/manage/campaigns`}>
+                参加募集を確認
+              </a>
+            </>
+          ) : (
+            <div className="form-stack">
+              {campaigns.map((campaign) => (
+                <form
+                  action={saveCampaignRules}
+                  className="settings-card form-stack"
+                  key={campaign.id}
+                >
+                  <input type="hidden" name="serviceSlug" value={serviceSlug} />
+                  <input type="hidden" name="campaignId" value={campaign.id} />
+                  <h3>{campaign.name}</h3>
+                  <p>
+                    {campaign.status === 'OPEN' ? '募集中' : '準備中'}／
+                    {campaign.startsAt.toLocaleDateString('ja-JP')}〜
+                    {campaign.endsAt.toLocaleDateString('ja-JP')}
+                  </p>
+                  {RULES.map((rule) => {
+                    const saved = campaign.pointRuleVersions.find(
+                      (version) => version.ruleKey === rule.key,
+                    );
+                    const serviceRule = current.get(rule.key);
+                    return (
+                      <fieldset key={rule.key}>
+                        <legend>
+                          <strong>{rule.label}</strong>
+                        </legend>
+                        <label className="field">
+                          <span className="field__label">この募集での設定</span>
+                          <select
+                            className="field__control"
+                            name={`mode_${rule.key}`}
+                            defaultValue={saved?.status ?? 'INHERIT'}
+                          >
+                            <option value="INHERIT">サービス設定を使う</option>
+                            <option value="ACTIVE">この募集専用のポイント数にする</option>
+                            <option value="SUSPENDED">この募集では付与しない</option>
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span className="field__label">この募集でもらえるポイント</span>
+                          <input
+                            className="field__control"
+                            name={rule.key}
+                            type="number"
+                            min="1"
+                            max="10000"
+                            defaultValue={
+                              saved?.grantAmount ?? serviceRule?.grantAmount ?? rule.defaultAmount
+                            }
+                            required
+                          />
+                        </label>
+                        <label className="field">
+                          <span className="field__label">この募集で発行できる合計上限</span>
+                          <input
+                            className="field__control"
+                            name={rule.budgetKey}
+                            type="number"
+                            min="1"
+                            max="10000000"
+                            defaultValue={saved?.budget?.maximumPoints ?? ''}
+                            placeholder="専用設定時のみ。空欄なら上限なし"
+                          />
+                        </label>
+                        {saved?.budget ? (
+                          <small>
+                            現在 {saved.budget.grantedPoints.toLocaleString('ja-JP')}{' '}
+                            WP発行済み／残り
+                            {(
+                              saved.budget.maximumPoints - saved.budget.grantedPoints
+                            ).toLocaleString('ja-JP')}{' '}
+                            WP
+                          </small>
+                        ) : null}
+                      </fieldset>
+                    );
+                  })}
+                  <label className="field">
+                    <span className="field__label">変更理由</span>
+                    <textarea
+                      className="field__control"
+                      name="reason"
+                      minLength={3}
+                      maxLength={1000}
+                      required
+                    />
+                  </label>
+                  <button className="button" type="submit">
+                    この募集の設定を保存
+                  </button>
+                </form>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="settings-card" id="point-rewards">
           <h2>ポイントの使い道を設定</h2>
           <p>
@@ -1555,15 +1857,17 @@ export default async function ServicePointSettingsPage({
                     <strong>
                       {item.action === 'POINT_RULES_UPDATED'
                         ? '獲得条件を変更'
-                        : item.action === 'POINT_REWARDS_UPDATED'
-                          ? 'ポイントの使い道を変更'
-                          : item.action === 'POINT_ISSUANCE_STOPPED'
-                            ? 'ポイント付与を一括停止'
-                            : item.action === 'POINT_ISSUANCE_RESUMED'
-                              ? 'ポイント付与を再開'
-                              : item.action === 'POINT_BALANCE_CORRECTED'
-                                ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
-                                : `${target ?? '参加者'}へ ${amount} WP付与`}
+                        : item.action === 'CAMPAIGN_POINT_RULES_UPDATED'
+                          ? `${typeof data.campaignName === 'string' ? data.campaignName : '募集'}のポイント条件を変更`
+                          : item.action === 'POINT_REWARDS_UPDATED'
+                            ? 'ポイントの使い道を変更'
+                            : item.action === 'POINT_ISSUANCE_STOPPED'
+                              ? 'ポイント付与を一括停止'
+                              : item.action === 'POINT_ISSUANCE_RESUMED'
+                                ? 'ポイント付与を再開'
+                                : item.action === 'POINT_BALANCE_CORRECTED'
+                                  ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
+                                  : `${target ?? '参加者'}へ ${amount} WP付与`}
                     </strong>
                     <br />
                     {item.occurredAt.toLocaleString('ja-JP')}／

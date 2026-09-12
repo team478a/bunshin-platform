@@ -5,12 +5,42 @@ import { PrismaPointLedgerRepository } from '../src/index';
 describe('PrismaPointLedgerRepository service-scoped dashboard', () => {
   it('uses the selected service for membership, history, rules and weekly posts', async () => {
     const pointTransactionFindMany = vi.fn().mockResolvedValue([]);
-    const pointRuleVersionFindMany = vi.fn().mockResolvedValue([]);
+    const pointRuleVersionFindMany = vi.fn().mockResolvedValue([
+      {
+        ruleKey: 'POSTED_DAILY',
+        grantAmount: 5,
+        dailyLimit: 5,
+        weeklyLimit: null,
+        workspaceId: 'workspace-1',
+        groupId: 'group-a',
+        campaignId: null,
+        campaign: null,
+        status: 'ACTIVE',
+        version: 1,
+      },
+      {
+        ruleKey: 'POSTED_DAILY',
+        grantAmount: 12,
+        dailyLimit: 12,
+        weeklyLimit: null,
+        workspaceId: 'workspace-1',
+        groupId: 'group-a',
+        campaignId: 'campaign-a',
+        campaign: { name: '秋の募集' },
+        status: 'ACTIVE',
+        version: 1,
+      },
+    ]);
     const postRecordFindMany = vi.fn().mockResolvedValue([]);
     const groupMembershipFindFirst = vi.fn().mockResolvedValue({ id: 'group-member-1' });
     const client = {
       workspaceMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'workspace-member-1' }) },
       groupMembership: { findFirst: groupMembershipFindFirst },
+      campaignParticipation: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ campaignId: 'campaign-a', campaign: { name: '秋の募集' } }]),
+      },
       pointAccount: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'account-1',
@@ -26,7 +56,7 @@ describe('PrismaPointLedgerRepository service-scoped dashboard', () => {
       postRecord: { findMany: postRecordFindMany },
     } as unknown as PrismaClient;
 
-    await new PrismaPointLedgerRepository(client).getUserDashboard({
+    const dashboard = await new PrismaPointLedgerRepository(client).getUserDashboard({
       workspaceId: 'workspace-1',
       groupId: 'group-a',
       actorUserId: 'user-1',
@@ -57,6 +87,16 @@ describe('PrismaPointLedgerRepository service-scoped dashboard', () => {
           OR: [{ groupId: null }, { groupId: 'group-a' }],
         }),
       }),
+    );
+    expect(dashboard?.earningMethods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ campaignId: null, grantAmount: 5 }),
+        expect.objectContaining({
+          campaignId: 'campaign-a',
+          campaignName: '秋の募集',
+          grantAmount: 12,
+        }),
+      ]),
     );
     expect(postRecordFindMany).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -38,6 +38,8 @@ export interface PointTransactionRecord {
 
 export interface PointEarningMethod {
   ruleKey: string;
+  campaignId: string | null;
+  campaignName: string | null;
   grantAmount: number;
   dailyLimit: number | null;
   weeklyLimit: number | null;
