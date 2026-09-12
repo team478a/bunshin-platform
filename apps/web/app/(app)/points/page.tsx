@@ -125,8 +125,8 @@ export default async function PointsPage({
         </strong>
         {dashboard.nextExpiryAt ? (
           <p>
-            {date(dashboard.nextExpiryAt)}までに期限を迎える予定: {dashboard.expiringWithin30Days}{' '}
-            WP
+            今後30日以内に期限を迎える予定: {dashboard.expiringWithin30Days} WP（最も近い期限は
+            {date(dashboard.nextExpiryAt)}）
           </p>
         ) : (
           <p>30日以内に期限を迎えるポイントはありません。</p>

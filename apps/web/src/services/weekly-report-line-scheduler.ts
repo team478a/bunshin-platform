@@ -135,6 +135,7 @@ export async function scheduleWeeklyReportLineDeliveries(input: {
           workspaceId: service.workspaceId,
           groupId: service.groupId,
           window,
+          asOf: now,
         }),
       ]);
       if (!actor || !connections.length) {
@@ -157,6 +158,17 @@ export async function scheduleWeeklyReportLineDeliveries(input: {
                   headline: report.headline,
                   nextStep: report.nextStep,
                   reportUrl,
+                  pointExpiry:
+                    report.expiringPoints > 0 && report.nextPointExpiryAt
+                      ? {
+                          amount: report.expiringPoints,
+                          dateLabel: new Intl.DateTimeFormat('ja-JP', {
+                            timeZone: timezone,
+                            month: 'long',
+                            day: 'numeric',
+                          }).format(report.nextPointExpiryAt),
+                        }
+                      : null,
                 }),
               },
             ]
