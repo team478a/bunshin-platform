@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { buildRewardsPilotReadiness } from '../../../../../src/rewards/rewards-pilot-readiness';
 import {
   buildRewardsPilotMetrics,
   participatedInRewardsPilotPeriod,
@@ -664,6 +665,19 @@ export default async function ServicePointSettingsPage({
     ),
   );
   const rewardsPilotActiveCount = activeRewardsPilotMembers.length;
+  const activePointRuleCount = RULES.filter((rule) => {
+    const saved = current.get(rule.key);
+    return !saved || saved.status === 'ACTIVE';
+  }).length;
+  const pilotReadiness = buildRewardsPilotReadiness({
+    policyStatus: rewardsPolicy?.status ?? null,
+    startsAt: rewardsPolicy?.startsAt ?? null,
+    endsAt: rewardsPolicy?.endsAt ?? null,
+    now,
+    activeParticipantCount: rewardsPilotActiveCount,
+    pointIssuanceStopped: pointConfiguration.pointIssuanceStopped,
+    activeRuleCount: activePointRuleCount,
+  });
   const rewardsPilotAssignments = await db.prisma.groupMemberFeatureAssignment.findMany({
     where: {
       workspaceId: service.workspaceId,
@@ -820,6 +834,75 @@ export default async function ServicePointSettingsPage({
           </p>
         ) : null}
 
+        <section className="settings-card" aria-labelledby="pilot-readiness-title">
+          <h2 id="pilot-readiness-title">4週間の試験を始める前の確認</h2>
+          {pilotReadiness.status === 'COMPLETED' ? (
+            <>
+              <p>
+                <strong>試験期間は終了しました。</strong>
+              </p>
+              <p>下にある試験結果を確認し、必要に応じてCSVを保存してください。</p>
+              <a className="button button--secondary" href="#pilot-results">
+                試験結果を見る
+              </a>
+            </>
+          ) : (
+            <>
+              <p>
+                {pilotReadiness.status === 'READY' ? (
+                  <strong>準備完了です。試験を開始できます。</strong>
+                ) : (
+                  <strong>あと{pilotReadiness.missingCount}項目の設定が必要です。</strong>
+                )}
+              </p>
+              <p>5項目すべてが「準備済み」になれば、ポイントを安全に試せます。</p>
+              <ul>
+                {pilotReadiness.items.map((item) => {
+                  const settingsHref =
+                    item.key === 'POLICY' || item.key === 'PERIOD'
+                      ? platformAdmin
+                        ? `/admin/groups/${service.serviceId}/features/${db.REWARDS_PILOT_FEATURE_KEY}`
+                        : null
+                      : item.key === 'PARTICIPANTS'
+                        ? `/s/${serviceSlug}/manage/members`
+                        : item.key === 'ISSUANCE'
+                          ? '#point-control'
+                          : '#point-rules';
+                  return (
+                    <li key={item.key}>
+                      <strong>
+                        {item.ready ? '準備済み' : '要設定'}：{item.label}
+                      </strong>
+                      <br />
+                      <span>{item.detail}</span>
+                      {item.key === 'PERIOD' && item.ready ? (
+                        <>
+                          <br />
+                          <span>設定期間：{pilotPeriodLabel}</span>
+                        </>
+                      ) : null}
+                      {!item.ready && settingsHref ? (
+                        <>
+                          <br />
+                          <a href={settingsHref}>この設定を直す</a>
+                        </>
+                      ) : null}
+                      {!item.ready &&
+                      (item.key === 'POLICY' || item.key === 'PERIOD') &&
+                      !platformAdmin ? (
+                        <>
+                          <br />
+                          <span>システム管理者へ設定を依頼してください。</span>
+                        </>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </section>
+
         {policyExpiryNotice ? (
           <section className="settings-card" aria-labelledby="pilot-policy-expiry-title">
             <h2 id="pilot-policy-expiry-title">サービスの試験利用終了日が近づいています</h2>
@@ -878,7 +961,7 @@ export default async function ServicePointSettingsPage({
           </div>
         </section>
 
-        <section className="settings-card">
+        <section className="settings-card" id="pilot-results">
           <h2>試験運用の結果</h2>
           <p>
             {pilotPeriod.status === 'COMPLETED'
@@ -960,7 +1043,7 @@ export default async function ServicePointSettingsPage({
           </p>
         </section>
 
-        <section className="settings-card">
+        <section className="settings-card" id="point-control">
           <h2>ポイント付与の一括停止</h2>
           <p>
             現在は
@@ -1084,7 +1167,7 @@ export default async function ServicePointSettingsPage({
           )}
         </section>
 
-        <section className="settings-card">
+        <section className="settings-card" id="point-rules">
           <h2>ポイントのため方を設定</h2>
           <p>
             チェックを外すと、その条件からはポイントが付かなくなります。変更前の履歴も残ります。

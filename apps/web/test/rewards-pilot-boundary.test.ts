@@ -44,6 +44,16 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('/admin/groups/${service.serviceId}/features');
   });
 
+  it('shows operators whether the 4-week pilot is ready to start', () => {
+    expect(servicePointsPage).toContain('buildRewardsPilotReadiness');
+    expect(servicePointsPage).toContain('4週間の試験を始める前の確認');
+    expect(servicePointsPage).toContain('準備完了です。試験を開始できます。');
+    expect(servicePointsPage).toContain('あと{pilotReadiness.missingCount}項目の設定が必要です。');
+    expect(servicePointsPage).toContain('この設定を直す');
+    expect(servicePointsPage).toContain("'#point-control'");
+    expect(servicePointsPage).toContain("'#point-rules'");
+  });
+
   it('shows operators a plain-language pilot report and review candidates', () => {
     expect(servicePointsPage).toContain('試験運用の結果');
     expect(servicePointsPage).toContain('resolveRewardsPilotMeasurementPeriod');
