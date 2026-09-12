@@ -152,19 +152,16 @@ export default async function PointsPage({
       actorUserId: user.userId,
     })
     .catch(() => []);
-  const recoveryNotice =
-    dashboard.account.recoveryDue > 0
-      ? await db.prisma.serviceConfigurationAudit.findFirst({
-          where: {
-            workspaceId: workspace.id,
-            groupId: serviceContext.groupId,
-            action: 'POINT_RECOVERY_REGISTERED',
-            afterData: { path: ['userId'], equals: user.userId },
-          },
-          select: { reason: true, occurredAt: true },
-          orderBy: { occurredAt: 'desc' },
-        })
-      : null;
+  const recoveryNotice = await db.prisma.serviceConfigurationAudit.findFirst({
+    where: {
+      workspaceId: workspace.id,
+      groupId: serviceContext.groupId,
+      action: { in: ['POINT_RECOVERY_REGISTERED', 'POINT_RECOVERY_CANCELLED'] },
+      afterData: { path: ['userId'], equals: user.userId },
+    },
+    select: { action: true, afterData: true, reason: true, occurredAt: true },
+    orderBy: { occurredAt: 'desc' },
+  });
   const pointUseOptions = buildPointUseOptions({
     catalog,
     availablePoints: dashboard.account.availablePoints,
@@ -213,6 +210,18 @@ export default async function PointsPage({
           </p>
           <p>新しくポイントを受け取ると、この回収未済分へ自動で充てられます。</p>
           {recoveryNotice ? <p>運営者からの説明：{recoveryNotice.reason}</p> : null}
+        </section>
+      ) : recoveryNotice?.action === 'POINT_RECOVERY_CANCELLED' ? (
+        <section className="notice notice--success" aria-labelledby="point-recovery-title">
+          <h2 id="point-recovery-title">ポイント回収が取り消されました</h2>
+          <p>回収済みのポイントが残高へ戻り、回収未済分も解除されました。</p>
+          <p>運営者からの説明：{recoveryNotice.reason}</p>
+        </section>
+      ) : recoveryNotice?.action === 'POINT_RECOVERY_REGISTERED' ? (
+        <section className="notice notice--success" aria-labelledby="point-recovery-title">
+          <h2 id="point-recovery-title">ポイントの訂正が完了しました</h2>
+          <p>回収未済のポイントはありません。ポイント交換を利用できます。</p>
+          <p>運営者からの説明：{recoveryNotice.reason}</p>
         </section>
       ) : null}
 

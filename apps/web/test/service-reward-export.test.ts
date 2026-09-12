@@ -29,6 +29,7 @@ describe('service reward export boundaries', () => {
     expect(page).toContain('運営操作履歴を保存');
     expect(source).toContain("'回収未済WP'");
     expect(source).toContain("'POINT_RECOVERY_REGISTERED'");
+    expect(source).toContain("'POINT_RECOVERY_CANCELLED'");
   });
 
   it('uses the configured pilot period and exports an aggregate plus participant results', () => {

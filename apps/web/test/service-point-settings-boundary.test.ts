@@ -23,6 +23,7 @@ describe('service point settings boundaries', () => {
     expect(page).toContain("action: 'POINT_RULES_UPDATED'");
     expect(page).toContain("action: 'POINT_BONUS_GRANTED'");
     expect(page).toContain("action: 'POINT_RECOVERY_REGISTERED'");
+    expect(page).toContain("action: 'POINT_RECOVERY_CANCELLED'");
     expect(processor).toContain("type: recoveryAdded > 0 ? 'RECOVERY' : 'REVERSAL'");
     expect(processor).toContain('recoveryDue: { increment: recoveryAdded }');
     expect(processor).toContain(
@@ -30,9 +31,22 @@ describe('service point settings boundaries', () => {
     );
     expect(processor).toContain('tx.pointConsumptionLink.create');
     expect(page).toContain('db.registerPointRecovery');
+    expect(page).toContain('db.cancelPointRecovery');
     expect(page).toContain('parsed.data.userId === actor.userId');
     expect(page).toContain('memberships.filter(({ userId }) => userId !== actor.userId)');
     expect(page).toContain('運営者自身への付与はできません。');
+  });
+
+  it('lets the operator cancel one exact recovery with a reason and idempotency key', () => {
+    expect(page).toContain('recoveryCancellationSchema');
+    expect(page).toContain('recoveryTransactionId: z.uuid()');
+    expect(page).toContain("sourceType: 'OPERATOR_RECOVERY'");
+    expect(page).toContain('`operator-recovery-cancellation:${parsed.data.operationId}`');
+    expect(page).toContain('回収を取り消す');
+    expect(page).toContain('取り消す理由（本人にも表示されます）');
+    expect(processor).toContain('OPERATOR_RECOVERY_CANCELLATION');
+    expect(processor).toContain('recoveryDue: { decrement: recoveryDueCancelled }');
+    expect(processor).toContain('availablePoints: { increment: recoveredPoints }');
   });
 
   it('does not apply an operator point form twice when iPhone resends it', () => {

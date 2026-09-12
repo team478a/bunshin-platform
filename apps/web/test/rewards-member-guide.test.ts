@@ -50,6 +50,8 @@ describe('rewards member guide', () => {
     expect(points).toContain('ポイントの利用を一時停止しています');
     expect(points).toContain('新しくポイントを受け取ると、この回収未済分へ自動で充てられます');
     expect(points).toContain('運営者からの説明：');
+    expect(points).toContain('ポイント回収が取り消されました');
+    expect(points).toContain('ポイントの訂正が完了しました');
     expect(badges).toContain('バッジが増えるまで');
   });
 

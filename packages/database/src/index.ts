@@ -18855,6 +18855,107 @@ export async function registerPointRecovery(
   };
 }
 
+export async function cancelPointRecovery(
+  tx: Prisma.TransactionClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    userId: string;
+    actorUserId: string;
+    recoveryTransactionId: string;
+    idempotencyKey: string;
+    now: Date;
+  },
+) {
+  const recovery = await tx.pointTransaction.findFirst({
+    where: {
+      id: input.recoveryTransactionId,
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      userId: input.userId,
+      type: { in: ['REVERSAL', 'RECOVERY'] },
+      sourceType: 'OPERATOR_RECOVERY',
+    },
+    include: { account: true, consumptionFor: true },
+  });
+  if (!recovery) return null;
+  const existingCancellation = await tx.pointTransaction.findFirst({
+    where: {
+      accountId: recovery.accountId,
+      type: 'REFUND',
+      sourceType: 'OPERATOR_RECOVERY_CANCELLATION',
+      sourceId: recovery.id,
+    },
+  });
+  if (existingCancellation) return { applied: false as const };
+  const existingIdempotency = await tx.pointTransaction.findUnique({
+    where: {
+      accountId_idempotencyKey: {
+        accountId: recovery.accountId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    },
+  });
+  if (existingIdempotency)
+    throw new ApplicationError('CONFLICT', 'idempotency key payload mismatch');
+  const amount = Math.abs(recovery.amount);
+  const recoveredPoints = recovery.consumptionFor.reduce((sum, item) => sum + item.amount, 0);
+  if (recoveredPoints > amount)
+    throw new ApplicationError('CONFLICT', 'point recovery attribution mismatch');
+  const recoveryDueCancelled = amount - recoveredPoints;
+  const account = recovery.account;
+  if (account.recoveryDue < recoveryDueCancelled)
+    throw new ApplicationError('CONFLICT', 'point recovery balance mismatch');
+  const changed = await tx.pointAccount.updateMany({
+    where: {
+      id: account.id,
+      availablePoints: account.availablePoints,
+      recoveryDue: account.recoveryDue,
+      revision: account.revision,
+    },
+    data: {
+      availablePoints: { increment: recoveredPoints },
+      recoveryDue: { decrement: recoveryDueCancelled },
+      revision: { increment: 1 },
+    },
+  });
+  if (changed.count !== 1) throw new ApplicationError('CONFLICT', 'point account changed');
+  const cancellation = await tx.pointTransaction.create({
+    data: {
+      accountId: account.id,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      groupId: input.groupId,
+      type: 'REFUND',
+      amount,
+      idempotencyKey: input.idempotencyKey,
+      sourceType: 'OPERATOR_RECOVERY_CANCELLATION',
+      sourceId: recovery.id,
+      createdAt: input.now,
+    },
+  });
+  if (recoveryDueCancelled > 0) {
+    await tx.pointConsumptionLink.create({
+      data: {
+        consumptionTransactionId: recovery.id,
+        grantTransactionId: cancellation.id,
+        amount: recoveryDueCancelled,
+      },
+    });
+  }
+  const updated = await tx.pointAccount.findUniqueOrThrow({ where: { id: account.id } });
+  return {
+    applied: true as const,
+    before: pointAccountRecord(account),
+    account: pointAccountRecord(updated),
+    amount,
+    recoveredPointsRestored: recoveredPoints,
+    recoveryDueCancelled,
+    recoveryTransaction: pointTransactionRecord(recovery),
+    cancellationTransaction: pointTransactionRecord(cancellation),
+  };
+}
+
 const badgeDefinitionRecord = (
   row: Prisma.BadgeDefinitionGetPayload<object>,
 ): BadgeDefinitionRecord => ({

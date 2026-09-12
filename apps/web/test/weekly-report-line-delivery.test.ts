@@ -69,4 +69,19 @@ describe('weekly report LINE delivery', () => {
       'ポイントのお知らせ\n今後30日以内に25 WPが期限を迎えます。最も近い期限は9月30日です。',
     );
   });
+
+  it('adds a point recovery status when the participant needs to know about a correction', () => {
+    expect(
+      buildWeeklyReportLineMessage({
+        serviceName: '投稿サポート',
+        headline: '今週は2件、投稿できました',
+        nextStep: '今日あったことを一つ残す',
+        reportUrl: 'https://example.com/report',
+        pointRecoveryNotice:
+          'ポイントの回収未済分が解消し、ポイント交換を再び利用できるようになりました。',
+      }),
+    ).toContain(
+      'ポイント訂正のお知らせ\nポイントの回収未済分が解消し、ポイント交換を再び利用できるようになりました。',
+    );
+  });
 });

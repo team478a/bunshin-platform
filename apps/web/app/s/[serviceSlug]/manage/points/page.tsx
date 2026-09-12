@@ -102,6 +102,13 @@ const correctionSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+const recoveryCancellationSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(80),
+  operationId: z.uuid(),
+  recoveryTransactionId: z.uuid(),
+  reason: z.string().trim().min(3).max(1000),
+});
+
 const pointControlSchema = z.object({
   serviceSlug: z.string().trim().min(1).max(80),
   target: z.enum(['stop', 'resume']),
@@ -656,6 +663,84 @@ async function correctPoints(formData: FormData) {
   redirect(`${returnPath}?corrected=1` as Route);
 }
 
+async function cancelRecovery(formData: FormData) {
+  'use server';
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const parsed = recoveryCancellationSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/groups');
+  const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
+  try {
+    const service = await resolveManagedServiceContext(parsed.data.serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const now = new Date();
+    await db.prisma.$transaction(
+      async (tx) => {
+        const [configuration, recoveryTransaction] = await Promise.all([
+          tx.serviceConfiguration.findFirst({
+            where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+            select: { id: true },
+          }),
+          tx.pointTransaction.findFirst({
+            where: {
+              id: parsed.data.recoveryTransactionId,
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              type: { in: ['REVERSAL', 'RECOVERY'] },
+              sourceType: 'OPERATOR_RECOVERY',
+            },
+            select: { userId: true },
+          }),
+        ]);
+        if (!configuration || !recoveryTransaction) throw new Error('POINT_RECOVERY_NOT_FOUND');
+        const idempotencyKey = `operator-recovery-cancellation:${parsed.data.operationId}`;
+        const cancellation = await db.cancelPointRecovery(tx, {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: recoveryTransaction.userId,
+          actorUserId: actor.userId,
+          recoveryTransactionId: parsed.data.recoveryTransactionId,
+          idempotencyKey,
+          now,
+        });
+        if (!cancellation) throw new Error('POINT_RECOVERY_NOT_FOUND');
+        if (!cancellation.applied) return;
+        await tx.serviceConfigurationAudit.create({
+          data: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            configurationId: configuration.id,
+            action: 'POINT_RECOVERY_CANCELLED',
+            beforeData: {
+              availablePoints: cancellation.before.availablePoints,
+              recoveryDue: cancellation.before.recoveryDue,
+            },
+            afterData: {
+              userId: recoveryTransaction.userId,
+              recoveryTransactionId: parsed.data.recoveryTransactionId,
+              amount: cancellation.amount,
+              recoveredPointsRestored: cancellation.recoveredPointsRestored,
+              recoveryDueCancelled: cancellation.recoveryDueCancelled,
+              availablePoints: cancellation.account.availablePoints,
+              recoveryDue: cancellation.account.recoveryDue,
+              idempotencyKey,
+            },
+            reason: parsed.data.reason,
+            performedByUserId: actor.userId,
+            occurredAt: now,
+          },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  } catch {
+    redirect(`${returnPath}?error=recovery-cancellation` as Route);
+  }
+  revalidatePath(returnPath);
+  revalidatePath('/points');
+  redirect(`${returnPath}?recoveryCancelled=1` as Route);
+}
+
 async function changePointIssuance(formData: FormData) {
   'use server';
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -708,6 +793,7 @@ export default async function ServicePointSettingsPage({
     campaignRules?: string;
     bonus?: string;
     corrected?: string;
+    recoveryCancelled?: string;
     rewards?: string;
     control?: string;
     error?: string;
@@ -830,6 +916,7 @@ export default async function ServicePointSettingsPage({
             'POINT_BONUS_GRANTED',
             'POINT_BALANCE_CORRECTED',
             'POINT_RECOVERY_REGISTERED',
+            'POINT_RECOVERY_CANCELLED',
             'POINT_ISSUANCE_STOPPED',
             'POINT_ISSUANCE_RESUMED',
             'POINT_REWARDS_UPDATED',
@@ -873,6 +960,42 @@ export default async function ServicePointSettingsPage({
       _max: { awardedAt: true },
     }),
   ]);
+  const recoveryTransactions = await db.prisma.pointTransaction.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      type: { in: ['REVERSAL', 'RECOVERY'] },
+      sourceType: 'OPERATOR_RECOVERY',
+    },
+    select: {
+      id: true,
+      userId: true,
+      amount: true,
+      createdAt: true,
+      user: { select: { displayName: true, email: true } },
+      consumptionFor: { select: { amount: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
+  const recoveryCancellations = recoveryTransactions.length
+    ? await db.prisma.pointTransaction.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          type: 'REFUND',
+          sourceType: 'OPERATOR_RECOVERY_CANCELLATION',
+          sourceId: { in: recoveryTransactions.map(({ id }) => id) },
+        },
+        select: { sourceId: true },
+      })
+    : [];
+  const cancelledRecoveryIds = new Set(
+    recoveryCancellations.flatMap(({ sourceId }) => (sourceId ? [sourceId] : [])),
+  );
+  const cancellableRecoveries = recoveryTransactions.filter(
+    ({ id }) => !cancelledRecoveryIds.has(id),
+  );
   const current = new Map<string, (typeof versions)[number]>();
   for (const version of versions)
     if (!current.has(version.ruleKey)) current.set(version.ruleKey, version);
@@ -1059,6 +1182,9 @@ export default async function ServicePointSettingsPage({
         {query.corrected ? (
           <p className="notice notice--success">誤付与ポイントの回収を記録しました。</p>
         ) : null}
+        {query.recoveryCancelled ? (
+          <p className="notice notice--success">誤付与ポイントの回収を取り消しました。</p>
+        ) : null}
         {query.rewards ? (
           <p className="notice notice--success">ポイントの使い道を保存しました。</p>
         ) : null}
@@ -1070,19 +1196,21 @@ export default async function ServicePointSettingsPage({
         ) : null}
         {query.error ? (
           <p className="notice notice--danger">
-            {query.error === 'recovery'
-              ? '回収を記録できませんでした。画面を更新し、入力内容を確認してください。'
-              : query.error === 'budget'
-                ? '発行上限は、すでに発行したポイント以上にしてください。'
-                : query.error === 'campaign-budget'
-                  ? '募集の発行上限は、すでに発行したポイント以上にしてください。'
-                  : query.error === 'campaign-rules'
-                    ? '募集ごとのポイント設定を保存できませんでした。募集の期間と入力内容を確認してください。'
-                    : query.error === 'stopped'
-                      ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
-                      : query.error === 'rewards'
-                        ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
-                        : '保存できませんでした。入力内容を確認してください。'}
+            {query.error === 'recovery-cancellation'
+              ? '回収を取り消せませんでした。すでに取り消されていないか確認してください。'
+              : query.error === 'recovery'
+                ? '回収を記録できませんでした。画面を更新し、入力内容を確認してください。'
+                : query.error === 'budget'
+                  ? '発行上限は、すでに発行したポイント以上にしてください。'
+                  : query.error === 'campaign-budget'
+                    ? '募集の発行上限は、すでに発行したポイント以上にしてください。'
+                    : query.error === 'campaign-rules'
+                      ? '募集ごとのポイント設定を保存できませんでした。募集の期間と入力内容を確認してください。'
+                      : query.error === 'stopped'
+                        ? 'ポイント付与は一括停止中です。再開してからボーナスを付与してください。'
+                        : query.error === 'rewards'
+                          ? 'ポイントの使い道を保存できませんでした。入力内容を確認してください。'
+                          : '保存できませんでした。入力内容を確認してください。'}
           </p>
         ) : null}
 
@@ -1773,6 +1901,52 @@ export default async function ServicePointSettingsPage({
           </form>
         </section>
 
+        <section className="settings-card" id="point-recovery-cancellation">
+          <h2>回収を取り消す</h2>
+          <p>
+            回収する相手や金額を間違えた場合に使います。回収済みのポイントは本人へ戻り、回収未済分も解除されます。
+          </p>
+          {cancellableRecoveries.length === 0 ? (
+            <p>取り消せる回収記録はありません。</p>
+          ) : (
+            <form action={cancelRecovery} className="form-stack">
+              <input type="hidden" name="serviceSlug" value={serviceSlug} />
+              <input type="hidden" name="operationId" value={randomUUID()} />
+              <label className="field">
+                <span className="field__label">取り消す回収記録</span>
+                <select className="field__control" name="recoveryTransactionId" required>
+                  {cancellableRecoveries.map((recovery) => {
+                    const recovered = recovery.consumptionFor.reduce(
+                      (sum, link) => sum + link.amount,
+                      0,
+                    );
+                    return (
+                      <option key={recovery.id} value={recovery.id}>
+                        {recovery.user.displayName || recovery.user.email || recovery.userId}／
+                        {Math.abs(recovery.amount)} WP／回収済み{recovered} WP／
+                        {recovery.createdAt.toLocaleDateString('ja-JP')}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field__label">取り消す理由（本人にも表示されます）</span>
+                <textarea
+                  className="field__control"
+                  name="reason"
+                  minLength={3}
+                  maxLength={1000}
+                  required
+                />
+              </label>
+              <button className="button button--secondary" type="submit">
+                この回収を取り消す
+              </button>
+            </form>
+          )}
+        </section>
+
         <section className="settings-card">
           <h2>バッジを設定・付与</h2>
           <p>このサービス専用のバッジを作り、参加者を選んで付与できます。</p>
@@ -1813,7 +1987,9 @@ export default async function ServicePointSettingsPage({
                                   ? `${target ?? '参加者'}のポイントを ${Math.abs(Number(amount))} WP訂正`
                                   : item.action === 'POINT_RECOVERY_REGISTERED'
                                     ? `${target ?? '参加者'}から ${Math.abs(Number(amount))} WP回収`
-                                    : `${target ?? '参加者'}へ ${amount} WP付与`}
+                                    : item.action === 'POINT_RECOVERY_CANCELLED'
+                                      ? `${target ?? '参加者'}の回収 ${Math.abs(Number(amount))} WPを取消`
+                                      : `${target ?? '参加者'}へ ${amount} WP付与`}
                     </strong>
                     <br />
                     {item.occurredAt.toLocaleString('ja-JP')}／

@@ -39,7 +39,9 @@ const pointAuditActionLabel = (action: string) =>
         ? 'ポイント残高を訂正'
         : action === 'POINT_RECOVERY_REGISTERED'
           ? '誤付与ポイントを回収'
-          : action;
+          : action === 'POINT_RECOVERY_CANCELLED'
+            ? '誤付与ポイントの回収を取消'
+            : action;
 
 const badgeAuditActionLabels: Record<string, string> = {
   GROUP_BADGE_CREATED_AND_SUBMITTED: 'バッジを作成',
@@ -240,6 +242,7 @@ async function auditRows(workspaceId: string, groupId: string) {
             'POINT_BONUS_GRANTED',
             'POINT_BALANCE_CORRECTED',
             'POINT_RECOVERY_REGISTERED',
+            'POINT_RECOVERY_CANCELLED',
           ],
         },
       },
