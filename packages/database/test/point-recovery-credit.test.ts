@@ -1,6 +1,10 @@
 import type { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { applyPointCreditToAccount, registerPointRecovery } from '../src/index';
+import {
+  applyPointCreditToAccount,
+  cancelPointRecovery,
+  registerPointRecovery,
+} from '../src/index';
 
 describe('applyPointCreditToAccount', () => {
   it('uses a new credit to clear recovery debt before increasing available points', async () => {
@@ -201,6 +205,122 @@ describe('registerPointRecovery', () => {
         amount: 10,
         idempotencyKey: 'operator-recovery:operation-1',
         now,
+      }),
+    ).resolves.toEqual({ applied: false });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancelPointRecovery', () => {
+  it('restores collected points and clears the uncollected recovery amount', async () => {
+    const now = new Date('2026-09-12T00:00:00Z');
+    const account = {
+      id: 'account-1',
+      workspaceId: 'workspace-1',
+      userId: 'user-1',
+      availablePoints: 0,
+      recoveryDue: 7,
+      revision: 2,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const recovery = {
+      id: 'recovery-1',
+      accountId: account.id,
+      workspaceId: account.workspaceId,
+      userId: account.userId,
+      groupId: 'group-1',
+      campaignId: null,
+      ruleVersionId: null,
+      type: 'RECOVERY' as const,
+      amount: -10,
+      idempotencyKey: 'operator-recovery:operation-1',
+      sourceType: 'OPERATOR_RECOVERY',
+      sourceId: 'operator-1',
+      expiresAt: null,
+      createdAt: now,
+      account,
+      consumptionFor: [{ amount: 3 }],
+    };
+    const cancellation = {
+      ...recovery,
+      id: 'cancellation-1',
+      type: 'REFUND' as const,
+      amount: 10,
+      idempotencyKey: 'operator-recovery-cancellation:operation-2',
+      sourceType: 'OPERATOR_RECOVERY_CANCELLATION',
+      sourceId: recovery.id,
+    };
+    const updated = { ...account, availablePoints: 3, recoveryDue: 0, revision: 3 };
+    const createLink = vi.fn().mockResolvedValue({ id: 'link-2' });
+    const tx = {
+      pointAccount: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(updated),
+      },
+      pointTransaction: {
+        findFirst: vi.fn().mockResolvedValueOnce(recovery).mockResolvedValueOnce(null),
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue(cancellation),
+      },
+      pointConsumptionLink: { create: createLink },
+    } as unknown as Prisma.TransactionClient;
+
+    await expect(
+      cancelPointRecovery(tx, {
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        userId: 'user-1',
+        actorUserId: 'operator-2',
+        recoveryTransactionId: recovery.id,
+        idempotencyKey: 'operator-recovery-cancellation:operation-2',
+        now,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        applied: true,
+        amount: 10,
+        recoveredPointsRestored: 3,
+        recoveryDueCancelled: 7,
+        account: expect.objectContaining({ availablePoints: 3, recoveryDue: 0 }),
+      }),
+    );
+    expect(createLink).toHaveBeenCalledWith({
+      data: {
+        consumptionTransactionId: recovery.id,
+        grantTransactionId: cancellation.id,
+        amount: 7,
+      },
+    });
+  });
+
+  it('does not cancel the same recovery twice', async () => {
+    const existingCancellation = { id: 'cancellation-1' };
+    const updateMany = vi.fn();
+    const tx = {
+      pointTransaction: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValueOnce({
+            id: 'recovery-1',
+            accountId: 'account-1',
+            account: { id: 'account-1' },
+            consumptionFor: [],
+          })
+          .mockResolvedValueOnce(existingCancellation),
+      },
+      pointAccount: { updateMany },
+    } as unknown as Prisma.TransactionClient;
+
+    await expect(
+      cancelPointRecovery(tx, {
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        userId: 'user-1',
+        actorUserId: 'operator-2',
+        recoveryTransactionId: 'recovery-1',
+        idempotencyKey: 'operator-recovery-cancellation:operation-2',
+        now: new Date(),
       }),
     ).resolves.toEqual({ applied: false });
     expect(updateMany).not.toHaveBeenCalled();
