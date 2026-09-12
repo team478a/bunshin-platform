@@ -103,8 +103,9 @@ describe('replaceRewardsPilotMemberAssignments', () => {
   });
 
   it('rejects more than 30 selected members before querying the database', async () => {
+    const findFirst = vi.fn();
     const client = {
-      groupMembership: { findFirst: vi.fn(), findMany: vi.fn() },
+      groupMembership: { findFirst, findMany: vi.fn() },
       groupFeaturePolicy: { findFirst: vi.fn() },
       groupMemberFeatureAssignment: { findMany: vi.fn() },
       groupFeatureAuditLog: { create: vi.fn() },
@@ -126,6 +127,6 @@ describe('replaceRewardsPilotMemberAssignments', () => {
         now: new Date('2026-09-12T00:00:00.000Z'),
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
-    expect(client.groupMembership.findFirst).not.toHaveBeenCalled();
+    expect(findFirst).not.toHaveBeenCalled();
   });
 });
