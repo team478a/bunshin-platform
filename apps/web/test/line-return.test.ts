@@ -65,6 +65,19 @@ describe('LINE authentication return path', () => {
     expect(safeLineAuthReturnPath('/s/Bad-Slug')).toBeNull();
   });
 
+  it('preserves only a valid Monday on a service weekly report return path', () => {
+    expect(safeLineAuthReturnPath('/s/side-job-support/weekly-report?week=2026-09-07')).toBe(
+      '/s/side-job-support/weekly-report?week=2026-09-07',
+    );
+    expect(safeLineAuthReturnPath('/s/side-job-support/weekly-report')).toBe(
+      '/s/side-job-support/weekly-report',
+    );
+    expect(safeLineAuthReturnPath('/s/side-job-support/weekly-report?week=2026-09-08')).toBeNull();
+    expect(
+      safeLineAuthReturnPath('/s/side-job-support/weekly-report?week=2026-09-07&next=/admin'),
+    ).toBeNull();
+  });
+
   it('keeps only a bounded referral code and click ID on a service entry path', () => {
     const clickId = '11111111-1111-4111-8111-111111111111';
     expect(safeLineAuthReturnPath(`/s/side-job-support?ref=FRIEND2026&rc=${clickId}`)).toBe(

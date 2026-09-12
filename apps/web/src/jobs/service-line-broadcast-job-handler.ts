@@ -35,7 +35,7 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
           broadcastId: broadcast.id,
           status: 'PENDING',
         },
-        select: { id: true, groupMembershipId: true },
+        select: { id: true, groupMembershipId: true, message: true },
         take: 500,
       });
       const connections = await db.prisma.groupLineConnection.findMany({
@@ -67,7 +67,7 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         const outcome = await provider.pushText({
           accessToken: token,
           recipientId: providerUserId,
-          text: broadcast.message,
+          text: recipient.message ?? broadcast.message,
         });
         if (outcome.ok) {
           await db.prisma.serviceLineBroadcastRecipient.update({

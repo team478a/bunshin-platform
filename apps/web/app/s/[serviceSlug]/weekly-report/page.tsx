@@ -38,10 +38,11 @@ export default async function ServiceWeeklyReportPage({
   const { serviceSlug } = await params;
   const service = await resolvePublicServiceContext(serviceSlug).catch(() => null);
   if (!service) notFound();
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  const returnTo = `/s/${service.configuration.slug}/weekly-report` as Route;
-  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(returnTo)}` as Route);
   const window = resolveWeeklyReportWindow((await searchParams).week);
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  const returnTo =
+    `/s/${service.configuration.slug}/weekly-report?week=${window.weekStart}` as Route;
+  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(returnTo)}` as Route);
   const db = await import('@bunshin/database');
   const report = (
     await loadServiceWeeklyProgressReports({
