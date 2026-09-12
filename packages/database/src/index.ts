@@ -19217,6 +19217,7 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
 
   async getUserDashboard(input: {
     workspaceId: string;
+    groupId: string;
     actorUserId: string;
     now: Date;
     timezone: string;
@@ -19233,16 +19234,17 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
     });
     if (!membership) return null;
 
-    const groupMemberships = await this.client.groupMembership.findMany({
+    const groupMembership = await this.client.groupMembership.findFirst({
       where: {
         workspaceId: input.workspaceId,
+        groupId: input.groupId,
         userId: input.actorUserId,
         status: 'ACTIVE',
         group: { status: 'ACTIVE' },
       },
-      select: { groupId: true },
+      select: { id: true },
     });
-    const groupIds = groupMemberships.map(({ groupId }) => groupId);
+    if (!groupMembership) return null;
 
     const account = await this.client.pointAccount.findUnique({
       where: {
@@ -19265,6 +19267,7 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
               accountId: account.id,
               workspaceId: input.workspaceId,
               userId: input.actorUserId,
+              OR: [{ groupId: input.groupId }, { groupId: null }],
             },
             orderBy: { createdAt: 'desc' },
             take: 20,
@@ -19290,7 +19293,7 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
       this.client.pointRuleVersion.findMany({
         where: {
           status: { in: ['ACTIVE', 'SUSPENDED'] },
-          OR: [{ groupId: null }, { groupId: { in: groupIds } }],
+          OR: [{ groupId: null }, { groupId: input.groupId }],
           campaignId: null,
           AND: [
             { OR: [{ workspaceId: null }, { workspaceId: input.workspaceId }] },
@@ -19311,7 +19314,11 @@ export class PrismaPointLedgerRepository implements PointLedgerRepository {
         orderBy: [{ ruleKey: 'asc' }, { version: 'desc' }],
       }),
       this.client.postRecord.findMany({
-        where: { workspaceId: input.workspaceId, actorUserId: input.actorUserId },
+        where: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          bunshin: { groupId: input.groupId },
+        },
         select: { postedAt: true },
         orderBy: { postedAt: 'desc' },
         take: 20,
@@ -20198,17 +20205,32 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
           }
           const dayKey = pointDayKey(input.occurredAt, input.timezone);
           const weekKey = pointWeekKey(input.occurredAt, input.timezone);
+          const servicePeriod = groupId ? `:group:${groupId}` : '';
           const ruleRequests =
             input.eventType === 'MISSION_VIEWED'
-              ? [{ key: 'MISSION_VIEWED_DAILY', period: `day:${dayKey}`, eligible: true }]
+              ? [
+                  {
+                    key: 'MISSION_VIEWED_DAILY',
+                    period: `day:${dayKey}${servicePeriod}`,
+                    legacyPeriod: `day:${dayKey}`,
+                    eligible: true,
+                  },
+                ]
               : [
-                  { key: 'POSTED_DAILY', period: `day:${dayKey}`, eligible: true },
+                  {
+                    key: 'POSTED_DAILY',
+                    period: `day:${dayKey}${servicePeriod}`,
+                    legacyPeriod: `day:${dayKey}`,
+                    eligible: true,
+                  },
                   {
                     key: 'POSTED_WEEKLY_3',
-                    period: `week:${weekKey}`,
+                    period: `week:${weekKey}${servicePeriod}`,
+                    legacyPeriod: `week:${weekKey}`,
                     eligible: await this.hasThreePostsInWeek(
                       tx,
                       input.workspaceId,
+                      groupId,
                       input.actorUserId,
                       weekKey,
                       input.timezone,
@@ -20254,9 +20276,16 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
             if (rule.status === 'SUSPENDED') continue;
             activeRuleFound = true;
             const idempotencyKey = `rule:${rule.id}:${request.period}`;
-            const existing = await tx.pointTransaction.findUnique({
+            const legacyIdempotencyKey = `rule:${rule.id}:${request.legacyPeriod}`;
+            const existing = await tx.pointTransaction.findFirst({
               where: {
-                accountId_idempotencyKey: { accountId: account.id, idempotencyKey },
+                accountId: account.id,
+                OR: [
+                  { idempotencyKey },
+                  ...(groupId && legacyIdempotencyKey !== idempotencyKey
+                    ? [{ idempotencyKey: legacyIdempotencyKey, groupId }]
+                    : []),
+                ],
               },
               select: { id: true },
             });
@@ -20337,6 +20366,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
   private async hasThreePostsInWeek(
     tx: Prisma.TransactionClient,
     workspaceId: string,
+    groupId: string | null,
     userId: string,
     weekKey: string,
     timezone: string,
@@ -20346,6 +20376,7 @@ export class PrismaPointActivityProcessorRepository implements PointActivityProc
       where: {
         workspaceId,
         actorUserId: userId,
+        ...(groupId ? { bunshin: { groupId } } : {}),
         postedAt: {
           gte: new Date(occurredAt.getTime() - 7 * 24 * 60 * 60 * 1000),
           lte: new Date(occurredAt.getTime() + 7 * 24 * 60 * 60 * 1000),

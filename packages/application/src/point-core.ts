@@ -60,6 +60,7 @@ export interface PointLedgerRepository {
   }): Promise<PointAccountSnapshot | null>;
   getUserDashboard(input: {
     workspaceId: string;
+    groupId: string;
     actorUserId: string;
     now: Date;
     timezone: string;
@@ -99,12 +100,14 @@ export class GetPointUserDashboard {
   constructor(private readonly repository: PointLedgerRepository) {}
   async execute(input: {
     workspaceId: string;
+    groupId: string;
     actorUserId: string;
     now?: Date;
     timezone?: string;
   }) {
     const result = await this.repository.getUserDashboard({
       workspaceId: required(input.workspaceId, 'workspace id'),
+      groupId: required(input.groupId, 'group id'),
       actorUserId: required(input.actorUserId, 'actor user id'),
       now: input.now ?? new Date(),
       timezone: required(input.timezone ?? 'Asia/Tokyo', 'timezone', 100),

@@ -89,6 +89,7 @@ export default async function PointsPage({
   try {
     dashboard = await new GetPointUserDashboard(new db.PrismaPointLedgerRepository()).execute({
       workspaceId: workspace.id,
+      groupId: serviceContext.groupId,
       actorUserId: user.userId,
       timezone: 'Asia/Tokyo',
     });
@@ -203,10 +204,11 @@ export default async function PointsPage({
         ) : (
           <p>30日以内に期限を迎えるポイントはありません。</p>
         )}
+        <p>この残高と失効予定は、利用中のすべてのサービスで共通です。</p>
       </section>
 
       <section className="settings-card point-progress" aria-labelledby="weekly-progress-title">
-        <h2 id="weekly-progress-title">今週の投稿</h2>
+        <h2 id="weekly-progress-title">{serviceContext.serviceName}の今週の投稿</h2>
         <div className="point-progress__summary">
           <strong>{dashboard.weeklyPosts}回</strong>
           <span> / あと{Math.max(0, dashboard.weeklyPostGoal - dashboard.weeklyPosts)}回</span>
@@ -297,7 +299,8 @@ export default async function PointsPage({
       </section>
 
       <section className="settings-card" aria-labelledby="point-history-title">
-        <h2 id="point-history-title">最近の履歴</h2>
+        <h2 id="point-history-title">このサービスの最近の履歴</h2>
+        <p>このサービスでの増減と、運営者による全サービス共通の調整を表示します。</p>
         {dashboard.recentTransactions.length ? (
           <ul className="point-history">
             {dashboard.recentTransactions.map((item) => (

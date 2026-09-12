@@ -62,13 +62,18 @@ describe('point core use cases', () => {
     const port = repository();
     const result = await new GetPointUserDashboard(port).execute({
       workspaceId: ' workspace-1 ',
+      groupId: ' group-1 ',
       actorUserId: ' user-1 ',
       now: new Date('2026-08-29T00:00:00Z'),
     });
     expect(result.weeklyPosts).toBe(2);
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(port.getUserDashboard).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 'workspace-1', actorUserId: 'user-1' }),
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        groupId: 'group-1',
+        actorUserId: 'user-1',
+      }),
     );
   });
 
@@ -79,6 +84,7 @@ describe('point core use cases', () => {
     await expect(
       new GetPointUserDashboard(port).execute({
         workspaceId: 'workspace-1',
+        groupId: 'group-1',
         actorUserId: 'user-2',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
