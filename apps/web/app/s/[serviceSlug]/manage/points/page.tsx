@@ -5,7 +5,11 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { currentUserProvider } from '../../../../../src/auth/current-user';
-import { buildRewardsPilotMetrics } from '../../../../../src/rewards/rewards-pilot-metrics';
+import {
+  buildRewardsPilotMetrics,
+  participatedInRewardsPilotPeriod,
+  resolveRewardsPilotMeasurementPeriod,
+} from '../../../../../src/rewards/rewards-pilot-metrics';
 import { getRewardsPilotExpiryNotice } from '../../../../../src/rewards/rewards-pilot-expiry';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
@@ -530,6 +534,7 @@ export default async function ServicePointSettingsPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
+  const now = new Date();
   const memberships = await db.prisma.groupMembership.findMany({
     where: {
       workspaceId: service.workspaceId,
@@ -559,9 +564,8 @@ export default async function ServicePointSettingsPage({
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
         featureKey: 'REWARDS.POINTS_BADGES',
-        status: 'ENABLED',
       },
-      select: { startsAt: true, endsAt: true },
+      select: { status: true, startsAt: true, endsAt: true },
     }),
     db.prisma.platformAdmin.findFirst({
       where: {
@@ -640,14 +644,18 @@ export default async function ServicePointSettingsPage({
   for (const version of versions)
     if (!current.has(version.ruleKey)) current.set(version.ruleKey, version);
   const query = await searchParams;
-  const now = new Date();
-  const pilotFrom = new Date(now.valueOf() - 28 * 86_400_000);
+  const pilotPeriod = resolveRewardsPilotMeasurementPeriod({
+    startsAt: rewardsPolicy?.startsAt ?? null,
+    endsAt: rewardsPolicy?.endsAt ?? null,
+    now,
+  });
   const rewardsPolicyActive = Boolean(
     rewardsPolicy &&
+    rewardsPolicy.status === 'ENABLED' &&
     (!rewardsPolicy.startsAt || rewardsPolicy.startsAt <= now) &&
     (!rewardsPolicy.endsAt || rewardsPolicy.endsAt > now),
   );
-  const rewardsPilotMembers = memberships.filter((membership) =>
+  const activeRewardsPilotMembers = memberships.filter((membership) =>
     membership.featureAssignments.some(
       (assignment) =>
         assignment.status === 'ENABLED' &&
@@ -655,9 +663,35 @@ export default async function ServicePointSettingsPage({
         (!assignment.endsAt || assignment.endsAt > now),
     ),
   );
-  const rewardsPilotCount = rewardsPilotMembers.length;
+  const rewardsPilotActiveCount = activeRewardsPilotMembers.length;
+  const rewardsPilotAssignments = await db.prisma.groupMemberFeatureAssignment.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      featureKey: 'REWARDS.POINTS_BADGES',
+      status: 'ENABLED',
+    },
+    select: {
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      groupMembership: {
+        select: {
+          userId: true,
+          user: { select: { displayName: true, email: true } },
+        },
+      },
+    },
+  });
+  const rewardsPilotParticipants = rewardsPilotAssignments
+    .filter((assignment) => participatedInRewardsPilotPeriod(assignment, pilotPeriod))
+    .map((assignment) => assignment.groupMembership);
+  const rewardsPilotUserIds = [
+    ...new Set(rewardsPilotParticipants.map((membership) => membership.userId)),
+  ];
+  const rewardsPilotCount = rewardsPilotUserIds.length;
   const policyExpiryNotice = getRewardsPilotExpiryNotice(rewardsPolicy?.endsAt ?? null, now);
-  const expiringPilotMembers = rewardsPilotMembers
+  const expiringPilotMembers = activeRewardsPilotMembers
     .map((membership) => ({
       membership,
       notice: getRewardsPilotExpiryNotice(
@@ -669,13 +703,12 @@ export default async function ServicePointSettingsPage({
       ),
     }))
     .filter(({ notice }) => notice !== null);
-  const rewardsPilotUserIds = rewardsPilotMembers.map(({ userId }) => userId);
   const [pilotPosts, pilotGrantTransactions, pilotRedemptions] = await Promise.all([
     db.prisma.postRecord.findMany({
       where: {
         workspaceId: service.workspaceId,
         actorUserId: { in: rewardsPilotUserIds },
-        postedAt: { gte: pilotFrom, lte: now },
+        postedAt: { gte: pilotPeriod.from, lt: pilotPeriod.toExclusive },
         bunshin: { groupId: service.serviceId },
       },
       select: { actorUserId: true, postedAt: true },
@@ -686,7 +719,7 @@ export default async function ServicePointSettingsPage({
         groupId: service.serviceId,
         userId: { in: rewardsPilotUserIds },
         type: 'GRANT',
-        createdAt: { gte: pilotFrom, lte: now },
+        createdAt: { gte: pilotPeriod.from, lt: pilotPeriod.toExclusive },
       },
       select: { userId: true, amount: true },
     }),
@@ -695,7 +728,7 @@ export default async function ServicePointSettingsPage({
         workspaceId: service.workspaceId,
         userId: { in: rewardsPilotUserIds },
         status: 'CONFIRMED',
-        confirmedAt: { gte: pilotFrom, lte: now },
+        confirmedAt: { gte: pilotPeriod.from, lt: pilotPeriod.toExclusive },
       },
       select: { userId: true, pointCost: true },
     }),
@@ -718,11 +751,14 @@ export default async function ServicePointSettingsPage({
   });
   const pilotPercentage = (count: number) =>
     rewardsPilotCount === 0 ? '—' : `${Math.round((count / rewardsPilotCount) * 100)}%`;
-  const pilotPeriodLabel = `${pilotFrom.toLocaleDateString('ja-JP', {
+  const pilotPeriodEnd = new Date(
+    Math.max(pilotPeriod.from.getTime(), pilotPeriod.toExclusive.getTime() - 1),
+  );
+  const pilotPeriodLabel = `${pilotPeriod.from.toLocaleDateString('ja-JP', {
     timeZone: 'Asia/Tokyo',
-  })}〜${now.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`;
+  })}〜${pilotPeriodEnd.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`;
   const memberName = new Map(
-    memberships.map((membership) => [
+    [...memberships, ...rewardsPilotParticipants].map((membership) => [
       membership.userId,
       membership.user.displayName || membership.user.email || '参加者',
     ]),
@@ -820,7 +856,8 @@ export default async function ServicePointSettingsPage({
         <section className="settings-card">
           <h2>試験利用者を選ぶ</h2>
           <p>
-            現在 <strong>{rewardsPilotCount}人／30人</strong> がポイントとバッジを利用できます。
+            現在 <strong>{rewardsPilotActiveCount}人／30人</strong>{' '}
+            がポイントとバッジを利用できます。
           </p>
           {rewardsPolicyActive ? (
             <p>参加者ごとに利用開始・停止と利用期間を設定できます。</p>
@@ -843,14 +880,23 @@ export default async function ServicePointSettingsPage({
 
         <section className="settings-card">
           <h2>試験運用の結果</h2>
-          <p>現在の試験利用者について、直近28日間（{pilotPeriodLabel}）を集計しています。</p>
+          <p>
+            {pilotPeriod.status === 'COMPLETED'
+              ? '終了した試験期間を固定し、その期間内の結果を表示しています。'
+              : pilotPeriod.status === 'UPCOMING'
+                ? '試験開始前です。開始後の記録をこの期間へ集計します。'
+                : pilotPeriod.status === 'ROLLING'
+                  ? '試験期間が未設定のため、現在利用中の参加者について直近28日間を集計しています。'
+                  : '設定された試験期間について、現在までの結果を集計しています。'}
+          </p>
+          <p>集計期間：{pilotPeriodLabel}</p>
           <div className="table-scroll">
             <table>
               <tbody>
                 <tr>
                   <th>試験利用者</th>
                   <td>{rewardsPilotMetrics.participantCount}人</td>
-                  <td>現在ポイントとバッジを利用できる人数</td>
+                  <td>集計期間中にポイントとバッジを利用できた人数</td>
                 </tr>
                 <tr>
                   <th>投稿した人</th>

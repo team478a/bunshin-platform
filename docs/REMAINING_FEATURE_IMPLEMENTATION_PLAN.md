@@ -57,7 +57,7 @@ Daily Missionの共通LINE受信、専用URLの開始・修正通知、紹介URL
 ## R5 販売・拡張
 
 - K1〜K8: 契約、座席、利用権、Credit、価格版、決済、返金、管理画面
-- P5〜P7: Group独自ポイント特典、管理、30人・4週間検証
+- P5〜P7: Group独自ポイント特典、管理、30人・4週間検証（コード実装済み。本番での対象者設定と4週間運用待ち）
 - AV-4D3〜AV-10: AI動画Provider、完成動画配布、Funnel、限定検証
 - Phase 10: 100人検証後の承認型SNS投稿とmetrics取得
 - Phase 11: BLOG Capability移行
