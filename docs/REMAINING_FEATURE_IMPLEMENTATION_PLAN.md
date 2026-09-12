@@ -11,7 +11,9 @@
 - 紹介URLのLINE共有とQR読取を実端末で確認する。
 - Production GateへMigration、復元訓練、端末smoke、退会dry-run、LINE Go/No-Goの証跡を登録する。
 
-完了条件は、対象commitと証跡をProduction Gateへ記録し、同じ日付の重複生成・重複配信がないことを確認すること。
+Daily Missionの共通LINE受信、専用URLの開始・修正通知、紹介URLのLINE共有・QR読取、同日重複防止は、個別の確認手順と証跡欄をProduction Gateへ実装済み。本番Migration後の実施・記録待ち。
+
+完了条件は、対象commitと全証跡をProduction Gateへ記録し、責任者の最終承認を保存すること。
 
 ## R1 保存商品機能の仕上げ
 

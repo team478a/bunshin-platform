@@ -30,6 +30,10 @@ describe('production gate checklist', () => {
       'LINE_GO_NO_GO',
       'TREND_RESEARCH_SMOKE',
       'EXTERNAL_TRACKING_SMOKE',
+      'DAILY_MISSION_LINE_SMOKE',
+      'TRACKING_LINK_NOTIFICATION_SMOKE',
+      'REFERRAL_SHARE_SMOKE',
+      'DUPLICATE_PREVENTION_SMOKE',
       'FINAL_APPROVAL',
     ]);
     expect(productionGateChecklist({ ...readyInput, recordedManualChecks }).launchReady).toBe(true);
@@ -43,6 +47,18 @@ describe('production gate checklist', () => {
     const value = productionGateChecklist({ ...readyInput, recordedManualChecks: new Set() });
     expect(value.manual).toContainEqual(
       expect.objectContaining({ code: 'EXTERNAL_TRACKING_SMOKE', status: 'MANUAL_CHECK' }),
+    );
+  });
+
+  it('無料運用開始に必要な実機確認を個別に表示する', () => {
+    const value = productionGateChecklist({ ...readyInput, recordedManualChecks: new Set() });
+    expect(value.manual.map((item) => item.code)).toEqual(
+      expect.arrayContaining([
+        'DAILY_MISSION_LINE_SMOKE',
+        'TRACKING_LINK_NOTIFICATION_SMOKE',
+        'REFERRAL_SHARE_SMOKE',
+        'DUPLICATE_PREVENTION_SMOKE',
+      ]),
     );
   });
 

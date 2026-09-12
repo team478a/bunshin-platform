@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RecordProductionGateEvidence, type ProductionGateEvidenceRepository } from '../src';
+import {
+  currentProductionGateRecordedChecks,
+  RecordProductionGateEvidence,
+  type ProductionGateCheckKey,
+  type ProductionGateEvidenceRepository,
+} from '../src';
 
 const evidence = {
   id: 'evidence-1',
@@ -20,6 +25,45 @@ const repository = (
 });
 
 describe('production gate evidence', () => {
+  it('requires a new final approval after a required check changes', () => {
+    const required = [
+      'BACKUP_RESTORE',
+      'MIGRATION_HEALTH',
+      'AUTH_SMOKE',
+      'FREE_MVP_SMOKE',
+      'ACCOUNT_DELETION_DRY_RUN',
+      'LINE_GO_NO_GO',
+      'TREND_RESEARCH_SMOKE',
+      'EXTERNAL_TRACKING_SMOKE',
+      'DAILY_MISSION_LINE_SMOKE',
+      'TRACKING_LINK_NOTIFICATION_SMOKE',
+      'REFERRAL_SHARE_SMOKE',
+      'DUPLICATE_PREVENTION_SMOKE',
+    ] as const;
+    const events: Array<{
+      checkKey: ProductionGateCheckKey;
+      action: 'RECORDED' | 'REVOKED';
+      occurredAt: string;
+    }> = required.map((checkKey) => ({
+      checkKey,
+      action: 'RECORDED' as const,
+      occurredAt: '2026-09-12T00:00:00.000Z',
+    }));
+    events.push({
+      checkKey: 'FINAL_APPROVAL',
+      action: 'RECORDED',
+      occurredAt: '2026-09-12T01:00:00.000Z',
+    });
+    expect(currentProductionGateRecordedChecks(events)).toContain('FINAL_APPROVAL');
+
+    events.push({
+      checkKey: 'DAILY_MISSION_LINE_SMOKE',
+      action: 'RECORDED',
+      occurredAt: '2026-09-12T02:00:00.000Z',
+    });
+    expect(currentProductionGateRecordedChecks(events)).not.toContain('FINAL_APPROVAL');
+  });
+
   it('normalizes and records an allowlisted HTTPS evidence URL', async () => {
     const append = vi.fn().mockResolvedValue(evidence);
     await new RecordProductionGateEvidence(repository(append)).execute({

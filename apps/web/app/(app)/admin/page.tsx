@@ -1,5 +1,6 @@
 import {
   CheckLineOperationalReadiness,
+  currentProductionGateRecordedChecks,
   GetAdminAlerts,
   InspectPointBalances,
   ListAiProviderConfigurations,
@@ -92,12 +93,7 @@ export default async function OperationsAdminPage() {
           new db.PrismaProductionGateEvidenceRepository(),
         ).execute({ actorUserId: user.userId, environment: 'PRODUCTION', commitSha })
       : [];
-  const latestGateEvidence = new Map(
-    gateEvidence.map((item) => [item.checkKey, item.action] as const),
-  );
-  const recordedManualChecks = new Set(
-    [...latestGateEvidence].filter(([, action]) => action === 'RECORDED').map(([key]) => key),
-  );
+  const recordedManualChecks = currentProductionGateRecordedChecks(gateEvidence);
   const productionGate = productionGateChecklist({
     environment: environment.APP_ENV,
     operationsReady: readiness.ready,
@@ -180,7 +176,7 @@ export default async function OperationsAdminPage() {
       </section>
 
       <section className="settings-card" aria-labelledby="production-gate-title">
-        <h2 id="production-gate-title">100人検証を始める前の確認</h2>
+        <h2 id="production-gate-title">無料運用を始める前の確認</h2>
         <p>
           {productionGate.automaticReady
             ? '機械で確認できる設定はそろっています。人が確認する項目を完了してください。'
