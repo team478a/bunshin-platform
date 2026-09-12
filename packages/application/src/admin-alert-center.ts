@@ -8,7 +8,13 @@ export interface AdminAlert {
   title: string;
   guidance: string;
   count: number | null;
-  href: '/admin/ai' | '/admin/line' | '/admin/support' | '/admin/deletions' | '/admin/guide';
+  href:
+    | '/admin/ai'
+    | '/admin/line'
+    | '/admin/rewards'
+    | '/admin/support'
+    | '/admin/deletions'
+    | '/admin/guide';
 }
 
 export interface AdminAlertSnapshot {
@@ -32,6 +38,13 @@ export interface AdminAlertSnapshot {
     deadJobs: number;
   };
   otherDeadJobs: number;
+  rewards: {
+    failedPointProcessing: number;
+    stalePointProcessing: number;
+    failedBadgeProcessing: number;
+    staleBadgeProcessing: number;
+    stoppedServices: number;
+  };
   blockedDeletions: number;
   openSupportCases: number;
   urgentSupportCases: number;
@@ -142,6 +155,30 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
       guidance: '復旧手順を確認し、原因を解消してから再実行してください。',
       count: snapshot.otherDeadJobs,
       href: '/admin/guide',
+    });
+  const failedRewardsProcessing =
+    snapshot.rewards.failedPointProcessing +
+    snapshot.rewards.stalePointProcessing +
+    snapshot.rewards.failedBadgeProcessing +
+    snapshot.rewards.staleBadgeProcessing;
+  if (failedRewardsProcessing > 0)
+    alerts.push({
+      code: 'REWARDS_PROCESSING_FAILURES',
+      severity: 'WARNING',
+      title: 'ポイント・バッジの自動反映を確認してください',
+      guidance:
+        '自動再試行されます。件数が減らない場合は、定期処理の稼働状況と失敗時刻を確認してください。',
+      count: failedRewardsProcessing,
+      href: '/admin/rewards',
+    });
+  if (snapshot.rewards.stoppedServices > 0)
+    alerts.push({
+      code: 'POINT_ISSUANCE_STOPPED_SERVICES',
+      severity: 'INFO',
+      title: 'ポイント付与を停止しているサービスがあります',
+      guidance: '意図した停止か、サービス運営者へ確認してください。',
+      count: snapshot.rewards.stoppedServices,
+      href: '/admin/rewards',
     });
   if (snapshot.blockedDeletions > 0)
     alerts.push({
