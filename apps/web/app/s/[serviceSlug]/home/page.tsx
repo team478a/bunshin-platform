@@ -106,6 +106,11 @@ export default async function ServiceMemberHome({
     membership.featureAssignments.some((item) => item.featureKey === featureKey && active(item));
   const imageAvailable = available('SOCIAL.IMAGE_GENERATION');
   const videoAvailable = available('VIDEO_GENERATION');
+  const rewardsPilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    userId: actor.userId,
+  });
   const trackingLinkAvailable =
     (await db.prisma.externalTrackingSystem.count({
       where: {
@@ -252,12 +257,21 @@ export default async function ServiceMemberHome({
           <h2>利用できる機能</h2>
           {!imageAvailable &&
             !videoAvailable &&
+            !rewardsPilotAccess &&
             !['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole) && (
               <p>
                 現在、利用できる機能を準備しています。サービス運営者からの案内をお待ちください。
               </p>
             )}
           <div className="service-home-actions">
+            {rewardsPilotAccess && (
+              <Link
+                className="button button--primary"
+                href={`/s/${service.configuration.slug}/activity#rewards` as Route}
+              >
+                ポイント・バッジを見る
+              </Link>
+            )}
             <Link
               className="button button--primary"
               href={`/s/${service.configuration.slug}/weekly-report` as Route}

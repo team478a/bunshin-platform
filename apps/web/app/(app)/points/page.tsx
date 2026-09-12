@@ -1,4 +1,5 @@
 import { GetPointUserDashboard, type PointTransactionType } from '@bunshin/application';
+import type { Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
@@ -171,6 +172,24 @@ export default async function PointsPage({
         <p>
           「投稿しました」は自己申告です。SNSへの実際の投稿は自動確認されません。実際に投稿した後で記録してください。
         </p>
+      </section>
+
+      <section className="settings-card" aria-labelledby="point-reflection-title">
+        <h2 id="point-reflection-title">ポイントが増えるまで</h2>
+        <ol className="reward-help-steps">
+          <li>今日の投稿案を開く、またはSNSへの投稿を記録します。</li>
+          <li>通常1分ほど待ち、このページを開き直します。</li>
+          <li>増えた内容は、下の「最近の履歴」で確認できます。</li>
+        </ol>
+        <p>
+          同じ行動でもらえるポイントは原則1日1回です。すでに受け取った日は、もう一度操作しても増えません。
+        </p>
+        <Link
+          className="button button--secondary"
+          href={`/badges?workspaceId=${encodeURIComponent(workspace.id)}` as Route}
+        >
+          バッジの進み具合を見る
+        </Link>
       </section>
 
       <section className="settings-card" aria-labelledby="point-history-title">
