@@ -4870,6 +4870,7 @@ body:has(.app-shell) > .site-footer {
   color: var(--color-text-muted);
 }
 .point-methods,
+.point-use-options,
 .point-history {
   display: grid;
   gap: 0;
@@ -4885,6 +4886,40 @@ body:has(.app-shell) > .site-footer {
   gap: 16px;
   padding: 14px 0;
   border-top: 1px solid var(--color-border);
+}
+.point-use-options {
+  gap: 14px;
+  margin-top: 18px;
+}
+.point-use-options > li {
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-background);
+}
+.point-use-options__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.point-use-options__heading strong {
+  font-size: 1.05rem;
+}
+.point-use-options__heading b {
+  flex: 0 0 auto;
+  color: #d33f2d;
+}
+.point-use-options > li > p {
+  margin: 10px 0;
+}
+.point-use-options .is-ready {
+  color: #18794e;
+  font-weight: 700;
+}
+.point-use-options .is-waiting {
+  color: var(--color-text-muted);
+  font-weight: 700;
 }
 .point-methods li:first-child,
 .point-history li:first-child {
