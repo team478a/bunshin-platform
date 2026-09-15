@@ -32,6 +32,40 @@ describe('外部サービス接続確認', () => {
     );
   });
 
+  it('Runwayは動画を生成せず存在しないタスクで接続確認する', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'RUNWAY',
+        apiKey: 'runway-secret',
+        model: 'gen4_turbo',
+      }),
+    ).resolves.toEqual({ success: true, errorCategory: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.dev.runwayml.com/v1/tasks/00000000-0000-4000-8000-000000000000',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer runway-secret',
+          'X-Runway-Version': '2024-11-06',
+        },
+      }),
+    );
+  });
+
+  it('Runwayで利用できないモデルを接続前に拒否する', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      new AiProviderConnectionTestAdapter().validate({
+        provider: 'RUNWAY',
+        apiKey: 'runway-secret',
+        model: 'gen4-turbo',
+      }),
+    ).resolves.toEqual({ success: false, errorCategory: 'MODEL_UNAVAILABLE' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('LINE Access TokenとMessaging Channel IDの不一致を拒否する', async () => {
     const fetchMock = vi
       .fn()

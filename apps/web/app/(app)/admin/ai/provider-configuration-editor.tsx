@@ -24,7 +24,7 @@ const labels: Record<Provider, string> = {
   FIRECRAWL: 'ウェブページを読む検索（Firecrawl）',
   CREATOMATE: '動画を仕上げるサービス（Creatomate）',
   FAL: 'AI動画を作るサービス（fal）',
-  RUNWAY: 'Runway（提供準備中）',
+  RUNWAY: 'AI動画を作るサービス（Runway）',
 };
 const usd = (micros: number) => (micros / 1_000_000).toFixed(2);
 const connectionErrors: Record<string, string> = {
@@ -33,7 +33,6 @@ const connectionErrors: Record<string, string> = {
   MODEL_UNAVAILABLE: '指定したAIモデルを利用できません',
   PROVIDER_CONFIGURATION_INVALID: '外部サービス側の設定を確認してください',
   PROVIDER_UNAVAILABLE: '外部サービスへ一時的に接続できません',
-  VIDEO_PROVIDER_CONNECTION_NOT_IMPLEMENTED: '動画Providerの接続機能は次の更新で利用できます',
 };
 
 export function AiProviderConfigurationEditor(props: {
@@ -223,13 +222,11 @@ export function AiProviderConfigurationEditor(props: {
                 </p>
                 <p>
                   次にすること：
-                  {value === 'RUNWAY'
-                    ? '提供開始までお待ちください'
-                    : !item?.apiKeyConfigured
-                      ? 'APIキーを登録する'
-                      : item.status !== 'ACTIVE'
-                        ? 'この設定を使い始める'
-                        : '設定済みです'}
+                  {!item?.apiKeyConfigured
+                    ? 'APIキーを登録する'
+                    : item.status !== 'ACTIVE'
+                      ? 'この設定を使い始める'
+                      : '設定済みです'}
                 </p>
               </article>
             );
@@ -285,13 +282,11 @@ export function AiProviderConfigurationEditor(props: {
               value={provider}
               onChange={(event) => setProvider(event.target.value as Provider)}
             >
-              {Object.entries(labels)
-                .filter(([value]) => value !== 'RUNWAY')
-                .map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+              {Object.entries(labels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </select>
           </label>
           {['OPENAI', 'GROK', 'FAL', 'RUNWAY'].includes(provider) ? (
@@ -306,7 +301,7 @@ export function AiProviderConfigurationEditor(props: {
                     : provider === 'FAL'
                       ? 'kling-o1-reference-to-video'
                       : provider === 'RUNWAY'
-                        ? 'gen4-turbo'
+                        ? 'gen4_turbo'
                         : 'gpt-5-mini'
                 }
                 required
@@ -416,7 +411,7 @@ export function AiProviderConfigurationEditor(props: {
                   {usd(item.monthlyBudgetUsdMicros)}
                 </p>
                 <p>利用1回の見込み原価：${usd(item.requestCostUsdMicros ?? 0)}</p>
-                {item.provider !== 'RUNWAY' && item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
+                {item.apiKeyConfigured && item.status !== 'ACTIVE' ? (
                   <button
                     className="button button--primary"
                     disabled={actionConfigurationId !== null}

@@ -2451,8 +2451,6 @@ export class PrismaAiProviderConfigurationRepository implements AiProviderConfig
         where: { id: input.configurationId, environment: input.environment },
       });
       if (target === null) return null;
-      if (target.provider === 'RUNWAY')
-        throw new ApplicationError('CONFLICT', 'Runwayは提供準備中です。');
       if (
         target.encryptedApiKey === null ||
         target.lastVerifiedAt === null ||

@@ -92,7 +92,7 @@ const updateSceneSchema = z
 const queueAiScenesSchema = z
   .object({
     expectedRevision: z.number().int().positive(),
-    provider: z.literal('FAL'),
+    provider: z.enum(['FAL', 'RUNWAY']),
   })
   .strict();
 const jobEnvironment = {

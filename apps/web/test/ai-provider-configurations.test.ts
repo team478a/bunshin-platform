@@ -123,4 +123,26 @@ describe('AI provider configuration HTTP', () => {
       expect.objectContaining({ provider: 'CREATOMATE', model: null }),
     );
   });
+
+  it('accepts a Runway video model configuration', async () => {
+    const response = await createAiProviderConfigurationResponse(
+      request({
+        provider: 'RUNWAY',
+        reason: 'Runway動画生成を準備',
+        model: 'gen4_turbo',
+        dailyBudgetUsd: 1,
+        monthlyBudgetUsd: 5,
+        requestCostUsd: 0.05,
+        apiKey: 'runway-secret-1234',
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(state.createVersion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'RUNWAY',
+        model: 'gen4_turbo',
+        requestCostUsdMicros: 50_000,
+      }),
+    );
+  });
 });
