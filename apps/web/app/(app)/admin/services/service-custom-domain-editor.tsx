@@ -8,6 +8,13 @@ type CustomDomain = {
   verificationNote: string | null;
 };
 
+const statusLabel = {
+  DRAFT: '準備中',
+  VERIFIED: 'DNS設定待ち',
+  ACTIVE: '利用中',
+  DISABLED: '停止中',
+} as const;
+
 export function ServiceCustomDomainEditor({
   serviceId,
   domain,
@@ -17,6 +24,30 @@ export function ServiceCustomDomainEditor({
 }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+
+  async function synchronize() {
+    setSaving(true);
+    setMessage('VercelとDNSの接続を確認しています…');
+    try {
+      const response = await fetch(
+        `/api/admin/services/${encodeURIComponent(serviceId)}/custom-domain`,
+        { method: 'POST' },
+      );
+      const result = (await response.json()) as {
+        data?: { status?: string; verificationNote?: string | null };
+        error?: { message?: string };
+      };
+      if (!response.ok)
+        throw new Error(result.error?.message ?? '独自ドメインを確認できませんでした。');
+      const status =
+        result.data?.status === 'ACTIVE' ? '公開を開始しました。' : 'まだ設定が必要です。';
+      setMessage(`${status}${result.data?.verificationNote ?? ''} 画面を更新します…`);
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '独自ドメインを確認できませんでした。');
+      setSaving(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,14 +82,14 @@ export function ServiceCustomDomainEditor({
   return (
     <details className="settings-card">
       <summary>OEM・独自ドメインを準備する</summary>
-      <p>
-        ここでは利用予定のホスト名と確認状態だけを管理します。DNSやVercelの接続をこの画面から自動では変更しません。
-      </p>
+      <p>利用するドメインを保存したあと、Vercelへの登録とDNSの接続確認をこの画面から行えます。</p>
       <ol>
         <li>利用するドメインを入力し「準備中」で保存します。</li>
-        <li>公開先の接続機能は準備中です。現在は希望するドメインの登録まで行えます。</li>
+        <li>「Vercelへ登録・接続を確認」を押します。</li>
+        <li>表示されたDNS設定をドメイン会社の画面へ登録し、もう一度確認します。</li>
       </ol>
-      <p>登録だけでは公開されません。現在はサービスの既存URLをご利用ください。</p>
+      <p>状態が「利用中」になった時点で、そのドメインからサービスを開けます。</p>
+      {domain ? <p>現在の状態：{statusLabel[domain.status]}</p> : null}
       <form className="admin-form-grid" onSubmit={(event) => void submit(event)}>
         <label>
           独自ドメイン
@@ -73,16 +104,6 @@ export function ServiceCustomDomainEditor({
           状態
           <select defaultValue={domain?.status ?? 'DRAFT'} name="status">
             <option value="DRAFT">準備中</option>
-            {domain?.status === 'VERIFIED' ? (
-              <option value="VERIFIED" disabled>
-                確認済み（旧設定）
-              </option>
-            ) : null}
-            {domain?.status === 'ACTIVE' ? (
-              <option value="ACTIVE" disabled>
-                利用中（旧設定・公開未保証）
-              </option>
-            ) : null}
             <option value="DISABLED">停止中</option>
           </select>
         </label>
@@ -107,6 +128,19 @@ export function ServiceCustomDomainEditor({
           {saving ? '保存中…' : '独自ドメインを保存する'}
         </button>
       </form>
+      {domain && domain.status !== 'DISABLED' ? (
+        <button disabled={saving} type="button" onClick={() => void synchronize()}>
+          {saving ? '確認中…' : 'Vercelへ登録・接続を確認'}
+        </button>
+      ) : null}
+      {domain?.verificationNote ? <p>{domain.verificationNote}</p> : null}
+      {domain?.status === 'ACTIVE' ? (
+        <p>
+          LINE・メールログインを使う場合は、SupabaseのRedirect URLsに
+          {` https://${domain.hostname}/auth/** `}
+          も登録してください。
+        </p>
+      ) : null}
       <p aria-live="polite" role="status">
         {message}
       </p>

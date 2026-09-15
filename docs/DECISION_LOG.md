@@ -2193,3 +2193,12 @@
 - Boundary: Serviceの機能許可、試験期間、一括停止、ポイント付与条件は引き続き適用する。サービス所有者、運営管理者、コンテンツ担当者は自動対象に含めない。
 - Privacy: 規約同意前、参加停止中、または別Serviceの参加者には利用を許可しない。
 - Source: `docs/REWARDS_ALL_REGISTERED_PARTICIPANTS_REPORT.md`
+
+## 2026-09-15: 独自ドメインはVercelとDNSの実確認後だけ公開する
+
+- Registration: SUPER_ADMINが利用ホスト名を保存し、Vercel Project Domains APIへ登録する。契約で独自ドメインが停止中の場合は操作を許可しない。
+- State: 所有確認前を`DRAFT`、所有確認済みでDNS接続待ちを`VERIFIED`、Vercel Domain Configuration APIが正常接続を返した場合だけ`ACTIVE`とする。
+- Routing: Next.js Proxyが`ACTIVE`なホスト名をService slugへ解決し、Service、Workspaceがともに利用中の場合だけ内部Service URLへrewriteする。
+- Authentication: Proxyが検証した独自ホストをリクエスト内部ヘッダーで渡し、同一Origin検証とLINE／メール認証のcallback URLへ使用する。外部から渡された同名ヘッダーはProxyで必ず削除する。
+- Boundary: Vercel API tokenとSupabase Redirect URLは運用環境へ別途設定する。認証情報をDBやリポジトリへ保存しない。
+- Source: `docs/CUSTOM_DOMAIN_ROUTING_REPORT.md`

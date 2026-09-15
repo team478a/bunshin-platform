@@ -1,7 +1,7 @@
 import { getServerEnvironment } from '@bunshin/config';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requireSameOrigin } from '../../../src/auth/request-security';
+import { requireSameOrigin, trustedRequestOrigin } from '../../../src/auth/request-security';
 import {
   LINE_AUTH_RETURN_COOKIE,
   LINE_AUTH_RETURN_MAX_AGE_SECONDS,
@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
       email: input.data.email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${environment.APP_URL}/auth/confirm`,
+        emailRedirectTo: `${trustedRequestOrigin(request)}/auth/confirm`,
       },
     });
     if (error) {

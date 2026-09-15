@@ -2260,7 +2260,7 @@ model ServiceCommercialSetting {
   @@map("service_commercial_settings")
 }
 
-/// サービス固有ドメインの申請・確認状態。DNS／Vercel の接続操作そのものは保存しない。
+/// サービス固有ドメインと、Vercel／DNSの接続確認状態。
 model ServiceCustomDomain {
   id               String                    @id @default(uuid()) @db.Uuid
   workspaceId      String                    @map("workspace_id") @db.Uuid
