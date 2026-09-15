@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260915150000_add_social_insight_snapshots';
+export const LATEST_DATABASE_MIGRATION = '20260916083000_publish_watashi_works_official';
