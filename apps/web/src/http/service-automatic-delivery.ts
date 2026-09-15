@@ -2,6 +2,7 @@ import 'server-only';
 import {
   EnqueueJob,
   GetBunshin,
+  GetLineNotificationPreference,
   ScheduleWeeklyPlanPreparation,
   UpdateLineNotificationPreference,
 } from '@bunshin/application';
@@ -10,11 +11,12 @@ import { requestIdFromHeader } from '@bunshin/observability';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { mondayForDate } from '../jobs/service-automatic-week';
 import { ensureUserWorkspaceLineConnection } from '../line/ensure-user-workspace-connection';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
+import { sendRegistrationCompletionLine } from '../services/registration-completion-line';
 
 const schema = z
   .object({ enabled: z.boolean(), localTime: z.string().regex(/^(0[7-9]|1\d|20):[0-5]\d$/) })
@@ -37,7 +39,7 @@ export async function updateServiceAutomaticDelivery(
     const value = parsed.data;
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const service = await resolvePublicServiceContext(serviceSlug);
+    const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
     const deliveryPolicy = readServiceOnboardingSettings(
       service.configuration.registration.onboardingConfig,
       service.configuration.registration.surveyConfig,
@@ -64,9 +66,11 @@ export async function updateServiceAutomaticDelivery(
         'CONFLICT',
         'LINEでログインしてから、お届け設定を開始してください。',
       );
-    await new UpdateLineNotificationPreference(
-      new db.PrismaLineNotificationPreferenceRepository(),
-    ).execute({
+    const preferenceRepository = new db.PrismaLineNotificationPreferenceRepository();
+    const previousPreference = await new GetLineNotificationPreference(
+      preferenceRepository,
+    ).execute(scope);
+    await new UpdateLineNotificationPreference(preferenceRepository).execute({
       ...scope,
       enabled: value.enabled,
       consentGranted: value.enabled,
@@ -87,6 +91,18 @@ export async function updateServiceAutomaticDelivery(
         environment: currentLineEnvironment(),
         correlationId: requestId,
         weekStartDate,
+      });
+    if (
+      value.enabled &&
+      (!previousPreference.enabled || previousPreference.notificationConsentAt === null)
+    )
+      await sendRegistrationCompletionLine({
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        actorUserId: actor.userId,
+        serviceSlug: service.configuration.slug,
+        serviceName: service.configuration.displayName,
+        localTime: value.localTime,
       });
     return Response.json(
       { data: { enabled: value.enabled }, requestId },
