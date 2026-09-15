@@ -12,6 +12,7 @@ export function VideoAiSceneRequester(props: {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [provider, setProvider] = useState<'FAL' | 'RUNWAY'>('FAL');
 
   async function submit() {
     setBusy(true);
@@ -22,7 +23,7 @@ export function VideoAiSceneRequester(props: {
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ expectedRevision: props.revision, provider: 'FAL' }),
+          body: JSON.stringify({ expectedRevision: props.revision, provider }),
         },
       );
       const result = (await response.json()) as { error?: { message?: string } };
@@ -38,6 +39,16 @@ export function VideoAiSceneRequester(props: {
 
   return (
     <div className="form-stack">
+      <label>
+        AI動画サービス
+        <select
+          value={provider}
+          onChange={(event) => setProvider(event.target.value as 'FAL' | 'RUNWAY')}
+        >
+          <option value="FAL">fal</option>
+          <option value="RUNWAY">Runway</option>
+        </select>
+      </label>
       <button
         className="button button--primary"
         type="button"

@@ -92,8 +92,28 @@ export class AiProviderConnectionTestAdapter {
     apiKey: string;
     model: string | null;
   }) {
-    if (input.provider === 'RUNWAY')
-      return { success: false, errorCategory: 'VIDEO_PROVIDER_CONNECTION_NOT_IMPLEMENTED' };
+    if (input.provider === 'RUNWAY') {
+      const model = input.model?.trim();
+      if (!model || !['gen4_turbo', 'gen4.5'].includes(model))
+        return { success: false, errorCategory: 'MODEL_UNAVAILABLE' };
+      const response = await fetch(
+        'https://api.dev.runwayml.com/v1/tasks/00000000-0000-4000-8000-000000000000',
+        {
+          headers: {
+            authorization: `Bearer ${input.apiKey}`,
+            'X-Runway-Version': '2024-11-06',
+          },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      // An authenticated request for an intentionally absent task returns 404 and
+      // verifies the key without starting a paid generation.
+      if (response.status === 404) return { success: true, errorCategory: null };
+      if (response.status === 401 || response.status === 403)
+        return { success: false, errorCategory: 'CREDENTIAL_INVALID' };
+      if (response.status === 429) return { success: false, errorCategory: 'QUOTA_OR_RATE_LIMIT' };
+      return { success: false, errorCategory: 'PROVIDER_CONFIGURATION_INVALID' };
+    }
     if (input.provider === 'FAL') {
       const model = input.model?.trim();
       if (!model || !/^kling-[a-z0-9-]{1,100}$/i.test(model))

@@ -6,7 +6,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const BUCKET = 'video-ai-scenes';
 const MAX_BYTES = 100_000_000;
-const HOSTS = new Set(['fal.media', 'v2.fal.media', 'v3.fal.media']);
+const HOSTS = new Set([
+  'fal.media',
+  'v2.fal.media',
+  'v3.fal.media',
+  'dnznrvs05pmza.cloudfront.net',
+]);
 
 function storageClient() {
   const environment = getServerEnvironment();
@@ -27,7 +32,9 @@ function allowedSourceUrl(value: string) {
   }
   if (
     url.protocol !== 'https:' ||
-    !HOSTS.has(url.hostname) ||
+    (!HOSTS.has(url.hostname) &&
+      url.hostname !== 'runwayml.com' &&
+      !url.hostname.endsWith('.runwayml.com')) ||
     url.username ||
     url.password ||
     url.hash

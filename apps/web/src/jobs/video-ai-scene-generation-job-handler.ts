@@ -9,6 +9,7 @@ import { ApplicationError } from '@bunshin/shared';
 import { resolveVideoAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { AiCharacterReferenceStorage } from '../ai-character-reference-storage';
 import { FalKlingVideoAdapter, FalKlingVideoProviderError } from '../providers/fal-kling-video';
+import { RunwayVideoAdapter, RunwayVideoProviderError } from '../providers/runway-video';
 import { SupabaseFalVideoSceneOutputStorage } from '../video/fal-video-scene-output-storage';
 
 class PrivateCharacterReferenceUrls implements VideoSceneReferenceUrlPort {
@@ -30,15 +31,23 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
   return {
     async execute(input) {
       try {
-        const configuration = await resolveVideoAiRuntimeConfiguration({ provider: 'FAL' });
         const db = await import('@bunshin/database');
         const repository = new db.PrismaVideoSceneGenerationRepository();
         const execution = await repository.findForExecution(input);
+        if (!execution) throw new ApplicationError('NOT_FOUND', 'video scene generation not found');
+        if (execution.generation.provider !== 'FAL' && execution.generation.provider !== 'RUNWAY')
+          throw new ApplicationError('CONFIGURATION_ERROR', 'unsupported video provider');
+        const provider = execution.generation.provider;
+        const configuration = await resolveVideoAiRuntimeConfiguration({ provider });
         if (execution?.generation.status === 'QUEUED')
           await new db.PrismaVideoMediaQuotaRepository().reserve(execution.generation);
+        const providerAdapter =
+          provider === 'RUNWAY'
+            ? new RunwayVideoAdapter(configuration.apiKey)
+            : new FalKlingVideoAdapter(configuration.apiKey);
         const result = await new ExecuteVideoSceneGenerationStep(
           repository,
-          new FalKlingVideoAdapter(configuration.apiKey),
+          providerAdapter,
           new PrivateCharacterReferenceUrls(),
           new SupabaseFalVideoSceneOutputStorage(),
         ).execute(input);
@@ -53,6 +62,11 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
       } catch (error) {
         if (error instanceof FalKlingVideoProviderError)
           throw new VideoAiSceneGenerationJobHandlerError(`FAL_${error.category}`, error.retryable);
+        if (error instanceof RunwayVideoProviderError)
+          throw new VideoAiSceneGenerationJobHandlerError(
+            `RUNWAY_${error.category}`,
+            error.retryable,
+          );
         if (error instanceof ApplicationError) throw error;
         throw new VideoAiSceneGenerationJobHandlerError('VIDEO_AI_SCENE_INFRASTRUCTURE', true);
       }
