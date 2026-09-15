@@ -6,8 +6,10 @@ import {
   RecordVideoDeliveryAction,
   RecordVideoDeliveryNotification,
   RevokeVideoDelivery,
+  ServiceReferralRewardService,
   type VideoDeliveryAction,
 } from '@bunshin/application';
+import { RecordManualPost, SOCIAL_PLATFORMS } from '@bunshin/capability-social';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -436,13 +438,67 @@ export async function recordServiceVideoDeliveryActionResponse(
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const service = await resolvePublicServiceContext(serviceSlug);
     const db = await import('@bunshin/database');
-    const delivery = await new RecordVideoDeliveryAction(
-      new db.PrismaVideoDeliveryRepository(),
-    ).execute({
+    const deliveries = new db.PrismaVideoDeliveryRepository();
+    const parsedDeliveryId = uuid.parse(deliveryId);
+    if (action === 'POSTED') {
+      const existing = await new GetMyVideoDelivery(deliveries).execute({
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        actorUserId: actor.userId,
+        videoDeliveryId: parsedDeliveryId,
+      });
+      if (existing.status === 'POSTED')
+        return Response.json(
+          { data: existing, requestId },
+          { headers: { 'cache-control': 'no-store' } },
+        );
+      if (existing.status !== 'ACCEPTED')
+        throw new ApplicationError('CONFLICT', 'video must be accepted before posting');
+      const project = await db.prisma.videoProject.findFirst({
+        where: {
+          id: existing.videoProjectId,
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          ownerUserId: actor.userId,
+        },
+        select: {
+          platform: true,
+          socialImageGenerationRequest: {
+            select: { bunshinId: true, dailyMissionId: true },
+          },
+        },
+      });
+      const source = project?.socialImageGenerationRequest;
+      if (project && source) {
+        await new RecordManualPost(
+          new db.PrismaDailyMissionRepository(),
+          new db.PrismaBunshinCapabilityAssignmentRepository(),
+          new db.PrismaMissionOutcomeRepository(),
+        ).execute({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          bunshinId: source.bunshinId,
+          actorUserId: actor.userId,
+          dailyMissionId: source.dailyMissionId,
+          platform: z.enum(SOCIAL_PLATFORMS).parse(project.platform),
+          postUrl: null,
+          idempotencyKey: `video-delivery-post:${existing.id}`,
+        });
+        await new ServiceReferralRewardService(
+          new db.PrismaServiceReferralRewardRepository(),
+        ).completeMilestone({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          referredUserId: actor.userId,
+          milestone: 'FIRST_POST_REPORTED',
+        });
+      }
+    }
+    const delivery = await new RecordVideoDeliveryAction(deliveries).execute({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
-      videoDeliveryId: uuid.parse(deliveryId),
+      videoDeliveryId: parsedDeliveryId,
       action: action as VideoDeliveryAction,
       eventData: {},
     });

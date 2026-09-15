@@ -16471,6 +16471,8 @@ export class PrismaVideoDeliveryRepository implements VideoDeliveryRepository {
         (delivery.expiresAt !== null && delivery.expiresAt <= now)
       )
         return null;
+      if (input.action === 'POSTED' && delivery.status === 'POSTED')
+        return videoDeliveryRecord(delivery);
       const permitted =
         input.action === 'VIEWED'
           ? delivery.status !== 'DECLINED'
