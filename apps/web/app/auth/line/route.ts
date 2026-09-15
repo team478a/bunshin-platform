@@ -1,6 +1,6 @@
 import { getServerEnvironment } from '@bunshin/config';
 import { NextResponse } from 'next/server';
-import { requireSameOrigin } from '../../../src/auth/request-security';
+import { requireSameOrigin, trustedRequestOrigin } from '../../../src/auth/request-security';
 import {
   LINE_AUTH_RETURN_COOKIE,
   LINE_AUTH_RETURN_MAX_AGE_SECONDS,
@@ -22,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'custom:line',
       options: {
-        redirectTo: `${environment.APP_URL}/auth/line/callback`,
+        redirectTo: `${trustedRequestOrigin(request)}/auth/line/callback`,
         scopes: 'openid profile',
       },
     });

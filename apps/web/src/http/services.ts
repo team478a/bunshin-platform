@@ -10,6 +10,10 @@ import {
   SERVICE_CREATION_TEMPLATES,
 } from '../services/service-creation-templates';
 import { enforceBusinessFreeRegistrationSettings } from '../services/business-daily-service-settings';
+import {
+  type VercelCustomDomainProvider,
+  vercelCustomDomainProviderFromEnvironment,
+} from '../services/vercel-custom-domain';
 
 const uuid = z.string().uuid();
 const optionalUrl = z
@@ -424,6 +428,14 @@ export async function updateServiceCustomDomainResponse(request: Request, config
       )
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid custom domain');
+    if (
+      process.env.APP_URL &&
+      value.hostname === new URL(process.env.APP_URL).hostname.toLowerCase()
+    )
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        'システム本体のドメインはサービス専用に設定できません。',
+      );
 
     const db = await import('@bunshin/database');
     const saved = await db.prisma.$transaction(async (tx) => {
@@ -468,11 +480,8 @@ export async function updateServiceCustomDomainResponse(request: Request, config
           hostname: value.hostname,
           status: value.status,
           verificationNote: value.verificationNote || null,
-          verifiedAt:
-            value.status === 'VERIFIED' && configuration.customDomain?.verifiedAt === null
-              ? now
-              : (configuration.customDomain?.verifiedAt ?? null),
-          activatedAt: value.status === 'ACTIVE' ? now : null,
+          verifiedAt: null,
+          activatedAt: null,
         },
       });
       await tx.serviceConfigurationAudit.create({
@@ -507,6 +516,113 @@ export async function updateServiceCustomDomainResponse(request: Request, config
     });
     return Response.json(
       { data: saved, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function synchronizeServiceCustomDomainResponse(
+  request: Request,
+  configurationId: string,
+  provider?: Pick<VercelCustomDomainProvider, 'synchronize'>,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const user = await (await currentUserProvider()).getCurrentUser();
+    if (!user) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    if (!uuid.safeParse(configurationId).success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid service id');
+
+    const db = await import('@bunshin/database');
+    const [admin, configuration] = await Promise.all([
+      db.prisma.platformAdmin.findFirst({
+        where: { userId: user.userId, status: 'ACTIVE', role: 'SUPER_ADMIN' },
+        select: { id: true },
+      }),
+      db.prisma.serviceConfiguration.findUnique({
+        where: { id: configurationId },
+        include: { customDomain: true },
+      }),
+    ]);
+    if (!admin) throw new ApplicationError('FORBIDDEN', 'platform administrator required');
+    if (!configuration?.customDomain)
+      throw new ApplicationError('NOT_FOUND', 'custom domain not found');
+    const entitlement = await db.prisma.organizationEntitlement.findUnique({
+      where: { workspaceId: configuration.workspaceId },
+      select: { customDomainEnabled: true, suspended: true },
+    });
+    if (entitlement?.suspended)
+      throw new ApplicationError('FORBIDDEN', 'organization operations are suspended');
+    if (entitlement && !entitlement.customDomainEnabled)
+      throw new ApplicationError(
+        'FORBIDDEN',
+        'custom domain is not included in the organization contract',
+      );
+    if (configuration.customDomain.status === 'DISABLED')
+      throw new ApplicationError('CONFLICT', '停止中の独自ドメインは確認できません。');
+
+    const connection = await (provider ?? vercelCustomDomainProviderFromEnvironment()).synchronize(
+      configuration.customDomain.hostname,
+    );
+    const now = new Date();
+    const saved = await db.prisma.$transaction(async (tx) => {
+      const current = await tx.serviceCustomDomain.findUnique({
+        where: { id: configuration.customDomain!.id },
+      });
+      if (!current || current.hostname !== configuration.customDomain!.hostname)
+        throw new ApplicationError(
+          'CONFLICT',
+          '確認中にドメインが変更されました。画面を更新してください。',
+        );
+      const customDomain = await tx.serviceCustomDomain.update({
+        where: { id: current.id },
+        data: {
+          status: connection.status,
+          verificationNote: connection.note,
+          verifiedAt: connection.status === 'DRAFT' ? null : (current.verifiedAt ?? now),
+          activatedAt: connection.status === 'ACTIVE' ? (current.activatedAt ?? now) : null,
+        },
+      });
+      await tx.serviceConfigurationAudit.create({
+        data: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          configurationId: configuration.id,
+          action: 'CUSTOM_DOMAIN_CONNECTION_SYNCHRONIZED',
+          beforeData: {
+            hostname: current.hostname,
+            status: current.status,
+            verificationNote: current.verificationNote,
+          },
+          afterData: {
+            hostname: customDomain.hostname,
+            status: customDomain.status,
+            verificationNote: customDomain.verificationNote,
+          },
+          reason: 'VercelとDNSの接続状態を確認',
+          performedByUserId: user.userId,
+        },
+      });
+      return customDomain;
+    });
+    return Response.json(
+      {
+        data: {
+          hostname: saved.hostname,
+          status: saved.status,
+          verificationNote: saved.verificationNote,
+          verifiedAt: saved.verifiedAt?.toISOString() ?? null,
+          activatedAt: saved.activatedAt?.toISOString() ?? null,
+        },
+        requestId,
+      },
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {

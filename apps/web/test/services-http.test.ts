@@ -13,6 +13,8 @@ const state = vi.hoisted(
     createAudit: ReturnType<typeof vi.fn>;
     organizationEntitlement: ReturnType<typeof vi.fn>;
     upsertCustomDomain: ReturnType<typeof vi.fn>;
+    findCustomDomain: ReturnType<typeof vi.fn>;
+    updateCustomDomain: ReturnType<typeof vi.fn>;
   } => ({
     user: { userId: 'admin-1' },
     create: vi.fn(),
@@ -24,6 +26,8 @@ const state = vi.hoisted(
     createAudit: vi.fn(),
     organizationEntitlement: vi.fn(),
     upsertCustomDomain: vi.fn(),
+    findCustomDomain: vi.fn(),
+    updateCustomDomain: vi.fn(),
   }),
 );
 
@@ -35,6 +39,9 @@ vi.mock('@bunshin/database', () => ({
     create = state.create;
   },
   prisma: {
+    platformAdmin: { findFirst: state.platformAdmin },
+    serviceConfiguration: { findUnique: state.findService },
+    organizationEntitlement: { findUnique: state.organizationEntitlement },
     $transaction: (callback: (tx: unknown) => unknown) =>
       callback({
         platformAdmin: { findFirst: state.platformAdmin },
@@ -44,7 +51,11 @@ vi.mock('@bunshin/database', () => ({
         },
         serviceCommercialSetting: { upsert: state.upsertCommercialSetting },
         organizationEntitlement: { findUnique: state.organizationEntitlement },
-        serviceCustomDomain: { upsert: state.upsertCustomDomain },
+        serviceCustomDomain: {
+          upsert: state.upsertCustomDomain,
+          findUnique: state.findCustomDomain,
+          update: state.updateCustomDomain,
+        },
         group: { update: state.updateGroup },
         serviceConfigurationAudit: { create: state.createAudit },
       }),
@@ -53,6 +64,7 @@ vi.mock('@bunshin/database', () => ({
 
 import {
   createServiceResponse,
+  synchronizeServiceCustomDomainResponse,
   updateServiceCommercialSettingsResponse,
   updateServiceCustomDomainResponse,
   updateServiceLifecycleResponse,
@@ -142,6 +154,22 @@ describe('service admin HTTP', () => {
       verificationNote: null,
       verifiedAt: null,
       activatedAt: null,
+    });
+    state.findCustomDomain.mockResolvedValue({
+      id: 'domain-1',
+      hostname: 'service.example.com',
+      status: 'DRAFT',
+      verificationNote: null,
+      verifiedAt: null,
+      activatedAt: null,
+    });
+    state.updateCustomDomain.mockResolvedValue({
+      id: 'domain-1',
+      hostname: 'service.example.com',
+      status: 'ACTIVE',
+      verificationNote: 'Vercelで確認しました。',
+      verifiedAt: new Date('2026-09-15T00:00:00.000Z'),
+      activatedAt: new Date('2026-09-15T00:00:00.000Z'),
     });
   });
 
@@ -397,5 +425,47 @@ describe('service admin HTTP', () => {
     );
     expect(response.status).toBe(403);
     expect(state.upsertCustomDomain).not.toHaveBeenCalled();
+  });
+
+  it('activates a custom domain only after the hosting provider confirms the connection', async () => {
+    state.findService.mockResolvedValue({
+      id: configurationId,
+      workspaceId,
+      groupId: 'group-1',
+      customDomain: {
+        id: 'domain-1',
+        hostname: 'service.example.com',
+        status: 'DRAFT',
+        verificationNote: null,
+      },
+    });
+    state.organizationEntitlement.mockResolvedValue({
+      customDomainEnabled: true,
+      suspended: false,
+    });
+    const provider = {
+      synchronize: vi.fn().mockResolvedValue({
+        status: 'ACTIVE' as const,
+        note: 'Vercelで確認しました。',
+      }),
+    };
+    const response = await synchronizeServiceCustomDomainResponse(
+      new Request(`http://localhost:3000/api/admin/services/${configurationId}/custom-domain`, {
+        method: 'POST',
+        headers: { origin: 'http://localhost:3000' },
+      }),
+      configurationId,
+      provider,
+    );
+    expect(response.status).toBe(200);
+    expect(provider.synchronize).toHaveBeenCalledWith('service.example.com');
+    expect(state.updateCustomDomain).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'ACTIVE' }) }),
+    );
+    expect(state.createAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'CUSTOM_DOMAIN_CONNECTION_SYNCHRONIZED' }),
+      }),
+    );
   });
 });
