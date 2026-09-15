@@ -12,6 +12,16 @@ const migration = readFileSync(
   'utf8',
 );
 
+const publicationMigration = readFileSync(
+  fileURLToPath(
+    new URL(
+      '../prisma/migrations/20260916083000_publish_watashi_works_official/migration.sql',
+      import.meta.url,
+    ),
+  ),
+  'utf8',
+);
+
 describe('Watashi Works official service seed', () => {
   it('creates the business project below the Watashi Works organization', () => {
     expect(migration).toContain("'運営団体ワタシワークス'");
@@ -32,5 +42,18 @@ describe('Watashi Works official service seed', () => {
     expect(migration).toContain("'OWNER'");
     expect(migration).toContain('INSERT INTO "group_memberships"');
     expect(migration).toContain("'SERVICE_OWNER'");
+  });
+
+  it('publishes public LINE registration when launch preparation is complete', () => {
+    expect(publicationMigration).toContain('WHERE sc."slug" = \'watashi-works-official\'');
+    expect(publicationMigration).toMatch(/"visibility"\s*=\s*'PUBLIC'/);
+    expect(publicationMigration).toMatch(/"mode"\s*=\s*'PUBLIC'/);
+    expect(publicationMigration).toMatch(/"line_enabled"\s*=\s*true/);
+    expect(publicationMigration).toMatch(/"email_enabled"\s*=\s*false/);
+    expect(publicationMigration).toMatch(/"invite_code_enabled"\s*=\s*false/);
+    expect(publicationMigration).toContain(
+      'Watashi Works official publication skipped: service configuration not found',
+    );
+    expect(publicationMigration).toContain('ワタシワークス公式をLINE登録導線で一般公開');
   });
 });
