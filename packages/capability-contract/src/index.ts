@@ -1,5 +1,12 @@
 export type CapabilityType =
-  'SOCIAL' | 'BLOG' | 'LINE_MARKETING' | 'LP' | 'LEAD_GENERATION' | 'SALES' | 'CUSTOMER_SUPPORT';
+  | 'SOCIAL'
+  | 'BLOG'
+  | 'LINE_MARKETING'
+  | 'LP'
+  | 'LEAD_GENERATION'
+  | 'SALES'
+  | 'CUSTOMER_SUPPORT'
+  | 'FORTUNE';
 
 export const CAPABILITY_ASSIGNMENT_STATUSES = ['ACTIVE', 'SUSPENDED', 'LOCKED'] as const;
 export type CapabilityAssignmentStatus = (typeof CAPABILITY_ASSIGNMENT_STATUSES)[number];
