@@ -2202,3 +2202,15 @@
 - Authentication: Proxyが検証した独自ホストをリクエスト内部ヘッダーで渡し、同一Origin検証とLINE／メール認証のcallback URLへ使用する。外部から渡された同名ヘッダーはProxyで必ず削除する。
 - Boundary: Vercel API tokenとSupabase Redirect URLは運用環境へ別途設定する。認証情報をDBやリポジトリへ保存しない。
 - Source: `docs/CUSTOM_DOMAIN_ROUTING_REPORT.md`
+
+## 2026-09-16: 無料占いは同じ基盤の独立Serviceとして構想し実装を保留する
+
+- Product boundary: 無料占いを`ワタシワークス公式`の企業向け投稿支援へ混在させず、`運営団体ワタシワークス`配下の独立したプロジェクト・公開Serviceとして扱う。
+- Architecture: User、LINE認証、Service参加、同意、通知、監査、AI利用量、退会などの共通基盤は再利用する。占い専用の別認証、別会員DB、別LINE基盤を新設しない。
+- Capability: 実装する場合は`FORTUNE`を独立Capabilityとして追加し、SOCIAL、BLOG、販売機能とは実行権限・画面・保存データを分離する。
+- Isolation: 占い結果、選択テーマ、利用履歴を他Service、他User、SOCIAL Memory、投稿生成へ暗黙共有しない。占い参加を他Serviceへの参加や販売同意として扱わない。
+- Delivery: 利用者には占い専用の入口、今日の占い、履歴、設定だけを表示し、投稿、商品、代理店、運営者メニューを表示しない。公開ブランドと独自ドメインはService設定で分離できるようにする。
+- Initial scope: 着手時は、1日1回のサーバー側抽選、承認済み基本解説、履歴、本人削除を先に成立させる。AI文章生成、詳細な知識管理、週次LINE通知は利用実績を確認して段階追加する。
+- Status: 方針の記録だけを行う。FORTUNE Capability、Schema、Migration、API、画面、Service初期データ、本番設定はまだ追加しない。
+- Revisit condition: 既存のワタシワークス公式と千ノ国メディアの運用を優先し、占いサービスの目的、公開ブランド、カード画像・文章の権利、基本解説の作成方法、限定公開の担当と上限を決めた後に実装判断を再開する。
+- Reviewed source: `WATASHI_WORKS_FORTUNE_MODULE_SPEC_V1_0.docx`（2026-09-16確認）
