@@ -6,4 +6,9 @@ describe('capability contract', () => {
     const definition: CapabilityDefinition = { type: 'SOCIAL', version: '1' };
     expect(definition).toEqual({ type: 'SOCIAL', version: '1' });
   });
+
+  it('allows fortune to remain isolated behind a capability assignment', () => {
+    const definition: CapabilityDefinition = { type: 'FORTUNE', version: '1' };
+    expect(definition).toEqual({ type: 'FORTUNE', version: '1' });
+  });
 });

@@ -1337,6 +1337,32 @@ enum CapabilityType {
   LEAD_GENERATION
   SALES
   CUSTOMER_SUPPORT
+  FORTUNE
+}
+
+enum FortuneTheme {
+  LOVE
+  WORK
+  RELATIONSHIPS
+}
+
+enum FortuneOrientation {
+  UPRIGHT
+  REVERSED
+}
+
+enum FortuneReadingStatus {
+  GENERATING
+  READY_AI
+  READY_BASIC
+  FAILED
+  DELETED
+}
+
+enum FortuneKnowledgeStatus {
+  DRAFT
+  APPROVED
+  RETIRED
 }
 
 enum CapabilityAssignmentStatus {
@@ -1749,6 +1775,9 @@ model User {
   serviceCommercialSettingsUpdated  ServiceCommercialSetting[]          @relation("ServiceCommercialSettingUpdater")
   serviceConfigurationAudits        ServiceConfigurationAudit[]         @relation("ServiceConfigurationAuditActor")
   serviceReferralRewardRulesCreated ServiceReferralRewardRule[]         @relation("ServiceReferralRewardRuleCreator")
+  fortuneParticipations             FortuneParticipant[]                @relation("FortuneParticipantUser")
+  fortuneReadings                   FortuneReading[]                    @relation("FortuneReadingUser")
+  fortuneKnowledgeVersionsApproved  FortuneKnowledgeVersion[]           @relation("FortuneKnowledgeApprover")
 
   @@index([status])
   @@map("users")
@@ -1938,6 +1967,7 @@ model Workspace {
   serviceMediaReservations        ServiceMediaGenerationReservation[]
   serviceCustomDomains            ServiceCustomDomain[]
   serviceCommercialSettings       ServiceCommercialSetting[]
+  fortuneServiceSettings          FortuneServiceSetting[]
   serviceBrands                   ServiceBrand[]
   serviceRegistrationPolicies     ServiceRegistrationPolicy[]
   serviceConfigurationAudits      ServiceConfigurationAudit[]
@@ -2184,6 +2214,7 @@ model Group {
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
   bunshins                        Bunshin[]
+  fortuneServiceSetting           FortuneServiceSetting?
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -2222,6 +2253,7 @@ model ServiceConfiguration {
   legalDocuments       ServiceLegalDocument[]
   commercialSetting    ServiceCommercialSetting?
   customDomain         ServiceCustomDomain?
+  fortuneSetting       FortuneServiceSetting?
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId])
@@ -2328,6 +2360,139 @@ model ServiceRegistrationPolicy {
   @@unique([workspaceId, groupId, configurationId])
   @@index([workspaceId, groupId, mode])
   @@map("service_registration_policies")
+}
+
+/// 占いサービス固有の公開停止スイッチと安全な運用上限。
+/// 新規作成時は常に非公開・AI無効で、運営者が明示的に有効化する。
+model FortuneServiceSetting {
+  id                        String                    @id @default(uuid()) @db.Uuid
+  workspaceId               String                    @map("workspace_id") @db.Uuid
+  groupId                   String                    @unique @map("group_id") @db.Uuid
+  configurationId           String                    @unique @map("configuration_id") @db.Uuid
+  bunshinId                 String                    @unique @map("bunshin_id") @db.Uuid
+  enabled                   Boolean                   @default(false)
+  aiEnabled                 Boolean                   @default(false) @map("ai_enabled")
+  minimumAge                Int                       @default(18) @map("minimum_age")
+  timeZone                  String                    @default("Asia/Tokyo") @map("time_zone") @db.VarChar(80)
+  historyRetentionDays      Int                       @default(90) @map("history_retention_days")
+  weeklyNotificationEnabled Boolean                   @default(false) @map("weekly_notification_enabled")
+  weeklyNotificationDay     Int                       @default(3) @map("weekly_notification_day")
+  weeklyNotificationHour    Int                       @default(19) @map("weekly_notification_hour")
+  monthlyAiCostCapYen       Int                       @default(10000) @map("monthly_ai_cost_cap_yen")
+  createdAt                 DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                 Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group                     Group                     @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration             ServiceConfiguration      @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  bunshin                   Bunshin                   @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  participants              FortuneParticipant[]
+  knowledgeVersions         FortuneKnowledgeVersion[]
+  readings                  FortuneReading[]
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId])
+  @@unique([workspaceId, groupId, configurationId])
+  @@unique([workspaceId, bunshinId])
+  @@index([workspaceId, enabled])
+  @@map("fortune_service_settings")
+}
+
+model FortuneParticipant {
+  id                  String                @id @default(uuid()) @db.Uuid
+  workspaceId         String                @map("workspace_id") @db.Uuid
+  groupId             String                @map("group_id") @db.Uuid
+  serviceSettingId    String                @map("service_setting_id") @db.Uuid
+  groupMembershipId   String                @unique @map("group_membership_id") @db.Uuid
+  userId              String                @map("user_id") @db.Uuid
+  ageConfirmedAt      DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
+  notificationEnabled Boolean               @default(false) @map("notification_enabled")
+  joinedAt            DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
+  withdrawnAt         DateTime?             @map("withdrawn_at") @db.Timestamptz(6)
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceSetting      FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  groupMembership     GroupMembership       @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  user                User                  @relation("FortuneParticipantUser", fields: [userId], references: [id], onDelete: Restrict)
+  readings            FortuneReading[]
+
+  @@unique([serviceSettingId, userId])
+  @@unique([workspaceId, groupId, groupMembershipId, userId])
+  @@unique([workspaceId, groupId, id, userId])
+  @@index([serviceSettingId, withdrawnAt])
+  @@map("fortune_participants")
+}
+
+model FortuneKnowledgeVersion {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  serviceSettingId   String                  @map("service_setting_id") @db.Uuid
+  version            Int
+  status             FortuneKnowledgeStatus @default(DRAFT)
+  promptVersion      String                  @map("prompt_version") @db.VarChar(80)
+  approvedByUserId   String?                 @map("approved_by_user_id") @db.Uuid
+  approvedAt         DateTime?               @map("approved_at") @db.Timestamptz(6)
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceSetting     FortuneServiceSetting   @relation(fields: [serviceSettingId], references: [id], onDelete: Cascade)
+  approvedBy         User?                   @relation("FortuneKnowledgeApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  cardMeanings       FortuneCardMeaning[]
+  readings           FortuneReading[]
+
+  @@unique([serviceSettingId, version])
+  @@index([serviceSettingId, status])
+  @@map("fortune_knowledge_versions")
+}
+
+model FortuneCardMeaning {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  knowledgeVersionId String                  @map("knowledge_version_id") @db.Uuid
+  cardCode           String                  @map("card_code") @db.VarChar(40)
+  orientation        FortuneOrientation
+  theme              FortuneTheme
+  title              String                  @db.VarChar(160)
+  body               String                  @db.Text
+  actionStep         String                  @map("action_step") @db.VarChar(500)
+  safetyReviewed     Boolean                 @default(false) @map("safety_reviewed")
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  knowledgeVersion   FortuneKnowledgeVersion @relation(fields: [knowledgeVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeVersionId, cardCode, orientation, theme])
+  @@index([knowledgeVersionId, safetyReviewed])
+  @@map("fortune_card_meanings")
+}
+
+/// 行を削除せずDELETEDへ遷移させることで、結果削除後も同日再抽選を防ぐ。
+model FortuneReading {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  workspaceId        String                   @map("workspace_id") @db.Uuid
+  groupId            String                   @map("group_id") @db.Uuid
+  serviceSettingId   String                   @map("service_setting_id") @db.Uuid
+  participantId      String                   @map("participant_id") @db.Uuid
+  memberUserId       String                   @map("member_user_id") @db.Uuid
+  knowledgeVersionId String?                  @map("knowledge_version_id") @db.Uuid
+  localDate          DateTime                 @map("local_date") @db.Date
+  theme              FortuneTheme
+  cardCode           String                   @map("card_code") @db.VarChar(40)
+  orientation        FortuneOrientation
+  status             FortuneReadingStatus     @default(GENERATING)
+  readingText        String?                  @map("reading_text") @db.Text
+  actionStep         String?                  @map("action_step") @db.VarChar(500)
+  modelName          String?                  @map("model_name") @db.VarChar(120)
+  promptVersion      String?                  @map("prompt_version") @db.VarChar(80)
+  failureCode        String?                  @map("failure_code") @db.VarChar(80)
+  generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
+  deletedAt          DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceSetting     FortuneServiceSetting    @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Restrict)
+  participant        FortuneParticipant       @relation(fields: [workspaceId, groupId, participantId, memberUserId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  memberUser         User                     @relation("FortuneReadingUser", fields: [memberUserId], references: [id], onDelete: Restrict)
+  knowledgeVersion   FortuneKnowledgeVersion? @relation(fields: [knowledgeVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceSettingId, participantId, localDate])
+  @@index([memberUserId, createdAt])
+  @@index([serviceSettingId, status, createdAt])
+  @@map("fortune_readings")
 }
 
 model ServiceConfigurationAudit {
@@ -2487,6 +2652,7 @@ model GroupMembership {
   serviceCreditAccount         ServiceCreditAccount?
   serviceReferralRewards       ServiceReferralReward[]          @relation("ServiceReferralRewardMembership")
   memberProductProfiles        MemberProductProfile[]
+  fortuneParticipation         FortuneParticipant?
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -5062,6 +5228,7 @@ model Bunshin {
   knowledgeGrants                 BunshinKnowledgeGrant[]
   memories                        BunshinMemory[]
   capabilityAssignments           BunshinCapabilityAssignment[]
+  fortuneServiceSetting           FortuneServiceSetting?
   socialProfiles                  SocialProfile[]
   socialAccountStrategies         SocialAccountStrategy[]
   contentPillars                  ContentPillar[]
