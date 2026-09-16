@@ -8,6 +8,9 @@ export const FORTUNE_CAPABILITY = {
   version: '1',
 } as const satisfies CapabilityDefinition;
 
+/** Common service notification topic used by the Fortune package. */
+export const FORTUNE_WEEKLY_NOTIFICATION_TOPIC = 'FORTUNE_WEEKLY';
+
 export const FORTUNE_THEMES = ['LOVE', 'WORK', 'RELATIONSHIPS'] as const;
 export type FortuneTheme = (typeof FORTUNE_THEMES)[number];
 
@@ -135,7 +138,6 @@ export interface FortuneReadingView {
 export interface FortuneParticipantView {
   id: string;
   ageConfirmedAt: Date;
-  notificationEnabled: boolean;
 }
 
 export type CreateFortuneReadingResult =

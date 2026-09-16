@@ -2221,3 +2221,12 @@
 - Authentication: Proxyが検証した独自ホストをリクエスト内部ヘッダーで渡し、同一Origin検証とLINE／メール認証のcallback URLへ使用する。外部から渡された同名ヘッダーはProxyで必ず削除する。
 - Boundary: Vercel API tokenとSupabase Redirect URLは運用環境へ別途設定する。認証情報をDBやリポジトリへ保存しない。
 - Source: `docs/CUSTOM_DOMAIN_ROUTING_REPORT.md`
+
+## 2026-09-16: 占いも共通Service会員状態と通知同意を使用する
+
+- Membership: 占いの利用可否は`GroupMembership.status=ACTIVE`と最新の規約同意を正とし、`FortuneParticipant.withdrawnAt`を参照しない。
+- Extension: `FortuneParticipant`は年齢確認と既存の占い結果参照を保持するCapability固有拡張として残す。
+- Notification: 週次占い通知の本人同意は`ServiceNotificationPreference(topic=FORTUNE_WEEKLY, channel=LINE)`へ統一し、占い固有の`notificationEnabled`を参照・更新しない。
+- Migration: 旧設定で通知ONかつ現在も有効な参加者だけを共通設定へ移す。既に共通設定がある場合は明示的な停止を含む現在値を上書きしない。
+- Compatibility: 旧カラムは段階移行中の互換用としてDBに残すが、アプリケーションからは利用しない。十分な運用確認後に別Migrationで削除する。
+- Package boundary: 占いパッケージは通知Topicだけを公開し、会員・同意・通知保存の実装は共通Service基盤へ委譲する。

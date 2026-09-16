@@ -5052,6 +5052,35 @@ body:has(.app-shell) > .site-footer {
   height: 1.4rem;
 }
 
+.fortune-notification-setting {
+  display: grid;
+  gap: 1rem;
+}
+
+.fortune-notification-setting strong {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.fortune-notification-setting p {
+  margin: 0.35rem 0 0;
+  color: #667085;
+  line-height: 1.7;
+}
+
+.fortune-notification-setting .button {
+  width: 100%;
+}
+
+.fortune-notification-setting .form-success {
+  color: #17643a;
+  font-weight: 700;
+}
+
+.fortune-notification-setting .form-error {
+  color: #b42318;
+}
+
 .fortune-theme-button {
   display: grid;
   gap: 0.3rem;

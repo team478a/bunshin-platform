@@ -2,6 +2,7 @@ import { PublicShell } from '../../../ui/public-shell';
 import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav } from '../fortune-ui';
+import { FortuneNotificationSetting } from '../fortune-notification-setting';
 
 export const dynamic = 'force-dynamic';
 export default async function FortuneSettingsPage({
@@ -31,11 +32,13 @@ export default async function FortuneSettingsPage({
         </section>
         <section className="settings-card">
           <h2>お知らせ</h2>
-          <p>
-            {setting.weeklyNotificationEnabled
-              ? '週1回のお知らせが設定されています。'
-              : 'お知らせは送られません。'}
-          </p>
+          {!setting.weeklyNotificationEnabled ? (
+            <p>現在、このサービスでは週1回のお知らせを配信していません。</p>
+          ) : !today.participant ? (
+            <p>年齢確認を終えると、LINE通知を設定できます。</p>
+          ) : (
+            <FortuneNotificationSetting serviceSlug={serviceSlug} />
+          )}
         </section>
         <section className="settings-card">
           <h2>結果の保存期間</h2>
