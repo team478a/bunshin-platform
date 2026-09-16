@@ -11706,9 +11706,15 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
             groupId_userId: { groupId: configuration.groupId, userId: input.actorUserId },
           },
         });
-        if (existing !== null && !['ACTIVE', 'PENDING_APPROVAL'].includes(existing.status))
+        if (existing !== null && existing.role !== 'PARTICIPANT') return null;
+        if (
+          existing !== null &&
+          !['ACTIVE', 'PENDING_APPROVAL', 'DECLINED', 'REVOKED'].includes(existing.status)
+        )
           return null;
-        if (existing === null) {
+        const needsParticipantSeat =
+          existing === null || !['ACTIVE', 'PENDING_APPROVAL'].includes(existing.status);
+        if (needsParticipantSeat) {
           const commercial = await tx.serviceCommercialSetting.findFirst({
             where: {
               workspaceId: configuration.workspaceId,
@@ -11956,6 +11962,7 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
           workspaceId: configuration.workspaceId,
           groupId: configuration.groupId,
           userId: input.actorUserId,
+          role: 'PARTICIPANT',
           status: { in: ['ACTIVE', 'PENDING_APPROVAL', 'REVOKED'] },
         },
       });

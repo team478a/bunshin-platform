@@ -162,6 +162,77 @@ export function FortuneDeleteButton({
   );
 }
 
+export function FortuneWithdrawButton({ serviceSlug }: { serviceSlug: string }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  return (
+    <div className="fortune-action">
+      {!confirming ? (
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={() => setConfirming(true)}
+        >
+          この占いサービスを退会する
+        </button>
+      ) : (
+        <div className="notice notice--danger">
+          <strong>この占いサービスから退会しますか？</strong>
+          <p>
+            他のサービスとワタシワークスのアカウントは残ります。退会後は占い結果を見られなくなります。
+          </p>
+          <div className="fortune-withdraw-actions">
+            <button
+              className="button button--danger"
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void (async () => {
+                  setBusy(true);
+                  setError('');
+                  try {
+                    await request(`/api/services/${serviceSlug}/participation`, {
+                      method: 'DELETE',
+                    });
+                    router.push(`/s/${serviceSlug}?withdrawn=1` as Route);
+                    router.refresh();
+                  } catch (cause) {
+                    setError(
+                      cause instanceof Error ? cause.message : '退会手続きを完了できませんでした。',
+                    );
+                    setBusy(false);
+                  }
+                })()
+              }
+            >
+              {busy ? '退会手続き中…' : '退会する'}
+            </button>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setConfirming(false);
+                setError('');
+              }}
+            >
+              やめる
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const feedbackChoices: Array<{ value: FortuneFeedbackRating; label: string }> = [
   { value: 'HELPFUL', label: '参考になった' },
   { value: 'SOMEWHAT', label: '少し参考になった' },
