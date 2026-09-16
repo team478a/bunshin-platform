@@ -209,13 +209,13 @@ export function SimpleFirstPostSetup({
       <section className="simple-first-post" aria-labelledby="service-line-required-title">
         <header>
           <p className="eyebrow">LINE配信を受け取る準備</p>
-          <h2 id="service-line-required-title">{serviceName}の公式LINEを接続してください</h2>
+          <h2 id="service-line-required-title">{serviceName}LINEとの接続確認が必要です</h2>
           <p>
-            投稿案を届けるLINEの本人確認がまだ完了していません。下のボタンから接続し、公式アカウントの友だち追加を確認してください。
+            会員登録や投稿設定をやり直す必要はありません。投稿案の配信先として、現在のLINEアカウントを一度確認してください。
           </p>
         </header>
         <a className="button button--primary button--full" href={serviceLineHref}>
-          公式LINEを接続する
+          LINEとの接続を確認する
         </a>
         {deliveryEnabled ? (
           <p className="notice" role="status">

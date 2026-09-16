@@ -48,7 +48,8 @@ describe('simple service first-post setup', () => {
     expect(page).toContain('serviceLineConnected={Boolean(dedicatedLineConnection)}');
     expect(page).toContain('serviceName={service.configuration.displayName}');
     expect(setup).toContain('serviceLineRequired && !serviceLineConnected');
-    expect(setup).toContain('公式LINEを接続する');
+    expect(setup).toContain('LINEとの接続を確認する');
+    expect(setup).toContain('会員登録や投稿設定をやり直す必要はありません。');
     expect(setup).toContain('投稿の設定は保存されています。');
   });
 });
