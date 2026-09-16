@@ -10,13 +10,19 @@ import type {
   FortuneRepository,
   FortuneTheme,
 } from '@bunshin/capability-fortune';
-import { TAROT_DECK } from '@bunshin/capability-fortune';
+import { TAROT_DECK, toJapanLocalDate } from '@bunshin/capability-fortune';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
 const dateOnly = (value: string) => new Date(`${value}T00:00:00.000Z`);
 const cardName = (code: string) => TAROT_DECK.find((card) => card.code === code)?.nameJa ?? code;
+
+export function fortuneReadingRetentionCutoff(at: Date, historyRetentionDays: number) {
+  const cutoff = dateOnly(toJapanLocalDate(at));
+  cutoff.setUTCDate(cutoff.getUTCDate() - Math.max(0, Math.trunc(historyRetentionDays) - 1));
+  return cutoff;
+}
 
 async function target(db: Db, serviceSlug: string, actorUserId: string) {
   return db.fortuneServiceSetting.findFirst({
@@ -107,7 +113,10 @@ async function view(
 }
 
 export class PrismaFortuneRepository implements FortuneRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(
+    private readonly db: PrismaClient,
+    private readonly now: () => Date = () => new Date(),
+  ) {}
 
   async joinParticipant(input: {
     serviceSlug: string;
@@ -365,8 +374,7 @@ export class PrismaFortuneRepository implements FortuneRepository {
       where: { serviceSettingId: scope.id, userId: input.actorUserId },
     });
     if (!participant) return null;
-    const cutoff = new Date();
-    cutoff.setUTCDate(cutoff.getUTCDate() - scope.historyRetentionDays);
+    const cutoff = fortuneReadingRetentionCutoff(this.now(), scope.historyRetentionDays);
     const rows = await this.db.fortuneReading.findMany({
       where: {
         serviceSettingId: scope.id,
@@ -388,12 +396,14 @@ export class PrismaFortuneRepository implements FortuneRepository {
   }): Promise<FortuneReadingView | null> {
     const scope = await target(this.db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
+    const cutoff = fortuneReadingRetentionCutoff(this.now(), scope.historyRetentionDays);
     const row = await this.db.fortuneReading.findFirst({
       where: {
         id: input.readingId,
         serviceSettingId: scope.id,
         memberUserId: input.actorUserId,
         status: { not: 'DELETED' },
+        localDate: { gte: cutoff },
       },
     });
     return row ? view(this.db, row) : null;
@@ -408,12 +418,14 @@ export class PrismaFortuneRepository implements FortuneRepository {
     return this.db.$transaction(async (tx) => {
       const scope = await target(tx, input.serviceSlug, input.actorUserId);
       if (!scope) return null;
+      const cutoff = fortuneReadingRetentionCutoff(input.viewedAt, scope.historyRetentionDays);
       await tx.fortuneReading.updateMany({
         where: {
           id: input.readingId,
           serviceSettingId: scope.id,
           memberUserId: input.actorUserId,
           status: { in: ['READY_AI', 'READY_BASIC'] },
+          localDate: { gte: cutoff },
           firstViewedAt: null,
         },
         data: { firstViewedAt: input.viewedAt },
@@ -424,6 +436,7 @@ export class PrismaFortuneRepository implements FortuneRepository {
           serviceSettingId: scope.id,
           memberUserId: input.actorUserId,
           status: { in: ['READY_AI', 'READY_BASIC'] },
+          localDate: { gte: cutoff },
         },
       });
       return row ? view(tx, row) : null;
@@ -441,12 +454,14 @@ export class PrismaFortuneRepository implements FortuneRepository {
     return this.db.$transaction(async (tx) => {
       const scope = await target(tx, input.serviceSlug, input.actorUserId);
       if (!scope) return null;
+      const cutoff = fortuneReadingRetentionCutoff(input.submittedAt, scope.historyRetentionDays);
       const reading = await tx.fortuneReading.findFirst({
         where: {
           id: input.readingId,
           serviceSettingId: scope.id,
           memberUserId: input.actorUserId,
           status: { in: ['READY_AI', 'READY_BASIC'] },
+          localDate: { gte: cutoff },
           firstViewedAt: { not: null },
         },
       });
