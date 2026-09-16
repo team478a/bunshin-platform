@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   history: vi.fn(),
   reading: vi.fn(),
   delete: vi.fn(),
+  feedback: vi.fn(),
   recordUse: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ import {
   drawFortuneResponse,
   getFortuneTodayResponse,
   joinFortuneResponse,
+  updateFortuneFeedbackResponse,
 } from '../src/http/fortune';
 
 const request = (path: string, init?: RequestInit) =>
@@ -51,6 +53,7 @@ describe('fortune HTTP contract', () => {
       ageConfirmedAt: new Date(),
     });
     state.draw.mockResolvedValue({ id: 'reading-1' });
+    state.feedback.mockResolvedValue({ id: 'reading-1', feedbackRating: 'HELPFUL' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
   });
 
@@ -105,5 +108,56 @@ describe('fortune HTTP contract', () => {
       'fortune',
     );
     expect(unavailable.status).toBe(503);
+  });
+
+  it('accepts only selected feedback for the authenticated reading owner', async () => {
+    const response = await updateFortuneFeedbackResponse(
+      request(
+        '/api/services/fortune/fortune/readings/11111111-1111-4111-8111-111111111111/feedback',
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ rating: 'HELPFUL', issue: null }),
+        },
+      ),
+      'fortune',
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(response.status).toBe(200);
+    expect(state.feedback).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      readingId: '11111111-1111-4111-8111-111111111111',
+      rating: 'HELPFUL',
+      issue: null,
+    });
+
+    const rejected = await updateFortuneFeedbackResponse(
+      request(
+        '/api/services/fortune/fortune/readings/11111111-1111-4111-8111-111111111111/feedback',
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ rating: 'GREAT', comment: 'free text' }),
+        },
+      ),
+      'fortune',
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(rejected.status).toBe(400);
+
+    const mismatchedReason = await updateFortuneFeedbackResponse(
+      request(
+        '/api/services/fortune/fortune/readings/11111111-1111-4111-8111-111111111111/feedback',
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ rating: 'HELPFUL', issue: 'TOO_VAGUE' }),
+        },
+      ),
+      'fortune',
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(mismatchedReason.status).toBe(400);
   });
 });

@@ -3,6 +3,8 @@ import type {
   FortuneOrientation,
   FortuneAiGenerationClaim,
   FortuneAiReadingResult,
+  FortuneFeedbackIssue,
+  FortuneFeedbackRating,
   FortuneParticipantView,
   FortuneReadingView,
   FortuneRepository,
@@ -83,6 +85,10 @@ async function view(
   },
 ): Promise<FortuneReadingView> {
   const meaning = await meaningForReading(db, row);
+  const feedback = await db.fortuneFeedback.findUnique({
+    where: { readingId: row.id },
+    select: { rating: true, issueCode: true },
+  });
   return {
     id: row.id,
     localDate: row.localDate.toISOString().slice(0, 10),
@@ -94,6 +100,8 @@ async function view(
     title: meaning?.title ?? null,
     body: row.readingText,
     actionStep: row.actionStep,
+    feedbackRating: feedback?.rating ?? null,
+    feedbackIssue: (feedback?.issueCode as FortuneFeedbackIssue | null | undefined) ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -389,6 +397,77 @@ export class PrismaFortuneRepository implements FortuneRepository {
       },
     });
     return row ? view(this.db, row) : null;
+  }
+
+  async markReadingViewed(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    viewedAt: Date;
+  }): Promise<FortuneReadingView | null> {
+    return this.db.$transaction(async (tx) => {
+      const scope = await target(tx, input.serviceSlug, input.actorUserId);
+      if (!scope) return null;
+      await tx.fortuneReading.updateMany({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+          status: { in: ['READY_AI', 'READY_BASIC'] },
+          firstViewedAt: null,
+        },
+        data: { firstViewedAt: input.viewedAt },
+      });
+      const row = await tx.fortuneReading.findFirst({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+          status: { in: ['READY_AI', 'READY_BASIC'] },
+        },
+      });
+      return row ? view(tx, row) : null;
+    });
+  }
+
+  async submitFeedback(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    rating: FortuneFeedbackRating;
+    issue: FortuneFeedbackIssue | null;
+    submittedAt: Date;
+  }): Promise<FortuneReadingView | null> {
+    return this.db.$transaction(async (tx) => {
+      const scope = await target(tx, input.serviceSlug, input.actorUserId);
+      if (!scope) return null;
+      const reading = await tx.fortuneReading.findFirst({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+          status: { in: ['READY_AI', 'READY_BASIC'] },
+          firstViewedAt: { not: null },
+        },
+      });
+      if (!reading) return null;
+      await tx.fortuneFeedback.upsert({
+        where: { readingId: reading.id },
+        create: {
+          workspaceId: reading.workspaceId,
+          groupId: reading.groupId,
+          serviceSettingId: reading.serviceSettingId,
+          participantId: reading.participantId,
+          memberUserId: reading.memberUserId,
+          readingId: reading.id,
+          rating: input.rating,
+          issueCode: input.issue,
+          createdAt: input.submittedAt,
+        },
+        update: { rating: input.rating, issueCode: input.issue },
+      });
+      return view(tx, reading);
+    });
   }
 
   async deleteReading(input: {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildStandardFortuneKnowledgePack,
   drawTarotCard,
@@ -109,6 +109,8 @@ describe('daily fortune flow', () => {
     title: '希望を育てる日',
     body: '今日は小さな希望を大切にしましょう。',
     actionStep: '気持ちを一つ言葉にしましょう。',
+    feedbackRating: null,
+    feedbackIssue: null,
     createdAt: new Date('2026-09-17T00:00:00.000Z'),
   };
 
@@ -124,6 +126,8 @@ describe('daily fortune flow', () => {
       title: '希望を育てる日',
       body: '今日は小さな希望を大切にしましょう。',
       actionStep: '気持ちを一つ言葉にしましょう。',
+      feedbackRating: null,
+      feedbackIssue: null,
       createdAt: new Date('2026-09-17T00:00:00.000Z'),
     };
     let randomCalls = 0;
@@ -234,5 +238,59 @@ describe('daily fortune flow', () => {
       service.draw({ serviceSlug: 'fortune', actorUserId: 'user-1', theme: 'LOVE' }),
     ).resolves.toEqual(basicReading);
     expect(failureCode).toBe('AI_OUTPUT_REJECTED');
+  });
+
+  it('records the first visible result and saves only selected feedback', async () => {
+    const viewed = { ...basicReading, feedbackRating: null };
+    const rated = { ...viewed, feedbackRating: 'HELPFUL' as const };
+    const markReadingViewed = vi.fn().mockResolvedValue(viewed);
+    const submitFeedback = vi.fn().mockResolvedValue(rated);
+    const repository = {
+      findParticipant: () =>
+        Promise.resolve({ id: 'participant-1', ageConfirmedAt: new Date('2026-09-01') }),
+      findReadingForDate: () => Promise.resolve(basicReading),
+      markReadingViewed,
+      submitFeedback,
+    } as unknown as FortuneRepository;
+    const service = new FortuneDailyReadingService(repository, { nextInt: () => 0 });
+
+    await expect(
+      service.today({
+        serviceSlug: 'fortune',
+        actorUserId: 'user-1',
+        now: new Date('2026-09-17T01:00:00.000Z'),
+        recordView: true,
+      }),
+    ).resolves.toEqual({
+      participant: { id: 'participant-1', ageConfirmedAt: new Date('2026-09-01') },
+      reading: viewed,
+    });
+    expect(markReadingViewed).toHaveBeenCalledWith(
+      expect.objectContaining({ readingId: 'reading-1', actorUserId: 'user-1' }),
+    );
+
+    await expect(
+      service.feedback({
+        serviceSlug: 'fortune',
+        actorUserId: 'user-1',
+        readingId: 'reading-1',
+        rating: 'HELPFUL',
+        issue: null,
+      }),
+    ).resolves.toEqual(rated);
+    expect(submitFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({ rating: 'HELPFUL', issue: null }),
+    );
+
+    await expect(
+      service.feedback({
+        serviceSlug: 'fortune',
+        actorUserId: 'user-1',
+        readingId: 'reading-1',
+        rating: 'HELPFUL',
+        issue: 'TOO_VAGUE',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_FEEDBACK' });
+    expect(submitFeedback).toHaveBeenCalledTimes(1);
   });
 });

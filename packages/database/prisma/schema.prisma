@@ -1373,6 +1373,12 @@ enum FortuneReadingStatus {
   DELETED
 }
 
+enum FortuneFeedbackRating {
+  HELPFUL
+  SOMEWHAT
+  NOT_HELPFUL
+}
+
 enum FortuneKnowledgeStatus {
   DRAFT
   APPROVED
@@ -1791,6 +1797,7 @@ model User {
   serviceReferralRewardRulesCreated ServiceReferralRewardRule[]         @relation("ServiceReferralRewardRuleCreator")
   fortuneParticipations             FortuneParticipant[]                @relation("FortuneParticipantUser")
   fortuneReadings                   FortuneReading[]                    @relation("FortuneReadingUser")
+  fortuneFeedback                   FortuneFeedback[]                   @relation("FortuneFeedbackUser")
   fortuneKnowledgeVersionsApproved  FortuneKnowledgeVersion[]           @relation("FortuneKnowledgeApprover")
   serviceNotificationPreferences    ServiceNotificationPreference[]
   serviceMembershipEvents           ServiceMembershipEvent[]
@@ -2408,6 +2415,7 @@ model FortuneServiceSetting {
   participants              FortuneParticipant[]
   knowledgeVersions         FortuneKnowledgeVersion[]
   readings                  FortuneReading[]
+  feedback                  FortuneFeedback[]
 
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId])
@@ -2434,6 +2442,7 @@ model FortuneParticipant {
   groupMembership     GroupMembership       @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
   user                User                  @relation("FortuneParticipantUser", fields: [userId], references: [id], onDelete: Restrict)
   readings            FortuneReading[]
+  feedback            FortuneFeedback[]
 
   @@unique([serviceSettingId, userId])
   @@unique([workspaceId, groupId, groupMembershipId, userId])
@@ -2501,6 +2510,7 @@ model FortuneReading {
   promptVersion      String?                  @map("prompt_version") @db.VarChar(80)
   failureCode        String?                  @map("failure_code") @db.VarChar(80)
   generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
+  firstViewedAt      DateTime?                @map("first_viewed_at") @db.Timestamptz(6)
   deletedAt          DateTime?                @map("deleted_at") @db.Timestamptz(6)
   createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -2508,11 +2518,37 @@ model FortuneReading {
   participant        FortuneParticipant       @relation(fields: [workspaceId, groupId, participantId, memberUserId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
   memberUser         User                     @relation("FortuneReadingUser", fields: [memberUserId], references: [id], onDelete: Restrict)
   knowledgeVersion   FortuneKnowledgeVersion? @relation(fields: [knowledgeVersionId], references: [id], onDelete: Restrict)
+  feedback           FortuneFeedback?
 
   @@unique([serviceSettingId, participantId, localDate])
+  @@unique([workspaceId, groupId, serviceSettingId, participantId, memberUserId, id])
   @@index([memberUserId, createdAt])
   @@index([serviceSettingId, status, createdAt])
   @@map("fortune_readings")
+}
+
+/// 本人が閲覧した結果へ付ける選択式評価。自由文や占い本文を複製しない。
+model FortuneFeedback {
+  id               String                @id @default(uuid()) @db.Uuid
+  workspaceId      String                @map("workspace_id") @db.Uuid
+  groupId          String                @map("group_id") @db.Uuid
+  serviceSettingId String                @map("service_setting_id") @db.Uuid
+  participantId    String                @map("participant_id") @db.Uuid
+  memberUserId     String                @map("member_user_id") @db.Uuid
+  readingId        String                @unique @map("reading_id") @db.Uuid
+  rating           FortuneFeedbackRating
+  issueCode        String?               @map("issue_code") @db.VarChar(40)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceSetting   FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  participant      FortuneParticipant    @relation(fields: [workspaceId, groupId, participantId, memberUserId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  memberUser       User                  @relation("FortuneFeedbackUser", fields: [memberUserId], references: [id], onDelete: Cascade)
+  reading          FortuneReading        @relation(fields: [workspaceId, groupId, serviceSettingId, participantId, memberUserId, readingId], references: [workspaceId, groupId, serviceSettingId, participantId, memberUserId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, serviceSettingId, participantId, memberUserId, readingId])
+  @@index([serviceSettingId, rating, createdAt])
+  @@index([memberUserId, createdAt])
+  @@map("fortune_feedback")
 }
 
 model ServiceConfigurationAudit {

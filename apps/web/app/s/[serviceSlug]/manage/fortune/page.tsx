@@ -85,6 +85,14 @@ export default async function FortuneManagementPage({
                 <dd>{quality.activeReaders}人</dd>
               </div>
               <div>
+                <dt>結果を確認した人</dt>
+                <dd>{quality.viewedReaders}人</dd>
+              </div>
+              <div>
+                <dt>別の日にも利用した人</dt>
+                <dd>{quality.repeatReaders}人</dd>
+              </div>
+              <div>
                 <dt>占い結果</dt>
                 <dd>{quality.readingCount}件</dd>
               </div>
@@ -104,6 +112,22 @@ export default async function FortuneManagementPage({
                 <dt>処理が止まっている結果</dt>
                 <dd>{quality.staleGeneratingCount}件</dd>
               </div>
+              <div>
+                <dt>評価回答</dt>
+                <dd>{quality.feedbackCount}件</dd>
+              </div>
+              <div>
+                <dt>参考になった</dt>
+                <dd>{quality.helpfulFeedbackCount}件</dd>
+              </div>
+              <div>
+                <dt>少し参考になった</dt>
+                <dd>{quality.somewhatFeedbackCount}件</dd>
+              </div>
+              <div>
+                <dt>今回は違った</dt>
+                <dd>{quality.notHelpfulFeedbackCount}件</dd>
+              </div>
             </dl>
             {quality.failures.length > 0 && (
               <div>
@@ -112,6 +136,24 @@ export default async function FortuneManagementPage({
                   {quality.failures.map((failure) => (
                     <li key={failure.code}>
                       {fortuneFailureLabel(failure.code)}：{failure.count}件
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {quality.feedbackIssues.length > 0 && (
+              <div>
+                <h3>「今回は違った」と感じた理由</h3>
+                <ul>
+                  {quality.feedbackIssues.map((issue) => (
+                    <li key={issue.code}>
+                      {{
+                        TOO_VAGUE: '内容があいまい',
+                        HARD_TO_UNDERSTAND: '分かりにくい',
+                        UNCOMFORTABLE: '不安になった',
+                        OTHER: 'その他',
+                      }[issue.code] ?? 'その他'}
+                      ：{issue.count}件
                     </li>
                   ))}
                 </ul>
