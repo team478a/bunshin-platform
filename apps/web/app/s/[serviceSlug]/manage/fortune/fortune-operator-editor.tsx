@@ -1,0 +1,167 @@
+'use client';
+
+import { FORTUNE_ORIENTATIONS, FORTUNE_THEMES, TAROT_DECK } from '@bunshin/capability-fortune';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+
+async function send(serviceSlug: string, value: unknown) {
+  const response = await fetch(`/api/services/${serviceSlug}/fortune-operations`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(value),
+  });
+  const body = (await response.json()) as { error?: { message?: string } };
+  if (!response.ok) throw new Error(body.error?.message ?? '操作を完了できませんでした。');
+}
+
+export function FortuneOperatorEditor({
+  serviceSlug,
+  enabled,
+  canEnable,
+  bunshinId,
+  bunshins,
+}: {
+  serviceSlug: string;
+  enabled: boolean;
+  canEnable: boolean;
+  bunshinId: string | null;
+  bunshins: Array<{ id: string; name: string }>;
+}) {
+  const router = useRouter();
+  const [selectedBunshinId, setSelectedBunshinId] = useState(bunshinId ?? bunshins[0]?.id ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await action();
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '操作を完了できませんでした。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const meanings = TAROT_DECK.flatMap((card) =>
+      FORTUNE_ORIENTATIONS.flatMap((orientation) =>
+        FORTUNE_THEMES.map((theme) => ({
+          cardCode: card.code,
+          orientation,
+          theme,
+          title: '',
+          body: '',
+          actionStep: '',
+        })),
+      ),
+    );
+    const blob = new Blob(
+      [JSON.stringify({ promptVersion: 'fortune-basic-v1', meanings }, null, 2)],
+      { type: 'application/json' },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'fortune-knowledge-template.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fortune-operator-editor">
+      <section className="settings-card">
+        <h2>1. 解釈ファイルを準備する</h2>
+        <p>ひな形には、78枚×正位置・逆位置×3テーマの468件が入っています。</p>
+        <button className="button button--secondary" type="button" onClick={downloadTemplate}>
+          JSONひな形を保存する
+        </button>
+      </section>
+      <section className="settings-card">
+        <h2>2. 完成した解釈を読み込む</h2>
+        {bunshins.length === 0 ? (
+          <p className="form-error">
+            このサービスには利用できる投稿パートナーがいません。先に投稿パートナーを作成してください。
+          </p>
+        ) : (
+          <>
+            <label>
+              占いを担当する投稿パートナー
+              <select
+                value={selectedBunshinId}
+                onChange={(event) => setSelectedBunshinId(event.target.value)}
+                disabled={busy}
+              >
+                {bunshins.map((bunshin) => (
+                  <option key={bunshin.id} value={bunshin.id}>
+                    {bunshin.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              完成したJSONファイル
+              <input
+                type="file"
+                accept="application/json,.json"
+                disabled={busy}
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={busy || !file || !selectedBunshinId}
+              onClick={() =>
+                void run(async () => {
+                  if (!file) return;
+                  const pack = JSON.parse(await file.text()) as unknown;
+                  await send(serviceSlug, {
+                    action: 'IMPORT_KNOWLEDGE',
+                    bunshinId: selectedBunshinId,
+                    pack,
+                  });
+                  setMessage('468件を検査し、承認版として保存しました。');
+                })
+              }
+            >
+              {busy ? '検査しています…' : '検査して承認版を保存する'}
+            </button>
+          </>
+        )}
+      </section>
+      <section className="settings-card">
+        <h2>3. 利用者への公開</h2>
+        <p>{enabled ? '現在、占い機能は公開中です。' : '現在、占い機能は停止中です。'}</p>
+        <button
+          className={`button ${enabled ? 'button--secondary' : 'button--primary'}`}
+          type="button"
+          disabled={busy || (!enabled && !canEnable)}
+          onClick={() =>
+            void run(async () => {
+              await send(serviceSlug, { action: 'SET_ENABLED', enabled: !enabled });
+              setMessage(enabled ? '占い機能を停止しました。' : '占い機能を公開しました。');
+            })
+          }
+        >
+          {enabled ? '利用者への公開を停止する' : '準備完了後に公開する'}
+        </button>
+      </section>
+      {message && (
+        <p className="success-message" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
