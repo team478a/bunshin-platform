@@ -15,8 +15,10 @@ import {
 import { isFortuneLineReady } from './launch-readiness';
 import {
   assessFortuneQuality,
+  summarizeFortuneMembershipActivity,
   summarizeFortuneAiOperations,
   type FortuneAiOperationsSummary,
+  type FortuneMembershipActivitySummary,
   type FortuneQualityAssessment,
 } from './quality';
 
@@ -62,6 +64,7 @@ export interface FortuneOperationsQuality {
   notHelpfulFeedbackCount: number;
   feedbackIssues: Array<{ code: string; count: number }>;
   failures: Array<{ code: string; count: number }>;
+  membershipActivity: FortuneMembershipActivitySummary;
   aiOperations: FortuneAiOperationsSummary;
   assessment: FortuneQualityAssessment;
 }
@@ -566,6 +569,7 @@ export async function fortuneOperationsQuality(
     consumedGenerations,
     processingGenerations,
     aiUsage,
+    membershipEvents,
   ] = await Promise.all([
     db.prisma.fortuneParticipant.count({
       where: {
@@ -652,6 +656,14 @@ export async function fortuneOperationsQuality(
         estimatedCostUsdMicros: true,
       },
     }),
+    db.prisma.serviceMembershipEvent.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        occurredAt: { gte: periodStart },
+      },
+      select: { eventType: true, groupMembershipId: true },
+    }),
   ]);
   const count = (status: 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED') =>
     statuses.find((row) => row.status === status)?._count._all ?? 0;
@@ -692,6 +704,7 @@ export async function fortuneOperationsQuality(
     failures: failureRows.flatMap((row) =>
       row.failureCode ? [{ code: row.failureCode, count: row._count._all }] : [],
     ),
+    membershipActivity: summarizeFortuneMembershipActivity(membershipEvents),
     aiOperations: summarizeFortuneAiOperations({
       monthKey,
       commercialStatus: commercialSetting?.status ?? null,

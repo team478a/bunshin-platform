@@ -23,6 +23,44 @@ export interface FortuneAiOperationsSummary {
   estimatedCostUsdMicros: number;
 }
 
+export const FORTUNE_MEMBERSHIP_EVENT_TYPES = [
+  'REGISTRATION_COMPLETED',
+  'FIRST_SERVICE_USE',
+  'SERVICE_REVISITED',
+  'NOTIFICATION_OPTED_IN',
+  'NOTIFICATION_OPTED_OUT',
+  'SERVICE_WITHDRAWN',
+] as const;
+
+export type FortuneMembershipEventType = (typeof FORTUNE_MEMBERSHIP_EVENT_TYPES)[number];
+
+export interface FortuneMembershipActivitySummary {
+  registeredParticipants: number;
+  firstUseParticipants: number;
+  revisitedParticipants: number;
+  notificationOptInParticipants: number;
+  notificationOptOutParticipants: number;
+  withdrawnParticipants: number;
+}
+
+export function summarizeFortuneMembershipActivity(
+  events: Array<{ eventType: FortuneMembershipEventType; groupMembershipId: string }>,
+): FortuneMembershipActivitySummary {
+  const participants = new Map<FortuneMembershipEventType, Set<string>>(
+    FORTUNE_MEMBERSHIP_EVENT_TYPES.map((eventType) => [eventType, new Set<string>()]),
+  );
+  for (const event of events) participants.get(event.eventType)?.add(event.groupMembershipId);
+  const count = (eventType: FortuneMembershipEventType) => participants.get(eventType)?.size ?? 0;
+  return {
+    registeredParticipants: count('REGISTRATION_COMPLETED'),
+    firstUseParticipants: count('FIRST_SERVICE_USE'),
+    revisitedParticipants: count('SERVICE_REVISITED'),
+    notificationOptInParticipants: count('NOTIFICATION_OPTED_IN'),
+    notificationOptOutParticipants: count('NOTIFICATION_OPTED_OUT'),
+    withdrawnParticipants: count('SERVICE_WITHDRAWN'),
+  };
+}
+
 export function summarizeFortuneAiOperations(input: {
   monthKey: string;
   commercialStatus: string | null;
