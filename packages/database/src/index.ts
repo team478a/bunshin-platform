@@ -11847,6 +11847,105 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
     );
   }
 
+  async recordUse(input: Parameters<ServiceParticipationRepository['recordUse']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const configuration = await tx.serviceConfiguration.findFirst({
+        where: {
+          slug: input.slug,
+          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+          ],
+        },
+        select: { workspaceId: true, groupId: true },
+      });
+      if (configuration === null) return null;
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+          consentedAt: { not: null },
+        },
+      });
+      if (membership === null) return null;
+
+      const published = await tx.serviceLegalDocument.findMany({
+        where: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          status: 'PUBLISHED',
+          effectiveAt: { lte: input.now },
+        },
+        orderBy: [{ type: 'asc' }, { version: 'desc' }],
+        select: { id: true, type: true },
+      });
+      const requiredIds = [
+        ...new Map(published.map((document) => [document.type, document.id])).values(),
+      ];
+      if (requiredIds.length > 0) {
+        const accepted = await tx.serviceLegalConsent.count({
+          where: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            legalDocumentId: { in: requiredIds },
+          },
+        });
+        if (accepted !== requiredIds.length) return null;
+      }
+
+      return groupMembershipRecord(
+        await tx.groupMembership.update({
+          where: { id: membership.id },
+          data: { lastUsedAt: input.now },
+        }),
+      );
+    });
+  }
+
+  async withdraw(input: Parameters<ServiceParticipationRepository['withdraw']>[0]) {
+    return this.client.$transaction(async (tx) => {
+      const configuration = await tx.serviceConfiguration.findUnique({
+        where: { slug: input.slug },
+        select: { workspaceId: true, groupId: true },
+      });
+      if (configuration === null) return null;
+      const membership = await tx.groupMembership.findFirst({
+        where: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          userId: input.actorUserId,
+          status: { in: ['ACTIVE', 'PENDING_APPROVAL', 'REVOKED'] },
+        },
+      });
+      if (membership === null) return null;
+      if (membership.status === 'REVOKED') return groupMembershipRecord(membership);
+
+      const updated = await tx.groupMembership.update({
+        where: { id: membership.id },
+        data: { status: 'REVOKED', revokedAt: input.now },
+      });
+      await tx.groupMembershipAuditLog.create({
+        data: {
+          workspaceId: configuration.workspaceId,
+          groupId: configuration.groupId,
+          groupMembershipId: membership.id,
+          action: 'REVOKED',
+          beforeData: { role: membership.role, status: membership.status },
+          afterData: { role: updated.role, status: updated.status },
+          reason: 'service withdrawal requested by member',
+          performedByUserId: input.actorUserId,
+          occurredAt: input.now,
+        },
+      });
+      return groupMembershipRecord(updated);
+    });
+  }
+
   async approve(input: Parameters<ServiceParticipationRepository['approve']>[0]) {
     return this.client.$transaction(async (tx) => {
       const [manager, workspaceManager, platformAdmin] = await Promise.all([

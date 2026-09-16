@@ -19,6 +19,10 @@ const repository = (): ServiceParticipationRepository => ({
   findView: vi.fn(() => Promise.resolve(null)),
   request: vi.fn(() => Promise.resolve(membership)),
   approve: vi.fn(() => Promise.resolve({ ...membership, status: 'ACTIVE' as const })),
+  recordUse: vi.fn(() => Promise.resolve({ ...membership, status: 'ACTIVE' as const })),
+  withdraw: vi.fn(() =>
+    Promise.resolve({ ...membership, status: 'REVOKED' as const, revokedAt: new Date() }),
+  ),
 });
 
 describe('ServiceParticipationService', () => {
@@ -92,5 +96,39 @@ describe('ServiceParticipationService', () => {
         reason: 'OK',
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('records use only through the server resolved service slug and actor', async () => {
+    const recordUse = vi.fn(() =>
+      Promise.resolve({ ...membership, status: 'ACTIVE' as const, lastUsedAt: new Date() }),
+    );
+    await new ServiceParticipationService({ ...repository(), recordUse }).recordUse({
+      slug: 'fortune-service',
+      actorUserId: 'user-1',
+    });
+    expect(recordUse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'fortune-service',
+        actorUserId: 'user-1',
+        now: expect.any(Date),
+      }),
+    );
+  });
+
+  it('withdraws only the actor service membership', async () => {
+    const withdraw = vi.fn(() =>
+      Promise.resolve({ ...membership, status: 'REVOKED' as const, revokedAt: new Date() }),
+    );
+    await new ServiceParticipationService({ ...repository(), withdraw }).withdraw({
+      slug: 'fortune-service',
+      actorUserId: 'user-1',
+    });
+    expect(withdraw).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'fortune-service',
+        actorUserId: 'user-1',
+        now: expect.any(Date),
+      }),
+    );
   });
 });

@@ -98,6 +98,8 @@ export interface GroupMembership {
   consentedAt: Date | null;
   declinedAt: Date | null;
   revokedAt: Date | null;
+  /** Last successful use of this service. Optional for compatibility with older callers. */
+  lastUsedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
