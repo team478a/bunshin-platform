@@ -56,6 +56,28 @@ export async function requestServiceParticipationResponse(request: Request, slug
   }
 }
 
+export async function withdrawServiceParticipationResponse(request: Request, slug: string) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const membership = await (
+      await service()
+    ).withdraw({ slug: slugSchema.parse(slug), actorUserId: actor.userId });
+    return Response.json(
+      { data: membership, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
 export async function approveServiceParticipationResponse(
   request: Request,
   workspaceId: string,

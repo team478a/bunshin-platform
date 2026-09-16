@@ -8,6 +8,13 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const activityMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260916140000_add_service_membership_activity/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('service participation persistence', () => {
   it('adds a distinct approval waiting status and auditable transitions', () => {
@@ -29,6 +36,12 @@ describe('service participation persistence', () => {
     );
     expect(migration).toContain(
       'REFERENCES "service_legal_documents"("workspace_id", "group_id", "id")',
+    );
+  });
+
+  it('keeps product-wide activity metadata on the reusable service membership', () => {
+    expect(activityMigration).toMatch(
+      /ALTER TABLE\s+"group_memberships"[\s\S]*ADD COLUMN\s+"last_used_at"\s+TIMESTAMPTZ\(6\)/,
     );
   });
 });

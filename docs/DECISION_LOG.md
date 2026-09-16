@@ -2,6 +2,16 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-104: 販売可能な共通会員境界は既存Service Membershipを拡張する
+
+- 日付: 2026-09-16
+- 状態: Accepted
+- Product boundary: 顧客固有の会員テーブルを追加せず、既存`Group`をService、`GroupMembership`をService Membershipとして再利用する。User全体を削除せず、対象Serviceだけを退会できる。
+- Authorization: Module利用時はサーバーがslugと認証済みUserからACTIVE Membershipを解決し、公開中の最新Service規約への同意を確認する。ClientからworkspaceId、groupId、membershipId、userIdを受け取らない。
+- Activity: 共通Membershipへ`lastUsedAt`を保持する。Module固有の内容、占い結果、投稿履歴、Memoryは記録しない。
+- Withdrawal: 本人退会はMembershipを`REVOKED`にして監査を残す。共通User、Workspace Membership、他Service Membership、各Moduleの保持データは削除しない。
+- Packaging: 占い、投稿支援、Point、Badge等はこの会員境界を利用する追加Moduleとし、顧客名、固定ID、LINE資格情報をCoreへ直書きしない。
+
 ## D-103: サービス管理者のLINE再送は自サービスの一時的失敗だけに限定する
 
 - 日付: 2026-09-01

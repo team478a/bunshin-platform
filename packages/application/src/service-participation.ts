@@ -36,15 +36,33 @@ export interface ServiceParticipationRepository {
     reason: string;
     now: Date;
   }): Promise<GroupMembership | null>;
+  recordUse(input: {
+    slug: string;
+    actorUserId: string;
+    now: Date;
+  }): Promise<GroupMembership | null>;
+  withdraw(input: {
+    slug: string;
+    actorUserId: string;
+    now: Date;
+  }): Promise<GroupMembership | null>;
 }
+
+const serviceSlug = (value: string) => {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) || value.length > 80)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid service slug');
+  return value;
+};
 
 export class ServiceParticipationService {
   constructor(private readonly repository: ServiceParticipationRepository) {}
 
   async findView(input: { slug: string; actorUserId: string | null; now?: Date }) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) || input.slug.length > 80)
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid service slug');
-    const result = await this.repository.findView({ ...input, now: input.now ?? new Date() });
+    const result = await this.repository.findView({
+      ...input,
+      slug: serviceSlug(input.slug),
+      now: input.now ?? new Date(),
+    });
     if (result === null) throw new ApplicationError('NOT_FOUND', 'service not found');
     return result;
   }
@@ -57,8 +75,7 @@ export class ServiceParticipationService {
     referralClickId?: string | null;
     now?: Date;
   }) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) || input.slug.length > 80)
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid service slug');
+    serviceSlug(input.slug);
     if (
       input.legalDocumentIds.length > 2 ||
       new Set(input.legalDocumentIds).size !== input.legalDocumentIds.length
@@ -102,6 +119,27 @@ export class ServiceParticipationService {
       now: input.now ?? new Date(),
     });
     if (result === null) throw new ApplicationError('FORBIDDEN', 'service approval denied');
+    return result;
+  }
+
+  async recordUse(input: { slug: string; actorUserId: string; now?: Date }) {
+    const result = await this.repository.recordUse({
+      ...input,
+      slug: serviceSlug(input.slug),
+      now: input.now ?? new Date(),
+    });
+    if (result === null)
+      throw new ApplicationError('FORBIDDEN', 'active service membership required');
+    return result;
+  }
+
+  async withdraw(input: { slug: string; actorUserId: string; now?: Date }) {
+    const result = await this.repository.withdraw({
+      ...input,
+      slug: serviceSlug(input.slug),
+      now: input.now ?? new Date(),
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'service membership unavailable');
     return result;
   }
 }
