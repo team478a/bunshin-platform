@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ServiceLifecycleEditor } from './service-lifecycle-editor';
 import { ServiceCommercialSettingEditor } from './service-commercial-setting-editor';
 import { ServiceCustomDomainEditor } from './service-custom-domain-editor';
+import { isFortunePackageLicenseActive } from '../../../../src/services/fortune-package-license';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,19 @@ export default async function ServicesAdminPage({
   const [workspaces, groups, services] = await Promise.all([
     db.prisma.workspace.findMany({
       where: { type: 'ORGANIZATION' },
-      select: { id: true, name: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        organizationEntitlement: {
+          select: {
+            fortunePackageEnabled: true,
+            suspended: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        },
+      },
       orderBy: { name: 'asc' },
     }),
     db.prisma.group.findMany({
@@ -42,7 +55,13 @@ export default async function ServicesAdminPage({
     }),
   ]);
   const query = await searchParams;
-  const activeWorkspaces = workspaces.filter((workspace) => workspace.status === 'ACTIVE');
+  const activeWorkspaces = workspaces
+    .filter((workspace) => workspace.status === 'ACTIVE')
+    .map((workspace) => ({
+      id: workspace.id,
+      name: workspace.name,
+      fortunePackageEnabled: isFortunePackageLicenseActive(workspace.organizationEntitlement),
+    }));
   const requestedGroup = groups.find(
     (group) =>
       group.id === query.groupId &&

@@ -275,6 +275,7 @@ describe('service admin HTTP', () => {
     expect(response.status).toBe(201);
     expect(state.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        requiredFeature: 'FORTUNE_PACKAGE',
         configuration: expect.objectContaining({
           registration: expect.objectContaining({
             onboardingConfig: expect.objectContaining({

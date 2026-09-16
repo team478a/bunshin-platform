@@ -127,6 +127,7 @@ export async function createServiceResponse(request: Request) {
     ).create({
       workspaceId: value.workspaceId,
       ...(value.groupId ? { groupId: value.groupId } : {}),
+      ...(fortunePackage ? { requiredFeature: 'FORTUNE_PACKAGE' as const } : {}),
       actorUserId: user.userId,
       reason: value.reason,
       configuration: {

@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
     },
   },
   tx: {
+    organizationEntitlement: { findUnique: vi.fn() },
     serviceConfiguration: { findFirst: vi.fn() },
     serviceRegistrationPolicy: { update: vi.fn() },
     serviceCommercialSetting: { upsert: vi.fn() },
@@ -57,6 +58,12 @@ describe('fortune package installation', () => {
         onboardingConfig: state.service.configuration.registration.onboardingConfig,
       },
       fortuneSetting: null,
+    });
+    state.tx.organizationEntitlement.findUnique.mockResolvedValue({
+      fortunePackageEnabled: true,
+      suspended: false,
+      startsAt: null,
+      endsAt: null,
     });
     state.tx.bunshin.create.mockResolvedValue({ id: '44444444-4444-4444-8444-444444444444' });
     state.tx.fortuneServiceSetting.create.mockResolvedValue({
@@ -143,6 +150,25 @@ describe('fortune package installation', () => {
     expect(state.tx.bunshin.create).not.toHaveBeenCalled();
     expect(state.tx.fortuneServiceSetting.create).not.toHaveBeenCalled();
     expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledTimes(1);
+    expect(state.tx.organizationEntitlement.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new installation when the organization has no active package license', async () => {
+    state.tx.organizationEntitlement.findUnique.mockResolvedValue({
+      fortunePackageEnabled: false,
+      suspended: false,
+      startsAt: null,
+      endsAt: null,
+    });
+
+    await expect(
+      installStandardFortunePackage({
+        serviceSlug: 'daily-fortune',
+        actorUserId: '77777777-7777-4777-8777-777777777777',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(state.tx.serviceCommercialSetting.upsert).not.toHaveBeenCalled();
+    expect(state.tx.bunshin.create).not.toHaveBeenCalled();
   });
 
   it('updates an installed v1 package without replacing operator settings or custom metadata', async () => {

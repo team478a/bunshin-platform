@@ -17,6 +17,7 @@ import {
   type FortunePackageReleaseStatus,
 } from '../services/service-creation-templates';
 import { isFortuneLineReady } from './launch-readiness';
+import { isFortunePackageLicenseActive } from '../services/fortune-package-license';
 import {
   assessFortuneQuality,
   summarizeFortuneMembershipActivity,
@@ -447,6 +448,22 @@ export async function installStandardFortunePackage(input: {
       },
     });
     if (!configuration) throw new ApplicationError('NOT_FOUND', 'service not found');
+    if (!configuration.fortuneSetting) {
+      const entitlement = await tx.organizationEntitlement.findUnique({
+        where: { workspaceId: service.workspaceId },
+        select: {
+          fortunePackageEnabled: true,
+          suspended: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      });
+      if (!isFortunePackageLicenseActive(entitlement))
+        throw new ApplicationError(
+          'FORBIDDEN',
+          'fortune package is not enabled for this organization',
+        );
+    }
     await tx.serviceCommercialSetting.upsert({
       where: { groupId: service.serviceId },
       create: {
