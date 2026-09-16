@@ -1,3 +1,5 @@
+import type { Route } from 'next';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import {
@@ -37,6 +39,9 @@ export default async function FortuneManagementPage({
           <p className="eyebrow">サービス管理者</p>
           <h1>占いの公開準備</h1>
           <p>解釈の不足や危険な表現を検査し、すべて揃った後にだけ公開できます。</p>
+          <Link href={`/s/${serviceSlug}/manage/fortune/manual` as Route}>
+            初めての運営手順を見る
+          </Link>
         </header>
         <section className="settings-card">
           <p className="eyebrow">導入情報</p>

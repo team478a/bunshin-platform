@@ -12,6 +12,7 @@ export function FortuneNav({ serviceSlug }: { serviceSlug: string }) {
       <Link href={`/s/${serviceSlug}/today` as Route}>今日の占い</Link>
       <Link href={`/s/${serviceSlug}/history` as Route}>過去の結果</Link>
       <Link href={`/s/${serviceSlug}/settings` as Route}>設定</Link>
+      <Link href={`/s/${serviceSlug}/manual` as Route}>使い方</Link>
     </nav>
   );
 }
