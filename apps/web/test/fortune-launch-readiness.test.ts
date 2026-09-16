@@ -3,6 +3,12 @@ import { buildFortuneLaunchSteps, isFortuneLineReady } from '../src/fortune/laun
 import type { FortuneOperatorStatus } from '../src/fortune/operator';
 
 const status = (override: Partial<FortuneOperatorStatus> = {}): FortuneOperatorStatus => ({
+  packageRelease: {
+    key: 'FORTUNE_DAILY_GUIDANCE',
+    installedVersion: 1,
+    currentVersion: 1,
+    state: 'CURRENT',
+  },
   configured: true,
   enabled: false,
   aiEnabled: false,

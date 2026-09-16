@@ -10,7 +10,9 @@ import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
 import {
   FORTUNE_INITIAL_MEMBER_LIMIT,
+  fortunePackageReleaseStatus,
   isFortuneServicePackage,
+  type FortunePackageReleaseStatus,
 } from '../services/service-creation-templates';
 import { isFortuneLineReady } from './launch-readiness';
 import {
@@ -23,6 +25,7 @@ import {
 } from './quality';
 
 export interface FortuneOperatorStatus {
+  packageRelease: FortunePackageReleaseStatus;
   configured: boolean;
   enabled: boolean;
   aiEnabled: boolean;
@@ -84,6 +87,9 @@ export async function fortuneOperatorStatus(
   actorUserId: string,
 ): Promise<FortuneOperatorStatus> {
   const service = await scope(serviceSlug, actorUserId);
+  const packageRelease = fortunePackageReleaseStatus(
+    service.configuration.registration.onboardingConfig,
+  );
   const db = await import('@bunshin/database');
   const lineEnvironment = currentLineEnvironment();
   const now = new Date();
@@ -217,6 +223,7 @@ export async function fortuneOperatorStatus(
   );
   const memberLimit = commercialSetting?.includedMemberLimit ?? null;
   return {
+    packageRelease,
     configured: Boolean(configuration.fortuneSetting),
     enabled: configuration.fortuneSetting?.enabled ?? false,
     aiEnabled: configuration.fortuneSetting?.aiEnabled ?? false,

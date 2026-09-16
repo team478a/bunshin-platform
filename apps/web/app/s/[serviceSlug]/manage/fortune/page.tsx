@@ -34,6 +34,49 @@ export default async function FortuneManagementPage({
           <h1>占いの公開準備</h1>
           <p>解釈の不足や危険な表現を検査し、すべて揃った後にだけ公開できます。</p>
         </header>
+        <section className="settings-card">
+          <p className="eyebrow">導入情報</p>
+          <h2>占いパッケージ</h2>
+          <dl>
+            <div>
+              <dt>サービスに設定された版</dt>
+              <dd>
+                {status.packageRelease.installedVersion === null
+                  ? 'パッケージ情報なし'
+                  : `v${status.packageRelease.installedVersion}`}
+              </dd>
+            </div>
+            <div>
+              <dt>このシステムの最新版</dt>
+              <dd>v{status.packageRelease.currentVersion}</dd>
+            </div>
+            <div>
+              <dt>機能の導入</dt>
+              <dd>{status.configured ? '導入済み' : '未導入'}</dd>
+            </div>
+            <div>
+              <dt>更新状態</dt>
+              <dd>
+                {
+                  {
+                    CURRENT: '最新版です',
+                    UPDATE_AVAILABLE: '更新できます',
+                    UNSUPPORTED_NEWER: 'このシステムより新しい版です',
+                    NOT_SELECTED: '版情報を確認できません',
+                  }[status.packageRelease.state]
+                }
+              </dd>
+            </div>
+          </dl>
+          {status.packageRelease.state === 'UPDATE_AVAILABLE' && (
+            <p>システム管理者がパッケージ更新を適用するまで、現在の設定で運用を続けられます。</p>
+          )}
+          {status.packageRelease.state === 'UNSUPPORTED_NEWER' && (
+            <p className="form-error">
+              システムを更新するまで設定を変更せず、システム管理者へ連絡してください。
+            </p>
+          )}
+        </section>
         <section className="settings-card fortune-readiness-card">
           <h2>公開までの準備 {completedSteps}/5</h2>
           <p>「未完了」の項目を上から順番に設定してください。</p>
