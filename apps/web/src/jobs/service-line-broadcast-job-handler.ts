@@ -1,5 +1,6 @@
 import 'server-only';
 import type { ServiceLineBroadcastJobHandler } from '@bunshin/application';
+import { FORTUNE_WEEKLY_NOTIFICATION_TOPIC } from '@bunshin/capability-fortune';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
 import { LineMessagingApiAdapter } from '../line/messaging-provider';
 
@@ -15,18 +16,53 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         },
       });
       if (!broadcast) return { retryable: false };
-      const configuration = await db.prisma.groupLineChannelConfiguration.findFirst({
+      const environment = currentLineEnvironment();
+      const policy = await db.prisma.groupLineRoutingPolicy.findUnique({
         where: {
-          workspaceId: broadcast.workspaceId,
-          groupId: broadcast.groupId,
-          environment: currentLineEnvironment(),
-          status: 'ACTIVE',
-          lastVerifiedAt: { not: null },
-          lastErrorCategory: null,
-          globallyPaused: false,
+          workspaceId_groupId_environment: {
+            workspaceId: broadcast.workspaceId,
+            groupId: broadcast.groupId,
+            environment,
+          },
         },
-        select: { encryptedAccessToken: true },
+        select: { mode: true, pilotEnabled: true },
       });
+      const mode = policy?.mode ?? 'SHARED';
+      if (mode === 'DISABLED' || (mode === 'DEDICATED' && !policy?.pilotEnabled)) {
+        await db.prisma.serviceLineBroadcastRecipient.updateMany({
+          where: { broadcastId: broadcast.id, status: 'PENDING' },
+          data: { status: 'SKIPPED', errorCategory: 'LINE_DELIVERY_DISABLED' },
+        });
+        await db.prisma.serviceLineBroadcast.update({
+          where: { id: broadcast.id },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        });
+        return { retryable: false };
+      }
+      const configuration =
+        mode === 'DEDICATED'
+          ? await db.prisma.groupLineChannelConfiguration.findFirst({
+              where: {
+                workspaceId: broadcast.workspaceId,
+                groupId: broadcast.groupId,
+                environment,
+                status: 'ACTIVE',
+                lastVerifiedAt: { not: null },
+                lastErrorCategory: null,
+                globallyPaused: false,
+              },
+              select: { id: true, encryptedAccessToken: true },
+            })
+          : await db.prisma.lineChannelConfiguration.findFirst({
+              where: {
+                environment,
+                status: 'ACTIVE',
+                lastVerifiedAt: { not: null },
+                lastErrorCategory: null,
+                globallyPaused: false,
+              },
+              select: { id: true, encryptedAccessToken: true },
+            });
       if (!configuration) return { retryable: true, category: 'LINE_CONFIGURATION_UNAVAILABLE' };
       const recipients = await db.prisma.serviceLineBroadcastRecipient.findMany({
         where: {
@@ -35,23 +71,75 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
           broadcastId: broadcast.id,
           status: 'PENDING',
         },
-        select: { id: true, groupMembershipId: true, message: true },
+        select: { id: true, groupMembershipId: true, userId: true, message: true },
         take: 500,
       });
-      const connections = await db.prisma.groupLineConnection.findMany({
+      const memberships = await db.prisma.groupMembership.findMany({
         where: {
           workspaceId: broadcast.workspaceId,
           groupId: broadcast.groupId,
-          groupMembershipId: { in: recipients.map((recipient) => recipient.groupMembershipId) },
+          id: { in: recipients.map((recipient) => recipient.groupMembershipId) },
           status: 'ACTIVE',
-          notificationConsentAt: { not: null },
-          friendshipStatus: 'FOLLOWING',
+          consentedAt: { not: null },
+          user: { status: 'ACTIVE' },
         },
-        select: { groupMembershipId: true, providerUserId: true },
+        select: { id: true },
       });
-      const recipientIds = new Map(
-        connections.map((item) => [item.groupMembershipId, item.providerUserId]),
-      );
+      const eligibleMembershipIds = new Set(memberships.map((item) => item.id));
+      const criteria = broadcast.segmentCriteria as { kind?: unknown };
+      if (criteria.kind === 'FORTUNE_WEEKLY') {
+        const preferences = await db.prisma.serviceNotificationPreference.findMany({
+          where: {
+            workspaceId: broadcast.workspaceId,
+            groupId: broadcast.groupId,
+            groupMembershipId: { in: recipients.map((item) => item.groupMembershipId) },
+            topic: FORTUNE_WEEKLY_NOTIFICATION_TOPIC,
+            channel: 'LINE',
+            enabled: true,
+            consentedAt: { not: null },
+            optedOutAt: null,
+          },
+          select: { groupMembershipId: true },
+        });
+        const consented = new Set(preferences.map((item) => item.groupMembershipId));
+        for (const membershipId of eligibleMembershipIds)
+          if (!consented.has(membershipId)) eligibleMembershipIds.delete(membershipId);
+      }
+      const recipientIds = new Map<string, string>();
+      if (mode === 'DEDICATED') {
+        const connections = await db.prisma.groupLineConnection.findMany({
+          where: {
+            workspaceId: broadcast.workspaceId,
+            groupId: broadcast.groupId,
+            configurationId: configuration.id,
+            groupMembershipId: { in: [...eligibleMembershipIds] },
+            status: 'ACTIVE',
+            notificationConsentAt: { not: null },
+            friendshipStatus: 'FOLLOWING',
+          },
+          select: { groupMembershipId: true, providerUserId: true },
+        });
+        for (const item of connections)
+          recipientIds.set(item.groupMembershipId, item.providerUserId);
+      } else {
+        const connections = await db.prisma.lineConnection.findMany({
+          where: {
+            environment,
+            workspaceId: broadcast.workspaceId,
+            userId: { in: recipients.map((recipient) => recipient.userId) },
+            status: 'ACTIVE',
+            notificationConsentAt: { not: null },
+            friendshipStatus: 'FOLLOWING',
+          },
+          select: { userId: true, providerUserId: true },
+        });
+        const byUser = new Map(connections.map((item) => [item.userId, item.providerUserId]));
+        for (const recipient of recipients) {
+          const providerUserId = byUser.get(recipient.userId);
+          if (providerUserId && eligibleMembershipIds.has(recipient.groupMembershipId))
+            recipientIds.set(recipient.groupMembershipId, providerUserId);
+        }
+      }
       const provider = new LineMessagingApiAdapter();
       const token = new AesGcmLineSecretCrypto().decrypt(configuration.encryptedAccessToken);
       let failed = 0;

@@ -12,6 +12,7 @@ import {
   installStandardFortunePackage,
   setFortuneAiEnabled,
   setFortuneEnabled,
+  setFortuneWeeklyNotification,
 } from '../fortune/operator';
 
 const slug = z
@@ -35,6 +36,14 @@ const body = z.discriminatedUnion('action', [
     .strict(),
   z.object({ action: z.literal('SET_ENABLED'), enabled: z.boolean() }).strict(),
   z.object({ action: z.literal('SET_AI_ENABLED'), enabled: z.boolean() }).strict(),
+  z
+    .object({
+      action: z.literal('SET_WEEKLY_NOTIFICATION'),
+      enabled: z.boolean(),
+      weekday: z.number().int().min(0).max(6),
+      hour: z.number().int().min(0).max(23),
+    })
+    .strict(),
 ]);
 
 const mappedError = (error: unknown) => {
@@ -129,6 +138,17 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
           serviceSlug: parsedSlug,
           actorUserId,
           enabled: value.enabled,
+        }),
+        requestId,
+      );
+    if (value.action === 'SET_WEEKLY_NOTIFICATION')
+      return result(
+        await setFortuneWeeklyNotification({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          enabled: value.enabled,
+          weekday: value.weekday,
+          hour: value.hour,
         }),
         requestId,
       );

@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   installStandard: vi.fn(),
   setEnabled: vi.fn(),
   setAiEnabled: vi.fn(),
+  setWeeklyNotification: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),
@@ -20,6 +21,7 @@ vi.mock('../src/fortune/operator', () => ({
   installStandardFortunePackage: state.installStandard,
   setFortuneEnabled: state.setEnabled,
   setFortuneAiEnabled: state.setAiEnabled,
+  setFortuneWeeklyNotification: state.setWeeklyNotification,
 }));
 
 import {
@@ -59,6 +61,11 @@ describe('fortune operator HTTP boundary', () => {
       meaningCount: 468,
     });
     state.setEnabled.mockResolvedValue({ enabled: true });
+    state.setWeeklyNotification.mockResolvedValue({
+      weeklyNotificationEnabled: true,
+      weeklyNotificationDay: 3,
+      weeklyNotificationHour: 19,
+    });
   });
 
   it('requires authentication for readiness data', async () => {
@@ -134,6 +141,26 @@ describe('fortune operator HTTP boundary', () => {
     expect(state.installStandard).toHaveBeenCalledWith({
       serviceSlug: 'fortune',
       actorUserId: 'manager-1',
+    });
+  });
+
+  it('updates the weekly notification schedule within the authenticated service scope', async () => {
+    const response = await updateFortuneOperationsResponse(
+      request({
+        action: 'SET_WEEKLY_NOTIFICATION',
+        enabled: true,
+        weekday: 5,
+        hour: 18,
+      }),
+      'fortune',
+    );
+    expect(response.status).toBe(200);
+    expect(state.setWeeklyNotification).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
+      enabled: true,
+      weekday: 5,
+      hour: 18,
     });
   });
 });

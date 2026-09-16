@@ -26,6 +26,10 @@ import {
   scheduleWeeklyReportLineDeliveries,
   type WeeklyReportLineScheduleSummary,
 } from '../services/weekly-report-line-scheduler';
+import {
+  scheduleFortuneWeeklyLineDeliveries,
+  type FortuneWeeklyLineScheduleSummary,
+} from '../services/fortune-weekly-line-scheduler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -48,6 +52,7 @@ export interface MissionSchedulerPort {
       };
       personalityLearning?: PersonalityLearningScheduleSummary;
       weeklyReportLine?: WeeklyReportLineScheduleSummary;
+      fortuneWeeklyLine?: FortuneWeeklyLineScheduleSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -170,11 +175,15 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
       const weeklyReportLine = await scheduleWeeklyReportLineDeliveries({ environment }).catch(
         () => ({ services: 0, due: 0, broadcasts: 0, recipients: 0, skipped: 0, failures: 1 }),
       );
+      const fortuneWeeklyLine = await scheduleFortuneWeeklyLineDeliveries({ environment }).catch(
+        () => ({ services: 0, due: 0, broadcasts: 0, recipients: 0, skipped: 0, failures: 1 }),
+      );
       return {
         ...missionResult,
         trend: trendResult,
         badgeLine: { ...badgePrepared, ...badgeJobResult },
         weeklyReportLine,
+        fortuneWeeklyLine,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };

@@ -2231,6 +2231,14 @@
 - Compatibility: 旧カラムは段階移行中の互換用としてDBに残すが、アプリケーションからは利用しない。十分な運用確認後に別Migrationで削除する。
 - Package boundary: 占いパッケージは通知Topicだけを公開し、会員・同意・通知保存の実装は共通Service基盤へ委譲する。
 
+## 2026-09-16: 週次占いLINE通知は本人同意を送信直前にも確認する
+
+- Schedule: Service運営者が曜日と時刻を設定し、占い公開中かつ週次通知が有効なServiceだけを定期Schedulerの対象にする。
+- Consent: `ServiceNotificationPreference(topic=FORTUNE_WEEKLY, channel=LINE)`、ACTIVE会員、参加同意、年齢確認済みの占い参加状態を準備時に確認し、配信時にも通知同意と会員状態を再確認する。
+- Routing: GroupのLINE経路設定に従い、共有LINEではWorkspaceの接続、専用LINEではGroupの接続と確認済み専用設定を使用する。
+- Idempotency: 環境、Service、配信日から作る自動配信キーで、同じ週次案内を同日に複数回作らない。
+- Privacy: LINE本文はサービス名、一般的な案内、サービスURLだけとし、占い結果、テーマ、カード、氏名を含めない。
+
 ## 2026-09-16: 占いを版付きService作成テンプレートとして提供する
 
 - Template: 新しい運営団体・プロジェクトへ導入するときは`FORTUNE_DAILY_GUIDANCE`テンプレートを選び、パッケージキーと版をServiceのOnboarding設定へ保存する。

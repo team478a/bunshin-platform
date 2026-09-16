@@ -20,6 +20,10 @@ export function FortuneOperatorEditor({
   standardKnowledgeReady,
   enabled,
   aiEnabled,
+  weeklyNotificationEnabled,
+  weeklyNotificationDay,
+  weeklyNotificationHour,
+  timeZone,
   canEnable,
   bunshinId,
   bunshins,
@@ -29,6 +33,10 @@ export function FortuneOperatorEditor({
   standardKnowledgeReady: boolean;
   enabled: boolean;
   aiEnabled: boolean;
+  weeklyNotificationEnabled: boolean;
+  weeklyNotificationDay: number;
+  weeklyNotificationHour: number;
+  timeZone: string;
   canEnable: boolean;
   bunshinId: string | null;
   bunshins: Array<{ id: string; name: string }>;
@@ -37,6 +45,8 @@ export function FortuneOperatorEditor({
   const [selectedBunshinId, setSelectedBunshinId] = useState(bunshinId ?? bunshins[0]?.id ?? '');
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notificationDay, setNotificationDay] = useState(weeklyNotificationDay);
+  const [notificationHour, setNotificationHour] = useState(weeklyNotificationHour);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -246,6 +256,89 @@ export function FortuneOperatorEditor({
             >
               {aiEnabled ? 'AI個別化を停止する' : 'AI接続を確認して有効にする'}
             </button>
+          </section>
+          <section className="settings-card">
+            <h2>6. 週1回のお知らせ</h2>
+            <p>
+              希望した利用者だけに、占いを確認できる案内をLINEで送ります。占い結果や個人情報はLINE本文に載せません。
+            </p>
+            <label>
+              曜日
+              <select
+                value={notificationDay}
+                disabled={busy}
+                onChange={(event) => setNotificationDay(Number(event.target.value))}
+              >
+                {['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'].map(
+                  (label, value) => (
+                    <option key={label} value={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label>
+              配信時刻（{timeZone}）
+              <select
+                value={notificationHour}
+                disabled={busy}
+                onChange={(event) => setNotificationHour(Number(event.target.value))}
+              >
+                {Array.from({ length: 24 }, (_, hour) => (
+                  <option key={hour} value={hour}>
+                    {hour}時
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>
+              {weeklyNotificationEnabled
+                ? '現在、本人が希望した場合だけ配信します。'
+                : '現在、週次LINE通知は停止中です。'}
+            </p>
+            <button
+              className={`button ${weeklyNotificationEnabled ? 'button--secondary' : 'button--primary'}`}
+              type="button"
+              disabled={busy || (!weeklyNotificationEnabled && !enabled)}
+              onClick={() =>
+                void run(async () => {
+                  await send(serviceSlug, {
+                    action: 'SET_WEEKLY_NOTIFICATION',
+                    enabled: !weeklyNotificationEnabled,
+                    weekday: notificationDay,
+                    hour: notificationHour,
+                  });
+                  setMessage(
+                    weeklyNotificationEnabled
+                      ? '週次LINE通知を停止しました。'
+                      : '週次LINE通知を有効にしました。利用者本人の希望後に配信されます。',
+                  );
+                })
+              }
+            >
+              {weeklyNotificationEnabled ? '週次LINE通知を停止する' : 'この曜日と時刻で有効にする'}
+            </button>
+            {weeklyNotificationEnabled && (
+              <button
+                className="button button--secondary"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await send(serviceSlug, {
+                      action: 'SET_WEEKLY_NOTIFICATION',
+                      enabled: true,
+                      weekday: notificationDay,
+                      hour: notificationHour,
+                    });
+                    setMessage('配信する曜日と時刻を変更しました。');
+                  })
+                }
+              >
+                曜日と時刻を変更する
+              </button>
+            )}
           </section>
         </>
       )}
