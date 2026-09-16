@@ -8,6 +8,53 @@ export interface FortuneQualityAssessment {
   failureRate: number;
 }
 
+export interface FortuneAiOperationsSummary {
+  monthKey: string;
+  commercialStatus: string | null;
+  generationLimit: number | null;
+  consumedGenerations: number;
+  processingGenerations: number;
+  successfulCalls: number;
+  failedCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  pricedCalls: number;
+  unpricedCalls: number;
+  estimatedCostUsdMicros: number;
+}
+
+export function summarizeFortuneAiOperations(input: {
+  monthKey: string;
+  commercialStatus: string | null;
+  generationLimit: number | null;
+  consumedGenerations: number;
+  processingGenerations: number;
+  usage: Array<{
+    status: 'SUCCESS' | 'FAILED';
+    inputTokens: number | null;
+    outputTokens: number | null;
+    estimatedCostUsdMicros: bigint | number | null;
+  }>;
+}): FortuneAiOperationsSummary {
+  return {
+    monthKey: input.monthKey,
+    commercialStatus: input.commercialStatus,
+    generationLimit: input.generationLimit,
+    consumedGenerations: input.consumedGenerations,
+    processingGenerations: input.processingGenerations,
+    successfulCalls: input.usage.filter((row) => row.status === 'SUCCESS').length,
+    failedCalls: input.usage.filter((row) => row.status === 'FAILED').length,
+    inputTokens: input.usage.reduce((sum, row) => sum + (row.inputTokens ?? 0), 0),
+    outputTokens: input.usage.reduce((sum, row) => sum + (row.outputTokens ?? 0), 0),
+    pricedCalls: input.usage.filter((row) => row.estimatedCostUsdMicros !== null).length,
+    unpricedCalls: input.usage.filter((row) => row.estimatedCostUsdMicros === null).length,
+    estimatedCostUsdMicros: input.usage.reduce(
+      (sum, row) => sum + Number(row.estimatedCostUsdMicros ?? 0),
+      0,
+    ),
+  };
+}
+
 export function assessFortuneQuality(input: {
   aiEnabled: boolean;
   aiReadingCount: number;
