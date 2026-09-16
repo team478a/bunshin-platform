@@ -41,12 +41,14 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
     const started = Date.now();
     const operationKey = `fortune-reading:${input.claim.reading.id}`;
     let usagePending = true;
+    let providerAttempted = false;
     try {
       const result = await withOrganizationAiGenerationQuota({
         workspaceId: input.claim.workspaceId,
         groupId: input.claim.groupId,
         operationKey,
         generate: async (): Promise<FortuneAiReadingResult> => {
+          providerAttempted = true;
           let response: Response;
           try {
             response = await fetch('https://api.openai.com/v1/responses', {
@@ -152,8 +154,10 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
           inputTokens: null,
           outputTokens: null,
           latencyMs: Date.now() - started,
-          estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
-          pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
+          estimatedCostUsdMicros:
+            providerAttempted && runtime.requestCostUsdMicros ? runtime.requestCostUsdMicros : null,
+          pricingVersion:
+            providerAttempted && runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
           idempotencyKey: operationKey,
         });

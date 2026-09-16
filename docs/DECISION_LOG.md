@@ -2275,3 +2275,11 @@
 - Validation: 評価値と理由は固定候補だけを受け付け、自由文や占い本文を評価レコードへ保存しない。
 - Scope: 閲覧記録と評価更新ではService、参加者、会員本人、結果所有者をすべて照合し、別Serviceや別利用者の結果を更新しない。
 - Reporting: 運営者には直近30日の閲覧者、別日の再利用者、評価別・理由別件数だけを表示し、氏名と占い内容は表示しない。
+
+## 2026-09-16: 占いAIの上限と利用原価は共通Service基盤で管理する
+
+- Ledger: 占いAI生成は共通の`AiUsageEvent`へ`FORTUNE_DAILY_READING`として成功・失敗、トークン、概算原価を記録し、占い専用の重複台帳を作らない。
+- Quota: 外部AIを呼び出す前に`ServiceAiGenerationReservation`でService月間枠を確保し、システム管理者が設定する`ServiceCommercialSetting.monthlyAiGenerationLimit`を正とする。
+- Operator view: 占い運営画面には当月のService全体の利用数・上限と、占い担当に限定した成功・失敗、トークン、概算AI原価を読み取り専用で表示する。
+- Unknown price: Provider単価が未設定の呼び出しは0円と断定せず、概算に含まれない件数を表示する。
+- Rejection accounting: 月間枠の拒否などProviderへ到達していない失敗には、リクエスト原価を記録しない。

@@ -71,96 +71,157 @@ export default async function FortuneManagementPage({
           bunshins={status.bunshins}
         />
         {quality && (
-          <section className="settings-card">
-            <p className="eyebrow">直近{quality.periodDays}日</p>
-            <h2>運用品質：{quality.assessment.label}</h2>
-            <p>{quality.assessment.message}</p>
-            <dl>
-              <div>
-                <dt>利用できる参加者</dt>
-                <dd>{quality.activeParticipants}人</dd>
-              </div>
-              <div>
-                <dt>占いを利用した人</dt>
-                <dd>{quality.activeReaders}人</dd>
-              </div>
-              <div>
-                <dt>結果を確認した人</dt>
-                <dd>{quality.viewedReaders}人</dd>
-              </div>
-              <div>
-                <dt>別の日にも利用した人</dt>
-                <dd>{quality.repeatReaders}人</dd>
-              </div>
-              <div>
-                <dt>占い結果</dt>
-                <dd>{quality.readingCount}件</dd>
-              </div>
-              <div>
-                <dt>AIで作成</dt>
-                <dd>{quality.aiReadingCount}件</dd>
-              </div>
-              <div>
-                <dt>安全な標準文を表示</dt>
-                <dd>{quality.basicReadingCount}件</dd>
-              </div>
-              <div>
-                <dt>完了できなかった結果</dt>
-                <dd>{quality.failedReadingCount}件</dd>
-              </div>
-              <div>
-                <dt>処理が止まっている結果</dt>
-                <dd>{quality.staleGeneratingCount}件</dd>
-              </div>
-              <div>
-                <dt>評価回答</dt>
-                <dd>{quality.feedbackCount}件</dd>
-              </div>
-              <div>
-                <dt>参考になった</dt>
-                <dd>{quality.helpfulFeedbackCount}件</dd>
-              </div>
-              <div>
-                <dt>少し参考になった</dt>
-                <dd>{quality.somewhatFeedbackCount}件</dd>
-              </div>
-              <div>
-                <dt>今回は違った</dt>
-                <dd>{quality.notHelpfulFeedbackCount}件</dd>
-              </div>
-            </dl>
-            {quality.failures.length > 0 && (
-              <div>
-                <h3>標準文への切り替え・失敗理由</h3>
-                <ul>
-                  {quality.failures.map((failure) => (
-                    <li key={failure.code}>
-                      {fortuneFailureLabel(failure.code)}：{failure.count}件
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {quality.feedbackIssues.length > 0 && (
-              <div>
-                <h3>「今回は違った」と感じた理由</h3>
-                <ul>
-                  {quality.feedbackIssues.map((issue) => (
-                    <li key={issue.code}>
-                      {{
-                        TOO_VAGUE: '内容があいまい',
-                        HARD_TO_UNDERSTAND: '分かりにくい',
-                        UNCOMFORTABLE: '不安になった',
-                        OTHER: 'その他',
-                      }[issue.code] ?? 'その他'}
-                      ：{issue.count}件
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <p>この画面には利用者の氏名や占い内容を表示しません。</p>
-          </section>
+          <>
+            <section className="settings-card">
+              <p className="eyebrow">{quality.aiOperations.monthKey}</p>
+              <h2>今月のAI利用</h2>
+              <dl>
+                <div>
+                  <dt>契約設定</dt>
+                  <dd>
+                    {{
+                      ACTIVE: '利用中',
+                      SUSPENDED: '停止中',
+                      ENDED: '終了',
+                      DRAFT: '準備中（上限は未適用）',
+                    }[quality.aiOperations.commercialStatus ?? ''] ?? '設定なし'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>サービス全体の利用済み</dt>
+                  <dd>
+                    {quality.aiOperations.consumedGenerations}回
+                    {quality.aiOperations.generationLimit === null
+                      ? '（上限なし）'
+                      : ` / ${quality.aiOperations.generationLimit}回`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>処理中</dt>
+                  <dd>{quality.aiOperations.processingGenerations}回</dd>
+                </div>
+                <div>
+                  <dt>AI呼び出し</dt>
+                  <dd>
+                    成功 {quality.aiOperations.successfulCalls}回 / 失敗{' '}
+                    {quality.aiOperations.failedCalls}回
+                  </dd>
+                </div>
+                <div>
+                  <dt>使用トークン</dt>
+                  <dd>
+                    入力 {quality.aiOperations.inputTokens.toLocaleString('ja-JP')} / 出力{' '}
+                    {quality.aiOperations.outputTokens.toLocaleString('ja-JP')}
+                  </dd>
+                </div>
+                <div>
+                  <dt>概算AI原価</dt>
+                  <dd>
+                    約 ${(quality.aiOperations.estimatedCostUsdMicros / 1_000_000).toFixed(4)} USD
+                  </dd>
+                </div>
+              </dl>
+              {quality.aiOperations.unpricedCalls > 0 && (
+                <p>
+                  価格未設定の{quality.aiOperations.unpricedCalls}
+                  回は概算AI原価に含まれていません。
+                </p>
+              )}
+              <p>
+                月間上限は、システム管理者がサービスの契約設定で管理します。成功・失敗とトークン数は、この占い担当が実行したAI生成だけを表示します。
+              </p>
+            </section>
+            <section className="settings-card">
+              <p className="eyebrow">直近{quality.periodDays}日</p>
+              <h2>運用品質：{quality.assessment.label}</h2>
+              <p>{quality.assessment.message}</p>
+              <dl>
+                <div>
+                  <dt>利用できる参加者</dt>
+                  <dd>{quality.activeParticipants}人</dd>
+                </div>
+                <div>
+                  <dt>占いを利用した人</dt>
+                  <dd>{quality.activeReaders}人</dd>
+                </div>
+                <div>
+                  <dt>結果を確認した人</dt>
+                  <dd>{quality.viewedReaders}人</dd>
+                </div>
+                <div>
+                  <dt>別の日にも利用した人</dt>
+                  <dd>{quality.repeatReaders}人</dd>
+                </div>
+                <div>
+                  <dt>占い結果</dt>
+                  <dd>{quality.readingCount}件</dd>
+                </div>
+                <div>
+                  <dt>AIで作成</dt>
+                  <dd>{quality.aiReadingCount}件</dd>
+                </div>
+                <div>
+                  <dt>安全な標準文を表示</dt>
+                  <dd>{quality.basicReadingCount}件</dd>
+                </div>
+                <div>
+                  <dt>完了できなかった結果</dt>
+                  <dd>{quality.failedReadingCount}件</dd>
+                </div>
+                <div>
+                  <dt>処理が止まっている結果</dt>
+                  <dd>{quality.staleGeneratingCount}件</dd>
+                </div>
+                <div>
+                  <dt>評価回答</dt>
+                  <dd>{quality.feedbackCount}件</dd>
+                </div>
+                <div>
+                  <dt>参考になった</dt>
+                  <dd>{quality.helpfulFeedbackCount}件</dd>
+                </div>
+                <div>
+                  <dt>少し参考になった</dt>
+                  <dd>{quality.somewhatFeedbackCount}件</dd>
+                </div>
+                <div>
+                  <dt>今回は違った</dt>
+                  <dd>{quality.notHelpfulFeedbackCount}件</dd>
+                </div>
+              </dl>
+              {quality.failures.length > 0 && (
+                <div>
+                  <h3>標準文への切り替え・失敗理由</h3>
+                  <ul>
+                    {quality.failures.map((failure) => (
+                      <li key={failure.code}>
+                        {fortuneFailureLabel(failure.code)}：{failure.count}件
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {quality.feedbackIssues.length > 0 && (
+                <div>
+                  <h3>「今回は違った」と感じた理由</h3>
+                  <ul>
+                    {quality.feedbackIssues.map((issue) => (
+                      <li key={issue.code}>
+                        {{
+                          TOO_VAGUE: '内容があいまい',
+                          HARD_TO_UNDERSTAND: '分かりにくい',
+                          UNCOMFORTABLE: '不安になった',
+                          OTHER: 'その他',
+                        }[issue.code] ?? 'その他'}
+                        ：{issue.count}件
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p>この画面には利用者の氏名や占い内容を表示しません。</p>
+            </section>
+          </>
         )}
         {status.configured && !quality && (
           <section className="settings-card">

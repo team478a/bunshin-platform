@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { assessFortuneQuality, fortuneFailureLabel } from '../src/fortune/quality';
+import {
+  assessFortuneQuality,
+  fortuneFailureLabel,
+  summarizeFortuneAiOperations,
+} from '../src/fortune/quality';
 
 describe('fortune operations quality', () => {
   it('does not treat standard readings as fallbacks while AI is disabled', () => {
@@ -62,5 +66,42 @@ describe('fortune operations quality', () => {
   it('uses safe Japanese labels instead of exposing internal failure codes', () => {
     expect(fortuneFailureLabel('AI_OUTPUT_REJECTED')).toContain('安全確認');
     expect(fortuneFailureLabel('UNKNOWN_PROVIDER_DETAIL')).not.toContain('UNKNOWN');
+  });
+
+  it('summarizes the shared AI ledger without treating unknown prices as free', () => {
+    const result = summarizeFortuneAiOperations({
+      monthKey: '2026-09',
+      commercialStatus: 'ACTIVE',
+      generationLimit: 100,
+      consumedGenerations: 3,
+      processingGenerations: 1,
+      usage: [
+        {
+          status: 'SUCCESS',
+          inputTokens: 120,
+          outputTokens: 80,
+          estimatedCostUsdMicros: 2_500n,
+        },
+        {
+          status: 'FAILED',
+          inputTokens: null,
+          outputTokens: null,
+          estimatedCostUsdMicros: null,
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      generationLimit: 100,
+      consumedGenerations: 3,
+      processingGenerations: 1,
+      successfulCalls: 1,
+      failedCalls: 1,
+      inputTokens: 120,
+      outputTokens: 80,
+      pricedCalls: 1,
+      unpricedCalls: 1,
+      estimatedCostUsdMicros: 2_500,
+    });
   });
 });

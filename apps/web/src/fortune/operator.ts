@@ -10,7 +10,12 @@ import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
 import { isFortuneServicePackage } from '../services/service-creation-templates';
 import { isFortuneLineReady } from './launch-readiness';
-import { assessFortuneQuality, type FortuneQualityAssessment } from './quality';
+import {
+  assessFortuneQuality,
+  summarizeFortuneAiOperations,
+  type FortuneAiOperationsSummary,
+  type FortuneQualityAssessment,
+} from './quality';
 
 export interface FortuneOperatorStatus {
   configured: boolean;
@@ -51,6 +56,7 @@ export interface FortuneOperationsQuality {
   notHelpfulFeedbackCount: number;
   feedbackIssues: Array<{ code: string; count: number }>;
   failures: Array<{ code: string; count: number }>;
+  aiOperations: FortuneAiOperationsSummary;
   assessment: FortuneQualityAssessment;
 }
 
@@ -482,12 +488,15 @@ export async function fortuneOperationsQuality(
   const db = await import('@bunshin/database');
   const setting = await db.prisma.fortuneServiceSetting.findFirst({
     where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-    select: { id: true, aiEnabled: true },
+    select: { id: true, bunshinId: true, aiEnabled: true },
   });
   if (!setting) return null;
 
   const periodStart = new Date(now.getTime() - 30 * 86_400_000);
   const staleBefore = new Date(now.getTime() - 10 * 60_000);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const monthKey = `${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, '0')}`;
   const readingScope = { serviceSettingId: setting.id, createdAt: { gte: periodStart } };
   const [
     activeParticipants,
@@ -498,6 +507,10 @@ export async function fortuneOperationsQuality(
     failureRows,
     feedbackRows,
     feedbackIssueRows,
+    commercialSetting,
+    consumedGenerations,
+    processingGenerations,
+    aiUsage,
   ] = await Promise.all([
     db.prisma.fortuneParticipant.count({
       where: {
@@ -549,6 +562,41 @@ export async function fortuneOperationsQuality(
       _count: { _all: true },
       orderBy: { _count: { issueCode: 'desc' } },
     }),
+    db.prisma.serviceCommercialSetting.findFirst({
+      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+      select: { status: true, monthlyAiGenerationLimit: true },
+    }),
+    db.prisma.serviceAiGenerationReservation.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        monthKey,
+        status: 'CONSUMED',
+      },
+    }),
+    db.prisma.serviceAiGenerationReservation.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        monthKey,
+        status: 'RESERVED',
+        expiresAt: { gt: now },
+      },
+    }),
+    db.prisma.aiUsageEvent.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        bunshinId: setting.bunshinId,
+        taskType: 'FORTUNE_DAILY_READING',
+        occurredAt: { gte: monthStart, lt: nextMonthStart },
+      },
+      select: {
+        status: true,
+        inputTokens: true,
+        outputTokens: true,
+        estimatedCostUsdMicros: true,
+      },
+    }),
   ]);
   const count = (status: 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED') =>
     statuses.find((row) => row.status === status)?._count._all ?? 0;
@@ -589,6 +637,17 @@ export async function fortuneOperationsQuality(
     failures: failureRows.flatMap((row) =>
       row.failureCode ? [{ code: row.failureCode, count: row._count._all }] : [],
     ),
+    aiOperations: summarizeFortuneAiOperations({
+      monthKey,
+      commercialStatus: commercialSetting?.status ?? null,
+      generationLimit:
+        commercialSetting?.status === 'DRAFT'
+          ? null
+          : (commercialSetting?.monthlyAiGenerationLimit ?? null),
+      consumedGenerations,
+      processingGenerations,
+      usage: aiUsage,
+    }),
     assessment: assessFortuneQuality({
       aiEnabled: setting.aiEnabled,
       aiReadingCount,
