@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
     bunshinCapabilityAssignment: { create: vi.fn() },
     fortuneServiceSetting: { create: vi.fn() },
     fortuneKnowledgeVersion: { create: vi.fn(), update: vi.fn() },
+    serviceConfigurationAudit: { create: vi.fn(), findMany: vi.fn() },
     fortuneCardMeaning: {
       createMany:
         vi.fn<(input: { data: Array<{ safetyReviewed: boolean }> }) => Promise<unknown>>(),
@@ -38,11 +39,13 @@ vi.mock('../src/services/public-service', () => ({
 vi.mock('@bunshin/database', () => ({
   prisma: {
     $transaction: vi.fn((operation: (tx: typeof state.tx) => unknown) => operation(state.tx)),
+    serviceConfigurationAudit: state.tx.serviceConfigurationAudit,
   },
 }));
 
 import {
   installStandardFortunePackage,
+  fortunePackageAuditHistory,
   updateStandardFortunePackage,
 } from '../src/fortune/operator';
 
@@ -122,6 +125,14 @@ describe('fortune package installation', () => {
         },
       }),
     );
+    expect(state.tx.serviceConfigurationAudit.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'FORTUNE_PACKAGE_INSTALLED',
+        beforeData: { packageVersion: null },
+        afterData: expect.objectContaining({ packageVersion: 2, meaningCount: 468 }),
+        performedByUserId: '77777777-7777-4777-8777-777777777777',
+      }),
+    });
   });
 
   it('does not create duplicates when the package is already installed', async () => {
@@ -151,6 +162,7 @@ describe('fortune package installation', () => {
     expect(state.tx.fortuneServiceSetting.create).not.toHaveBeenCalled();
     expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledTimes(1);
     expect(state.tx.organizationEntitlement.findUnique).not.toHaveBeenCalled();
+    expect(state.tx.serviceConfigurationAudit.create).not.toHaveBeenCalled();
   });
 
   it('rejects a new installation when the organization has no active package license', async () => {
@@ -209,6 +221,13 @@ describe('fortune package installation', () => {
       },
     });
     expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledTimes(1);
+    expect(state.tx.serviceConfigurationAudit.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'FORTUNE_PACKAGE_UPDATED',
+        beforeData: { packageVersion: 1 },
+        afterData: expect.objectContaining({ packageVersion: 2 }),
+      }),
+    });
   });
 
   it('does not rewrite a package that is already current', async () => {
@@ -219,6 +238,7 @@ describe('fortune package installation', () => {
       }),
     ).resolves.toEqual({ updated: false, fromVersion: 2, toVersion: 2 });
     expect(state.tx.serviceRegistrationPolicy.update).not.toHaveBeenCalled();
+    expect(state.tx.serviceConfigurationAudit.create).not.toHaveBeenCalled();
   });
 
   it('refuses installation when the service was not created from the fortune package', async () => {
@@ -232,5 +252,44 @@ describe('fortune package installation', () => {
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(state.tx.serviceConfiguration.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('returns only the service-scoped package history with the responsible operator', async () => {
+    state.tx.serviceConfigurationAudit.findMany.mockResolvedValue([
+      {
+        id: '88888888-8888-4888-8888-888888888888',
+        action: 'FORTUNE_PACKAGE_UPDATED',
+        beforeData: { packageVersion: 1 },
+        afterData: { packageVersion: 2 },
+        occurredAt: new Date('2026-09-17T00:00:00.000Z'),
+        performedBy: { displayName: '運営担当', email: 'operator@example.com' },
+      },
+    ]);
+
+    await expect(
+      fortunePackageAuditHistory('daily-fortune', '77777777-7777-4777-8777-777777777777'),
+    ).resolves.toEqual([
+      {
+        id: '88888888-8888-4888-8888-888888888888',
+        action: 'UPDATED',
+        fromVersion: 1,
+        toVersion: 2,
+        occurredAt: new Date('2026-09-17T00:00:00.000Z'),
+        actor: '運営担当',
+      },
+    ]);
+    expect(state.tx.serviceConfigurationAudit.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: state.service.workspaceId,
+          groupId: state.service.serviceId,
+          configurationId: state.service.configuration.id,
+          action: {
+            in: ['FORTUNE_PACKAGE_INSTALLED', 'FORTUNE_PACKAGE_UPDATED'],
+          },
+        }),
+        take: 20,
+      }),
+    );
   });
 });

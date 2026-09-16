@@ -75,6 +75,18 @@ export interface FortuneOperationsQuality {
   assessment: FortuneQualityAssessment;
 }
 
+export interface FortunePackageAuditEntry {
+  id: string;
+  action: 'INSTALLED' | 'UPDATED';
+  fromVersion: number | null;
+  toVersion: number;
+  occurredAt: Date;
+  actor: string;
+}
+
+const FORTUNE_PACKAGE_INSTALLED_ACTION = 'FORTUNE_PACKAGE_INSTALLED';
+const FORTUNE_PACKAGE_UPDATED_ACTION = 'FORTUNE_PACKAGE_UPDATED';
+
 async function scope(serviceSlug: string, actorUserId: string) {
   try {
     return await resolveManagedServiceContext(serviceSlug, actorUserId);
@@ -256,6 +268,57 @@ export async function fortuneOperatorStatus(
       memberLimit === null ? null : Math.max(0, memberLimit - registeredParticipants),
     bunshins,
   };
+}
+
+export async function fortunePackageAuditHistory(
+  serviceSlug: string,
+  actorUserId: string,
+  limit = 20,
+): Promise<FortunePackageAuditEntry[]> {
+  const service = await scope(serviceSlug, actorUserId);
+  const db = await import('@bunshin/database');
+  const rows = await db.prisma.serviceConfigurationAudit.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      configurationId: service.configuration.id,
+      action: { in: [FORTUNE_PACKAGE_INSTALLED_ACTION, FORTUNE_PACKAGE_UPDATED_ACTION] },
+    },
+    select: {
+      id: true,
+      action: true,
+      beforeData: true,
+      afterData: true,
+      occurredAt: true,
+      performedBy: { select: { displayName: true, email: true } },
+    },
+    orderBy: { occurredAt: 'desc' },
+    take: Math.min(Math.max(limit, 1), 50),
+  });
+
+  return rows.flatMap((row) => {
+    const before = jsonObject(row.beforeData);
+    const after = jsonObject(row.afterData);
+    const toVersion = after?.['packageVersion'];
+    const fromVersion = before?.['packageVersion'];
+    if (typeof toVersion !== 'number') return [];
+    return [
+      {
+        id: row.id,
+        action: row.action === FORTUNE_PACKAGE_INSTALLED_ACTION ? 'INSTALLED' : 'UPDATED',
+        fromVersion: typeof fromVersion === 'number' ? fromVersion : null,
+        toVersion,
+        occurredAt: row.occurredAt,
+        actor: row.performedBy.displayName || row.performedBy.email || '運営担当者',
+      } satisfies FortunePackageAuditEntry,
+    ];
+  });
+}
+
+function jsonObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 export async function importFortuneKnowledge(input: {
@@ -565,6 +628,23 @@ export async function installStandardFortunePackage(input: {
         ),
       },
     });
+    await tx.serviceConfigurationAudit.create({
+      data: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: configuration.id,
+        action: FORTUNE_PACKAGE_INSTALLED_ACTION,
+        beforeData: { packageVersion: null },
+        afterData: {
+          packageKey: FORTUNE_PACKAGE_KEY,
+          packageVersion: CURRENT_FORTUNE_PACKAGE_VERSION,
+          knowledgeVersion: 1,
+          meaningCount: pack.meanings.length,
+        },
+        reason: '占い標準パッケージを初回導入',
+        performedByUserId: input.actorUserId,
+      },
+    });
     return {
       installed: true,
       bunshinId: bunshin.id,
@@ -654,6 +734,21 @@ export async function updateStandardFortunePackage(input: {
         onboardingConfig: packageConfigAtCurrentVersion(
           configuration.registration.onboardingConfig,
         ),
+      },
+    });
+    await tx.serviceConfigurationAudit.create({
+      data: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: configuration.id,
+        action: FORTUNE_PACKAGE_UPDATED_ACTION,
+        beforeData: { packageVersion: release.installedVersion },
+        afterData: {
+          packageKey: FORTUNE_PACKAGE_KEY,
+          packageVersion: release.currentVersion,
+        },
+        reason: '占い標準パッケージを最新版へ更新',
+        performedByUserId: input.actorUserId,
       },
     });
     return {

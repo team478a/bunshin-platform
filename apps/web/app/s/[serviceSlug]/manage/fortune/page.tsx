@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import {
+  fortunePackageAuditHistory,
   fortuneOperationsQuality,
   fortuneOperatorStatus,
 } from '../../../../../src/fortune/operator';
@@ -21,9 +22,12 @@ export default async function FortuneManagementPage({
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/fortune`)}`);
   const status = await fortuneOperatorStatus(serviceSlug, actor.userId).catch(() => null);
   if (!status) notFound();
-  const quality = status.configured
-    ? await fortuneOperationsQuality(serviceSlug, actor.userId).catch(() => null)
-    : null;
+  const [quality, packageHistory] = await Promise.all([
+    status.configured
+      ? fortuneOperationsQuality(serviceSlug, actor.userId).catch(() => null)
+      : Promise.resolve(null),
+    fortunePackageAuditHistory(serviceSlug, actor.userId),
+  ]);
   const launchSteps = buildFortuneLaunchSteps(serviceSlug, status);
   const completedSteps = launchSteps.filter((step) => step.ready).length;
   return (
@@ -75,6 +79,40 @@ export default async function FortuneManagementPage({
             <p className="form-error">
               システムを更新するまで設定を変更せず、システム管理者へ連絡してください。
             </p>
+          )}
+        </section>
+        <section className="settings-card">
+          <h2>パッケージ履歴</h2>
+          <p>導入・更新を実行した日時、版、担当者を直近20件まで表示します。</p>
+          {packageHistory.length === 0 ? (
+            <p>まだ導入・更新履歴はありません。</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日時</th>
+                    <th>操作</th>
+                    <th>版</th>
+                    <th>担当者</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packageHistory.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{entry.occurredAt.toLocaleString('ja-JP')}</td>
+                      <td>{entry.action === 'INSTALLED' ? '初回導入' : '更新'}</td>
+                      <td>
+                        {entry.fromVersion === null
+                          ? `v${entry.toVersion}`
+                          : `v${entry.fromVersion} → v${entry.toVersion}`}
+                      </td>
+                      <td>{entry.actor}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
         <section className="settings-card fortune-readiness-card">
