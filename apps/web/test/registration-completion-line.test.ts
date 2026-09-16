@@ -66,9 +66,7 @@ describe('registration completion LINE', () => {
   it('describes scheduled service delivery without promising a daily message', async () => {
     await sendRegistrationCompletionLine({ ...input, cadence: 'SCHEDULED' });
     const text = m.pushText.mock.calls[0]?.[0].text as string;
-    expect(text).toContain(
-      '投稿予定日の08:00ごろ、あなた向けの投稿案をLINEでお届けします。',
-    );
+    expect(text).toContain('投稿予定日の08:00ごろ、あなた向けの投稿案をLINEでお届けします。');
     expect(text).not.toContain('毎日08:00ごろ');
   });
 
