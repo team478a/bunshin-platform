@@ -9,6 +9,7 @@ import {
   fortuneOperatorStatus,
   importFortuneKnowledge,
   importStandardFortuneKnowledge,
+  installStandardFortunePackage,
   setFortuneAiEnabled,
   setFortuneEnabled,
 } from '../fortune/operator';
@@ -18,6 +19,7 @@ const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(80);
 const body = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('INSTALL_STANDARD_PACKAGE') }).strict(),
   z
     .object({
       action: z.literal('IMPORT_KNOWLEDGE'),
@@ -91,6 +93,15 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
     const requestBody: unknown = await request.json();
     const value = await body.parseAsync(requestBody);
     const parsedSlug = slug.parse(serviceSlug);
+    if (value.action === 'INSTALL_STANDARD_PACKAGE')
+      return result(
+        await installStandardFortunePackage({
+          serviceSlug: parsedSlug,
+          actorUserId,
+        }),
+        requestId,
+        201,
+      );
     if (value.action === 'IMPORT_KNOWLEDGE')
       return result(
         await importFortuneKnowledge({

@@ -60,6 +60,8 @@ export default async function FortuneManagementPage({
         </section>
         <FortuneOperatorEditor
           serviceSlug={serviceSlug}
+          configured={status.configured}
+          standardKnowledgeReady={status.approvedMeaningCount === status.requiredMeaningCount}
           enabled={status.enabled}
           aiEnabled={status.aiEnabled}
           canEnable={status.canEnable}

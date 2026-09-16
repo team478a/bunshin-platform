@@ -6,7 +6,9 @@ const state = vi.hoisted(() => ({
   status: vi.fn(),
   importPack: vi.fn(),
   importStandard: vi.fn(),
+  installStandard: vi.fn(),
   setEnabled: vi.fn(),
+  setAiEnabled: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),
@@ -15,7 +17,9 @@ vi.mock('../src/fortune/operator', () => ({
   fortuneOperatorStatus: state.status,
   importFortuneKnowledge: state.importPack,
   importStandardFortuneKnowledge: state.importStandard,
+  installStandardFortunePackage: state.installStandard,
   setFortuneEnabled: state.setEnabled,
+  setFortuneAiEnabled: state.setAiEnabled,
 }));
 
 import {
@@ -48,6 +52,12 @@ describe('fortune operator HTTP boundary', () => {
     state.status.mockResolvedValue({ configured: false });
     state.importPack.mockResolvedValue({ version: 1, meaningCount: 468 });
     state.importStandard.mockResolvedValue({ version: 1, meaningCount: 468 });
+    state.installStandard.mockResolvedValue({
+      installed: true,
+      bunshinId: '11111111-1111-4111-8111-111111111111',
+      version: 1,
+      meaningCount: 468,
+    });
     state.setEnabled.mockResolvedValue({ enabled: true });
   });
 
@@ -112,6 +122,18 @@ describe('fortune operator HTTP boundary', () => {
       serviceSlug: 'fortune',
       actorUserId: 'manager-1',
       bunshinId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
+  it('installs the standard package using only the authenticated service scope', async () => {
+    const response = await updateFortuneOperationsResponse(
+      request({ action: 'INSTALL_STANDARD_PACKAGE' }),
+      'fortune',
+    );
+    expect(response.status).toBe(201);
+    expect(state.installStandard).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
     });
   });
 });
