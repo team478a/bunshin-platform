@@ -11720,15 +11720,19 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
             select: { includedMemberLimit: true },
           });
           if (commercial?.includedMemberLimit) {
+            await tx.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "service_configurations" WHERE "id" = ${configuration.id}::uuid FOR UPDATE`,
+            );
             const members = await tx.groupMembership.count({
               where: {
                 workspaceId: configuration.workspaceId,
                 groupId: configuration.groupId,
+                role: 'PARTICIPANT',
                 status: { in: ['ACTIVE', 'PENDING_APPROVAL'] },
               },
             });
             if (members >= commercial.includedMemberLimit) {
-              throw new ApplicationError('FORBIDDEN', 'service member limit reached');
+              throw new ApplicationError('FORBIDDEN', 'このサービスは定員に達しました');
             }
           }
         }

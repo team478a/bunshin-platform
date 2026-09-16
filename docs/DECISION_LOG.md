@@ -2283,3 +2283,12 @@
 - Operator view: 占い運営画面には当月のService全体の利用数・上限と、占い担当に限定した成功・失敗、トークン、概算AI原価を読み取り専用で表示する。
 - Unknown price: Provider単価が未設定の呼び出しは0円と断定せず、概算に含まれない件数を表示する。
 - Rejection accounting: 月間枠の拒否などProviderへ到達していない失敗には、リクエスト原価を記録しない。
+
+## 2026-09-16: 占いv1の限定公開は共通Service参加枠で100人に制限する
+
+- Default: `FORTUNE_DAILY_GUIDANCE` v1の導入時に、Service契約設定がなければ無料・100人上限を作成する。既存の契約設定は上書きしない。
+- Existing services: 既存の占いServiceで契約設定がない場合もMigrationで同じ初期値を補う。
+- Enforcement: `ServiceCommercialSetting.includedMemberLimit`と共通Service参加処理を利用し、占い専用の定員テーブルを追加しない。
+- Concurrency: 新規参加時はService設定行をトランザクション内でロックしてから参加者数を数え、同時登録による上限超過を防ぐ。
+- Counting: 契約人数には`PARTICIPANT`の有効・承認待ち参加だけを数え、Service所有者や運営担当者を利用者枠として消費しない。
+- Operations: 占い運営画面には登録参加者数、上限、残り参加枠だけを表示し、参加者の個人情報は表示しない。
