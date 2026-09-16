@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   history: vi.fn(),
   reading: vi.fn(),
   delete: vi.fn(),
+  recordUse: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -17,6 +18,9 @@ vi.mock('../src/auth/current-user', () => ({
 }));
 vi.mock('../src/fortune/runtime', () => ({
   fortuneDailyReadingService: () => Promise.resolve(state),
+}));
+vi.mock('../src/services/service-membership', () => ({
+  recordServiceUse: state.recordUse,
 }));
 
 import {
@@ -48,6 +52,7 @@ describe('fortune HTTP contract', () => {
       notificationEnabled: false,
     });
     state.draw.mockResolvedValue({ id: 'reading-1' });
+    state.recordUse.mockResolvedValue({ id: 'membership-1' });
   });
 
   it('requires authentication for reads', async () => {
@@ -55,6 +60,15 @@ describe('fortune HTTP contract', () => {
     expect(
       (await getFortuneTodayResponse(request('/api/services/fortune/today'), 'fortune')).status,
     ).toBe(401);
+  });
+
+  it('records service-scoped use before returning a reading', async () => {
+    const response = await getFortuneTodayResponse(
+      request('/api/services/fortune/today'),
+      'fortune',
+    );
+    expect(response.status).toBe(200);
+    expect(state.recordUse).toHaveBeenCalledWith('fortune', 'user-1');
   });
 
   it('requires an explicit age confirmation and rejects authority fields', async () => {

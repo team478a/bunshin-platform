@@ -107,6 +107,20 @@ enum GroupMembershipAuditAction {
   REVOKED
 }
 
+enum ServiceNotificationChannel {
+  LINE
+  EMAIL
+}
+
+enum ServiceMembershipEventType {
+  REGISTRATION_COMPLETED
+  FIRST_SERVICE_USE
+  SERVICE_REVISITED
+  NOTIFICATION_OPTED_IN
+  NOTIFICATION_OPTED_OUT
+  SERVICE_WITHDRAWN
+}
+
 enum GroupInvitationStatus {
   ACTIVE
   EXHAUSTED
@@ -1778,6 +1792,8 @@ model User {
   fortuneParticipations             FortuneParticipant[]                @relation("FortuneParticipantUser")
   fortuneReadings                   FortuneReading[]                    @relation("FortuneReadingUser")
   fortuneKnowledgeVersionsApproved  FortuneKnowledgeVersion[]           @relation("FortuneKnowledgeApprover")
+  serviceNotificationPreferences    ServiceNotificationPreference[]
+  serviceMembershipEvents           ServiceMembershipEvent[]
 
   @@index([status])
   @@map("users")
@@ -1905,6 +1921,8 @@ model Workspace {
   aiUsageEvents                   AiUsageEvent[]
   lineNotificationPreferences     LineNotificationPreference[]
   lineConnections                 LineConnection[]
+  serviceNotificationPreferences  ServiceNotificationPreference[]
+  serviceMembershipEvents         ServiceMembershipEvent[]
   lineWebhookEvents               LineWebhookEvent[]
   jobs                            Job[]
   lineMessageDeliveries           LineMessageDelivery[]
@@ -2215,6 +2233,8 @@ model Group {
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
   bunshins                        Bunshin[]
   fortuneServiceSetting           FortuneServiceSetting?
+  serviceNotificationPreferences  ServiceNotificationPreference[]
+  serviceMembershipEvents         ServiceMembershipEvent[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -2654,6 +2674,8 @@ model GroupMembership {
   serviceReferralRewards       ServiceReferralReward[]          @relation("ServiceReferralRewardMembership")
   memberProductProfiles        MemberProductProfile[]
   fortuneParticipation         FortuneParticipant?
+  serviceNotificationPreferences ServiceNotificationPreference[]
+  serviceMembershipEvents         ServiceMembershipEvent[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -2662,6 +2684,52 @@ model GroupMembership {
   @@index([groupId, status])
   @@index([groupId, serviceRole, status])
   @@map("group_memberships")
+}
+
+model ServiceNotificationPreference {
+  id                String                     @id @default(uuid()) @db.Uuid
+  workspaceId       String                     @map("workspace_id") @db.Uuid
+  groupId           String                     @map("group_id") @db.Uuid
+  groupMembershipId String                     @map("group_membership_id") @db.Uuid
+  userId            String                     @map("user_id") @db.Uuid
+  topic             String                     @db.VarChar(80)
+  channel           ServiceNotificationChannel
+  enabled           Boolean                    @default(false)
+  consentedAt       DateTime?                  @map("consented_at") @db.Timestamptz(6)
+  optedOutAt        DateTime?                  @map("opted_out_at") @db.Timestamptz(6)
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                      @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership            @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, groupMembershipId, topic, channel])
+  @@index([workspaceId, groupId, topic, channel, enabled])
+  @@index([userId, enabled])
+  @@map("service_notification_preferences")
+}
+
+model ServiceMembershipEvent {
+  id                String                     @id @default(uuid()) @db.Uuid
+  workspaceId       String                     @map("workspace_id") @db.Uuid
+  groupId           String                     @map("group_id") @db.Uuid
+  groupMembershipId String                     @map("group_membership_id") @db.Uuid
+  userId            String                     @map("user_id") @db.Uuid
+  eventType         ServiceMembershipEventType @map("event_type")
+  topic             String?                    @db.VarChar(80)
+  channel           ServiceNotificationChannel?
+  idempotencyKey    String                     @unique @map("idempotency_key") @db.VarChar(200)
+  occurredAt        DateTime                   @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group                      @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership            @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade)
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, groupId, eventType, occurredAt])
+  @@index([groupMembershipId, occurredAt])
+  @@index([userId, occurredAt])
+  @@map("service_membership_events")
 }
 
 model GroupMembershipAuditLog {

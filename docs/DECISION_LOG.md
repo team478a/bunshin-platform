@@ -12,6 +12,15 @@
 - Withdrawal: 本人退会はMembershipを`REVOKED`にして監査を残す。共通User、Workspace Membership、他Service Membership、各Moduleの保持データは削除しない。
 - Packaging: 占い、投稿支援、Point、Badge等はこの会員境界を利用する追加Moduleとし、顧客名、固定ID、LINE資格情報をCoreへ直書きしない。
 
+## D-105: 通知同意と会員利用イベントをService Membership単位で分離する
+
+- 日付: 2026-09-16
+- 状態: Accepted
+- Consent: 通知同意は`workspaceId + groupId + groupMembershipId + topic + channel`で管理する。既存のBunshin別投稿通知設定を流用せず、別Service・別Module・別Channelへ同意を波及させない。
+- Event: 登録完了、初回利用、再訪、通知同意・解除、Service退会を共通イベントとして保存する。イベントはService Membershipに束縛し、本文、占い結果、投稿、Memory等のModule固有内容を保存しない。
+- Idempotency: 登録・初回利用・退会はMembership単位、再訪はUTC日単位、通知変更は直前状態単位の冪等Keyで重複を防ぐ。
+- Packaging: 顧客別の集計とModule追加に利用できる共通境界とし、顧客名やModule固有テーブルをCoreイベントへ固定しない。
+
 ## D-103: サービス管理者のLINE再送は自サービスの一時的失敗だけに限定する
 
 - 日付: 2026-09-01

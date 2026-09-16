@@ -15,6 +15,13 @@ const activityMigration = readFileSync(
   ),
   'utf8',
 );
+const eventsMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260916150000_add_service_membership_events/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('service participation persistence', () => {
   it('adds a distinct approval waiting status and auditable transitions', () => {
@@ -43,5 +50,14 @@ describe('service participation persistence', () => {
     expect(activityMigration).toMatch(
       /ALTER TABLE\s+"group_memberships"[\s\S]*ADD COLUMN\s+"last_used_at"\s+TIMESTAMPTZ\(6\)/,
     );
+  });
+
+  it('scopes notification consent and lifecycle events to the same service membership', () => {
+    expect(eventsMigration).toContain('CREATE TABLE "service_notification_preferences"');
+    expect(eventsMigration).toContain('CREATE TABLE "service_membership_events"');
+    expect(eventsMigration).toContain(
+      'REFERENCES "group_memberships"("workspace_id", "group_id", "id", "user_id")',
+    );
+    expect(eventsMigration).not.toContain('metadata');
   });
 });

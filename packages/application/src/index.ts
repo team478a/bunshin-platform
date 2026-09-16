@@ -29,6 +29,7 @@ export * from './video-render-completion';
 export * from './social-image-generation-job';
 export * from './social-image-pilot-evidence';
 export * from './service-participation';
+export * from './service-notification-preference';
 
 export interface ValidationMetricsPeriod {
   from: Date;
