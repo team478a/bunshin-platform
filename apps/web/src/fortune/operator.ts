@@ -6,8 +6,10 @@ import {
   type FortuneKnowledgePack,
 } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
+import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
 import { isFortuneServicePackage } from '../services/service-creation-templates';
+import { isFortuneLineReady } from './launch-readiness';
 
 export interface FortuneOperatorStatus {
   configured: boolean;
@@ -20,6 +22,7 @@ export interface FortuneOperatorStatus {
   termsReady: boolean;
   privacyReady: boolean;
   brandReady: boolean;
+  lineReady: boolean;
   bunshinReady: boolean;
   canEnable: boolean;
   bunshins: Array<{ id: string; name: string }>;
@@ -41,46 +44,77 @@ export async function fortuneOperatorStatus(
 ): Promise<FortuneOperatorStatus> {
   const service = await scope(serviceSlug, actorUserId);
   const db = await import('@bunshin/database');
-  const configuration = await db.prisma.serviceConfiguration.findFirst({
-    where: {
-      id: service.configuration.id,
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-    },
-    select: {
-      contactEmail: true,
-      brand: { select: { logoUrl: true } },
-      legalDocuments: {
-        where: { status: 'PUBLISHED' },
-        select: { type: true },
+  const lineEnvironment = currentLineEnvironment();
+  const [configuration, linePolicy, dedicatedLine, sharedLineReadyCount] = await Promise.all([
+    db.prisma.serviceConfiguration.findFirst({
+      where: {
+        id: service.configuration.id,
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
       },
-      fortuneSetting: {
-        select: {
-          enabled: true,
-          aiEnabled: true,
-          bunshinId: true,
-          bunshin: {
-            select: {
-              status: true,
-              capabilityAssignments: {
-                where: { capabilityType: 'FORTUNE', status: 'ACTIVE' },
-                select: { id: true },
+      select: {
+        contactEmail: true,
+        brand: { select: { logoUrl: true } },
+        legalDocuments: {
+          where: { status: 'PUBLISHED' },
+          select: { type: true },
+        },
+        fortuneSetting: {
+          select: {
+            enabled: true,
+            aiEnabled: true,
+            bunshinId: true,
+            bunshin: {
+              select: {
+                status: true,
+                capabilityAssignments: {
+                  where: { capabilityType: 'FORTUNE', status: 'ACTIVE' },
+                  select: { id: true },
+                },
               },
             },
-          },
-          knowledgeVersions: {
-            where: { status: 'APPROVED' },
-            orderBy: { version: 'desc' },
-            take: 1,
-            select: {
-              version: true,
-              _count: { select: { cardMeanings: { where: { safetyReviewed: true } } } },
+            knowledgeVersions: {
+              where: { status: 'APPROVED' },
+              orderBy: { version: 'desc' },
+              take: 1,
+              select: {
+                version: true,
+                _count: { select: { cardMeanings: { where: { safetyReviewed: true } } } },
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    db.prisma.groupLineRoutingPolicy.findUnique({
+      where: {
+        workspaceId_groupId_environment: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          environment: lineEnvironment,
+        },
+      },
+      select: { mode: true, pilotEnabled: true },
+    }),
+    db.prisma.groupLineChannelConfiguration.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        environment: lineEnvironment,
+        status: 'ACTIVE',
+      },
+      select: { lastVerifiedAt: true, lastErrorCategory: true, globallyPaused: true },
+    }),
+    db.prisma.lineChannelConfiguration.count({
+      where: {
+        environment: lineEnvironment,
+        status: 'ACTIVE',
+        globallyPaused: false,
+        lastVerifiedAt: { not: null },
+        lastErrorCategory: null,
+      },
+    }),
+  ]);
   if (!configuration) throw new ApplicationError('NOT_FOUND', 'service not found');
   const bunshins = await db.prisma.bunshin.findMany({
     where: {
@@ -96,6 +130,16 @@ export async function fortuneOperatorStatus(
   const termsReady = configuration.legalDocuments.some((item) => item.type === 'TERMS');
   const privacyReady = configuration.legalDocuments.some((item) => item.type === 'PRIVACY');
   const brandReady = Boolean(configuration.brand?.logoUrl && configuration.contactEmail);
+  const lineMode = linePolicy?.mode ?? 'SHARED';
+  const lineReady = isFortuneLineReady({
+    registrationLineEnabled: service.configuration.registration.lineEnabled,
+    mode: lineMode,
+    sharedLineReadyCount,
+    dedicatedPilotEnabled: linePolicy?.pilotEnabled ?? false,
+    dedicatedLastVerifiedAt: dedicatedLine?.lastVerifiedAt ?? null,
+    dedicatedLastErrorCategory: dedicatedLine?.lastErrorCategory ?? null,
+    dedicatedGloballyPaused: dedicatedLine?.globallyPaused ?? true,
+  });
   const bunshinReady = Boolean(
     configuration.fortuneSetting?.bunshin.status === 'ACTIVE' &&
     configuration.fortuneSetting.bunshin.capabilityAssignments.length === 1,
@@ -111,12 +155,14 @@ export async function fortuneOperatorStatus(
     termsReady,
     privacyReady,
     brandReady,
+    lineReady,
     bunshinReady,
     canEnable:
       approvedMeaningCount === FORTUNE_KNOWLEDGE_MEANING_COUNT &&
       termsReady &&
       privacyReady &&
       brandReady &&
+      lineReady &&
       bunshinReady,
     bunshins,
   };
