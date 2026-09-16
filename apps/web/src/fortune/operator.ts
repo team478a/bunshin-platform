@@ -7,6 +7,7 @@ import {
 } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import { resolveManagedServiceContext } from '../services/public-service';
+import { isFortuneServicePackage } from '../services/service-creation-templates';
 
 export interface FortuneOperatorStatus {
   configured: boolean;
@@ -266,6 +267,129 @@ export async function importStandardFortuneKnowledge(input: {
   return importFortuneKnowledge({
     ...input,
     pack: buildStandardFortuneKnowledgePack(),
+  });
+}
+
+export async function installStandardFortunePackage(input: {
+  serviceSlug: string;
+  actorUserId: string;
+}): Promise<{
+  installed: boolean;
+  bunshinId: string;
+  version: number | null;
+  meaningCount: number;
+}> {
+  const service = await scope(input.serviceSlug, input.actorUserId);
+  if (!isFortuneServicePackage(service.configuration.registration.onboardingConfig))
+    throw new ApplicationError('CONFLICT', 'fortune package is not selected for this service');
+
+  const pack = buildStandardFortuneKnowledgePack();
+  const db = await import('@bunshin/database');
+  return db.prisma.$transaction(async (tx) => {
+    const configuration = await tx.serviceConfiguration.findFirst({
+      where: {
+        id: service.configuration.id,
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+      },
+      select: {
+        id: true,
+        fortuneSetting: {
+          select: {
+            bunshinId: true,
+            knowledgeVersions: {
+              where: { status: 'APPROVED' },
+              orderBy: { version: 'desc' },
+              take: 1,
+              select: {
+                version: true,
+                _count: { select: { cardMeanings: { where: { safetyReviewed: true } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!configuration) throw new ApplicationError('NOT_FOUND', 'service not found');
+    if (configuration.fortuneSetting) {
+      const approved = configuration.fortuneSetting.knowledgeVersions[0];
+      return {
+        installed: false,
+        bunshinId: configuration.fortuneSetting.bunshinId,
+        version: approved?.version ?? null,
+        meaningCount: approved?._count.cardMeanings ?? 0,
+      };
+    }
+
+    const bunshin = await tx.bunshin.create({
+      data: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        ownerUserId: input.actorUserId,
+        name: '占い案内パートナー',
+        slug: `fortune-${crypto.randomUUID()}`,
+        type: 'EXPERT',
+        status: 'ACTIVE',
+        objectiveSummary: '毎日のカードを、安心して受け取れる生活のヒントとして案内します。',
+        audienceSummary: '18歳以上の占いサービス参加者へ、恋愛・仕事・人間関係のヒントを届けます。',
+        personalitySummary:
+          '不安をあおらず、結果を断定せず、落ち着いた日本語で小さな行動を提案します。',
+      },
+      select: { id: true },
+    });
+    await tx.bunshinCapabilityAssignment.create({
+      data: {
+        workspaceId: service.workspaceId,
+        bunshinId: bunshin.id,
+        capabilityType: 'FORTUNE',
+        status: 'ACTIVE',
+        assignedByUserId: input.actorUserId,
+      },
+    });
+    const setting = await tx.fortuneServiceSetting.create({
+      data: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: configuration.id,
+        bunshinId: bunshin.id,
+        enabled: false,
+        aiEnabled: false,
+        minimumAge: 18,
+        historyRetentionDays: 90,
+        weeklyNotificationEnabled: false,
+      },
+      select: { id: true },
+    });
+    const knowledge = await tx.fortuneKnowledgeVersion.create({
+      data: {
+        serviceSettingId: setting.id,
+        version: 1,
+        status: 'DRAFT',
+        promptVersion: pack.promptVersion,
+      },
+      select: { id: true },
+    });
+    await tx.fortuneCardMeaning.createMany({
+      data: pack.meanings.map((meaning) => ({
+        knowledgeVersionId: knowledge.id,
+        ...meaning,
+        safetyReviewed: true,
+      })),
+    });
+    await tx.fortuneKnowledgeVersion.update({
+      where: { id: knowledge.id },
+      data: {
+        status: 'APPROVED',
+        approvedByUserId: input.actorUserId,
+        approvedAt: new Date(),
+      },
+    });
+    return {
+      installed: true,
+      bunshinId: bunshin.id,
+      version: 1,
+      meaningCount: pack.meanings.length,
+    };
   });
 }
 
