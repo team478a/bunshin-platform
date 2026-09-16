@@ -97,11 +97,173 @@ export interface TarotDraw {
 export class FortunePolicyError extends Error {
   constructor(
     readonly code:
-      'INVALID_RANDOM_VALUE' | 'INVALID_THEME' | 'INVALID_READING_OUTPUT' | 'UNSAFE_READING_OUTPUT',
+      | 'INVALID_RANDOM_VALUE'
+      | 'INVALID_THEME'
+      | 'INVALID_READING_OUTPUT'
+      | 'UNSAFE_READING_OUTPUT'
+      | 'NOT_AVAILABLE'
+      | 'NOT_PARTICIPANT'
+      | 'KNOWLEDGE_NOT_READY'
+      | 'READING_NOT_FOUND',
     message: string,
   ) {
     super(message);
     this.name = 'FortunePolicyError';
+  }
+}
+
+export type FortuneReadingState = 'GENERATING' | 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED';
+
+export interface FortuneReadingView {
+  id: string;
+  localDate: string;
+  theme: FortuneTheme;
+  cardCode: string;
+  cardNameJa: string;
+  orientation: FortuneOrientation;
+  status: FortuneReadingState;
+  title: string | null;
+  body: string | null;
+  actionStep: string | null;
+  createdAt: Date;
+}
+
+export interface FortuneParticipantView {
+  id: string;
+  ageConfirmedAt: Date;
+  notificationEnabled: boolean;
+}
+
+export type CreateFortuneReadingResult =
+  | { kind: 'READY'; reading: FortuneReadingView }
+  | { kind: 'NOT_AVAILABLE' }
+  | { kind: 'NOT_PARTICIPANT' }
+  | { kind: 'KNOWLEDGE_NOT_READY' };
+
+export interface FortuneRepository {
+  joinParticipant(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    ageConfirmedAt: Date;
+  }): Promise<FortuneParticipantView | null>;
+  findParticipant(input: {
+    serviceSlug: string;
+    actorUserId: string;
+  }): Promise<FortuneParticipantView | null>;
+  findReadingForDate(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    localDate: string;
+  }): Promise<FortuneReadingView | null>;
+  createBasicReading(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    localDate: string;
+    theme: FortuneTheme;
+    cardCode: string;
+    orientation: FortuneOrientation;
+  }): Promise<CreateFortuneReadingResult>;
+  listReadings(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    limit: number;
+  }): Promise<FortuneReadingView[] | null>;
+  findReading(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+  }): Promise<FortuneReadingView | null>;
+  deleteReading(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    deletedAt: Date;
+  }): Promise<boolean>;
+}
+
+export class FortuneDailyReadingService {
+  constructor(
+    private readonly repository: FortuneRepository,
+    private readonly random: SecureRandomSource,
+  ) {}
+
+  async join(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    ageConfirmed: boolean;
+    now?: Date;
+  }) {
+    if (!input.ageConfirmed)
+      throw new FortunePolicyError('NOT_PARTICIPANT', '18歳以上の確認が必要です');
+    const participant = await this.repository.joinParticipant({
+      serviceSlug: input.serviceSlug,
+      actorUserId: input.actorUserId,
+      ageConfirmedAt: input.now ?? new Date(),
+    });
+    if (!participant) throw new FortunePolicyError('NOT_AVAILABLE', '占いサービスを利用できません');
+    return participant;
+  }
+
+  async today(input: { serviceSlug: string; actorUserId: string; now?: Date }) {
+    const participant = await this.repository.findParticipant(input);
+    if (!participant) return { participant: null, reading: null };
+    const reading = await this.repository.findReadingForDate({
+      serviceSlug: input.serviceSlug,
+      actorUserId: input.actorUserId,
+      localDate: toJapanLocalDate(input.now ?? new Date()),
+    });
+    return { participant, reading };
+  }
+
+  async draw(input: { serviceSlug: string; actorUserId: string; theme: unknown; now?: Date }) {
+    const localDate = toJapanLocalDate(input.now ?? new Date());
+    const existing = await this.repository.findReadingForDate({
+      serviceSlug: input.serviceSlug,
+      actorUserId: input.actorUserId,
+      localDate,
+    });
+    if (existing) return existing;
+    const theme = parseFortuneTheme(input.theme);
+    const draw = drawTarotCard(this.random);
+    const result = await this.repository.createBasicReading({
+      serviceSlug: input.serviceSlug,
+      actorUserId: input.actorUserId,
+      localDate,
+      theme,
+      cardCode: draw.card.code,
+      orientation: draw.orientation,
+    });
+    if (result.kind === 'READY') return result.reading;
+    if (result.kind === 'NOT_PARTICIPANT')
+      throw new FortunePolicyError('NOT_PARTICIPANT', '占いへの参加確認が必要です');
+    if (result.kind === 'KNOWLEDGE_NOT_READY')
+      throw new FortunePolicyError('KNOWLEDGE_NOT_READY', '占いの解釈を準備しています');
+    throw new FortunePolicyError('NOT_AVAILABLE', '占いサービスを利用できません');
+  }
+
+  async history(input: { serviceSlug: string; actorUserId: string; limit?: number }) {
+    const readings = await this.repository.listReadings({
+      ...input,
+      limit: Math.min(Math.max(input.limit ?? 90, 1), 90),
+    });
+    if (!readings) throw new FortunePolicyError('NOT_PARTICIPANT', '占いへの参加確認が必要です');
+    return readings;
+  }
+
+  async reading(input: { serviceSlug: string; actorUserId: string; readingId: string }) {
+    const reading = await this.repository.findReading(input);
+    if (!reading) throw new FortunePolicyError('READING_NOT_FOUND', '占い結果が見つかりません');
+    return reading;
+  }
+
+  async delete(input: { serviceSlug: string; actorUserId: string; readingId: string; now?: Date }) {
+    const deleted = await this.repository.deleteReading({
+      serviceSlug: input.serviceSlug,
+      actorUserId: input.actorUserId,
+      readingId: input.readingId,
+      deletedAt: input.now ?? new Date(),
+    });
+    if (!deleted) throw new FortunePolicyError('READING_NOT_FOUND', '占い結果が見つかりません');
   }
 }
 

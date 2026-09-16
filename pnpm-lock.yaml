@@ -50,6 +50,9 @@ importers:
       '@bunshin/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@bunshin/capability-fortune':
+        specifier: workspace:*
+        version: link:../../packages/capability-fortune
       '@bunshin/capability-social':
         specifier: workspace:*
         version: link:../../packages/capability-social
@@ -190,6 +193,9 @@ importers:
       '@bunshin/auth':
         specifier: workspace:*
         version: link:../auth
+      '@bunshin/capability-fortune':
+        specifier: workspace:*
+        version: link:../capability-fortune
       '@bunshin/capability-social':
         specifier: workspace:*
         version: link:../capability-social
