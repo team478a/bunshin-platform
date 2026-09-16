@@ -8,6 +8,8 @@ export const SERVICE_CREATION_TEMPLATE_KEYS = [
 
 export type ServiceCreationTemplateKey = (typeof SERVICE_CREATION_TEMPLATE_KEYS)[number];
 
+export const FORTUNE_INITIAL_MEMBER_LIMIT = 100;
+
 export const SERVICE_CREATION_TEMPLATES = {
   SIDE_HUSTLE_AFFILIATE: {
     label: '副業・アフィリエイト向け',
@@ -85,6 +87,7 @@ export const SERVICE_CREATION_TEMPLATES = {
     fortunePackage: {
       key: 'FORTUNE_DAILY_GUIDANCE',
       version: 1,
+      memberLimit: FORTUNE_INITIAL_MEMBER_LIMIT,
       minimumAge: 18,
       historyRetentionDays: 90,
       weeklyNotificationEnabled: false,
@@ -142,6 +145,7 @@ export const SERVICE_CREATION_TEMPLATES = {
     fortunePackage?: {
       key: 'FORTUNE_DAILY_GUIDANCE';
       version: 1;
+      memberLimit: 100;
       minimumAge: 18;
       historyRetentionDays: 90;
       weeklyNotificationEnabled: false;

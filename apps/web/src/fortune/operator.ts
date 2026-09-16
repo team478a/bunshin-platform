@@ -8,7 +8,10 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
-import { isFortuneServicePackage } from '../services/service-creation-templates';
+import {
+  FORTUNE_INITIAL_MEMBER_LIMIT,
+  isFortuneServicePackage,
+} from '../services/service-creation-templates';
 import { isFortuneLineReady } from './launch-readiness';
 import {
   assessFortuneQuality,
@@ -35,6 +38,9 @@ export interface FortuneOperatorStatus {
   lineReady: boolean;
   bunshinReady: boolean;
   canEnable: boolean;
+  memberLimit: number | null;
+  registeredParticipants: number;
+  remainingParticipantSlots: number | null;
   bunshins: Array<{ id: string; name: string }>;
 }
 
@@ -77,7 +83,15 @@ export async function fortuneOperatorStatus(
   const service = await scope(serviceSlug, actorUserId);
   const db = await import('@bunshin/database');
   const lineEnvironment = currentLineEnvironment();
-  const [configuration, linePolicy, dedicatedLine, sharedLineReadyCount] = await Promise.all([
+  const now = new Date();
+  const [
+    configuration,
+    linePolicy,
+    dedicatedLine,
+    sharedLineReadyCount,
+    commercialSetting,
+    registeredParticipants,
+  ] = await Promise.all([
     db.prisma.serviceConfiguration.findFirst({
       where: {
         id: service.configuration.id,
@@ -150,6 +164,24 @@ export async function fortuneOperatorStatus(
         lastErrorCategory: null,
       },
     }),
+    db.prisma.serviceCommercialSetting.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+        AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+      },
+      select: { includedMemberLimit: true },
+    }),
+    db.prisma.groupMembership.count({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        role: 'PARTICIPANT',
+        status: { in: ['ACTIVE', 'PENDING_APPROVAL'] },
+      },
+    }),
   ]);
   if (!configuration) throw new ApplicationError('NOT_FOUND', 'service not found');
   const bunshins = await db.prisma.bunshin.findMany({
@@ -180,6 +212,7 @@ export async function fortuneOperatorStatus(
     configuration.fortuneSetting?.bunshin.status === 'ACTIVE' &&
     configuration.fortuneSetting.bunshin.capabilityAssignments.length === 1,
   );
+  const memberLimit = commercialSetting?.includedMemberLimit ?? null;
   return {
     configured: Boolean(configuration.fortuneSetting),
     enabled: configuration.fortuneSetting?.enabled ?? false,
@@ -204,6 +237,10 @@ export async function fortuneOperatorStatus(
       brandReady &&
       lineReady &&
       bunshinReady,
+    memberLimit,
+    registeredParticipants,
+    remainingParticipantSlots:
+      memberLimit === null ? null : Math.max(0, memberLimit - registeredParticipants),
     bunshins,
   };
 }
@@ -397,6 +434,24 @@ export async function installStandardFortunePackage(input: {
       },
     });
     if (!configuration) throw new ApplicationError('NOT_FOUND', 'service not found');
+    await tx.serviceCommercialSetting.upsert({
+      where: { groupId: service.serviceId },
+      create: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: configuration.id,
+        planName: '占い限定公開 v1',
+        billingMode: 'FREE',
+        status: 'ACTIVE',
+        monthlyPriceYen: null,
+        includedMemberLimit: FORTUNE_INITIAL_MEMBER_LIMIT,
+        monthlyAiGenerationLimit: null,
+        monthlyImageGenerationLimit: null,
+        monthlyVideoGenerationLimit: null,
+        updatedByUserId: input.actorUserId,
+      },
+      update: {},
+    });
     if (configuration.fortuneSetting) {
       const approved = configuration.fortuneSetting.knowledgeVersions[0];
       return {

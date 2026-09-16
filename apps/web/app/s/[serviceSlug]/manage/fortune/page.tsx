@@ -53,6 +53,19 @@ export default async function FortuneManagementPage({
               <dt>公開状態</dt>
               <dd>{status.enabled ? '公開中' : '停止中'}</dd>
             </div>
+            <div>
+              <dt>登録参加者</dt>
+              <dd>
+                {status.registeredParticipants}人
+                {status.memberLimit === null ? '（上限なし）' : ` / ${status.memberLimit}人`}
+              </dd>
+            </div>
+            {status.remainingParticipantSlots !== null && (
+              <div>
+                <dt>残り参加枠</dt>
+                <dd>{status.remainingParticipantSlots}人</dd>
+              </div>
+            )}
           </dl>
           {!status.canEnable && <p>未完了の項目を準備すると、公開ボタンを押せるようになります。</p>}
         </section>

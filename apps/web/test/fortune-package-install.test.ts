@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   },
   tx: {
     serviceConfiguration: { findFirst: vi.fn() },
+    serviceCommercialSetting: { upsert: vi.fn() },
     bunshin: { create: vi.fn() },
     bunshinCapabilityAssignment: { create: vi.fn() },
     fortuneServiceSetting: { create: vi.fn() },
@@ -82,6 +83,15 @@ describe('fortune package installation', () => {
         }),
       }),
     );
+    expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          billingMode: 'FREE',
+          status: 'ACTIVE',
+          includedMemberLimit: 100,
+        }),
+      }),
+    );
     const meanings = state.tx.fortuneCardMeaning.createMany.mock.calls[0]?.[0].data;
     expect(meanings).toBeDefined();
     if (!meanings) throw new Error('fortune meanings were not created');
@@ -113,6 +123,7 @@ describe('fortune package installation', () => {
     });
     expect(state.tx.bunshin.create).not.toHaveBeenCalled();
     expect(state.tx.fortuneServiceSetting.create).not.toHaveBeenCalled();
+    expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledTimes(1);
   });
 
   it('refuses installation when the service was not created from the fortune package', async () => {

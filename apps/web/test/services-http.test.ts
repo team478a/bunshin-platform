@@ -282,6 +282,7 @@ describe('service admin HTTP', () => {
               fortunePackage: {
                 key: 'FORTUNE_DAILY_GUIDANCE',
                 version: 1,
+                memberLimit: 100,
                 minimumAge: 18,
                 historyRetentionDays: 90,
                 weeklyNotificationEnabled: false,

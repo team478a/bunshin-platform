@@ -20,6 +20,9 @@ const status = (override: Partial<FortuneOperatorStatus> = {}): FortuneOperatorS
   lineReady: true,
   bunshinReady: true,
   canEnable: true,
+  memberLimit: 100,
+  registeredParticipants: 12,
+  remainingParticipantSlots: 88,
   bunshins: [{ id: 'bunshin-1', name: '占い案内パートナー' }],
   ...override,
 });
