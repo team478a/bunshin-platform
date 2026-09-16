@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { fortuneDailyReadingService } from '../fortune/runtime';
+import { recordServiceUse } from '../services/service-membership';
 
 const slug = z
   .string()
@@ -33,10 +34,18 @@ async function actorId() {
   return actor.userId;
 }
 
-async function json<T>(request: Request, run: (actorUserId: string) => Promise<T>, status = 200) {
+async function json<T>(
+  request: Request,
+  serviceSlug: string,
+  run: (actorUserId: string, parsedSlug: string) => Promise<T>,
+  status = 200,
+) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
-    const data = await run(await actorId());
+    const parsedSlug = slug.parse(serviceSlug);
+    const actorUserId = await actorId();
+    await recordServiceUse(parsedSlug, actorUserId);
+    const data = await run(actorUserId, parsedSlug);
     return Response.json(
       { data, requestId },
       { status, headers: { 'cache-control': 'private, no-store' } },
@@ -60,10 +69,11 @@ const requireJson = async <T>(request: Request, schema: z.ZodType<T>) => {
 export const joinFortuneResponse = (request: Request, serviceSlug: string) =>
   json(
     request,
-    async (actorUserId) => {
+    serviceSlug,
+    async (actorUserId, parsedSlug) => {
       const body = await requireJson(request, joinBody);
       return (await fortuneDailyReadingService()).join({
-        serviceSlug: slug.parse(serviceSlug),
+        serviceSlug: parsedSlug,
         actorUserId,
         ageConfirmed: body.ageConfirmed,
       });
@@ -72,9 +82,9 @@ export const joinFortuneResponse = (request: Request, serviceSlug: string) =>
   );
 
 export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =>
-  json(request, async (actorUserId) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) =>
     (await fortuneDailyReadingService()).today({
-      serviceSlug: slug.parse(serviceSlug),
+      serviceSlug: parsedSlug,
       actorUserId,
     }),
   );
@@ -82,10 +92,11 @@ export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =
 export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
   json(
     request,
-    async (actorUserId) => {
+    serviceSlug,
+    async (actorUserId, parsedSlug) => {
       const body = await requireJson(request, drawBody);
       return (await fortuneDailyReadingService()).draw({
-        serviceSlug: slug.parse(serviceSlug),
+        serviceSlug: parsedSlug,
         actorUserId,
         theme: body.theme,
       });
@@ -94,9 +105,9 @@ export const drawFortuneResponse = (request: Request, serviceSlug: string) =>
   );
 
 export const listFortuneHistoryResponse = (request: Request, serviceSlug: string) =>
-  json(request, async (actorUserId) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) =>
     (await fortuneDailyReadingService()).history({
-      serviceSlug: slug.parse(serviceSlug),
+      serviceSlug: parsedSlug,
       actorUserId,
     }),
   );
@@ -106,9 +117,9 @@ export const getFortuneReadingResponse = (
   serviceSlug: string,
   readingId: string,
 ) =>
-  json(request, async (actorUserId) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) =>
     (await fortuneDailyReadingService()).reading({
-      serviceSlug: slug.parse(serviceSlug),
+      serviceSlug: parsedSlug,
       actorUserId,
       readingId: uuid.parse(readingId),
     }),
@@ -119,12 +130,12 @@ export const deleteFortuneReadingResponse = (
   serviceSlug: string,
   readingId: string,
 ) =>
-  json(request, async (actorUserId) => {
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
     requireSameOrigin(request);
     await (
       await fortuneDailyReadingService()
     ).delete({
-      serviceSlug: slug.parse(serviceSlug),
+      serviceSlug: parsedSlug,
       actorUserId,
       readingId: uuid.parse(readingId),
     });

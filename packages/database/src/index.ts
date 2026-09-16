@@ -1,6 +1,7 @@
 import { authorizedVideoPhotos } from './video-photos';
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository } from './fortune';
+export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
 import { hasActiveVideoProjectEntitlement } from './video-project-entitlement';
@@ -11841,6 +11842,21 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
             occurredAt: input.now,
           },
         });
+        if (status === 'ACTIVE')
+          await tx.serviceMembershipEvent.createMany({
+            data: [
+              {
+                workspaceId: configuration.workspaceId,
+                groupId: configuration.groupId,
+                groupMembershipId: membership.id,
+                userId: input.actorUserId,
+                eventType: 'REGISTRATION_COMPLETED',
+                idempotencyKey: `${membership.id}:registration-completed`,
+                occurredAt: input.now,
+              },
+            ],
+            skipDuplicates: true,
+          });
         return groupMembershipRecord(membership);
       },
       { isolationLevel: 'Serializable' },
@@ -11898,12 +11914,29 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
         if (accepted !== requiredIds.length) return null;
       }
 
-      return groupMembershipRecord(
-        await tx.groupMembership.update({
-          where: { id: membership.id },
-          data: { lastUsedAt: input.now },
-        }),
-      );
+      const updated = await tx.groupMembership.update({
+        where: { id: membership.id },
+        data: { lastUsedAt: input.now },
+      });
+      const firstUse = membership.lastUsedAt === null;
+      const eventKey = firstUse
+        ? `${membership.id}:first-service-use`
+        : `${membership.id}:service-revisited:${input.now.toISOString().slice(0, 10)}`;
+      await tx.serviceMembershipEvent.createMany({
+        data: [
+          {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            eventType: firstUse ? 'FIRST_SERVICE_USE' : 'SERVICE_REVISITED',
+            idempotencyKey: eventKey,
+            occurredAt: input.now,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      return groupMembershipRecord(updated);
     });
   }
 
@@ -11941,6 +11974,20 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
           performedByUserId: input.actorUserId,
           occurredAt: input.now,
         },
+      });
+      await tx.serviceMembershipEvent.createMany({
+        data: [
+          {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            eventType: 'SERVICE_WITHDRAWN',
+            idempotencyKey: `${membership.id}:service-withdrawn`,
+            occurredAt: input.now,
+          },
+        ],
+        skipDuplicates: true,
       });
       return groupMembershipRecord(updated);
     });
@@ -12005,6 +12052,20 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
           performedByUserId: input.actorUserId,
           occurredAt: input.now,
         },
+      });
+      await tx.serviceMembershipEvent.createMany({
+        data: [
+          {
+            workspaceId: input.workspaceId,
+            groupId: input.serviceId,
+            groupMembershipId: target.id,
+            userId: target.userId,
+            eventType: 'REGISTRATION_COMPLETED',
+            idempotencyKey: `${target.id}:registration-completed`,
+            occurredAt: input.now,
+          },
+        ],
+        skipDuplicates: true,
       });
       return groupMembershipRecord(updated);
     });
