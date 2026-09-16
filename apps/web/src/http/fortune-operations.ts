@@ -1,5 +1,5 @@
 import 'server-only';
-import { FortunePolicyError } from '@bunshin/capability-fortune';
+import { buildStandardFortuneKnowledgePack, FortunePolicyError } from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import {
   fortuneOperatorStatus,
   importFortuneKnowledge,
+  importStandardFortuneKnowledge,
   setFortuneEnabled,
 } from '../fortune/operator';
 
@@ -21,6 +22,12 @@ const body = z.discriminatedUnion('action', [
       action: z.literal('IMPORT_KNOWLEDGE'),
       bunshinId: z.string().uuid(),
       pack: z.unknown(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('IMPORT_STANDARD_KNOWLEDGE'),
+      bunshinId: z.string().uuid(),
     })
     .strict(),
   z.object({ action: z.literal('SET_ENABLED'), enabled: z.boolean() }).strict(),
@@ -49,7 +56,20 @@ const result = (data: unknown, requestId: string, status = 200) =>
 export async function getFortuneOperationsResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
-    return result(await fortuneOperatorStatus(slug.parse(serviceSlug), await actorId()), requestId);
+    const parsedSlug = slug.parse(serviceSlug);
+    const userId = await actorId();
+    const status = await fortuneOperatorStatus(parsedSlug, userId);
+    if (new URL(request.url).searchParams.get('download') === 'standard')
+      return new Response(JSON.stringify(buildStandardFortuneKnowledgePack(), null, 2), {
+        status: 200,
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-disposition': 'attachment; filename="fortune-standard-ja-v1.json"',
+          'content-type': 'application/json; charset=utf-8',
+          'x-request-id': requestId,
+        },
+      });
+    return result(status, requestId);
   } catch (error) {
     const mapped = toApiError(mappedError(error), requestId);
     return Response.json(mapped.body, {
@@ -76,6 +96,16 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
           actorUserId,
           bunshinId: value.bunshinId,
           pack: value.pack,
+        }),
+        requestId,
+        201,
+      );
+    if (value.action === 'IMPORT_STANDARD_KNOWLEDGE')
+      return result(
+        await importStandardFortuneKnowledge({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          bunshinId: value.bunshinId,
         }),
         requestId,
         201,

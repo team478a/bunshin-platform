@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildStandardFortuneKnowledgePack,
   drawTarotCard,
   FortuneDailyReadingService,
   FortunePolicyError,
@@ -82,6 +83,17 @@ describe('fortune core', () => {
         meanings: [{ ...meanings[0], title: '絶対に成功する日' }, ...meanings.slice(1)],
       }),
     ).toThrowError(/公開できません/);
+  });
+
+  it('provides a complete safe standard pack for an operator to review', () => {
+    const pack = buildStandardFortuneKnowledgePack();
+    expect(pack.promptVersion).toBe('fortune-standard-ja-v1');
+    expect(pack.meanings).toHaveLength(468);
+    expect(
+      new Set(pack.meanings.map((item) => `${item.cardCode}:${item.orientation}:${item.theme}`))
+        .size,
+    ).toBe(468);
+    expect(pack.meanings.every((item) => item.title.length > 0 && item.body.length > 0)).toBe(true);
   });
 });
 

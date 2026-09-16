@@ -76,14 +76,7 @@ export function FortuneOperatorEditor({
   return (
     <div className="fortune-operator-editor">
       <section className="settings-card">
-        <h2>1. 解釈ファイルを準備する</h2>
-        <p>ひな形には、78枚×正位置・逆位置×3テーマの468件が入っています。</p>
-        <button className="button button--secondary" type="button" onClick={downloadTemplate}>
-          JSONひな形を保存する
-        </button>
-      </section>
-      <section className="settings-card">
-        <h2>2. 完成した解釈を読み込む</h2>
+        <h2>1. 担当を選ぶ</h2>
         {bunshins.length === 0 ? (
           <p className="form-error">
             このサービスには利用できる投稿パートナーがいません。先に投稿パートナーを作成してください。
@@ -104,6 +97,50 @@ export function FortuneOperatorEditor({
                 ))}
               </select>
             </label>
+          </>
+        )}
+      </section>
+      <section className="settings-card">
+        <h2>2. 標準解釈を確認して導入する</h2>
+        <p>
+          カードごとの象徴を、恋愛・仕事・人間関係の3テーマに合わせた初期運用向けの468件です。
+          断定、診断、投資判断、販売誘導を含まないよう検査されています。
+        </p>
+        <div className="button-row">
+          <a
+            className="button button--secondary"
+            href={`/api/services/${serviceSlug}/fortune-operations?download=standard`}
+          >
+            全468件を保存して確認する
+          </a>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={busy || !selectedBunshinId}
+            onClick={() =>
+              void run(async () => {
+                await send(serviceSlug, {
+                  action: 'IMPORT_STANDARD_KNOWLEDGE',
+                  bunshinId: selectedBunshinId,
+                });
+                setMessage('標準解釈468件を承認版として保存しました。');
+              })
+            }
+          >
+            {busy ? '保存しています…' : '内容を承認して標準解釈を導入する'}
+          </button>
+        </div>
+      </section>
+      <section className="settings-card">
+        <h2>3. 独自の解釈を使う場合</h2>
+        <p>
+          標準解釈を使わず、独自の文章へ差し替える場合だけ利用します。ひな形には468件すべてが入っています。
+        </p>
+        <button className="button button--secondary" type="button" onClick={downloadTemplate}>
+          空のJSONひな形を保存する
+        </button>
+        {bunshins.length > 0 && (
+          <>
             <label>
               完成したJSONファイル
               <input
@@ -136,7 +173,7 @@ export function FortuneOperatorEditor({
         )}
       </section>
       <section className="settings-card">
-        <h2>3. 利用者への公開</h2>
+        <h2>4. 利用者への公開</h2>
         <p>{enabled ? '現在、占い機能は公開中です。' : '現在、占い機能は停止中です。'}</p>
         <button
           className={`button ${enabled ? 'button--secondary' : 'button--primary'}`}

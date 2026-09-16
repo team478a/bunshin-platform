@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   user: null as { userId: string } | null,
   status: vi.fn(),
   importPack: vi.fn(),
+  importStandard: vi.fn(),
   setEnabled: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
@@ -13,6 +14,7 @@ vi.mock('../src/auth/current-user', () => ({
 vi.mock('../src/fortune/operator', () => ({
   fortuneOperatorStatus: state.status,
   importFortuneKnowledge: state.importPack,
+  importStandardFortuneKnowledge: state.importStandard,
   setFortuneEnabled: state.setEnabled,
 }));
 
@@ -45,6 +47,7 @@ describe('fortune operator HTTP boundary', () => {
     state.user = { userId: 'manager-1' };
     state.status.mockResolvedValue({ configured: false });
     state.importPack.mockResolvedValue({ version: 1, meaningCount: 468 });
+    state.importStandard.mockResolvedValue({ version: 1, meaningCount: 468 });
     state.setEnabled.mockResolvedValue({ enabled: true });
   });
 
@@ -83,6 +86,32 @@ describe('fortune operator HTTP boundary', () => {
       actorUserId: 'manager-1',
       bunshinId: '11111111-1111-4111-8111-111111111111',
       pack,
+    });
+  });
+
+  it('downloads and imports the server-owned standard pack after manager authorization', async () => {
+    const download = await getFortuneOperationsResponse(
+      new Request(
+        'http://localhost:3000/api/services/fortune/fortune-operations?download=standard',
+      ),
+      'fortune',
+    );
+    expect(download.status).toBe(200);
+    expect(download.headers.get('content-disposition')).toContain('fortune-standard-ja-v1.json');
+    expect(((await download.json()) as { meanings: unknown[] }).meanings).toHaveLength(468);
+
+    const response = await updateFortuneOperationsResponse(
+      request({
+        action: 'IMPORT_STANDARD_KNOWLEDGE',
+        bunshinId: '11111111-1111-4111-8111-111111111111',
+      }),
+      'fortune',
+    );
+    expect(response.status).toBe(201);
+    expect(state.importStandard).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
+      bunshinId: '11111111-1111-4111-8111-111111111111',
     });
   });
 });

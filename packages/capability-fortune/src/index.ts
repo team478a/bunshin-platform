@@ -1,4 +1,7 @@
 import type { CapabilityDefinition } from '@bunshin/capability-contract';
+import { buildStandardFortuneKnowledgePackFromDeck } from './standard-knowledge';
+
+export { STANDARD_FORTUNE_PROMPT_VERSION } from './standard-knowledge';
 
 export const FORTUNE_CAPABILITY = {
   type: 'FORTUNE',
@@ -406,6 +409,13 @@ export function parseFortuneKnowledgePack(value: unknown): FortuneKnowledgePack 
 }
 
 export const FORTUNE_KNOWLEDGE_MEANING_COUNT = expectedMeaningKeys.size;
+
+/** 初期運用向けの全468通りの標準解釈。返却前に公開時と同じ安全検査を行う。 */
+export function buildStandardFortuneKnowledgePack(): FortuneKnowledgePack {
+  return parseFortuneKnowledgePack(
+    buildStandardFortuneKnowledgePackFromDeck(TAROT_DECK, FORTUNE_ORIENTATIONS, FORTUNE_THEMES),
+  );
+}
 
 const prohibitedPatterns = [
   /必ず.{0,12}(起こる|叶う|成功する)/u,
