@@ -1,6 +1,8 @@
 import type {
   CreateFortuneReadingResult,
   FortuneOrientation,
+  FortuneAiGenerationClaim,
+  FortuneAiReadingResult,
   FortuneParticipantView,
   FortuneReadingView,
   FortuneRepository,
@@ -243,6 +245,104 @@ export class PrismaFortuneRepository implements FortuneRepository {
       });
       return { kind: 'READY', reading: await view(tx, reading) };
     });
+  }
+
+  async claimAiGeneration(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+  }): Promise<FortuneAiGenerationClaim | null> {
+    return this.db.$transaction(async (tx) => {
+      const scope = await target(tx, input.serviceSlug, input.actorUserId);
+      if (!scope || !scope.aiEnabled) return null;
+      const claimed = await tx.fortuneReading.updateMany({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+          status: 'READY_BASIC',
+        },
+        data: { status: 'GENERATING', failureCode: null },
+      });
+      if (claimed.count !== 1) return null;
+      const reading = await tx.fortuneReading.findFirst({
+        where: {
+          id: input.readingId,
+          serviceSettingId: scope.id,
+          memberUserId: input.actorUserId,
+        },
+      });
+      if (!reading) return null;
+      return {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        bunshinId: scope.bunshinId,
+        reading: await view(tx, reading),
+      };
+    });
+  }
+
+  async completeAiGeneration(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    output: FortuneAiReadingResult;
+  }): Promise<FortuneReadingView | null> {
+    const scope = await target(this.db, input.serviceSlug, input.actorUserId);
+    if (!scope) return null;
+    const updated = await this.db.fortuneReading.updateMany({
+      where: {
+        id: input.readingId,
+        serviceSettingId: scope.id,
+        memberUserId: input.actorUserId,
+        status: 'GENERATING',
+      },
+      data: {
+        status: 'READY_AI',
+        readingText: input.output.body,
+        actionStep: input.output.actionStep,
+        modelName: input.output.model,
+        promptVersion: input.output.promptVersion,
+        failureCode: null,
+        generatedAt: new Date(),
+      },
+    });
+    if (updated.count !== 1) return null;
+    const row = await this.db.fortuneReading.findFirst({
+      where: {
+        id: input.readingId,
+        serviceSettingId: scope.id,
+        memberUserId: input.actorUserId,
+      },
+    });
+    return row ? view(this.db, row) : null;
+  }
+
+  async fallbackAiGeneration(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    failureCode: string;
+  }): Promise<FortuneReadingView | null> {
+    const scope = await target(this.db, input.serviceSlug, input.actorUserId);
+    if (!scope) return null;
+    await this.db.fortuneReading.updateMany({
+      where: {
+        id: input.readingId,
+        serviceSettingId: scope.id,
+        memberUserId: input.actorUserId,
+        status: 'GENERATING',
+      },
+      data: { status: 'READY_BASIC', failureCode: input.failureCode, modelName: null },
+    });
+    const row = await this.db.fortuneReading.findFirst({
+      where: {
+        id: input.readingId,
+        serviceSettingId: scope.id,
+        memberUserId: input.actorUserId,
+      },
+    });
+    return row ? view(this.db, row) : null;
   }
 
   async listReadings(input: {

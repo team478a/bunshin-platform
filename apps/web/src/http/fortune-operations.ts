@@ -9,6 +9,7 @@ import {
   fortuneOperatorStatus,
   importFortuneKnowledge,
   importStandardFortuneKnowledge,
+  setFortuneAiEnabled,
   setFortuneEnabled,
 } from '../fortune/operator';
 
@@ -31,6 +32,7 @@ const body = z.discriminatedUnion('action', [
     })
     .strict(),
   z.object({ action: z.literal('SET_ENABLED'), enabled: z.boolean() }).strict(),
+  z.object({ action: z.literal('SET_AI_ENABLED'), enabled: z.boolean() }).strict(),
 ]);
 
 const mappedError = (error: unknown) => {
@@ -109,6 +111,15 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
         }),
         requestId,
         201,
+      );
+    if (value.action === 'SET_AI_ENABLED')
+      return result(
+        await setFortuneAiEnabled({
+          serviceSlug: parsedSlug,
+          actorUserId,
+          enabled: value.enabled,
+        }),
+        requestId,
       );
     return result(
       await setFortuneEnabled({ serviceSlug: parsedSlug, actorUserId, enabled: value.enabled }),

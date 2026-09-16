@@ -98,6 +98,20 @@ describe('fortune core', () => {
 });
 
 describe('daily fortune flow', () => {
+  const basicReading = {
+    id: 'reading-1',
+    localDate: '2026-09-17',
+    theme: 'LOVE' as const,
+    cardCode: 'MAJOR_17',
+    cardNameJa: '星',
+    orientation: 'UPRIGHT' as const,
+    status: 'READY_BASIC' as const,
+    title: '希望を育てる日',
+    body: '今日は小さな希望を大切にしましょう。',
+    actionStep: '気持ちを一つ言葉にしましょう。',
+    createdAt: new Date('2026-09-17T00:00:00.000Z'),
+  };
+
   it('returns the existing result without drawing again', async () => {
     const reading = {
       id: 'reading-1',
@@ -132,5 +146,93 @@ describe('daily fortune flow', () => {
       }),
     ).resolves.toEqual(reading);
     expect(randomCalls).toBe(0);
+  });
+
+  it('stores a safe AI result after the approved basic result is reserved', async () => {
+    const aiReading = {
+      ...basicReading,
+      status: 'READY_AI' as const,
+      body: '星の象徴を手がかりに、仕事で続けたいことを静かに見直してみましょう。',
+      actionStep: '続けたいことを一つ書きましょう。',
+    };
+    let completed = false;
+    const repository = {
+      findReadingForDate: () => Promise.resolve(null),
+      createBasicReading: () => Promise.resolve({ kind: 'READY', reading: basicReading }),
+      claimAiGeneration: () =>
+        Promise.resolve({
+          workspaceId: 'workspace-1',
+          groupId: 'group-1',
+          bunshinId: 'bunshin-1',
+          reading: basicReading,
+        }),
+      completeAiGeneration: () => {
+        completed = true;
+        return Promise.resolve(aiReading);
+      },
+      fallbackAiGeneration: () => Promise.resolve(basicReading),
+    } as unknown as FortuneRepository;
+    const service = new FortuneDailyReadingService(
+      repository,
+      { nextInt: () => 0 },
+      {
+        generate: () =>
+          Promise.resolve({
+            body: aiReading.body,
+            actionStep: aiReading.actionStep,
+            model: 'test-model',
+            promptVersion: 'test-v1',
+            inputTokens: 10,
+            outputTokens: 20,
+            latencyMs: 30,
+          }),
+      },
+    );
+
+    await expect(
+      service.draw({ serviceSlug: 'fortune', actorUserId: 'user-1', theme: 'LOVE' }),
+    ).resolves.toEqual(aiReading);
+    expect(completed).toBe(true);
+  });
+
+  it('returns the approved basic result when AI output fails the safety check', async () => {
+    let failureCode = '';
+    const repository = {
+      findReadingForDate: () => Promise.resolve(null),
+      createBasicReading: () => Promise.resolve({ kind: 'READY', reading: basicReading }),
+      claimAiGeneration: () =>
+        Promise.resolve({
+          workspaceId: 'workspace-1',
+          groupId: 'group-1',
+          bunshinId: 'bunshin-1',
+          reading: basicReading,
+        }),
+      completeAiGeneration: () => Promise.resolve(null),
+      fallbackAiGeneration: (input: { failureCode: string }) => {
+        failureCode = input.failureCode;
+        return Promise.resolve(basicReading);
+      },
+    } as unknown as FortuneRepository;
+    const service = new FortuneDailyReadingService(
+      repository,
+      { nextInt: () => 0 },
+      {
+        generate: () =>
+          Promise.resolve({
+            body: '絶対に成功します。',
+            actionStep: '今すぐ契約してください。',
+            model: 'test-model',
+            promptVersion: 'test-v1',
+            inputTokens: 10,
+            outputTokens: 20,
+            latencyMs: 30,
+          }),
+      },
+    );
+
+    await expect(
+      service.draw({ serviceSlug: 'fortune', actorUserId: 'user-1', theme: 'LOVE' }),
+    ).resolves.toEqual(basicReading);
+    expect(failureCode).toBe('AI_OUTPUT_REJECTED');
   });
 });
