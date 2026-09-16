@@ -146,6 +146,40 @@ export default async function FortuneManagementPage({
             </section>
             <section className="settings-card">
               <p className="eyebrow">直近{quality.periodDays}日</p>
+              <h2>登録から継続利用まで</h2>
+              <p>
+                利用者の氏名や占い内容を表示せず、サービスへの参加と利用の流れだけを確認できます。
+              </p>
+              <dl>
+                <div>
+                  <dt>新しく登録した人</dt>
+                  <dd>{quality.membershipActivity.registeredParticipants}人</dd>
+                </div>
+                <div>
+                  <dt>初めて利用した人</dt>
+                  <dd>{quality.membershipActivity.firstUseParticipants}人</dd>
+                </div>
+                <div>
+                  <dt>別の日にも利用した人</dt>
+                  <dd>{quality.membershipActivity.revisitedParticipants}人</dd>
+                </div>
+                <div>
+                  <dt>週1回のお知らせを開始した人</dt>
+                  <dd>{quality.membershipActivity.notificationOptInParticipants}人</dd>
+                </div>
+                <div>
+                  <dt>週1回のお知らせを停止した人</dt>
+                  <dd>{quality.membershipActivity.notificationOptOutParticipants}人</dd>
+                </div>
+                <div>
+                  <dt>サービスを退会した人</dt>
+                  <dd>{quality.membershipActivity.withdrawnParticipants}人</dd>
+                </div>
+              </dl>
+              <p>同じ人が期間中に同じ操作を複数回行っても、この画面では1人として数えます。</p>
+            </section>
+            <section className="settings-card">
+              <p className="eyebrow">直近{quality.periodDays}日</p>
               <h2>運用品質：{quality.assessment.label}</h2>
               <p>{quality.assessment.message}</p>
               <dl>

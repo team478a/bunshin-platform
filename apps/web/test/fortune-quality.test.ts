@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assessFortuneQuality,
   fortuneFailureLabel,
+  summarizeFortuneMembershipActivity,
   summarizeFortuneAiOperations,
 } from '../src/fortune/quality';
 
@@ -102,6 +103,28 @@ describe('fortune operations quality', () => {
       pricedCalls: 1,
       unpricedCalls: 1,
       estimatedCostUsdMicros: 2_500,
+    });
+  });
+
+  it('summarizes service membership events by participant without double counting revisits', () => {
+    const result = summarizeFortuneMembershipActivity([
+      { eventType: 'REGISTRATION_COMPLETED', groupMembershipId: 'member-1' },
+      { eventType: 'FIRST_SERVICE_USE', groupMembershipId: 'member-1' },
+      { eventType: 'SERVICE_REVISITED', groupMembershipId: 'member-1' },
+      { eventType: 'SERVICE_REVISITED', groupMembershipId: 'member-1' },
+      { eventType: 'SERVICE_REVISITED', groupMembershipId: 'member-2' },
+      { eventType: 'NOTIFICATION_OPTED_IN', groupMembershipId: 'member-1' },
+      { eventType: 'NOTIFICATION_OPTED_OUT', groupMembershipId: 'member-2' },
+      { eventType: 'SERVICE_WITHDRAWN', groupMembershipId: 'member-3' },
+    ]);
+
+    expect(result).toEqual({
+      registeredParticipants: 1,
+      firstUseParticipants: 1,
+      revisitedParticipants: 2,
+      notificationOptInParticipants: 1,
+      notificationOptOutParticipants: 1,
+      withdrawnParticipants: 1,
     });
   });
 });
