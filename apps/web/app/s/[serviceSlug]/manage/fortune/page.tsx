@@ -114,6 +114,9 @@ export default async function FortuneManagementPage({
         </section>
         <FortuneOperatorEditor
           serviceSlug={serviceSlug}
+          packageReleaseState={status.packageRelease.state}
+          installedPackageVersion={status.packageRelease.installedVersion}
+          currentPackageVersion={status.packageRelease.currentVersion}
           configured={status.configured}
           standardKnowledgeReady={status.approvedMeaningCount === status.requiredMeaningCount}
           enabled={status.enabled}

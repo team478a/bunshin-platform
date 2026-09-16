@@ -59,7 +59,7 @@ describe('service creation templates', () => {
       referralEnabled: false,
       fortunePackage: {
         key: 'FORTUNE_DAILY_GUIDANCE',
-        version: 1,
+        version: 2,
         minimumAge: 18,
         historyRetentionDays: 90,
         weeklyNotificationEnabled: false,
@@ -84,12 +84,17 @@ describe('service creation templates', () => {
     ).toEqual({
       key: 'FORTUNE_DAILY_GUIDANCE',
       installedVersion: 1,
-      currentVersion: 1,
-      state: 'CURRENT',
+      currentVersion: 2,
+      state: 'UPDATE_AVAILABLE',
     });
     expect(
       fortunePackageReleaseStatus({
         fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 2 },
+      }).state,
+    ).toBe('CURRENT');
+    expect(
+      fortunePackageReleaseStatus({
+        fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 3 },
       }).state,
     ).toBe('UNSUPPORTED_NEWER');
     expect(fortunePackageReleaseStatus({ fortunePackage: { version: 1 } }).state).toBe(

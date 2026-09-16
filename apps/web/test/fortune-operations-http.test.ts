@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   importPack: vi.fn(),
   importStandard: vi.fn(),
   installStandard: vi.fn(),
+  updateStandard: vi.fn(),
   setEnabled: vi.fn(),
   setAiEnabled: vi.fn(),
   setWeeklyNotification: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('../src/fortune/operator', () => ({
   importFortuneKnowledge: state.importPack,
   importStandardFortuneKnowledge: state.importStandard,
   installStandardFortunePackage: state.installStandard,
+  updateStandardFortunePackage: state.updateStandard,
   setFortuneEnabled: state.setEnabled,
   setFortuneAiEnabled: state.setAiEnabled,
   setFortuneWeeklyNotification: state.setWeeklyNotification,
@@ -60,6 +62,7 @@ describe('fortune operator HTTP boundary', () => {
       version: 1,
       meaningCount: 468,
     });
+    state.updateStandard.mockResolvedValue({ updated: true, fromVersion: 1, toVersion: 2 });
     state.setEnabled.mockResolvedValue({ enabled: true });
     state.setWeeklyNotification.mockResolvedValue({
       weeklyNotificationEnabled: true,
@@ -139,6 +142,18 @@ describe('fortune operator HTTP boundary', () => {
     );
     expect(response.status).toBe(201);
     expect(state.installStandard).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
+    });
+  });
+
+  it('updates the standard package using only the authenticated service scope', async () => {
+    const response = await updateFortuneOperationsResponse(
+      request({ action: 'UPDATE_STANDARD_PACKAGE' }),
+      'fortune',
+    );
+    expect(response.status).toBe(200);
+    expect(state.updateStandard).toHaveBeenCalledWith({
       serviceSlug: 'fortune',
       actorUserId: 'manager-1',
     });
