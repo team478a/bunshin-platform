@@ -1,6 +1,6 @@
 import { authorizedVideoPhotos } from './video-photos';
 export { PrismaPointExpirationRepository } from './point-expiration';
-export { PrismaFortuneRepository } from './fortune';
+export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
