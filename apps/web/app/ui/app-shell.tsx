@@ -28,6 +28,7 @@ const adminNavigationGroups = [
       { href: '/admin/organizations', label: '運営団体' },
       { href: '/admin/groups', label: 'プロジェクト管理' },
       { href: '/admin/services', label: '公開設定' },
+      { href: '/admin/fortune', label: '占いパッケージ' },
       { href: '/admin/activity-rules', label: '続けやすさのルール' },
       { href: '/admin/badges', label: 'グループバッジ確認' },
       { href: '/admin/badges/rewards', label: 'バッジ特典運用' },
