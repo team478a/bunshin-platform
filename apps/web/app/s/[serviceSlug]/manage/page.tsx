@@ -101,6 +101,11 @@ const sections = [
     description: '参加者が確認する利用規約とプライバシーポリシーを管理します。',
     href: 'legal',
   },
+  {
+    title: '占いの公開準備',
+    description: 'カード解釈の完全性と安全性を確認し、占い機能の公開・停止を管理します。',
+    href: 'fortune',
+  },
 ] as const;
 
 const businessDailySectionHrefs = new Set<string>([

@@ -3,6 +3,9 @@ import {
   drawTarotCard,
   FortuneDailyReadingService,
   FortunePolicyError,
+  FORTUNE_ORIENTATIONS,
+  FORTUNE_THEMES,
+  parseFortuneKnowledgePack,
   parseFortuneTheme,
   TAROT_DECK,
   toJapanLocalDate,
@@ -44,6 +47,39 @@ describe('fortune core', () => {
       validateFortuneReadingOutput({
         body: '絶対に成功します。',
         actionStep: '今すぐ契約してください。',
+      }),
+    ).toThrowError(/公開できません/);
+  });
+
+  it('accepts only a complete and unique 468-meaning knowledge pack', () => {
+    const meanings = TAROT_DECK.flatMap((card) =>
+      FORTUNE_ORIENTATIONS.flatMap((orientation) =>
+        FORTUNE_THEMES.map((theme) => ({
+          cardCode: card.code,
+          orientation,
+          theme,
+          title: `${card.nameJa}のヒント`,
+          body: '今日は自分の気持ちを落ち着いて見つめる日にしましょう。',
+          actionStep: '今できる小さな行動を一つ書き出しましょう。',
+        })),
+      ),
+    );
+    expect(
+      parseFortuneKnowledgePack({ promptVersion: 'basic-v1', meanings }).meanings,
+    ).toHaveLength(468);
+    expect(() =>
+      parseFortuneKnowledgePack({ promptVersion: 'basic-v1', meanings: meanings.slice(1) }),
+    ).toThrowError(/468件/);
+    expect(() =>
+      parseFortuneKnowledgePack({
+        promptVersion: 'basic-v1',
+        meanings: [...meanings.slice(0, -1), meanings[0]],
+      }),
+    ).toThrowError(/重複/);
+    expect(() =>
+      parseFortuneKnowledgePack({
+        promptVersion: 'basic-v1',
+        meanings: [{ ...meanings[0], title: '絶対に成功する日' }, ...meanings.slice(1)],
       }),
     ).toThrowError(/公開できません/);
   });
