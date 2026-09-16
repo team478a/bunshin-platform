@@ -1,12 +1,11 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { fortuneOperatorStatus } from '../../../../../src/fortune/operator';
+import { buildFortuneLaunchSteps } from '../../../../../src/fortune/launch-readiness';
 import { PublicShell } from '../../../../ui/public-shell';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
 
 export const dynamic = 'force-dynamic';
-
-const readinessLabel = (ready: boolean) => (ready ? '準備済み' : '未完了');
 
 export default async function FortuneManagementPage({
   params,
@@ -18,6 +17,8 @@ export default async function FortuneManagementPage({
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/fortune`)}`);
   const status = await fortuneOperatorStatus(serviceSlug, actor.userId).catch(() => null);
   if (!status) notFound();
+  const launchSteps = buildFortuneLaunchSteps(serviceSlug, status);
+  const completedSteps = launchSteps.filter((step) => step.ready).length;
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
@@ -27,30 +28,20 @@ export default async function FortuneManagementPage({
           <p>解釈の不足や危険な表現を検査し、すべて揃った後にだけ公開できます。</p>
         </header>
         <section className="settings-card fortune-readiness-card">
-          <h2>準備状況</h2>
+          <h2>公開までの準備 {completedSteps}/5</h2>
+          <p>「未完了」の項目を上から順番に設定してください。</p>
+          <ol className="form-stack">
+            {launchSteps.map((step) => (
+              <li key={step.key}>
+                <strong>
+                  {step.ready ? '✓ 準備済み' : '未完了'}：{step.title}
+                </strong>
+                <p>{step.description}</p>
+                {!step.ready && <a href={step.href}>{step.actionLabel}</a>}
+              </li>
+            ))}
+          </ol>
           <dl>
-            <div>
-              <dt>承認済みの解釈</dt>
-              <dd>
-                {status.approvedMeaningCount}/{status.requiredMeaningCount}件
-              </dd>
-            </div>
-            <div>
-              <dt>利用規約</dt>
-              <dd>{readinessLabel(status.termsReady)}</dd>
-            </div>
-            <div>
-              <dt>プライバシーポリシー</dt>
-              <dd>{readinessLabel(status.privacyReady)}</dd>
-            </div>
-            <div>
-              <dt>ロゴ・問い合わせ先</dt>
-              <dd>{readinessLabel(status.brandReady)}</dd>
-            </div>
-            <div>
-              <dt>占い担当の投稿パートナー</dt>
-              <dd>{readinessLabel(status.bunshinReady)}</dd>
-            </div>
             <div>
               <dt>公開状態</dt>
               <dd>{status.enabled ? '公開中' : '停止中'}</dd>
