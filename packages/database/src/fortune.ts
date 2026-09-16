@@ -114,7 +114,10 @@ export class PrismaFortuneRepository implements FortuneRepository {
         where: {
           serviceSettingId_userId: { serviceSettingId: scope.id, userId: input.actorUserId },
         },
-        update: { withdrawnAt: null },
+        update: {
+          groupMembershipId: membership.id,
+          ageConfirmedAt: input.ageConfirmedAt,
+        },
         create: {
           workspaceId: scope.workspaceId,
           groupId: scope.groupId,
@@ -127,7 +130,6 @@ export class PrismaFortuneRepository implements FortuneRepository {
       return {
         id: participant.id,
         ageConfirmedAt: participant.ageConfirmedAt,
-        notificationEnabled: participant.notificationEnabled,
       };
     });
   }
@@ -139,13 +141,12 @@ export class PrismaFortuneRepository implements FortuneRepository {
     const scope = await target(this.db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
     const participant = await this.db.fortuneParticipant.findFirst({
-      where: { serviceSettingId: scope.id, userId: input.actorUserId, withdrawnAt: null },
+      where: { serviceSettingId: scope.id, userId: input.actorUserId },
     });
     return participant
       ? {
           id: participant.id,
           ageConfirmedAt: participant.ageConfirmedAt,
-          notificationEnabled: participant.notificationEnabled,
         }
       : null;
   }
@@ -158,7 +159,7 @@ export class PrismaFortuneRepository implements FortuneRepository {
     const scope = await target(this.db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
     const participant = await this.db.fortuneParticipant.findFirst({
-      where: { serviceSettingId: scope.id, userId: input.actorUserId, withdrawnAt: null },
+      where: { serviceSettingId: scope.id, userId: input.actorUserId },
     });
     if (!participant) return null;
     const reading = await this.db.fortuneReading.findUnique({
@@ -185,7 +186,7 @@ export class PrismaFortuneRepository implements FortuneRepository {
       const scope = await target(tx, input.serviceSlug, input.actorUserId);
       if (!scope) return { kind: 'NOT_AVAILABLE' };
       const participant = await tx.fortuneParticipant.findFirst({
-        where: { serviceSettingId: scope.id, userId: input.actorUserId, withdrawnAt: null },
+        where: { serviceSettingId: scope.id, userId: input.actorUserId },
       });
       if (!participant) return { kind: 'NOT_PARTICIPANT' };
       const knowledge = await tx.fortuneKnowledgeVersion.findFirst({
@@ -353,7 +354,7 @@ export class PrismaFortuneRepository implements FortuneRepository {
     const scope = await target(this.db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
     const participant = await this.db.fortuneParticipant.findFirst({
-      where: { serviceSettingId: scope.id, userId: input.actorUserId, withdrawnAt: null },
+      where: { serviceSettingId: scope.id, userId: input.actorUserId },
     });
     if (!participant) return null;
     const cutoff = new Date();

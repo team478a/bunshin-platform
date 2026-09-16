@@ -49,7 +49,6 @@ describe('fortune HTTP contract', () => {
     state.join.mockResolvedValue({
       id: 'participant-1',
       ageConfirmedAt: new Date(),
-      notificationEnabled: false,
     });
     state.draw.mockResolvedValue({ id: 'reading-1' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });

@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260916150000_add_service_membership_events';
+export const LATEST_DATABASE_MIGRATION = '20260916160000_align_fortune_membership';
