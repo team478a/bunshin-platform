@@ -10,13 +10,14 @@ const state = vi.hoisted(() => ({
       id: '33333333-3333-4333-8333-333333333333',
       registration: {
         onboardingConfig: {
-          fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 1 },
+          fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 2 },
         },
       },
     },
   },
   tx: {
     serviceConfiguration: { findFirst: vi.fn() },
+    serviceRegistrationPolicy: { update: vi.fn() },
     serviceCommercialSetting: { upsert: vi.fn() },
     bunshin: { create: vi.fn() },
     bunshinCapabilityAssignment: { create: vi.fn() },
@@ -39,16 +40,22 @@ vi.mock('@bunshin/database', () => ({
   },
 }));
 
-import { installStandardFortunePackage } from '../src/fortune/operator';
+import {
+  installStandardFortunePackage,
+  updateStandardFortunePackage,
+} from '../src/fortune/operator';
 
 describe('fortune package installation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.service.configuration.registration.onboardingConfig = {
-      fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 1 },
+      fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 2 },
     };
     state.tx.serviceConfiguration.findFirst.mockResolvedValue({
       id: state.service.configuration.id,
+      registration: {
+        onboardingConfig: state.service.configuration.registration.onboardingConfig,
+      },
       fortuneSetting: null,
     });
     state.tx.bunshin.create.mockResolvedValue({ id: '44444444-4444-4444-8444-444444444444' });
@@ -99,11 +106,23 @@ describe('fortune package installation', () => {
     expect(meanings.every((meaning: { safetyReviewed: boolean }) => meaning.safetyReviewed)).toBe(
       true,
     );
+    expect(state.tx.serviceRegistrationPolicy.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          onboardingConfig: expect.objectContaining({
+            fortunePackage: expect.objectContaining({ version: 2 }),
+          }),
+        },
+      }),
+    );
   });
 
   it('does not create duplicates when the package is already installed', async () => {
     state.tx.serviceConfiguration.findFirst.mockResolvedValue({
       id: state.service.configuration.id,
+      registration: {
+        onboardingConfig: state.service.configuration.registration.onboardingConfig,
+      },
       fortuneSetting: {
         bunshinId: '44444444-4444-4444-8444-444444444444',
         knowledgeVersions: [{ version: 1, _count: { cardMeanings: 468 } }],
@@ -124,6 +143,56 @@ describe('fortune package installation', () => {
     expect(state.tx.bunshin.create).not.toHaveBeenCalled();
     expect(state.tx.fortuneServiceSetting.create).not.toHaveBeenCalled();
     expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates an installed v1 package without replacing operator settings or custom metadata', async () => {
+    const legacyConfig = {
+      welcomeTitle: '独自の案内',
+      fortunePackage: {
+        key: 'FORTUNE_DAILY_GUIDANCE',
+        version: 1,
+        customLabel: '保持する',
+      },
+    };
+    state.service.configuration.registration.onboardingConfig = legacyConfig;
+    state.tx.serviceConfiguration.findFirst.mockResolvedValue({
+      id: state.service.configuration.id,
+      registration: {
+        onboardingConfig: state.service.configuration.registration.onboardingConfig,
+      },
+      fortuneSetting: { id: '55555555-5555-4555-8555-555555555555' },
+    });
+
+    await expect(
+      updateStandardFortunePackage({
+        serviceSlug: 'daily-fortune',
+        actorUserId: '77777777-7777-4777-8777-777777777777',
+      }),
+    ).resolves.toEqual({ updated: true, fromVersion: 1, toVersion: 2 });
+    expect(state.tx.serviceRegistrationPolicy.update).toHaveBeenCalledWith({
+      where: { configurationId: state.service.configuration.id },
+      data: {
+        onboardingConfig: {
+          welcomeTitle: '独自の案内',
+          fortunePackage: {
+            key: 'FORTUNE_DAILY_GUIDANCE',
+            version: 2,
+            customLabel: '保持する',
+          },
+        },
+      },
+    });
+    expect(state.tx.serviceCommercialSetting.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not rewrite a package that is already current', async () => {
+    await expect(
+      updateStandardFortunePackage({
+        serviceSlug: 'daily-fortune',
+        actorUserId: '77777777-7777-4777-8777-777777777777',
+      }),
+    ).resolves.toEqual({ updated: false, fromVersion: 2, toVersion: 2 });
+    expect(state.tx.serviceRegistrationPolicy.update).not.toHaveBeenCalled();
   });
 
   it('refuses installation when the service was not created from the fortune package', async () => {

@@ -13,6 +13,7 @@ import {
   setFortuneAiEnabled,
   setFortuneEnabled,
   setFortuneWeeklyNotification,
+  updateStandardFortunePackage,
 } from '../fortune/operator';
 
 const slug = z
@@ -21,6 +22,7 @@ const slug = z
   .max(80);
 const body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('INSTALL_STANDARD_PACKAGE') }).strict(),
+  z.object({ action: z.literal('UPDATE_STANDARD_PACKAGE') }).strict(),
   z
     .object({
       action: z.literal('IMPORT_KNOWLEDGE'),
@@ -110,6 +112,14 @@ export async function updateFortuneOperationsResponse(request: Request, serviceS
         }),
         requestId,
         201,
+      );
+    if (value.action === 'UPDATE_STANDARD_PACKAGE')
+      return result(
+        await updateStandardFortunePackage({
+          serviceSlug: parsedSlug,
+          actorUserId,
+        }),
+        requestId,
       );
     if (value.action === 'IMPORT_KNOWLEDGE')
       return result(

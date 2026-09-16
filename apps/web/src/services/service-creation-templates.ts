@@ -10,7 +10,7 @@ export type ServiceCreationTemplateKey = (typeof SERVICE_CREATION_TEMPLATE_KEYS)
 
 export const FORTUNE_INITIAL_MEMBER_LIMIT = 100;
 export const FORTUNE_PACKAGE_KEY = 'FORTUNE_DAILY_GUIDANCE' as const;
-export const CURRENT_FORTUNE_PACKAGE_VERSION = 1;
+export const CURRENT_FORTUNE_PACKAGE_VERSION = 2;
 
 export type FortunePackageReleaseState =
   'CURRENT' | 'UPDATE_AVAILABLE' | 'UNSUPPORTED_NEWER' | 'NOT_SELECTED';
@@ -156,8 +156,8 @@ export const SERVICE_CREATION_TEMPLATES = {
     };
     fortunePackage?: {
       key: typeof FORTUNE_PACKAGE_KEY;
-      version: 1;
-      memberLimit: 100;
+      version: typeof CURRENT_FORTUNE_PACKAGE_VERSION;
+      memberLimit: typeof FORTUNE_INITIAL_MEMBER_LIMIT;
       minimumAge: 18;
       historyRetentionDays: 90;
       weeklyNotificationEnabled: false;

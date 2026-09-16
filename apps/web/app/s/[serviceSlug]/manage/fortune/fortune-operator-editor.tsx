@@ -16,6 +16,9 @@ async function send(serviceSlug: string, value: unknown) {
 
 export function FortuneOperatorEditor({
   serviceSlug,
+  packageReleaseState,
+  installedPackageVersion,
+  currentPackageVersion,
   configured,
   standardKnowledgeReady,
   enabled,
@@ -29,6 +32,9 @@ export function FortuneOperatorEditor({
   bunshins,
 }: {
   serviceSlug: string;
+  packageReleaseState: 'CURRENT' | 'UPDATE_AVAILABLE' | 'UNSUPPORTED_NEWER' | 'NOT_SELECTED';
+  installedPackageVersion: number | null;
+  currentPackageVersion: number;
   configured: boolean;
   standardKnowledgeReady: boolean;
   enabled: boolean;
@@ -95,6 +101,28 @@ export function FortuneOperatorEditor({
 
   return (
     <div className="fortune-operator-editor">
+      {configured && packageReleaseState === 'UPDATE_AVAILABLE' && (
+        <section className="settings-card">
+          <h2>占いパッケージを更新する</h2>
+          <p>
+            導入中のv{installedPackageVersion}をv{currentPackageVersion}
+            へ更新できます。公開状態、独自の解釈、AI、通知設定はそのまま保持されます。
+          </p>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await send(serviceSlug, { action: 'UPDATE_STANDARD_PACKAGE' });
+                setMessage(`占いパッケージをv${currentPackageVersion}へ更新しました。`);
+              })
+            }
+          >
+            {busy ? '更新しています…' : `v${currentPackageVersion}へ更新する`}
+          </button>
+        </section>
+      )}
       {!configured && (
         <section className="settings-card">
           <h2>最初に、占いパッケージを準備する</h2>

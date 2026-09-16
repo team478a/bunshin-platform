@@ -9,7 +9,9 @@ import { ApplicationError } from '@bunshin/shared';
 import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
 import {
+  CURRENT_FORTUNE_PACKAGE_VERSION,
   FORTUNE_INITIAL_MEMBER_LIMIT,
+  FORTUNE_PACKAGE_KEY,
   fortunePackageReleaseStatus,
   isFortuneServicePackage,
   type FortunePackageReleaseStatus,
@@ -427,6 +429,7 @@ export async function installStandardFortunePackage(input: {
       },
       select: {
         id: true,
+        registration: { select: { onboardingConfig: true } },
         fortuneSetting: {
           select: {
             bunshinId: true,
@@ -535,11 +538,111 @@ export async function installStandardFortunePackage(input: {
         approvedAt: new Date(),
       },
     });
+    if (!configuration.registration)
+      throw new ApplicationError('CONFLICT', 'fortune package metadata is unavailable');
+    await tx.serviceRegistrationPolicy.update({
+      where: { configurationId: configuration.id },
+      data: {
+        onboardingConfig: packageConfigAtCurrentVersion(
+          configuration.registration.onboardingConfig,
+        ),
+      },
+    });
     return {
       installed: true,
       bunshinId: bunshin.id,
       version: 1,
       meaningCount: pack.meanings.length,
+    };
+  });
+}
+
+function packageConfigAtCurrentVersion(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new ApplicationError('CONFLICT', 'fortune package metadata is unavailable');
+  const onboarding = value as Record<string, unknown>;
+  const selected = onboarding['fortunePackage'];
+  if (!selected || typeof selected !== 'object' || Array.isArray(selected))
+    throw new ApplicationError('CONFLICT', 'fortune package metadata is unavailable');
+  return {
+    ...onboarding,
+    fortunePackage: {
+      ...(selected as Record<string, unknown>),
+      key: FORTUNE_PACKAGE_KEY,
+      version: CURRENT_FORTUNE_PACKAGE_VERSION,
+    },
+  };
+}
+
+export async function updateStandardFortunePackage(input: {
+  serviceSlug: string;
+  actorUserId: string;
+}): Promise<{ updated: boolean; fromVersion: number; toVersion: number }> {
+  const service = await scope(input.serviceSlug, input.actorUserId);
+  const release = fortunePackageReleaseStatus(service.configuration.registration.onboardingConfig);
+  if (release.state === 'NOT_SELECTED' || release.installedVersion === null)
+    throw new ApplicationError('CONFLICT', 'fortune package is not selected for this service');
+  if (release.state === 'UNSUPPORTED_NEWER')
+    throw new ApplicationError('CONFLICT', 'installed fortune package is newer than this system');
+  if (release.state === 'CURRENT')
+    return {
+      updated: false,
+      fromVersion: release.installedVersion,
+      toVersion: release.currentVersion,
+    };
+
+  const db = await import('@bunshin/database');
+  return db.prisma.$transaction(async (tx) => {
+    const configuration = await tx.serviceConfiguration.findFirst({
+      where: {
+        id: service.configuration.id,
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+      },
+      select: {
+        id: true,
+        registration: { select: { onboardingConfig: true } },
+        fortuneSetting: { select: { id: true } },
+      },
+    });
+    if (!configuration?.fortuneSetting)
+      throw new ApplicationError(
+        'CONFLICT',
+        'install the fortune package before applying an update',
+      );
+
+    await tx.serviceCommercialSetting.upsert({
+      where: { groupId: service.serviceId },
+      create: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: configuration.id,
+        planName: '占い限定公開 v1',
+        billingMode: 'FREE',
+        status: 'ACTIVE',
+        monthlyPriceYen: null,
+        includedMemberLimit: FORTUNE_INITIAL_MEMBER_LIMIT,
+        monthlyAiGenerationLimit: null,
+        monthlyImageGenerationLimit: null,
+        monthlyVideoGenerationLimit: null,
+        updatedByUserId: input.actorUserId,
+      },
+      update: {},
+    });
+    if (!configuration.registration)
+      throw new ApplicationError('CONFLICT', 'fortune package metadata is unavailable');
+    await tx.serviceRegistrationPolicy.update({
+      where: { configurationId: configuration.id },
+      data: {
+        onboardingConfig: packageConfigAtCurrentVersion(
+          configuration.registration.onboardingConfig,
+        ),
+      },
+    });
+    return {
+      updated: true,
+      fromVersion: release.installedVersion!,
+      toVersion: release.currentVersion,
     };
   });
 }

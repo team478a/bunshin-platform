@@ -281,7 +281,7 @@ describe('service admin HTTP', () => {
               templateKey: 'FORTUNE_DAILY_GUIDANCE',
               fortunePackage: {
                 key: 'FORTUNE_DAILY_GUIDANCE',
-                version: 1,
+                version: 2,
                 memberLimit: 100,
                 minimumAge: 18,
                 historyRetentionDays: 90,
