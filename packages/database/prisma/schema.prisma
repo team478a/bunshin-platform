@@ -2068,6 +2068,7 @@ model OrganizationEntitlement {
   dedicatedLineEnabled        Boolean   @default(false) @map("dedicated_line_enabled")
   oemEnabled                  Boolean   @default(false) @map("oem_enabled")
   customDomainEnabled         Boolean   @default(false) @map("custom_domain_enabled")
+  fortunePackageEnabled       Boolean   @default(false) @map("fortune_package_enabled")
   suspended                   Boolean   @default(false)
   startsAt                    DateTime? @map("starts_at") @db.Timestamptz(6)
   endsAt                      DateTime? @map("ends_at") @db.Timestamptz(6)

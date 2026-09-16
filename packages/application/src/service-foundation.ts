@@ -53,6 +53,7 @@ export interface ServiceFoundationRepository {
     groupId?: string;
     actorUserId: string;
     reason: string;
+    requiredFeature?: 'FORTUNE_PACKAGE';
     configuration: Omit<ServiceFoundationRecord, 'id' | 'workspaceId' | 'groupId'>;
   }): Promise<ServiceFoundationRecord | null>;
   save(input: {

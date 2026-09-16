@@ -11258,6 +11258,7 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
           maxGroups: true,
           maxServices: true,
           oemEnabled: true,
+          fortunePackageEnabled: true,
           suspended: true,
           startsAt: true,
           endsAt: true,
@@ -11280,6 +11281,11 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
       if (!input.groupId && entitlement?.maxGroups && groupCount >= entitlement.maxGroups)
         return null;
       if (entitlement?.maxServices && serviceCount >= entitlement.maxServices) return null;
+      if (
+        input.requiredFeature === 'FORTUNE_PACKAGE' &&
+        entitlement?.fortunePackageEnabled !== true
+      )
+        return null;
       const value = input.configuration;
       if (entitlement && !entitlement.oemEnabled && !value.poweredByEnabled) return null;
       const group = existingGroup

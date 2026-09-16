@@ -18,6 +18,7 @@ const schema = z.object({
   dedicatedLineEnabled: z.string().optional(),
   oemEnabled: z.string().optional(),
   customDomainEnabled: z.string().optional(),
+  fortunePackageEnabled: z.string().optional(),
   suspended: z.string().optional(),
   startsAt: z.string().max(40),
   endsAt: z.string().max(40),
@@ -73,6 +74,7 @@ async function saveEntitlement(formData: FormData) {
       dedicatedLineEnabled: input.data.dedicatedLineEnabled === 'on',
       oemEnabled: input.data.oemEnabled === 'on',
       customDomainEnabled: input.data.customDomainEnabled === 'on',
+      fortunePackageEnabled: input.data.fortunePackageEnabled === 'on',
       suspended: input.data.suspended === 'on',
       startsAt,
       endsAt,
@@ -98,6 +100,7 @@ async function saveEntitlement(formData: FormData) {
             dedicatedLineEnabled: previous.dedicatedLineEnabled,
             oemEnabled: previous.oemEnabled,
             customDomainEnabled: previous.customDomainEnabled,
+            fortunePackageEnabled: previous.fortunePackageEnabled,
             suspended: previous.suspended,
             startsAt: previous.startsAt?.toISOString() ?? null,
             endsAt: previous.endsAt?.toISOString() ?? null,
@@ -254,6 +257,14 @@ export default async function OrganizationLimitsPage({
               defaultChecked={setting?.customDomainEnabled ?? false}
             />{' '}
             独自ドメインを許可
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              name="fortunePackageEnabled"
+              defaultChecked={setting?.fortunePackageEnabled ?? false}
+            />{' '}
+            占いパッケージの新規導入を許可
           </label>
           <label>
             <input type="checkbox" name="suspended" defaultChecked={setting?.suspended ?? false} />{' '}

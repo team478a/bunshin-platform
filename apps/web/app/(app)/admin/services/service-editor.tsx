@@ -12,7 +12,7 @@ export function ServiceEditor({
   defaultWorkspaceId,
   defaultGroupId,
 }: {
-  workspaces: { id: string; name: string }[];
+  workspaces: { id: string; name: string; fortunePackageEnabled: boolean }[];
   groups: { id: string; workspaceId: string; name: string }[];
   defaultWorkspaceId?: string;
   defaultGroupId?: string;
@@ -26,6 +26,8 @@ export function ServiceEditor({
   const template = SERVICE_CREATION_TEMPLATES[templateKey];
   const businessFreeCreation = templateKey === 'BUSINESS_DAILY_IDEAS';
   const fortuneCreation = templateKey === 'FORTUNE_DAILY_GUIDANCE';
+  const fortunePackageAllowed =
+    workspaces.find((workspace) => workspace.id === workspaceId)?.fortunePackageEnabled ?? false;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -146,6 +148,11 @@ export function ServiceEditor({
           <p>
             サービス作成時は占い、AI個別化、週次通知を停止した状態にします。作成後の「占いの公開準備」で、担当、標準解釈、利用規約、プライバシー、ロゴ、問い合わせ先を確認してから公開します。
           </p>
+          {!fortunePackageAllowed ? (
+            <p className="notice notice--danger">
+              この運営団体では占いパッケージを契約していません。先に「契約・利用上限」で新規導入を許可してください。
+            </p>
+          ) : null}
         </div>
       )}
       <form key={templateKey} onSubmit={(event) => void submit(event)} className="admin-form-grid">
@@ -299,7 +306,7 @@ export function ServiceEditor({
           作成理由
           <input name="reason" required maxLength={1000} placeholder="例：プロジェクトの公開準備" />
         </label>
-        <button type="submit" disabled={saving}>
+        <button type="submit" disabled={saving || (fortuneCreation && !fortunePackageAllowed)}>
           {saving ? '作成中…' : '公開設定を作成する'}
         </button>
       </form>
