@@ -25,6 +25,7 @@ export function ServiceEditor({
   const [groupId, setGroupId] = useState(defaultGroupId ?? '');
   const template = SERVICE_CREATION_TEMPLATES[templateKey];
   const businessFreeCreation = templateKey === 'BUSINESS_DAILY_IDEAS';
+  const fortuneCreation = templateKey === 'FORTUNE_DAILY_GUIDANCE';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,6 +140,14 @@ export function ServiceEditor({
           <p>初回案内と質問は、サービス作成後に必要なものだけ設定できます。</p>
         )}
       </div>
+      {fortuneCreation && (
+        <div className="service-template-preview">
+          <h3>占いは安全確認後に公開します</h3>
+          <p>
+            サービス作成時は占い、AI個別化、週次通知を停止した状態にします。作成後の「占いの公開準備」で、担当、標準解釈、利用規約、プライバシー、ロゴ、問い合わせ先を確認してから公開します。
+          </p>
+        </div>
+      )}
       <form key={templateKey} onSubmit={(event) => void submit(event)} className="admin-form-grid">
         <input type="hidden" name="templateKey" value={templateKey} />
         <label>
