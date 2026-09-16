@@ -287,3 +287,27 @@ export async function setFortuneEnabled(input: {
   if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
   return { enabled: input.enabled };
 }
+
+export async function setFortuneAiEnabled(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  enabled: boolean;
+}) {
+  const status = await fortuneOperatorStatus(input.serviceSlug, input.actorUserId);
+  if (!status.configured) throw new ApplicationError('CONFLICT', 'fortune is not configured');
+  if (input.enabled) {
+    if (!status.enabled)
+      throw new ApplicationError('CONFLICT', 'publish fortune before enabling AI');
+    const { resolveOpenAiRuntimeConfiguration } =
+      await import('../ai/runtime-provider-configuration');
+    await resolveOpenAiRuntimeConfiguration();
+  }
+  const service = await scope(input.serviceSlug, input.actorUserId);
+  const db = await import('@bunshin/database');
+  const updated = await db.prisma.fortuneServiceSetting.updateMany({
+    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+    data: { aiEnabled: input.enabled },
+  });
+  if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  return { aiEnabled: input.enabled };
+}

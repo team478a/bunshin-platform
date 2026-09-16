@@ -61,6 +61,7 @@ export default async function FortuneManagementPage({
         <FortuneOperatorEditor
           serviceSlug={serviceSlug}
           enabled={status.enabled}
+          aiEnabled={status.aiEnabled}
           canEnable={status.canEnable}
           bunshinId={status.bunshinId}
           bunshins={status.bunshins}

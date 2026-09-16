@@ -17,12 +17,14 @@ async function send(serviceSlug: string, value: unknown) {
 export function FortuneOperatorEditor({
   serviceSlug,
   enabled,
+  aiEnabled,
   canEnable,
   bunshinId,
   bunshins,
 }: {
   serviceSlug: string;
   enabled: boolean;
+  aiEnabled: boolean;
   canEnable: boolean;
   bunshinId: string | null;
   bunshins: Array<{ id: string; name: string }>;
@@ -187,6 +189,27 @@ export function FortuneOperatorEditor({
           }
         >
           {enabled ? '利用者への公開を停止する' : '準備完了後に公開する'}
+        </button>
+      </section>
+      <section className="settings-card">
+        <h2>5. AIで文章を個別化する</h2>
+        <p>
+          有効にすると、承認済み標準解釈を土台に、その日のカード・正逆・テーマに合わせて文章を整えます。
+          AIが利用できない場合や安全検査に通らない場合は、標準解釈をそのまま表示します。
+        </p>
+        <p>{aiEnabled ? '現在、AI個別化は有効です。' : '現在、標準解釈だけを表示します。'}</p>
+        <button
+          className={`button ${aiEnabled ? 'button--secondary' : 'button--primary'}`}
+          type="button"
+          disabled={busy || (!aiEnabled && !enabled)}
+          onClick={() =>
+            void run(async () => {
+              await send(serviceSlug, { action: 'SET_AI_ENABLED', enabled: !aiEnabled });
+              setMessage(aiEnabled ? 'AI個別化を停止しました。' : 'AI個別化を有効にしました。');
+            })
+          }
+        >
+          {aiEnabled ? 'AI個別化を停止する' : 'AI接続を確認して有効にする'}
         </button>
       </section>
       {message && (

@@ -144,6 +144,29 @@ export type CreateFortuneReadingResult =
   | { kind: 'NOT_PARTICIPANT' }
   | { kind: 'KNOWLEDGE_NOT_READY' };
 
+export interface FortuneAiGenerationClaim {
+  workspaceId: string;
+  groupId: string;
+  bunshinId: string;
+  reading: FortuneReadingView;
+}
+
+export interface FortuneAiReadingResult extends FortuneReadingOutput {
+  model: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+}
+
+export interface FortuneAiReadingGenerator {
+  generate(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    claim: FortuneAiGenerationClaim;
+  }): Promise<FortuneAiReadingResult>;
+}
+
 export interface FortuneRepository {
   joinParticipant(input: {
     serviceSlug: string;
@@ -167,6 +190,23 @@ export interface FortuneRepository {
     cardCode: string;
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
+  claimAiGeneration(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+  }): Promise<FortuneAiGenerationClaim | null>;
+  completeAiGeneration(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    output: FortuneAiReadingResult;
+  }): Promise<FortuneReadingView | null>;
+  fallbackAiGeneration(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    failureCode: string;
+  }): Promise<FortuneReadingView | null>;
   listReadings(input: {
     serviceSlug: string;
     actorUserId: string;
@@ -189,6 +229,7 @@ export class FortuneDailyReadingService {
   constructor(
     private readonly repository: FortuneRepository,
     private readonly random: SecureRandomSource,
+    private readonly aiGenerator?: FortuneAiReadingGenerator,
   ) {}
 
   async join(input: {
@@ -237,7 +278,43 @@ export class FortuneDailyReadingService {
       cardCode: draw.card.code,
       orientation: draw.orientation,
     });
-    if (result.kind === 'READY') return result.reading;
+    if (result.kind === 'READY') {
+      if (!this.aiGenerator) return result.reading;
+      const claim = await this.repository.claimAiGeneration({
+        serviceSlug: input.serviceSlug,
+        actorUserId: input.actorUserId,
+        readingId: result.reading.id,
+      });
+      if (!claim) return result.reading;
+      try {
+        const generated = await this.aiGenerator.generate({
+          serviceSlug: input.serviceSlug,
+          actorUserId: input.actorUserId,
+          claim,
+        });
+        const safe = validateFortuneReadingOutput(generated);
+        return (
+          (await this.repository.completeAiGeneration({
+            serviceSlug: input.serviceSlug,
+            actorUserId: input.actorUserId,
+            readingId: result.reading.id,
+            output: { ...generated, ...safe },
+          })) ?? result.reading
+        );
+      } catch (error) {
+        const fallback = await this.repository.fallbackAiGeneration({
+          serviceSlug: input.serviceSlug,
+          actorUserId: input.actorUserId,
+          readingId: result.reading.id,
+          failureCode:
+            error instanceof FortunePolicyError &&
+            ['INVALID_READING_OUTPUT', 'UNSAFE_READING_OUTPUT'].includes(error.code)
+              ? 'AI_OUTPUT_REJECTED'
+              : 'AI_GENERATION_FAILED',
+        });
+        return fallback ?? result.reading;
+      }
+    }
     if (result.kind === 'NOT_PARTICIPANT')
       throw new FortunePolicyError('NOT_PARTICIPANT', '占いへの参加確認が必要です');
     if (result.kind === 'KNOWLEDGE_NOT_READY')
