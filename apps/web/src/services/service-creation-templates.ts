@@ -9,6 +9,18 @@ export const SERVICE_CREATION_TEMPLATE_KEYS = [
 export type ServiceCreationTemplateKey = (typeof SERVICE_CREATION_TEMPLATE_KEYS)[number];
 
 export const FORTUNE_INITIAL_MEMBER_LIMIT = 100;
+export const FORTUNE_PACKAGE_KEY = 'FORTUNE_DAILY_GUIDANCE' as const;
+export const CURRENT_FORTUNE_PACKAGE_VERSION = 1;
+
+export type FortunePackageReleaseState =
+  'CURRENT' | 'UPDATE_AVAILABLE' | 'UNSUPPORTED_NEWER' | 'NOT_SELECTED';
+
+export interface FortunePackageReleaseStatus {
+  key: typeof FORTUNE_PACKAGE_KEY | null;
+  installedVersion: number | null;
+  currentVersion: number;
+  state: FortunePackageReleaseState;
+}
 
 export const SERVICE_CREATION_TEMPLATES = {
   SIDE_HUSTLE_AFFILIATE: {
@@ -85,8 +97,8 @@ export const SERVICE_CREATION_TEMPLATES = {
     inviteCodeEnabled: false,
     referralEnabled: false,
     fortunePackage: {
-      key: 'FORTUNE_DAILY_GUIDANCE',
-      version: 1,
+      key: FORTUNE_PACKAGE_KEY,
+      version: CURRENT_FORTUNE_PACKAGE_VERSION,
       memberLimit: FORTUNE_INITIAL_MEMBER_LIMIT,
       minimumAge: 18,
       historyRetentionDays: 90,
@@ -143,7 +155,7 @@ export const SERVICE_CREATION_TEMPLATES = {
       mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
     };
     fortunePackage?: {
-      key: 'FORTUNE_DAILY_GUIDANCE';
+      key: typeof FORTUNE_PACKAGE_KEY;
       version: 1;
       memberLimit: 100;
       minimumAge: 18;
@@ -159,14 +171,43 @@ export const SERVICE_CREATION_TEMPLATES = {
   }
 >;
 
-export function isFortuneServicePackage(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+export function fortunePackageReleaseStatus(value: unknown): FortunePackageReleaseStatus {
+  const unavailable: FortunePackageReleaseStatus = {
+    key: null,
+    installedVersion: null,
+    currentVersion: CURRENT_FORTUNE_PACKAGE_VERSION,
+    state: 'NOT_SELECTED',
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return unavailable;
   const fortunePackage = (value as Record<string, unknown>)['fortunePackage'];
-  return (
-    typeof fortunePackage === 'object' &&
-    fortunePackage !== null &&
-    !Array.isArray(fortunePackage) &&
-    (fortunePackage as Record<string, unknown>)['key'] === 'FORTUNE_DAILY_GUIDANCE' &&
-    (fortunePackage as Record<string, unknown>)['version'] === 1
-  );
+  if (
+    typeof fortunePackage !== 'object' ||
+    fortunePackage === null ||
+    Array.isArray(fortunePackage)
+  )
+    return unavailable;
+  const packageRecord = fortunePackage as Record<string, unknown>;
+  const version = packageRecord['version'];
+  if (
+    packageRecord['key'] !== FORTUNE_PACKAGE_KEY ||
+    typeof version !== 'number' ||
+    !Number.isInteger(version) ||
+    version < 1
+  )
+    return unavailable;
+  return {
+    key: FORTUNE_PACKAGE_KEY,
+    installedVersion: version,
+    currentVersion: CURRENT_FORTUNE_PACKAGE_VERSION,
+    state:
+      version === CURRENT_FORTUNE_PACKAGE_VERSION
+        ? 'CURRENT'
+        : version < CURRENT_FORTUNE_PACKAGE_VERSION
+          ? 'UPDATE_AVAILABLE'
+          : 'UNSUPPORTED_NEWER',
+  };
+}
+
+export function isFortuneServicePackage(value: unknown): boolean {
+  return fortunePackageReleaseStatus(value).state !== 'NOT_SELECTED';
 }

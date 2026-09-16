@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fortunePackageReleaseStatus,
   isFortuneServicePackage,
   SERVICE_CREATION_TEMPLATES,
 } from '../src/services/service-creation-templates';
@@ -72,6 +73,27 @@ describe('service creation templates', () => {
     ).toBe(true);
     expect(isFortuneServicePackage({ fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE' } })).toBe(
       false,
+    );
+  });
+
+  it('reports whether an installed fortune package is current or needs a system update', () => {
+    expect(
+      fortunePackageReleaseStatus({
+        fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 1 },
+      }),
+    ).toEqual({
+      key: 'FORTUNE_DAILY_GUIDANCE',
+      installedVersion: 1,
+      currentVersion: 1,
+      state: 'CURRENT',
+    });
+    expect(
+      fortunePackageReleaseStatus({
+        fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE', version: 2 },
+      }).state,
+    ).toBe('UNSUPPORTED_NEWER');
+    expect(fortunePackageReleaseStatus({ fortunePackage: { version: 1 } }).state).toBe(
+      'NOT_SELECTED',
     );
   });
 });
