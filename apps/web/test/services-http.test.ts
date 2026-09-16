@@ -262,6 +262,38 @@ describe('service admin HTTP', () => {
     );
   });
 
+  it('stores the versioned fortune package defaults without publishing fortune', async () => {
+    const response = await createServiceResponse(
+      request({
+        ...body,
+        templateKey: 'FORTUNE_DAILY_GUIDANCE',
+        registrationMode: 'PUBLIC',
+        emailEnabled: false,
+        lineEnabled: true,
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configuration: expect.objectContaining({
+          registration: expect.objectContaining({
+            onboardingConfig: expect.objectContaining({
+              templateKey: 'FORTUNE_DAILY_GUIDANCE',
+              fortunePackage: {
+                key: 'FORTUNE_DAILY_GUIDANCE',
+                version: 1,
+                minimumAge: 18,
+                historyRetentionDays: 90,
+                weeklyNotificationEnabled: false,
+                aiEnabled: false,
+              },
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('keeps onboarding empty for a custom service', async () => {
     const response = await createServiceResponse(request({ ...body, templateKey: 'CUSTOM' }));
     expect(response.status).toBe(201);

@@ -7,6 +7,8 @@ import { currentLineEnvironment } from '../../../../src/line/secure-configuratio
 import { resolveManagedServiceContext } from '../../../../src/services/public-service';
 import { buildServiceLaunchReadiness } from '../../../../src/services/service-launch-readiness';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
+import { selectServiceManagementSections } from '../../../../src/services/service-management-navigation';
 import { buildSideHustleContentFunnel } from '../../../../src/services/side-hustle-content-funnel';
 import { buildPerformanceFeedbackSummary } from '../../../../src/services/performance-feedback-summary';
 import { buildBusinessPilotMetrics } from '../../../../src/services/business-pilot-metrics';
@@ -108,16 +110,6 @@ const sections = [
   },
 ] as const;
 
-const businessDailySectionHrefs = new Set<string>([
-  '90-day-report',
-  'weekly-report',
-  'members',
-  'knowledge',
-  'line',
-  'settings',
-  'legal',
-]);
-
 export default async function ServiceManagementHome({
   params,
 }: {
@@ -162,6 +154,7 @@ export default async function ServiceManagementHome({
         select: { mode: true, pilotEnabled: true },
         take: 1,
       },
+      fortuneServiceSetting: { select: { id: true } },
     },
   });
   if (!group) notFound();
@@ -446,6 +439,9 @@ export default async function ServiceManagementHome({
     configuration.registration.surveyConfig,
   );
   const isBusinessDailyService = onboarding.businessProfileEnabled;
+  const isFortuneService =
+    isFortuneServicePackage(configuration.registration.onboardingConfig) ||
+    group.fortuneServiceSetting !== null;
   const participantIds = group.memberships.map(({ userId }) => userId);
   const [businessActivityRows, businessLineOpenRows, businessOutcomePosts] =
     isBusinessDailyService && participantIds.length > 0
@@ -724,9 +720,10 @@ export default async function ServiceManagementHome({
         ]
       : []),
   ];
-  const visibleSections = isBusinessDailyService
-    ? sections.filter((section) => businessDailySectionHrefs.has(section.href))
-    : sections;
+  const visibleSections = selectServiceManagementSections(sections, {
+    businessDaily: isBusinessDailyService,
+    fortune: isFortuneService,
+  });
 
   return (
     <PublicShell showPlatformBrand={false}>

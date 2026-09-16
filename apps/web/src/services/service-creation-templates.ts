@@ -2,6 +2,7 @@ export const SERVICE_CREATION_TEMPLATE_KEYS = [
   'SIDE_HUSTLE_AFFILIATE',
   'ENTERPRISE_PROGRAM',
   'BUSINESS_DAILY_IDEAS',
+  'FORTUNE_DAILY_GUIDANCE',
   'CUSTOM',
 ] as const;
 
@@ -73,6 +74,29 @@ export const SERVICE_CREATION_TEMPLATES = {
       questions: ['発信するときに大切にしたいことを教えてください。'],
     },
   },
+  FORTUNE_DAILY_GUIDANCE: {
+    label: '占いサービス向け',
+    description: '1日1回の占いと希望者への週次LINE通知を、安全確認後に公開する初期設定です。',
+    registrationMode: 'PUBLIC',
+    emailEnabled: false,
+    lineEnabled: true,
+    inviteCodeEnabled: false,
+    referralEnabled: false,
+    fortunePackage: {
+      key: 'FORTUNE_DAILY_GUIDANCE',
+      version: 1,
+      minimumAge: 18,
+      historyRetentionDays: 90,
+      weeklyNotificationEnabled: false,
+      aiEnabled: false,
+    },
+    onboarding: {
+      welcomeTitle: '今日を考えるヒントを受け取る準備をします',
+      welcomeMessage:
+        '登録後に年齢を確認すると、恋愛・仕事・人間関係から1つ選んで、1日1回カードを引けます。',
+      questions: [],
+    },
+  },
   CUSTOM: {
     label: '自由に設定する',
     description: '用途を決めず、必要な登録方法を個別に設定します。',
@@ -115,6 +139,14 @@ export const SERVICE_CREATION_TEMPLATES = {
       contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
       mediaMode: 'TEXT_ONLY' | 'IMAGE' | 'VIDEO' | 'IMAGE_AND_VIDEO';
     };
+    fortunePackage?: {
+      key: 'FORTUNE_DAILY_GUIDANCE';
+      version: 1;
+      minimumAge: 18;
+      historyRetentionDays: 90;
+      weeklyNotificationEnabled: false;
+      aiEnabled: false;
+    };
     onboarding: {
       welcomeTitle: string;
       welcomeMessage: string;
@@ -122,3 +154,15 @@ export const SERVICE_CREATION_TEMPLATES = {
     };
   }
 >;
+
+export function isFortuneServicePackage(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const fortunePackage = (value as Record<string, unknown>)['fortunePackage'];
+  return (
+    typeof fortunePackage === 'object' &&
+    fortunePackage !== null &&
+    !Array.isArray(fortunePackage) &&
+    (fortunePackage as Record<string, unknown>)['key'] === 'FORTUNE_DAILY_GUIDANCE' &&
+    (fortunePackage as Record<string, unknown>)['version'] === 1
+  );
+}

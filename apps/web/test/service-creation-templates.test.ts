@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { SERVICE_CREATION_TEMPLATES } from '../src/services/service-creation-templates';
+import {
+  isFortuneServicePackage,
+  SERVICE_CREATION_TEMPLATES,
+} from '../src/services/service-creation-templates';
 
 describe('service creation templates', () => {
   it('prepares public registration and attribution for the side-hustle service', () => {
@@ -44,5 +47,31 @@ describe('service creation templates', () => {
         contentMode: 'READY_TO_USE',
       },
     });
+  });
+
+  it('prepares a versioned LINE-first fortune package without enabling delivery or AI', () => {
+    expect(SERVICE_CREATION_TEMPLATES.FORTUNE_DAILY_GUIDANCE).toMatchObject({
+      registrationMode: 'PUBLIC',
+      emailEnabled: false,
+      lineEnabled: true,
+      inviteCodeEnabled: false,
+      referralEnabled: false,
+      fortunePackage: {
+        key: 'FORTUNE_DAILY_GUIDANCE',
+        version: 1,
+        minimumAge: 18,
+        historyRetentionDays: 90,
+        weeklyNotificationEnabled: false,
+        aiEnabled: false,
+      },
+    });
+    expect(
+      isFortuneServicePackage({
+        fortunePackage: SERVICE_CREATION_TEMPLATES.FORTUNE_DAILY_GUIDANCE.fortunePackage,
+      }),
+    ).toBe(true);
+    expect(isFortuneServicePackage({ fortunePackage: { key: 'FORTUNE_DAILY_GUIDANCE' } })).toBe(
+      false,
+    );
   });
 });

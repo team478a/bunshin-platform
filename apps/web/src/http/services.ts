@@ -112,6 +112,7 @@ export async function createServiceResponse(request: Request) {
             lockCadence: false as const,
             contentMode: 'READY_TO_USE' as const,
           };
+    const fortunePackage = 'fortunePackage' in template ? template.fortunePackage : null;
     const registration = enforceBusinessFreeRegistrationSettings({
       businessProfileEnabled,
       registrationMode: value.registrationMode,
@@ -160,6 +161,7 @@ export async function createServiceResponse(request: Request) {
             welcomeMessage: template.onboarding.welcomeMessage,
             businessProfileEnabled,
             dailyIdeaDelivery,
+            ...(fortunePackage ? { fortunePackage } : {}),
           },
           surveyConfig: { questions: [...template.onboarding.questions] },
         },
