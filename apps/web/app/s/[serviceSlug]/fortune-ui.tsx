@@ -1,6 +1,7 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 import type { FortuneReadingView } from '@bunshin/capability-fortune';
+import { FortuneFeedbackButtons } from './fortune-actions';
 
 export const themeLabel = (theme: FortuneReadingView['theme']) =>
   ({ LOVE: '恋愛', WORK: '仕事', RELATIONSHIPS: '人間関係' })[theme];
@@ -34,12 +35,20 @@ export function ReadingCard({
         <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
       </h2>
       {reading.title && <h3>{reading.title}</h3>}
-      {reading.body && <p className="fortune-reading-body">{reading.body}</p>}
-      {reading.actionStep && (
+      {!linked && reading.body && <p className="fortune-reading-body">{reading.body}</p>}
+      {!linked && reading.actionStep && (
         <div className="fortune-action-step">
           <strong>今日できること</strong>
           <p>{reading.actionStep}</p>
         </div>
+      )}
+      {!linked && reading.body && (
+        <FortuneFeedbackButtons
+          serviceSlug={serviceSlug}
+          readingId={reading.id}
+          current={reading.feedbackRating}
+          currentIssue={reading.feedbackIssue}
+        />
       )}
     </article>
   );

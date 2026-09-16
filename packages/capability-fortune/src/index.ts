@@ -105,6 +105,7 @@ export class FortunePolicyError extends Error {
     readonly code:
       | 'INVALID_RANDOM_VALUE'
       | 'INVALID_THEME'
+      | 'INVALID_FEEDBACK'
       | 'INVALID_READING_OUTPUT'
       | 'INVALID_KNOWLEDGE_PACK'
       | 'UNSAFE_READING_OUTPUT'
@@ -121,6 +122,16 @@ export class FortunePolicyError extends Error {
 
 export type FortuneReadingState = 'GENERATING' | 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED';
 
+export const FORTUNE_FEEDBACK_RATINGS = ['HELPFUL', 'SOMEWHAT', 'NOT_HELPFUL'] as const;
+export type FortuneFeedbackRating = (typeof FORTUNE_FEEDBACK_RATINGS)[number];
+export const FORTUNE_FEEDBACK_ISSUES = [
+  'TOO_VAGUE',
+  'HARD_TO_UNDERSTAND',
+  'UNCOMFORTABLE',
+  'OTHER',
+] as const;
+export type FortuneFeedbackIssue = (typeof FORTUNE_FEEDBACK_ISSUES)[number];
+
 export interface FortuneReadingView {
   id: string;
   localDate: string;
@@ -132,6 +143,8 @@ export interface FortuneReadingView {
   title: string | null;
   body: string | null;
   actionStep: string | null;
+  feedbackRating: FortuneFeedbackRating | null;
+  feedbackIssue: FortuneFeedbackIssue | null;
   createdAt: Date;
 }
 
@@ -219,6 +232,20 @@ export interface FortuneRepository {
     actorUserId: string;
     readingId: string;
   }): Promise<FortuneReadingView | null>;
+  markReadingViewed(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    viewedAt: Date;
+  }): Promise<FortuneReadingView | null>;
+  submitFeedback(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    rating: FortuneFeedbackRating;
+    issue: FortuneFeedbackIssue | null;
+    submittedAt: Date;
+  }): Promise<FortuneReadingView | null>;
   deleteReading(input: {
     serviceSlug: string;
     actorUserId: string;
@@ -251,7 +278,12 @@ export class FortuneDailyReadingService {
     return participant;
   }
 
-  async today(input: { serviceSlug: string; actorUserId: string; now?: Date }) {
+  async today(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    now?: Date;
+    recordView?: boolean;
+  }) {
     const participant = await this.repository.findParticipant(input);
     if (!participant) return { participant: null, reading: null };
     const reading = await this.repository.findReadingForDate({
@@ -259,7 +291,16 @@ export class FortuneDailyReadingService {
       actorUserId: input.actorUserId,
       localDate: toJapanLocalDate(input.now ?? new Date()),
     });
-    return { participant, reading };
+    const visible =
+      input.recordView && reading && reading.status !== 'DELETED'
+        ? await this.repository.markReadingViewed({
+            serviceSlug: input.serviceSlug,
+            actorUserId: input.actorUserId,
+            readingId: reading.id,
+            viewedAt: input.now ?? new Date(),
+          })
+        : reading;
+    return { participant, reading: visible ?? reading };
   }
 
   async draw(input: { serviceSlug: string; actorUserId: string; theme: unknown; now?: Date }) {
@@ -334,7 +375,38 @@ export class FortuneDailyReadingService {
   }
 
   async reading(input: { serviceSlug: string; actorUserId: string; readingId: string }) {
-    const reading = await this.repository.findReading(input);
+    const existing = await this.repository.findReading(input);
+    const reading = existing
+      ? await this.repository.markReadingViewed({
+          ...input,
+          viewedAt: new Date(),
+        })
+      : null;
+    if (!reading) throw new FortunePolicyError('READING_NOT_FOUND', '占い結果が見つかりません');
+    return reading;
+  }
+
+  async feedback(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    readingId: string;
+    rating: FortuneFeedbackRating;
+    issue: FortuneFeedbackIssue | null;
+    now?: Date;
+  }) {
+    if (input.issue && input.rating !== 'NOT_HELPFUL')
+      throw new FortunePolicyError(
+        'INVALID_FEEDBACK',
+        '気になった理由は「今回は違った」を選んだ場合だけ保存できます',
+      );
+    const reading = await this.repository.submitFeedback({
+      serviceSlug: input.serviceSlug,
+      actorUserId: input.actorUserId,
+      readingId: input.readingId,
+      rating: input.rating,
+      issue: input.issue,
+      submittedAt: input.now ?? new Date(),
+    });
     if (!reading) throw new FortunePolicyError('READING_NOT_FOUND', '占い結果が見つかりません');
     return reading;
   }

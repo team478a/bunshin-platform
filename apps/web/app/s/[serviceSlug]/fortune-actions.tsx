@@ -3,6 +3,7 @@
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import type { FortuneFeedbackIssue, FortuneFeedbackRating } from '@bunshin/capability-fortune';
 
 async function request(url: string, init: RequestInit) {
   const response = await fetch(url, {
@@ -158,5 +159,123 @@ export function FortuneDeleteButton({
         </p>
       )}
     </div>
+  );
+}
+
+const feedbackChoices: Array<{ value: FortuneFeedbackRating; label: string }> = [
+  { value: 'HELPFUL', label: '参考になった' },
+  { value: 'SOMEWHAT', label: '少し参考になった' },
+  { value: 'NOT_HELPFUL', label: '今回は違った' },
+];
+
+export function FortuneFeedbackButtons({
+  serviceSlug,
+  readingId,
+  current,
+  currentIssue,
+}: {
+  serviceSlug: string;
+  readingId: string;
+  current: FortuneFeedbackRating | null;
+  currentIssue: FortuneFeedbackIssue | null;
+}) {
+  const [selected, setSelected] = useState(current);
+  const [issue, setIssue] = useState(currentIssue);
+  const [busy, setBusy] = useState<FortuneFeedbackRating | null>(null);
+  const [error, setError] = useState('');
+  return (
+    <section className="fortune-action" aria-labelledby={`fortune-feedback-${readingId}`}>
+      <h3 id={`fortune-feedback-${readingId}`}>この結果は参考になりましたか？</h3>
+      <p>選ぶだけで回答できます。占いの内容や自由文は送信しません。</p>
+      <div className="button-row">
+        {feedbackChoices.map((choice) => (
+          <button
+            key={choice.value}
+            className={`button ${selected === choice.value ? 'button--primary' : 'button--secondary'}`}
+            type="button"
+            disabled={busy !== null}
+            aria-pressed={selected === choice.value}
+            onClick={() =>
+              void (async () => {
+                setBusy(choice.value);
+                setError('');
+                try {
+                  await request(
+                    `/api/services/${serviceSlug}/fortune/readings/${readingId}/feedback`,
+                    {
+                      method: 'PUT',
+                      body: JSON.stringify({ rating: choice.value, issue: null }),
+                    },
+                  );
+                  setSelected(choice.value);
+                  setIssue(null);
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : '回答を保存できませんでした。');
+                } finally {
+                  setBusy(null);
+                }
+              })
+            }
+          >
+            {busy === choice.value ? '保存しています…' : choice.label}
+          </button>
+        ))}
+      </div>
+      {selected === 'NOT_HELPFUL' && (
+        <div className="fortune-action">
+          <p>どこが気になりましたか？（選ばなくても大丈夫です）</p>
+          <div className="button-row">
+            {[
+              ['TOO_VAGUE', '内容があいまい'],
+              ['HARD_TO_UNDERSTAND', '分かりにくい'],
+              ['UNCOMFORTABLE', '不安になった'],
+              ['OTHER', 'その他'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                className={`button ${issue === value ? 'button--primary' : 'button--secondary'}`}
+                type="button"
+                disabled={busy !== null}
+                aria-pressed={issue === value}
+                onClick={() =>
+                  void (async () => {
+                    const selectedIssue = value as FortuneFeedbackIssue;
+                    setBusy('NOT_HELPFUL');
+                    setError('');
+                    try {
+                      await request(
+                        `/api/services/${serviceSlug}/fortune/readings/${readingId}/feedback`,
+                        {
+                          method: 'PUT',
+                          body: JSON.stringify({
+                            rating: 'NOT_HELPFUL',
+                            issue: selectedIssue,
+                          }),
+                        },
+                      );
+                      setIssue(selectedIssue);
+                    } catch (cause) {
+                      setError(
+                        cause instanceof Error ? cause.message : '回答を保存できませんでした。',
+                      );
+                    } finally {
+                      setBusy(null);
+                    }
+                  })
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {selected && <p className="success-message">回答を保存しました。変更もできます。</p>}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

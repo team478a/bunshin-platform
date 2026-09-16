@@ -1,5 +1,10 @@
 import 'server-only';
-import { FortunePolicyError, FORTUNE_THEMES } from '@bunshin/capability-fortune';
+import {
+  FortunePolicyError,
+  FORTUNE_FEEDBACK_ISSUES,
+  FORTUNE_FEEDBACK_RATINGS,
+  FORTUNE_THEMES,
+} from '@bunshin/capability-fortune';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -15,6 +20,20 @@ const slug = z
 const uuid = z.string().uuid();
 const joinBody = z.object({ ageConfirmed: z.literal(true) }).strict();
 const drawBody = z.object({ theme: z.enum(FORTUNE_THEMES) }).strict();
+const feedbackBody = z
+  .object({
+    rating: z.enum(FORTUNE_FEEDBACK_RATINGS),
+    issue: z.enum(FORTUNE_FEEDBACK_ISSUES).nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.issue && value.rating !== 'NOT_HELPFUL')
+      context.addIssue({
+        code: 'custom',
+        path: ['issue'],
+        message: 'reason is available only for NOT_HELPFUL feedback',
+      });
+  });
 
 const mapError = (error: unknown) => {
   if (error instanceof z.ZodError)
@@ -24,6 +43,8 @@ const mapError = (error: unknown) => {
     return new ApplicationError('CONFIGURATION_ERROR', error.message);
   if (error.code === 'NOT_PARTICIPANT') return new ApplicationError('FORBIDDEN', error.message);
   if (error.code === 'INVALID_THEME')
+    return new ApplicationError('VALIDATION_ERROR', error.message);
+  if (error.code === 'INVALID_FEEDBACK')
     return new ApplicationError('VALIDATION_ERROR', error.message);
   return new ApplicationError('NOT_FOUND', error.message);
 };
@@ -86,6 +107,7 @@ export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =
     (await fortuneDailyReadingService()).today({
       serviceSlug: parsedSlug,
       actorUserId,
+      recordView: true,
     }),
   );
 
@@ -140,4 +162,20 @@ export const deleteFortuneReadingResponse = (
       readingId: uuid.parse(readingId),
     });
     return { deleted: true };
+  });
+
+export const updateFortuneFeedbackResponse = (
+  request: Request,
+  serviceSlug: string,
+  readingId: string,
+) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, feedbackBody);
+    return (await fortuneDailyReadingService()).feedback({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      readingId: uuid.parse(readingId),
+      rating: body.rating,
+      issue: body.issue,
+    });
   });
