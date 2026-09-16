@@ -1,0 +1,88 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
+const state = vi.hoisted(() => ({
+  user: null as { userId: string } | null,
+  status: vi.fn(),
+  importPack: vi.fn(),
+  setEnabled: vi.fn(),
+}));
+vi.mock('../src/auth/current-user', () => ({
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: () => Promise.resolve(state.user) }),
+}));
+vi.mock('../src/fortune/operator', () => ({
+  fortuneOperatorStatus: state.status,
+  importFortuneKnowledge: state.importPack,
+  setFortuneEnabled: state.setEnabled,
+}));
+
+import {
+  getFortuneOperationsResponse,
+  updateFortuneOperationsResponse,
+} from '../src/http/fortune-operations';
+
+const request = (body?: unknown, origin = 'http://localhost:3000') =>
+  new Request(
+    'http://localhost:3000/api/services/fortune/fortune-operations',
+    body === undefined
+      ? undefined
+      : {
+          method: 'POST',
+          headers: { origin, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+  );
+
+describe('fortune operator HTTP boundary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('APP_ENV', 'development');
+    vi.stubEnv('APP_URL', 'http://localhost:3000');
+    vi.stubEnv('DATABASE_URL', 'postgresql://local');
+    vi.stubEnv('DIRECT_URL', 'postgresql://local');
+    vi.stubEnv('SESSION_SECRET', '12345678901234567890123456789012');
+    vi.stubEnv('LOG_LEVEL', 'info');
+    state.user = { userId: 'manager-1' };
+    state.status.mockResolvedValue({ configured: false });
+    state.importPack.mockResolvedValue({ version: 1, meaningCount: 468 });
+    state.setEnabled.mockResolvedValue({ enabled: true });
+  });
+
+  it('requires authentication for readiness data', async () => {
+    state.user = null;
+    expect((await getFortuneOperationsResponse(request(), 'fortune')).status).toBe(401);
+  });
+
+  it('rejects cross-origin and authority fields before importing', async () => {
+    const crossOrigin = await updateFortuneOperationsResponse(
+      request({ action: 'SET_ENABLED', enabled: true }, 'https://attacker.example'),
+      'fortune',
+    );
+    expect(crossOrigin.status).toBe(403);
+    const injected = await updateFortuneOperationsResponse(
+      request({ action: 'SET_ENABLED', enabled: true, actorUserId: 'attacker' }),
+      'fortune',
+    );
+    expect(injected.status).toBe(400);
+    expect(state.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it('passes only the authenticated manager and service scope to import', async () => {
+    const pack = { promptVersion: 'v1', meanings: [] };
+    const response = await updateFortuneOperationsResponse(
+      request({
+        action: 'IMPORT_KNOWLEDGE',
+        bunshinId: '11111111-1111-4111-8111-111111111111',
+        pack,
+      }),
+      'fortune',
+    );
+    expect(response.status).toBe(201);
+    expect(state.importPack).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'manager-1',
+      bunshinId: '11111111-1111-4111-8111-111111111111',
+      pack,
+    });
+  });
+});
