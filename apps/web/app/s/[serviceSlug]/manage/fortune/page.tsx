@@ -62,6 +62,10 @@ export default async function FortuneManagementPage({
           standardKnowledgeReady={status.approvedMeaningCount === status.requiredMeaningCount}
           enabled={status.enabled}
           aiEnabled={status.aiEnabled}
+          weeklyNotificationEnabled={status.weeklyNotificationEnabled}
+          weeklyNotificationDay={status.weeklyNotificationDay}
+          weeklyNotificationHour={status.weeklyNotificationHour}
+          timeZone={status.timeZone}
           canEnable={status.canEnable}
           bunshinId={status.bunshinId}
           bunshins={status.bunshins}

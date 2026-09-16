@@ -16,6 +16,10 @@ export interface FortuneOperatorStatus {
   configured: boolean;
   enabled: boolean;
   aiEnabled: boolean;
+  weeklyNotificationEnabled: boolean;
+  weeklyNotificationDay: number;
+  weeklyNotificationHour: number;
+  timeZone: string;
   bunshinId: string | null;
   approvedVersion: number | null;
   approvedMeaningCount: number;
@@ -78,6 +82,10 @@ export async function fortuneOperatorStatus(
           select: {
             enabled: true,
             aiEnabled: true,
+            weeklyNotificationEnabled: true,
+            weeklyNotificationDay: true,
+            weeklyNotificationHour: true,
+            timeZone: true,
             bunshinId: true,
             bunshin: {
               select: {
@@ -163,6 +171,10 @@ export async function fortuneOperatorStatus(
     configured: Boolean(configuration.fortuneSetting),
     enabled: configuration.fortuneSetting?.enabled ?? false,
     aiEnabled: configuration.fortuneSetting?.aiEnabled ?? false,
+    weeklyNotificationEnabled: configuration.fortuneSetting?.weeklyNotificationEnabled ?? false,
+    weeklyNotificationDay: configuration.fortuneSetting?.weeklyNotificationDay ?? 3,
+    weeklyNotificationHour: configuration.fortuneSetting?.weeklyNotificationHour ?? 19,
+    timeZone: configuration.fortuneSetting?.timeZone ?? 'Asia/Tokyo',
     bunshinId: configuration.fortuneSetting?.bunshinId ?? null,
     approvedVersion: approved?.version ?? null,
     approvedMeaningCount,
@@ -573,4 +585,40 @@ export async function setFortuneAiEnabled(input: {
   });
   if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
   return { aiEnabled: input.enabled };
+}
+
+export async function setFortuneWeeklyNotification(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  enabled: boolean;
+  weekday: number;
+  hour: number;
+}) {
+  if (!Number.isInteger(input.weekday) || input.weekday < 0 || input.weekday > 6)
+    throw new ApplicationError('VALIDATION_ERROR', 'weekday must be between 0 and 6');
+  if (!Number.isInteger(input.hour) || input.hour < 0 || input.hour > 23)
+    throw new ApplicationError('VALIDATION_ERROR', 'hour must be between 0 and 23');
+  const status = await fortuneOperatorStatus(input.serviceSlug, input.actorUserId);
+  if (!status.configured) throw new ApplicationError('CONFLICT', 'fortune is not configured');
+  if (input.enabled && (!status.enabled || !status.lineReady))
+    throw new ApplicationError(
+      'CONFLICT',
+      'publish fortune and complete LINE setup before enabling notifications',
+    );
+  const service = await scope(input.serviceSlug, input.actorUserId);
+  const db = await import('@bunshin/database');
+  const updated = await db.prisma.fortuneServiceSetting.updateMany({
+    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+    data: {
+      weeklyNotificationEnabled: input.enabled,
+      weeklyNotificationDay: input.weekday,
+      weeklyNotificationHour: input.hour,
+    },
+  });
+  if (updated.count !== 1) throw new ApplicationError('NOT_FOUND', 'fortune setting not found');
+  return {
+    weeklyNotificationEnabled: input.enabled,
+    weeklyNotificationDay: input.weekday,
+    weeklyNotificationHour: input.hour,
+  };
 }
