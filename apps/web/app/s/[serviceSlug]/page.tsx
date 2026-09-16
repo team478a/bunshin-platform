@@ -64,7 +64,11 @@ export default async function ServiceEntryPage({
   searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
-  searchParams: Promise<{ ref?: string | string[]; rc?: string | string[] }>;
+  searchParams: Promise<{
+    ref?: string | string[];
+    rc?: string | string[];
+    withdrawn?: string | string[];
+  }>;
 }) {
   const { serviceSlug } = await params;
   const query = await searchParams;
@@ -105,6 +109,12 @@ export default async function ServiceEntryPage({
           <h1>{configuration.displayName}</h1>
           <p>{configuration.description}</p>
         </header>
+
+        {query.withdrawn === '1' && (
+          <p className="notice notice--success" role="status">
+            このサービスの退会が完了しました。ワタシワークスのアカウントと他のサービスはそのまま利用できます。
+          </p>
+        )}
 
         <section className="service-entry__card" aria-labelledby="registration-title">
           {participation.membership?.status === 'ACTIVE' ? (

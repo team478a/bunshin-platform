@@ -3,6 +3,7 @@ import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav } from '../fortune-ui';
 import { FortuneNotificationSetting } from '../fortune-notification-setting';
+import { FortuneWithdrawButton } from '../fortune-actions';
 
 export const dynamic = 'force-dynamic';
 export default async function FortuneSettingsPage({
@@ -46,6 +47,13 @@ export default async function FortuneSettingsPage({
             占い結果は{setting.historyRetentionDays}
             日間確認できます。結果画面からいつでも削除できます。
           </p>
+        </section>
+        <section className="settings-card">
+          <h2>この占いサービスの退会</h2>
+          <p>
+            この占いサービスだけを退会します。他のサービスとワタシワークスのアカウントは残ります。
+          </p>
+          <FortuneWithdrawButton serviceSlug={serviceSlug} />
         </section>
         <FortuneNav serviceSlug={serviceSlug} />
       </main>

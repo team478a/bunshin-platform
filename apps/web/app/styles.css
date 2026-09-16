@@ -5037,6 +5037,16 @@ body:has(.app-shell) > .site-footer {
   gap: 1rem;
 }
 
+.fortune-withdraw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.fortune-withdraw-actions .button {
+  flex: 1 1 10rem;
+}
+
 .fortune-check {
   display: flex;
   align-items: center;
