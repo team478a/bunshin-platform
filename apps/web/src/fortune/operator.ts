@@ -10,6 +10,7 @@ import { currentLineEnvironment } from '../line/secure-configuration';
 import { resolveManagedServiceContext } from '../services/public-service';
 import { isFortuneServicePackage } from '../services/service-creation-templates';
 import { isFortuneLineReady } from './launch-readiness';
+import { assessFortuneQuality, type FortuneQualityAssessment } from './quality';
 
 export interface FortuneOperatorStatus {
   configured: boolean;
@@ -26,6 +27,20 @@ export interface FortuneOperatorStatus {
   bunshinReady: boolean;
   canEnable: boolean;
   bunshins: Array<{ id: string; name: string }>;
+}
+
+export interface FortuneOperationsQuality {
+  periodDays: 30;
+  activeParticipants: number;
+  activeReaders: number;
+  readingCount: number;
+  aiReadingCount: number;
+  basicReadingCount: number;
+  failedReadingCount: number;
+  deletedReadingCount: number;
+  staleGeneratingCount: number;
+  failures: Array<{ code: string; count: number }>;
+  assessment: FortuneQualityAssessment;
 }
 
 async function scope(serviceSlug: string, actorUserId: string) {
@@ -437,6 +452,84 @@ export async function installStandardFortunePackage(input: {
       meaningCount: pack.meanings.length,
     };
   });
+}
+
+export async function fortuneOperationsQuality(
+  serviceSlug: string,
+  actorUserId: string,
+  now = new Date(),
+): Promise<FortuneOperationsQuality | null> {
+  const service = await scope(serviceSlug, actorUserId);
+  const db = await import('@bunshin/database');
+  const setting = await db.prisma.fortuneServiceSetting.findFirst({
+    where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+    select: { id: true, aiEnabled: true },
+  });
+  if (!setting) return null;
+
+  const periodStart = new Date(now.getTime() - 30 * 86_400_000);
+  const staleBefore = new Date(now.getTime() - 10 * 60_000);
+  const readingScope = { serviceSettingId: setting.id, createdAt: { gte: periodStart } };
+  const [activeParticipants, statuses, readers, staleGeneratingCount, failureRows] =
+    await Promise.all([
+      db.prisma.fortuneParticipant.count({
+        where: {
+          serviceSettingId: setting.id,
+          groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+        },
+      }),
+      db.prisma.fortuneReading.groupBy({
+        by: ['status'],
+        where: readingScope,
+        _count: { _all: true },
+      }),
+      db.prisma.fortuneReading.findMany({
+        where: readingScope,
+        distinct: ['memberUserId'],
+        select: { memberUserId: true },
+      }),
+      db.prisma.fortuneReading.count({
+        where: {
+          serviceSettingId: setting.id,
+          status: 'GENERATING',
+          createdAt: { gte: periodStart, lt: staleBefore },
+        },
+      }),
+      db.prisma.fortuneReading.groupBy({
+        by: ['failureCode'],
+        where: { ...readingScope, failureCode: { not: null } },
+        _count: { _all: true },
+        orderBy: { _count: { failureCode: 'desc' } },
+        take: 5,
+      }),
+    ]);
+  const count = (status: 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED') =>
+    statuses.find((row) => row.status === status)?._count._all ?? 0;
+  const aiReadingCount = count('READY_AI');
+  const basicReadingCount = count('READY_BASIC');
+  const failedReadingCount = count('FAILED');
+  const deletedReadingCount = count('DELETED');
+  return {
+    periodDays: 30,
+    activeParticipants,
+    activeReaders: readers.length,
+    readingCount: aiReadingCount + basicReadingCount + failedReadingCount + deletedReadingCount,
+    aiReadingCount,
+    basicReadingCount,
+    failedReadingCount,
+    deletedReadingCount,
+    staleGeneratingCount,
+    failures: failureRows.flatMap((row) =>
+      row.failureCode ? [{ code: row.failureCode, count: row._count._all }] : [],
+    ),
+    assessment: assessFortuneQuality({
+      aiEnabled: setting.aiEnabled,
+      aiReadingCount,
+      basicReadingCount,
+      failedReadingCount,
+      staleGeneratingCount,
+    }),
+  };
 }
 
 export async function setFortuneEnabled(input: {
