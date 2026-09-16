@@ -373,6 +373,21 @@ export default async function ServiceBunshinDetailPage({
     },
     select: { id: true },
   });
+  const dedicatedLineConnection = dedicatedLine
+    ? await db.prisma.groupLineConnection.findFirst({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          configurationId: dedicatedLine.id,
+          userId: actor.userId,
+          status: 'ACTIVE',
+          friendshipStatus: 'FOLLOWING',
+          notificationConsentAt: { not: null },
+          groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+        },
+        select: { id: true },
+      })
+    : null;
   const dailyActions: DailyActionView[] = (
     await db.prisma.bunshinMemory.findMany({
       where: {
@@ -446,6 +461,7 @@ export default async function ServiceBunshinDetailPage({
         ) : null}
         <SimpleFirstPostSetup
           serviceSlug={service.configuration.slug}
+          serviceName={service.configuration.displayName}
           bunshinId={bunshin.id}
           topic={bunshin.objectiveSummary}
           audience={bunshin.audienceSummary}
@@ -456,6 +472,8 @@ export default async function ServiceBunshinDetailPage({
           deliveryTime={deliveryTime}
           deliverySchedule={deliverySchedule}
           deliveryPolicy={deliveryPolicy}
+          serviceLineRequired={Boolean(dedicatedLine)}
+          serviceLineConnected={Boolean(dedicatedLineConnection)}
         />
         {approvedBusinessStrategy ? (
           <BusinessProfileGuide

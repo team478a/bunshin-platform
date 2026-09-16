@@ -12,6 +12,7 @@ export async function sendRegistrationCompletionLine(input: {
   serviceSlug: string;
   serviceName: string;
   localTime: string;
+  cadence: 'DAILY' | 'WEEKDAYS' | 'SCHEDULED';
 }) {
   const logger = createLogger().child({
     workspaceId: input.workspaceId,
@@ -57,6 +58,12 @@ export async function sendRegistrationCompletionLine(input: {
       `/s/${encodeURIComponent(input.serviceSlug)}/home`,
       getServerEnvironment().APP_URL,
     ).toString();
+    const deliveryTiming =
+      input.cadence === 'DAILY'
+        ? `毎日${input.localTime}ごろ`
+        : input.cadence === 'WEEKDAYS'
+          ? `平日の${input.localTime}ごろ`
+          : `投稿予定日の${input.localTime}ごろ`;
     const result = await new LineMessagingApiAdapter().pushText({
       accessToken: new AesGcmLineSecretCrypto().decrypt(
         connection.configuration.encryptedAccessToken,
@@ -66,7 +73,7 @@ export async function sendRegistrationCompletionLine(input: {
         '登録が完了しました。',
         '',
         `${input.serviceName}へようこそ。`,
-        `毎日${input.localTime}ごろ、あなたの事業に合う投稿文をLINEでお届けします。`,
+        `${deliveryTiming}、あなた向けの投稿案をLINEでお届けします。`,
         '届いた文章は、内容を確認してからSNSへコピーして使えます。',
         '',
         '今日の画面を見る',

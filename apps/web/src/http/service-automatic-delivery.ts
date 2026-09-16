@@ -52,20 +52,58 @@ export async function updateServiceAutomaticDelivery(
       actorUserId: actor.userId,
     };
     await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
+    const lineRouting = value.enabled
+      ? await db.prisma.groupLineRoutingPolicy.findUnique({
+          where: {
+            workspaceId_groupId_environment: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              environment: currentLineEnvironment(),
+            },
+          },
+          select: { mode: true },
+        })
+      : null;
     const weekStartDate = mondayForDate(
       new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }),
     );
     const scopes = new db.PrismaMissionAutomationScopeRepository();
     if (value.enabled && !(await scopes.validateWeekly({ ...scope, weekStartDate })))
       throw new ApplicationError('CONFLICT', '先に投稿するSNSと発信方法を設定してください。');
-    if (
+    if (value.enabled && lineRouting?.mode === 'DEDICATED') {
+      const dedicatedConnection = await db.prisma.groupLineConnection.findFirst({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          userId: actor.userId,
+          status: 'ACTIVE',
+          friendshipStatus: 'FOLLOWING',
+          notificationConsentAt: { not: null },
+          groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
+          configuration: {
+            environment: currentLineEnvironment(),
+            status: 'ACTIVE',
+            globallyPaused: false,
+            lastVerifiedAt: { not: null },
+            lastErrorCategory: null,
+          },
+        },
+        select: { id: true },
+      });
+      if (!dedicatedConnection)
+        throw new ApplicationError(
+          'CONFLICT',
+          '先にこのサービス専用の公式LINEを接続し、友だち追加を確認してください。',
+        );
+    } else if (
       value.enabled &&
       !(await ensureUserWorkspaceLineConnection(actor.userId, service.workspaceId, true))
-    )
+    ) {
       throw new ApplicationError(
         'CONFLICT',
         'LINEでログインしてから、お届け設定を開始してください。',
       );
+    }
     const preferenceRepository = new db.PrismaLineNotificationPreferenceRepository();
     const previousPreference = await new GetLineNotificationPreference(
       preferenceRepository,
@@ -103,6 +141,10 @@ export async function updateServiceAutomaticDelivery(
         serviceSlug: service.configuration.slug,
         serviceName: service.configuration.displayName,
         localTime: value.localTime,
+        cadence:
+          deliveryPolicy.enabled && deliveryPolicy.lockCadence
+            ? deliveryPolicy.cadence
+            : 'SCHEDULED',
       });
     return Response.json(
       { data: { enabled: value.enabled }, requestId },

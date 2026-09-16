@@ -8,6 +8,8 @@ const m = vi.hoisted(() => ({
   enqueue: vi.fn(),
   completion: vi.fn(),
   preference: vi.fn(),
+  routing: vi.fn(),
+  dedicatedConnection: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/config', () => ({
@@ -63,6 +65,10 @@ vi.mock('@bunshin/application', () => ({
   EnqueueJob: class {},
 }));
 vi.mock('@bunshin/database', () => ({
+  prisma: {
+    groupLineRoutingPolicy: { findUnique: m.routing },
+    groupLineConnection: { findFirst: m.dedicatedConnection },
+  },
   PrismaBunshinRepository: class {},
   PrismaLineNotificationPreferenceRepository: class {},
   PrismaJobRepository: class {},
@@ -89,6 +95,8 @@ describe('service automatic delivery settings', () => {
     m.eligible.mockResolvedValue(true);
     m.preference.mockResolvedValue({ enabled: false, notificationConsentAt: null });
     m.completion.mockResolvedValue({ status: 'SENT' });
+    m.routing.mockResolvedValue({ mode: 'DEDICATED' });
+    m.dedicatedConnection.mockResolvedValue({ id: 'connection' });
   });
   it('saves consent and queues preparation using the authenticated service scope', async () => {
     expect((await call({ enabled: true, localTime: '08:00' })).status).toBe(200);
@@ -116,11 +124,19 @@ describe('service automatic delivery settings', () => {
       serviceSlug: 'my-service',
       serviceName: 'ワタシワークス公式',
       localTime: '08:00',
+      cadence: 'WEEKDAYS',
     });
   });
   it('does not send the completion message again when delivery was already enabled', async () => {
     m.preference.mockResolvedValue({ enabled: true, notificationConsentAt: new Date() });
     expect((await call({ enabled: true, localTime: '08:00' })).status).toBe(200);
+    expect(m.completion).not.toHaveBeenCalled();
+  });
+  it('requires the service-specific LINE connection before enabling dedicated delivery', async () => {
+    m.dedicatedConnection.mockResolvedValue(null);
+    expect((await call({ enabled: true, localTime: '08:00' })).status).toBe(409);
+    expect(m.save).not.toHaveBeenCalled();
+    expect(m.enqueue).not.toHaveBeenCalled();
     expect(m.completion).not.toHaveBeenCalled();
   });
   it('stops notifications without queuing another preparation', async () => {

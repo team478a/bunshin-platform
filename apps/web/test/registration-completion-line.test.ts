@@ -38,6 +38,7 @@ const input = {
   serviceSlug: 'watashi-works-official',
   serviceName: 'ワタシワークス公式',
   localTime: '08:00',
+  cadence: 'DAILY' as const,
 };
 
 describe('registration completion LINE', () => {
@@ -55,13 +56,18 @@ describe('registration completion LINE', () => {
     expect(m.pushText).toHaveBeenCalledWith({
       accessToken: 'access-token',
       recipientId: 'U123',
-      text: expect.stringContaining(
-        '毎日08:00ごろ、あなたの事業に合う投稿文をLINEでお届けします。',
-      ),
+      text: expect.stringContaining('毎日08:00ごろ、あなた向けの投稿案をLINEでお届けします。'),
     });
     expect(m.pushText.mock.calls[0]?.[0].text).toContain(
       'https://www.watashi-works.com/s/watashi-works-official/home',
     );
+  });
+
+  it('describes scheduled service delivery without promising a daily message', async () => {
+    await sendRegistrationCompletionLine({ ...input, cadence: 'SCHEDULED' });
+    const text = m.pushText.mock.calls[0]?.[0].text as string;
+    expect(text).toContain('投稿予定日の08:00ごろ、あなた向けの投稿案をLINEでお届けします。');
+    expect(text).not.toContain('毎日08:00ごろ');
   });
 
   it('skips safely when the dedicated LINE connection is not ready', async () => {

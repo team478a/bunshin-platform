@@ -43,6 +43,7 @@ function preferredFormats(platform: SocialPlatform) {
 
 export function SimpleFirstPostSetup({
   serviceSlug,
+  serviceName,
   bunshinId,
   topic,
   audience,
@@ -53,8 +54,11 @@ export function SimpleFirstPostSetup({
   deliveryTime,
   deliverySchedule,
   deliveryPolicy,
+  serviceLineRequired,
+  serviceLineConnected,
 }: {
   serviceSlug: string;
+  serviceName: string;
   bunshinId: string;
   topic: string;
   audience: string;
@@ -74,6 +78,8 @@ export function SimpleFirstPostSetup({
     lockCadence: boolean;
     contentMode: 'IDEA' | 'PROMPT' | 'READY_TO_USE';
   };
+  serviceLineRequired: boolean;
+  serviceLineConnected: boolean;
 }) {
   const router = useRouter();
   const [platform, setPlatform] = useState<SocialPlatform>('INSTAGRAM');
@@ -105,6 +111,7 @@ export function SimpleFirstPostSetup({
         timeZone: 'UTC',
       }).format(new Date(`${deliverySchedule.nextScheduledDate}T00:00:00.000Z`))
     : null;
+  const serviceLineHref = `/s/${encodedService}/bunshins/${encodedBunshin}/line`;
 
   async function request<T>(path: string, body: unknown): Promise<T> {
     const requestId = createClientRequestId();
@@ -195,6 +202,28 @@ export function SimpleFirstPostSetup({
     } finally {
       setPending(false);
     }
+  }
+
+  if (serviceLineRequired && !serviceLineConnected) {
+    return (
+      <section className="simple-first-post" aria-labelledby="service-line-required-title">
+        <header>
+          <p className="eyebrow">LINE配信を受け取る準備</p>
+          <h2 id="service-line-required-title">{serviceName}LINEとの接続確認が必要です</h2>
+          <p>
+            会員登録や投稿設定をやり直す必要はありません。投稿案の配信先として、現在のLINEアカウントを一度確認してください。
+          </p>
+        </header>
+        <a className="button button--primary button--full" href={serviceLineHref}>
+          LINEとの接続を確認する
+        </a>
+        {deliveryEnabled ? (
+          <p className="notice" role="status">
+            投稿の設定は保存されています。LINE接続が完了すると、次の投稿予定日から受け取れます。
+          </p>
+        ) : null}
+      </section>
+    );
   }
 
   if (ready) {

@@ -42,4 +42,14 @@ describe('simple service first-post setup', () => {
     expect(setup).toContain('今日は投稿予定がないため、LINE配信はありません。');
     expect(setup).toContain('次回は${nextDeliveryLabel}の予定です。');
   });
+
+  it('blocks false completion until the dedicated service LINE is connected', () => {
+    expect(page).toContain('serviceLineRequired={Boolean(dedicatedLine)}');
+    expect(page).toContain('serviceLineConnected={Boolean(dedicatedLineConnection)}');
+    expect(page).toContain('serviceName={service.configuration.displayName}');
+    expect(setup).toContain('serviceLineRequired && !serviceLineConnected');
+    expect(setup).toContain('LINEとの接続を確認する');
+    expect(setup).toContain('会員登録や投稿設定をやり直す必要はありません。');
+    expect(setup).toContain('投稿の設定は保存されています。');
+  });
 });
