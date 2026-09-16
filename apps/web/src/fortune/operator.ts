@@ -1,5 +1,6 @@
 import 'server-only';
 import {
+  buildStandardFortuneKnowledgePack,
   FORTUNE_KNOWLEDGE_MEANING_COUNT,
   parseFortuneKnowledgePack,
   type FortuneKnowledgePack,
@@ -254,6 +255,17 @@ export async function importFortuneKnowledge(input: {
       },
     });
     return { version, meaningCount: pack.meanings.length };
+  });
+}
+
+export async function importStandardFortuneKnowledge(input: {
+  serviceSlug: string;
+  actorUserId: string;
+  bunshinId: string;
+}) {
+  return importFortuneKnowledge({
+    ...input,
+    pack: buildStandardFortuneKnowledgePack(),
   });
 }
 
