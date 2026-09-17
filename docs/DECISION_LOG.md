@@ -2391,3 +2391,10 @@
 - Operation: 公開後に別のテスト利用者で登録、占い作成、結果閲覧まで実行し、実データを使って動作確認済みと判定する。
 - Feedback: 結果評価は運用品質画面まで確認する推奨項目とし、初期の運用開始は妨げない。
 - Privacy: 運営画面には確認人数と件数だけを表示し、利用者名、選択テーマ、カード、占い本文を表示しない。
+
+## 2026-09-17: 占いの会員・通知状態を共通Service基盤へ完全移行する
+
+- Notification: 占い週次通知の同意は`service_notification_preferences`の`FORTUNE_WEEKLY`だけを正本とする。
+- Membership: 参加中・退会済みの状態は`GroupMembership.status`だけを正本とする。
+- Cleanup: 移行済みでアプリケーション参照のない`fortune_participants.notification_enabled`と`withdrawn_at`、旧検索Indexを削除する。
+- Retention: 年齢確認と過去の占い結果を結び付ける`fortune_participants`行自体は保持する。

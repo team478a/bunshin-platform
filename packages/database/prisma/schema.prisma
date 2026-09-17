@@ -2434,9 +2434,7 @@ model FortuneParticipant {
   groupMembershipId   String                @unique @map("group_membership_id") @db.Uuid
   userId              String                @map("user_id") @db.Uuid
   ageConfirmedAt      DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
-  notificationEnabled Boolean               @default(false) @map("notification_enabled")
   joinedAt            DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
-  withdrawnAt         DateTime?             @map("withdrawn_at") @db.Timestamptz(6)
   createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   serviceSetting      FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
@@ -2448,7 +2446,6 @@ model FortuneParticipant {
   @@unique([serviceSettingId, userId])
   @@unique([workspaceId, groupId, groupMembershipId, userId])
   @@unique([workspaceId, groupId, id, userId])
-  @@index([serviceSettingId, withdrawnAt])
   @@map("fortune_participants")
 }
 
