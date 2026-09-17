@@ -183,8 +183,12 @@ export default async function ServiceEntryPage({
           {configuration.contactEmail && (
             <a href={`mailto:${configuration.contactEmail}`}>お問い合わせ</a>
           )}
-          {configuration.termsUrl && <a href={configuration.termsUrl}>利用規約</a>}
-          {configuration.privacyUrl && <a href={configuration.privacyUrl}>プライバシー</a>}
+          {participation.legalDocuments.some(({ type }) => type === 'TERMS') && (
+            <Link href={`/s/${configuration.slug}/terms` as Route}>利用規約</Link>
+          )}
+          {participation.legalDocuments.some(({ type }) => type === 'PRIVACY') && (
+            <Link href={`/s/${configuration.slug}/privacy` as Route}>プライバシー</Link>
+          )}
           {configuration.poweredByEnabled && <small>Powered by ワタシワークス</small>}
         </footer>
       </article>

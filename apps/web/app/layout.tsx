@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import './styles.css';
+import { SiteFooter } from './ui/site-footer';
 
 export const metadata: Metadata = {
   title: 'ワタシワークス',
@@ -17,10 +17,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ja">
       <body>
         {children}
-        <footer className="site-footer">
-          <Link href="/terms">利用規約</Link>
-          <Link href="/privacy">プライバシー</Link>
-        </footer>
+        <SiteFooter />
       </body>
     </html>
   );
