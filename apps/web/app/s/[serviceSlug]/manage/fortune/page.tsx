@@ -8,6 +8,7 @@ import {
   fortuneOperatorStatus,
 } from '../../../../../src/fortune/operator';
 import { buildFortuneLaunchSteps } from '../../../../../src/fortune/launch-readiness';
+import { buildFortuneOperationalValidation } from '../../../../../src/fortune/operational-validation';
 import { fortuneFailureLabel } from '../../../../../src/fortune/quality';
 import { PublicShell } from '../../../../ui/public-shell';
 import { FortuneOperatorEditor } from './fortune-operator-editor';
@@ -32,6 +33,7 @@ export default async function FortuneManagementPage({
   ]);
   const launchSteps = buildFortuneLaunchSteps(serviceSlug, status);
   const completedSteps = launchSteps.filter((step) => step.ready).length;
+  const operationalValidation = buildFortuneOperationalValidation(serviceSlug, status, quality);
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
@@ -172,6 +174,45 @@ export default async function FortuneManagementPage({
           bunshinId={status.bunshinId}
           bunshins={status.bunshins}
         />
+        {status.configured && (
+          <section className="settings-card fortune-readiness-card">
+            <p className="eyebrow">本番開始後の確認</p>
+            <h2>
+              利用者の動作確認 {operationalValidation.requiredComplete}/
+              {operationalValidation.requiredTotal}
+            </h2>
+            <p>
+              設定が揃っただけでは完了ではありません。運営者とは別のテスト利用者で、登録から結果の確認まで順番に試してください。登録人数は現在値、占い・閲覧・評価は直近
+              {quality?.periodDays ?? 30}日の記録で判定します。
+            </p>
+            <ol className="form-stack">
+              {operationalValidation.items.map((item) => (
+                <li key={item.key}>
+                  <strong className={item.complete ? 'status-success' : 'status-warning'}>
+                    {item.complete ? '✓ 確認済み' : item.required ? '未確認' : '推奨'}：{item.title}
+                  </strong>
+                  <p>{item.description}</p>
+                  {!item.complete && <Link href={item.href as Route}>{item.actionLabel}</Link>}
+                </li>
+              ))}
+            </ol>
+            <p>
+              <strong>
+                現在の開始判定：
+                {operationalValidation.ready
+                  ? '基本動作を確認済みです'
+                  : '利用者による確認待ちです'}
+              </strong>
+            </p>
+            {operationalValidation.ready &&
+              operationalValidation.recommendedComplete <
+                operationalValidation.recommendedTotal && (
+                <p>
+                  基本動作は確認済みです。結果への評価も1件送ると、運用品質画面まで確認できます。
+                </p>
+              )}
+          </section>
+        )}
         {quality && (
           <>
             <section className="settings-card">
