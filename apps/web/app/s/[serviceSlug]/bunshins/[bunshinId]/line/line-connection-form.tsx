@@ -14,6 +14,7 @@ export function LineConnectionForm({
 
   return (
     <form
+      id="line-connect-form"
       className="form-stack line-link-form"
       action="/auth/service-line/start"
       method="post"
