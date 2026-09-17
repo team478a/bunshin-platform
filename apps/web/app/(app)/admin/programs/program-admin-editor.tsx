@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; name: string }[] }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [preset, setPreset] = useState<'SIDE_HUSTLE_90_DAY' | 'SIMPLE'>('SIDE_HUSTLE_90_DAY');
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,6 +28,7 @@ export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; n
           description: text('description'),
           category: text('category'),
           targetAudience: text('targetAudience'),
+          definitionPreset: text('definitionPreset'),
           standardDurationDays: Number(text('standardDurationDays')),
           supportModes,
         }),
@@ -86,6 +88,19 @@ export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; n
           />
         </label>
         <label className="field">
+          <span className="field__label">プログラムの型</span>
+          <select
+            className="field__control"
+            name="definitionPreset"
+            value={preset}
+            onChange={(event) => setPreset(event.target.value as typeof preset)}
+          >
+            <option value="SIDE_HUSTLE_90_DAY">副業・SNS集客の90日プログラム</option>
+            <option value="SIMPLE">シンプルな毎日実践プログラム</option>
+          </select>
+          <small>90日プログラムには、4つの段階と曜日ごとの行動、成果の確認項目が入ります。</small>
+        </label>
+        <label className="field">
           <span className="field__label">標準の日数</span>
           <input
             className="field__control"
@@ -93,7 +108,9 @@ export function ProgramAdminEditor({ workspaces }: { workspaces: { id: string; n
             type="number"
             min={1}
             max={365}
-            defaultValue={30}
+            key={preset}
+            defaultValue={preset === 'SIDE_HUSTLE_90_DAY' ? 90 : 30}
+            readOnly={preset === 'SIDE_HUSTLE_90_DAY'}
             required
           />
         </label>

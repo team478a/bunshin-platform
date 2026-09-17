@@ -1,4 +1,5 @@
 import { ApplicationError } from '@bunshin/shared';
+import { parseProgramDefinition } from './program-definition';
 
 export const PROGRAM_SUPPORT_MODES = ['IDEA_ONLY', 'GUIDED', 'READY_TO_USE'] as const;
 export type ProgramSupportMode = (typeof PROGRAM_SUPPORT_MODES)[number];
@@ -171,7 +172,8 @@ export class ProgramCoreService {
   async createTemplateVersion(
     input: Parameters<ProgramCoreRepository['createTemplateVersion']>[0],
   ) {
-    const result = await this.repository.createTemplateVersion(input);
+    const definition = input.publish ? parseProgramDefinition(input.definition) : input.definition;
+    const result = await this.repository.createTemplateVersion({ ...input, definition });
     if (result === null) throw new ApplicationError('FORBIDDEN', 'program version denied');
     return result;
   }

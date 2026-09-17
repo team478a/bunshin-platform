@@ -20,6 +20,13 @@ describe('program management boundary', () => {
     expect(http).toContain('ownerGroupId: null');
   });
 
+  it('publishes only a validated versioned definition', () => {
+    expect(http).toContain('definitionPreset: z.enum(PROGRAM_DEFINITION_PRESETS)');
+    expect(http).toContain('createProgramDefinition({');
+    expect(http).toContain('parseProgramDefinition(');
+    expect(http).toContain('definition: definitionJson');
+  });
+
   it('revalidates workspace, service and membership for manual enrollment', () => {
     const enrollment = http.slice(http.indexOf('export async function enrollProgramResponse'));
     expect(enrollment).toContain('workspaceId: service.workspaceId');

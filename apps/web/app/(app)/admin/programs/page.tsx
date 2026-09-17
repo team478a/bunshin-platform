@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import { programDefinitionSummary } from '@bunshin/application';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { ProgramAdminEditor } from './program-admin-editor';
 
@@ -44,6 +45,7 @@ export default async function ProgramAdminPage() {
         <div className="settings-stack">
           {templates.map((template) => {
             const latest = versions.find((version) => version.programTemplateId === template.id);
+            const summary = programDefinitionSummary(latest?.definition);
             return (
               <article key={template.id}>
                 <h3>{template.name}</h3>
@@ -54,6 +56,14 @@ export default async function ProgramAdminPage() {
                 <p>
                   最新版：第{latest?.version ?? 0}版 ／ 状態：{template.status}
                 </p>
+                {summary ? (
+                  <p>
+                    定義：{summary.durationLabel} ／ {summary.phaseCount}段階 ／{' '}
+                    {summary.missionCount}行動 ／ {summary.resultCount}成果項目
+                  </p>
+                ) : (
+                  <p>定義：旧形式（新版を公開すると検証済み形式になります）</p>
+                )}
               </article>
             );
           })}
