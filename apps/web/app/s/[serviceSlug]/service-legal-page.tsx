@@ -44,7 +44,10 @@ export async function ServiceLegalPage({
               <p>現在準備中です。公開までしばらくお待ちください。</p>
             )}
           </section>
-          <Link className="button button--secondary button--full" href={`/s/${serviceSlug}` as Route}>
+          <Link
+            className="button button--secondary button--full"
+            href={`/s/${serviceSlug}` as Route}
+          >
             サービスに戻る
           </Link>
         </article>
