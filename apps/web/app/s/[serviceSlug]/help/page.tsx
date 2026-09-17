@@ -9,6 +9,7 @@ import {
   resolvePublicServiceContext,
 } from '../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -73,6 +74,7 @@ export default async function ServiceHelpPage({
   );
   const delivery = settings.dailyIdeaDelivery;
   const isBusinessDailyService = settings.businessProfileEnabled;
+  const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
   const isManager = ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership?.serviceRole ?? '');
   const isContentEditor = membership?.serviceRole === 'CONTENT_EDITOR';
   const rewardsPilotAccess =
@@ -243,7 +245,9 @@ export default async function ServiceHelpPage({
               <div>
                 <p>紹介機能が有効なサービスでは、活動ページに専用URLやQRコードが表示されます。</p>
                 <p>
-                  ポイント残高は同じ運営元の対応サービスで共通です。バッジと画像作成回数はサービスごとに管理されます。
+                  {promptOnlyImages
+                    ? 'ポイント残高は同じ運営元の対応サービスで共通です。バッジはサービスごとに管理されます。'
+                    : 'ポイント残高は同じ運営元の対応サービスで共通です。バッジと画像作成回数はサービスごとに管理されます。'}
                 </p>
               </div>
             </details>
@@ -295,18 +299,31 @@ export default async function ServiceHelpPage({
         {!isBusinessDailyService && (
           <section className="service-entry__card service-help__section" id="media">
             <p className="eyebrow">画像・動画</p>
-            <h2>利用できる場合の流れ</h2>
-            <p>
-              画像・動画のボタンは、サービスと参加者の両方に利用権限があり、作成回数が残っている場合に表示されます。
-            </p>
-            <ul className="service-help__list">
-              <li>画像は生成結果を確認してダウンロードし、ご自身でSNSへ投稿します。</li>
-              <li>
-                動画は企画・台本・場面を確認してから生成します。完成まで時間がかかる場合があります。
-              </li>
-              <li>人物、商品、ロゴ、音楽など、利用する権利がある素材だけを登録してください。</li>
-              <li>生成に失敗して回数だけ減った場合は、再実行せず運営者へ連絡してください。</li>
-            </ul>
+            <h2>{promptOnlyImages ? '画像用の文章を使う流れ' : '利用できる場合の流れ'}</h2>
+            {promptOnlyImages ? (
+              <ol className="service-help__steps">
+                <li>投稿案にある「画像用の文章をコピー」を押します。</li>
+                <li>ChatGPTなど、画像を作れるサービスを開きます。</li>
+                <li>コピーした文章を貼り付けて送信し、できた画像を保存します。</li>
+                <li>保存した画像と投稿文をご自身のSNSへ投稿します。</li>
+              </ol>
+            ) : (
+              <>
+                <p>
+                  画像・動画のボタンは、サービスと参加者の両方に利用権限があり、作成回数が残っている場合に表示されます。
+                </p>
+                <ul className="service-help__list">
+                  <li>画像は生成結果を確認してダウンロードし、ご自身でSNSへ投稿します。</li>
+                  <li>
+                    動画は企画・台本・場面を確認してから生成します。完成まで時間がかかる場合があります。
+                  </li>
+                  <li>
+                    人物、商品、ロゴ、音楽など、利用する権利がある素材だけを登録してください。
+                  </li>
+                  <li>生成に失敗して回数だけ減った場合は、再実行せず運営者へ連絡してください。</li>
+                </ul>
+              </>
+            )}
           </section>
         )}
 
@@ -339,7 +356,7 @@ export default async function ServiceHelpPage({
                 </p>
               </div>
             </details>
-            {!isBusinessDailyService && (
+            {!isBusinessDailyService && !promptOnlyImages && (
               <details>
                 <summary>画像・動画の作成ボタンがありません</summary>
                 <div>

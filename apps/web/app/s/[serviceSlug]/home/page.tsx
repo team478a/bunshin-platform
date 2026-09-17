@@ -22,6 +22,7 @@ import {
   readServiceAnnouncement,
   readServiceOnboardingSettings,
 } from '../../../../src/services/service-onboarding-settings';
+import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -92,6 +93,7 @@ export default async function ServiceMemberHome({
     service.configuration.registration.surveyConfig,
   );
   const isBusinessDailyService = onboarding.businessProfileEnabled;
+  const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
   const announcement = readServiceAnnouncement(service.configuration.registration.onboardingConfig);
   if (
     (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) ||
@@ -108,7 +110,8 @@ export default async function ServiceMemberHome({
       (item) => item.featureKey === featureKey && active(item),
     ) &&
     membership.featureAssignments.some((item) => item.featureKey === featureKey && active(item));
-  const imageAvailable = !isBusinessDailyService && available('SOCIAL.IMAGE_GENERATION');
+  const imageAvailable =
+    !isBusinessDailyService && !promptOnlyImages && available('SOCIAL.IMAGE_GENERATION');
   const videoAvailable = !isBusinessDailyService && available('VIDEO_GENERATION');
   const rewardsPilotAccess = isBusinessDailyService
     ? null
@@ -300,6 +303,7 @@ export default async function ServiceMemberHome({
         <section className="service-entry__card">
           <h2>{isBusinessDailyService ? '毎日の集客を進める' : '利用できる機能'}</h2>
           {!isBusinessDailyService &&
+            !promptOnlyImages &&
             !imageAvailable &&
             !videoAvailable &&
             !rewardsPilotAccess &&
@@ -309,6 +313,20 @@ export default async function ServiceMemberHome({
               </p>
             )}
           <div className="service-home-actions">
+            {promptOnlyImages && (
+              <div className="notice">
+                <strong>画像は、画像用の文章をコピーして作ります</strong>
+                <p>
+                  投稿パートナーに届く「画像用の文章」をコピーし、ChatGPTなどの画像を作れるサービスへ貼り付けて送ってください。
+                </p>
+                <Link
+                  className="button button--primary"
+                  href={`/s/${service.configuration.slug}/bunshins` as Route}
+                >
+                  投稿パートナーを見る
+                </Link>
+              </div>
+            )}
             {rewardsPilotAccess && (
               <Link
                 className="button button--primary"
@@ -372,7 +390,7 @@ export default async function ServiceMemberHome({
             <Link className="button" href={`/s/${service.configuration.slug}/help` as Route}>
               使い方・困ったとき
             </Link>
-            {!isBusinessDailyService && (
+            {!isBusinessDailyService && !promptOnlyImages && (
               <Link className="button" href={`/s/${service.configuration.slug}/credits` as Route}>
                 画像作成回数を見る
               </Link>

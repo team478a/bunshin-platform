@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { isPromptOnlyImageService } from '../../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../../ui/public-shell';
 import { CreditAdjustmentEditor } from './credit-adjustment-editor';
 import { CreditBulkGrantEditor } from './credit-bulk-grant-editor';
@@ -17,6 +18,9 @@ export default async function ServiceCreditManagementPage({
   if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/credits`)}`);
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
+  if (isPromptOnlyImageService(service.configuration.slug)) {
+    redirect(`/s/${service.configuration.slug}/manage`);
+  }
 
   const db = await import('@bunshin/database');
   const memberships = await db.prisma.groupMembership.findMany({

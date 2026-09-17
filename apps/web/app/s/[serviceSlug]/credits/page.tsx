@@ -6,6 +6,7 @@ import {
   serviceCreditLedgerSummary,
 } from '../../../../src/services/service-credit-balance';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
+import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,9 @@ export default async function ServiceCreditsPage({
     serviceSlug,
     `/s/${serviceSlug}/credits`,
   );
+  if (isPromptOnlyImageService(service.configuration.slug)) {
+    redirect(`/s/${service.configuration.slug}/home` as Route);
+  }
   const db = await import('@bunshin/database');
   const membership = await db.prisma.groupMembership.findFirst({
     where: {

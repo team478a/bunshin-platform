@@ -222,9 +222,16 @@ export function SennokuniManual() {
                 投稿案を読み、使う場合は <ActionLabel>採用する</ActionLabel> を押します。
               </li>
               <li>
-                <ActionLabel>投稿文をコピー</ActionLabel> を押します。
+                画像を使う場合は <ActionLabel>画像用の文章をコピー</ActionLabel> を押します。
               </li>
-              <li>Instagramなどを開き、投稿文を貼り付けて内容を確認します。</li>
+              <li>ChatGPTなど、画像を作れるサービスを開き、コピーした文章を貼り付けて送ります。</li>
+              <li>
+                作成された画像をスマートフォンへ保存します。続きの画像が必要なときは「次」と送ります。
+              </li>
+              <li>
+                千ノ国メディアへ戻り、<ActionLabel>投稿文をコピー</ActionLabel> を押します。
+              </li>
+              <li>Instagramなどを開き、保存した画像と投稿文を入れて内容を確認します。</li>
               <li>SNSへ投稿した後、千ノ国メディアへ戻ります。</li>
               <li>
                 <ActionLabel tone="coral">投稿しました</ActionLabel> を押します。
@@ -233,6 +240,10 @@ export function SennokuniManual() {
             <p className="easy-manual__warning">
               <strong>順番に注意：</strong>
               「投稿しました」は、実際にSNSへ投稿したことを確認してから押します。
+            </p>
+            <p className="easy-manual__tip">
+              <strong>画像について：</strong>
+              千ノ国メディアの中では画像を作りません。「画像用の文章」をChatGPTなどへ送って作ります。
             </p>
             <details className="easy-manual__details">
               <summary>iPhoneでコピーできないとき</summary>
@@ -291,14 +302,11 @@ export function SennokuniManual() {
                   <strong>30 WP</strong>
                   <span>別の投稿案を1回作る</span>
                 </p>
-                <p>
-                  <strong>50 WP</strong>
-                  <span>投稿画像を1回作る（画像機能を使える方だけ表示）</span>
-                </p>
               </div>
               <small>
                 ポイント数と使い道は運営者が変更する場合があります。画面に表示される数字が最新です。
               </small>
+              <small>画像用の文章をコピーして使うとき、画像作成回数やWPは消費しません。</small>
             </details>
           </section>
         </div>

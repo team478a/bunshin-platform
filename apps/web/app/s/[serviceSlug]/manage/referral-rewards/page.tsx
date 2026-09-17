@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { ServiceReferralRewardRuleService } from '@bunshin/application';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { isPromptOnlyImageService } from '../../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ReferralRewardRuleEditor } from './referral-reward-rule-editor';
 
@@ -18,6 +19,9 @@ export default async function ServiceReferralRewardsPage({
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/referral-rewards`)}`);
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
+  if (isPromptOnlyImageService(service.configuration.slug)) {
+    redirect(`/s/${service.configuration.slug}/manage`);
+  }
   const db = await import('@bunshin/database');
   const rules = await new ServiceReferralRewardRuleService(
     new db.PrismaServiceReferralRewardRuleRepository(),
