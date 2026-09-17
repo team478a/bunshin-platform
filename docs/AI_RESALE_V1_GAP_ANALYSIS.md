@@ -5,6 +5,11 @@
 - 調査範囲: コード、Prisma schema・migration、Application Service、API、画面、Job、LINE、AI、管理画面、既存テスト
 - 実装変更: なし。本書以外のコード、DB、API、UI、LINE、課金、Promptは変更していない。
 
+## ダウンロード
+
+- [PDF版](downloads/ワタシワークス_AI物販V1_現状仕様調査・差分分析.pdf)
+- [Word版](downloads/ワタシワークス_AI物販V1_現状仕様調査・差分分析.docx)
+
 ## 1. Executive Summary
 
 AI物販V1は、現在のワタシワークスを捨てて別システムとして作る必要はない。Programの定義・採用・Offering・Enrollment、Action提示履歴、追記型Event、進捗Snapshot、公開登録、LINEマルチサービス接続、Job再試行、AI Provider設定・使用量記録、サービス別ブランド・規約は既に存在する。
@@ -23,28 +28,28 @@ AI物販V1は、現在のワタシワークスを捨てて別システムとし�
 
 分類の意味は次のとおり。
 
-| 分類 | 意味 |
-| --- | --- |
-| A | そのまま利用可能 |
-| B | 軽微な変更で利用可能 |
-| C | 既存機能の拡張が必要 |
-| D | 新規実装が必要 |
-| E | V1では不要 |
+| 分類 | 意味                 |
+| ---- | -------------------- |
+| A    | そのまま利用可能     |
+| B    | 軽微な変更で利用可能 |
+| C    | 既存機能の拡張が必要 |
+| D    | 新規実装が必要       |
+| E    | V1では不要           |
 
 ## 2. 現在のシステム構成
 
-| 領域 | 現在の構成 | 主な根拠 |
-| --- | --- | --- |
-| Frontend | Next.js App Router、React、TypeScript。公開サービス画面と管理画面を同一Webアプリで提供 | `apps/web/app` |
-| Backend | Next.js Route Handler。Zod入力検証、Application Service、Prisma Repositoryの順で処理 | `apps/web/src/http`, `packages/application/src`, `packages/database/src` |
-| Database | PostgreSQL / Prisma。Workspaceを所有境界、Groupを運営サービス境界として保持 | `packages/database/prisma/schema.prisma` |
-| Auth | Supabase session、LINE Login、Workspace/Group Membershipによる認可 | `apps/web/src/auth`, `packages/auth` |
-| AI | Provider設定をDB管理し、OpenAI等をAdapterから呼ぶ。モデル、Prompt Version、token、原価、処理時間、成否を記録 | `apps/web/src/ai/runtime-provider-configuration.ts`, `apps/web/src/observability/ai-usage.ts` |
-| LINE | 共通LINEとGroup専用LINE、Webhook routing、通知同意、quiet hours、Job、失敗履歴、再送、リッチメニュー | `GroupLine*`, `LineMessageDelivery*`, `ServiceLineBroadcast*` |
-| Payment | サービスの課金方式と月額表示、Program Offeringの価格参照欄のみ。実決済は外部責務 | `ServiceCommercialSetting`, `ProgramOffering` |
-| Admin | Platform管理、運営団体、サービス、Program、LINE、参加者、運用レポート等 | `apps/web/app/(app)/admin`, `apps/web/app/s/[serviceSlug]/manage` |
-| Program | Template → Version → ServiceProgram → Offering → Enrollment。RuntimeはAssignment → Event → Snapshot | `packages/application/src/program-*`, Prisma Program models |
-| Mission | SOCIAL固有の`DailyMission`と、Program共通の`ProgramMissionAssignment`が存在 | Prisma `DailyMission`, `ProgramMissionAssignment` |
+| 領域     | 現在の構成                                                                                                   | 主な根拠                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Frontend | Next.js App Router、React、TypeScript。公開サービス画面と管理画面を同一Webアプリで提供                       | `apps/web/app`                                                                                |
+| Backend  | Next.js Route Handler。Zod入力検証、Application Service、Prisma Repositoryの順で処理                         | `apps/web/src/http`, `packages/application/src`, `packages/database/src`                      |
+| Database | PostgreSQL / Prisma。Workspaceを所有境界、Groupを運営サービス境界として保持                                  | `packages/database/prisma/schema.prisma`                                                      |
+| Auth     | Supabase session、LINE Login、Workspace/Group Membershipによる認可                                           | `apps/web/src/auth`, `packages/auth`                                                          |
+| AI       | Provider設定をDB管理し、OpenAI等をAdapterから呼ぶ。モデル、Prompt Version、token、原価、処理時間、成否を記録 | `apps/web/src/ai/runtime-provider-configuration.ts`, `apps/web/src/observability/ai-usage.ts` |
+| LINE     | 共通LINEとGroup専用LINE、Webhook routing、通知同意、quiet hours、Job、失敗履歴、再送、リッチメニュー         | `GroupLine*`, `LineMessageDelivery*`, `ServiceLineBroadcast*`                                 |
+| Payment  | サービスの課金方式と月額表示、Program Offeringの価格参照欄のみ。実決済は外部責務                             | `ServiceCommercialSetting`, `ProgramOffering`                                                 |
+| Admin    | Platform管理、運営団体、サービス、Program、LINE、参加者、運用レポート等                                      | `apps/web/app/(app)/admin`, `apps/web/app/s/[serviceSlug]/manage`                             |
+| Program  | Template → Version → ServiceProgram → Offering → Enrollment。RuntimeはAssignment → Event → Snapshot          | `packages/application/src/program-*`, Prisma Program models                                   |
+| Mission  | SOCIAL固有の`DailyMission`と、Program共通の`ProgramMissionAssignment`が存在                                  | Prisma `DailyMission`, `ProgramMissionAssignment`                                             |
 
 依存方向は概ね`apps/web → application/capability → database adapter`で、LINE・OpenAI等のProviderはWeb側Adapterへ分離されている。AI物販固有の処理も同じ境界を守る必要がある。
 
@@ -72,51 +77,51 @@ AI物販V1で利用価値が高い既存機能は次のとおり。
 
 ## 4. Gap Analysis
 
-| 機能 | 現在の実装 | AI物販V1で必要な仕様 | 分類 | 必要な変更 | 関連ファイル | 関連DB | 関連API |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 公開無料登録 | Serviceを`PUBLIC`にすると規約同意後にMembershipを`ACTIVE`化 | LINE等から誰でも無料登録 | A | AI物販用Service設定と導線のみ | `service-participation.ts`, `public-service.ts` | `ServiceRegistrationPolicy`, `GroupMembership`, `ServiceLegalConsent` | `POST /api/services/{slug}/participation` |
-| 登録日起点 | 登録完了EventとMembership作成・同意時刻を保存 | DAY1からDAY7を登録日で進行 | A | Programの開始日の正本を`ProgramEnrollment.startsAt`に統一 | `service-participation.ts` | `ServiceMembershipEvent`, `ProgramEnrollment` | 既存参加API |
-| 無料Program自動Enrollment | 現行は管理者が無料・招待制Offeringへ手動割当 | 登録直後に7日体験へ自動参加 | C | `REGISTRATION_COMPLETED`を起点に冪等作成するUse Case/Jobを接続 | `apps/web/src/http/programs.ts` | `ProgramEnrollment`, `ProgramAuditLog` | 現行enrollment APIは管理者用。自動経路が必要 |
-| 7日固定進行 | Definitionは固定日数を持つがMission scheduleは曜日のみ。Runtime未接続 | DAY1〜DAY7を未実行でも暦日で進める | C | `startsAt`からProgram dayを算出し、日次評価するorchestratorを追加 | `program-definition.ts`, `program-runtime.ts` | `ProgramEnrollment`, `ProgramProgressSnapshot` | Runtime API/Jobなし |
-| DAY7判定 | Assignment/Event/Snapshotは保存できるが分類ruleなし | NOT_STARTED / PARTIAL / LISTED | C | Eventを集計する純粋ruleと判定Event/Snapshot更新 | `program-runtime.ts` | `ProgramActionEvent`, `ProgramProgressSnapshot` | DAY7評価Job/APIが必要 |
-| Program Definition | duration、phase、mission、resultをversioned JSONで検証 | AI物販のAction、7日・90日phase、結果定義 | B | AI物販Preset追加。日付/状態トリガー表現はV2拡張 | `program-definition.ts`, `program-definition-presets.ts` | `ProgramTemplateVersion.definition` | 既存Program管理APIを再利用 |
-| Action提示履歴 | Assignmentが定義key、表示snapshot、対象resource、rule versionを保持 | 何をいつ提示したか保存 | A | そのまま使用 | `program-runtime.ts` | `ProgramMissionAssignment` | 現在Web API未接続 |
-| Action開始・完了・スキップ | Runtimeが状態遷移とEventを同一transactionで保存 | 実行/未実行/完了日時 | A | そのまま使用し、画面/APIだけ接続 | `program-runtime.ts`, Prisma repository | `ProgramMissionAssignment`, `ProgramActionEvent` | 新しいRuntime endpointが必要 |
-| Next Best Action | 現行90日SNSはPhase×曜日の固定関数 | 現在状態から1件のActionまたはWAITを決定 | C | 共通orchestratorとAI物販固有ruleを追加 | `business-growth-actions.ts`は参考のみ | Runtime 3 tables | 評価/取得APIが必要 |
-| Action種別 | Definitionのkey/capabilityは文字列で拡張可 | ITEM_FIND等9種 | B | AI物販Action catalogと入力validatorを追加 | `program-definition.ts` | Definition JSON | Program管理APIのpreset追加 |
-| WAIT | SNSにREST表示と`RESTED`はあるがProgram上の非作業Action semanticsなし | 完了操作不要の正式なWAITと理由 | C | `NO_ACTION`/WAITの提示・自動消化・翌日再評価規則を定義 | `business-growth-actions.ts`, runtime | Assignment/Event/Snapshot | Action取得API |
-| 最終行動日時 | Snapshotに`lastActionAt`、Membershipに`lastUsedAt`、Mission Activityあり | PAUSED判定の基準 | A | Programでは`ProgramActionEvent`から更新する | runtime, service participation | `ProgramProgressSnapshot`, `GroupMembership`, `MissionActivity` | なし |
-| PAUSED判定 | SOCIAL向けdormancy ruleと復帰Reminderあり | Program固有の無活動日数でPAUSED | C | Program eventを使う判定ruleと状態遷移を接続 | `activity-continuity-rules.ts`, `daily-mission-job-handler.ts` | `ActivityContinuityRule`, Program Runtime | 評価Jobが必要 |
-| RECOVERY | LINEのReminderはあるが提示ActionはDailyMission限定 | 小さい復帰Actionを提示 | C | PAUSED ruleからRECOVERY Assignmentを作る | 同上 | Runtime tables | Action/通知API・Job |
-| 実行結果4択 | SOCIAL Missionに「できた/一部/できない/助けが必要」がある | Action結果入力と次回調整 | B | Program Runtime transition metadataへ同じ語彙を移植 | `service-daily-missions.ts`, `service-generation-knowledge.ts` | `MissionActivity`, `ProgramActionEvent` | Program Action result endpoint |
-| 商品の正本 | 商品、出品、反応、改善、販売を1商品単位で持つmodelなし | 対象商品とライフサイクルを構造化 | D | AI物販Capability固有の`ResaleItem`相当を追加 | 該当なし | 新規候補 | 商品登録・更新API候補 |
-| Personal Result Data | Event metadataとsource resource参照は可能 | 提示→実行→商品結果を追跡 | C | Assignment/Eventを正本にし、商品modelへresource参照。metadata schemaをAction別に検証 | `program-runtime.ts` | Runtime tables + `ResaleItem`候補 | Action/Event API |
-| note用イベント | 任意event type、source、時刻、metadataを追記保存可 | FIRST_LISTING等を失わず保存 | B | Event catalog、重複防止key、発火条件を定義 | `program-runtime.ts` | `ProgramActionEvent` | 内部Use Caseのみ |
-| SOCIAL投稿文 | DailyMission生成、結果、投稿記録、生成Contextがある | 出品説明やSNS告知が必要な場合だけ生成 | B | ActionからSOCIAL capabilityへtarget resourceとして接続 | `capability-social`, `daily-mission-generation.ts` | `DailyMission`一式 | 既存Daily Mission API |
-| LINE紐付け | 共通/Group専用のConnection、友だち状態、同意を保持 | AI物販参加者へ通知 | A | AI物販ServiceのLINE設定 | LINE auth/webhook files | `GroupLineConnection`, `LineConnection` | 既存LINE auth/webhook |
-| 状態別LINE通知 | DailyMission通知と任意Broadcastはある | ACTION/WAIT/RECOVERY/EVENTの個別通知 | C | Program event起点scheduler、template、Program deep linkを追加 | LINE jobs, service broadcast | Broadcast/Recipientまたは汎用Delivery拡張 | 内部scheduler、必要なら管理API |
-| LINE通知履歴・失敗・再送 | 配信、attempt、Job、retry、失敗categoryあり | 運用監視と再送 | A | Program通知も同じ実行基盤を通す | `line-messaging-core.ts`, broadcast job | Delivery/Attempt/Recipient | 既存retry API |
-| LINE頻度制御 | Daily/weekday、quiet hours、pausedUntil、reminder opt-in | Program別頻度と過剰通知防止 | C | Service/Program topic preferenceと優先度・cooldownを適用 | notification preference files | `LineNotificationPreference`, `ServiceNotificationPreference` | 既存設定API拡張 |
-| LINE deep link | DailyMission専用署名state、Service URL、リッチメニュー | 現在のProgram Actionを開く | C | resourceをDailyMissionに固定しないProgram Action用署名state | `line-messaging-core.ts` | `MissionDeepLinkState`はDailyMission FK必須 | Program deep-link endpoint |
-| 90日一括決済 | Stripe SDK・checkout・payment transaction・Webhookなし | 29,800円/9,800円を一括購入 | D | Provider port、Stripe adapter、Product/Price mapping、checkout、Webhook、監査 | 該当なし | 新規Purchase/Payment/Webhook候補 | 新規checkout/webhook |
-| 無料→有料 | Offering/Enrollmentはfree/price reference/期間を持つ | DAY7後に有料90日へ切替 | C | 購入成功で有料Offering Enrollment/Entitlementを冪等付与 | `program-core.ts` | Offering/Enrollment + Purchase候補 | Payment webhookから内部Use Case |
-| 有効期限・失効 | EnrollmentにendsAtとEXPIREDがあるが自動失効Jobなし | 購入日から90日で失効 | C | endsAt設定、期限Job、画面ガード | Program core/runtime | `ProgramEnrollment` | 内部Job |
-| キャンセル・返金 | Program決済としてはなし | CANCELLED、返金、利用停止の整合 | D | Payment state machineと監査。Enrollmentとは分離 | 該当なし | Payment候補 + Enrollment | webhook/admin API |
-| 手動権限付与 | 管理者がProgramへ手動Enrollment可能 | 紹介参加権の手動運用 | A | 有料Offeringも管理画面で扱えるようにする場合は軽微拡張 | Program管理画面 | `ProgramEnrollment` | 既存enrollment APIは無料限定 |
-| ユーザーAction画面 | Program画面は支援モード・目標表示のみ | 今日の1Action、WAIT、入力、結果 | D | Program Runtimeを読むスマホ画面を新設 | `app/s/[serviceSlug]/programs` | Runtime + ResaleItem | Runtime API |
-| DAY7/購入画面 | なし | 状態別説明、購入しない理由、monitor提示 | D | 状態別offer UIと理由記録 | 該当なし | Offer decision/purchase reason候補 | 新規API |
-| 管理指標 | SNS90日、参加者、運用CSVはある | DAY1/DAY3/DAY7/購入/販売/PAUSED等 | C | Program Eventsの集計query/exportを追加 | reports/export files | Runtime/Event/Purchase/Item | 管理report API |
-| 個人タイムライン | Event保存はあるが画面・queryなし | 登録から販売まで時系列表示 | C | Membership Event + Program Event + Paymentを統合投影 | Program runtime/report | 複数event tables | 管理timeline API |
-| AI Provider | DB設定、モデル切替、接続確認、Adapterあり | Action文面生成 | A | 既存Providerを利用 | runtime provider config | `AiProviderConfiguration` | 既存管理API |
-| AI観測性 | model/prompt/token/cost/latency/statusを保存 | 文面生成の監査 | A | 新task typeで記録 | `ai-usage.ts` | `AiUsageEvent` | 内部 |
-| Program Prompt | 各Provider fileにPrompt定数・本文が埋め込まれている | Program/Action別instruction・tone・禁止表現 | C | Program版設定またはversioned Prompt registryを追加 | `apps/web/src/providers/openai-*.ts` | Definition/新Prompt config候補 | 管理APIはV1不要 |
-| AI fallback | Provider例外処理や一部fallbackはあるが共通Program文面fallbackなし | AI失敗時もActionを表示 | B | ルール側の固定文を必須fallbackにする | provider/service files | AI usage event | 内部 |
-| Tenant/Brand | Workspace→Group→Service、Brand/Legal/Domainあり | OEMの組織・ブランド境界 | A | 既存境界を使用 | services/settings files | Workspace/Group/Service* | 既存service API |
-| Program追加 | Platform/private TemplateとService採用がある | 他の90日Programへ横展開 | B | 固有rule実装のregistryを追加 | Program files | Program models | Program管理API |
-| LINEマルチテナント | SHARED/DEDICATED/DISABLED、Group別Channel/Webhook | OEM別LINE | A | 通知templateのTenant化は別途C | group line files | `GroupLine*` | 既存Group LINE API |
-| 決済マルチテナント | seller/paymentOwnerの責任区分だけ存在 | 販売主体別Stripe口座 | D | V1では単一販売者。将来Connect adapter | Program Offering | Payment新規 | 将来 |
-| note自動生成・投稿 | なし | V1対象外 | E | Eventを残すだけ | Program runtime | `ProgramActionEvent` | なし |
-| 高度BI/自由AI判断/Market Data | なし | V1対象外 | E | 実装しない | なし | なし | なし |
+| 機能                          | 現在の実装                                                               | AI物販V1で必要な仕様                        | 分類 | 必要な変更                                                                           | 関連ファイル                                                   | 関連DB                                                                | 関連API                                      |
+| ----------------------------- | ------------------------------------------------------------------------ | ------------------------------------------- | ---- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
+| 公開無料登録                  | Serviceを`PUBLIC`にすると規約同意後にMembershipを`ACTIVE`化              | LINE等から誰でも無料登録                    | A    | AI物販用Service設定と導線のみ                                                        | `service-participation.ts`, `public-service.ts`                | `ServiceRegistrationPolicy`, `GroupMembership`, `ServiceLegalConsent` | `POST /api/services/{slug}/participation`    |
+| 登録日起点                    | 登録完了EventとMembership作成・同意時刻を保存                            | DAY1からDAY7を登録日で進行                  | A    | Programの開始日の正本を`ProgramEnrollment.startsAt`に統一                            | `service-participation.ts`                                     | `ServiceMembershipEvent`, `ProgramEnrollment`                         | 既存参加API                                  |
+| 無料Program自動Enrollment     | 現行は管理者が無料・招待制Offeringへ手動割当                             | 登録直後に7日体験へ自動参加                 | C    | `REGISTRATION_COMPLETED`を起点に冪等作成するUse Case/Jobを接続                       | `apps/web/src/http/programs.ts`                                | `ProgramEnrollment`, `ProgramAuditLog`                                | 現行enrollment APIは管理者用。自動経路が必要 |
+| 7日固定進行                   | Definitionは固定日数を持つがMission scheduleは曜日のみ。Runtime未接続    | DAY1〜DAY7を未実行でも暦日で進める          | C    | `startsAt`からProgram dayを算出し、日次評価するorchestratorを追加                    | `program-definition.ts`, `program-runtime.ts`                  | `ProgramEnrollment`, `ProgramProgressSnapshot`                        | Runtime API/Jobなし                          |
+| DAY7判定                      | Assignment/Event/Snapshotは保存できるが分類ruleなし                      | NOT_STARTED / PARTIAL / LISTED              | C    | Eventを集計する純粋ruleと判定Event/Snapshot更新                                      | `program-runtime.ts`                                           | `ProgramActionEvent`, `ProgramProgressSnapshot`                       | DAY7評価Job/APIが必要                        |
+| Program Definition            | duration、phase、mission、resultをversioned JSONで検証                   | AI物販のAction、7日・90日phase、結果定義    | B    | AI物販Preset追加。日付/状態トリガー表現はV2拡張                                      | `program-definition.ts`, `program-definition-presets.ts`       | `ProgramTemplateVersion.definition`                                   | 既存Program管理APIを再利用                   |
+| Action提示履歴                | Assignmentが定義key、表示snapshot、対象resource、rule versionを保持      | 何をいつ提示したか保存                      | A    | そのまま使用                                                                         | `program-runtime.ts`                                           | `ProgramMissionAssignment`                                            | 現在Web API未接続                            |
+| Action開始・完了・スキップ    | Runtimeが状態遷移とEventを同一transactionで保存                          | 実行/未実行/完了日時                        | A    | そのまま使用し、画面/APIだけ接続                                                     | `program-runtime.ts`, Prisma repository                        | `ProgramMissionAssignment`, `ProgramActionEvent`                      | 新しいRuntime endpointが必要                 |
+| Next Best Action              | 現行90日SNSはPhase×曜日の固定関数                                        | 現在状態から1件のActionまたはWAITを決定     | C    | 共通orchestratorとAI物販固有ruleを追加                                               | `business-growth-actions.ts`は参考のみ                         | Runtime 3 tables                                                      | 評価/取得APIが必要                           |
+| Action種別                    | Definitionのkey/capabilityは文字列で拡張可                               | ITEM_FIND等9種                              | B    | AI物販Action catalogと入力validatorを追加                                            | `program-definition.ts`                                        | Definition JSON                                                       | Program管理APIのpreset追加                   |
+| WAIT                          | SNSにREST表示と`RESTED`はあるがProgram上の非作業Action semanticsなし     | 完了操作不要の正式なWAITと理由              | C    | `NO_ACTION`/WAITの提示・自動消化・翌日再評価規則を定義                               | `business-growth-actions.ts`, runtime                          | Assignment/Event/Snapshot                                             | Action取得API                                |
+| 最終行動日時                  | Snapshotに`lastActionAt`、Membershipに`lastUsedAt`、Mission Activityあり | PAUSED判定の基準                            | A    | Programでは`ProgramActionEvent`から更新する                                          | runtime, service participation                                 | `ProgramProgressSnapshot`, `GroupMembership`, `MissionActivity`       | なし                                         |
+| PAUSED判定                    | SOCIAL向けdormancy ruleと復帰Reminderあり                                | Program固有の無活動日数でPAUSED             | C    | Program eventを使う判定ruleと状態遷移を接続                                          | `activity-continuity-rules.ts`, `daily-mission-job-handler.ts` | `ActivityContinuityRule`, Program Runtime                             | 評価Jobが必要                                |
+| RECOVERY                      | LINEのReminderはあるが提示ActionはDailyMission限定                       | 小さい復帰Actionを提示                      | C    | PAUSED ruleからRECOVERY Assignmentを作る                                             | 同上                                                           | Runtime tables                                                        | Action/通知API・Job                          |
+| 実行結果4択                   | SOCIAL Missionに「できた/一部/できない/助けが必要」がある                | Action結果入力と次回調整                    | B    | Program Runtime transition metadataへ同じ語彙を移植                                  | `service-daily-missions.ts`, `service-generation-knowledge.ts` | `MissionActivity`, `ProgramActionEvent`                               | Program Action result endpoint               |
+| 商品の正本                    | 商品、出品、反応、改善、販売を1商品単位で持つmodelなし                   | 対象商品とライフサイクルを構造化            | D    | AI物販Capability固有の`ResaleItem`相当を追加                                         | 該当なし                                                       | 新規候補                                                              | 商品登録・更新API候補                        |
+| Personal Result Data          | Event metadataとsource resource参照は可能                                | 提示→実行→商品結果を追跡                    | C    | Assignment/Eventを正本にし、商品modelへresource参照。metadata schemaをAction別に検証 | `program-runtime.ts`                                           | Runtime tables + `ResaleItem`候補                                     | Action/Event API                             |
+| note用イベント                | 任意event type、source、時刻、metadataを追記保存可                       | FIRST_LISTING等を失わず保存                 | B    | Event catalog、重複防止key、発火条件を定義                                           | `program-runtime.ts`                                           | `ProgramActionEvent`                                                  | 内部Use Caseのみ                             |
+| SOCIAL投稿文                  | DailyMission生成、結果、投稿記録、生成Contextがある                      | 出品説明やSNS告知が必要な場合だけ生成       | B    | ActionからSOCIAL capabilityへtarget resourceとして接続                               | `capability-social`, `daily-mission-generation.ts`             | `DailyMission`一式                                                    | 既存Daily Mission API                        |
+| LINE紐付け                    | 共通/Group専用のConnection、友だち状態、同意を保持                       | AI物販参加者へ通知                          | A    | AI物販ServiceのLINE設定                                                              | LINE auth/webhook files                                        | `GroupLineConnection`, `LineConnection`                               | 既存LINE auth/webhook                        |
+| 状態別LINE通知                | DailyMission通知と任意Broadcastはある                                    | ACTION/WAIT/RECOVERY/EVENTの個別通知        | C    | Program event起点scheduler、template、Program deep linkを追加                        | LINE jobs, service broadcast                                   | Broadcast/Recipientまたは汎用Delivery拡張                             | 内部scheduler、必要なら管理API               |
+| LINE通知履歴・失敗・再送      | 配信、attempt、Job、retry、失敗categoryあり                              | 運用監視と再送                              | A    | Program通知も同じ実行基盤を通す                                                      | `line-messaging-core.ts`, broadcast job                        | Delivery/Attempt/Recipient                                            | 既存retry API                                |
+| LINE頻度制御                  | Daily/weekday、quiet hours、pausedUntil、reminder opt-in                 | Program別頻度と過剰通知防止                 | C    | Service/Program topic preferenceと優先度・cooldownを適用                             | notification preference files                                  | `LineNotificationPreference`, `ServiceNotificationPreference`         | 既存設定API拡張                              |
+| LINE deep link                | DailyMission専用署名state、Service URL、リッチメニュー                   | 現在のProgram Actionを開く                  | C    | resourceをDailyMissionに固定しないProgram Action用署名state                          | `line-messaging-core.ts`                                       | `MissionDeepLinkState`はDailyMission FK必須                           | Program deep-link endpoint                   |
+| 90日一括決済                  | Stripe SDK・checkout・payment transaction・Webhookなし                   | 29,800円/9,800円を一括購入                  | D    | Provider port、Stripe adapter、Product/Price mapping、checkout、Webhook、監査        | 該当なし                                                       | 新規Purchase/Payment/Webhook候補                                      | 新規checkout/webhook                         |
+| 無料→有料                     | Offering/Enrollmentはfree/price reference/期間を持つ                     | DAY7後に有料90日へ切替                      | C    | 購入成功で有料Offering Enrollment/Entitlementを冪等付与                              | `program-core.ts`                                              | Offering/Enrollment + Purchase候補                                    | Payment webhookから内部Use Case              |
+| 有効期限・失効                | EnrollmentにendsAtとEXPIREDがあるが自動失効Jobなし                       | 購入日から90日で失効                        | C    | endsAt設定、期限Job、画面ガード                                                      | Program core/runtime                                           | `ProgramEnrollment`                                                   | 内部Job                                      |
+| キャンセル・返金              | Program決済としてはなし                                                  | CANCELLED、返金、利用停止の整合             | D    | Payment state machineと監査。Enrollmentとは分離                                      | 該当なし                                                       | Payment候補 + Enrollment                                              | webhook/admin API                            |
+| 手動権限付与                  | 管理者がProgramへ手動Enrollment可能                                      | 紹介参加権の手動運用                        | A    | 有料Offeringも管理画面で扱えるようにする場合は軽微拡張                               | Program管理画面                                                | `ProgramEnrollment`                                                   | 既存enrollment APIは無料限定                 |
+| ユーザーAction画面            | Program画面は支援モード・目標表示のみ                                    | 今日の1Action、WAIT、入力、結果             | D    | Program Runtimeを読むスマホ画面を新設                                                | `app/s/[serviceSlug]/programs`                                 | Runtime + ResaleItem                                                  | Runtime API                                  |
+| DAY7/購入画面                 | なし                                                                     | 状態別説明、購入しない理由、monitor提示     | D    | 状態別offer UIと理由記録                                                             | 該当なし                                                       | Offer decision/purchase reason候補                                    | 新規API                                      |
+| 管理指標                      | SNS90日、参加者、運用CSVはある                                           | DAY1/DAY3/DAY7/購入/販売/PAUSED等           | C    | Program Eventsの集計query/exportを追加                                               | reports/export files                                           | Runtime/Event/Purchase/Item                                           | 管理report API                               |
+| 個人タイムライン              | Event保存はあるが画面・queryなし                                         | 登録から販売まで時系列表示                  | C    | Membership Event + Program Event + Paymentを統合投影                                 | Program runtime/report                                         | 複数event tables                                                      | 管理timeline API                             |
+| AI Provider                   | DB設定、モデル切替、接続確認、Adapterあり                                | Action文面生成                              | A    | 既存Providerを利用                                                                   | runtime provider config                                        | `AiProviderConfiguration`                                             | 既存管理API                                  |
+| AI観測性                      | model/prompt/token/cost/latency/statusを保存                             | 文面生成の監査                              | A    | 新task typeで記録                                                                    | `ai-usage.ts`                                                  | `AiUsageEvent`                                                        | 内部                                         |
+| Program Prompt                | 各Provider fileにPrompt定数・本文が埋め込まれている                      | Program/Action別instruction・tone・禁止表現 | C    | Program版設定またはversioned Prompt registryを追加                                   | `apps/web/src/providers/openai-*.ts`                           | Definition/新Prompt config候補                                        | 管理APIはV1不要                              |
+| AI fallback                   | Provider例外処理や一部fallbackはあるが共通Program文面fallbackなし        | AI失敗時もActionを表示                      | B    | ルール側の固定文を必須fallbackにする                                                 | provider/service files                                         | AI usage event                                                        | 内部                                         |
+| Tenant/Brand                  | Workspace→Group→Service、Brand/Legal/Domainあり                          | OEMの組織・ブランド境界                     | A    | 既存境界を使用                                                                       | services/settings files                                        | Workspace/Group/Service*                                              | 既存service API                              |
+| Program追加                   | Platform/private TemplateとService採用がある                             | 他の90日Programへ横展開                     | B    | 固有rule実装のregistryを追加                                                         | Program files                                                  | Program models                                                        | Program管理API                               |
+| LINEマルチテナント            | SHARED/DEDICATED/DISABLED、Group別Channel/Webhook                        | OEM別LINE                                   | A    | 通知templateのTenant化は別途C                                                        | group line files                                               | `GroupLine*`                                                          | 既存Group LINE API                           |
+| 決済マルチテナント            | seller/paymentOwnerの責任区分だけ存在                                    | 販売主体別Stripe口座                        | D    | V1では単一販売者。将来Connect adapter                                                | Program Offering                                               | Payment新規                                                           | 将来                                         |
+| note自動生成・投稿            | なし                                                                     | V1対象外                                    | E    | Eventを残すだけ                                                                      | Program runtime                                                | `ProgramActionEvent`                                                  | なし                                         |
+| 高度BI/自由AI判断/Market Data | なし                                                                     | V1対象外                                    | E    | 実装しない                                                                           | なし                                                           | なし                                                                  | なし                                         |
 
 ## 5. Program / Mission詳細分析
 
@@ -269,18 +274,18 @@ DAY7分類は、登録日から7日経過した時点でEventを集計する。
 
 実装候補であり、今回追加していない。
 
-| API候補 | 目的 | 再利用するService |
-| --- | --- | --- |
-| `GET /api/services/{slug}/program-actions/today` | 現在Action/WAITと表示snapshot取得 | Program Runtime + NBA orchestrator |
-| `POST /api/services/{slug}/program-actions/{id}/start` | START記録 | ProgramRuntimeService |
-| `POST /api/services/{slug}/program-actions/{id}/result` | 完了/一部/未完了/助けが必要 | ProgramRuntimeService |
-| `POST /api/services/{slug}/resale-items` | 対象商品作成 | AI物販Capability |
-| `PATCH /api/services/{slug}/resale-items/{id}` | 出品・反応・改善・販売更新 | AI物販Capability + Event projector |
-| `GET /api/services/{slug}/program-offer` | DAY7状態別offer取得 | Classification + Offering |
-| `POST /api/services/{slug}/program-offer/decline` | 非購入理由 | Offer decision repository |
-| `POST /api/services/{slug}/checkout` | 一括決済開始 | Payment port |
-| `POST /api/payments/{provider}/webhook` | 購入/返金の冪等反映 | Payment adapter |
-| `GET /api/services/{slug}/manage/program-funnel` | 指標と個人timeline | Event projector |
+| API候補                                                 | 目的                              | 再利用するService                  |
+| ------------------------------------------------------- | --------------------------------- | ---------------------------------- |
+| `GET /api/services/{slug}/program-actions/today`        | 現在Action/WAITと表示snapshot取得 | Program Runtime + NBA orchestrator |
+| `POST /api/services/{slug}/program-actions/{id}/start`  | START記録                         | ProgramRuntimeService              |
+| `POST /api/services/{slug}/program-actions/{id}/result` | 完了/一部/未完了/助けが必要       | ProgramRuntimeService              |
+| `POST /api/services/{slug}/resale-items`                | 対象商品作成                      | AI物販Capability                   |
+| `PATCH /api/services/{slug}/resale-items/{id}`          | 出品・反応・改善・販売更新        | AI物販Capability + Event projector |
+| `GET /api/services/{slug}/program-offer`                | DAY7状態別offer取得               | Classification + Offering          |
+| `POST /api/services/{slug}/program-offer/decline`       | 非購入理由                        | Offer decision repository          |
+| `POST /api/services/{slug}/checkout`                    | 一括決済開始                      | Payment port                       |
+| `POST /api/payments/{provider}/webhook`                 | 購入/返金の冪等反映               | Payment adapter                    |
+| `GET /api/services/{slug}/manage/program-funnel`        | 指標と個人timeline                | Event projector                    |
 
 すべてでWorkspace、Group、Membership、Enrollmentを同時に照合し、same-origin、Zod validation、idempotency keyを必須にする。
 
@@ -563,21 +568,21 @@ OEM基盤としての適合度は高い。Organization Entitlementには`oemEnab
 
 ## 20. Hard-coded Dependencies
 
-| 固定依存 | 現在位置 | 影響 | V1方針 |
-| --- | --- | --- | --- |
-| ワタシワークス名称・共通ロゴ | `app/ui/brand-mark.tsx`, shell/public page | Platform shellのOEM表示 | Service画面では既存Brandを使う。Platform全面OEM化はしない |
-| SNS90日Phase/Action | `business-growth-program.ts`, `business-growth-actions.ts` | 新Programへ再利用不可 | AI物販Policyを別moduleに置く |
-| SIDE_HUSTLE preset | `program-definition-presets.ts`, admin editor | Program選択肢がコード依存 | AI物販preset追加は許容。汎用builderは作らない |
-| Prompt本文/Prompt version | `apps/web/src/providers/openai-*.ts` | Program別変更がコードdeploy | AI物販rendererを独立しkey/version境界を設ける |
-| LINE Mission resource | `LineMessageDelivery.dailyMissionId`, `MissionDeepLinkState.dailyMissionId` | Program Actionを直接通知不可 | Program通知を別resourceとして扱う |
-| LINE message kind | `DAILY_MISSION`, `REMINDER` | ACTION/WAIT/EVENTを区別不可 | Program通知kind/templateを追加またはBroadcast metadata化 |
-| APP_URL | secure config/rich menu/deep link | 単一origin前提 | 既存Custom Domain resolverを通す |
-| 月額料金 | `ServiceCommercialSetting.monthlyPriceYen` | 一括Program価格を表現不可 | Program Offering + Payment price snapshotを使う |
-| Price provider | `ProgramOffering.priceReference`のみ | Stripe口座/Priceの意味未定 | Payment Adapter内で解釈 |
-| 90日開始日 | Business profile `createdAt` | Enrollment開始とずれる | AI物販では必ずEnrollment.startsAt |
-| 千ノ国固有slug/copy | manual/help/migration | 他Serviceへの影響は限定 | AI物販へ流用しない |
-| 問い合わせ先・規約URL | ServiceConfigurationで設定可能 | 固定依存ではない | そのまま利用 |
-| ロゴ・色・独自domain | ServiceBrand/CustomDomain | 設定済み境界 | そのまま利用 |
+| 固定依存                     | 現在位置                                                                    | 影響                         | V1方針                                                    |
+| ---------------------------- | --------------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------- |
+| ワタシワークス名称・共通ロゴ | `app/ui/brand-mark.tsx`, shell/public page                                  | Platform shellのOEM表示      | Service画面では既存Brandを使う。Platform全面OEM化はしない |
+| SNS90日Phase/Action          | `business-growth-program.ts`, `business-growth-actions.ts`                  | 新Programへ再利用不可        | AI物販Policyを別moduleに置く                              |
+| SIDE_HUSTLE preset           | `program-definition-presets.ts`, admin editor                               | Program選択肢がコード依存    | AI物販preset追加は許容。汎用builderは作らない             |
+| Prompt本文/Prompt version    | `apps/web/src/providers/openai-*.ts`                                        | Program別変更がコードdeploy  | AI物販rendererを独立しkey/version境界を設ける             |
+| LINE Mission resource        | `LineMessageDelivery.dailyMissionId`, `MissionDeepLinkState.dailyMissionId` | Program Actionを直接通知不可 | Program通知を別resourceとして扱う                         |
+| LINE message kind            | `DAILY_MISSION`, `REMINDER`                                                 | ACTION/WAIT/EVENTを区別不可  | Program通知kind/templateを追加またはBroadcast metadata化  |
+| APP_URL                      | secure config/rich menu/deep link                                           | 単一origin前提               | 既存Custom Domain resolverを通す                          |
+| 月額料金                     | `ServiceCommercialSetting.monthlyPriceYen`                                  | 一括Program価格を表現不可    | Program Offering + Payment price snapshotを使う           |
+| Price provider               | `ProgramOffering.priceReference`のみ                                        | Stripe口座/Priceの意味未定   | Payment Adapter内で解釈                                   |
+| 90日開始日                   | Business profile `createdAt`                                                | Enrollment開始とずれる       | AI物販では必ずEnrollment.startsAt                         |
+| 千ノ国固有slug/copy          | manual/help/migration                                                       | 他Serviceへの影響は限定      | AI物販へ流用しない                                        |
+| 問い合わせ先・規約URL        | ServiceConfigurationで設定可能                                              | 固定依存ではない             | そのまま利用                                              |
+| ロゴ・色・独自domain         | ServiceBrand/CustomDomain                                                   | 設定済み境界                 | そのまま利用                                              |
 
 ## 21. Recommended Boundary Design
 
