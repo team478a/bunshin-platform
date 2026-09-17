@@ -2398,3 +2398,13 @@
 - Membership: 参加中・退会済みの状態は`GroupMembership.status`だけを正本とする。
 - Cleanup: 移行済みでアプリケーション参照のない`fortune_participants.notification_enabled`と`withdrawn_at`、旧検索Indexを削除する。
 - Retention: 年齢確認と過去の占い結果を結び付ける`fortune_participants`行自体は保持する。
+
+## 2026-09-18: AI物販V1の次Action判定をProgram Coreと物販固有Policyへ分離する
+
+- Runtime: `ProgramMissionAssignment`、`ProgramActionEvent`、`ProgramProgressSnapshot`を提示、事実、現在状態の正本として維持する。
+- Boundary: 共通Application層は`NextActionPolicy`と判定結果の形式だけを定義し、`ITEM_FIND`等の意味、商品状態、優先順位は`capability-resale`が所有する。
+- Decision: Next Best ActionはRuleが1件だけ決定し、AIは判断を変更しない。`WAIT`は`reevaluateAt`を必須とする。
+- Evidence: DAY7の`LISTED`はAction完了申告だけで判定せず、`ResaleItem`の出品状態または`FIRST_LISTING` Eventを根拠にする。
+- Continuity: PAUSEDはユーザー操作の最終時刻を基準とし、正式なWAIT期間を無活動日数へ含めない。
+- Events: ユーザーの「できなかった」は`ACTION_NOT_COMPLETED`、技術的失敗は`ACTION_FAILED`として分離する。
+- Scope: この段階ではDB、API、画面、LINE、決済へ接続せず、純粋なcatalog、日付計算、状態遷移、Policyとunit testだけを追加する。
