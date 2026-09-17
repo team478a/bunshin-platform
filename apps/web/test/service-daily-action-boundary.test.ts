@@ -41,6 +41,12 @@ describe('service Daily Action boundary', () => {
     expect(page).toContain('<DailyActionSection');
   });
 
+  it('lets iPhone users choose an existing photo instead of forcing the camera', () => {
+    expect(ui).toContain('「写真ライブラリ」または「写真を撮る」');
+    expect(ui).toContain('選択した写真：');
+    expect(ui).not.toContain('capture="environment"');
+  });
+
   it('feeds only the current owner Bunshin materials into service generation', () => {
     expect(generation).toContain('allowServiceOwnerMemories');
     expect(generation).toContain('PrismaOwnerBunshinMemoryRepository');

@@ -95,6 +95,7 @@ export function DailyActionSection({
   const [selected, setSelected] = useState<DailyActionType | null>(null);
   const [draftText, setDraftText] = useState('');
   const [message, setMessage] = useState('');
+  const [selectedPhotoName, setSelectedPhotoName] = useState('');
   const [saving, setSaving] = useState(false);
   const [updatingPhotoId, setUpdatingPhotoId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -173,6 +174,7 @@ export function DailyActionSection({
       }
       setActions((current) => [savedAction, ...current.filter(({ id }) => id !== savedAction.id)]);
       formRef.current?.reset();
+      setSelectedPhotoName('');
       setDraftText('');
       setSelected(null);
       setMessage('残しました。次の投稿を作るときに、この内容を使います。');
@@ -271,6 +273,7 @@ export function DailyActionSection({
             aria-pressed={selected === item.type}
             onClick={() => {
               setDraftText('');
+              setSelectedPhotoName('');
               setSelected(item.type);
               setMessage('');
             }}
@@ -293,10 +296,19 @@ export function DailyActionSection({
                 type="file"
                 name="photo"
                 accept="image/jpeg,image/png,image/webp"
-                capture="environment"
+                onChange={(event) =>
+                  setSelectedPhotoName(event.currentTarget.files?.[0]?.name ?? '')
+                }
                 required
               />
-              <small>「写真を撮る」または「写真ライブラリ」を選べます。10MBまでです。</small>
+              <small>
+                ボタンを押して「写真ライブラリ」または「写真を撮る」を選んでください。10MBまでです。
+              </small>
+              {selectedPhotoName ? (
+                <strong className="daily-action__selected-photo" role="status">
+                  選択した写真：{selectedPhotoName}
+                </strong>
+              ) : null}
             </label>
           ) : null}
           <label className="field">
@@ -324,7 +336,10 @@ export function DailyActionSection({
           <button
             className="button button--secondary button--full"
             type="button"
-            onClick={() => setSelected(null)}
+            onClick={() => {
+              setSelectedPhotoName('');
+              setSelected(null);
+            }}
           >
             やめる
           </button>
