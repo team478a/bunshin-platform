@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ProgramCoreService } from '../src/program-core';
 import type { ProgramCoreRepository } from '../src/program-core';
+import { createProgramDefinition } from '../src/program-definition-presets';
 
 const repository = () => {
   const mocks = {
@@ -81,5 +82,49 @@ describe('ProgramCoreService', () => {
       groupMembershipId: 'membership-a',
       serviceProgramId: 'program-a',
     });
+  });
+
+  it('rejects an invalid definition before publishing a version', async () => {
+    const { repo, mocks } = repository();
+    const service = new ProgramCoreService(repo);
+    await expect(
+      service.createTemplateVersion({
+        workspaceId: 'workspace-a',
+        actorUserId: 'user-a',
+        programTemplateId: 'program-a',
+        definition: {},
+        publish: true,
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(mocks.createTemplateVersion).not.toHaveBeenCalled();
+  });
+
+  it('passes a validated definition to the repository', async () => {
+    const { repo, mocks } = repository();
+    const service = new ProgramCoreService(repo);
+    const definition = createProgramDefinition({
+      preset: 'SIMPLE',
+      durationDays: 30,
+      supportModes: ['GUIDED'],
+    });
+    mocks.createTemplateVersion.mockResolvedValue({
+      id: 'version-a',
+      workspaceId: 'workspace-a',
+      programTemplateId: 'program-a',
+      version: 1,
+      status: 'PUBLISHED',
+      definition,
+      publishedAt: new Date(),
+    });
+    await service.createTemplateVersion({
+      workspaceId: 'workspace-a',
+      actorUserId: 'user-a',
+      programTemplateId: 'program-a',
+      definition,
+      publish: true,
+    });
+    expect(mocks.createTemplateVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ definition }),
+    );
   });
 });

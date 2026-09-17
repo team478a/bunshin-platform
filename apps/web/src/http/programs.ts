@@ -1,5 +1,11 @@
 import 'server-only';
 import { requestIdFromHeader } from '@bunshin/observability';
+import {
+  createProgramDefinition,
+  parseProgramDefinition,
+  programDefinitionJson,
+  PROGRAM_DEFINITION_PRESETS,
+} from '@bunshin/application';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
@@ -15,6 +21,7 @@ const officialProgramSchema = z
     description: z.string().trim().min(1).max(2000),
     category: z.string().trim().min(1).max(80),
     targetAudience: z.string().trim().min(1).max(500),
+    definitionPreset: z.enum(PROGRAM_DEFINITION_PRESETS),
     standardDurationDays: z.number().int().min(1).max(365),
     supportModes: z.array(supportMode).min(1).max(3),
   })
@@ -62,6 +69,14 @@ export async function createOfficialProgramResponse(request: Request) {
     const actor = await json(request);
     const value = officialProgramSchema.parse(await request.json());
     const db = await import('@bunshin/database');
+    const definition = parseProgramDefinition(
+      createProgramDefinition({
+        preset: value.definitionPreset,
+        durationDays: value.standardDurationDays,
+        supportModes: value.supportModes,
+      }),
+    );
+    const definitionJson = programDefinitionJson(definition);
     const data = await db.prisma.$transaction(async (tx) => {
       const [admin, workspace] = await Promise.all([
         tx.platformAdmin.findFirst({
@@ -94,11 +109,7 @@ export async function createOfficialProgramResponse(request: Request) {
           programTemplateId: template.id,
           version: 1,
           status: 'PUBLISHED',
-          definition: {
-            standardDurationDays: value.standardDurationDays,
-            supportModes: value.supportModes,
-            participation: 'INVITATION_ONLY',
-          },
+          definition: definitionJson,
           createdByUserId: actor.userId,
           publishedAt: new Date(),
         },
