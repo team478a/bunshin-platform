@@ -173,7 +173,9 @@ describe('service LINE linking', () => {
     expect(m.createAttempt).not.toHaveBeenCalled();
   });
   it('links only the verified subject to the current service member', async () => {
-    expect(outcome(await callback())).toBe('connected');
+    const response = await callback();
+    expect(outcome(response)).toBe('connected');
+    expect(new URL(response.headers.get('location')!).pathname).toBe(`/s/service/bunshins/${id}`);
     expect(m.connect).toHaveBeenCalledWith(
       expect.objectContaining({
         actorUserId: 'owner',

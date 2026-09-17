@@ -5,6 +5,7 @@ import {
   ServiceLineLinkUnavailable,
 } from '../../../../../../src/http/service-line-link';
 import { isRouteNotFound } from '../../../../../../src/navigation/route-not-found';
+import { LineConnectionForm } from './line-connection-form';
 
 export const dynamic = 'force-dynamic';
 export default async function ServiceLinePage({
@@ -62,58 +63,89 @@ export default async function ServiceLinePage({
       '処理を完了できませんでした。ログイン状態、公式LINEの友だち追加、通知しない時間帯を確認してください。接続の途中で失敗した場合は、もう一度接続を始めてください。',
   };
   const result = (await searchParams).lineResult;
+  const connected = Boolean(
+    connection?.status === 'ACTIVE' &&
+    connection.friendshipStatus === 'FOLLOWING' &&
+    connection.notificationConsentAt,
+  );
   return (
-    <main className="app-page">
-      <h1>LINEの接続と動画の完成通知</h1>
-      <p>{scope.bunshin.name}</p>
-      <p>現在のアカウントに、このサービスからのお知らせを受け取るLINEを接続します。</p>
-      {result && messages[result] ? <p role="status">{messages[result]}</p> : null}
-      <p>
-        接続状態：
-        {connection?.status === 'ACTIVE' &&
-        connection.friendshipStatus === 'FOLLOWING' &&
-        connection.notificationConsentAt
-          ? '接続済み'
-          : '確認が必要'}
-      </p>
-      <form action="/auth/service-line/start" method="post">
-        <input type="hidden" name="serviceSlug" value={serviceSlug} />
-        <input type="hidden" name="bunshinId" value={bunshinId} />
-        <label>
-          <input type="checkbox" name="consent" value="yes" required />
-          このサービスのLINE通知を受け取ることに同意する
-        </label>
-        <button type="submit">本人確認してLINEを接続する</button>
-      </form>
-      <h2>完成した動画</h2>
-      {renders.map((render) => (
-        <section key={render.id}>
-          <h3>{render.project.title}</h3>
-          <p>
-            通知：
-            {render.notificationStatus === 'SENT'
-              ? '送信済み'
-              : render.notificationStatus === 'PENDING'
-                ? '送信待ち'
-                : '未送信'}
-          </p>
-          {render.notificationStatus === 'CANCELLED' &&
-          render.notificationErrorCode === 'NOTIFICATION_SUPPRESSED' &&
-          !render.notifiedAt &&
-          render.outputStorageKey &&
-          (!render.expiresAt || render.expiresAt.getTime() > Date.now()) &&
-          render.completedAt &&
-          Date.now() - render.completedAt.getTime() < 23 * 60 * 60_000 ? (
-            <form action="/auth/service-line/retry-video" method="post">
-              <input type="hidden" name="serviceSlug" value={serviceSlug} />
-              <input type="hidden" name="bunshinId" value={bunshinId} />
-              <input type="hidden" name="renderId" value={render.id} />
-              <button type="submit">この動画の完成通知を送る</button>
-            </form>
-          ) : null}
+    <main className="app-page line-link-page">
+      <header className="app-page__heading">
+        <p className="eyebrow">{scope.bunshin.name}</p>
+        <h1>LINEの接続と動画の完成通知</h1>
+        <p>現在のアカウントに、このサービスからのお知らせを受け取るLINEを接続します。</p>
+      </header>
+      {result === 'failed' && (
+        <section className="settings-card line-link-status line-link-status--error" role="alert">
+          <h2>LINE接続は完了していません</h2>
+          <p className="form-error">{messages.failed}</p>
+          <p>下の同意欄にチェックを付けてから、もう一度青いボタンを押してください。</p>
         </section>
-      ))}
-      <Link href={`/s/${serviceSlug}/bunshins/${bunshinId}`}>投稿パートナーの設定へ戻る</Link>
+      )}
+      {result && result !== 'failed' && messages[result] ? (
+        <p className="success-message line-link-result" role="status">
+          {messages[result]}
+        </p>
+      ) : null}
+      <section
+        className={`settings-card line-link-status ${connected ? 'line-link-status--connected' : ''}`}
+      >
+        <h2>{connected ? 'LINE接続は完了しています' : 'LINEを接続する'}</h2>
+        <p>
+          接続状態：<strong>{connected ? '接続済み' : '未完了'}</strong>
+        </p>
+        {connected ? (
+          <Link
+            className="button button--primary button--full"
+            href={`/s/${serviceSlug}/bunshins/${bunshinId}`}
+          >
+            投稿パートナーの設定へ進む
+          </Link>
+        ) : (
+          <LineConnectionForm serviceSlug={serviceSlug} bunshinId={bunshinId} />
+        )}
+      </section>
+      <section className="line-link-videos" aria-labelledby="completed-videos-title">
+        <header>
+          <p className="eyebrow">通知履歴</p>
+          <h2 id="completed-videos-title">完成した動画</h2>
+        </header>
+        {renders.length === 0 && <p className="settings-card">完成した動画はまだありません。</p>}
+        {renders.map((render) => (
+          <article className="settings-card line-link-video" key={render.id}>
+            <h3>{render.project.title}</h3>
+            <p>
+              通知：
+              <strong>
+                {render.notificationStatus === 'SENT'
+                  ? '送信済み'
+                  : render.notificationStatus === 'PENDING'
+                    ? '送信待ち'
+                    : '未送信'}
+              </strong>
+            </p>
+            {render.notificationStatus === 'CANCELLED' &&
+            render.notificationErrorCode === 'NOTIFICATION_SUPPRESSED' &&
+            !render.notifiedAt &&
+            render.outputStorageKey &&
+            (!render.expiresAt || render.expiresAt.getTime() > Date.now()) &&
+            render.completedAt &&
+            Date.now() - render.completedAt.getTime() < 23 * 60 * 60_000 ? (
+              <form action="/auth/service-line/retry-video" method="post">
+                <input type="hidden" name="serviceSlug" value={serviceSlug} />
+                <input type="hidden" name="bunshinId" value={bunshinId} />
+                <input type="hidden" name="renderId" value={render.id} />
+                <button className="button button--secondary button--full" type="submit">
+                  この動画の完成通知を送る
+                </button>
+              </form>
+            ) : null}
+          </article>
+        ))}
+      </section>
+      <Link className="line-link-back" href={`/s/${serviceSlug}/bunshins/${bunshinId}`}>
+        ← 投稿パートナーの設定へ戻る
+      </Link>
     </main>
   );
 }

@@ -5025,6 +5025,140 @@ body:has(.app-shell) > .site-footer {
   font-size: 0.875rem;
 }
 
+.line-link-page {
+  max-width: 680px;
+  padding-bottom: 5rem;
+}
+
+.line-link-page .app-page__heading {
+  margin-bottom: 1.25rem;
+}
+
+.line-link-status {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.25rem, 5vw, 2rem);
+}
+
+.line-link-status > h2,
+.line-link-status > p {
+  margin: 0;
+}
+
+.line-link-status > h2 {
+  padding: 0;
+  font-size: clamp(1.25rem, 5vw, 1.6rem);
+  line-height: 1.45;
+}
+
+.line-link-status--error {
+  border-color: #f0b5b1;
+  background: #fff7f6;
+}
+
+.line-link-status--error > h2 {
+  color: #b42318;
+}
+
+.line-link-status--connected {
+  border-color: #9ed8b5;
+  background: #f2fbf5;
+}
+
+.line-link-status--connected > h2 {
+  color: #087a3e;
+}
+
+.line-link-result {
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+}
+
+.line-link-form {
+  gap: 0.8rem;
+}
+
+.line-link-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 2px solid #cfd5e1;
+  border-radius: 14px;
+  background: #fff;
+  font-weight: 750;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.line-link-consent.is-checked {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 7%, white);
+}
+
+.line-link-consent input {
+  flex: none;
+  width: 1.55rem;
+  height: 1.55rem;
+  margin-top: 0.1rem;
+  accent-color: var(--color-primary);
+}
+
+.line-link-form__guide,
+.line-link-form__progress {
+  margin: 0;
+  color: #667085;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.line-link-form__progress {
+  color: var(--color-primary-strong);
+  text-align: center;
+}
+
+.line-link-form .button {
+  min-height: 54px;
+  font-size: 1rem;
+}
+
+.line-link-videos {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 2rem;
+}
+
+.line-link-videos > header h2 {
+  margin: 0.2rem 0 0;
+}
+
+.line-link-video {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.line-link-video h3,
+.line-link-video p {
+  margin: 0;
+}
+
+.line-link-back {
+  display: inline-block;
+  margin-top: 1.5rem;
+  font-weight: 750;
+}
+
+@media (max-width: 560px) {
+  .line-link-page {
+    padding-inline: 18px;
+  }
+
+  .line-link-status {
+    border-radius: 20px;
+  }
+}
+
 .fortune-page {
   max-width: 720px;
   padding-bottom: 7rem;

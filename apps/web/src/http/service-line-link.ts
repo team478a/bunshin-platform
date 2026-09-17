@@ -87,6 +87,8 @@ export async function serviceLineLinkScope(slug: string, bunshinId: string) {
 
 const returnPath = (slug: string, id: string) =>
   `/s/${encodeURIComponent(slug)}/bunshins/${encodeURIComponent(id)}/line`;
+const partnerPath = (slug: string, id: string) =>
+  `/s/${encodeURIComponent(slug)}/bunshins/${encodeURIComponent(id)}`;
 const callbackUrl = () =>
   new URL('/auth/service-line/callback', getServerEnvironment().APP_URL).toString();
 function redirectTo(path: string) {
@@ -235,6 +237,7 @@ export async function finishServiceLineLink(request: Request) {
       });
     });
     result = verified.following ? 'connected' : 'follow-required';
+    if (verified.following) destination = partnerPath(attempt.serviceSlug, attempt.bunshinId);
   } catch {
     // No provider token, code, subject or callback URL is logged.
     reportFailure(request, 'callback');
