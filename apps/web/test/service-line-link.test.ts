@@ -164,12 +164,14 @@ describe('service LINE linking', () => {
   });
   it('rejects cross-origin requests before creating a proof', async () => {
     expect(outcome(await startServiceLineLink(post('start', {}, 'https://attacker.example')))).toBe(
-      'failed',
+      'request-invalid',
     );
     expect(m.createAttempt).not.toHaveBeenCalled();
   });
   it('requires explicit notification consent', async () => {
-    expect(outcome(await startServiceLineLink(post('start', { consent: 'no' })))).toBe('failed');
+    expect(outcome(await startServiceLineLink(post('start', { consent: 'no' })))).toBe(
+      'consent-required',
+    );
     expect(m.createAttempt).not.toHaveBeenCalled();
   });
   it('links only the verified subject to the current service member', async () => {
@@ -188,16 +190,27 @@ describe('service LINE linking', () => {
       expect.objectContaining({ data: expect.objectContaining({ nonce: '', verifier: '' }) }),
     );
   });
+  it('returns a cancelled LINE authorization to the connection page', async () => {
+    const response = await finishServiceLineLink(
+      new Request(
+        `https://example.com/auth/service-line/callback?state=${state}&error=access_denied`,
+      ),
+    );
+    const location = new URL(response.headers.get('location')!);
+    expect(location.pathname).toBe(`/s/service/bunshins/${id}/line`);
+    expect(outcome(response)).toBe('failed');
+    expect(m.verify).not.toHaveBeenCalled();
+  });
   it.each([
-    'cookie',
-    'owner',
-    'configuration',
-    'expired',
-    'consumed',
-    'race',
-    'membership',
-    'bunshin',
-  ])('rejects %s mismatch or replay without contacting LINE', async (failure) => {
+    ['cookie', 'session-expired'],
+    ['owner', 'session-changed'],
+    ['configuration', 'session-changed'],
+    ['expired', 'session-expired'],
+    ['consumed', 'session-expired'],
+    ['race', 'session-expired'],
+    ['membership', 'session-changed'],
+    ['bunshin', 'session-changed'],
+  ])('rejects %s mismatch or replay without contacting LINE', async (failure, expected) => {
     if (failure === 'cookie') m.cookie.mockReturnValue({ value: 'other' });
     if (failure === 'owner') m.actor.mockResolvedValue({ userId: 'other' });
     if (failure === 'configuration') m.configuration.mockResolvedValue({ ...config, id: 'other' });
@@ -206,19 +219,25 @@ describe('service LINE linking', () => {
     if (failure === 'race') m.claim.mockResolvedValue({ count: 0 });
     if (failure === 'membership') m.membership.mockResolvedValue(null);
     if (failure === 'bunshin') m.bunshin.mockResolvedValue(null);
-    expect(outcome(await callback())).toBe('failed');
+    expect(outcome(await callback())).toBe(expected);
     expect(m.verify).not.toHaveBeenCalled();
     expect(m.connect).not.toHaveBeenCalled();
   });
+  it('reports LINE verification failures without exposing provider credentials', async () => {
+    m.verify.mockRejectedValue(new Error('provider detail'));
+    expect(outcome(await callback())).toBe('verification-failed');
+    expect(JSON.stringify(m.log.mock.calls)).toContain('verification-failed');
+    expect(JSON.stringify(m.log.mock.calls)).not.toContain('provider detail');
+  });
   it('does not enable notifications if the verified destination conflicts with another member', async () => {
     m.connect.mockRejectedValue(new Error('unique constraint'));
-    expect(outcome(await callback())).toBe('failed');
+    expect(outcome(await callback())).toBe('destination-in-use');
     expect(m.preference).not.toHaveBeenCalled();
     expect(JSON.stringify(m.log.mock.calls)).not.toContain('code=');
   });
   it('does not update preferences when the connection changes concurrently', async () => {
     m.connectionUpdate.mockResolvedValue({ count: 0 });
-    expect(outcome(await callback())).toBe('failed');
+    expect(outcome(await callback())).toBe('save-failed');
     expect(m.preference).not.toHaveBeenCalled();
   });
 });

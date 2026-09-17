@@ -28,10 +28,25 @@ const scopeSchema = z.object({
     .regex(/^[a-z0-9-]+$/),
   bunshinId: z.string().uuid(),
 });
-function reportFailure(request: Request, operation: string) {
+export type ServiceLineLinkResult =
+  | 'connected'
+  | 'follow-required'
+  | 'queued'
+  | 'request-invalid'
+  | 'consent-required'
+  | 'configuration-unavailable'
+  | 'session-expired'
+  | 'session-changed'
+  | 'verification-failed'
+  | 'destination-in-use'
+  | 'save-failed'
+  | 'failed';
+
+function reportFailure(request: Request, operation: string, category: ServiceLineLinkResult) {
   logger.error('service_line_link_failed', {
     requestId: requestIdFromHeader(request.headers.get('x-request-id')),
     operation,
+    category,
   });
 }
 
@@ -99,14 +114,20 @@ function redirectTo(path: string) {
 
 export async function startServiceLineLink(request: Request) {
   let destination = '/account';
+  let result: ServiceLineLinkResult = 'request-invalid';
   try {
     requireSameOrigin(request);
     const form = await request.formData();
     const slug = z.string().parse(form.get('serviceSlug'));
     const id = z.string().parse(form.get('bunshinId'));
-    const scope = await serviceLineLinkScope(slug, id);
     destination = returnPath(slug, id);
-    if (form.get('consent') !== 'yes') throw new Error('Consent required');
+    if (form.get('consent') !== 'yes') {
+      result = 'consent-required';
+      throw new Error('Consent required');
+    }
+    result = 'configuration-unavailable';
+    const scope = await serviceLineLinkScope(slug, id);
+    result = 'failed';
     const proof = createLineLinkProof();
     await scope.db.prisma.serviceLineLinkAttempt.deleteMany({
       where: { expiresAt: { lt: new Date() } },
@@ -141,34 +162,33 @@ export async function startServiceLineLink(request: Request) {
     response.headers.set('cache-control', 'no-store');
     return response;
   } catch {
-    reportFailure(request, 'start');
-    return redirectTo(`${destination}?lineResult=failed`);
+    reportFailure(request, 'start', result);
+    return redirectTo(`${destination}?lineResult=${result}`);
   }
 }
 
 export async function finishServiceLineLink(request: Request) {
   let destination = '/account';
-  let result = 'failed';
+  let result: ServiceLineLinkResult = 'session-expired';
   try {
     const url = new URL(request.url);
     const state = url.searchParams.get('state');
     const code = url.searchParams.get('code');
-    const browserState = (await cookies()).get(lineLinkCookie)?.value;
-    if (
-      !state ||
-      !/^[\w-]{43}$/.test(state) ||
-      state !== browserState ||
-      !code ||
-      code.length > 2048 ||
-      url.searchParams.has('error')
-    )
-      throw new Error('Invalid callback');
+    if (!state || !/^[\w-]{43}$/.test(state)) throw new Error('Invalid state');
     const db = await import('@bunshin/database');
     const attempt = await db.prisma.serviceLineLinkAttempt.findUnique({
       where: { stateHash: hashLineState(state) },
     });
+    if (attempt) destination = returnPath(attempt.serviceSlug, attempt.bunshinId);
+    if (url.searchParams.has('error')) {
+      result = 'failed';
+      throw new Error('LINE authorization cancelled');
+    }
+    const browserState = (await cookies()).get(lineLinkCookie)?.value;
+    if (state !== browserState || !code || code.length > 2048) throw new Error('Invalid callback');
     if (!attempt || attempt.consumedAt || attempt.expiresAt <= new Date())
       throw new Error('Expired attempt');
+    result = 'session-changed';
     const scope = await serviceLineLinkScope(attempt.serviceSlug, attempt.bunshinId);
     if (
       scope.actor.userId !== attempt.actorUserId ||
@@ -180,7 +200,11 @@ export async function finishServiceLineLink(request: Request) {
       where: { stateHash: attempt.stateHash, consumedAt: null, expiresAt: { gt: new Date() } },
       data: { consumedAt: new Date(), verifier: '', nonce: '' },
     });
-    if (claimed.count !== 1) throw new Error('Already consumed');
+    if (claimed.count !== 1) {
+      result = 'session-expired';
+      throw new Error('Already consumed');
+    }
+    result = 'verification-failed';
     const verified = await verifyServiceLineCode({
       code,
       nonce: attempt.nonce,
@@ -190,6 +214,7 @@ export async function finishServiceLineLink(request: Request) {
       redirectUri: callbackUrl(),
     });
     // The unique configuration/provider-subject constraint rejects a destination owned by another member.
+    result = 'destination-in-use';
     const connected = await new db.PrismaGroupLineConnectionRepository().connectVerified({
       environment: currentLineEnvironment(),
       workspaceId: scope.service.workspaceId,
@@ -201,6 +226,7 @@ export async function finishServiceLineLink(request: Request) {
       consentGranted: true,
     });
     if (!connected) throw new Error('Connection scope changed');
+    result = 'save-failed';
     await db.prisma.$transaction(async (tx) => {
       const updated = await tx.groupLineConnection.updateMany({
         where: {
@@ -240,7 +266,7 @@ export async function finishServiceLineLink(request: Request) {
     if (verified.following) destination = partnerPath(attempt.serviceSlug, attempt.bunshinId);
   } catch {
     // No provider token, code, subject or callback URL is logged.
-    reportFailure(request, 'callback');
+    reportFailure(request, 'callback', result);
   }
   const response = redirectTo(`${destination}?lineResult=${result}`);
   response.cookies.set(lineLinkCookie, '', { maxAge: 0, path: '/auth/service-line' });
@@ -310,7 +336,7 @@ export async function retryCompletedVideoNotice(request: Request) {
     });
     return redirectTo(`${destination}?lineResult=queued`);
   } catch {
-    reportFailure(request, 'retry-video');
+    reportFailure(request, 'retry-video', 'failed');
     return redirectTo(`${destination}?lineResult=failed`);
   }
 }

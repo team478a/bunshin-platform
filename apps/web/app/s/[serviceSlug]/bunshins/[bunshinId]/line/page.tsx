@@ -55,13 +55,55 @@ export default async function ServiceLinePage({
       },
     }),
   ]);
-  const messages: Record<string, string> = {
-    connected: 'LINEを接続し、通知を有効にしました。',
-    'follow-required':
-      'LINEを確認しました。公式アカウントを友だち追加し、接続をもう一度確認してください。',
-    queued: '完成通知の送信を受け付けました。少し待って画面を更新してください。',
-    failed:
-      '処理を完了できませんでした。ログイン状態、公式LINEの友だち追加、通知しない時間帯を確認してください。接続の途中で失敗した場合は、もう一度接続を始めてください。',
+  const messages: Record<string, { title: string; body: string }> = {
+    'request-invalid': {
+      title: 'この画面を更新してください',
+      body: '安全確認の期限が切れました。画面を更新してから、もう一度お試しください。',
+    },
+    'consent-required': {
+      title: '同意欄へのチェックが必要です',
+      body: '下の四角を押してチェックを付けると、青い接続ボタンを押せます。',
+    },
+    'configuration-unavailable': {
+      title: '現在LINEへ接続できません',
+      body: 'ログイン状態またはサービスのLINE設定を確認できませんでした。画面を更新しても直らない場合は運営者へご連絡ください。',
+    },
+    'session-expired': {
+      title: 'LINEの本人確認が期限切れになりました',
+      body: 'この画面とLINEの本人確認で別のブラウザが開いた可能性があります。この画面から、もう一度接続を始めてください。',
+    },
+    'session-changed': {
+      title: 'ログイン状態が変わりました',
+      body: 'ワタシワークスへログインし直してから、もう一度接続を始めてください。',
+    },
+    'verification-failed': {
+      title: 'LINEの本人確認を完了できませんでした',
+      body: '公式LINEを友だち追加していることを確認し、この画面からもう一度お試しください。繰り返し失敗する場合はLINE設定を運営者が確認します。',
+    },
+    'destination-in-use': {
+      title: 'このLINEは別の登録で使用されています',
+      body: '現在ログインしているワタシワークスのアカウントをご確認ください。心当たりがない場合は運営者へご連絡ください。',
+    },
+    'save-failed': {
+      title: 'LINE接続の保存を完了できませんでした',
+      body: '本人確認は進みましたが、接続情報を保存できませんでした。少し待ってから、もう一度お試しください。',
+    },
+    connected: {
+      title: 'LINE接続が完了しました',
+      body: 'LINEを接続し、通知を有効にしました。',
+    },
+    'follow-required': {
+      title: '公式LINEの友だち追加が必要です',
+      body: 'LINEを確認しました。公式アカウントを友だち追加し、接続をもう一度確認してください。',
+    },
+    queued: {
+      title: '通知を受け付けました',
+      body: '完成通知の送信を受け付けました。少し待って画面を更新してください。',
+    },
+    failed: {
+      title: 'LINE接続は完了していません',
+      body: 'LINEの本人確認を途中で閉じた場合は、この画面からもう一度接続を始めてください。',
+    },
   };
   const result = (await searchParams).lineResult;
   const connected = Boolean(
@@ -76,16 +118,20 @@ export default async function ServiceLinePage({
         <h1>LINEの接続と動画の完成通知</h1>
         <p>現在のアカウントに、このサービスからのお知らせを受け取るLINEを接続します。</p>
       </header>
-      {result === 'failed' && (
-        <section className="settings-card line-link-status line-link-status--error" role="alert">
-          <h2>LINE接続は完了していません</h2>
-          <p className="form-error">{messages.failed}</p>
-          <p>下の同意欄にチェックを付けてから、もう一度青いボタンを押してください。</p>
-        </section>
-      )}
-      {result && result !== 'failed' && messages[result] ? (
+      {result &&
+        messages[result] &&
+        !['connected', 'follow-required', 'queued'].includes(result) && (
+          <section className="settings-card line-link-status line-link-status--error" role="alert">
+            <h2>{messages[result].title}</h2>
+            <p className="form-error">{messages[result].body}</p>
+            <a className="button button--secondary button--full" href="#line-connect-form">
+              接続をやり直す
+            </a>
+          </section>
+        )}
+      {result && ['connected', 'follow-required', 'queued'].includes(result) && messages[result] ? (
         <p className="success-message line-link-result" role="status">
-          {messages[result]}
+          {messages[result].body}
         </p>
       ) : null}
       <section
