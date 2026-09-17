@@ -3462,6 +3462,68 @@ export class PrismaGroupLineConnectionRepository implements GroupLineConnectionR
         select: { id: true },
       });
       if (!membership || !configuration) return false;
+      const [providerConnection, userConnection] = await Promise.all([
+        tx.groupLineConnection.findUnique({
+          where: {
+            configurationId_providerUserId: {
+              configurationId: input.configurationId,
+              providerUserId: input.verifiedProviderUserId,
+            },
+          },
+          select: { id: true, userId: true },
+        }),
+        tx.groupLineConnection.findUnique({
+          where: {
+            configurationId_userId: {
+              configurationId: input.configurationId,
+              userId: input.actorUserId,
+            },
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (providerConnection && providerConnection.userId !== input.actorUserId) {
+        // A verified LINE login proves control of the notification destination. Move the
+        // destination from a stale/duplicate app registration and stop pending delivery
+        // to that registration instead of asking the person to register again.
+        if (userConnection && userConnection.id !== providerConnection.id)
+          await tx.groupLineConnection.delete({ where: { id: userConnection.id } });
+        const moved = await tx.groupLineConnection.updateMany({
+          where: {
+            id: providerConnection.id,
+            configurationId: input.configurationId,
+            userId: providerConnection.userId,
+          },
+          data: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: input.groupMembershipId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            notificationConsentAt: input.consentGranted ? new Date() : null,
+          },
+        });
+        if (moved.count !== 1) throw new Error('LINE destination ownership changed');
+        await tx.lineMessageDelivery.updateMany({
+          where: {
+            environment: input.environment,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            userId: providerConnection.userId,
+            status: { in: ['PENDING', 'PROCESSING', 'FAILED'] },
+            sentAt: null,
+            cancelledAt: null,
+          },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: new Date(),
+            lastErrorCategory: 'RECIPIENT_UNAVAILABLE',
+            leaseOwner: null,
+            leaseExpiresAt: null,
+          },
+        });
+        return true;
+      }
       await tx.groupLineConnection.upsert({
         where: {
           configurationId_userId: {
