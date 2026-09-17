@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260917090000_add_fortune_package_entitlement';
+export const LATEST_DATABASE_MIGRATION = '20260917110000_drop_fortune_legacy_membership_columns';
