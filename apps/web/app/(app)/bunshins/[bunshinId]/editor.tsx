@@ -73,36 +73,60 @@ export function BunshinEditor({
     personalitySummary: bunshin.personalitySummary,
   });
   const [overviewMessage, setOverviewMessage] = useState<string | null>(null);
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const [managementAction, setManagementAction] = useState<string | null>(null);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshin.id)}`;
   async function save(event: FormEvent) {
     event.preventDefault();
+    setOverviewSaving(true);
     setOverviewMessage(null);
-    const response = await fetch(endpoint, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    setOverviewMessage(
-      response.ok
-        ? '基本情報を保存しました。'
-        : '保存できませんでした。入力内容を確認して、もう一度お試しください。',
-    );
-    if (response.ok) router.refresh();
+    try {
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      setOverviewMessage(
+        response.ok
+          ? '基本情報を保存しました。'
+          : '保存できませんでした。入力内容を確認して、もう一度お試しください。',
+      );
+      if (response.ok) router.refresh();
+    } catch {
+      setOverviewMessage('保存できませんでした。通信状態を確認して、もう一度お試しください。');
+    } finally {
+      setOverviewSaving(false);
+    }
   }
   async function archive() {
-    const response = await fetch(`${endpoint}/archive`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
-    if (response.ok) router.push('/bunshins');
+    setManagementAction('archive');
+    try {
+      const response = await fetch(`${endpoint}/archive`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      if (!response.ok) throw new Error();
+      router.push('/bunshins');
+    } catch {
+      setOverviewMessage('停止できませんでした。もう一度お試しください。');
+      setManagementAction(null);
+    }
   }
   async function setGrant(knowledgeId: string, granted: boolean) {
-    const response = await fetch(
-      `${endpoint}/knowledge/${encodeURIComponent(knowledgeId)}/${granted ? 'revoke' : 'grant'}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
-    );
-    if (response.ok) router.refresh();
+    setManagementAction(`knowledge:${knowledgeId}`);
+    try {
+      const response = await fetch(
+        `${endpoint}/knowledge/${encodeURIComponent(knowledgeId)}/${granted ? 'revoke' : 'grant'}`,
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      );
+      if (!response.ok) throw new Error();
+      router.refresh();
+    } catch {
+      setOverviewMessage('知識の利用設定を変更できませんでした。もう一度お試しください。');
+    } finally {
+      setManagementAction(null);
+    }
   }
   return (
     <main className="app-page bunshin-detail-page">
@@ -180,8 +204,8 @@ export function BunshinEditor({
                 onChange={(e) => setForm({ ...form, personalitySummary: e.target.value })}
               />
             </label>
-            <button className="button button--primary" type="submit">
-              変更を保存
+            <button className="button button--primary" type="submit" disabled={overviewSaving}>
+              {overviewSaving ? '保存しています…' : '変更を保存'}
             </button>
           </form>
           {overviewMessage ? (
@@ -294,8 +318,16 @@ export function BunshinEditor({
                         {item.title}
                         <small>{item.type}</small>
                       </span>
-                      <button type="button" onClick={() => void setGrant(item.id, item.granted)}>
-                        {item.granted ? '利用を解除' : '利用する'}
+                      <button
+                        type="button"
+                        disabled={managementAction !== null}
+                        onClick={() => void setGrant(item.id, item.granted)}
+                      >
+                        {managementAction === `knowledge:${item.id}`
+                          ? '変更しています…'
+                          : item.granted
+                            ? '利用を解除'
+                            : '利用する'}
                       </button>
                     </li>
                   ))}
@@ -331,9 +363,10 @@ export function BunshinEditor({
               <button
                 className="button button--danger"
                 type="button"
+                disabled={managementAction !== null}
                 onClick={() => void archive()}
               >
-                アーカイブ
+                {managementAction === 'archive' ? '停止しています…' : 'アーカイブ'}
               </button>
             </div>
           </div>

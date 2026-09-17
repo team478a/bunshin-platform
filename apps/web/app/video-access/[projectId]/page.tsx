@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { authorizedVideoView } from '../../../src/http/video-line-access';
 import { PublicShell } from '../../ui/public-shell';
 import { VideoPostCopy } from '../../ui/video-post-copy';
+import { PendingSubmitButton } from '../../ui/pending-submit-button';
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
@@ -25,18 +26,22 @@ export default async function VideoAccessPage({
   const source = `/video-access/${projectId}/download`;
   return (
     <PublicShell>
-      <main className="app-page" style={{ maxWidth: 680, margin: '0 auto', padding: '24px 16px' }}>
+      <main className="app-page video-access-page">
         {scope ? (
           <>
-            <h1>{scope.project.title}</h1>
+            <header className="app-page__heading">
+              <p className="eyebrow">完成した動画</p>
+              <h1>{scope.project.title}</h1>
+              <p>内容を確認し、この動画を使うか選んでください。</p>
+            </header>
             {scope.project.renderAttempts.length ? (
               <>
                 <video
+                  className="video-access-player"
                   controls
                   playsInline
                   preload="metadata"
                   src={source}
-                  style={{ width: '100%', maxHeight: '65vh', background: '#111' }}
                 />
                 {scope.postCopy ? (
                   <VideoPostCopy
@@ -46,11 +51,16 @@ export default async function VideoAccessPage({
                 ) : null}
                 {scope.project.reviewDecision === 'ADOPTED' ? (
                   <>
-                    <p role="status">
+                    <p className="notice notice--success" role="status">
                       <strong>この動画を使うことを記録しました。</strong>
                     </p>
-                    <p>
-                      <a href={source} target="_blank" rel="noreferrer">
+                    <p className="video-access-download">
+                      <a
+                        className="button button--primary button--full"
+                        href={source}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         動画を開く・iPhoneへ保存する
                       </a>
                     </p>
@@ -65,7 +75,12 @@ export default async function VideoAccessPage({
                         <>
                           <p>Instagramなどへの投稿が終わったら、下のボタンを1回押してください。</p>
                           <form action={`/video-access/${projectId}/posted`} method="post">
-                            <button type="submit">投稿しました</button>
+                            <PendingSubmitButton
+                              className="button button--primary button--full"
+                              pendingLabel="記録しています…"
+                            >
+                              投稿しました
+                            </PendingSubmitButton>
                           </form>
                         </>
                       )}
@@ -73,65 +88,88 @@ export default async function VideoAccessPage({
                     </section>
                   </>
                 ) : scope.project.reviewDecision === 'REJECTED' ? (
-                  <section className="settings-card" role="status">
-                    <strong>今回は使わないことを記録しました。</strong>
+                  <section className="settings-card video-access-decision" role="status">
+                    <h2>今回は使わないことを記録しました</h2>
                     <p>選んだ理由は運営者へ届き、次の動画づくりの改善に使われます。</p>
                   </section>
                 ) : query.decision === 'adopted' ? (
-                  <p role="status">この動画を使うことを記録しました。</p>
+                  <p className="notice notice--success" role="status">
+                    この動画を使うことを記録しました。
+                  </p>
                 ) : null}
-                <div className="form-stack">
-                  <form action={`/video-access/${projectId}/decision`} method="post">
-                    <input type="hidden" name="decision" value="ADOPTED" />
-                    <button type="submit">この動画を使う</button>
-                  </form>
-                  <form action={`/video-access/${projectId}/decision`} method="post">
-                    <input type="hidden" name="decision" value="REJECTED" />
-                    <label className="field">
-                      <span className="field__label">使わない理由</span>
-                      <select
-                        className="field__control"
-                        name="reviewReason"
-                        defaultValue={scope.project.reviewReason ?? ''}
-                        required
+                {!scope.project.reviewDecision && (
+                  <section className="settings-card video-access-review">
+                    <h2>この動画を使いますか？</h2>
+                    <form action={`/video-access/${projectId}/decision`} method="post">
+                      <input type="hidden" name="decision" value="ADOPTED" />
+                      <PendingSubmitButton
+                        className="button button--primary button--full"
+                        pendingLabel="記録しています…"
                       >
-                        <option value="" disabled>
-                          選んでください
-                        </option>
-                        <option value="NARRATION_HARD_TO_HEAR">ナレーションが聞き取りにくい</option>
-                        <option value="AI_VOICE_UNNATURAL">声が不自然</option>
-                        <option value="CONTENT_MISMATCH">内容が希望と違う</option>
-                        <option value="VISUAL_UNNATURAL">映像や画像が不自然</option>
-                        <option value="TOO_LONG">動画が長すぎる</option>
-                        <option value="OTHER">その他</option>
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span className="field__label">詳しく伝える（任意）</span>
-                      <textarea
-                        className="field__control"
-                        name="reviewNote"
-                        maxLength={500}
-                        defaultValue={scope.project.reviewNote ?? ''}
-                        placeholder="例：声が速くて聞き取れませんでした"
-                      />
-                    </label>
-                    <button type="submit" className="button button--secondary">
-                      理由を送って今回は使わない
-                    </button>
-                  </form>
-                </div>
+                        この動画を使う
+                      </PendingSubmitButton>
+                    </form>
+                    <details>
+                      <summary>今回は使わない</summary>
+                      <form
+                        className="form-stack"
+                        action={`/video-access/${projectId}/decision`}
+                        method="post"
+                      >
+                        <input type="hidden" name="decision" value="REJECTED" />
+                        <label className="field">
+                          <span className="field__label">使わない理由</span>
+                          <select
+                            className="field__control"
+                            name="reviewReason"
+                            defaultValue=""
+                            required
+                          >
+                            <option value="" disabled>
+                              選んでください
+                            </option>
+                            <option value="NARRATION_HARD_TO_HEAR">
+                              ナレーションが聞き取りにくい
+                            </option>
+                            <option value="AI_VOICE_UNNATURAL">声が不自然</option>
+                            <option value="CONTENT_MISMATCH">内容が希望と違う</option>
+                            <option value="VISUAL_UNNATURAL">映像や画像が不自然</option>
+                            <option value="TOO_LONG">動画が長すぎる</option>
+                            <option value="OTHER">その他</option>
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span className="field__label">詳しく伝える（任意）</span>
+                          <textarea
+                            className="field__control"
+                            name="reviewNote"
+                            maxLength={500}
+                            placeholder="例：声が速くて聞き取れませんでした"
+                          />
+                        </label>
+                        <PendingSubmitButton
+                          className="button button--secondary button--full"
+                          pendingLabel="送信しています…"
+                        >
+                          理由を送って今回は使わない
+                        </PendingSubmitButton>
+                      </form>
+                    </details>
+                  </section>
+                )}
                 {query.result === 'decision-failed' ? (
-                  <p role="alert">操作を記録できませんでした。もう一度お試しください。</p>
+                  <p className="notice notice--danger" role="alert">
+                    操作を記録できませんでした。もう一度お試しください。
+                  </p>
                 ) : null}
                 {query.result === 'post-failed' ? (
-                  <p role="alert">
+                  <p className="notice notice--danger" role="alert">
                     投稿完了を記録できませんでした。投稿案で「この内容で進める」を押してから、もう一度お試しください。
                   </p>
                 ) : null}
               </>
             ) : (
-              <p>動画は準備中、または保存期限を過ぎています。</p>
+              <p className="settings-card">動画は準備中、または保存期限を過ぎています。</p>
             )}
             {scope.appOwner ? (
               <p>
@@ -142,24 +180,38 @@ export default async function VideoAccessPage({
             ) : null}
           </>
         ) : (
-          <>
-            <h1>LINEで届いた動画を見る</h1>
-            <p>通知を受け取ったLINEで本人確認すると、この動画を閲覧・保存できます。</p>
+          <section className="auth-panel video-access-auth" aria-labelledby="video-access-title">
+            <div className="page-heading page-heading--center">
+              <p className="eyebrow">動画の受け取り</p>
+              <h1 id="video-access-title">LINEで届いた動画を見る</h1>
+              <p>通知を受け取ったLINEで本人確認すると、この動画を閲覧・保存できます。</p>
+            </div>
             {query.result === 'failed' ? (
-              <p role="alert">
-                確認できませんでした。通知を受け取ったLINEで、もう一度確認してください。保存期限を過ぎた動画は開けません。
-              </p>
+              <div className="notice notice--danger" role="alert">
+                <strong>本人確認を完了できませんでした</strong>
+                <span>
+                  通知を受け取ったLINEで、もう一度確認してください。保存期限を過ぎた動画は開けません。
+                </span>
+              </div>
             ) : null}
             <form action="/auth/video-line/start" method="post">
               <input type="hidden" name="projectId" value={projectId} />
-              <button type="submit">LINEで本人確認して動画を見る</button>
+              <PendingSubmitButton
+                className="button button--line button--full"
+                pendingLabel="LINEの本人確認を開いています…"
+              >
+                <span className="button__line-mark" aria-hidden="true">
+                  LINE
+                </span>
+                LINEで本人確認して動画を見る
+              </PendingSubmitButton>
             </form>
-            <p>
+            <p className="auth-panel__help">
               <a href={`/login?returnTo=${encodeURIComponent(`/video-access/${projectId}`)}`}>
                 動画を作成したアカウントでログインする
               </a>
             </p>
-          </>
+          </section>
         )}
       </main>
     </PublicShell>

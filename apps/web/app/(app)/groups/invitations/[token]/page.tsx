@@ -2,6 +2,7 @@ import { GroupParticipationService } from '@bunshin/application';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { PendingSubmitButton } from '../../../../ui/pending-submit-button';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { groupInvitationTokenHash } from '../../../../../src/http/group-invitations';
@@ -190,17 +191,17 @@ export async function InvitationContent({
           <label>
             <input type="checkbox" required /> 内容を確認し、サービスへの参加に同意します
           </label>
-          <button className="button" type="submit">
+          <PendingSubmitButton className="button button--primary" pendingLabel="参加しています…">
             同意して参加する
-          </button>
+          </PendingSubmitButton>
         </form>
         <form action={declineInvitation}>
           <input type="hidden" name="workspaceId" value={invitation.workspaceId} />
           <input type="hidden" name="token" value={token.data} />
           {serviceSlug && <input type="hidden" name="serviceSlug" value={serviceSlug} />}
-          <button className="button button--secondary" type="submit">
+          <PendingSubmitButton className="button button--secondary" pendingLabel="処理しています…">
             今回は参加しない
-          </button>
+          </PendingSubmitButton>
         </form>
         {serviceSlug ? (
           <a href={`/s/${serviceSlug}`}>あとで確認する</a>

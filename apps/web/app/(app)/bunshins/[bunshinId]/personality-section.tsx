@@ -75,6 +75,7 @@ export function PersonalitySection({
     changeReason: '',
   }));
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/personality-versions`;
   const lines = (value: string) =>
     value
@@ -84,37 +85,53 @@ export function PersonalitySection({
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (pendingAction) return;
+    setPendingAction('save');
     setMessage(null);
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        forbiddenExpressions: lines(form.forbiddenExpressions),
-        preferredExpressions: lines(form.preferredExpressions),
-        visualDirection: form.visualDirection.trim() || null,
-      }),
-    });
-    setMessage(
-      response.ok
-        ? '新しい話し方を保存しました。前の設定も残っています。'
-        : '保存できませんでした。空らんや同じ表現がないか確認してください。',
-    );
-    if (response.ok) router.refresh();
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          forbiddenExpressions: lines(form.forbiddenExpressions),
+          preferredExpressions: lines(form.preferredExpressions),
+          visualDirection: form.visualDirection.trim() || null,
+        }),
+      });
+      setMessage(
+        response.ok
+          ? '新しい話し方を保存しました。前の設定も残っています。'
+          : '保存できませんでした。空らんや同じ表現がないか確認してください。',
+      );
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage('保存できませんでした。通信状態を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function restore(version: PersonalityVersionView) {
     if (!window.confirm(`第${version.version}版の話し方に戻しますか？`)) return;
+    if (pendingAction) return;
+    setPendingAction(`restore:${version.id}`);
     setMessage(null);
-    const response = await fetch(`${endpoint}/${encodeURIComponent(version.id)}/restore`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ changeReason: `第${version.version}版へ戻す` }),
-    });
-    setMessage(
-      response.ok ? '前の話し方を新しい設定として保存しました。' : '元に戻せませんでした。',
-    );
-    if (response.ok) router.refresh();
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(version.id)}/restore`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ changeReason: `第${version.version}版へ戻す` }),
+      });
+      setMessage(
+        response.ok ? '前の話し方を新しい設定として保存しました。' : '元に戻せませんでした。',
+      );
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage('元に戻せませんでした。通信状態を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function act(proposalId: string, action: 'approve' | 'reject' | 'revoke') {
@@ -124,11 +141,21 @@ export function PersonalitySection({
       revoke: '反映前に戻す',
     };
     if (!window.confirm(`${labels[action]}でよろしいですか？`)) return;
+    if (pendingAction) return;
+    setPendingAction(`${action}:${proposalId}`);
     setMessage(null);
-    const proposalEndpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/personality-learning-proposals/${encodeURIComponent(proposalId)}/${action}`;
-    const response = await fetch(proposalEndpoint, { method: 'POST' });
-    setMessage(response.ok ? '改善提案の状態を更新しました。' : '改善提案を更新できませんでした。');
-    if (response.ok) router.refresh();
+    try {
+      const proposalEndpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/personality-learning-proposals/${encodeURIComponent(proposalId)}/${action}`;
+      const response = await fetch(proposalEndpoint, { method: 'POST' });
+      setMessage(
+        response.ok ? '改善提案の状態を更新しました。' : '改善提案を更新できませんでした。',
+      );
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage('改善提案を更新できませんでした。通信状態を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   if (!current) return <p>くわしい話し方は、まだ決まっていません。</p>;
@@ -169,25 +196,34 @@ export function PersonalitySection({
                     <button
                       className="button button--primary"
                       type="button"
+                      disabled={pendingAction !== null}
                       onClick={() => void act(proposal.id, 'approve')}
                     >
-                      この改善を反映する
+                      {pendingAction === `approve:${proposal.id}`
+                        ? '反映しています…'
+                        : 'この改善を反映する'}
                     </button>
                     <button
                       className="button button--secondary"
                       type="button"
+                      disabled={pendingAction !== null}
                       onClick={() => void act(proposal.id, 'reject')}
                     >
-                      今回は使わない
+                      {pendingAction === `reject:${proposal.id}`
+                        ? '処理しています…'
+                        : '今回は使わない'}
                     </button>
                   </div>
                 ) : proposal.status === 'APPROVED' ? (
                   <button
                     className="button button--secondary"
                     type="button"
+                    disabled={pendingAction !== null}
                     onClick={() => void act(proposal.id, 'revoke')}
                   >
-                    反映前の話し方に戻す
+                    {pendingAction === `revoke:${proposal.id}`
+                      ? '戻しています…'
+                      : '反映前の話し方に戻す'}
                   </button>
                 ) : (
                   <span>{proposal.status === 'REJECTED' ? '今回は使わない提案' : '取消済み'}</span>
@@ -314,8 +350,12 @@ export function PersonalitySection({
             placeholder="例：もっとやさしい話し方にしたい"
           />
         </label>
-        <button className="button button--primary button--full" type="submit">
-          この話し方を保存する
+        <button
+          className="button button--primary button--full"
+          type="submit"
+          disabled={pendingAction !== null}
+        >
+          {pendingAction === 'save' ? '保存しています…' : 'この話し方を保存する'}
         </button>
       </form>
       {message ? (
@@ -340,9 +380,10 @@ export function PersonalitySection({
                 <button
                   className="button button--secondary"
                   type="button"
+                  disabled={pendingAction !== null}
                   onClick={() => void restore(version)}
                 >
-                  この話し方に戻す
+                  {pendingAction === `restore:${version.id}` ? '戻しています…' : 'この話し方に戻す'}
                 </button>
               ) : null}
             </li>

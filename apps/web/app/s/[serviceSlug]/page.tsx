@@ -7,6 +7,7 @@ import { resolvePublicServiceContext } from '../../../src/services/public-servic
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../src/navigation/route-not-found';
 import { ParticipationForm } from './participation-form';
+import { PendingSubmitButton } from '../../ui/pending-submit-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,12 +154,15 @@ export default async function ServiceEntryPage({
               {copy.action && !currentUser && configuration.registration.lineEnabled && (
                 <form action="/auth/line" method="post">
                   <input name="returnTo" type="hidden" value={returnTo} />
-                  <button className="button button--line button--full" type="submit">
+                  <PendingSubmitButton
+                    className="button button--line button--full"
+                    pendingLabel="LINEを開いています…"
+                  >
                     <span className="button__line-mark" aria-hidden="true">
                       LINE
                     </span>
                     {copy.action}
-                  </button>
+                  </PendingSubmitButton>
                 </form>
               )}
               {configuration.registration.emailEnabled && copy.action && !currentUser && (

@@ -28,21 +28,31 @@ export function CampaignParticipationEditor({
 }) {
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [message, setMessage] = useState('');
+  const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null);
   const base = `/api/workspaces/${workspaceId}/bunshins/${bunshinId}/campaigns`;
   const decide = async (campaignId: string, decision: string) => {
+    if (pendingCampaignId) return;
+    setPendingCampaignId(campaignId);
     setMessage('保存しています…');
-    const response = await fetch(`${base}/${campaignId}/decision`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ decision, reason: null }),
-    });
-    if (!response.ok) {
-      setMessage('処理できませんでした。募集期間や人数をご確認ください。');
-      return;
+    try {
+      const response = await fetch(`${base}/${campaignId}/decision`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ decision, reason: null }),
+      });
+      if (!response.ok) {
+        setMessage('処理できませんでした。募集期間や人数をご確認ください。');
+        return;
+      }
+      const refreshed = await fetch(base, { cache: 'no-store' });
+      if (!refreshed.ok) throw new Error();
+      setCampaigns(((await refreshed.json()) as { data: Campaign[] }).data);
+      setMessage('選択を保存しました。');
+    } catch {
+      setMessage('処理できませんでした。通信状態を確認して、もう一度お試しください。');
+    } finally {
+      setPendingCampaignId(null);
     }
-    const refreshed = await fetch(base, { cache: 'no-store' });
-    setCampaigns(((await refreshed.json()) as { data: Campaign[] }).data);
-    setMessage('選択を保存しました。');
   };
   return (
     <>
@@ -86,27 +96,51 @@ export function CampaignParticipationEditor({
                         ? '参加を取り消した'
                         : 'まだ選んでいません'}
               </p>
-              <button type="button" onClick={() => void decide(campaign.id, 'ACCEPTED')}>
-                参加する
-              </button>
-              <button type="button" onClick={() => void decide(campaign.id, 'ON_HOLD')}>
-                あとで決める
-              </button>
-              <button type="button" onClick={() => void decide(campaign.id, 'DECLINED')}>
-                今回は参加しない
-              </button>
-              {status === 'ACCEPTED' ? (
-                <button type="button" onClick={() => void decide(campaign.id, 'WITHDRAWN')}>
-                  参加を取り消す
+              <div className="form-actions">
+                <button
+                  className="button button--primary"
+                  type="button"
+                  disabled={pendingCampaignId !== null}
+                  onClick={() => void decide(campaign.id, 'ACCEPTED')}
+                >
+                  {pendingCampaignId === campaign.id ? '保存しています…' : '参加する'}
                 </button>
-              ) : null}
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={pendingCampaignId !== null}
+                  onClick={() => void decide(campaign.id, 'ON_HOLD')}
+                >
+                  あとで決める
+                </button>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={pendingCampaignId !== null}
+                  onClick={() => void decide(campaign.id, 'DECLINED')}
+                >
+                  今回は参加しない
+                </button>
+                {status === 'ACCEPTED' ? (
+                  <button
+                    className="button button--danger"
+                    type="button"
+                    disabled={pendingCampaignId !== null}
+                    onClick={() => void decide(campaign.id, 'WITHDRAWN')}
+                  >
+                    参加を取り消す
+                  </button>
+                ) : null}
+              </div>
             </section>
           );
         })
       )}
-      <p role="status" aria-live="polite">
-        {message}
-      </p>
+      {message ? (
+        <p className="form-feedback" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </>
   );
 }

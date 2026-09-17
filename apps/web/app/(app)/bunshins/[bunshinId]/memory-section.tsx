@@ -58,61 +58,93 @@ export function MemorySection({
   const [form, setForm] = useState(initialForm);
   const [showInactive, setShowInactive] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/bunshins/${encodeURIComponent(bunshinId)}/memories`;
   const visible = memories.filter((memory) => memory.active !== showInactive);
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (pendingAction) return;
+    setPendingAction('create');
     setMessage(null);
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    if (!response.ok)
-      return setMessage('覚える内容を保存できませんでした。入力を確認してください。');
-    setForm(initialForm);
-    setMessage('投稿パートナーが新しく覚えました。');
-    router.refresh();
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!response.ok) throw new Error();
+      setForm(initialForm);
+      setMessage('投稿パートナーが新しく覚えました。');
+      router.refresh();
+    } catch {
+      setMessage('覚える内容を保存できませんでした。入力を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function update(memory: MemoryView) {
+    if (pendingAction) return;
+    setPendingAction(`update:${memory.id}`);
     setMessage(null);
-    const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        type: memory.type,
-        content: memory.content,
-        summary: memory.summary ?? '',
-        confidence: memory.confidence,
-        importance: memory.importance,
-      }),
-    });
-    setMessage(response.ok ? '覚えている内容を保存しました。' : '内容を保存できませんでした。');
-    if (response.ok) router.refresh();
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: memory.type,
+          content: memory.content,
+          summary: memory.summary ?? '',
+          confidence: memory.confidence,
+          importance: memory.importance,
+        }),
+      });
+      setMessage(response.ok ? '覚えている内容を保存しました。' : '内容を保存できませんでした。');
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage('内容を保存できませんでした。通信状態を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function setActive(memory: MemoryView) {
+    if (pendingAction) return;
+    setPendingAction(`active:${memory.id}`);
     setMessage(null);
-    const action = memory.active ? 'deactivate' : 'activate';
-    const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}/${action}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
-    setMessage(response.ok ? '使う内容を変えました。' : '変更できませんでした。');
-    if (response.ok) router.refresh();
+    try {
+      const action = memory.active ? 'deactivate' : 'activate';
+      const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}/${action}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      setMessage(response.ok ? '使う内容を変えました。' : '変更できませんでした。');
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage('変更できませんでした。通信状態を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function remove(memory: MemoryView) {
     if (!window.confirm('この内容を忘れさせますか？後から元に戻すことはできません。')) return;
+    if (pendingAction) return;
+    setPendingAction(`delete:${memory.id}`);
     setMessage(null);
-    const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}`, {
-      method: 'DELETE',
-    });
-    setMessage(response.ok ? 'この内容を忘れました。' : '削除できませんでした。');
-    if (response.ok) router.refresh();
+    try {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(memory.id)}`, {
+        method: 'DELETE',
+      });
+      setMessage(response.ok ? 'この内容を忘れました。' : '削除できませんでした。');
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage('削除できませんでした。通信状態を確認してください。');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   return (
@@ -194,8 +226,12 @@ export function MemorySection({
             onChange={(event) => setForm({ ...form, importance: Number(event.target.value) })}
           />
         </label>
-        <button className="button button--primary button--full" type="submit">
-          投稿パートナーに覚えてもらう
+        <button
+          className="button button--primary button--full"
+          type="submit"
+          disabled={pendingAction !== null}
+        >
+          {pendingAction === 'create' ? '保存しています…' : '投稿パートナーに覚えてもらう'}
         </button>
       </form>
 
@@ -237,6 +273,7 @@ export function MemorySection({
               onUpdate={update}
               onSetActive={setActive}
               onDelete={remove}
+              pendingAction={pendingAction}
             />
           ))}
         </ul>
@@ -250,11 +287,13 @@ function MemoryItem({
   onUpdate,
   onSetActive,
   onDelete,
+  pendingAction,
 }: {
   initial: MemoryView;
   onUpdate: (memory: MemoryView) => Promise<void>;
   onSetActive: (memory: MemoryView) => Promise<void>;
   onDelete: (memory: MemoryView) => Promise<void>;
+  pendingAction: string | null;
 }) {
   const [memory, setMemory] = useState(initial);
   return (
@@ -323,23 +362,30 @@ function MemoryItem({
         <button
           className="button button--primary"
           type="button"
+          disabled={pendingAction !== null}
           onClick={() => void onUpdate(memory)}
         >
-          保存
+          {pendingAction === `update:${memory.id}` ? '保存中…' : '保存'}
         </button>
         <button
           className="button button--secondary"
           type="button"
+          disabled={pendingAction !== null}
           onClick={() => void onSetActive(memory)}
         >
-          {memory.active ? '無効にする' : '有効にする'}
+          {pendingAction === `active:${memory.id}`
+            ? '変更中…'
+            : memory.active
+              ? '無効にする'
+              : '有効にする'}
         </button>
         <button
           className="button button--danger"
           type="button"
+          disabled={pendingAction !== null}
           onClick={() => void onDelete(memory)}
         >
-          削除
+          {pendingAction === `delete:${memory.id}` ? '削除中…' : '削除'}
         </button>
       </div>
     </li>
