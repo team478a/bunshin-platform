@@ -114,6 +114,7 @@ describe('LINE login routes', () => {
       options: {
         redirectTo: 'https://bunshin.example/auth/line/callback',
         scopes: 'openid profile',
+        queryParams: { bot_prompt: 'aggressive' },
       },
     });
   });

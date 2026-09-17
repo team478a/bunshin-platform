@@ -24,6 +24,7 @@ export async function POST(request: Request): Promise<Response> {
       options: {
         redirectTo: `${trustedRequestOrigin(request)}/auth/line/callback`,
         scopes: 'openid profile',
+        queryParams: { bot_prompt: 'aggressive' },
       },
     });
     if (error !== null || !data.url) throw error ?? new Error('LINE authorization URL unavailable');
