@@ -120,7 +120,7 @@ export async function scheduleFortuneWeeklyLineDeliveries(input: {
               consentedAt: { not: null },
               serviceRole: 'PARTICIPANT',
               fortuneParticipation: {
-                is: { serviceSettingId: setting.id, withdrawnAt: null },
+                is: { serviceSettingId: setting.id },
               },
             },
             user: { status: 'ACTIVE' },

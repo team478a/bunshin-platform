@@ -15,7 +15,7 @@
 
 ## 段階移行
 
-`fortune_participants.notification_enabled`と`withdrawn_at`は既存環境の安全な移行のため、今回は削除しない。アプリケーションからの参照と更新を止め、運用確認後にカラム削除を別作業で行う。
+旧通知設定を共通通知設定へ移した後、アプリケーションから旧項目の参照と更新を停止した。運用確認後の移行で`fortune_participants.notification_enabled`と`withdrawn_at`を削除し、通知同意と退会状態の正本を共通Service基盤へ一本化した。
 
 ## パッケージ境界
 
