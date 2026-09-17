@@ -68,10 +68,13 @@ export async function generateMetadata({
 
 export default async function ServiceBunshinDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string; bunshinId: string }>;
+  searchParams: Promise<{ lineResult?: string }>;
 }) {
   const { serviceSlug, bunshinId } = await params;
+  const lineResult = (await searchParams).lineResult;
   const { actor, service } = await resolveAuthenticatedMemberServicePage(
     serviceSlug,
     `/s/${serviceSlug}/bunshins/${bunshinId}`,
@@ -452,6 +455,11 @@ export default async function ServiceBunshinDetailPage({
           <h1>{bunshin.name}</h1>
           <p>初回設定のあとは、投稿案を自動で準備してLINEでお知らせします。</p>
         </header>
+        {lineResult === 'connected' && (
+          <p className="success-message" role="status">
+            LINE接続が完了しました。これで、このサービスからのお知らせを受け取れます。
+          </p>
+        )}
         {dedicatedLine ? (
           <a href={`/s/${service.configuration.slug}/bunshins/${bunshin.id}/line`}>
             {isBusinessDailyService
