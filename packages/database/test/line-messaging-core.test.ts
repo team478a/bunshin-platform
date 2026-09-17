@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  PrismaGroupLineConnectionRepository,
   PrismaLineConnectionRepository,
   PrismaLineMessageDeliveryRepository,
   PrismaMissionDeepLinkStateRepository,
@@ -15,6 +16,62 @@ const scope = {
 };
 
 describe('LINE messaging persistence isolation', () => {
+  it('moves a verified dedicated LINE destination from a stale registration', async () => {
+    const deleteConnection = vi.fn().mockResolvedValue({ id: 'actor-old-connection' });
+    const moveConnection = vi.fn().mockResolvedValue({ count: 1 });
+    const cancelDeliveries = vi.fn().mockResolvedValue({ count: 2 });
+    const tx = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-new' }) },
+      groupLineChannelConfiguration: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'configuration-a' }),
+      },
+      groupLineConnection: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'provider-connection', userId: 'user-old' })
+          .mockResolvedValueOnce({ id: 'actor-old-connection' }),
+        delete: deleteConnection,
+        updateMany: moveConnection,
+        upsert: vi.fn(),
+      },
+      lineMessageDelivery: { updateMany: cancelDeliveries },
+    };
+    const client = {
+      $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)),
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaGroupLineConnectionRepository(client).connectVerified({
+        environment: 'PRODUCTION',
+        workspaceId: 'workspace-a',
+        groupId: 'group-a',
+        configurationId: 'configuration-a',
+        groupMembershipId: 'membership-new',
+        actorUserId: 'user-new',
+        verifiedProviderUserId: 'U-verified',
+        consentGranted: true,
+      }),
+    ).resolves.toBe(true);
+    expect(deleteConnection).toHaveBeenCalledWith({ where: { id: 'actor-old-connection' } });
+    expect(moveConnection).toHaveBeenCalledWith({
+      where: {
+        id: 'provider-connection',
+        configurationId: 'configuration-a',
+        userId: 'user-old',
+      },
+      data: expect.objectContaining({
+        groupMembershipId: 'membership-new',
+        userId: 'user-new',
+        status: 'ACTIVE',
+      }),
+    });
+    expect(cancelDeliveries).toHaveBeenCalledWith({
+      where: expect.objectContaining({ userId: 'user-old', groupId: 'group-a' }),
+      data: expect.objectContaining({ status: 'CANCELLED' }),
+    });
+    expect(tx.groupLineConnection.upsert).not.toHaveBeenCalled();
+  });
+
   it('resolves a group delivery only through its dedicated LINE connection', async () => {
     const dedicatedFind = vi.fn().mockResolvedValue({ providerUserId: 'U-dedicated' });
     const sharedFind = vi.fn();
