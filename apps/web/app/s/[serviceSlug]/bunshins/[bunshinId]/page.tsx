@@ -25,6 +25,7 @@ import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../src/services/member-service-page';
 import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
+import { isPromptOnlyImageService } from '../../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../../ui/public-shell';
 import { SocialProfileSection } from '../../../../(app)/bunshins/[bunshinId]/social-profile-section';
 import { ContentPillarSection } from '../../../../(app)/bunshins/[bunshinId]/content-pillar-section';
@@ -320,37 +321,40 @@ export default async function ServiceBunshinDetailPage({
     missionDates: dailyMissions.map(({ missionDate }) => missionDate),
   });
   const generationProfile = socialProfiles.find(({ status }) => status === 'ACTIVE');
-  const imageMembership = isBusinessDailyService
-    ? null
-    : await db.prisma.groupMembership.findFirst({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          userId: actor.userId,
-          status: 'ACTIVE',
-          consentedAt: { not: null },
-          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
-        },
-        select: {
-          featureAssignments: {
-            where: { featureKey: 'SOCIAL.IMAGE_GENERATION', status: 'ENABLED' },
-            select: { startsAt: true, endsAt: true },
+  const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
+  const imageMembership =
+    isBusinessDailyService || promptOnlyImages
+      ? null
+      : await db.prisma.groupMembership.findFirst({
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            userId: actor.userId,
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
           },
-          group: {
-            select: {
-              featurePolicies: {
-                where: { featureKey: 'SOCIAL.IMAGE_GENERATION', status: 'ENABLED' },
-                select: { startsAt: true, endsAt: true },
+          select: {
+            featureAssignments: {
+              where: { featureKey: 'SOCIAL.IMAGE_GENERATION', status: 'ENABLED' },
+              select: { startsAt: true, endsAt: true },
+            },
+            group: {
+              select: {
+                featurePolicies: {
+                  where: { featureKey: 'SOCIAL.IMAGE_GENERATION', status: 'ENABLED' },
+                  select: { startsAt: true, endsAt: true },
+                },
               },
             },
           },
-        },
-      });
+        });
   const entitlementNow = new Date();
   const isCurrent = (value: { startsAt: Date | null; endsAt: Date | null }) =>
     (!value.startsAt || value.startsAt <= entitlementNow) &&
     (!value.endsAt || value.endsAt > entitlementNow);
   const imageCreationAvailable = Boolean(
+    !promptOnlyImages &&
     imageMembership?.featureAssignments.some(isCurrent) &&
     imageMembership.group.featurePolicies.some(isCurrent),
   );

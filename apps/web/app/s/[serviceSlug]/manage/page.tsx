@@ -8,6 +8,7 @@ import { resolveManagedServiceContext } from '../../../../src/services/public-se
 import { buildServiceLaunchReadiness } from '../../../../src/services/service-launch-readiness';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
+import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { selectServiceManagementSections } from '../../../../src/services/service-management-navigation';
 import { buildSideHustleContentFunnel } from '../../../../src/services/side-hustle-content-funnel';
 import { buildPerformanceFeedbackSummary } from '../../../../src/services/performance-feedback-summary';
@@ -723,6 +724,7 @@ export default async function ServiceManagementHome({
   const visibleSections = selectServiceManagementSections(sections, {
     businessDaily: isBusinessDailyService,
     fortune: isFortuneService,
+    promptOnlyImages: isPromptOnlyImageService(configuration.slug),
   });
 
   return (

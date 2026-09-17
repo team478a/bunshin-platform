@@ -5,6 +5,9 @@ const sections = [
   { href: 'members' },
   { href: 'knowledge' },
   { href: 'points' },
+  { href: 'referral-rewards' },
+  { href: 'credits' },
+  { href: 'image-operations' },
   { href: 'line' },
   { href: 'settings' },
   { href: 'legal' },
@@ -34,5 +37,15 @@ describe('service management navigation', () => {
         (section) => section.href,
       ),
     ).toEqual(['members', 'knowledge', 'line', 'settings', 'legal']);
+  });
+
+  it('hides image generation operations for a prompt-only service', () => {
+    expect(
+      selectServiceManagementSections(sections, {
+        businessDaily: false,
+        fortune: false,
+        promptOnlyImages: true,
+      }).map((section) => section.href),
+    ).toEqual(['members', 'knowledge', 'points', 'line', 'settings', 'legal']);
   });
 });

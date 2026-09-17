@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { isPromptOnlyImageService } from '../../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,9 @@ export default async function ServiceImageOperationsPage({
     redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/image-operations`)}`);
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
+  if (isPromptOnlyImageService(service.configuration.slug)) {
+    redirect(`/s/${service.configuration.slug}/manage`);
+  }
 
   const db = await import('@bunshin/database');
   const [requests, members] = await Promise.all([

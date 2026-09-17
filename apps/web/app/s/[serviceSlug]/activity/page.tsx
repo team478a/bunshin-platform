@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
 import { resolvePublicServiceContext } from '../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceReferralShare } from './service-referral-share';
 
@@ -60,6 +61,7 @@ export default async function ServiceMemberActivityPage({
   if (onboarding.businessProfileEnabled) {
     redirect(`/s/${serviceSlug}/weekly-report` as Route);
   }
+  const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
 
   const rewardsPilotAccess = await db.getActiveRewardsPilotAccess(db.prisma, {
     workspaceId: service.workspaceId,
@@ -90,15 +92,17 @@ export default async function ServiceMemberActivityPage({
             },
           })
         : null,
-      db.prisma.serviceCreditAccount.findFirst({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          groupMembershipId: membership.id,
-          userId: actor.userId,
-        },
-        select: { availableCredits: true },
-      }),
+      promptOnlyImages
+        ? null
+        : db.prisma.serviceCreditAccount.findFirst({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              groupMembershipId: membership.id,
+              userId: actor.userId,
+            },
+            select: { availableCredits: true },
+          }),
       rewardsPilotAccess
         ? db.prisma.pointAccount.findFirst({
             where: { workspaceId: service.workspaceId, userId: actor.userId },
@@ -198,9 +202,13 @@ export default async function ServiceMemberActivityPage({
           <p className="eyebrow">あなたの記録</p>
           <h1>活動・紹介</h1>
           <p>
-            {rewardsPilotAccess
-              ? 'ポイント、バッジ、紹介、画像作成回数をここで確認できます。'
-              : '紹介と画像作成回数をここで確認できます。'}
+            {promptOnlyImages
+              ? rewardsPilotAccess
+                ? 'ポイント、バッジ、紹介をここで確認できます。'
+                : '紹介の記録をここで確認できます。'
+              : rewardsPilotAccess
+                ? 'ポイント、バッジ、紹介、画像作成回数をここで確認できます。'
+                : '紹介と画像作成回数をここで確認できます。'}
           </p>
         </header>
 
@@ -334,21 +342,23 @@ export default async function ServiceMemberActivityPage({
           </section>
         )}
 
-        <section className="service-entry__card service-activity-dashboard__section">
-          <div>
-            <p className="eyebrow">画像を作れる回数</p>
-            <h2>画像作成回数</h2>
-          </div>
-          <div className="service-activity-dashboard__stats service-activity-dashboard__stats--single">
+        {!promptOnlyImages && (
+          <section className="service-entry__card service-activity-dashboard__section">
             <div>
-              <small>現在の残り</small>
-              <strong>{creditAccount?.availableCredits ?? 0}回</strong>
+              <p className="eyebrow">画像を作れる回数</p>
+              <h2>画像作成回数</h2>
             </div>
-          </div>
-          <Link className="button" href={`/s/${serviceSlug}/credits` as Route}>
-            画像作成回数の履歴を見る
-          </Link>
-        </section>
+            <div className="service-activity-dashboard__stats service-activity-dashboard__stats--single">
+              <div>
+                <small>現在の残り</small>
+                <strong>{creditAccount?.availableCredits ?? 0}回</strong>
+              </div>
+            </div>
+            <Link className="button" href={`/s/${serviceSlug}/credits` as Route}>
+              画像作成回数の履歴を見る
+            </Link>
+          </section>
+        )}
 
         <Link href={`/s/${serviceSlug}/home` as Route}>← サービスホームへ戻る</Link>
       </article>
