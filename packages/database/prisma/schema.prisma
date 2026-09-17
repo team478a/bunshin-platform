@@ -280,6 +280,83 @@ model ProgramEnrollment {
   @@map("program_enrollments")
 }
 
+model ProgramMissionAssignment {
+  id                       String                         @id @default(uuid()) @db.Uuid
+  workspaceId              String                         @map("workspace_id") @db.Uuid
+  groupId                  String                         @map("group_id") @db.Uuid
+  programEnrollmentId      String                         @map("program_enrollment_id") @db.Uuid
+  programTemplateVersionId String                         @map("program_template_version_id") @db.Uuid
+  sequence                 Int
+  routeKey                 String                         @map("route_key") @db.VarChar(80)
+  phaseKey                 String                         @map("phase_key") @db.VarChar(80)
+  missionDefinitionKey     String                         @map("mission_definition_key") @db.VarChar(80)
+  variantKey               String?                        @map("variant_key") @db.VarChar(80)
+  targetResourceType       String?                        @map("target_resource_type") @db.VarChar(80)
+  targetResourceId         String?                        @map("target_resource_id") @db.Uuid
+  status                   ProgramMissionAssignmentStatus @default(PRESENTED)
+  displaySnapshot          Json                           @map("display_snapshot")
+  ruleVersion              String                         @map("rule_version") @db.VarChar(80)
+  presentedAt              DateTime                       @map("presented_at") @db.Timestamptz(3)
+  startedAt                DateTime?                      @map("started_at") @db.Timestamptz(3)
+  completedAt              DateTime?                      @map("completed_at") @db.Timestamptz(3)
+  skippedAt                DateTime?                      @map("skipped_at") @db.Timestamptz(3)
+  createdAt                DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([programEnrollmentId, sequence])
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, programEnrollmentId, status, presentedAt])
+  @@index([workspaceId, programTemplateVersionId, phaseKey, missionDefinitionKey])
+  @@map("program_mission_assignments")
+}
+
+model ProgramActionEvent {
+  id                  String   @id @default(uuid()) @db.Uuid
+  workspaceId         String   @map("workspace_id") @db.Uuid
+  groupId             String   @map("group_id") @db.Uuid
+  programEnrollmentId String   @map("program_enrollment_id") @db.Uuid
+  missionAssignmentId String?  @map("mission_assignment_id") @db.Uuid
+  eventType           String   @map("event_type") @db.VarChar(80)
+  sourceResourceType  String?  @map("source_resource_type") @db.VarChar(80)
+  sourceResourceId    String?  @map("source_resource_id") @db.Uuid
+  idempotencyKey      String   @map("idempotency_key") @db.VarChar(200)
+  schemaVersion       Int      @default(1) @map("schema_version")
+  metadata            Json
+  actorUserId         String?  @map("actor_user_id") @db.Uuid
+  occurredAt          DateTime @map("occurred_at") @db.Timestamptz(3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, idempotencyKey])
+  @@index([workspaceId, groupId, programEnrollmentId, occurredAt])
+  @@index([workspaceId, groupId, missionAssignmentId, eventType])
+  @@map("program_action_events")
+}
+
+model ProgramProgressSnapshot {
+  id                       String    @id @default(uuid()) @db.Uuid
+  workspaceId              String    @map("workspace_id") @db.Uuid
+  groupId                  String    @map("group_id") @db.Uuid
+  programEnrollmentId      String    @unique @map("program_enrollment_id") @db.Uuid
+  programTemplateVersionId String    @map("program_template_version_id") @db.Uuid
+  currentAssignmentId      String?   @map("current_assignment_id") @db.Uuid
+  routeKey                 String    @map("route_key") @db.VarChar(80)
+  phaseKey                 String    @map("phase_key") @db.VarChar(80)
+  stateKey                 String    @map("state_key") @db.VarChar(80)
+  bottleneckKey            String?   @map("bottleneck_key") @db.VarChar(80)
+  completedMissionCount    Int       @default(0) @map("completed_mission_count")
+  revision                 Int       @default(1)
+  ruleVersion              String    @map("rule_version") @db.VarChar(80)
+  lastActionAt             DateTime? @map("last_action_at") @db.Timestamptz(3)
+  calculatedAt             DateTime  @map("calculated_at") @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, phaseKey, stateKey])
+  @@map("program_progress_snapshots")
+}
+
 model ServiceProgramSupportPolicy {
   id                  String              @id @default(uuid()) @db.Uuid
   workspaceId         String              @map("workspace_id") @db.Uuid
@@ -397,6 +474,13 @@ enum ProgramVersionStatus {
   DRAFT
   PUBLISHED
   SUPERSEDED
+}
+
+enum ProgramMissionAssignmentStatus {
+  PRESENTED
+  STARTED
+  COMPLETED
+  SKIPPED
 }
 
 enum ServiceProgramStatus {
