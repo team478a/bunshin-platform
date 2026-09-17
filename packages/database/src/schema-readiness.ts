@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260917130000_set_sennokuni_prompt_only_images';
+export const LATEST_DATABASE_MIGRATION = '20260917150000_add_program_runtime_tracking';
