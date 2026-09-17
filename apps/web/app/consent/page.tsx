@@ -2,6 +2,7 @@ import { GetRequiredLegalConsents } from '@bunshin/application';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../src/auth/current-user';
 import { PublicShell } from '../ui/public-shell';
+import { PendingSubmitButton } from '../ui/pending-submit-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,9 +41,12 @@ export default async function ConsentPage() {
             ))}
           </div>
           <div className="sticky-action">
-            <button className="button button--primary button--full" type="submit">
+            <PendingSubmitButton
+              className="button button--primary button--full"
+              pendingLabel="同意を保存しています…"
+            >
               同意してワタシワークスを利用する
-            </button>
+            </PendingSubmitButton>
           </div>
         </form>
       </section>

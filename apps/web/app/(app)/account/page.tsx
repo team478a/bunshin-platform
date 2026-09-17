@@ -3,6 +3,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../src/auth/current-user';
+import { PendingSubmitButton } from '../../ui/pending-submit-button';
 
 export const dynamic = 'force-dynamic';
 export default async function AccountPage({
@@ -217,9 +218,12 @@ export default async function AccountPage({
       </section>
 
       <form action="/auth/logout" method="post">
-        <button className="button button--secondary button--full" type="submit">
+        <PendingSubmitButton
+          className="button button--secondary button--full"
+          pendingLabel="ログアウトしています…"
+        >
           ログアウト
-        </button>
+        </PendingSubmitButton>
       </form>
 
       <section className="danger-zone account-danger-zone" aria-labelledby="danger-zone-title">
@@ -231,9 +235,12 @@ export default async function AccountPage({
             </p>
             <p>処理前であれば取り消せます。</p>
             <form action="/account/deletion/cancel" method="post">
-              <button className="button button--secondary" type="submit">
+              <PendingSubmitButton
+                className="button button--secondary"
+                pendingLabel="取り消しています…"
+              >
                 退会要求を取り消す
-              </button>
+              </PendingSubmitButton>
             </form>
           </>
         ) : (
@@ -244,9 +251,12 @@ export default async function AccountPage({
                 <input name="confirmation" value="DELETE" type="checkbox" required />
                 退会要求の内容を確認しました
               </label>
-              <button className="button button--danger" type="submit">
+              <PendingSubmitButton
+                className="button button--danger"
+                pendingLabel="退会要求を送信しています…"
+              >
                 退会を要求する
-              </button>
+              </PendingSubmitButton>
             </form>
           </>
         )}

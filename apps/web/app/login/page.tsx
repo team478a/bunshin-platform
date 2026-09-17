@@ -1,5 +1,6 @@
 import { PublicShell } from '../ui/public-shell';
 import { safeLineAuthReturnPath, videoAuthReturnProjectId } from '../../src/auth/line-return';
+import { PendingSubmitButton } from '../ui/pending-submit-button';
 
 export default async function LoginPage({
   searchParams,
@@ -46,12 +47,15 @@ export default async function LoginPage({
         <form action={videoProjectId ? '/auth/video-line/start' : '/auth/line'} method="post">
           {videoProjectId && <input name="projectId" type="hidden" value={videoProjectId} />}
           {returnTo && <input name="returnTo" type="hidden" value={returnTo} />}
-          <button className="button button--line button--full" type="submit">
+          <PendingSubmitButton
+            className="button button--line button--full"
+            pendingLabel="LINEを開いています…"
+          >
             <span className="button__line-mark" aria-hidden="true">
               LINE
             </span>
             {videoProjectId ? 'LINEで本人確認して動画を見る' : 'LINEでログイン'}
-          </button>
+          </PendingSubmitButton>
         </form>
         <div className="auth-divider" aria-hidden="true">
           <span>または</span>
@@ -72,9 +76,12 @@ export default async function LoginPage({
               required
             />
           </label>
-          <button className="button button--secondary button--full" type="submit">
+          <PendingSubmitButton
+            className="button button--secondary button--full"
+            pendingLabel="メールを送信しています…"
+          >
             メールでログイン
-          </button>
+          </PendingSubmitButton>
         </form>
         <p className="auth-panel__help">メールログインではパスワードの入力は必要ありません。</p>
       </section>

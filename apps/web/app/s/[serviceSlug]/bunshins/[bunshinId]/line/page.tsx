@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PendingSubmitButton } from '../../../../../ui/pending-submit-button';
 import { notFound } from 'next/navigation';
 import {
   serviceLineLinkScope,
@@ -135,9 +136,12 @@ export default async function ServiceLinePage({
                 <input type="hidden" name="serviceSlug" value={serviceSlug} />
                 <input type="hidden" name="bunshinId" value={bunshinId} />
                 <input type="hidden" name="renderId" value={render.id} />
-                <button className="button button--secondary button--full" type="submit">
+                <PendingSubmitButton
+                  className="button button--secondary button--full"
+                  pendingLabel="通知を送っています…"
+                >
                   この動画の完成通知を送る
-                </button>
+                </PendingSubmitButton>
               </form>
             ) : null}
           </article>

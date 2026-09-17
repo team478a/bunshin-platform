@@ -23,18 +23,27 @@ export function LineNotificationPreferenceSection(props: {
     : null;
   const [value, setValue] = useState({ ...props.preference, pausedUntil: localPause });
   const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
   async function save(event: FormEvent) {
     event.preventDefault();
-    const endpoint = `/api/workspaces/${encodeURIComponent(props.workspaceId)}/bunshins/${encodeURIComponent(props.bunshinId)}/line-notification-preference`;
-    const response = await fetch(endpoint, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...value,
-        pausedUntil: value.pausedUntil ? new Date(value.pausedUntil).toISOString() : null,
-      }),
-    });
-    setMessage(response.ok ? '通知設定を保存しました。' : '通知設定を保存できませんでした。');
+    setSaving(true);
+    setMessage('');
+    try {
+      const endpoint = `/api/workspaces/${encodeURIComponent(props.workspaceId)}/bunshins/${encodeURIComponent(props.bunshinId)}/line-notification-preference`;
+      const response = await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...value,
+          pausedUntil: value.pausedUntil ? new Date(value.pausedUntil).toISOString() : null,
+        }),
+      });
+      setMessage(response.ok ? '通知設定を保存しました。' : '通知設定を保存できませんでした。');
+    } catch {
+      setMessage('通知設定を保存できませんでした。通信状態を確認して、もう一度お試しください。');
+    } finally {
+      setSaving(false);
+    }
   }
   return (
     <section>
@@ -123,9 +132,15 @@ export function LineNotificationPreferenceSection(props: {
           />
           Reminderを有効にする（1日最大1回）
         </label>
-        <button type="submit">通知設定を保存</button>
+        <button className="button button--primary" type="submit" disabled={saving}>
+          {saving ? '保存しています…' : '通知設定を保存'}
+        </button>
       </form>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="notice" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -59,6 +59,7 @@ export function EvidenceEditor({
   const [evidence, setEvidence] = useState(initialEvidence as Evidence[]);
   const [reviews, setReviews] = useState(initialReviews as Review[]);
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
   const reload = async () => {
     const [evidenceResponse, reviewResponse] = await Promise.all([
       fetch(`${base}/evidence`, { cache: 'no-store' }),
@@ -68,6 +69,8 @@ export function EvidenceEditor({
     setReviews(((await reviewResponse.json()) as { data: Review[] }).data);
   };
   const run = async (operation: () => Promise<unknown>) => {
+    if (busy) return;
+    setBusy(true);
     setMessage('確認しています…');
     try {
       await operation();
@@ -75,6 +78,8 @@ export function EvidenceEditor({
       setMessage('保存しました。');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '処理できませんでした。');
+    } finally {
+      setBusy(false);
     }
   };
   const create = (event: FormEvent<HTMLFormElement>) => {
@@ -152,8 +157,8 @@ export function EvidenceEditor({
             <span className="field__label">確認先URL（任意・httpsのみ）</span>
             <input className="field__control" name="sourceUrl" type="url" placeholder="https://" />
           </label>
-          <button className="button evidence-form__submit" type="submit">
-            根拠を登録する
+          <button className="button evidence-form__submit" type="submit" disabled={busy}>
+            {busy ? '保存しています…' : '根拠を登録する'}
           </button>
         </form>
         <div className="evidence-list-heading">
@@ -174,9 +179,10 @@ export function EvidenceEditor({
                 <button
                   className="button button--secondary"
                   type="button"
+                  disabled={busy}
                   onClick={() => void run(() => post(`${base}/evidence/${item.id}/revoke`))}
                 >
-                  使用をやめる
+                  {busy ? '処理しています…' : '使用をやめる'}
                 </button>
               ) : null}
             </li>
@@ -241,8 +247,8 @@ export function EvidenceEditor({
               placeholder="ここに投稿する文章を貼り付けてください"
             />
           </label>
-          <button className="button evidence-form__submit" type="submit">
-            投稿文を確認する
+          <button className="button evidence-form__submit" type="submit" disabled={busy}>
+            {busy ? '確認しています…' : '投稿文を確認する'}
           </button>
         </form>
         <div className="evidence-list-heading">

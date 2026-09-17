@@ -58,10 +58,14 @@ export function ServiceDeliverySettings(props: {
           onChange={(event) => setLocalTime(event.target.value)}
         />
       </label>
-      <button disabled={pending} type="submit">
-        お届け設定を保存
+      <button className="button button--primary" disabled={pending} type="submit">
+        {pending ? '保存しています…' : 'お届け設定を保存'}
       </button>
-      {message ? <p role="status">{message}</p> : null}
+      {message ? (
+        <p className="notice" role="status" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </form>
   );
 }

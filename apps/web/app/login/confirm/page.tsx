@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { PendingSubmitButton } from '../../ui/pending-submit-button';
 import { PublicShell } from '../../ui/public-shell';
 
 export default async function LoginConfirmPage({
@@ -26,9 +27,9 @@ export default async function LoginConfirmPage({
         <form className="form-stack" action="/auth/confirm" method="post">
           <input type="hidden" name="token_hash" value={query.token_hash} />
           <input type="hidden" name="type" value="email" />
-          <button className="button button--primary button--full" type="submit">
+          <PendingSubmitButton pendingLabel="ログインしています…">
             ワタシワークスへログイン
-          </button>
+          </PendingSubmitButton>
         </form>
         <p className="auth-panel__help">このリンクは一度だけ使用できます。</p>
       </section>
