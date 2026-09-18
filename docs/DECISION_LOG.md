@@ -2475,3 +2475,13 @@
 - Window: 対象週の終了日時から直近28日間に保存された投稿別反応を利用し、週内の投稿が少ない場合も比較材料を維持する。
 - Privacy: Workspace、Service Group、Bunshin Owner、Actor Userを照合した本人の投稿だけを集計し、LINEには個人別の改善メモと本人用レポートURLだけを含める。
 - UX: LINE本文は反応数を羅列せず、一つの改善方針と基準テーマを伝える。詳細な投稿別数値は認証済みWebレポートで確認する。
+
+## 2026-09-18: OEM商用利用量はWorkspace単位のMAUとして確定する
+
+- Billing tenant: OEM契約と請求の単位は`Workspace(type=ORGANIZATION)`とし、配下の複数Service Groupを合算する。
+- Evidence: ログインや自動生成を数えず、参加者本人が成功させた対象操作だけを`ServiceUsageEvent`へ冪等記録する。
+- Exclusion: Platform Admin、Workspace OWNER/ADMIN、Service運営RoleはMAU対象外とし、ACTIVEなPARTICIPANTだけを数える。
+- Calculation: 月中はAsia/Tokyoの半開区間で`COUNT DISTINCT userId`相当を表示し、月末後は`TenantMonthlyUsage`へ料金表versionとともに確定する。
+- Immutability: FINALIZED後の月次値はService層の再確定防止とDB triggerの両方で更新・削除を禁止する。
+- Pricing: 初期版は0〜100人19,800円から1,001〜3,000人198,000円までを共通Policyに置き、3,001人以上は個別見積として自動金額を確定しない。
+- Boundary: SNS固有画面は対象イベントを発生させるだけとし、集計・料金・月次確定を共通Application/Database境界へ置く。

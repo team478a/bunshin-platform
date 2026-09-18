@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260918100000_add_ai_resale_runtime_persistence';
+export const LATEST_DATABASE_MIGRATION = '20260918130000_add_oem_commercial_usage';

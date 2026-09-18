@@ -17,7 +17,8 @@
     { "path": "/api/internal/account-deletions/run", "schedule": "15 18 * * *" },
     { "path": "/api/internal/points/release-expired", "schedule": "*/5 * * * *" },
     { "path": "/api/internal/assets/purge-expired", "schedule": "30 17 * * *" },
-    { "path": "/api/internal/fortune/purge-expired", "schedule": "45 17 * * *" }
+    { "path": "/api/internal/fortune/purge-expired", "schedule": "45 17 * * *" },
+    { "path": "/api/internal/commercial-usage/finalize", "schedule": "15 16 1 * *" }
   ],
   "functions": {
     "app/api/workspaces/[workspaceId]/bunshins/[bunshinId]/daily-missions/generate/route.ts": {

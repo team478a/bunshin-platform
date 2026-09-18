@@ -55,6 +55,7 @@ import {
   readPostPerformance,
   type PostPerformanceView,
 } from '../../../../../src/services/post-performance';
+import { recordCommercialUsageSafely } from '../../../../../src/services/commercial-usage';
 
 export const dynamic = 'force-dynamic';
 
@@ -171,6 +172,18 @@ export default async function ServiceBunshinDetailPage({
       )
     ).flat();
     weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(scope);
+    if (weeklyPlans.length > 0) {
+      const viewedOn = localDateInTimezone(new Date(), 'Asia/Tokyo');
+      await recordCommercialUsageSafely({
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        userId: actor.userId,
+        eventType: 'WEEKLY_PLAN_VIEW',
+        source: 'service_member_home',
+        idempotencyKey: `WEEKLY_PLAN_VIEW:${actor.userId}:${viewedOn}`,
+        metadata: { bunshinId },
+      });
+    }
     const missionRepository = new db.PrismaDailyMissionRepository();
     const missionRecords = await new ListDailyMissions(missionRepository).execute(scope);
     const engagementRepository = new db.PrismaMissionEngagementRepository();
