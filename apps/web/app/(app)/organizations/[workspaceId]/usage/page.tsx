@@ -9,6 +9,11 @@ function yen(value: number | null): string {
   return value === null ? '個別見積' : `${value.toLocaleString('ja-JP')}円`;
 }
 
+function invoiceStatusLabel(status: 'DRAFT' | 'ISSUED' | 'PAID' | 'VOID', dueAt: Date | null) {
+  if (status === 'ISSUED' && dueAt && dueAt < new Date()) return '支払期限超過';
+  return { DRAFT: '準備中', ISSUED: '請求済み', PAID: '入金済み', VOID: '取消' }[status];
+}
+
 export default async function OrganizationUsagePage({
   params,
 }: {
@@ -32,8 +37,11 @@ export default async function OrganizationUsagePage({
     }),
   ]);
   if (!platformAdmin && !membership) notFound();
-  const dashboard = await new db.PrismaCommercialUsageService().dashboard(workspaceId.data);
-  if (!dashboard) notFound();
+  const [dashboard, billing] = await Promise.all([
+    new db.PrismaCommercialUsageService().dashboard(workspaceId.data),
+    new db.PrismaCommercialBillingService().dashboard(workspaceId.data),
+  ]);
+  if (!dashboard || !billing) notFound();
 
   return (
     <main className="app-page">
@@ -75,6 +83,56 @@ export default async function OrganizationUsagePage({
           投稿案の確認・生成・再生成・採用、今日やることや週間計画の確認など、対象機能を使った参加者を月内で1人として数えます。
         </p>
         <p>登録やログインだけの人、運営者・スタッフ・システム管理者は含みません。</p>
+      </section>
+
+      <section className="settings-card">
+        <h2>契約・請求状況</h2>
+        {!billing.organizationCommercialContract ? (
+          <p>契約情報は準備中です。請求に関する確認はワタシワークス運営へお問い合わせください。</p>
+        ) : (
+          <>
+            <p>
+              契約状態：
+              {
+                { DRAFT: '準備中', ACTIVE: '契約中', SUSPENDED: '一時停止', ENDED: '終了' }[
+                  billing.organizationCommercialContract.status
+                ]
+              }
+            </p>
+            <p>請求先：{billing.organizationCommercialContract.billingName}</p>
+          </>
+        )}
+        {billing.tenantInvoices.filter((invoice) => invoice.status !== 'DRAFT').length === 0 ? (
+          <p>請求記録はまだありません。</p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>対象月</th>
+                  <th>金額</th>
+                  <th>状態</th>
+                  <th>支払期限</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billing.tenantInvoices
+                  .filter((invoice) => invoice.status !== 'DRAFT')
+                  .map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td>{invoice.periodStart.toISOString().slice(0, 7)}</td>
+                      <td>{yen(invoice.amountYen)}</td>
+                      <td>{invoiceStatusLabel(invoice.status, invoice.dueAt)}</td>
+                      <td>
+                        {invoice.dueAt?.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' }) ??
+                          '未発行'}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="settings-card">

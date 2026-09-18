@@ -7,6 +7,25 @@ import { currentUserProvider } from '../../../../../../src/auth/current-user';
 export const dynamic = 'force-dynamic';
 
 const workspaceSchema = z.object({ workspaceId: z.uuid() });
+const contractSchema = z.object({
+  workspaceId: z.uuid(),
+  status: z.enum(['DRAFT', 'ACTIVE', 'SUSPENDED', 'ENDED']),
+  billingMode: z.enum(['MANUAL_INVOICE', 'EXTERNAL_BILLING']),
+  billingName: z.string().trim().min(1).max(200),
+  billingEmail: z.email().max(320),
+  paymentTermsDays: z.coerce.number().int().min(0).max(365),
+  externalCustomerReference: z.string().trim().max(200).optional(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
+});
+const invoiceActionSchema = z.object({
+  workspaceId: z.uuid(),
+  invoiceId: z.uuid(),
+  action: z.enum(['ISSUE', 'MARK_PAID', 'VOID']),
+  externalInvoiceReference: z.string().trim().max(200).optional(),
+  paymentReference: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
 
 const EVENT_LABELS: Record<string, string> = {
   POST_VIEW: '投稿案を表示',
@@ -19,6 +38,24 @@ const EVENT_LABELS: Record<string, string> = {
 
 function yen(value: number | null): string {
   return value === null ? '個別見積' : `${value.toLocaleString('ja-JP')}円`;
+}
+
+function optionalDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(`${value}:00+09:00`);
+  if (Number.isNaN(date.getTime())) throw new Error('invalid date');
+  return date;
+}
+
+function dateTimeInput(value: Date | null | undefined): string {
+  if (!value) return '';
+  const local = new Date(value.getTime() + 9 * 60 * 60 * 1_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function invoiceStatusLabel(status: 'DRAFT' | 'ISSUED' | 'PAID' | 'VOID', dueAt: Date | null) {
+  if (status === 'ISSUED' && dueAt && dueAt < new Date()) return '支払期限超過';
+  return { DRAFT: '下書き', ISSUED: '請求済み', PAID: '入金済み', VOID: '取消' }[status];
 }
 
 async function requireSuperAdmin() {
@@ -39,6 +76,7 @@ async function finalizePreviousMonth(formData: FormData) {
   const { db } = await requireSuperAdmin();
   try {
     await new db.PrismaCommercialUsageService().finalizePreviousMonth(input.data.workspaceId);
+    await new db.PrismaCommercialBillingService().prepareWorkspaceInvoices(input.data.workspaceId);
   } catch {
     redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=finalize`);
   }
@@ -46,18 +84,79 @@ async function finalizePreviousMonth(formData: FormData) {
   redirect(`/admin/organizations/${input.data.workspaceId}/commercial?finalized=1`);
 }
 
+async function saveContract(formData: FormData) {
+  'use server';
+  const input = contractSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  try {
+    await new db.PrismaCommercialBillingService().saveContract({
+      ...input.data,
+      actorUserId: actor.userId,
+      externalCustomerReference: input.data.externalCustomerReference || null,
+      startsAt: optionalDate(input.data.startsAt),
+      endsAt: optionalDate(input.data.endsAt),
+    });
+  } catch {
+    redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=contract`);
+  }
+  revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
+  redirect(`/admin/organizations/${input.data.workspaceId}/commercial?contractSaved=1`);
+}
+
+async function prepareInvoices(formData: FormData) {
+  'use server';
+  const input = workspaceSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { db } = await requireSuperAdmin();
+  await new db.PrismaCommercialBillingService().prepareWorkspaceInvoices(input.data.workspaceId);
+  revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
+  redirect(`/admin/organizations/${input.data.workspaceId}/commercial?prepared=1`);
+}
+
+async function transitionInvoice(formData: FormData) {
+  'use server';
+  const input = invoiceActionSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  try {
+    await new db.PrismaCommercialBillingService().transitionInvoice({
+      workspaceId: input.data.workspaceId,
+      invoiceId: input.data.invoiceId,
+      action: input.data.action,
+      actorUserId: actor.userId,
+      externalInvoiceReference: input.data.externalInvoiceReference ?? null,
+      paymentReference: input.data.paymentReference ?? null,
+      notes: input.data.notes ?? null,
+    });
+  } catch {
+    redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=invoice`);
+  }
+  revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
+  redirect(`/admin/organizations/${input.data.workspaceId}/commercial?invoiceUpdated=1`);
+}
+
 export default async function OrganizationCommercialPage({
   params,
   searchParams,
 }: {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ finalized?: string; error?: string }>;
+  searchParams: Promise<{
+    finalized?: string;
+    error?: string;
+    contractSaved?: string;
+    prepared?: string;
+    invoiceUpdated?: string;
+  }>;
 }) {
   const workspaceId = z.uuid().safeParse((await params).workspaceId);
   if (!workspaceId.success) notFound();
   const [{ db }, query] = await Promise.all([requireSuperAdmin(), searchParams]);
-  const dashboard = await new db.PrismaCommercialUsageService().dashboard(workspaceId.data);
-  if (!dashboard) notFound();
+  const [dashboard, billing] = await Promise.all([
+    new db.PrismaCommercialUsageService().dashboard(workspaceId.data),
+    new db.PrismaCommercialBillingService().dashboard(workspaceId.data),
+  ]);
+  if (!dashboard || !billing) notFound();
   const { current } = dashboard;
 
   return (
@@ -77,9 +176,18 @@ export default async function OrganizationCommercialPage({
       {query.finalized === '1' ? (
         <p className="notice notice--success">前月の利用人数と料金を確定しました。</p>
       ) : null}
+      {query.contractSaved === '1' ? (
+        <p className="notice notice--success">契約・請求先を保存しました。</p>
+      ) : null}
+      {query.prepared === '1' ? (
+        <p className="notice notice--success">確定済みの利用から請求記録を作成しました。</p>
+      ) : null}
+      {query.invoiceUpdated === '1' ? (
+        <p className="notice notice--success">請求状態を更新しました。</p>
+      ) : null}
       {query.error ? (
         <p className="notice notice--danger">
-          前月を確定できませんでした。時間を置いて再度お試しください。
+          保存または更新できませんでした。入力内容と現在の状態を確認してください。
         </p>
       ) : null}
 
@@ -109,6 +217,111 @@ export default async function OrganizationCommercialPage({
       </section>
 
       <section className="settings-card">
+        <h2>OEM契約と請求先</h2>
+        <p>
+          MAU課金を請求へつなぐための契約情報です。税務上の請求書や決済は外部サービスで発行し、その番号と入金状態を下の請求台帳で管理します。
+        </p>
+        <form className="form-stack" action={saveContract}>
+          <input type="hidden" name="workspaceId" value={dashboard.workspace.id} />
+          <label className="field">
+            <span className="field__label">契約状態</span>
+            <select
+              className="field__control"
+              name="status"
+              defaultValue={billing.organizationCommercialContract?.status ?? 'DRAFT'}
+            >
+              <option value="DRAFT">準備中</option>
+              <option value="ACTIVE">契約中</option>
+              <option value="SUSPENDED">一時停止</option>
+              <option value="ENDED">終了</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">請求方法</span>
+            <select
+              className="field__control"
+              name="billingMode"
+              defaultValue={billing.organizationCommercialContract?.billingMode ?? 'MANUAL_INVOICE'}
+            >
+              <option value="MANUAL_INVOICE">請求書・手作業</option>
+              <option value="EXTERNAL_BILLING">外部決済サービス</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">請求先名</span>
+            <input
+              className="field__control"
+              name="billingName"
+              required
+              maxLength={200}
+              defaultValue={
+                billing.organizationCommercialContract?.billingName ??
+                billing.legalName ??
+                billing.name
+              }
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">請求先メール</span>
+            <input
+              className="field__control"
+              name="billingEmail"
+              type="email"
+              required
+              maxLength={320}
+              defaultValue={
+                billing.organizationCommercialContract?.billingEmail ?? billing.contactEmail ?? ''
+              }
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">支払期限（日数）</span>
+            <input
+              className="field__control"
+              name="paymentTermsDays"
+              type="number"
+              min={0}
+              max={365}
+              required
+              defaultValue={billing.organizationCommercialContract?.paymentTermsDays ?? 30}
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">外部顧客番号（任意）</span>
+            <input
+              className="field__control"
+              name="externalCustomerReference"
+              maxLength={200}
+              defaultValue={billing.organizationCommercialContract?.externalCustomerReference ?? ''}
+            />
+          </label>
+          <div className="form-grid form-grid--two">
+            <label className="field">
+              <span className="field__label">契約開始（任意）</span>
+              <input
+                className="field__control"
+                name="startsAt"
+                type="datetime-local"
+                defaultValue={dateTimeInput(billing.organizationCommercialContract?.startsAt)}
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">契約終了（任意）</span>
+              <input
+                className="field__control"
+                name="endsAt"
+                type="datetime-local"
+                defaultValue={dateTimeInput(billing.organizationCommercialContract?.endsAt)}
+              />
+            </label>
+          </div>
+          <button className="button" type="submit">
+            契約・請求先を保存
+          </button>
+        </form>
+      </section>
+
+      <section className="settings-card">
         <h2>MAUに含める利用</h2>
         <p>
           単なる登録やログインは含めません。参加者が次の機能を利用した月だけ、1人として数えます。同じ人が何度使っても月内は1人です。
@@ -126,6 +339,91 @@ export default async function OrganizationCommercialPage({
           </ul>
         )}
         <p className="field__hint">運営者、スタッフ、システム管理者の操作は除外されます。</p>
+      </section>
+
+      <section className="settings-card">
+        <h2>請求・入金管理</h2>
+        <p>確定MAUから重複しない請求記録を作成し、外部請求書の発行と入金を追跡します。</p>
+        <form action={prepareInvoices}>
+          <input type="hidden" name="workspaceId" value={dashboard.workspace.id} />
+          <button
+            className="button"
+            type="submit"
+            disabled={billing.organizationCommercialContract?.status !== 'ACTIVE'}
+          >
+            確定済みの月から請求記録を作る
+          </button>
+        </form>
+        {billing.tenantInvoices.length === 0 ? (
+          <p>請求記録はまだありません。契約を「契約中」にして、月次利用を確定してください。</p>
+        ) : (
+          <div className="settings-stack">
+            {billing.tenantInvoices.map((invoice) => (
+              <section className="service-template-preview" key={invoice.id}>
+                <h3>
+                  {invoice.periodStart.toISOString().slice(0, 7)} / {yen(invoice.amountYen)}
+                </h3>
+                <p>
+                  請求番号：{invoice.invoiceNumber} ／ MAU：{invoice.mau.toLocaleString('ja-JP')}人
+                  ／ 状態：
+                  {invoiceStatusLabel(invoice.status, invoice.dueAt)}
+                </p>
+                {invoice.dueAt ? (
+                  <p>
+                    支払期限：
+                    {invoice.dueAt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                  </p>
+                ) : null}
+                {invoice.status === 'DRAFT' ? (
+                  <form className="form-stack" action={transitionInvoice}>
+                    <input type="hidden" name="workspaceId" value={billing.id} />
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <input type="hidden" name="action" value="ISSUE" />
+                    <label className="field">
+                      <span className="field__label">外部請求書番号（任意）</span>
+                      <input
+                        className="field__control"
+                        name="externalInvoiceReference"
+                        maxLength={200}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field__label">メモ（任意）</span>
+                      <input className="field__control" name="notes" maxLength={1000} />
+                    </label>
+                    <button className="button" type="submit">
+                      請求済みにする
+                    </button>
+                  </form>
+                ) : null}
+                {invoice.status === 'ISSUED' ? (
+                  <form className="form-stack" action={transitionInvoice}>
+                    <input type="hidden" name="workspaceId" value={billing.id} />
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <input type="hidden" name="action" value="MARK_PAID" />
+                    <label className="field">
+                      <span className="field__label">入金参照番号（任意）</span>
+                      <input className="field__control" name="paymentReference" maxLength={200} />
+                    </label>
+                    <button className="button" type="submit">
+                      入金済みにする
+                    </button>
+                  </form>
+                ) : null}
+                {invoice.status === 'DRAFT' || invoice.status === 'ISSUED' ? (
+                  <form action={transitionInvoice}>
+                    <input type="hidden" name="workspaceId" value={billing.id} />
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <input type="hidden" name="action" value="VOID" />
+                    <button className="button button--secondary" type="submit">
+                      この請求を取り消す
+                    </button>
+                  </form>
+                ) : null}
+              </section>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="settings-card">
@@ -168,6 +466,34 @@ export default async function OrganizationCommercialPage({
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      <section className="settings-card">
+        <h2>契約・請求の変更履歴</h2>
+        {billing.commercialBillingAudits.length === 0 ? (
+          <p>変更履歴はまだありません。</p>
+        ) : (
+          <ul className="summary-list">
+            {billing.commercialBillingAudits.map((audit) => (
+              <li key={audit.id}>
+                <span>
+                  {audit.entityType === 'CONTRACT' ? '契約' : '請求'}：
+                  {{
+                    CREATED: '作成',
+                    AUTO_CREATED: '自動作成',
+                    UPDATED: '更新',
+                    ISSUE: '請求済み',
+                    MARK_PAID: '入金済み',
+                    VOID: '取消',
+                  }[audit.action] ?? audit.action}
+                </span>
+                <strong>
+                  {audit.occurredAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                </strong>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </main>

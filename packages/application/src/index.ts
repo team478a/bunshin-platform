@@ -31,6 +31,7 @@ export * from './social-image-pilot-evidence';
 export * from './service-participation';
 export * from './service-notification-preference';
 export * from './commercial-usage';
+export * from './commercial-billing';
 
 export interface ValidationMetricsPeriod {
   from: Date;
