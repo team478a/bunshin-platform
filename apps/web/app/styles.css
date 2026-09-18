@@ -3662,6 +3662,37 @@ a {
   padding-top: 0.9rem;
 }
 
+.resale-offer-funnel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.resale-offer-funnel > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #d9deea);
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.resale-offer-funnel span,
+.resale-offer-funnel small {
+  color: var(--muted, #667085);
+}
+
+.resale-offer-funnel strong {
+  color: var(--ink, #13213d);
+  font-size: 1.5rem;
+}
+
+.resale-offer-funnel__note {
+  margin-top: 0.75rem;
+  color: var(--muted, #667085);
+}
+
 .resale-offer-card__decline summary {
   cursor: pointer;
   color: #475467;

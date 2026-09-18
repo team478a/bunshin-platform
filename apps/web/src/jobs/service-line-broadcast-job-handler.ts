@@ -90,6 +90,7 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         kind?: unknown;
         programEnrollmentId?: unknown;
         assignmentId?: unknown;
+        offeringId?: unknown;
       };
       if (criteria.kind === 'FORTUNE_WEEKLY') {
         const preferences = await db.prisma.serviceNotificationPreference.findMany({
@@ -165,6 +166,46 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
               !progress ||
               !assignment ||
               !program
+            ) {
+              eligibleMembershipIds.delete(membershipId);
+            }
+          }
+        }
+      }
+      if (criteria.kind === 'AI_RESALE_OFFER') {
+        if (
+          typeof criteria.programEnrollmentId !== 'string' ||
+          typeof criteria.offeringId !== 'string'
+        ) {
+          eligibleMembershipIds.clear();
+        } else {
+          const offers = new db.PrismaAiResaleOfferRepository(db.prisma);
+          for (const membershipId of [...eligibleMembershipIds]) {
+            const recipient = recipients.find((item) => item.groupMembershipId === membershipId);
+            const [state, alreadyShown] = recipient
+              ? await Promise.all([
+                  offers.findState({
+                    workspaceId: broadcast.workspaceId,
+                    groupId: broadcast.groupId,
+                    actorUserId: recipient.userId,
+                    freeEnrollmentId: criteria.programEnrollmentId,
+                    now: new Date(),
+                  }),
+                  db.prisma.programActionEvent.findFirst({
+                    where: {
+                      workspaceId: broadcast.workspaceId,
+                      groupId: broadcast.groupId,
+                      programEnrollmentId: criteria.programEnrollmentId,
+                      eventType: 'STANDARD_OFFER_SHOWN',
+                    },
+                    select: { id: true },
+                  }),
+                ])
+              : [null, null];
+            if (
+              state?.status !== 'STANDARD' ||
+              state.offer?.offeringId !== criteria.offeringId ||
+              alreadyShown
             ) {
               eligibleMembershipIds.delete(membershipId);
             }

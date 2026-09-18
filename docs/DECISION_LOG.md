@@ -2453,3 +2453,10 @@
 - Transition: 価格理由の辞退時だけモニターを表示し、参加者の申込み操作はEvent記録に留める。
 - Entitlement: pilotでは外部入金を管理者が確認して確認番号を入力した時だけ`PAID_90D` Enrollmentを開始し、90暦日後に共通Runtimeで失効させる。
 - Boundary: 実決済を装うPurchase／Paymentは作らず、Webhookを含む決済基盤は別工程とする。
+
+## 2026-09-18: AI物販DAY7 Offer通知とファネルは既存記録を再利用する
+
+- LINE: `ServiceLineBroadcast`と既存Jobを利用し、`AI_RESALE_OFFER`を配信境界として追加する。
+- Eligibility: DAY7分類済み、標準Offer未処理、LINE通知同意・友だち状態が有効な本人だけを候補にする。
+- Revalidation: 送信直前にOffer状態を再取得し、辞退・申込み・有料開始後は送信対象から外す。
+- Funnel: Program Action Event、進捗スナップショット、LINE Recipientを集計し、集計専用テーブルは追加しない。

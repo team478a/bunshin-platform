@@ -39,6 +39,10 @@ import {
   scheduleAiResaleActionLineDeliveries,
   type AiResaleActionLineScheduleSummary,
 } from '../services/ai-resale-action-line-scheduler';
+import {
+  scheduleAiResaleOfferLineDeliveries,
+  type AiResaleOfferLineScheduleSummary,
+} from '../services/ai-resale-offer-line-scheduler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -64,6 +68,7 @@ export interface MissionSchedulerPort {
       fortuneWeeklyLine?: FortuneWeeklyLineScheduleSummary;
       aiResale?: AiResaleRuntimeBatchSummary;
       aiResaleLine?: AiResaleActionLineScheduleSummary;
+      aiResaleOfferLine?: AiResaleOfferLineScheduleSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -241,6 +246,17 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           truncated: false,
         }),
       );
+      const aiResaleOfferLine = await scheduleAiResaleOfferLineDeliveries({ environment }).catch(
+        () => ({
+          programs: 0,
+          candidates: 0,
+          broadcasts: 0,
+          recipients: 0,
+          skipped: 0,
+          failures: 1,
+          truncated: false,
+        }),
+      );
       return {
         ...missionResult,
         trend: trendResult,
@@ -249,6 +265,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         fortuneWeeklyLine,
         aiResale: aiResaleResult,
         aiResaleLine,
+        aiResaleOfferLine,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };

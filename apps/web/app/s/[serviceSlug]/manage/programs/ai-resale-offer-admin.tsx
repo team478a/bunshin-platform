@@ -18,18 +18,37 @@ type PendingApplicant = {
   requestedAt: string;
 };
 
+type OfferFunnel = {
+  daySeven: number;
+  notStarted: number;
+  partial: number;
+  listed: number;
+  lineDelivered: number;
+  lineFailed: number;
+  linePending: number;
+  lineSkipped: number;
+  standardShown: number;
+  standardDeclined: number;
+  monitorShown: number;
+  standardSelected: number;
+  monitorSelected: number;
+  paidEnrolled: number;
+};
+
 export function AiResaleOfferAdmin({
   serviceSlug,
   enabled,
   standard,
   monitor,
   pendingApplicants,
+  funnel,
 }: {
   serviceSlug: string;
   enabled: boolean;
   standard: OfferSettings;
   monitor: OfferSettings;
   pendingApplicants: PendingApplicant[];
+  funnel: OfferFunnel;
 }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -91,8 +110,53 @@ export function AiResaleOfferAdmin({
   }
 
   if (!enabled) return null;
+  const selected = funnel.standardSelected + funnel.monitorSelected;
+  const percentage = (value: number, total: number) =>
+    total === 0 ? '—' : `${Math.round((value / total) * 100)}%`;
   return (
     <>
+      <section className="settings-card program-management-card">
+        <p className="eyebrow">AI物販V1・運用状況</p>
+        <h2>DAY7から有料開始まで</h2>
+        <p>参加者がどこまで進んでいるかを、現在の記録から確認できます。</p>
+        <div className="resale-offer-funnel" aria-label="有料化ファネル">
+          <div>
+            <span>7日間完了</span>
+            <strong>{funnel.daySeven}人</strong>
+            <small>
+              未着手 {funnel.notStarted}／途中 {funnel.partial}／出品済み {funnel.listed}
+            </small>
+          </div>
+          <div>
+            <span>LINEで案内済み</span>
+            <strong>{funnel.lineDelivered}人</strong>
+            <small>
+              待機 {funnel.linePending}／送信対象外 {funnel.lineSkipped}／失敗 {funnel.lineFailed}
+            </small>
+          </div>
+          <div>
+            <span>標準案内を表示</span>
+            <strong>{funnel.standardShown}人</strong>
+            <small>DAY7完了者の {percentage(funnel.standardShown, funnel.daySeven)}</small>
+          </div>
+          <div>
+            <span>申込み希望</span>
+            <strong>{selected}人</strong>
+            <small>
+              標準 {funnel.standardSelected}／モニター {funnel.monitorSelected}
+            </small>
+          </div>
+          <div>
+            <span>90日利用開始</span>
+            <strong>{funnel.paidEnrolled}人</strong>
+            <small>DAY7完了者の {percentage(funnel.paidEnrolled, funnel.daySeven)}</small>
+          </div>
+        </div>
+        <p className="resale-offer-funnel__note">
+          標準プラン辞退 {funnel.standardDeclined}人／モニター案内表示 {funnel.monitorShown}人
+        </p>
+      </section>
+
       <section className="settings-card program-management-card">
         <p className="eyebrow">AI物販V1</p>
         <h2>DAY7後の90日プログラム</h2>

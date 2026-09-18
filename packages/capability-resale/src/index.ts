@@ -315,4 +315,5 @@ export * from './persistence';
 export * from './runtime';
 export * from './participant';
 export * from './line-action';
+export * from './line-offer';
 export * from './offer';
