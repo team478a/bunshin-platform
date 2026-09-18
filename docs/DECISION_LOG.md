@@ -2460,3 +2460,11 @@
 - Eligibility: DAY7分類済み、標準Offer未処理、LINE通知同意・友だち状態が有効な本人だけを候補にする。
 - Revalidation: 送信直前にOffer状態を再取得し、辞退・申込み・有料開始後は送信対象から外す。
 - Funnel: Program Action Event、進捗スナップショット、LINE Recipientを集計し、集計専用テーブルは追加しない。
+
+## 2026-09-18: 投稿別スクリーンショット結果を次回企画へ反映する
+
+- Input: SNS APIを必須にせず、利用者が投稿単体のインサイト画面を選び、画像から読み取った数字を確認して保存する。
+- Storage: 投稿との関係を失わないよう`PostRecord.manualMetrics.socialPerformance`へ保存し、既存の問い合わせ・予約実績を維持する。画像自体は保存しない。
+- Boundary: 保存対象のPostRecordはWorkspace、Service Group、Bunshin、Owner Userを全て照合し、別参加者の投稿を選択できないようにする。
+- Analysis: いいね、コメント、保存、シェア、プロフィール閲覧、フォロー増加を投稿単位で比較する。3件未満では傾向を断定せず、記録継続を案内する。
+- Generation: 直近28日間の投稿別実績を週間企画の`recentPerformance`へ渡し、反応の強いテーマを別の切り口へ展開する。数値や因果関係を公開文面へ書かない。

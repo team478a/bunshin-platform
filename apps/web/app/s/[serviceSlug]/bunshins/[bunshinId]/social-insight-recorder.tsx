@@ -9,17 +9,28 @@ import {
   type SocialInsightMetrics,
   type SocialInsightSnapshotView,
 } from '../../../../../src/services/social-insights';
+import {
+  POST_PERFORMANCE_METRIC_KEYS,
+  buildPostPerformanceInsight,
+  postPerformanceLabels,
+  type PostPerformanceMetricKey,
+  type PostPerformanceMetrics,
+  type PostPerformanceView,
+} from '../../../../../src/services/post-performance';
 
 type Profile = { id: string; platform: string };
-type Draft = SocialInsightMetrics & {
-  detectedPlatform: string;
-  observedOn: string;
-  periodStart: string;
-  periodEnd: string;
-  confidence: number | null;
-  note: string;
-  source: 'SCREENSHOT' | 'MANUAL';
-};
+type Draft = SocialInsightMetrics &
+  PostPerformanceMetrics & {
+    detectedPlatform: string;
+    observedOn: string;
+    periodStart: string;
+    periodEnd: string;
+    confidence: number | null;
+    note: string;
+    source: 'SCREENSHOT' | 'MANUAL';
+  };
+
+type PostedMission = { id: string; topic: string; postedAt: string };
 
 const platformLabels: Record<string, string> = {
   INSTAGRAM: 'Instagram',
@@ -46,6 +57,11 @@ const blankDraft = (): Draft => ({
   impressions: null,
   profileViews: null,
   interactions: null,
+  likes: null,
+  comments: null,
+  saves: null,
+  shares: null,
+  follows: null,
   confidence: null,
   note: '',
   source: 'MANUAL',
@@ -110,15 +126,22 @@ export function SocialInsightRecorder({
   endpoint,
   profiles,
   initialSnapshots,
+  postedMissions,
+  initialPostPerformances,
 }: {
   endpoint: string;
   profiles: Profile[];
   initialSnapshots: SocialInsightSnapshotView[];
+  postedMissions: PostedMission[];
+  initialPostPerformances: PostPerformanceView[];
 }) {
   const file = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id ?? '');
   const [snapshots, setSnapshots] = useState(initialSnapshots);
+  const [mode, setMode] = useState<'POST' | 'ACCOUNT'>(postedMissions.length ? 'POST' : 'ACCOUNT');
+  const [selectedMissionId, setSelectedMissionId] = useState(postedMissions[0]?.id ?? '');
+  const [postPerformances, setPostPerformances] = useState(initialPostPerformances);
   const [image, setImage] = useState<string | null>(null);
   const [busy, setBusy] = useState<'PREPARING' | 'READING' | 'SAVING' | null>(null);
   const [message, setMessage] = useState('');
@@ -146,7 +169,7 @@ export function SocialInsightRecorder({
       const response = await fetch(`${endpoint}/extract`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ image, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({ image, idempotencyKey: crypto.randomUUID(), mode }),
       });
       const body = (await response.json()) as { data?: Record<string, unknown> };
       if (!response.ok || !body.data) throw new Error(apiError(body));
@@ -165,6 +188,11 @@ export function SocialInsightRecorder({
         impressions: typeof value['impressions'] === 'number' ? value['impressions'] : null,
         profileViews: typeof value['profileViews'] === 'number' ? value['profileViews'] : null,
         interactions: typeof value['interactions'] === 'number' ? value['interactions'] : null,
+        likes: typeof value['likes'] === 'number' ? value['likes'] : null,
+        comments: typeof value['comments'] === 'number' ? value['comments'] : null,
+        saves: typeof value['saves'] === 'number' ? value['saves'] : null,
+        shares: typeof value['shares'] === 'number' ? value['shares'] : null,
+        follows: typeof value['follows'] === 'number' ? value['follows'] : null,
         confidence: typeof value['confidence'] === 'number' ? value['confidence'] : null,
         note: typeof value['note'] === 'string' ? value['note'] : '',
         source: 'SCREENSHOT',
@@ -182,34 +210,53 @@ export function SocialInsightRecorder({
     setBusy('SAVING');
     setMessage('保存しています…');
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(mode === 'POST' ? `${endpoint}/post-performance` : endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          socialProfileId: selectedProfileId,
-          observedOn: draft.observedOn,
-          periodStart: draft.periodStart || null,
-          periodEnd: draft.periodEnd || null,
-          ...Object.fromEntries(SOCIAL_INSIGHT_METRIC_KEYS.map((key) => [key, draft[key]])),
-          source: draft.source,
-        }),
+        body: JSON.stringify(
+          mode === 'POST'
+            ? {
+                dailyMissionId: selectedMissionId,
+                observedOn: draft.observedOn,
+                ...Object.fromEntries(POST_PERFORMANCE_METRIC_KEYS.map((key) => [key, draft[key]])),
+                source: draft.source,
+              }
+            : {
+                socialProfileId: selectedProfileId,
+                observedOn: draft.observedOn,
+                periodStart: draft.periodStart || null,
+                periodEnd: draft.periodEnd || null,
+                ...Object.fromEntries(SOCIAL_INSIGHT_METRIC_KEYS.map((key) => [key, draft[key]])),
+                source: draft.source,
+              },
+        ),
       });
-      const body = (await response.json()) as { data?: SocialInsightSnapshotView };
+      const body = (await response.json()) as {
+        data?: SocialInsightSnapshotView | PostPerformanceView;
+      };
       if (!response.ok || !body.data) throw new Error(apiError(body));
-      setSnapshots((current) =>
-        [
-          body.data!,
-          ...current.filter(
-            ({ socialProfileId, observedOn }) =>
-              socialProfileId !== body.data!.socialProfileId ||
-              observedOn !== body.data!.observedOn,
-          ),
-        ].slice(0, 12),
-      );
+      if (mode === 'POST') {
+        const saved = body.data as PostPerformanceView;
+        setPostPerformances((current) => [
+          saved,
+          ...current.filter(({ dailyMissionId }) => dailyMissionId !== saved.dailyMissionId),
+        ]);
+      } else {
+        const saved = body.data as SocialInsightSnapshotView;
+        setSnapshots((current) =>
+          [
+            saved,
+            ...current.filter(
+              ({ socialProfileId, observedOn }) =>
+                socialProfileId !== saved.socialProfileId || observedOn !== saved.observedOn,
+            ),
+          ].slice(0, 12),
+        );
+      }
       setDraft(null);
       setImage(null);
       if (file.current) file.current.value = '';
-      setMessage('SNSの数字を保存しました。');
+      setMessage(mode === 'POST' ? 'この投稿の反応を保存しました。' : 'SNSの数字を保存しました。');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存できませんでした。');
     } finally {
@@ -228,20 +275,70 @@ export function SocialInsightRecorder({
     );
   }
 
+  function updatePostMetric(key: PostPerformanceMetricKey, value: string) {
+    setDraft((current) =>
+      current
+        ? { ...current, [key]: value === '' ? null : Math.max(0, Number.parseInt(value, 10) || 0) }
+        : current,
+    );
+  }
+
   const latest = snapshots[0] ?? null;
   const previous =
     snapshots.find(
       (item) => latest && item.socialProfileId === latest.socialProfileId && item.id !== latest.id,
     ) ?? null;
   const changes = latest ? socialInsightChanges(latest, previous) : null;
+  const postInsight = buildPostPerformanceInsight(postPerformances);
 
   return (
     <section className="service-entry__card social-insight-recorder" id="sns-numbers">
-      <p className="eyebrow">週に1回で大丈夫です</p>
-      <h2>SNSの数字を記録する</h2>
+      <p className="eyebrow">投稿後に1分で記録</p>
+      <h2>投稿の反応を次に生かす</h2>
       <p>
-        Instagramなどの「インサイト」画面をスクリーンショットしてください。画像は数字を読むためだけに使い、保存しません。
+        Instagramなどの「インサイト」画面をスクリーンショットしてください。数字を比較し、次の投稿内容を改善します。画像自体は保存しません。
       </p>
+      <div className="social-insight-recorder__mode" role="group" aria-label="記録する数字">
+        <button
+          type="button"
+          aria-pressed={mode === 'POST'}
+          disabled={!postedMissions.length || busy !== null}
+          onClick={() => {
+            setMode('POST');
+            setDraft(null);
+            setImage(null);
+          }}
+        >
+          投稿ごとの反応
+        </button>
+        <button
+          type="button"
+          aria-pressed={mode === 'ACCOUNT'}
+          disabled={busy !== null}
+          onClick={() => {
+            setMode('ACCOUNT');
+            setDraft(null);
+            setImage(null);
+          }}
+        >
+          フォロワーなど全体の数字
+        </button>
+      </div>
+      {mode === 'POST' && postedMissions.length ? (
+        <label className="social-insight-recorder__post-select">
+          どの投稿の数字ですか？
+          <select
+            value={selectedMissionId}
+            onChange={(event) => setSelectedMissionId(event.target.value)}
+          >
+            {postedMissions.map((mission) => (
+              <option key={mission.id} value={mission.id}>
+                {mission.postedAt.slice(0, 10).replaceAll('-', '/')}・{mission.topic}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {profiles.length === 0 ? (
         <p>先に「細かい設定」から、使うSNSを登録してください。</p>
       ) : (
@@ -296,19 +393,21 @@ export function SocialInsightRecorder({
             </p>
           ) : null}
           {draft.note ? <p className="notice notice--warning">{draft.note}</p> : null}
-          <label>
-            SNS
-            <select
-              value={selectedProfileId}
-              onChange={(event) => setSelectedProfileId(event.target.value)}
-            >
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {platformLabels[profile.platform] ?? profile.platform}
-                </option>
-              ))}
-            </select>
-          </label>
+          {mode === 'ACCOUNT' ? (
+            <label>
+              SNS
+              <select
+                value={selectedProfileId}
+                onChange={(event) => setSelectedProfileId(event.target.value)}
+              >
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {platformLabels[profile.platform] ?? profile.platform}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label>
             記録日
             <input
@@ -317,48 +416,60 @@ export function SocialInsightRecorder({
               onChange={(event) => setDraft({ ...draft, observedOn: event.target.value })}
             />
           </label>
-          <div className="social-insight-recorder__period">
-            <label>
-              集計の開始日（分かる場合）
-              <input
-                type="date"
-                value={draft.periodStart}
-                onChange={(event) => setDraft({ ...draft, periodStart: event.target.value })}
-              />
-            </label>
-            <label>
-              集計の終了日（分かる場合）
-              <input
-                type="date"
-                value={draft.periodEnd}
-                onChange={(event) => setDraft({ ...draft, periodEnd: event.target.value })}
-              />
-            </label>
-          </div>
-          <div className="social-insight-recorder__metrics">
-            {SOCIAL_INSIGHT_METRIC_KEYS.map((key) => (
-              <label key={key}>
-                {socialInsightLabels[key]}
+          {mode === 'ACCOUNT' ? (
+            <div className="social-insight-recorder__period">
+              <label>
+                集計の開始日（分かる場合）
                 <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={2_000_000_000}
-                  value={draft[key] ?? ''}
-                  placeholder="分からなければ空欄"
-                  onChange={(event) => updateMetric(key, event.target.value)}
+                  type="date"
+                  value={draft.periodStart}
+                  onChange={(event) => setDraft({ ...draft, periodStart: event.target.value })}
                 />
               </label>
-            ))}
+              <label>
+                集計の終了日（分かる場合）
+                <input
+                  type="date"
+                  value={draft.periodEnd}
+                  onChange={(event) => setDraft({ ...draft, periodEnd: event.target.value })}
+                />
+              </label>
+            </div>
+          ) : null}
+          <div className="social-insight-recorder__metrics">
+            {(mode === 'POST' ? POST_PERFORMANCE_METRIC_KEYS : SOCIAL_INSIGHT_METRIC_KEYS).map(
+              (key) => (
+                <label key={key}>
+                  {mode === 'POST'
+                    ? postPerformanceLabels[key as PostPerformanceMetricKey]
+                    : socialInsightLabels[key as SocialInsightMetricKey]}
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={2_000_000_000}
+                    value={draft[key] ?? ''}
+                    placeholder="分からなければ空欄"
+                    onChange={(event) =>
+                      mode === 'POST'
+                        ? updatePostMetric(key as PostPerformanceMetricKey, event.target.value)
+                        : updateMetric(key as SocialInsightMetricKey, event.target.value)
+                    }
+                  />
+                </label>
+              ),
+            )}
           </div>
           <button
             className="button button--primary button--full"
             type="button"
             disabled={
               busy !== null ||
-              !selectedProfileId ||
+              (mode === 'POST' ? !selectedMissionId : !selectedProfileId) ||
               !draft.observedOn ||
-              SOCIAL_INSIGHT_METRIC_KEYS.every((key) => draft[key] === null)
+              (mode === 'POST' ? POST_PERFORMANCE_METRIC_KEYS : SOCIAL_INSIGHT_METRIC_KEYS).every(
+                (key) => draft[key] === null,
+              )
             }
             onClick={() => void save()}
           >
@@ -367,7 +478,27 @@ export function SocialInsightRecorder({
         </div>
       ) : null}
 
-      {latest ? (
+      {postPerformances.length ? (
+        <div className="social-insight-recorder__latest social-insight-recorder__analysis">
+          <p className="eyebrow">自動分析</p>
+          <h3>{postInsight.title}</h3>
+          {postInsight.bestTopic ? <p>反応を比べる基準：{postInsight.bestTopic}</p> : null}
+          <p>{postInsight.guidance}</p>
+          <div className="social-insight-recorder__post-history">
+            {postPerformances.slice(0, 5).map((item) => (
+              <article key={item.dailyMissionId}>
+                <strong>{item.topic}</strong>
+                <span>
+                  {item.observedOn.replaceAll('-', '/')}・いいね {numberText(item.likes)}・保存{' '}
+                  {numberText(item.saves)}・フォロー {numberText(item.follows)}
+                </span>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {mode === 'ACCOUNT' && latest ? (
         <div className="social-insight-recorder__latest">
           <h3>最近の記録</h3>
           <p>

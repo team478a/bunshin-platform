@@ -36,6 +36,11 @@ import {
   type BusinessOutcomes,
 } from './business-outcomes';
 import {
+  buildPostPerformancePlanningContext,
+  readPostPerformance,
+  type PostPerformanceView,
+} from './post-performance';
+import {
   OpenAIWeeklyPlanner,
   WEEKLY_PLANNER_PROMPT_VERSION,
 } from '../providers/openai-weekly-planner';
@@ -322,7 +327,7 @@ export async function createWeeklyPlanGenerationService() {
           format: true,
           topic: true,
           feedback: { select: { rating: true } },
-          postRecord: { select: { manualMetrics: true } },
+          postRecord: { select: { manualMetrics: true, postedAt: true } },
         },
       });
       const formats = [...new Set(missions.map(({ format }) => format))].sort().map((format) => {
@@ -334,6 +339,21 @@ export async function createWeeklyPlanGenerationService() {
           badFeedbackCount: values.filter(({ feedback }) => feedback?.rating === 'BAD').length,
         };
       });
+      const postPerformance = buildPostPerformancePlanningContext(
+        missions.flatMap(({ topic, postRecord }, index) => {
+          const performance = readPostPerformance(postRecord?.manualMetrics);
+          return performance && postRecord
+            ? [
+                {
+                  dailyMissionId: `recent-${index}`,
+                  topic,
+                  postedAt: postRecord.postedAt.toISOString(),
+                  ...performance,
+                } satisfies PostPerformanceView,
+              ]
+            : [];
+        }),
+      );
       return {
         periodDays: 28,
         postedCount: missions.length,
@@ -349,6 +369,7 @@ export async function createWeeklyPlanGenerationService() {
             manualMetrics: postRecord?.manualMetrics,
           })),
         ),
+        postPerformance,
       };
     },
     recordUsage: recordAiUsageSafely,

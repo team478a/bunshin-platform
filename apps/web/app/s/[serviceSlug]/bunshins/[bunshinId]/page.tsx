@@ -51,6 +51,10 @@ import { resolveDeliveryScheduleStatus } from '../../../../../src/services/deliv
 import { currentLineEnvironment } from '../../../../../src/line/secure-configuration';
 import { missionDecisionOrPending } from '../../../../../src/mission-decision-fallback';
 import { readBusinessOutcomes } from '../../../../../src/services/business-outcomes';
+import {
+  readPostPerformance,
+  type PostPerformanceView,
+} from '../../../../../src/services/post-performance';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,6 +128,7 @@ export default async function ServiceBunshinDetailPage({
   let variantPointCost: number | null = null;
   let rewardsPilotActive = false;
   let businessProgramStartedAt: Date | null = null;
+  let postPerformances: PostPerformanceView[] = [];
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -213,6 +218,20 @@ export default async function ServiceBunshinDetailPage({
         }),
       })),
     );
+    postPerformances = missionRecords.flatMap((mission, index) => {
+      const post = missionStates[index]?.post;
+      const performance = readPostPerformance(post?.manualMetrics);
+      return post && performance
+        ? [
+            {
+              dailyMissionId: mission.id,
+              topic: mission.topic,
+              postedAt: post.postedAt.toISOString(),
+              ...performance,
+            },
+          ]
+        : [];
+    });
     const missionVariants = await Promise.all(
       missionRecords.map((mission) =>
         new ListMissionContentVariants(new db.PrismaMissionContentVariantRepository()).execute({
@@ -618,6 +637,12 @@ export default async function ServiceBunshinDetailPage({
                   interactions: snapshot.interactions,
                   source: snapshot.source,
                 }))}
+                postedMissions={dailyMissions.flatMap((mission) =>
+                  mission.postedAt
+                    ? [{ id: mission.id, topic: mission.topic, postedAt: mission.postedAt }]
+                    : [],
+                )}
+                initialPostPerformances={postPerformances}
               />
               <BusinessResponseInsights missions={dailyMissions} />
             </MemberHomeDrawer>
