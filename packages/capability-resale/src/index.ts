@@ -312,3 +312,4 @@ export class AiResaleV1Policy implements NextActionPolicy<AiResaleV1DecisionCont
 export * from './persistence';
 export * from './runtime';
 export * from './participant';
+export * from './line-action';

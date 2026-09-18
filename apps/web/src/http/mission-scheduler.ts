@@ -35,6 +35,10 @@ import {
   scheduleFortuneWeeklyLineDeliveries,
   type FortuneWeeklyLineScheduleSummary,
 } from '../services/fortune-weekly-line-scheduler';
+import {
+  scheduleAiResaleActionLineDeliveries,
+  type AiResaleActionLineScheduleSummary,
+} from '../services/ai-resale-action-line-scheduler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -59,6 +63,7 @@ export interface MissionSchedulerPort {
       weeklyReportLine?: WeeklyReportLineScheduleSummary;
       fortuneWeeklyLine?: FortuneWeeklyLineScheduleSummary;
       aiResale?: AiResaleRuntimeBatchSummary;
+      aiResaleLine?: AiResaleActionLineScheduleSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -219,6 +224,17 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
       const fortuneWeeklyLine = await scheduleFortuneWeeklyLineDeliveries({ environment }).catch(
         () => ({ services: 0, due: 0, broadcasts: 0, recipients: 0, skipped: 0, failures: 1 }),
       );
+      const aiResaleLine = await scheduleAiResaleActionLineDeliveries({ environment }).catch(
+        () => ({
+          programs: 0,
+          candidates: 0,
+          broadcasts: 0,
+          recipients: 0,
+          skipped: 0,
+          failures: 1,
+          truncated: false,
+        }),
+      );
       return {
         ...missionResult,
         trend: trendResult,
@@ -226,6 +242,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         weeklyReportLine,
         fortuneWeeklyLine,
         aiResale: aiResaleResult,
+        aiResaleLine,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };

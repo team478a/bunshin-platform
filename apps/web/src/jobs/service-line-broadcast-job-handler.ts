@@ -86,7 +86,11 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         select: { id: true },
       });
       const eligibleMembershipIds = new Set(memberships.map((item) => item.id));
-      const criteria = broadcast.segmentCriteria as { kind?: unknown };
+      const criteria = broadcast.segmentCriteria as {
+        kind?: unknown;
+        programEnrollmentId?: unknown;
+        assignmentId?: unknown;
+      };
       if (criteria.kind === 'FORTUNE_WEEKLY') {
         const preferences = await db.prisma.serviceNotificationPreference.findMany({
           where: {
@@ -104,6 +108,68 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         const consented = new Set(preferences.map((item) => item.groupMembershipId));
         for (const membershipId of eligibleMembershipIds)
           if (!consented.has(membershipId)) eligibleMembershipIds.delete(membershipId);
+      }
+      if (criteria.kind === 'AI_RESALE_ACTION') {
+        if (
+          typeof criteria.programEnrollmentId !== 'string' ||
+          typeof criteria.assignmentId !== 'string'
+        ) {
+          eligibleMembershipIds.clear();
+        } else {
+          const [enrollment, progress, assignment] = await Promise.all([
+            db.prisma.programEnrollment.findFirst({
+              where: {
+                id: criteria.programEnrollmentId,
+                workspaceId: broadcast.workspaceId,
+                groupId: broadcast.groupId,
+                status: 'ACTIVE',
+              },
+              select: { id: true, groupMembershipId: true, serviceProgramId: true },
+            }),
+            db.prisma.programProgressSnapshot.findFirst({
+              where: {
+                workspaceId: broadcast.workspaceId,
+                groupId: broadcast.groupId,
+                programEnrollmentId: criteria.programEnrollmentId,
+                currentAssignmentId: criteria.assignmentId,
+              },
+              select: { id: true },
+            }),
+            db.prisma.programMissionAssignment.findFirst({
+              where: {
+                id: criteria.assignmentId,
+                workspaceId: broadcast.workspaceId,
+                groupId: broadcast.groupId,
+                programEnrollmentId: criteria.programEnrollmentId,
+                status: 'PRESENTED',
+              },
+              select: { id: true },
+            }),
+          ]);
+          const program = enrollment
+            ? await db.prisma.serviceProgram.findFirst({
+                where: {
+                  id: enrollment.serviceProgramId,
+                  workspaceId: broadcast.workspaceId,
+                  groupId: broadcast.groupId,
+                  status: 'ACTIVE',
+                  settings: { path: ['moduleKey'], equals: 'AI_RESALE_V1' },
+                },
+                select: { id: true },
+              })
+            : null;
+          for (const membershipId of eligibleMembershipIds) {
+            if (
+              !enrollment ||
+              enrollment.groupMembershipId !== membershipId ||
+              !progress ||
+              !assignment ||
+              !program
+            ) {
+              eligibleMembershipIds.delete(membershipId);
+            }
+          }
+        }
       }
       const recipientIds = new Map<string, string>();
       if (mode === 'DEDICATED') {

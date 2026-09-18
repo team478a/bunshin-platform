@@ -2436,3 +2436,13 @@
 - Boundary: 操作できるのはServiceの有効な参加者本人だけとし、Workspace、Group、Enrollment、Membership、Userを全て照合する。
 - Consistency: 商品更新、結果Event、Assignment終了、Progress更新を同じSerializable transactionへまとめ、UUIDの冪等キーとrevisionで重複・競合を防ぐ。
 - Scope: LINE通知、DAY7有料Offer、決済はこの変更へ含めず、現在Actionの利用経路が安定した後に接続する。
+
+## 2026-09-18: AI物販V1の現在Action通知はService LINE配信を再利用する
+
+- Delivery: Daily MissionへProgram Assignmentを混在させず、既存`ServiceLineBroadcast`、Recipient、Job、配信履歴、再送経路を利用する。
+- Idempotency: 通知はEnvironmentとAssignment IDを含む`automationKey`で一意にし、Cron再実行で二重作成しない。
+- Recipient: 有効なService参加者本人について、通知同意、友だち状態、専用LINEまたは共用LINEの有効な接続を確認する。未接続なら通知済みにせず、後続Cronで再評価する。
+- Freshness: 実送信直前にもEnrollment、Program、Progressの現在Assignment、Assignment状態を照合し、結果入力後の古いActionを送らない。
+- Link: Service slugとEnrollment IDから本人用Action URLを組み立て、未ログイン時は既存の安全な`returnTo`で同じ画面へ戻す。
+- Message: WORK、WAIT、RECOVERYを区別し、Action判断はRuleの結果を変更せず、固定文面へ変換するだけにする。
+- Scope: この変更では通知設定・配信・直接導線までとし、DAY7 Offerと決済は次の作業単位に分ける。
