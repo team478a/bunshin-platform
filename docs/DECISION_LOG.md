@@ -2501,3 +2501,11 @@
 - Boundary: 入力金額は確定MAUを変更せず、Workspaceと未請求の月次利用を照合して一対一の請求へ変換する。
 - Accounting: 内部台帳は消費税計算や適格請求書発行を担わない。正式な請求書は外部サービスで発行し、番号と入金参照を内部台帳へ記録する。
 - Provider: Stripe等の接続先が決まるまではProvider固有コードを追加せず、契約・利用量・請求状態を共通基盤として維持する。
+
+## 2026-09-18: OEMの決済先は運営団体ごとに所有する
+
+- Ownership: エンドユーザー向け商品の決済接続は`Workspace(type=ORGANIZATION)`単位で保持し、各OEM運営団体の`OWNER / ADMIN`が自社のStripe設定を管理する。
+- Boundary: 契約、MAU、内部請求台帳はProvider非依存のまま維持し、Stripe接続情報は外部連携境界へ分離する。Programの`paymentOwner=SERVICE`から所属Workspaceの有効な設定を解決する。
+- Security: 秘密鍵とWebhook署名シークレットは用途分離したAES-GCMで暗号化し、平文の再表示、監査ログへの保存、別Workspaceからの参照を許可しない。
+- Activation: 秘密鍵の保存だけでは利用開始せず、Stripe APIでアカウントを確認した設定だけを有効化できる。保存、接続確認、有効化、停止を監査する。
+- Scope: この段階は決済接続設定までとし、購入画面、Checkout、Webhookによる入金確定、返金は後続作業とする。

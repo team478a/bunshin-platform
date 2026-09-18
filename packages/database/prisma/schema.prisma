@@ -84,6 +84,18 @@ enum TenantInvoiceStatus {
   VOID
 }
 
+enum PaymentProvider {
+  STRIPE
+}
+
+enum OrganizationPaymentConfigurationStatus {
+  DRAFT
+  VERIFIED
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
 enum MembershipStatus {
   ACTIVE
   SUSPENDED
@@ -1969,6 +1981,8 @@ model User {
   organizationCommercialContractsUpdated OrganizationCommercialContract[] @relation("OrganizationCommercialContractUpdater")
   tenantInvoicesUpdated             TenantInvoice[]                     @relation("TenantInvoiceUpdater")
   commercialBillingAuditsPerformed CommercialBillingAudit[]            @relation("CommercialBillingAuditActor")
+  paymentConfigurationsUpdated     OrganizationPaymentConfiguration[]   @relation("OrganizationPaymentConfigurationUpdater")
+  paymentConfigurationAudits       OrganizationPaymentConfigurationAudit[] @relation("OrganizationPaymentConfigurationAuditActor")
 
   @@index([status])
   @@map("users")
@@ -2181,6 +2195,8 @@ model Workspace {
   organizationCommercialContract OrganizationCommercialContract?
   tenantInvoices                 TenantInvoice[]
   commercialBillingAudits        CommercialBillingAudit[]
+  paymentConfigurations          OrganizationPaymentConfiguration[]
+  paymentConfigurationAudits     OrganizationPaymentConfigurationAudit[]
 
   @@index([status])
   @@map("workspaces")
@@ -2967,6 +2983,53 @@ model OrganizationCommercialContract {
   @@unique([workspaceId, id])
   @@index([status, startsAt, endsAt])
   @@map("organization_commercial_contracts")
+}
+
+/// OEM運営団体が自社売上を受け取る決済接続。秘密値はWeb層で暗号化してから保存する。
+model OrganizationPaymentConfiguration {
+  id                     String                                  @id @default(uuid()) @db.Uuid
+  workspaceId            String                                  @map("workspace_id") @db.Uuid
+  environment            LineConfigurationEnvironment
+  provider               PaymentProvider                         @default(STRIPE)
+  status                 OrganizationPaymentConfigurationStatus  @default(DRAFT)
+  accountReference       String?                                 @map("account_reference") @db.VarChar(200)
+  encryptedSecretKey     String                                  @map("encrypted_secret_key") @db.Text
+  secretKeyMask          String                                  @map("secret_key_mask") @db.VarChar(24)
+  encryptedWebhookSecret String?                                 @map("encrypted_webhook_secret") @db.Text
+  webhookSecretMask      String?                                 @map("webhook_secret_mask") @db.VarChar(24)
+  keyVersion             Int                                     @default(1) @map("key_version")
+  lastVerifiedAt         DateTime?                               @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory      String?                                 @map("last_error_category") @db.VarChar(80)
+  updatedByUserId        String                                  @map("updated_by_user_id") @db.Uuid
+  createdAt              DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace              Workspace                               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  updatedBy              User                                    @relation("OrganizationPaymentConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  audits                 OrganizationPaymentConfigurationAudit[]
+
+  @@unique([workspaceId, environment, provider])
+  @@unique([workspaceId, id])
+  @@index([environment, status])
+  @@map("organization_payment_configurations")
+}
+
+/// 決済接続の変更履歴。秘密値そのものは監査データへ含めない。
+model OrganizationPaymentConfigurationAudit {
+  id              String                           @id @default(uuid()) @db.Uuid
+  workspaceId     String                           @map("workspace_id") @db.Uuid
+  configurationId String                           @map("configuration_id") @db.Uuid
+  actorUserId     String                           @map("actor_user_id") @db.Uuid
+  action          String                           @db.VarChar(40)
+  reason          String                           @db.VarChar(500)
+  changedFields   Json                             @map("changed_fields")
+  occurredAt      DateTime                         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  configuration   OrganizationPaymentConfiguration @relation(fields: [workspaceId, configurationId], references: [workspaceId, id], onDelete: Restrict)
+  actor           User                             @relation("OrganizationPaymentConfigurationAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, occurredAt])
+  @@index([configurationId, occurredAt])
+  @@map("organization_payment_configuration_audits")
 }
 
 /// 確定MAUから作る内部請求台帳。税務上の請求書番号・決済IDは外部参照として保持する。
