@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { AiResaleOfferCard, type OfferState } from './ai-resale-offer-card';
 
 type ResultStatus = 'DONE' | 'PARTIAL' | 'NOT_DONE';
 type ParticipantState = {
@@ -37,9 +38,11 @@ const classificationLabels = {
 export function AiResaleActionCard({
   serviceSlug,
   initialState,
+  initialOffer,
 }: {
   serviceSlug: string;
   initialState: ParticipantState;
+  initialOffer: OfferState | null;
 }) {
   const [state, setState] = useState(initialState);
   const [itemTitle, setItemTitle] = useState('');
@@ -117,6 +120,9 @@ export function AiResaleActionCard({
   }
 
   if (state.enrollmentStatus !== 'ACTIVE') {
+    if (initialOffer) {
+      return <AiResaleOfferCard serviceSlug={serviceSlug} initialState={initialOffer} />;
+    }
     return (
       <section className="service-entry__card resale-action-card resale-action-card--complete">
         <p className="eyebrow">7日間の体験が完了しました</p>

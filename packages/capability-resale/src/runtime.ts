@@ -61,6 +61,12 @@ export interface AiResaleActionDisplaySnapshot {
 export type AiResaleRuntimeWriteResult = 'APPLIED' | 'ALREADY_APPLIED' | 'STALE' | 'NOT_FOUND';
 
 export interface AiResaleRuntimeRepository {
+  expireEndedPaidParticipants(input: { now: Date; limit: number }): Promise<{
+    scanned: number;
+    expired: number;
+    failures: number;
+    truncated: boolean;
+  }>;
   enrollEligibleFreeParticipants(input: { now: Date; limit: number }): Promise<{
     scanned: number;
     enrolled: number;
@@ -93,6 +99,12 @@ export interface AiResaleRuntimeRepository {
 }
 
 export interface AiResaleRuntimeBatchSummary {
+  expiration: {
+    scanned: number;
+    expired: number;
+    failures: number;
+    truncated: boolean;
+  };
   enrollment: {
     scanned: number;
     enrolled: number;
@@ -334,12 +346,17 @@ export class RunAiResaleRuntimeBatch {
 
   async execute(): Promise<AiResaleRuntimeBatchSummary> {
     const now = this.now();
+    const expiration = await this.repository.expireEndedPaidParticipants({
+      now,
+      limit: this.limit,
+    });
     const enrollment = await this.repository.enrollEligibleFreeParticipants({
       now,
       limit: this.limit,
     });
     const due = await this.repository.listDueCandidates({ now, limit: this.limit });
     const summary: AiResaleRuntimeBatchSummary = {
+      expiration,
       enrollment,
       candidates: due.candidates.length,
       actions: 0,
@@ -348,8 +365,8 @@ export class RunAiResaleRuntimeBatch {
       alreadyApplied: 0,
       stale: 0,
       skipped: 0,
-      failures: enrollment.failures,
-      truncated: enrollment.truncated || due.truncated,
+      failures: expiration.failures + enrollment.failures,
+      truncated: expiration.truncated || enrollment.truncated || due.truncated,
     };
     for (const candidate of due.candidates) {
       try {

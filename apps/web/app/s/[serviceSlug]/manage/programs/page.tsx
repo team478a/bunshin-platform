@@ -1,8 +1,10 @@
 import { notFound, redirect } from 'next/navigation';
+import { parseAiResaleOfferTerms, parseAiResaleRuntimeSettings } from '@bunshin/capability-resale';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramManagementEditor } from './program-management-editor';
+import { AiResaleOfferAdmin } from './ai-resale-offer-admin';
 
 export const dynamic = 'force-dynamic';
 type SupportMode = 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
@@ -59,7 +61,13 @@ export default async function ServiceProgramsPage({
       }),
       db.prisma.programEnrollment.findMany({
         where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-        select: { serviceProgramId: true, groupMembershipId: true },
+        select: {
+          id: true,
+          serviceProgramId: true,
+          groupMembershipId: true,
+          status: true,
+          updatedAt: true,
+        },
       }),
       db.prisma.groupMembership.findMany({
         where: {
@@ -107,6 +115,90 @@ export default async function ServiceProgramsPage({
       },
     ];
   });
+  const aiPrograms = servicePrograms.flatMap((program) => {
+    try {
+      const settings = parseAiResaleRuntimeSettings(program.settings);
+      return settings ? [{ program, settings }] : [];
+    } catch {
+      return [];
+    }
+  });
+  const freeProgramIds = aiPrograms
+    .filter(({ settings }) => settings.policyKey === 'FREE_7D')
+    .map(({ program }) => program.id);
+  const paidProgramIds = aiPrograms
+    .filter(({ settings }) => settings.policyKey === 'PAID_90D')
+    .map(({ program }) => program.id);
+  const paidOfferings =
+    paidProgramIds.length === 0
+      ? []
+      : await db.prisma.programOffering.findMany({
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            serviceProgramId: { in: paidProgramIds },
+            status: 'ACTIVE',
+            isFree: false,
+          },
+          orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+        });
+  const offerOptions = paidOfferings.flatMap((offering) => {
+    const terms = parseAiResaleOfferTerms(offering.termsSnapshot);
+    return terms ? [{ offering, terms }] : [];
+  });
+  const completedFree = enrollments.filter(
+    (enrollment) =>
+      enrollment.status === 'COMPLETED' && freeProgramIds.includes(enrollment.serviceProgramId),
+  );
+  const selectedEvents =
+    completedFree.length === 0
+      ? []
+      : await db.prisma.programActionEvent.findMany({
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            programEnrollmentId: { in: completedFree.map(({ id }) => id) },
+            eventType: { in: ['STANDARD_OFFER_SELECTED', 'MONITOR_OFFER_SELECTED'] },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+        });
+  const activePaidMembershipIds = new Set(
+    enrollments
+      .filter(
+        (enrollment) =>
+          enrollment.status === 'ACTIVE' && paidProgramIds.includes(enrollment.serviceProgramId),
+      )
+      .map(({ groupMembershipId }) => groupMembershipId),
+  );
+  const seenApplicants = new Set<string>();
+  const pendingApplicants = selectedEvents.flatMap((event) => {
+    const enrollment = completedFree.find(({ id }) => id === event.programEnrollmentId);
+    if (
+      !enrollment ||
+      activePaidMembershipIds.has(enrollment.groupMembershipId) ||
+      seenApplicants.has(enrollment.groupMembershipId) ||
+      !event.sourceResourceId
+    ) {
+      return [];
+    }
+    const member = memberships.find(({ id }) => id === enrollment.groupMembershipId);
+    const option = offerOptions.find(({ offering }) => offering.id === event.sourceResourceId);
+    if (!member || !option) return [];
+    seenApplicants.add(enrollment.groupMembershipId);
+    return [
+      {
+        groupMembershipId: enrollment.groupMembershipId,
+        name: member.user.displayName,
+        email: member.user.email,
+        offerKind: option.terms.offerKey,
+        offeringId: option.offering.id,
+        amountYen: option.terms.amountYen,
+        requestedAt: event.occurredAt.toISOString(),
+      },
+    ];
+  });
+  const standard = offerOptions.find(({ terms }) => terms.offerKey === 'STANDARD') ?? null;
+  const monitor = offerOptions.find(({ terms }) => terms.offerKey === 'MONITOR') ?? null;
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
@@ -125,6 +217,29 @@ export default async function ServiceProgramsPage({
             name: membership.user.displayName,
             email: membership.user.email,
           }))}
+        />
+        <AiResaleOfferAdmin
+          serviceSlug={serviceSlug}
+          enabled={freeProgramIds.length > 0}
+          standard={
+            standard
+              ? {
+                  offeringId: standard.offering.id,
+                  amountYen: standard.terms.amountYen,
+                  applicationUrl: standard.terms.applicationUrl,
+                }
+              : null
+          }
+          monitor={
+            monitor
+              ? {
+                  offeringId: monitor.offering.id,
+                  amountYen: monitor.terms.amountYen,
+                  applicationUrl: monitor.terms.applicationUrl,
+                }
+              : null
+          }
+          pendingApplicants={pendingApplicants}
         />
       </main>
     </PublicShell>

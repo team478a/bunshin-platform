@@ -53,7 +53,7 @@ function zonedParts(value: Date, timeZone: string) {
   };
 }
 
-function addProgramCalendarDays(value: Date, days: number, timeZone: string) {
+export function addProgramCalendarDays(value: Date, days: number, timeZone: string) {
   const local = zonedParts(value, timeZone);
   const targetWall = Date.UTC(
     local.year,
@@ -323,6 +323,98 @@ function sameDecision(
 
 export class PrismaAiResaleRuntimeRepository implements AiResaleRuntimeRepository {
   constructor(private readonly client: PrismaClient) {}
+
+  async expireEndedPaidParticipants(
+    input: Parameters<AiResaleRuntimeRepository['expireEndedPaidParticipants']>[0],
+  ) {
+    const paidPrograms = (await runtimePrograms(this.client)).filter(
+      ({ settings }) => settings.policyKey === 'PAID_90D',
+    );
+    if (paidPrograms.length === 0) {
+      return { scanned: 0, expired: 0, failures: 0, truncated: false };
+    }
+    const candidates = await this.client.programEnrollment.findMany({
+      where: {
+        status: 'ACTIVE',
+        endsAt: { lte: input.now },
+        OR: paidPrograms.map((program) => ({
+          workspaceId: program.workspaceId,
+          groupId: program.groupId,
+          serviceProgramId: program.id,
+        })),
+      },
+      orderBy: [{ endsAt: 'asc' }, { id: 'asc' }],
+      take: input.limit + 1,
+    });
+    const selected = candidates.slice(0, input.limit);
+    let expired = 0;
+    let failures = 0;
+    for (const enrollment of selected) {
+      try {
+        const applied = await this.client.$transaction(
+          async (tx) => {
+            const changed = await tx.programEnrollment.updateMany({
+              where: {
+                id: enrollment.id,
+                workspaceId: enrollment.workspaceId,
+                groupId: enrollment.groupId,
+                status: 'ACTIVE',
+                endsAt: { lte: input.now },
+              },
+              data: { status: 'EXPIRED' },
+            });
+            if (changed.count !== 1) return false;
+            await tx.programMissionAssignment.updateMany({
+              where: {
+                workspaceId: enrollment.workspaceId,
+                groupId: enrollment.groupId,
+                programEnrollmentId: enrollment.id,
+                status: { in: ['PRESENTED', 'STARTED'] },
+              },
+              data: { status: 'SKIPPED', skippedAt: input.now },
+            });
+            await tx.programProgressSnapshot.updateMany({
+              where: {
+                workspaceId: enrollment.workspaceId,
+                groupId: enrollment.groupId,
+                programEnrollmentId: enrollment.id,
+              },
+              data: {
+                stateKey: 'COMPLETED',
+                currentAssignmentId: null,
+                nextEvaluationAt: null,
+                calculatedAt: input.now,
+                revision: { increment: 1 },
+              },
+            });
+            await tx.programAuditLog.create({
+              data: {
+                workspaceId: enrollment.workspaceId,
+                groupId: enrollment.groupId,
+                resourceType: 'PROGRAM_ENROLLMENT',
+                resourceId: enrollment.id,
+                action: 'EXPIRED',
+                beforeData: { status: enrollment.status, endsAt: enrollment.endsAt },
+                afterData: { status: 'EXPIRED', expiredAt: input.now },
+                performedByUserId: enrollment.invitedByUserId,
+              },
+            });
+            return true;
+          },
+          { isolationLevel: 'Serializable' },
+        );
+        if (applied) expired += 1;
+      } catch {
+        failures += 1;
+      }
+    }
+    return {
+      scanned: selected.length,
+      expired,
+      failures,
+      truncated: candidates.length > input.limit,
+    };
+  }
 
   async enrollEligibleFreeParticipants(
     input: Parameters<AiResaleRuntimeRepository['enrollEligibleFreeParticipants']>[0],

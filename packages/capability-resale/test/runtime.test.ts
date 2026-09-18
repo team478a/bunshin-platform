@@ -50,6 +50,12 @@ function repository(
   result: Awaited<ReturnType<AiResaleRuntimeRepository['persistDecision']>> = 'APPLIED',
 ): AiResaleRuntimeRepository {
   return {
+    expireEndedPaidParticipants: vi.fn().mockResolvedValue({
+      scanned: 0,
+      expired: 0,
+      failures: 0,
+      truncated: false,
+    }),
     enrollEligibleFreeParticipants: vi.fn().mockResolvedValue({
       scanned: 1,
       enrolled: 1,
@@ -110,6 +116,7 @@ describe('AI resale runtime batch', () => {
     ).execute();
 
     expect(store.enrollEligibleFreeParticipants).toHaveBeenCalledWith({ now, limit: 10 });
+    expect(store.expireEndedPaidParticipants).toHaveBeenCalledWith({ now, limit: 10 });
     expect(store.persistDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         decision: expect.objectContaining({ actionKey: 'ITEM_FIND', mode: 'WORK' }),

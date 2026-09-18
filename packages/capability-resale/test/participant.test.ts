@@ -84,6 +84,7 @@ function state(currentAction: AiResaleParticipantAction | null): AiResalePartici
 
 function runtimeStore(value: AiResaleRuntimeCandidate): AiResaleRuntimeRepository {
   return {
+    expireEndedPaidParticipants: vi.fn(),
     enrollEligibleFreeParticipants: vi.fn(),
     listDueCandidates: vi.fn(),
     findCandidate: vi.fn().mockResolvedValue(value),

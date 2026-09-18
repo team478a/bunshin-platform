@@ -1,4 +1,5 @@
 import {
+  AiResaleOfferService,
   AiResaleParticipantService,
   AiResaleV1Policy,
   ResalePersistenceError,
@@ -40,6 +41,16 @@ export default async function AiResaleParticipantPage({
     if (error instanceof ResalePersistenceError && error.code === 'NOT_FOUND') notFound();
     throw error;
   }
+  const offer =
+    state.enrollmentStatus === 'COMPLETED' && state.policyKey === 'FREE_7D'
+      ? await new AiResaleOfferService(new db.PrismaAiResaleOfferRepository(db.prisma)).current({
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          actorUserId: actor.userId,
+          freeEnrollmentId: programEnrollmentId,
+          now: new Date(),
+        })
+      : null;
   const style = {
     '--service-primary': service.configuration.brand.primaryColor,
     '--service-secondary': service.configuration.brand.secondaryColor,
@@ -55,6 +66,7 @@ export default async function AiResaleParticipantPage({
         </header>
         <AiResaleActionCard
           serviceSlug={serviceSlug}
+          initialOffer={offer}
           initialState={{
             enrollmentId: state.enrollmentId,
             programName: state.programName,
