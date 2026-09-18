@@ -321,6 +321,7 @@ model ProgramEnrollment {
   endsAt            DateTime?               @map("ends_at") @db.Timestamptz(3)
   createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  paidPurchase      ProgramPurchase?        @relation("ProgramPurchasePaidEnrollment")
 
   @@unique([groupMembershipId, serviceProgramId])
   @@unique([workspaceId, groupId, id])
@@ -3055,17 +3056,22 @@ model ProgramPurchase {
   paidEnrollmentId          String?                           @unique @map("paid_enrollment_id") @db.Uuid
   checkoutExpiresAt         DateTime?                         @map("checkout_expires_at") @db.Timestamptz(6)
   paidAt                    DateTime?                         @map("paid_at") @db.Timestamptz(6)
+  expiredAt                 DateTime?                         @map("expired_at") @db.Timestamptz(6)
+  refundedAt                DateTime?                         @map("refunded_at") @db.Timestamptz(6)
   metadata                  Json
   createdAt                 DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                 DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace                 Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   buyer                     User                              @relation("ProgramPurchaseBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
   paymentConfiguration      OrganizationPaymentConfiguration @relation(fields: [workspaceId, paymentConfigurationId], references: [workspaceId, id], onDelete: Restrict)
+  paidEnrollment            ProgramEnrollment?                @relation("ProgramPurchasePaidEnrollment", fields: [workspaceId, groupId, paidEnrollmentId], references: [workspaceId, groupId, id], onDelete: Restrict)
 
   @@unique([workspaceId, groupId, idempotencyKey])
   @@unique([workspaceId, id])
+  @@unique([workspaceId, groupId, paidEnrollmentId])
   @@index([workspaceId, groupId, buyerUserId, status])
   @@index([paymentConfigurationId, status, createdAt])
+  @@index([status, checkoutExpiresAt])
   @@map("program_purchases")
 }
 
