@@ -11,6 +11,7 @@ import {
   StripeAccountConnectionTestAdapter,
 } from '../../../../../src/payments/secure-configuration';
 import {
+  netPaidAmount,
   paymentDate,
   paymentOperationsMessage,
   purchaseStatusLabel,
@@ -305,7 +306,7 @@ export default async function OrganizationPaymentPage({
     configuration,
     recentPurchases,
     purchaseCounts,
-    paidAmount,
+    paidAmounts,
     failedWebhookEvents,
     failedWebhookCount,
   ] = await Promise.all([
@@ -337,6 +338,7 @@ export default async function OrganizationPaymentPage({
         groupId: true,
         status: true,
         amountYen: true,
+        refundedAmountYen: true,
         createdAt: true,
         paidAt: true,
         expiredAt: true,
@@ -351,7 +353,7 @@ export default async function OrganizationPaymentPage({
     }),
     db.prisma.programPurchase.aggregate({
       where: { workspaceId: workspace.id, paidAt: { not: null } },
-      _sum: { amountYen: true },
+      _sum: { amountYen: true, refundedAmountYen: true },
     }),
     db.prisma.paymentWebhookEvent.findMany({
       where: { workspaceId: workspace.id, status: 'FAILED' },
@@ -382,6 +384,9 @@ export default async function OrganizationPaymentPage({
     (countByStatus.get('CREATED') ?? 0) + (countByStatus.get('CHECKOUT_OPEN') ?? 0);
   const paidPurchaseCount = countByStatus.get('PAID') ?? 0;
   const refundedPurchaseCount = countByStatus.get('REFUNDED') ?? 0;
+  const grossAmountYen = paidAmounts._sum.amountYen ?? 0;
+  const refundedAmountYen = paidAmounts._sum.refundedAmountYen ?? 0;
+  const netAmountYen = netPaidAmount(grossAmountYen, refundedAmountYen);
   const result = (await searchParams).result;
   const webhookUrl = configuration
     ? new URL(
@@ -433,8 +438,16 @@ export default async function OrganizationPaymentPage({
         <p>{paymentOperationsMessage({ failedWebhookCount, waitingPurchaseCount })}</p>
         <div className="operations-overview" aria-label="売上と購入状況">
           <div>
-            <span>決済完了総額（返金前）</span>
-            <strong>{yen(paidAmount._sum.amountYen ?? 0)}</strong>
+            <span>差引売上</span>
+            <strong>{yen(netAmountYen)}</strong>
+          </div>
+          <div>
+            <span>決済完了総額</span>
+            <strong>{yen(grossAmountYen)}</strong>
+          </div>
+          <div>
+            <span>返金総額</span>
+            <strong>{yen(refundedAmountYen)}</strong>
           </div>
           <div>
             <span>入金済み</span>
@@ -463,7 +476,7 @@ export default async function OrganizationPaymentPage({
                   <th>受付日時</th>
                   <th>購入者</th>
                   <th>サービス</th>
-                  <th>金額</th>
+                  <th>決済・返金</th>
                   <th>状態</th>
                   <th>状態更新日時</th>
                 </tr>
@@ -477,7 +490,12 @@ export default async function OrganizationPaymentPage({
                       {purchase.buyer.email ? <small>{purchase.buyer.email}</small> : null}
                     </td>
                     <td>{groupNames.get(purchase.groupId) ?? '削除済みのサービス'}</td>
-                    <td>{yen(purchase.amountYen)}</td>
+                    <td>
+                      {yen(purchase.amountYen)}
+                      {purchase.refundedAmountYen > 0 ? (
+                        <small>返金 {yen(purchase.refundedAmountYen)}</small>
+                      ) : null}
+                    </td>
                     <td>{purchaseStatusLabel[purchase.status]}</td>
                     <td>
                       {paymentDate(

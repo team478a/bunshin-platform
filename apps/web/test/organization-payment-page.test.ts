@@ -36,4 +36,11 @@ describe('organization payment settings page', () => {
     expect(source).toContain('最近の購入');
     expect(source).toContain('要確認の決済通知');
   });
+
+  it('shows gross payments, cumulative refunds, and net sales', () => {
+    expect(source).toContain('_sum: { amountYen: true, refundedAmountYen: true }');
+    expect(source).toContain('差引売上');
+    expect(source).toContain('返金総額');
+    expect(source).toContain('purchase.refundedAmountYen');
+  });
 });

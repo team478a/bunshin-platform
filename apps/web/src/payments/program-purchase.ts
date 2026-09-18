@@ -573,6 +573,8 @@ export async function refundPaidProgramPurchase(
         if (
           !purchase ||
           purchase.amountYen !== input.amount ||
+          input.amountRefunded < 0 ||
+          input.amountRefunded > input.amount ||
           purchase.currency.toLowerCase() !== input.currency.toLowerCase()
         ) {
           await tx.paymentWebhookEvent.update({
@@ -582,8 +584,16 @@ export async function refundPaidProgramPurchase(
           throw new ApplicationError('FORBIDDEN', 'purchase verification failed');
         }
         const isFullRefund = input.fullyRefunded && input.amountRefunded >= purchase.amountYen;
+        const refundedAmountYen = Math.max(
+          purchase.refundedAmountYen,
+          Math.min(input.amountRefunded, purchase.amountYen),
+        );
         const now = new Date();
         if (!isFullRefund) {
+          await tx.programPurchase.update({
+            where: { id: purchase.id },
+            data: { refundedAmountYen },
+          });
           await tx.paymentWebhookEvent.update({
             where: { id: webhook.id },
             data: { status: 'IGNORED', errorCategory: 'PARTIAL_REFUND', processedAt: now },
@@ -634,7 +644,11 @@ export async function refundPaidProgramPurchase(
         });
         await tx.programPurchase.update({
           where: { id: purchase.id },
-          data: { status: 'REFUNDED', refundedAt: now },
+          data: {
+            status: 'REFUNDED',
+            refundedAmountYen: purchase.amountYen,
+            refundedAt: now,
+          },
         });
         await tx.paymentWebhookEvent.update({
           where: { id: webhook.id },

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   paymentDate,
   paymentOperationsMessage,
+  netPaidAmount,
   purchaseStatusLabel,
   yen,
 } from '../src/payments/payment-operations';
@@ -29,5 +30,11 @@ describe('payment operations presentation', () => {
     expect(yen(29800)).toBe('29,800円');
     expect(paymentDate(null)).toBe('未確定');
     expect(paymentDate(new Date('2026-09-18T01:30:00.000Z'))).toContain('2026');
+  });
+
+  it('calculates net sales after cumulative refunds without going negative', () => {
+    expect(netPaidAmount(29_800, 5_000)).toBe(24_800);
+    expect(netPaidAmount(29_800, 29_800)).toBe(0);
+    expect(netPaidAmount(29_800, 40_000)).toBe(0);
   });
 });
