@@ -352,6 +352,8 @@ export default async function OrganizationManagePage({
         <Link href={`/organizations/${organization.id}/usage`}>
           今月の利用人数・料金を確認する →
         </Link>
+        <br />
+        <Link href={`/organizations/${organization.id}/payment`}>自社の決済先を設定する →</Link>
       </header>
       <section className="operations-overview" aria-label="団体の設定状況">
         <div>

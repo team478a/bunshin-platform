@@ -27,6 +27,7 @@ const serverSchema = z
     LINE_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     AI_PROVIDER_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     ADMIN_EMAIL_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
+    PAYMENT_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_OFFICIAL_ACCOUNT_URL: officialLineAccountUrlSchema.optional(),
     VIDEO_RENDER_WEBHOOK_KEY_VERSION: z.coerce.number().int().positive().default(1),
