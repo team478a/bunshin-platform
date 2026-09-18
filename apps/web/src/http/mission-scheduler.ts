@@ -18,6 +18,11 @@ import {
   RunWeeklyPersonalityLearningScheduler,
   type PersonalityLearningScheduleSummary,
 } from '@bunshin/application';
+import {
+  AiResaleV1Policy,
+  RunAiResaleRuntimeBatch,
+  type AiResaleRuntimeBatchSummary,
+} from '@bunshin/capability-resale';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
@@ -53,6 +58,7 @@ export interface MissionSchedulerPort {
       personalityLearning?: PersonalityLearningScheduleSummary;
       weeklyReportLine?: WeeklyReportLineScheduleSummary;
       fortuneWeeklyLine?: FortuneWeeklyLineScheduleSummary;
+      aiResale?: AiResaleRuntimeBatchSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -101,6 +107,10 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
   const badgeJobs = new ScheduleBadgeLineDeliveryJobs(
     new db.PrismaBadgeLineJobCandidateRepository(db.prisma),
     new EnqueueJob(jobs),
+  );
+  const aiResale = new RunAiResaleRuntimeBatch(
+    new db.PrismaAiResaleRuntimeRepository(db.prisma),
+    new AiResaleV1Policy(),
   );
   const { resolveOpenAiRuntimeConfiguration } =
     await import('../ai/runtime-provider-configuration');
@@ -162,14 +172,45 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
             failures: 1,
           };
         });
-      const [missionResult, trendResult, personalityResult, pointResult, badgeResult] =
-        await Promise.all([
-          mission.execute(environment),
-          trend.execute(environment),
-          personalityLearning.execute(),
-          pointProcessing,
-          badgeProcessing,
-        ]);
+      const aiResaleProcessing = aiResale.execute().catch(() => {
+        logger.error('AI resale runtime processing failed', {
+          route: '/api/internal/jobs/schedule',
+          errorCode: 'AI_RESALE_RUNTIME_PROCESSING_FAILED',
+        });
+        return {
+          enrollment: {
+            scanned: 0,
+            enrolled: 0,
+            skipped: 0,
+            failures: 1,
+            truncated: false,
+          },
+          candidates: 0,
+          actions: 0,
+          waits: 0,
+          daySevenClassified: 0,
+          alreadyApplied: 0,
+          stale: 0,
+          skipped: 0,
+          failures: 1,
+          truncated: false,
+        } satisfies AiResaleRuntimeBatchSummary;
+      });
+      const [
+        missionResult,
+        trendResult,
+        personalityResult,
+        pointResult,
+        badgeResult,
+        aiResaleResult,
+      ] = await Promise.all([
+        mission.execute(environment),
+        trend.execute(environment),
+        personalityLearning.execute(),
+        pointProcessing,
+        badgeProcessing,
+        aiResaleProcessing,
+      ]);
       const badgePrepared = await badgePreparation.execute({ environment });
       const badgeJobResult = await badgeJobs.execute(environment);
       const weeklyReportLine = await scheduleWeeklyReportLineDeliveries({ environment }).catch(
@@ -184,6 +225,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         badgeLine: { ...badgePrepared, ...badgeJobResult },
         weeklyReportLine,
         fortuneWeeklyLine,
+        aiResale: aiResaleResult,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };

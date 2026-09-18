@@ -1,7 +1,9 @@
 import { authorizedVideoPhotos } from './video-photos';
+import { autoEnrollAiResaleForRegistration } from './resale-runtime';
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
 export { PrismaResaleItemRepository } from './resale';
+export { PrismaAiResaleRuntimeRepository } from './resale-runtime';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
@@ -12351,6 +12353,9 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
             ],
             skipDuplicates: true,
           });
+        if (status === 'ACTIVE') {
+          await autoEnrollAiResaleForRegistration(tx, { membership, now: input.now });
+        }
         return groupMembershipRecord(membership);
       },
       { isolationLevel: 'Serializable' },
