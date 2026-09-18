@@ -3,6 +3,7 @@ import type { Route } from 'next';
 import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
+import { getServerEnvironment } from '@bunshin/config';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import {
   AesGcmPaymentSecretCrypto,
@@ -198,9 +199,15 @@ async function setActive(formData: FormData) {
   if (
     configuration.status !== 'VERIFIED' ||
     !configuration.lastVerifiedAt ||
-    configuration.lastErrorCategory
+    configuration.lastErrorCategory ||
+    !configuration.encryptedWebhookSecret
   )
-    redirect(paymentPath(parsed.data.workspaceId, 'verification-required'));
+    redirect(
+      paymentPath(
+        parsed.data.workspaceId,
+        configuration.encryptedWebhookSecret ? 'verification-required' : 'webhook-required',
+      ),
+    );
   await db.prisma.$transaction([
     db.prisma.organizationPaymentConfiguration.update({
       where: { id: configuration.id },
@@ -267,6 +274,7 @@ const results: Record<string, string> = {
   'invalid-secret-key': 'Stripeの秘密鍵（sk_test_ または sk_live_ で始まる値）を入力してください。',
   'invalid-webhook-secret': 'Webhook署名シークレット（whsec_ で始まる値）を入力してください。',
   'verification-required': '接続確認が完了した設定だけ有効にできます。',
+  'webhook-required': '決済を有効にする前にWebhook署名シークレットを登録してください。',
 };
 const statusLabel = {
   DRAFT: '下書き',
@@ -307,6 +315,12 @@ export default async function OrganizationPaymentPage({
     },
   });
   const result = (await searchParams).result;
+  const webhookUrl = configuration
+    ? new URL(
+        `/api/payments/stripe/${configuration.id}/webhook`,
+        getServerEnvironment().APP_URL,
+      ).toString()
+    : null;
 
   return (
     <main className="app-page">
@@ -354,6 +368,13 @@ export default async function OrganizationPaymentPage({
           <li>接続確認後に「決済接続を有効にする」を押します。</li>
           <li>購入受付を始める前に、次の設定でWebhookを登録します。</li>
         </ol>
+        {webhookUrl ? (
+          <div className="settings-card__notice">
+            <strong>Stripeに登録するWebhook URL</strong>
+            <p className="break-all">{webhookUrl}</p>
+            <p>送信イベントは checkout.session.completed を選んでください。</p>
+          </div>
+        ) : null}
         <p>カード番号など購入者の決済情報は、この画面には入力しません。</p>
       </section>
 
@@ -385,7 +406,7 @@ export default async function OrganizationPaymentPage({
               autoComplete="new-password"
               placeholder="whsec_..."
             />
-            <small>Webhook受信機能を設定するときに登録します。今は空欄でも保存できます。</small>
+            <small>StripeでWebhook URLを登録した後に表示される whsec_ から始まる値です。</small>
           </label>
           <label>
             変更理由
@@ -445,7 +466,9 @@ export default async function OrganizationPaymentPage({
           <li>保存・接続確認・有効化・停止は変更者と理由を記録します。</li>
           <li>この団体の所有者・管理者だけが設定できます。</li>
         </ul>
-        <p>この画面は接続先の設定です。購入画面と入金Webhookを実装するまでは販売を開始しません。</p>
+        <p>
+          有効化後の購入はStripeの画面で行われ、署名を確認できた入金だけが利用開始に反映されます。
+        </p>
       </section>
     </main>
   );

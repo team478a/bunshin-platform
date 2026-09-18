@@ -27,6 +27,8 @@ import { hasActiveRewardsPilotAccess } from './rewards-pilot-access';
 import { reserveVideoMedia, finishVideoMedia, settleVideoSceneBatch } from './video-media-quota';
 import { purgeAccountMedia, type AccountDeletionMediaStorage } from './account-deletion-media';
 import { Prisma, PrismaClient } from '@prisma/client';
+export { Prisma };
+export type { PrismaClient };
 import { createHash, randomUUID } from 'node:crypto';
 import {
   assertSupportedVideoComposition,

@@ -21,8 +21,10 @@ describe('organization payment settings page', () => {
     expect(source).toContain("action: 'ACTIVATE'");
   });
 
-  it('tells operators that checkout and webhooks remain a separate launch step', () => {
-    expect(source).toContain('購入画面と入金Webhookを実装するまでは販売を開始しません');
+  it('shows the scoped webhook endpoint and requires its signing secret', () => {
+    expect(source).toContain('/api/payments/stripe/${configuration.id}/webhook');
+    expect(source).toContain('!configuration.encryptedWebhookSecret');
+    expect(source).toContain('checkout.session.completed');
     expect(source).toContain('カード番号など購入者の決済情報は、この画面には入力しません');
   });
 });

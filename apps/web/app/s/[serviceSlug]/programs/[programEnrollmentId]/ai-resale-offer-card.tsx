@@ -55,6 +55,27 @@ export function AiResaleOfferCard({
   const [error, setError] = useState('');
   const shownKey = useRef<string | null>(null);
   const retry = useRef<{ signature: string; key: string } | null>(null);
+  const checkoutKey = useRef<string | null>(null);
+
+  async function openCheckout(offeringId: string) {
+    checkoutKey.current ??= crypto.randomUUID();
+    const response = await fetch(
+      `/api/services/${encodeURIComponent(serviceSlug)}/program-enrollments/${state.freeEnrollmentId}/checkout`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ offeringId, idempotencyKey: checkoutKey.current }),
+      },
+    );
+    const payload = (await response.json()) as {
+      data?: { checkoutUrl?: string };
+      error?: { message?: string };
+    };
+    if (!response.ok || !payload.data?.checkoutUrl) {
+      throw new Error(payload.error?.message ?? '支払い画面を開けませんでした。');
+    }
+    window.location.assign(payload.data.checkoutUrl);
+  }
 
   async function act(
     action:
@@ -93,12 +114,11 @@ export function AiResaleOfferCard({
       retry.current = null;
       setState(payload.data.state);
       if (action.type === 'SELECT') {
-        setNotice(
-          payload.data.redirectUrl
-            ? '申込みページを開きます。'
-            : '申込み希望を受け付けました。運営者から支払い方法をご案内します。',
-        );
+        setNotice('安全な支払いページを開きます。');
         if (payload.data.redirectUrl) window.location.assign(payload.data.redirectUrl);
+        else if (payload.data.state.offer) {
+          await openCheckout(payload.data.state.offer.offeringId);
+        }
       } else if (action.type === 'DECLINE_STANDARD') {
         setNotice(
           action.reason === 'PRICE_TOO_HIGH'
@@ -141,15 +161,40 @@ export function AiResaleOfferCard({
     return (
       <section className="service-entry__card resale-offer-card resale-offer-card--pending">
         <p className="eyebrow">申込み受付済み</p>
-        <h2>運営者が入金を確認しています</h2>
-        <p>確認後に90日プログラムが開始されます。再登録は必要ありません。</p>
+        <h2>お支払い手続きを確認しています</h2>
+        <p>決済完了後に90日プログラムが自動で開始されます。再登録は必要ありません。</p>
+        {state.offer ? (
+          <button
+            className="button button--primary button--full"
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              setSaving(true);
+              setError('');
+              void openCheckout(state.offer!.offeringId)
+                .catch((cause) =>
+                  setError(
+                    cause instanceof Error ? cause.message : '支払い画面を開けませんでした。',
+                  ),
+                )
+                .finally(() => setSaving(false));
+            }}
+          >
+            {saving ? '処理しています…' : '支払いページを開く'}
+          </button>
+        ) : null}
         {state.offer?.terms.applicationUrl ? (
           <a
             className="button button--secondary button--full"
             href={state.offer.terms.applicationUrl}
           >
-            支払いページをもう一度開く
+            運営者指定の支払いページを開く
           </a>
+        ) : null}
+        {error ? (
+          <p className="notice notice--danger" role="alert">
+            {error}
+          </p>
         ) : null}
       </section>
     );
