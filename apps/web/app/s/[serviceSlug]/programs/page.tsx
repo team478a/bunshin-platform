@@ -105,6 +105,13 @@ export default async function MemberProgramsPage({
               memberMayChoose: policy?.memberMayChoose ?? false,
               preferredMode: preference?.preferredSupportMode ?? enrollment.supportMode,
               notes: preference?.notes ?? '',
+              actionHref:
+                program?.settings &&
+                typeof program.settings === 'object' &&
+                !Array.isArray(program.settings) &&
+                program.settings['moduleKey'] === 'AI_RESALE_V1'
+                  ? `/s/${serviceSlug}/programs/${enrollment.id}`
+                  : null,
               currentGoal: goal
                 ? `${goal.title}：${goal.targetValue.toString()} ${goal.unit}`
                 : null,

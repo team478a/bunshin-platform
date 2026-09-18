@@ -4,6 +4,7 @@ export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
 export { PrismaResaleItemRepository } from './resale';
 export { PrismaAiResaleRuntimeRepository } from './resale-runtime';
+export { PrismaAiResaleParticipantRepository } from './resale-participant';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';

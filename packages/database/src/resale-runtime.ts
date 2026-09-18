@@ -542,6 +542,120 @@ export class PrismaAiResaleRuntimeRepository implements AiResaleRuntimeRepositor
     };
   }
 
+  async findCandidate(input: Parameters<AiResaleRuntimeRepository['findCandidate']>[0]) {
+    const enrollment = await this.client.programEnrollment.findFirst({
+      where: {
+        id: input.programEnrollmentId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+        startsAt: { not: null },
+      },
+    });
+    if (!enrollment?.startsAt) return null;
+    const program = (await runtimePrograms(this.client, input)).find(
+      (item) => item.id === enrollment.serviceProgramId,
+    );
+    if (!program) return null;
+    const [membership, progress, items, events, completedMissionCount] = await Promise.all([
+      this.client.groupMembership.findFirst({
+        where: {
+          id: enrollment.groupMembershipId,
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          userId: input.actorUserId,
+          status: 'ACTIVE',
+        },
+      }),
+      this.client.programProgressSnapshot.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: enrollment.id,
+        },
+      }),
+      this.client.resaleItem.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: enrollment.id,
+        },
+        orderBy: [{ foundAt: 'asc' }, { id: 'asc' }],
+      }),
+      this.client.programActionEvent.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: enrollment.id,
+        },
+        select: { eventType: true, actorUserId: true, occurredAt: true },
+        orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+      }),
+      this.client.programMissionAssignment.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: enrollment.id,
+          status: 'COMPLETED',
+        },
+      }),
+    ]);
+    if (!membership) return null;
+    const currentAssignment =
+      progress?.currentAssignmentId === null || progress === null
+        ? null
+        : await this.client.programMissionAssignment.findFirst({
+            where: {
+              id: progress.currentAssignmentId,
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              programEnrollmentId: enrollment.id,
+            },
+          });
+    const lastUserActionAt =
+      [...events]
+        .reverse()
+        .find(
+          (event) =>
+            event.actorUserId === membership.userId &&
+            RESALE_USER_ACTION_EVENTS.includes(
+              event.eventType as (typeof RESALE_USER_ACTION_EVENTS)[number],
+            ),
+        )?.occurredAt ?? null;
+    const stateKey = RESALE_PROGRAM_STATES.includes(
+      progress?.stateKey as (typeof RESALE_PROGRAM_STATES)[number],
+    )
+      ? (progress!.stateKey as (typeof RESALE_PROGRAM_STATES)[number])
+      : 'ACTIVE';
+    const waitBaseline =
+      currentAssignment?.actionMode === 'WAIT' ? currentAssignment.reevaluateAt : null;
+    return {
+      workspaceId: enrollment.workspaceId,
+      groupId: enrollment.groupId,
+      programEnrollmentId: enrollment.id,
+      programTemplateVersionId: program.programTemplateVersionId,
+      participantUserId: membership.userId,
+      startsAt: enrollment.startsAt,
+      programDay: programDayAt({
+        startsAt: enrollment.startsAt,
+        now: input.now,
+        timeZone: program.settings.timeZone,
+      }),
+      settings: program.settings,
+      programState: stateKey,
+      activityBaselineAt:
+        waitBaseline !== null && waitBaseline > enrollment.startsAt
+          ? waitBaseline
+          : enrollment.startsAt,
+      lastUserActionAt,
+      completedMissionCount,
+      progressRevision: progress?.revision ?? null,
+      daySevenClassified: events.some(({ eventType }) => eventType === 'DAY7_CLASSIFIED'),
+      items,
+      eventTypes: events.map(({ eventType }) => eventType),
+    };
+  }
+
   async persistDecision(input: Parameters<AiResaleRuntimeRepository['persistDecision']>[0]) {
     try {
       return await this.client.$transaction(

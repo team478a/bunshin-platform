@@ -72,6 +72,13 @@ export interface AiResaleRuntimeRepository {
     now: Date;
     limit: number;
   }): Promise<{ candidates: AiResaleRuntimeCandidate[]; truncated: boolean }>;
+  findCandidate(input: {
+    workspaceId: string;
+    groupId: string;
+    actorUserId: string;
+    programEnrollmentId: string;
+    now: Date;
+  }): Promise<AiResaleRuntimeCandidate | null>;
   persistDecision(input: {
     candidate: AiResaleRuntimeCandidate;
     decision: NextActionDecision;
@@ -246,6 +253,50 @@ export function renderAiResaleFallback(
     target: decision.target,
     renderer: 'FIXED_FALLBACK',
   };
+}
+
+export function parseAiResaleActionDisplaySnapshot(
+  value: unknown,
+): AiResaleActionDisplaySnapshot | null {
+  if (!object(value)) return null;
+  const actionKey = value['actionKey'];
+  const mode = value['mode'];
+  const steps = value['steps'];
+  const target = value['target'];
+  if (
+    value['schemaVersion'] !== 1 ||
+    ![
+      'ITEM_FIND',
+      'PHOTO',
+      'LIST',
+      'WAIT',
+      'CHECK',
+      'IMPROVE',
+      'SHIPPING',
+      'NEXT_ITEM',
+      'RECOVERY',
+    ].includes(String(actionKey)) ||
+    !['WORK', 'WAIT'].includes(String(mode)) ||
+    typeof value['reasonCode'] !== 'string' ||
+    typeof value['title'] !== 'string' ||
+    typeof value['reason'] !== 'string' ||
+    !Array.isArray(steps) ||
+    !steps.every((step) => typeof step === 'string') ||
+    !(
+      value['estimatedMinutes'] === null ||
+      (typeof value['estimatedMinutes'] === 'number' && value['estimatedMinutes'] >= 0)
+    ) ||
+    value['renderer'] !== 'FIXED_FALLBACK' ||
+    !(
+      target === null ||
+      (object(target) &&
+        target['resourceType'] === 'RESALE_ITEM' &&
+        typeof target['resourceId'] === 'string')
+    )
+  ) {
+    return null;
+  }
+  return value as unknown as AiResaleActionDisplaySnapshot;
 }
 
 export function isDaySevenClassificationDue(candidate: AiResaleRuntimeCandidate) {
