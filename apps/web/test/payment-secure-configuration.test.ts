@@ -57,15 +57,13 @@ describe('OEM payment secure configuration', () => {
   });
 
   it('creates Checkout with a server-defined amount and an idempotency key', async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValue(
-        Response.json({
-          id: 'cs_test_oem123',
-          url: 'https://checkout.stripe.com/c/pay',
-          expires_at: 10,
-        }),
-      );
+    const request = vi.fn().mockResolvedValue(
+      Response.json({
+        id: 'cs_test_oem123',
+        url: 'https://checkout.stripe.com/c/pay',
+        expires_at: 10,
+      }),
+    );
     vi.stubGlobal('fetch', request);
     await expect(
       new StripeCheckoutAdapter().create({
