@@ -27,4 +27,13 @@ describe('organization payment settings page', () => {
     expect(source).toContain('checkout.session.completed');
     expect(source).toContain('カード番号など購入者の決済情報は、この画面には入力しません');
   });
+
+  it('scopes purchase and webhook operations to the selected organization', () => {
+    expect(source).toContain('programPurchase.findMany');
+    expect(source).toContain('paymentWebhookEvent.findMany');
+    expect(source).toContain('where: { workspaceId: workspace.id }');
+    expect(source).toContain("where: { workspaceId: workspace.id, status: 'FAILED' }");
+    expect(source).toContain('最近の購入');
+    expect(source).toContain('要確認の決済通知');
+  });
 });
