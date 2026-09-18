@@ -27,9 +27,12 @@ describe('AI resale DAY7 offer web boundary', () => {
     expect(participantCard).toContain("type: 'SELECT'");
   });
 
-  it('keeps external payment separate from paid access activation', () => {
-    expect(participantCard).toContain('申込み希望を受け付けました');
-    expect(participantCard).toContain('運営者が入金を確認しています');
+  it('starts organization checkout while retaining the manual confirmation fallback', () => {
+    expect(participantCard).toContain('/checkout`');
+    expect(participantCard).toContain('決済完了後に90日プログラムが自動で開始されます');
+    expect(participantCard).toContain('運営者指定の支払いページを開く');
+    expect(participantHttp).toContain("status: 'ACTIVE'");
+    expect(participantHttp).toContain('encryptedWebhookSecret: { not: null }');
     expect(adminCard).toContain('外部決済の確認番号');
     expect(adminCard).toContain('入金確認済みとして90日利用を開始する');
     expect(adminHttp).toContain('externalPaymentConfirmation');

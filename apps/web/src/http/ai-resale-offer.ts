@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
+import { currentPaymentEnvironment } from '../payments/secure-configuration';
 
 const uuid = z.string().uuid();
 const actionSchema = z.discriminatedUnion('type', [
@@ -111,10 +112,28 @@ export async function submitAiResaleOfferActionResponse(
     };
     await offers.act({ ...scope, action, occurredAt: new Date() });
     const state = await offers.current({ ...scope, now: new Date() });
+    const paymentConfiguration =
+      action.type === 'SELECT'
+        ? await (
+            await import('@bunshin/database')
+          ).prisma.organizationPaymentConfiguration.findFirst({
+            where: {
+              workspaceId: service.workspaceId,
+              environment: currentPaymentEnvironment(),
+              provider: 'STRIPE',
+              status: 'ACTIVE',
+              encryptedWebhookSecret: { not: null },
+            },
+            select: { id: true },
+          })
+        : null;
     return response(
       {
         state,
-        redirectUrl: action.type === 'SELECT' ? (state.offer?.terms.applicationUrl ?? null) : null,
+        redirectUrl:
+          action.type === 'SELECT' && !paymentConfiguration
+            ? (state.offer?.terms.applicationUrl ?? null)
+            : null,
       },
       requestId,
     );

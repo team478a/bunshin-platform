@@ -1,0 +1,28 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const schema = readFileSync(new URL('../prisma/schema.prisma', import.meta.url), 'utf8');
+const migration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260918213000_add_program_purchases/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+
+describe('program purchase persistence', () => {
+  it('scopes purchases to an organization and service with provider idempotency', () => {
+    expect(schema).toContain('model ProgramPurchase');
+    expect(schema).toContain('@@unique([workspaceId, groupId, idempotencyKey])');
+    expect(schema).toContain('providerCheckoutSessionId String?');
+    expect(migration).toContain('program_purchases_workspace_id_group_id_idempotency_key_key');
+    expect(migration).toContain('program_purchases_payment_configuration_fkey');
+  });
+
+  it('deduplicates webhook events without retaining the provider payload', () => {
+    expect(schema).toContain('model PaymentWebhookEvent');
+    expect(schema).toContain('@@unique([paymentConfigurationId, providerEventId])');
+    expect(schema).toContain('payloadDigest');
+    expect(schema).not.toContain('rawPayload');
+  });
+});

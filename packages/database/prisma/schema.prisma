@@ -96,6 +96,23 @@ enum OrganizationPaymentConfigurationStatus {
   ERROR
 }
 
+enum ProgramPurchaseStatus {
+  CREATED
+  CHECKOUT_OPEN
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentWebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
 enum MembershipStatus {
   ACTIVE
   SUSPENDED
@@ -1983,6 +2000,7 @@ model User {
   commercialBillingAuditsPerformed CommercialBillingAudit[]            @relation("CommercialBillingAuditActor")
   paymentConfigurationsUpdated     OrganizationPaymentConfiguration[]   @relation("OrganizationPaymentConfigurationUpdater")
   paymentConfigurationAudits       OrganizationPaymentConfigurationAudit[] @relation("OrganizationPaymentConfigurationAuditActor")
+  programPurchases                 ProgramPurchase[]                     @relation("ProgramPurchaseBuyer")
 
   @@index([status])
   @@map("users")
@@ -2197,6 +2215,8 @@ model Workspace {
   commercialBillingAudits        CommercialBillingAudit[]
   paymentConfigurations          OrganizationPaymentConfiguration[]
   paymentConfigurationAudits     OrganizationPaymentConfigurationAudit[]
+  programPurchases               ProgramPurchase[]
+  paymentWebhookEvents           PaymentWebhookEvent[]
 
   @@index([status])
   @@map("workspaces")
@@ -3006,11 +3026,68 @@ model OrganizationPaymentConfiguration {
   workspace              Workspace                               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   updatedBy              User                                    @relation("OrganizationPaymentConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   audits                 OrganizationPaymentConfigurationAudit[]
+  purchases              ProgramPurchase[]
+  webhookEvents          PaymentWebhookEvent[]
 
   @@unique([workspaceId, environment, provider])
   @@unique([workspaceId, id])
   @@index([environment, status])
   @@map("organization_payment_configurations")
+}
+
+/// エンドユーザーの有料Program購入。金額・所属・OfferingはCheckout作成時にサーバー側で確定する。
+model ProgramPurchase {
+  id                        String                            @id @default(uuid()) @db.Uuid
+  workspaceId               String                            @map("workspace_id") @db.Uuid
+  groupId                   String                            @map("group_id") @db.Uuid
+  buyerUserId               String                            @map("buyer_user_id") @db.Uuid
+  groupMembershipId         String                            @map("group_membership_id") @db.Uuid
+  sourceEnrollmentId        String                            @map("source_enrollment_id") @db.Uuid
+  programOfferingId         String                            @map("program_offering_id") @db.Uuid
+  paymentConfigurationId    String                            @map("payment_configuration_id") @db.Uuid
+  provider                  PaymentProvider                   @default(STRIPE)
+  status                    ProgramPurchaseStatus             @default(CREATED)
+  amountYen                 Int                               @map("amount_yen")
+  currency                  String                            @default("JPY") @db.VarChar(3)
+  idempotencyKey            String                            @map("idempotency_key") @db.VarChar(200)
+  providerCheckoutSessionId String?                           @unique @map("provider_checkout_session_id") @db.VarChar(200)
+  providerPaymentIntentId   String?                           @unique @map("provider_payment_intent_id") @db.VarChar(200)
+  paidEnrollmentId          String?                           @unique @map("paid_enrollment_id") @db.Uuid
+  checkoutExpiresAt         DateTime?                         @map("checkout_expires_at") @db.Timestamptz(6)
+  paidAt                    DateTime?                         @map("paid_at") @db.Timestamptz(6)
+  metadata                  Json
+  createdAt                 DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                 Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  buyer                     User                              @relation("ProgramPurchaseBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  paymentConfiguration      OrganizationPaymentConfiguration @relation(fields: [workspaceId, paymentConfigurationId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, groupId, idempotencyKey])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, groupId, buyerUserId, status])
+  @@index([paymentConfigurationId, status, createdAt])
+  @@map("program_purchases")
+}
+
+/// Stripe webhookの重複処理防止台帳。カード情報やWebhook本文は保存しない。
+model PaymentWebhookEvent {
+  id                     String                            @id @default(uuid()) @db.Uuid
+  workspaceId            String                            @map("workspace_id") @db.Uuid
+  paymentConfigurationId String                            @map("payment_configuration_id") @db.Uuid
+  provider               PaymentProvider                   @default(STRIPE)
+  providerEventId        String                            @map("provider_event_id") @db.VarChar(200)
+  eventType              String                            @map("event_type") @db.VarChar(120)
+  status                 PaymentWebhookEventStatus         @default(RECEIVED)
+  payloadDigest          String                            @map("payload_digest") @db.VarChar(64)
+  errorCategory          String?                           @map("error_category") @db.VarChar(80)
+  receivedAt             DateTime                          @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt            DateTime?                         @map("processed_at") @db.Timestamptz(6)
+  workspace              Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  paymentConfiguration   OrganizationPaymentConfiguration @relation(fields: [workspaceId, paymentConfigurationId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([paymentConfigurationId, providerEventId])
+  @@index([workspaceId, status, receivedAt])
+  @@map("payment_webhook_events")
 }
 
 /// 決済接続の変更履歴。秘密値そのものは監査データへ含めない。
