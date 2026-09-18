@@ -99,6 +99,11 @@ export function buildWeeklyReportLineMessage(input: {
   reportUrl: string;
   pointExpiry?: { amount: number; dateLabel: string } | null;
   pointRecoveryNotice?: string | null;
+  snsImprovement?: {
+    title: string;
+    guidance: string;
+    bestTopic: string | null;
+  } | null;
 }) {
   const pointExpiry = input.pointExpiry
     ? `\n\nポイントのお知らせ\n今後30日以内に${input.pointExpiry.amount} WPが期限を迎えます。最も近い期限は${input.pointExpiry.dateLabel}です。`
@@ -106,5 +111,8 @@ export function buildWeeklyReportLineMessage(input: {
   const pointRecovery = input.pointRecoveryNotice
     ? `\n\nポイント訂正のお知らせ\n${input.pointRecoveryNotice}`
     : '';
-  return `${input.serviceName}の1週間のふり返りです。\n\n${input.headline}${pointExpiry}${pointRecovery}\n\n次にやること\n${input.nextStep}\n\n今週できたことを見る\n${input.reportUrl}`;
+  const snsImprovement = input.snsImprovement
+    ? `\n\nSNS改善メモ\n${input.snsImprovement.title}${input.snsImprovement.bestTopic ? `\n反応を比べる基準：${input.snsImprovement.bestTopic}` : ''}\n${input.snsImprovement.guidance}`
+    : '';
+  return `${input.serviceName}の1週間のふり返りです。\n\n${input.headline}${snsImprovement}${pointExpiry}${pointRecovery}\n\n次にやること\n${input.nextStep}\n\n今週できたことを見る\n${input.reportUrl}`;
 }
