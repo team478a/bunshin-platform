@@ -183,6 +183,12 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           errorCode: 'AI_RESALE_RUNTIME_PROCESSING_FAILED',
         });
         return {
+          expiration: {
+            scanned: 0,
+            expired: 0,
+            failures: 1,
+            truncated: false,
+          },
           enrollment: {
             scanned: 0,
             enrolled: 0,

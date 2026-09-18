@@ -63,6 +63,8 @@ export const RESALE_DOMAIN_EVENTS = [
   'STANDARD_OFFER_SHOWN',
   'STANDARD_OFFER_DECLINED',
   'MONITOR_OFFER_SHOWN',
+  'STANDARD_OFFER_SELECTED',
+  'MONITOR_OFFER_SELECTED',
   'PAID_ENROLLED',
 ] as const;
 export type ResaleDomainEvent = (typeof RESALE_DOMAIN_EVENTS)[number];
@@ -313,3 +315,4 @@ export * from './persistence';
 export * from './runtime';
 export * from './participant';
 export * from './line-action';
+export * from './offer';

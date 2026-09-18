@@ -2446,3 +2446,10 @@
 - Link: Service slugとEnrollment IDから本人用Action URLを組み立て、未ログイン時は既存の安全な`returnTo`で同じ画面へ戻す。
 - Message: WORK、WAIT、RECOVERYを区別し、Action判断はRuleの結果を変更せず、固定文面へ変換するだけにする。
 - Scope: この変更では通知設定・配信・直接導線までとし、DAY7 Offerと決済は次の作業単位に分ける。
+
+## 2026-09-18: AI物販V1のDAY7 Offerと有料利用権を分離する
+
+- Offer: 無料Enrollmentの分類EventとProgress Snapshotを正本にし、標準・モニターの料金と申込み先を`ProgramOffering.termsSnapshot`から取得する。
+- Transition: 価格理由の辞退時だけモニターを表示し、参加者の申込み操作はEvent記録に留める。
+- Entitlement: pilotでは外部入金を管理者が確認して確認番号を入力した時だけ`PAID_90D` Enrollmentを開始し、90暦日後に共通Runtimeで失効させる。
+- Boundary: 実決済を装うPurchase／Paymentは作らず、Webhookを含む決済基盤は別工程とする。

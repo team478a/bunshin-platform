@@ -44,4 +44,13 @@ describe('AI resale runtime orchestration boundary', () => {
     expect(runtime).toContain("currentAssignment?.actionMode === 'WAIT'");
     expect(runtime).toContain('waitBaseline > enrollment.startsAt');
   });
+
+  it('expires paid access at its 90-day end before selecting due actions', () => {
+    const expiration = runtime.slice(runtime.indexOf('async expireEndedPaidParticipants'));
+    expect(expiration).toContain("settings.policyKey === 'PAID_90D'");
+    expect(expiration).toContain("data: { status: 'EXPIRED' }");
+    expect(expiration).toContain("stateKey: 'COMPLETED'");
+    expect(expiration).toContain('currentAssignmentId: null');
+    expect(expiration).toContain("action: 'EXPIRED'");
+  });
 });
