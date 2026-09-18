@@ -29,6 +29,7 @@ import { dailyMissionDto, missionContentVariantDto } from './daily-missions';
 import { missionActivityDto, missionDecisionDto } from './mission-engagement';
 import { missionFeedbackDto, postRecordDto } from './mission-outcome';
 import { dailyMissionGenerationError } from './daily-mission-generation-error';
+import { recordCommercialUsageSafely } from '../services/commercial-usage';
 
 const uuidSchema = z.string().uuid();
 const generateSchema = z
@@ -190,19 +191,28 @@ export function generateServiceDailyMissionResponse(
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
       const { createDailyMissionGenerationService } =
         await import('../services/daily-mission-generation');
-      return dailyMissionDto(
-        await createDailyMissionGenerationService().execute({
-          ...(await scope(serviceSlug, bunshinId)),
-          missionDate: parsed.data.missionDate,
-          timezone: parsed.data.timezone,
-          socialProfileId: parsed.data.socialProfileId,
-          generationIdempotencyKey: parsed.data.idempotencyKey,
-          usageIdempotencyPrefix: requestId,
-          existingPolicy: 'CONFLICT',
-          serviceSafeMode: true,
-          allowServiceOwnerMemories: true,
-        }),
-      );
+      const value = await scope(serviceSlug, bunshinId);
+      const mission = await createDailyMissionGenerationService().execute({
+        ...value,
+        missionDate: parsed.data.missionDate,
+        timezone: parsed.data.timezone,
+        socialProfileId: parsed.data.socialProfileId,
+        generationIdempotencyKey: parsed.data.idempotencyKey,
+        usageIdempotencyPrefix: requestId,
+        existingPolicy: 'CONFLICT',
+        serviceSafeMode: true,
+        allowServiceOwnerMemories: true,
+      });
+      await recordCommercialUsageSafely({
+        workspaceId: value.workspaceId,
+        groupId: value.groupId,
+        userId: value.actorUserId,
+        eventType: 'POST_GENERATE',
+        source: 'service_daily_mission',
+        idempotencyKey: `POST_GENERATE:${parsed.data.idempotencyKey}`,
+        metadata: { dailyMissionId: mission.id },
+      });
+      return dailyMissionDto(mission);
     },
     201,
     requestId,
@@ -242,18 +252,27 @@ export function generateServiceMissionContentVariantResponse(
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
       const { generatePointFundedMissionContentVariant } =
         await import('../services/point-funded-mission-content-variant');
-      return missionContentVariantDto(
-        await generatePointFundedMissionContentVariant({
-          ...(await scope(serviceSlug, bunshinId)),
-          dailyMissionId: uuidSchema.parse(dailyMissionId),
-          generationIdempotencyKey: parsed.data.idempotencyKey,
-          usageIdempotencyPrefix: requestId,
-          acceptedPointCost: parsed.data.acceptedPointCost,
-          serviceSafeMode: true,
-          allowServiceOwnerMemories: true,
-          ...(parsed.data.instruction ? { variantInstructions: [parsed.data.instruction] } : {}),
-        }),
-      );
+      const value = await scope(serviceSlug, bunshinId);
+      const variant = await generatePointFundedMissionContentVariant({
+        ...value,
+        dailyMissionId: uuidSchema.parse(dailyMissionId),
+        generationIdempotencyKey: parsed.data.idempotencyKey,
+        usageIdempotencyPrefix: requestId,
+        acceptedPointCost: parsed.data.acceptedPointCost,
+        serviceSafeMode: true,
+        allowServiceOwnerMemories: true,
+        ...(parsed.data.instruction ? { variantInstructions: [parsed.data.instruction] } : {}),
+      });
+      await recordCommercialUsageSafely({
+        workspaceId: value.workspaceId,
+        groupId: value.groupId,
+        userId: value.actorUserId,
+        eventType: 'POST_REGENERATE',
+        source: 'service_mission_variant',
+        idempotencyKey: `POST_REGENERATE:${parsed.data.idempotencyKey}`,
+        metadata: { dailyMissionId, variantId: variant.id },
+      });
+      return missionContentVariantDto(variant);
     },
     201,
     requestId,
@@ -273,17 +292,26 @@ export function selectServiceMissionContentVariantResponse(
     const parsed = variantSelectionSchema.safeParse(await body(request));
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
     const db = await import('@bunshin/database');
-    return missionContentVariantDto(
-      await new SelectMissionContentVariant(new db.PrismaMissionContentVariantRepository()).execute(
-        {
-          ...(await scope(serviceSlug, bunshinId)),
-          dailyMissionId: uuidSchema.parse(dailyMissionId),
-          variantId: uuidSchema.parse(variantId),
-          idempotencyKey: parsed.data.idempotencyKey,
-          selectedAt: new Date(),
-        },
-      ),
-    );
+    const value = await scope(serviceSlug, bunshinId);
+    const variant = await new SelectMissionContentVariant(
+      new db.PrismaMissionContentVariantRepository(),
+    ).execute({
+      ...value,
+      dailyMissionId: uuidSchema.parse(dailyMissionId),
+      variantId: uuidSchema.parse(variantId),
+      idempotencyKey: parsed.data.idempotencyKey,
+      selectedAt: new Date(),
+    });
+    await recordCommercialUsageSafely({
+      workspaceId: value.workspaceId,
+      groupId: value.groupId,
+      userId: value.actorUserId,
+      eventType: 'CONTENT_APPROVE',
+      source: 'service_mission_variant',
+      idempotencyKey: `CONTENT_APPROVE:${parsed.data.idempotencyKey}`,
+      metadata: { dailyMissionId, variantId },
+    });
+    return missionContentVariantDto(variant);
   });
 }
 
@@ -316,8 +344,9 @@ export function decideServiceDailyMissionResponse(
     const parsed = decisionSchema.safeParse(await body(request));
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
     const db = await import('@bunshin/database');
+    const value = await scope(serviceSlug, bunshinId);
     const common = {
-      ...(await scope(serviceSlug, bunshinId)),
+      ...value,
       dailyMissionId: uuidSchema.parse(dailyMissionId),
       idempotencyKey: parsed.data.idempotencyKey,
     };
@@ -335,6 +364,17 @@ export function decideServiceDailyMissionResponse(
             rejectionDetail: parsed.data.rejectionDetail ?? null,
           },
     );
+    if (parsed.data.decision === 'ACCEPTED') {
+      await recordCommercialUsageSafely({
+        workspaceId: value.workspaceId,
+        groupId: value.groupId,
+        userId: value.actorUserId,
+        eventType: 'CONTENT_APPROVE',
+        source: 'service_mission_decision',
+        idempotencyKey: `CONTENT_APPROVE:${parsed.data.idempotencyKey}`,
+        metadata: { dailyMissionId },
+      });
+    }
     return {
       decision: missionDecisionDto(result.decision),
       activity: missionActivityDto(result.activity),
@@ -353,21 +393,32 @@ export function recordServiceMissionActivityResponse(
     const parsed = activitySchema.safeParse(await body(request));
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
     const db = await import('@bunshin/database');
-    return missionActivityDto(
-      await new RecordMissionActivity(
-        new db.PrismaDailyMissionRepository(),
-        new db.PrismaBunshinCapabilityAssignmentRepository(),
-        new db.PrismaMissionEngagementRepository(),
-      ).execute({
-        ...(await scope(serviceSlug, bunshinId)),
-        dailyMissionId: uuidSchema.parse(dailyMissionId),
-        type: parsed.data.type,
-        idempotencyKey: parsed.data.idempotencyKey,
-        ...(parsed.data.type === 'COPIED_SLIDE' && parsed.data.metadata
-          ? { metadata: parsed.data.metadata }
-          : {}),
-      }),
-    );
+    const value = await scope(serviceSlug, bunshinId);
+    const activity = await new RecordMissionActivity(
+      new db.PrismaDailyMissionRepository(),
+      new db.PrismaBunshinCapabilityAssignmentRepository(),
+      new db.PrismaMissionEngagementRepository(),
+    ).execute({
+      ...value,
+      dailyMissionId: uuidSchema.parse(dailyMissionId),
+      type: parsed.data.type,
+      idempotencyKey: parsed.data.idempotencyKey,
+      ...(parsed.data.type === 'COPIED_SLIDE' && parsed.data.metadata
+        ? { metadata: parsed.data.metadata }
+        : {}),
+    });
+    if (parsed.data.type === 'VIEWED') {
+      await recordCommercialUsageSafely({
+        workspaceId: value.workspaceId,
+        groupId: value.groupId,
+        userId: value.actorUserId,
+        eventType: 'DAILY_MISSION_VIEW',
+        source: 'service_mission_activity',
+        idempotencyKey: `DAILY_MISSION_VIEW:${parsed.data.idempotencyKey}`,
+        metadata: { dailyMissionId },
+      });
+    }
+    return missionActivityDto(activity);
   });
 }
 

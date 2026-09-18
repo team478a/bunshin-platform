@@ -7,6 +7,13 @@ export { addProgramCalendarDays, PrismaAiResaleRuntimeRepository } from './resal
 export { PrismaAiResaleParticipantRepository } from './resale-participant';
 export { PrismaAiResaleOfferRepository } from './resale-offer';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
+export { PrismaCommercialUsageService } from './commercial-usage';
+export type {
+  CommercialUsageDashboard,
+  CommercialUsageSummary,
+  RecordCommercialUsageInput,
+  RecordCommercialUsageResult,
+} from './commercial-usage';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
 import { hasActiveVideoProjectEntitlement } from './video-project-entitlement';

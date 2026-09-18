@@ -349,6 +349,9 @@ export default async function OrganizationManagePage({
         <p className="eyebrow">運営団体の管理</p>
         <h1>{organization.name}</h1>
         <p>運営団体の基本情報、運営者、この団体に所属するプロジェクトを管理します。</p>
+        <Link href={`/organizations/${organization.id}/usage`}>
+          今月の利用人数・料金を確認する →
+        </Link>
       </header>
       <section className="operations-overview" aria-label="団体の設定状況">
         <div>

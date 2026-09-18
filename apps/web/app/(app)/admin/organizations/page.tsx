@@ -156,6 +156,12 @@ export default async function OrganizationsAdminPage({
                   >
                     契約・利用上限
                   </Link>
+                  <Link
+                    className="button button--secondary"
+                    href={`/admin/organizations/${organization.id}/commercial`}
+                  >
+                    利用人数・料金
+                  </Link>
                   <Link className="button" href={`/admin/groups?workspaceId=${organization.id}`}>
                     この団体にプロジェクトを作る
                   </Link>

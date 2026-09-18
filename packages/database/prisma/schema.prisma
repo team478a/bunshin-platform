@@ -65,6 +65,11 @@ enum WorkspaceInvitationStatus {
   REVOKED
 }
 
+enum TenantMonthlyUsageStatus {
+  OPEN
+  FINALIZED
+}
+
 enum MembershipStatus {
   ACTIVE
   SUSPENDED
@@ -1946,6 +1951,7 @@ model User {
   fortuneKnowledgeVersionsApproved  FortuneKnowledgeVersion[]           @relation("FortuneKnowledgeApprover")
   serviceNotificationPreferences    ServiceNotificationPreference[]
   serviceMembershipEvents           ServiceMembershipEvent[]
+  serviceUsageEvents                ServiceUsageEvent[]                  @relation("ServiceUsageEventUser")
 
   @@index([status])
   @@map("users")
@@ -2153,6 +2159,8 @@ model Workspace {
   campaignPostingApprovalPolicies CampaignPostingApprovalPolicy[]
   campaignPostingApprovalRequests CampaignPostingApprovalRequest[]
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
+  serviceUsageEvents              ServiceUsageEvent[]
+  tenantMonthlyUsage             TenantMonthlyUsage[]
 
   @@index([status])
   @@map("workspaces")
@@ -2388,6 +2396,7 @@ model Group {
   fortuneServiceSetting           FortuneServiceSetting?
   serviceNotificationPreferences  ServiceNotificationPreference[]
   serviceMembershipEvents         ServiceMembershipEvent[]
+  serviceUsageEvents              ServiceUsageEvent[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, id])
@@ -2855,6 +2864,7 @@ model GroupMembership {
   fortuneParticipation         FortuneParticipant?
   serviceNotificationPreferences ServiceNotificationPreference[]
   serviceMembershipEvents         ServiceMembershipEvent[]
+  serviceUsageEvents              ServiceUsageEvent[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -2863,6 +2873,54 @@ model GroupMembership {
   @@index([groupId, status])
   @@index([groupId, serviceRole, status])
   @@map("group_memberships")
+}
+
+/// OEM請求対象になる、参加者本人による有効なサービス操作の共通台帳。
+model ServiceUsageEvent {
+  id                String          @id @default(uuid()) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  groupId           String          @map("group_id") @db.Uuid
+  groupMembershipId String          @map("group_membership_id") @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  eventType         String          @map("event_type") @db.VarChar(80)
+  source            String          @db.VarChar(80)
+  idempotencyKey    String          @map("idempotency_key") @db.VarChar(240)
+  metadata          Json            @default("{}")
+  occurredAt        DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group             Group           @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  groupMembership   GroupMembership @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  user              User            @relation("ServiceUsageEventUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, occurredAt, userId])
+  @@index([workspaceId, groupId, occurredAt])
+  @@index([groupMembershipId, occurredAt])
+  @@map("service_usage_events")
+}
+
+/// 月末後に確定し、請求根拠として変更しないWorkspace単位のMAUスナップショット。
+model TenantMonthlyUsage {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  workspaceId        String                   @map("workspace_id") @db.Uuid
+  periodStart        DateTime                 @map("period_start") @db.Date
+  periodEnd          DateTime                 @map("period_end") @db.Date
+  timeZone           String                   @default("Asia/Tokyo") @map("time_zone") @db.VarChar(80)
+  mau                Int
+  pricingTierKey     String                   @map("pricing_tier_key") @db.VarChar(40)
+  calculatedPriceYen Int?                     @map("calculated_price_yen")
+  pricingVersion     String                   @map("pricing_version") @db.VarChar(80)
+  status             TenantMonthlyUsageStatus @default(OPEN)
+  calculatedAt       DateTime                 @default(now()) @map("calculated_at") @db.Timestamptz(6)
+  finalizedAt        DateTime?                @map("finalized_at") @db.Timestamptz(6)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace          Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, periodStart])
+  @@index([periodStart, status])
+  @@index([workspaceId, status, periodStart])
+  @@map("tenant_monthly_usage")
 }
 
 model ServiceNotificationPreference {
