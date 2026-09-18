@@ -13,6 +13,11 @@ import {
   sumBusinessOutcomes,
 } from './business-outcomes';
 import { socialInsightChanges, type SocialInsightMetrics } from './social-insights';
+import {
+  buildPostPerformanceInsight,
+  readPostPerformance,
+  type PostPerformanceView,
+} from './post-performance';
 
 type Window = {
   weekStart: string;
@@ -39,6 +44,11 @@ export type ServiceWeeklyProgressReport = ReturnType<typeof buildWeeklyProgressS
     latest: SocialInsightMetrics & { platform: string; observedOn: string };
     changes: SocialInsightMetrics;
   } | null;
+  postPerformance:
+    | (ReturnType<typeof buildPostPerformanceInsight> & {
+        recent: PostPerformanceView[];
+      })
+    | null;
 };
 
 const uniqueMissionCount = (items: { dailyMissionId: string }[]) =>
@@ -113,6 +123,7 @@ export async function loadServiceWeeklyProgressReports(input: {
     recoveryLinks,
     latestPosts,
     insightSnapshots,
+    performancePosts,
   ] = await Promise.all([
     input.client.dailyMission.findMany({
       where: { workspaceId: input.workspaceId, bunshinId: { in: bunshinIds }, missionDate },
@@ -276,6 +287,27 @@ export async function loadServiceWeeklyProgressReports(input: {
       orderBy: [{ observedOn: 'desc' }, { updatedAt: 'desc' }],
       take: 10_000,
     }),
+    input.client.postRecord.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        bunshinId: { in: bunshinIds },
+        actorUserId: { in: userIds },
+        postedAt: {
+          gte: new Date(input.window.endAt.getTime() - 28 * 24 * 60 * 60 * 1000),
+          lt: input.window.endAt,
+        },
+      },
+      select: {
+        actorUserId: true,
+        bunshinId: true,
+        dailyMissionId: true,
+        postedAt: true,
+        manualMetrics: true,
+        dailyMission: { select: { topic: true } },
+      },
+      orderBy: { postedAt: 'desc' },
+      take: 10_000,
+    }),
   ]);
   const missionOwner = new Map(bunshins.map(({ id, ownerUserId }) => [id, ownerUserId] as const));
   const missionTopic = new Map(missions.map(({ id, topic }) => [id, topic] as const));
@@ -293,6 +325,21 @@ export async function loadServiceWeeklyProgressReports(input: {
       ({ userId, bunshinId }) => userId === participant.userId && ownsBunshin(bunshinId),
     );
     const latestInsight = ownInsights[0] ?? null;
+    const ownPostPerformance = performancePosts.flatMap((post) => {
+      if (post.actorUserId !== participant.userId || !ownsBunshin(post.bunshinId)) return [];
+      const performance = readPostPerformance(post.manualMetrics);
+      return performance
+        ? [
+            {
+              dailyMissionId: post.dailyMissionId,
+              topic: post.dailyMission.topic,
+              postedAt: post.postedAt.toISOString(),
+              ...performance,
+            } satisfies PostPerformanceView,
+          ]
+        : [];
+    });
+    const postPerformanceInsight = buildPostPerformanceInsight(ownPostPerformance);
     const previousInsight = latestInsight
       ? (ownInsights.find(
           ({ id, socialProfileId }) =>
@@ -386,6 +433,9 @@ export async function loadServiceWeeklyProgressReports(input: {
               previousInsight ? insightMetrics(previousInsight) : null,
             ),
           }
+        : null,
+      postPerformance: ownPostPerformance.length
+        ? { ...postPerformanceInsight, recent: ownPostPerformance.slice(0, 5) }
         : null,
       businessProgress: buildParticipantBusinessProgress({
         startedAt: participant.businessProfileStartedAt,

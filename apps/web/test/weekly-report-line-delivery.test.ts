@@ -84,4 +84,22 @@ describe('weekly report LINE delivery', () => {
       'ポイント訂正のお知らせ\nポイントの回収未済分が解消し、ポイント交換を再び利用できるようになりました。',
     );
   });
+
+  it('adds the participant post analysis without exposing another participant data', () => {
+    const message = buildWeeklyReportLineMessage({
+      serviceName: '投稿サポート',
+      headline: '今週は3件、投稿できました',
+      nextStep: '今日あったことを一つ残す',
+      reportUrl: 'https://example.com/report',
+      snsImprovement: {
+        title: '保存・共有された内容を別の切り口で使いましょう',
+        bestTopic: '初めての相談でよくある質問',
+        guidance: '同じテーマを、最初の一言や写真を変えて次の投稿でも試します。',
+      },
+    });
+
+    expect(message).toContain('SNS改善メモ\n保存・共有された内容を別の切り口で使いましょう');
+    expect(message).toContain('反応を比べる基準：初めての相談でよくある質問');
+    expect(message).toContain('同じテーマを、最初の一言や写真を変えて次の投稿でも試します。');
+  });
 });

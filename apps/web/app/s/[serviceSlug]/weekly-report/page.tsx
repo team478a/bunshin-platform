@@ -203,6 +203,48 @@ export default async function ServiceWeeklyReportPage({
           </section>
         ) : null}
 
+        {isBusinessDailyService && report.postPerformance ? (
+          <section className="service-entry__card" aria-labelledby="weekly-post-performance">
+            <p className="eyebrow">投稿ごとの反応</p>
+            <h2 id="weekly-post-performance">次の投稿に生かすポイント</h2>
+            <div className="business-response-insights__next">
+              <strong>{report.postPerformance.title}</strong>
+              {report.postPerformance.bestTopic ? (
+                <p>
+                  反応を比べる基準：<b>{report.postPerformance.bestTopic}</b>
+                </p>
+              ) : null}
+              <p>{report.postPerformance.guidance}</p>
+            </div>
+            <div className="weekly-report__post-performance-list">
+              {report.postPerformance.recent.slice(0, 3).map((item) => (
+                <article key={item.dailyMissionId}>
+                  <strong>{item.topic}</strong>
+                  <span>{item.observedOn.replaceAll('-', '/')} 時点</span>
+                  <dl>
+                    <div>
+                      <dt>いいね</dt>
+                      <dd>{item.likes?.toLocaleString('ja-JP') ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>保存</dt>
+                      <dd>{item.saves?.toLocaleString('ja-JP') ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>シェア</dt>
+                      <dd>{item.shares?.toLocaleString('ja-JP') ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>フォロー</dt>
+                      <dd>{item.follows?.toLocaleString('ja-JP') ?? '—'}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {(report.pointsEarned > 0 ||
           report.pointsUsed > 0 ||
           report.expiringPoints > 0 ||

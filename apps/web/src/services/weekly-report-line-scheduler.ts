@@ -158,6 +158,13 @@ export async function scheduleWeeklyReportLineDeliveries(input: {
                   headline: report.headline,
                   nextStep: report.nextStep,
                   reportUrl,
+                  snsImprovement: report.postPerformance
+                    ? {
+                        title: report.postPerformance.title,
+                        guidance: report.postPerformance.guidance,
+                        bestTopic: report.postPerformance.bestTopic,
+                      }
+                    : null,
                   pointRecoveryNotice: report.pointRecoveryNotice,
                   pointExpiry:
                     report.expiringPoints > 0 && report.nextPointExpiryAt
