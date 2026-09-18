@@ -3049,6 +3049,7 @@ model ProgramPurchase {
   provider                  PaymentProvider                   @default(STRIPE)
   status                    ProgramPurchaseStatus             @default(CREATED)
   amountYen                 Int                               @map("amount_yen")
+  refundedAmountYen         Int                               @default(0) @map("refunded_amount_yen")
   currency                  String                            @default("JPY") @db.VarChar(3)
   idempotencyKey            String                            @map("idempotency_key") @db.VarChar(200)
   providerCheckoutSessionId String?                           @unique @map("provider_checkout_session_id") @db.VarChar(200)

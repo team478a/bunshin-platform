@@ -16,6 +16,13 @@ const lifecycleMigration = readFileSync(
   ),
   'utf8',
 );
+const refundAmountMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260918233000_add_program_purchase_refund_amount/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('program purchase persistence', () => {
   it('scopes purchases to an organization and service with provider idempotency', () => {
@@ -39,5 +46,12 @@ describe('program purchase persistence', () => {
     expect(lifecycleMigration).toContain('program_purchases_lifecycle_timestamps_check');
     expect(lifecycleMigration).toContain('program_purchases_status_checkout_expires_at_idx');
     expect(lifecycleMigration).toContain('program_purchases_paid_enrollment_fkey');
+  });
+
+  it('records cumulative refund amounts within the original purchase total', () => {
+    expect(schema).toContain('refundedAmountYen');
+    expect(refundAmountMigration).toContain('refunded_amount_yen');
+    expect(refundAmountMigration).toContain('program_purchases_refunded_amount_yen_check');
+    expect(refundAmountMigration).toContain('"refunded_amount_yen" <= "amount_yen"');
   });
 });

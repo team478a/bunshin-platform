@@ -14,6 +14,10 @@ export function yen(value: number): string {
   return `${value.toLocaleString('ja-JP')}円`;
 }
 
+export function netPaidAmount(amountYen: number, refundedAmountYen: number): number {
+  return Math.max(0, amountYen - refundedAmountYen);
+}
+
 export function paymentDate(value: Date | null): string {
   return (
     value?.toLocaleString('ja-JP', {

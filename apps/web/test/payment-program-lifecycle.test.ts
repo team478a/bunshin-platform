@@ -96,6 +96,7 @@ describe('program payment lifecycle', () => {
           sourceEnrollmentId: 'free-a',
           paidEnrollmentId: 'paid-a',
           amountYen: 29_800,
+          refundedAmountYen: 0,
           currency: 'JPY',
           status: 'PAID',
         }),
@@ -134,7 +135,11 @@ describe('program payment lifecycle', () => {
     });
     expect(purchaseUpdate).toHaveBeenCalledWith({
       where: { id: 'purchase-a' },
-      data: { status: 'REFUNDED', refundedAt: expect.any(Date) },
+      data: {
+        status: 'REFUNDED',
+        refundedAmountYen: 29_800,
+        refundedAt: expect.any(Date),
+      },
     });
     expect(eventCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -178,6 +183,7 @@ describe('program payment lifecycle', () => {
 
   it('keeps access active for a partial refund and records manual review state', async () => {
     const webhookUpdate = vi.fn();
+    const purchaseUpdate = vi.fn();
     const tx = {
       organizationPaymentConfiguration: { findFirst: vi.fn().mockResolvedValue(configuration) },
       paymentWebhookEvent: {
@@ -188,9 +194,11 @@ describe('program payment lifecycle', () => {
         findFirst: vi.fn().mockResolvedValue({
           id: 'purchase-a',
           amountYen: 29_800,
+          refundedAmountYen: 0,
           currency: 'JPY',
           status: 'PAID',
         }),
+        update: purchaseUpdate,
       },
       programEnrollment: { updateMany: vi.fn() },
     };
@@ -214,6 +222,10 @@ describe('program payment lifecycle', () => {
     ).resolves.toBe(false);
 
     expect(tx.programEnrollment.updateMany).not.toHaveBeenCalled();
+    expect(purchaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'purchase-a' },
+      data: { refundedAmountYen: 5_000 },
+    });
     expect(webhookUpdate).toHaveBeenCalledWith({
       where: { id: 'webhook-a' },
       data: {
@@ -221,6 +233,46 @@ describe('program payment lifecycle', () => {
         errorCategory: 'PARTIAL_REFUND',
         processedAt: expect.any(Date),
       },
+    });
+  });
+
+  it('does not reduce the stored refund total when Stripe events arrive out of order', async () => {
+    const purchaseUpdate = vi.fn();
+    const tx = {
+      organizationPaymentConfiguration: { findFirst: vi.fn().mockResolvedValue(configuration) },
+      paymentWebhookEvent: {
+        upsert: vi.fn().mockResolvedValue({ id: 'webhook-a', status: 'RECEIVED' }),
+        update: vi.fn(),
+      },
+      programPurchase: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'purchase-a',
+          amountYen: 29_800,
+          refundedAmountYen: 8_000,
+          currency: 'JPY',
+          status: 'PAID',
+        }),
+        update: purchaseUpdate,
+      },
+    };
+    const client = { $transaction: transactionWith(tx) } as unknown as PrismaClient;
+
+    await refundPaidProgramPurchase(client, {
+      configurationId: configuration.id,
+      providerEventId: 'evt-older-partial',
+      eventType: 'charge.refunded',
+      payloadDigest: 'digest',
+      paymentIntentId: 'pi-a',
+      amount: 29_800,
+      amountRefunded: 5_000,
+      currency: 'JPY',
+      fullyRefunded: false,
+      livemode: false,
+    });
+
+    expect(purchaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'purchase-a' },
+      data: { refundedAmountYen: 8_000 },
     });
   });
 
