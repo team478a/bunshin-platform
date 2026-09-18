@@ -70,6 +70,20 @@ enum TenantMonthlyUsageStatus {
   FINALIZED
 }
 
+enum OrganizationContractStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  ENDED
+}
+
+enum TenantInvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
 enum MembershipStatus {
   ACTIVE
   SUSPENDED
@@ -1952,6 +1966,9 @@ model User {
   serviceNotificationPreferences    ServiceNotificationPreference[]
   serviceMembershipEvents           ServiceMembershipEvent[]
   serviceUsageEvents                ServiceUsageEvent[]                  @relation("ServiceUsageEventUser")
+  organizationCommercialContractsUpdated OrganizationCommercialContract[] @relation("OrganizationCommercialContractUpdater")
+  tenantInvoicesUpdated             TenantInvoice[]                     @relation("TenantInvoiceUpdater")
+  commercialBillingAuditsPerformed CommercialBillingAudit[]            @relation("CommercialBillingAuditActor")
 
   @@index([status])
   @@map("users")
@@ -2161,6 +2178,9 @@ model Workspace {
   campaignPostingApprovalAudits   CampaignPostingApprovalAudit[]
   serviceUsageEvents              ServiceUsageEvent[]
   tenantMonthlyUsage             TenantMonthlyUsage[]
+  organizationCommercialContract OrganizationCommercialContract?
+  tenantInvoices                 TenantInvoice[]
+  commercialBillingAudits        CommercialBillingAudit[]
 
   @@index([status])
   @@map("workspaces")
@@ -2916,11 +2936,92 @@ model TenantMonthlyUsage {
   createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace          Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invoice            TenantInvoice?
 
+  @@unique([workspaceId, id])
   @@unique([workspaceId, periodStart])
   @@index([periodStart, status])
   @@index([workspaceId, status, periodStart])
   @@map("tenant_monthly_usage")
+}
+
+/// OEM運営団体の請求条件。決済Providerに依存せず、契約状態と請求先を一か所で管理する。
+model OrganizationCommercialContract {
+  id                        String                     @id @default(uuid()) @db.Uuid
+  workspaceId               String                     @unique @map("workspace_id") @db.Uuid
+  status                    OrganizationContractStatus @default(DRAFT)
+  billingMode               ServiceBillingMode         @default(MANUAL_INVOICE) @map("billing_mode")
+  billingName               String                     @map("billing_name") @db.VarChar(200)
+  billingEmail              String                     @map("billing_email") @db.VarChar(320)
+  paymentTermsDays          Int                        @default(30) @map("payment_terms_days")
+  externalCustomerReference String?                    @map("external_customer_reference") @db.VarChar(200)
+  startsAt                  DateTime?                   @map("starts_at") @db.Timestamptz(6)
+  endsAt                    DateTime?                   @map("ends_at") @db.Timestamptz(6)
+  updatedByUserId           String                     @map("updated_by_user_id") @db.Uuid
+  createdAt                 DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                 Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  updatedBy                 User                       @relation("OrganizationCommercialContractUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  invoices                  TenantInvoice[]
+
+  @@unique([workspaceId, id])
+  @@index([status, startsAt, endsAt])
+  @@map("organization_commercial_contracts")
+}
+
+/// 確定MAUから作る内部請求台帳。税務上の請求書番号・決済IDは外部参照として保持する。
+model TenantInvoice {
+  id                       String            @id @default(uuid()) @db.Uuid
+  workspaceId              String            @map("workspace_id") @db.Uuid
+  contractId               String            @map("contract_id") @db.Uuid
+  monthlyUsageId           String            @unique @map("monthly_usage_id") @db.Uuid
+  invoiceNumber            String            @unique @map("invoice_number") @db.VarChar(80)
+  status                   TenantInvoiceStatus @default(DRAFT)
+  periodStart              DateTime          @map("period_start") @db.Date
+  periodEnd                DateTime          @map("period_end") @db.Date
+  mau                      Int
+  pricingTierKey           String            @map("pricing_tier_key") @db.VarChar(40)
+  pricingVersion           String            @map("pricing_version") @db.VarChar(80)
+  amountYen                Int               @map("amount_yen")
+  externalInvoiceReference String?           @map("external_invoice_reference") @db.VarChar(200)
+  paymentReference         String?           @map("payment_reference") @db.VarChar(200)
+  notes                    String?           @db.VarChar(1000)
+  issuedAt                 DateTime?         @map("issued_at") @db.Timestamptz(6)
+  dueAt                    DateTime?         @map("due_at") @db.Timestamptz(6)
+  paidAt                   DateTime?         @map("paid_at") @db.Timestamptz(6)
+  voidedAt                 DateTime?         @map("voided_at") @db.Timestamptz(6)
+  updatedByUserId          String            @map("updated_by_user_id") @db.Uuid
+  createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace                Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  contract                 OrganizationCommercialContract @relation(fields: [workspaceId, contractId], references: [workspaceId, id], onDelete: Restrict)
+  monthlyUsage             TenantMonthlyUsage @relation(fields: [workspaceId, monthlyUsageId], references: [workspaceId, id], onDelete: Restrict)
+  updatedBy                User              @relation("TenantInvoiceUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, monthlyUsageId])
+  @@unique([workspaceId, id])
+  @@index([workspaceId, status, periodStart])
+  @@index([status, dueAt])
+  @@map("tenant_invoices")
+}
+
+/// 契約・請求状態の変更履歴。金額や入金状態を誰が変更したかを追跡する。
+model CommercialBillingAudit {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  actorUserId String    @map("actor_user_id") @db.Uuid
+  entityType  String    @map("entity_type") @db.VarChar(40)
+  entityId    String    @map("entity_id") @db.Uuid
+  action      String    @db.VarChar(40)
+  beforeData  Json?     @map("before_data")
+  afterData   Json      @map("after_data")
+  occurredAt  DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  actor       User      @relation("CommercialBillingAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, occurredAt])
+  @@index([entityType, entityId, occurredAt])
+  @@map("commercial_billing_audits")
 }
 
 model ServiceNotificationPreference {

@@ -2485,3 +2485,11 @@
 - Immutability: FINALIZED後の月次値はService層の再確定防止とDB triggerの両方で更新・削除を禁止する。
 - Pricing: 初期版は0〜100人19,800円から1,001〜3,000人198,000円までを共通Policyに置き、3,001人以上は個別見積として自動金額を確定しない。
 - Boundary: SNS固有画面は対象イベントを発生させるだけとし、集計・料金・月次確定を共通Application/Database境界へ置く。
+
+# 2026-09-18: OEM契約・請求は確定MAUと外部決済をつなぐProvider非依存台帳にする
+
+- Context: 運営団体ごとのMAU料金は確定できるが、契約状態、請求先、請求済み・入金済みの管理が存在しなかった。決済Providerと税務上の請求書仕様は未決定。
+- Decision: Workspace単位の`OrganizationCommercialContract`、確定MAUと一対一の`TenantInvoice`、変更履歴`CommercialBillingAudit`を追加する。内部台帳には確定金額と外部参照番号を保存し、税務上の請求書発行と決済は外部Providerへ委ねる。
+- Safety: OEM権限がない団体は契約を有効化できない。請求操作はPlatform SUPER_ADMINだけが行い、団体管理者は自団体の発行済み請求だけを閲覧する。状態遷移とWorkspace条件をServiceで強制する。
+- Automation: 月次MAU確定後、契約中の団体へ下書き請求を冪等に作成する。個別見積は自動請求しない。
+- Consequence: 手動請求で商用運用を開始でき、将来Stripe等を接続してもCoreの契約・利用・請求根拠を置き換えずに済む。

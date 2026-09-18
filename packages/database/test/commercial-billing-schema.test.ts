@@ -1,0 +1,41 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const schema = readFileSync(join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8');
+const migration = readFileSync(
+  join(
+    process.cwd(),
+    'prisma',
+    'migrations',
+    '20260918170000_add_oem_contract_invoicing',
+    'migration.sql',
+  ),
+  'utf8',
+);
+
+describe('OEM contract and invoice schema', () => {
+  it('binds one invoice to one tenant monthly usage snapshot', () => {
+    expect(schema).toContain('model OrganizationCommercialContract');
+    expect(schema).toContain('model TenantInvoice');
+    expect(schema).toContain('monthlyUsageId           String');
+    expect(migration).toContain('CREATE UNIQUE INDEX "tenant_invoices_monthly_usage_id_key"');
+  });
+
+  it('uses tenant-scoped foreign keys and keeps billing mutations auditable', () => {
+    expect(migration).toContain(
+      'FOREIGN KEY ("workspace_id", "contract_id") REFERENCES "organization_commercial_contracts"("workspace_id", "id")',
+    );
+    expect(migration).toContain(
+      'FOREIGN KEY ("workspace_id", "monthly_usage_id") REFERENCES "tenant_monthly_usage"("workspace_id", "id")',
+    );
+    expect(migration).toContain('CREATE TABLE "commercial_billing_audits"');
+    expect(migration).toContain('ALTER TABLE "tenant_invoices" ENABLE ROW LEVEL SECURITY');
+  });
+
+  it('enforces payment terms, non-negative charges, and lifecycle timestamps', () => {
+    expect(migration).toContain('"payment_terms_days" BETWEEN 0 AND 365');
+    expect(migration).toContain('"amount_yen" >= 0');
+    expect(migration).toContain('tenant_invoices_status_timestamps');
+  });
+});

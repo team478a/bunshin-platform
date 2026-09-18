@@ -8,6 +8,11 @@ export { PrismaAiResaleParticipantRepository } from './resale-participant';
 export { PrismaAiResaleOfferRepository } from './resale-offer';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaCommercialUsageService } from './commercial-usage';
+export { PrismaCommercialBillingService } from './commercial-billing';
+export type {
+  SaveOrganizationCommercialContractInput,
+  TransitionTenantInvoiceInput,
+} from './commercial-billing';
 export type {
   CommercialUsageDashboard,
   CommercialUsageSummary,

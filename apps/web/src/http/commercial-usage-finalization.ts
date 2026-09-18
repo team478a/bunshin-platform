@@ -9,8 +9,15 @@ export async function commercialUsageFinalizationResponse(request: Request): Pro
   try {
     authorizeCronRequest(request, getServerEnvironment().CRON_SECRET);
     const db = await import('@bunshin/database');
-    const result = await new db.PrismaCommercialUsageService().finalizeAllPreviousMonths();
-    createLogger().info('commercial usage months finalized', { requestId, ...result });
+    const usage = await new db.PrismaCommercialUsageService().finalizeAllPreviousMonths();
+    const billing = await new db.PrismaCommercialBillingService().prepareAllFinalizedInvoices();
+    const result = { usage, billing };
+    createLogger().info('commercial usage months finalized and invoices prepared', {
+      requestId,
+      ...usage,
+      invoicesPrepared: billing.prepared,
+      customQuotesSkipped: billing.skippedCustomQuote,
+    });
     return Response.json({ data: result, requestId });
   } catch (error) {
     const mapped = toApiError(error, requestId);

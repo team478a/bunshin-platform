@@ -1,0 +1,114 @@
+import type { PrismaClient } from '@prisma/client';
+import { describe, expect, it, vi } from 'vitest';
+import { PrismaCommercialBillingService } from '../src/commercial-billing';
+
+describe('PrismaCommercialBillingService', () => {
+  it('does not activate billing without an OEM entitlement', async () => {
+    const client = {
+      workspace: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'workspace-a',
+          organizationEntitlement: { oemEnabled: false },
+        }),
+      },
+    } as unknown as PrismaClient;
+    await expect(
+      new PrismaCommercialBillingService(client).saveContract({
+        workspaceId: 'workspace-a',
+        actorUserId: 'actor',
+        status: 'ACTIVE',
+        billingMode: 'MANUAL_INVOICE',
+        billingName: '運営会社A',
+        billingEmail: 'billing@example.com',
+        paymentTermsDays: 30,
+      }),
+    ).rejects.toThrow('OEM entitlement is required');
+  });
+
+  it('creates a tenant-scoped draft from one finalized usage snapshot', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'invoice' });
+    const rawClient = {
+      organizationCommercialContract: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'contract',
+          workspaceId: 'workspace-a',
+          updatedByUserId: 'actor',
+        }),
+      },
+      tenantMonthlyUsage: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: '12345678-1234-4000-8000-123456789abc',
+            periodStart: new Date('2026-08-01T00:00:00.000Z'),
+            periodEnd: new Date('2026-09-01T00:00:00.000Z'),
+            mau: 75,
+            pricingTierKey: 'MAU_0_100',
+            pricingVersion: 'oem-mau-jpy-v1',
+            calculatedPriceYen: 19_800,
+          },
+        ]),
+      },
+      tenantInvoice: { create },
+      commercialBillingAudit: { create: vi.fn().mockResolvedValue({ id: 'audit' }) },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaCommercialBillingService(client).prepareWorkspaceInvoices('workspace-a'),
+    ).resolves.toEqual({ prepared: 1, skippedCustomQuote: 0 });
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId: 'workspace-a',
+        contractId: 'contract',
+        amountYen: 19_800,
+      }),
+    });
+  });
+
+  it('always scopes invoice mutations to the requested organization', async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const client = { tenantInvoice: { findFirst } } as unknown as PrismaClient;
+    await expect(
+      new PrismaCommercialBillingService(client).transitionInvoice({
+        workspaceId: 'workspace-a',
+        invoiceId: 'invoice-b',
+        actorUserId: 'actor',
+        action: 'ISSUE',
+      }),
+    ).rejects.toThrow('invoice not found');
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'invoice-b', workspaceId: 'workspace-a' },
+      }),
+    );
+  });
+
+  it('does not create a fixed-price invoice for a custom quote month', async () => {
+    const create = vi.fn();
+    const rawClient = {
+      organizationCommercialContract: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'contract',
+          workspaceId: 'workspace-a',
+          updatedByUserId: 'actor',
+        }),
+      },
+      tenantMonthlyUsage: {
+        findMany: vi.fn().mockResolvedValue([{ calculatedPriceYen: null }]),
+      },
+      tenantInvoice: { create },
+      commercialBillingAudit: { create: vi.fn() },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+    await expect(
+      new PrismaCommercialBillingService(client).prepareWorkspaceInvoices('workspace-a'),
+    ).resolves.toEqual({ prepared: 0, skippedCustomQuote: 1 });
+    expect(create).not.toHaveBeenCalled();
+  });
+});
