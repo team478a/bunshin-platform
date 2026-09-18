@@ -80,7 +80,11 @@ describe('OEM payment secure configuration', () => {
     ).resolves.toMatchObject({ id: 'cs_test_oem123' });
     const options = request.mock.calls[0]![1] as RequestInit;
     expect(options.headers).toMatchObject({ 'idempotency-key': 'purchase-1' });
-    expect(String(options.body)).toContain(
+    expect(options.body).toBeInstanceOf(URLSearchParams);
+    if (!(options.body instanceof URLSearchParams)) {
+      throw new Error('Expected Stripe request body to be URLSearchParams');
+    }
+    expect(options.body.toString()).toContain(
       'line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=29800',
     );
   });
