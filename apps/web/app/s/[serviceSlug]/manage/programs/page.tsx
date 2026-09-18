@@ -199,6 +199,52 @@ export default async function ServiceProgramsPage({
   });
   const standard = offerOptions.find(({ terms }) => terms.offerKey === 'STANDARD') ?? null;
   const monitor = offerOptions.find(({ terms }) => terms.offerKey === 'MONITOR') ?? null;
+  const funnelEventTypes = [
+    'DAY7_CLASSIFIED',
+    'STANDARD_OFFER_SHOWN',
+    'STANDARD_OFFER_DECLINED',
+    'MONITOR_OFFER_SHOWN',
+    'STANDARD_OFFER_SELECTED',
+    'MONITOR_OFFER_SELECTED',
+    'PAID_ENROLLED',
+  ];
+  const [funnelEvents, classificationGroups, lineGroups] = await Promise.all([
+    db.prisma.programActionEvent.groupBy({
+      by: ['eventType'],
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        eventType: { in: funnelEventTypes },
+      },
+      _count: { _all: true },
+    }),
+    db.prisma.programProgressSnapshot.groupBy({
+      by: ['bottleneckKey'],
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        stateKey: 'COMPLETED',
+        ruleVersion: 'AI_RESALE_V1_DAY7_1',
+        bottleneckKey: { in: ['NOT_STARTED', 'PARTIAL', 'LISTED'] },
+      },
+      _count: { _all: true },
+    }),
+    db.prisma.serviceLineBroadcastRecipient.groupBy({
+      by: ['status'],
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        broadcast: { segmentCriteria: { path: ['kind'], equals: 'AI_RESALE_OFFER' } },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+  const eventCount = (eventType: string) =>
+    funnelEvents.find((row) => row.eventType === eventType)?._count._all ?? 0;
+  const classificationCount = (key: string) =>
+    classificationGroups.find((row) => row.bottleneckKey === key)?._count._all ?? 0;
+  const lineCount = (status: string) =>
+    lineGroups.find((row) => row.status === status)?._count._all ?? 0;
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
@@ -240,6 +286,22 @@ export default async function ServiceProgramsPage({
               : null
           }
           pendingApplicants={pendingApplicants}
+          funnel={{
+            daySeven: eventCount('DAY7_CLASSIFIED'),
+            notStarted: classificationCount('NOT_STARTED'),
+            partial: classificationCount('PARTIAL'),
+            listed: classificationCount('LISTED'),
+            lineDelivered: lineCount('SENT'),
+            lineFailed: lineCount('FAILED'),
+            linePending: lineCount('PENDING'),
+            lineSkipped: lineCount('SKIPPED'),
+            standardShown: eventCount('STANDARD_OFFER_SHOWN'),
+            standardDeclined: eventCount('STANDARD_OFFER_DECLINED'),
+            monitorShown: eventCount('MONITOR_OFFER_SHOWN'),
+            standardSelected: eventCount('STANDARD_OFFER_SELECTED'),
+            monitorSelected: eventCount('MONITOR_OFFER_SELECTED'),
+            paidEnrolled: eventCount('PAID_ENROLLED'),
+          }}
         />
       </main>
     </PublicShell>
