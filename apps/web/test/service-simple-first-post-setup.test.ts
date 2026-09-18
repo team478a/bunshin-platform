@@ -32,9 +32,21 @@ describe('simple service first-post setup', () => {
 
   it('keeps detailed controls available without making them the primary path', () => {
     expect(page).toContain('<SimpleFirstPostSetup');
-    expect(page).toContain('<details className="service-advanced-settings">');
-    expect(page).toContain('細かい設定を自分で変える（必要な方だけ）');
+    expect(page).toContain('<MemberHomeDrawer');
+    expect(page).toContain('投稿パートナーの設定を確認・変更する');
+    expect(page).toContain('配信時間、発信テーマ、利用するSNSなどを変更できます。');
     expect(page).toContain('id="today-post"');
+  });
+
+  it('puts today first and explains each optional menu in plain language', () => {
+    expect(page.indexOf('id="today-post"')).toBeLessThan(
+      page.indexOf('id="service-member-tools-title"'),
+    );
+    expect(page).toContain('普段は開かなくても大丈夫です。');
+    expect(page).toContain('SNSのプロフィールを整える');
+    expect(page).toContain('これからの投稿予定を見る');
+    expect(page).toContain('次の投稿に使う情報を残す');
+    expect(page).toContain('投稿後の反応を記録する');
   });
 
   it('explains when today is not a delivery day and shows the next date', () => {

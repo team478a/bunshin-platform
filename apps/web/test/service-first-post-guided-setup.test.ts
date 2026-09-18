@@ -34,7 +34,7 @@ describe('service first-post guided setup', () => {
   });
 
   it('starts automatic preparation while leaving SNS posting to the member', () => {
-    expect(detailPage).toContain('初回設定のあとは、投稿案を自動で準備してLINEでお知らせします。');
+    expect(detailPage).toContain('迷ったときは「今日やること」だけ進めれば大丈夫です。');
     expect(setup).toContain('LINE配信を始める');
     expect(setup).toContain('SNSへの投稿はご自身で行います');
   });
