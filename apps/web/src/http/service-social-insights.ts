@@ -14,12 +14,14 @@ import {
 import { resolvePublicServiceContext } from '../services/public-service';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
 import { SOCIAL_INSIGHT_METRIC_KEYS } from '../services/social-insights';
+import { POST_PERFORMANCE_METRIC_KEYS, writePostPerformance } from '../services/post-performance';
 
 const uuid = z.string().uuid();
 const imageSchema = z
   .object({
     image: z.string().max(4_000_000),
     idempotencyKey: uuid,
+    mode: z.enum(['ACCOUNT', 'POST']).default('ACCOUNT'),
   })
   .strict();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -35,6 +37,21 @@ const saveSchema = z
     impressions: nullableMetric,
     profileViews: nullableMetric,
     interactions: nullableMetric,
+    source: z.enum(['SCREENSHOT', 'MANUAL']),
+  })
+  .strict();
+const savePostPerformanceSchema = z
+  .object({
+    dailyMissionId: uuid,
+    observedOn: date,
+    reach: nullableMetric,
+    impressions: nullableMetric,
+    likes: nullableMetric,
+    comments: nullableMetric,
+    saves: nullableMetric,
+    shares: nullableMetric,
+    profileViews: nullableMetric,
+    follows: nullableMetric,
     source: z.enum(['SCREENSHOT', 'MANUAL']),
   })
   .strict();
@@ -137,7 +154,7 @@ export function extractServiceSocialInsightResponse(
       const result = await new OpenAiSocialInsightExtractor({
         apiKey: runtime.apiKey,
         model: runtime.model,
-      }).extract(image);
+      }).extract({ ...image, mode: parsed.data.mode });
       await recordAiUsageSafely({
         workspaceId: scope.workspaceId,
         bunshinId: scope.bunshinId,
@@ -182,6 +199,54 @@ export function extractServiceSocialInsightResponse(
         );
       throw error;
     }
+  });
+}
+
+export function saveServicePostPerformanceResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = savePostPerformanceSchema.safeParse(await json(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    if (POST_PERFORMANCE_METRIC_KEYS.every((key) => parsed.data[key] === null))
+      throw new ApplicationError('VALIDATION_ERROR', 'at least one metric is required');
+    const scope = await resolveScope(serviceSlug, bunshinId);
+    const mission = await scope.db.prisma.dailyMission.findFirst({
+      where: {
+        id: parsed.data.dailyMissionId,
+        workspaceId: scope.workspaceId,
+        bunshinId: scope.bunshinId,
+        bunshin: { ownerUserId: scope.userId, groupId: scope.groupId },
+      },
+      select: {
+        id: true,
+        topic: true,
+        postRecord: {
+          select: { id: true, actorUserId: true, postedAt: true, manualMetrics: true },
+        },
+      },
+    });
+    const post = mission?.postRecord;
+    if (!mission || !post || post.actorUserId !== scope.userId)
+      throw new ApplicationError('NOT_FOUND', 'posted mission not found');
+    const performance = {
+      observedOn: parsed.data.observedOn,
+      source: parsed.data.source,
+      ...Object.fromEntries(POST_PERFORMANCE_METRIC_KEYS.map((key) => [key, parsed.data[key]])),
+    } as Parameters<typeof writePostPerformance>[1];
+    await scope.db.prisma.postRecord.update({
+      where: { id: post.id },
+      data: { manualMetrics: writePostPerformance(post.manualMetrics, performance) },
+    });
+    return {
+      dailyMissionId: mission.id,
+      topic: mission.topic,
+      postedAt: post.postedAt.toISOString(),
+      ...performance,
+    };
   });
 }
 

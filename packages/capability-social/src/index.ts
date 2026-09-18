@@ -993,6 +993,17 @@ export interface WeeklyPlannerInput {
         other: number;
       };
     }>;
+    postPerformance?: {
+      recordedCount: number;
+      strongTopics: Array<{
+        topic: string;
+        engagementScore: number;
+        saves: number;
+        shares: number;
+        comments: number;
+        follows: number;
+      }>;
+    };
   };
   businessContentSchedule?: Array<{
     scheduledDate: string;
