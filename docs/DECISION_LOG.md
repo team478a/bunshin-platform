@@ -2426,3 +2426,13 @@
 - Idempotency: Enrollmentは既存unique key、DAY7はEnrollment単位のevent idempotency key、Action評価はSnapshot revisionとAssignment sequenceで競合を検出する。
 - Boundary: サービス名、料金、LINE ChannelをPolicyへ埋め込まない。Program固有設定はServiceProgramが所有し、固定fallback文はAI障害時にも現在Actionを表示するためCapability側が所有する。
 - Scope: この段階では自動Enrollment、Runtime Orchestrator、定期評価までとし、利用者向けAction API/UI、結果入力、LINE通知、Offer UIは後続作業とする。
+
+## 2026-09-18: AI物販V1の参加者画面は現在Actionと結果記録に絞る
+
+- UX: 参加中プログラムから「今日やること」を開き、1つのAction、理由、手順、所要時間だけを表示する。
+- Result: `DONE`、`PARTIAL`、`NOT_DONE`を記録し、Action固有の最小情報だけを追加で受け取る。
+- Immediate next: 結果保存後にPolicyを再評価し、画面遷移なしで次のActionまたはWAITを表示する。
+- WAIT: 作業不要を正式な状態として表示し、完了ボタンは出さず、次の確認予定を案内する。
+- Boundary: 操作できるのはServiceの有効な参加者本人だけとし、Workspace、Group、Enrollment、Membership、Userを全て照合する。
+- Consistency: 商品更新、結果Event、Assignment終了、Progress更新を同じSerializable transactionへまとめ、UUIDの冪等キーとrevisionで重複・競合を防ぐ。
+- Scope: LINE通知、DAY7有料Offer、決済はこの変更へ含めず、現在Actionの利用経路が安定した後に接続する。

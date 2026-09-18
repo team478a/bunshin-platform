@@ -58,6 +58,7 @@ function repository(
       truncated: false,
     }),
     listDueCandidates: vi.fn().mockResolvedValue({ candidates: due, truncated: false }),
+    findCandidate: vi.fn().mockResolvedValue(due[0] ?? null),
     persistDecision: vi.fn().mockResolvedValue(result),
     persistDaySevenClassification: vi.fn().mockResolvedValue(result),
   };

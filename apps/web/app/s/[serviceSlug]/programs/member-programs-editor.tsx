@@ -18,6 +18,7 @@ export function MemberProgramsEditor({
     memberMayChoose: boolean;
     preferredMode: string;
     notes: string;
+    actionHref: string | null;
     currentGoal: string | null;
     definitions: { id: string; name: string; metricType: string; unit: string; target: string }[];
   }[];
@@ -101,6 +102,11 @@ export function MemberProgramsEditor({
         <section className="settings-card" key={item.enrollmentId}>
           <h2>{item.name}</h2>
           <p>{item.guidance}</p>
+          {item.actionHref ? (
+            <a className="button button--primary button--full" href={item.actionHref}>
+              今日やることを見る
+            </a>
+          ) : null}
           {item.memberMayChoose ? (
             <form className="form-stack" onSubmit={(event) => preference(event, item.enrollmentId)}>
               <label className="field">

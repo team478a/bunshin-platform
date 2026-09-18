@@ -3548,6 +3548,83 @@ a {
   line-height: 1.75;
 }
 
+.resale-action-page {
+  max-width: 720px;
+}
+
+.resale-action-card {
+  text-align: left;
+}
+
+.resale-action-card h2 {
+  color: #17233d;
+  font-size: clamp(1.55rem, 7vw, 2.3rem);
+  line-height: 1.35;
+}
+
+.resale-action-card--complete {
+  text-align: center;
+}
+
+.resale-action-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.resale-action-card__meta span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--service-primary);
+  background: color-mix(in srgb, var(--service-primary) 9%, white);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.resale-action-card__reason {
+  font-size: 1rem;
+}
+
+.resale-action-card__steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 18px 18px 18px 44px;
+  border-radius: 18px;
+  background: #f6f7fb;
+  color: #26334d;
+  line-height: 1.65;
+}
+
+.resale-action-card__form {
+  display: grid;
+  gap: 16px;
+}
+
+.resale-action-card__secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.resale-action-card__secondary-actions .button {
+  min-height: 54px;
+  padding-inline: 12px;
+  white-space: normal;
+}
+
+.resale-action-card__wait {
+  padding: 20px;
+  border-color: color-mix(in srgb, var(--service-primary) 22%, white);
+  background: color-mix(in srgb, var(--service-primary) 5%, white);
+}
+
+@media (max-width: 520px) {
+  .resale-action-card__secondary-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .service-legal-document__body {
   display: block;
   text-align: left;
