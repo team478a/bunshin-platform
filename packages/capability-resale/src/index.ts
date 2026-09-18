@@ -218,19 +218,6 @@ export function classifyDaySeven(input: {
   return 'NOT_STARTED';
 }
 
-const allowedStatusTransitions: Readonly<Record<ResaleItemStatus, readonly ResaleItemStatus[]>> = {
-  FOUND: ['PHOTOGRAPHED', 'ARCHIVED'],
-  PHOTOGRAPHED: ['LISTED', 'ARCHIVED'],
-  LISTED: ['SOLD', 'ARCHIVED'],
-  SOLD: ['SHIPPED', 'ARCHIVED'],
-  SHIPPED: ['ARCHIVED'],
-  ARCHIVED: [],
-};
-
-export function canTransitionResaleItemStatus(from: ResaleItemStatus, to: ResaleItemStatus) {
-  return allowedStatusTransitions[from].includes(to);
-}
-
 export class AiResaleV1Policy implements NextActionPolicy<AiResaleV1DecisionContext> {
   evaluate(context: AiResaleV1DecisionContext): NextActionDecision {
     if (!Number.isInteger(context.programDay) || context.programDay < 1) {
@@ -321,3 +308,5 @@ export class AiResaleV1Policy implements NextActionPolicy<AiResaleV1DecisionCont
       : work('ITEM_FIND', 'NO_ACTIVE_ITEM', null);
   }
 }
+
+export * from './persistence';

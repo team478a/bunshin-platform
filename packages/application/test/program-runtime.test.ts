@@ -27,12 +27,15 @@ describe('ProgramRuntimeService', () => {
         routeKey: 'STANDARD',
         phaseKey: 'FOUNDATION',
         missionDefinitionKey: 'FOUNDATION_POST_1',
+        actionMode: 'WORK',
+        reasonCode: null,
         variantKey: null,
         targetResourceType: 'DAILY_MISSION',
         targetResourceId: null,
         displaySnapshot: {},
         ruleVersion: 'program-v1',
         presentedAt: new Date(),
+        reevaluateAt: null,
       }),
     ).rejects.toEqual(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
     expect(mocks.createAssignment).not.toHaveBeenCalled();
@@ -97,6 +100,7 @@ describe('ProgramRuntimeService', () => {
       revision: 1,
       ruleVersion: 'program-v1',
       lastActionAt: null,
+      nextEvaluationAt: null,
       calculatedAt: new Date(),
     });
     await service.saveProgress({
@@ -113,6 +117,7 @@ describe('ProgramRuntimeService', () => {
       completedMissionCount: 0,
       ruleVersion: ' program-v1 ',
       lastActionAt: null,
+      nextEvaluationAt: null,
       calculatedAt: new Date(),
     });
     expect(mocks.saveProgress).toHaveBeenCalledWith(
@@ -125,5 +130,33 @@ describe('ProgramRuntimeService', () => {
         ruleVersion: 'program-v1',
       }),
     );
+  });
+
+  it('rejects WAIT without a reason and reevaluation time', async () => {
+    const { repository, mocks } = makeRepository();
+    const service = new ProgramRuntimeService(repository);
+    await expect(
+      service.createAssignment({
+        workspaceId: 'workspace-a',
+        groupId: 'group-a',
+        actorUserId: 'user-a',
+        programEnrollmentId: 'enrollment-a',
+        programTemplateVersionId: 'version-a',
+        sequence: 1,
+        routeKey: 'STANDARD',
+        phaseKey: 'OBSERVATION',
+        missionDefinitionKey: 'WAIT',
+        actionMode: 'WAIT',
+        reasonCode: null,
+        variantKey: null,
+        targetResourceType: null,
+        targetResourceId: null,
+        displaySnapshot: {},
+        ruleVersion: 'program-v1',
+        presentedAt: new Date('2026-09-18T00:00:00.000Z'),
+        reevaluateAt: null,
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+    expect(mocks.createAssignment).not.toHaveBeenCalled();
   });
 });

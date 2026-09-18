@@ -276,6 +276,7 @@ model ProgramEnrollment {
 
   @@unique([groupMembershipId, serviceProgramId])
   @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, id, groupMembershipId])
   @@index([workspaceId, groupId, groupMembershipId, status])
   @@map("program_enrollments")
 }
@@ -290,6 +291,8 @@ model ProgramMissionAssignment {
   routeKey                 String                         @map("route_key") @db.VarChar(80)
   phaseKey                 String                         @map("phase_key") @db.VarChar(80)
   missionDefinitionKey     String                         @map("mission_definition_key") @db.VarChar(80)
+  actionMode               ProgramActionMode              @default(WORK) @map("action_mode")
+  reasonCode               String?                        @map("reason_code") @db.VarChar(80)
   variantKey               String?                        @map("variant_key") @db.VarChar(80)
   targetResourceType       String?                        @map("target_resource_type") @db.VarChar(80)
   targetResourceId         String?                        @map("target_resource_id") @db.Uuid
@@ -297,6 +300,7 @@ model ProgramMissionAssignment {
   displaySnapshot          Json                           @map("display_snapshot")
   ruleVersion              String                         @map("rule_version") @db.VarChar(80)
   presentedAt              DateTime                       @map("presented_at") @db.Timestamptz(3)
+  reevaluateAt             DateTime?                      @map("reevaluate_at") @db.Timestamptz(3)
   startedAt                DateTime?                      @map("started_at") @db.Timestamptz(3)
   completedAt              DateTime?                      @map("completed_at") @db.Timestamptz(3)
   skippedAt                DateTime?                      @map("skipped_at") @db.Timestamptz(3)
@@ -306,6 +310,7 @@ model ProgramMissionAssignment {
   @@unique([programEnrollmentId, sequence])
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, programEnrollmentId, status, presentedAt])
+  @@index([workspaceId, groupId, actionMode, reevaluateAt, status])
   @@index([workspaceId, programTemplateVersionId, phaseKey, missionDefinitionKey])
   @@map("program_mission_assignments")
 }
@@ -348,13 +353,48 @@ model ProgramProgressSnapshot {
   revision                 Int       @default(1)
   ruleVersion              String    @map("rule_version") @db.VarChar(80)
   lastActionAt             DateTime? @map("last_action_at") @db.Timestamptz(3)
+  nextEvaluationAt         DateTime? @map("next_evaluation_at") @db.Timestamptz(3)
   calculatedAt             DateTime  @map("calculated_at") @db.Timestamptz(3)
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([workspaceId, groupId, id])
   @@index([workspaceId, groupId, phaseKey, stateKey])
+  @@index([workspaceId, groupId, nextEvaluationAt])
   @@map("program_progress_snapshots")
+}
+
+model ResaleItem {
+  id                  String              @id @default(uuid()) @db.Uuid
+  workspaceId         String              @map("workspace_id") @db.Uuid
+  groupId             String              @map("group_id") @db.Uuid
+  programEnrollmentId String              @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String              @map("group_membership_id") @db.Uuid
+  ownerUserId         String              @map("owner_user_id") @db.Uuid
+  idempotencyKey      String              @map("idempotency_key") @db.VarChar(200)
+  title               String              @db.VarChar(160)
+  status              ResaleItemStatus    @default(FOUND)
+  reactionState       ResaleReactionState @default(UNKNOWN) @map("reaction_state")
+  foundAt             DateTime            @map("found_at") @db.Timestamptz(3)
+  listedAt            DateTime?           @map("listed_at") @db.Timestamptz(3)
+  reactionObservedAt  DateTime?           @map("reaction_observed_at") @db.Timestamptz(3)
+  lastImprovementType String?             @map("last_improvement_type") @db.VarChar(80)
+  lastImprovedAt      DateTime?           @map("last_improved_at") @db.Timestamptz(3)
+  soldAt              DateTime?           @map("sold_at") @db.Timestamptz(3)
+  soldPriceYen        Int?                @map("sold_price_yen")
+  shippedAt           DateTime?           @map("shipped_at") @db.Timestamptz(3)
+  reevaluateAt        DateTime?           @map("reevaluate_at") @db.Timestamptz(3)
+  archivedAt          DateTime?           @map("archived_at") @db.Timestamptz(3)
+  revision            Int                 @default(1)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, programEnrollmentId, idempotencyKey])
+  @@index([workspaceId, groupId, programEnrollmentId, status, updatedAt])
+  @@index([workspaceId, groupId, ownerUserId, status, updatedAt])
+  @@index([workspaceId, groupId, status, reevaluateAt])
+  @@map("resale_items")
 }
 
 model ServiceProgramSupportPolicy {
@@ -481,6 +521,27 @@ enum ProgramMissionAssignmentStatus {
   STARTED
   COMPLETED
   SKIPPED
+}
+
+enum ProgramActionMode {
+  WORK
+  WAIT
+}
+
+enum ResaleItemStatus {
+  FOUND
+  PHOTOGRAPHED
+  LISTED
+  SOLD
+  SHIPPED
+  ARCHIVED
+}
+
+enum ResaleReactionState {
+  UNKNOWN
+  NO_REACTION
+  REACTION
+  SOLD
 }
 
 enum ServiceProgramStatus {
