@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260917150000_add_program_runtime_tracking';
+export const LATEST_DATABASE_MIGRATION = '20260918100000_add_ai_resale_runtime_persistence';

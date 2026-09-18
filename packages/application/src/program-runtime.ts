@@ -1,4 +1,5 @@
 import { ApplicationError } from '@bunshin/shared';
+import { NEXT_ACTION_MODES, type NextActionMode } from './program-next-action';
 
 export const PROGRAM_MISSION_ASSIGNMENT_STATUSES = [
   'PRESENTED',
@@ -18,6 +19,8 @@ export interface ProgramMissionAssignmentRecord {
   routeKey: string;
   phaseKey: string;
   missionDefinitionKey: string;
+  actionMode: NextActionMode;
+  reasonCode: string | null;
   variantKey: string | null;
   targetResourceType: string | null;
   targetResourceId: string | null;
@@ -25,6 +28,7 @@ export interface ProgramMissionAssignmentRecord {
   displaySnapshot: unknown;
   ruleVersion: string;
   presentedAt: Date;
+  reevaluateAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
   skippedAt: Date | null;
@@ -61,6 +65,7 @@ export interface ProgramProgressSnapshotRecord {
   revision: number;
   ruleVersion: string;
   lastActionAt: Date | null;
+  nextEvaluationAt: Date | null;
   calculatedAt: Date;
 }
 
@@ -75,12 +80,15 @@ export interface ProgramRuntimeRepository {
     routeKey: string;
     phaseKey: string;
     missionDefinitionKey: string;
+    actionMode: NextActionMode;
+    reasonCode: string | null;
     variantKey: string | null;
     targetResourceType: string | null;
     targetResourceId: string | null;
     displaySnapshot: unknown;
     ruleVersion: string;
     presentedAt: Date;
+    reevaluateAt: Date | null;
   }): Promise<{ assignment: ProgramMissionAssignmentRecord; created: boolean } | null>;
   transitionAssignment(input: {
     workspaceId: string;
@@ -125,6 +133,7 @@ export interface ProgramRuntimeRepository {
     completedMissionCount: number;
     ruleVersion: string;
     lastActionAt: Date | null;
+    nextEvaluationAt: Date | null;
     calculatedAt: Date;
   }): Promise<ProgramProgressSnapshotRecord | null>;
   findProgress(input: {
@@ -162,11 +171,19 @@ export class ProgramRuntimeService {
     validDate(input.presentedAt, 'presentedAt');
     if ((input.targetResourceType === null) !== (input.targetResourceId === null))
       throw new ApplicationError('VALIDATION_ERROR', 'incomplete assignment target');
+    if (!NEXT_ACTION_MODES.includes(input.actionMode))
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid actionMode');
+    if (input.reevaluateAt !== null) validDate(input.reevaluateAt, 'reevaluateAt');
+    if (input.actionMode === 'WAIT' && (input.reasonCode === null || input.reevaluateAt === null))
+      throw new ApplicationError('VALIDATION_ERROR', 'WAIT requires reasonCode and reevaluateAt');
+    if (input.reevaluateAt !== null && input.reevaluateAt < input.presentedAt)
+      throw new ApplicationError('VALIDATION_ERROR', 'reevaluateAt precedes presentedAt');
     const result = await this.repository.createAssignment({
       ...input,
       routeKey: requiredKey(input.routeKey, 'routeKey'),
       phaseKey: requiredKey(input.phaseKey, 'phaseKey'),
       missionDefinitionKey: requiredKey(input.missionDefinitionKey, 'missionDefinitionKey'),
+      reasonCode: input.reasonCode === null ? null : requiredKey(input.reasonCode, 'reasonCode'),
       variantKey: input.variantKey === null ? null : requiredKey(input.variantKey, 'variantKey'),
       targetResourceType:
         input.targetResourceType === null
@@ -213,6 +230,7 @@ export class ProgramRuntimeService {
   async saveProgress(input: Parameters<ProgramRuntimeRepository['saveProgress']>[0]) {
     validDate(input.calculatedAt, 'calculatedAt');
     if (input.lastActionAt !== null) validDate(input.lastActionAt, 'lastActionAt');
+    if (input.nextEvaluationAt !== null) validDate(input.nextEvaluationAt, 'nextEvaluationAt');
     if (!Number.isInteger(input.completedMissionCount) || input.completedMissionCount < 0)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid completed mission count');
     const result = await this.repository.saveProgress({

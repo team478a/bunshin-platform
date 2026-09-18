@@ -206,6 +206,9 @@ importers:
       '@bunshin/capability-fortune':
         specifier: workspace:*
         version: link:../capability-fortune
+      '@bunshin/capability-resale':
+        specifier: workspace:*
+        version: link:../capability-resale
       '@bunshin/capability-social':
         specifier: workspace:*
         version: link:../capability-social

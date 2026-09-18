@@ -1,6 +1,7 @@
 import { authorizedVideoPhotos } from './video-photos';
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
+export { PrismaResaleItemRepository } from './resale';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
 import { authorizedSocialImageVideoSources } from './social-image-video-sources';
@@ -11259,6 +11260,9 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
         existing.routeKey !== input.routeKey ||
         existing.phaseKey !== input.phaseKey ||
         existing.missionDefinitionKey !== input.missionDefinitionKey ||
+        existing.actionMode !== input.actionMode ||
+        existing.reasonCode !== input.reasonCode ||
+        existing.reevaluateAt?.getTime() !== input.reevaluateAt?.getTime() ||
         existing.variantKey !== input.variantKey
       )
         return null;
@@ -11275,12 +11279,15 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
           routeKey: input.routeKey,
           phaseKey: input.phaseKey,
           missionDefinitionKey: input.missionDefinitionKey,
+          actionMode: input.actionMode,
+          reasonCode: input.reasonCode,
           variantKey: input.variantKey,
           targetResourceType: input.targetResourceType,
           targetResourceId: input.targetResourceId,
           displaySnapshot: input.displaySnapshot as Prisma.InputJsonValue,
           ruleVersion: input.ruleVersion,
           presentedAt: input.presentedAt,
+          reevaluateAt: input.reevaluateAt,
         },
       });
       return { assignment, created: true };
@@ -11301,6 +11308,9 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
         assignment.routeKey !== input.routeKey ||
         assignment.phaseKey !== input.phaseKey ||
         assignment.missionDefinitionKey !== input.missionDefinitionKey ||
+        assignment.actionMode !== input.actionMode ||
+        assignment.reasonCode !== input.reasonCode ||
+        assignment.reevaluateAt?.getTime() !== input.reevaluateAt?.getTime() ||
         assignment.variantKey !== input.variantKey
       )
         return null;
@@ -11552,6 +11562,7 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
         completedMissionCount: input.completedMissionCount,
         ruleVersion: input.ruleVersion,
         lastActionAt: input.lastActionAt,
+        nextEvaluationAt: input.nextEvaluationAt,
         calculatedAt: input.calculatedAt,
       },
       update: {
@@ -11564,6 +11575,7 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
         revision: { increment: 1 },
         ruleVersion: input.ruleVersion,
         lastActionAt: input.lastActionAt,
+        nextEvaluationAt: input.nextEvaluationAt,
         calculatedAt: input.calculatedAt,
       },
     });

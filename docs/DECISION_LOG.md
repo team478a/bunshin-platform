@@ -2408,3 +2408,12 @@
 - Continuity: PAUSEDはユーザー操作の最終時刻を基準とし、正式なWAIT期間を無活動日数へ含めない。
 - Events: ユーザーの「できなかった」は`ACTION_NOT_COMPLETED`、技術的失敗は`ACTION_FAILED`として分離する。
 - Scope: この段階ではDB、API、画面、LINE、決済へ接続せず、純粋なcatalog、日付計算、状態遷移、Policyとunit testだけを追加する。
+
+## 2026-09-18: AI物販V1のAction/Event/Snapshotは既存Program Runtimeへ保存する
+
+- Decision: AI物販専用のAction/Event/Snapshotテーブルは作らず、`ProgramMissionAssignment`、`ProgramActionEvent`、`ProgramProgressSnapshot`を正本として再利用する。
+- WAIT: `ProgramMissionAssignment`へ`actionMode`、`reasonCode`、`reevaluateAt`を、Progress Snapshotへ`nextEvaluationAt`を追加し、WAITをJSONだけに閉じ込めずJobから検索可能にする。
+- Capability boundary: 商品固有状態だけを`ResaleItem`として追加し、Program Coreへ商品状態や反応状態を混ぜない。
+- Tenant boundary: `ResaleItem`はWorkspace、Group、Enrollment、EnrollmentのMembership、Owner Userを複合外部キーで結び、別会員・別運営団体の商品を参照できないようにする。
+- Concurrency: 作成はEnrollment単位のidempotency key、更新はrevisionによる楽観ロックを使う。商品状態は前進のみ許可する。
+- Scope: この段階ではDB、Repository、domain validationまでを実装する。PolicyからAssignment/Event/Snapshotを一括更新するOrchestratorとWeb/API/Job接続は次の作業単位とする。
