@@ -10,6 +10,12 @@ import {
   currentPaymentEnvironment,
   StripeAccountConnectionTestAdapter,
 } from '../../../../../src/payments/secure-configuration';
+import {
+  paymentDate,
+  paymentOperationsMessage,
+  purchaseStatusLabel,
+  yen,
+} from '../../../../../src/payments/payment-operations';
 
 export const dynamic = 'force-dynamic';
 
@@ -295,25 +301,87 @@ export default async function OrganizationPaymentPage({
   const workspaceId = z.uuid().safeParse((await params).workspaceId);
   if (!workspaceId.success) notFound();
   const { db, workspace } = await requirePaymentManager(workspaceId.data, user.userId);
-  const configuration = await db.prisma.organizationPaymentConfiguration.findUnique({
-    where: {
-      workspaceId_environment_provider: {
-        workspaceId: workspace.id,
-        environment: currentPaymentEnvironment(),
-        provider: 'STRIPE',
+  const [
+    configuration,
+    recentPurchases,
+    purchaseCounts,
+    paidAmount,
+    failedWebhookEvents,
+    failedWebhookCount,
+  ] = await Promise.all([
+    db.prisma.organizationPaymentConfiguration.findUnique({
+      where: {
+        workspaceId_environment_provider: {
+          workspaceId: workspace.id,
+          environment: currentPaymentEnvironment(),
+          provider: 'STRIPE',
+        },
       },
-    },
-    select: {
-      id: true,
-      status: true,
-      accountReference: true,
-      secretKeyMask: true,
-      webhookSecretMask: true,
-      lastVerifiedAt: true,
-      lastErrorCategory: true,
-      updatedAt: true,
-    },
-  });
+      select: {
+        id: true,
+        status: true,
+        accountReference: true,
+        secretKeyMask: true,
+        webhookSecretMask: true,
+        lastVerifiedAt: true,
+        lastErrorCategory: true,
+        updatedAt: true,
+      },
+    }),
+    db.prisma.programPurchase.findMany({
+      where: { workspaceId: workspace.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        groupId: true,
+        status: true,
+        amountYen: true,
+        createdAt: true,
+        paidAt: true,
+        expiredAt: true,
+        refundedAt: true,
+        buyer: { select: { displayName: true, email: true } },
+      },
+    }),
+    db.prisma.programPurchase.groupBy({
+      by: ['status'],
+      where: { workspaceId: workspace.id },
+      _count: { _all: true },
+    }),
+    db.prisma.programPurchase.aggregate({
+      where: { workspaceId: workspace.id, paidAt: { not: null } },
+      _sum: { amountYen: true },
+    }),
+    db.prisma.paymentWebhookEvent.findMany({
+      where: { workspaceId: workspace.id, status: 'FAILED' },
+      orderBy: { receivedAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        eventType: true,
+        errorCategory: true,
+        receivedAt: true,
+      },
+    }),
+    db.prisma.paymentWebhookEvent.count({
+      where: { workspaceId: workspace.id, status: 'FAILED' },
+    }),
+  ]);
+  const groupIds = [...new Set(recentPurchases.map((purchase) => purchase.groupId))];
+  const groups =
+    groupIds.length === 0
+      ? []
+      : await db.prisma.group.findMany({
+          where: { workspaceId: workspace.id, id: { in: groupIds } },
+          select: { id: true, name: true },
+        });
+  const groupNames = new Map(groups.map((group) => [group.id, group.name]));
+  const countByStatus = new Map(purchaseCounts.map((row) => [row.status, row._count._all]));
+  const waitingPurchaseCount =
+    (countByStatus.get('CREATED') ?? 0) + (countByStatus.get('CHECKOUT_OPEN') ?? 0);
+  const paidPurchaseCount = countByStatus.get('PAID') ?? 0;
+  const refundedPurchaseCount = countByStatus.get('REFUNDED') ?? 0;
   const result = (await searchParams).result;
   const webhookUrl = configuration
     ? new URL(
@@ -358,6 +426,107 @@ export default async function OrganizationPaymentPage({
             }) ?? '未確認'}
           </strong>
         </div>
+      </section>
+
+      <section className="settings-card" aria-labelledby="payment-operations-title">
+        <h2 id="payment-operations-title">決済の運用状況</h2>
+        <p>{paymentOperationsMessage({ failedWebhookCount, waitingPurchaseCount })}</p>
+        <div className="operations-overview" aria-label="売上と購入状況">
+          <div>
+            <span>決済完了総額（返金前）</span>
+            <strong>{yen(paidAmount._sum.amountYen ?? 0)}</strong>
+          </div>
+          <div>
+            <span>入金済み</span>
+            <strong>{paidPurchaseCount.toLocaleString('ja-JP')}件</strong>
+          </div>
+          <div>
+            <span>支払い待ち</span>
+            <strong>{waitingPurchaseCount.toLocaleString('ja-JP')}件</strong>
+          </div>
+          <div>
+            <span>全額返金</span>
+            <strong>{refundedPurchaseCount.toLocaleString('ja-JP')}件</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-card" aria-labelledby="recent-purchases-title">
+        <h2 id="recent-purchases-title">最近の購入</h2>
+        {recentPurchases.length === 0 ? (
+          <p>購入記録はまだありません。</p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>受付日時</th>
+                  <th>購入者</th>
+                  <th>サービス</th>
+                  <th>金額</th>
+                  <th>状態</th>
+                  <th>状態更新日時</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentPurchases.map((purchase) => (
+                  <tr key={purchase.id}>
+                    <td>{paymentDate(purchase.createdAt)}</td>
+                    <td>
+                      {purchase.buyer.displayName}
+                      {purchase.buyer.email ? <small>{purchase.buyer.email}</small> : null}
+                    </td>
+                    <td>{groupNames.get(purchase.groupId) ?? '削除済みのサービス'}</td>
+                    <td>{yen(purchase.amountYen)}</td>
+                    <td>{purchaseStatusLabel[purchase.status]}</td>
+                    <td>
+                      {paymentDate(
+                        purchase.refundedAt ??
+                          purchase.paidAt ??
+                          purchase.expiredAt ??
+                          purchase.createdAt,
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="settings-card" aria-labelledby="failed-webhooks-title">
+        <h2 id="failed-webhooks-title">要確認の決済通知</h2>
+        {failedWebhookEvents.length === 0 ? (
+          <p>処理に失敗した決済通知はありません。</p>
+        ) : (
+          <>
+            <p>
+              {failedWebhookCount.toLocaleString('ja-JP')}
+              件の失敗記録があります。購入状態とStripeの取引を照合し、解消しない場合はワタシワークス運営へ連絡してください。
+            </p>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>受信日時</th>
+                    <th>通知</th>
+                    <th>エラー分類</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {failedWebhookEvents.map((event) => (
+                    <tr key={event.id}>
+                      <td>{paymentDate(event.receivedAt)}</td>
+                      <td>{event.eventType}</td>
+                      <td>{event.errorCategory ?? '詳細確認が必要'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="settings-card">
