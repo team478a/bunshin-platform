@@ -111,4 +111,59 @@ describe('PrismaCommercialBillingService', () => {
     ).resolves.toEqual({ prepared: 0, skippedCustomQuote: 1 });
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('creates a tenant-scoped invoice after an operator sets a custom quote amount', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'invoice-custom', amountYen: 250_000 });
+    const rawClient = {
+      organizationCommercialContract: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'contract', updatedByUserId: 'owner' }),
+      },
+      tenantMonthlyUsage: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: '12345678-1234-4000-8000-123456789abc',
+          periodStart: new Date('2026-08-01T00:00:00.000Z'),
+          periodEnd: new Date('2026-09-01T00:00:00.000Z'),
+          mau: 3_500,
+          pricingTierKey: 'CUSTOM',
+          pricingVersion: 'oem-mau-jpy-v1',
+        }),
+      },
+      tenantInvoice: { create },
+      commercialBillingAudit: { create: vi.fn().mockResolvedValue({ id: 'audit' }) },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+
+    await new PrismaCommercialBillingService(client).prepareCustomQuoteInvoice({
+      workspaceId: 'workspace-a',
+      monthlyUsageId: '12345678-1234-4000-8000-123456789abc',
+      actorUserId: 'actor',
+      amountYen: 250_000,
+      notes: '合意済み',
+    });
+    expect(rawClient.tenantMonthlyUsage.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({ workspaceId: 'workspace-a', calculatedPriceYen: null }),
+    });
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId: 'workspace-a',
+        amountYen: 250_000,
+        updatedByUserId: 'actor',
+      }),
+    });
+  });
+
+  it('rejects invalid custom quote amounts before querying billing data', async () => {
+    const client = {} as PrismaClient;
+    await expect(
+      new PrismaCommercialBillingService(client).prepareCustomQuoteInvoice({
+        workspaceId: 'workspace-a',
+        monthlyUsageId: 'usage',
+        actorUserId: 'actor',
+        amountYen: 0,
+      }),
+    ).rejects.toThrow('invalid custom quote amount');
+  });
 });

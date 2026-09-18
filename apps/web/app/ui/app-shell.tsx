@@ -26,6 +26,7 @@ const adminNavigationGroups = [
     label: '運営団体・プロジェクト',
     items: [
       { href: '/admin/organizations', label: '運営団体' },
+      { href: '/admin/commercial-billing', label: '請求・入金管理' },
       { href: '/admin/groups', label: 'プロジェクト管理' },
       { href: '/admin/services', label: '公開設定' },
       { href: '/admin/fortune', label: '占いパッケージ' },

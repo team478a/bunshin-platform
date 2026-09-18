@@ -26,6 +26,12 @@ const invoiceActionSchema = z.object({
   paymentReference: z.string().trim().max(200).optional(),
   notes: z.string().trim().max(1000).optional(),
 });
+const customQuoteSchema = z.object({
+  workspaceId: z.uuid(),
+  monthlyUsageId: z.uuid(),
+  amountYen: z.coerce.number().int().positive().max(1_000_000_000),
+  notes: z.string().trim().max(1000).optional(),
+});
 
 const EVENT_LABELS: Record<string, string> = {
   POST_VIEW: '投稿案を表示',
@@ -136,6 +142,25 @@ async function transitionInvoice(formData: FormData) {
   redirect(`/admin/organizations/${input.data.workspaceId}/commercial?invoiceUpdated=1`);
 }
 
+async function prepareCustomQuoteInvoice(formData: FormData) {
+  'use server';
+  const input = customQuoteSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  try {
+    await new db.PrismaCommercialBillingService().prepareCustomQuoteInvoice({
+      ...input.data,
+      actorUserId: actor.userId,
+      notes: input.data.notes || null,
+    });
+  } catch {
+    redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=customQuote`);
+  }
+  revalidatePath(`/admin/organizations/${input.data.workspaceId}/commercial`);
+  revalidatePath('/admin/commercial-billing');
+  redirect(`/admin/organizations/${input.data.workspaceId}/commercial?customQuoteSaved=1`);
+}
+
 export default async function OrganizationCommercialPage({
   params,
   searchParams,
@@ -147,6 +172,7 @@ export default async function OrganizationCommercialPage({
     contractSaved?: string;
     prepared?: string;
     invoiceUpdated?: string;
+    customQuoteSaved?: string;
   }>;
 }) {
   const workspaceId = z.uuid().safeParse((await params).workspaceId);
@@ -184,6 +210,9 @@ export default async function OrganizationCommercialPage({
       ) : null}
       {query.invoiceUpdated === '1' ? (
         <p className="notice notice--success">請求状態を更新しました。</p>
+      ) : null}
+      {query.customQuoteSaved === '1' ? (
+        <p className="notice notice--success">個別見積の金額で請求記録を作成しました。</p>
       ) : null}
       {query.error ? (
         <p className="notice notice--danger">
@@ -354,6 +383,44 @@ export default async function OrganizationCommercialPage({
             確定済みの月から請求記録を作る
           </button>
         </form>
+        {billing.tenantMonthlyUsage.length > 0 ? (
+          <div className="settings-stack">
+            <h3>個別見積の金額を確定</h3>
+            <p>3,001 MAU以上の月は、合意した税抜・税込条件に沿った請求総額を入力します。</p>
+            {billing.tenantMonthlyUsage.map((usage) => (
+              <form
+                className="form-stack service-template-preview"
+                action={prepareCustomQuoteInvoice}
+                key={usage.id}
+              >
+                <input type="hidden" name="workspaceId" value={billing.id} />
+                <input type="hidden" name="monthlyUsageId" value={usage.id} />
+                <strong>
+                  {usage.periodStart.toISOString().slice(0, 7)}／{usage.mau.toLocaleString('ja-JP')}{' '}
+                  MAU
+                </strong>
+                <label className="field">
+                  <span className="field__label">合意した請求総額（円）</span>
+                  <input
+                    className="field__control"
+                    name="amountYen"
+                    type="number"
+                    min="1"
+                    max="1000000000"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span className="field__label">見積条件・メモ（任意）</span>
+                  <input className="field__control" name="notes" maxLength={1000} />
+                </label>
+                <button className="button" type="submit">
+                  この金額で請求記録を作る
+                </button>
+              </form>
+            ))}
+          </div>
+        ) : null}
         {billing.tenantInvoices.length === 0 ? (
           <p>請求記録はまだありません。契約を「契約中」にして、月次利用を確定してください。</p>
         ) : (

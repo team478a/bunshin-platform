@@ -1,5 +1,6 @@
 import {
   nextTenantInvoiceStatus,
+  summarizeCommercialInvoices,
   tenantInvoiceDueAt,
   tenantInvoiceNumber,
   type TenantInvoiceAction,
@@ -30,6 +31,14 @@ export interface TransitionTenantInvoiceInput {
   paymentReference?: string | null;
   notes?: string | null;
   now?: Date;
+}
+
+export interface PrepareCustomQuoteInvoiceInput {
+  workspaceId: string;
+  monthlyUsageId: string;
+  actorUserId: string;
+  amountYen: number;
+  notes?: string | null;
 }
 
 function optionalText(value: string | null | undefined, maximum: number): string | null {
@@ -84,7 +93,116 @@ export class PrismaCommercialBillingService {
           take: 20,
           select: { id: true, entityType: true, action: true, occurredAt: true },
         },
+        tenantMonthlyUsage: {
+          where: { status: 'FINALIZED', calculatedPriceYen: null, invoice: null },
+          orderBy: { periodStart: 'asc' },
+          select: {
+            id: true,
+            periodStart: true,
+            periodEnd: true,
+            mau: true,
+            pricingTierKey: true,
+            pricingVersion: true,
+          },
+        },
       },
+    });
+  }
+
+  async operationsDashboard(now = new Date()) {
+    const [activeContracts, invoices] = await Promise.all([
+      this.client.organizationCommercialContract.count({ where: { status: 'ACTIVE' } }),
+      this.client.tenantInvoice.findMany({
+        orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
+        select: {
+          id: true,
+          workspaceId: true,
+          invoiceNumber: true,
+          status: true,
+          periodStart: true,
+          periodEnd: true,
+          mau: true,
+          pricingTierKey: true,
+          pricingVersion: true,
+          amountYen: true,
+          externalInvoiceReference: true,
+          paymentReference: true,
+          notes: true,
+          issuedAt: true,
+          dueAt: true,
+          paidAt: true,
+          createdAt: true,
+          workspace: { select: { name: true, legalName: true } },
+          contract: {
+            select: { billingName: true, billingEmail: true, externalCustomerReference: true },
+          },
+        },
+      }),
+    ]);
+    return {
+      activeContracts,
+      summary: summarizeCommercialInvoices(invoices, now),
+      invoices,
+    };
+  }
+
+  async prepareCustomQuoteInvoice(input: PrepareCustomQuoteInvoiceInput) {
+    if (
+      !Number.isSafeInteger(input.amountYen) ||
+      input.amountYen <= 0 ||
+      input.amountYen > 1_000_000_000
+    )
+      throw new Error('invalid custom quote amount');
+    const now = new Date();
+    const [contract, usage] = await Promise.all([
+      this.client.organizationCommercialContract.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          status: 'ACTIVE',
+          OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+          AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+        },
+      }),
+      this.client.tenantMonthlyUsage.findFirst({
+        where: {
+          id: input.monthlyUsageId,
+          workspaceId: input.workspaceId,
+          status: 'FINALIZED',
+          calculatedPriceYen: null,
+          invoice: null,
+        },
+      }),
+    ]);
+    if (!contract) throw new Error('active contract not found');
+    if (!usage) throw new Error('custom quote usage not found');
+    return this.client.$transaction(async (tx) => {
+      const invoice = await tx.tenantInvoice.create({
+        data: {
+          workspaceId: input.workspaceId,
+          contractId: contract.id,
+          monthlyUsageId: usage.id,
+          invoiceNumber: tenantInvoiceNumber(usage.periodStart, usage.id),
+          periodStart: usage.periodStart,
+          periodEnd: usage.periodEnd,
+          mau: usage.mau,
+          pricingTierKey: usage.pricingTierKey,
+          pricingVersion: usage.pricingVersion,
+          amountYen: input.amountYen,
+          notes: optionalText(input.notes, 1000),
+          updatedByUserId: input.actorUserId,
+        },
+      });
+      await tx.commercialBillingAudit.create({
+        data: {
+          workspaceId: input.workspaceId,
+          actorUserId: input.actorUserId,
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          action: 'CUSTOM_CREATED',
+          afterData: jsonSnapshot(invoice),
+        },
+      });
+      return invoice;
     });
   }
 
