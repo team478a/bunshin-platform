@@ -6,7 +6,12 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
-import { completePaidProgramPurchase, createProgramCheckout } from '../payments/program-purchase';
+import {
+  completePaidProgramPurchase,
+  createProgramCheckout,
+  expireProgramCheckout,
+  refundPaidProgramPurchase,
+} from '../payments/program-purchase';
 import {
   AesGcmPaymentSecretCrypto,
   currentPaymentEnvironment,
@@ -72,7 +77,10 @@ type StripeEvent = {
       payment_status?: unknown;
       payment_intent?: unknown;
       amount_total?: unknown;
+      amount?: unknown;
+      amount_refunded?: unknown;
       currency?: unknown;
+      refunded?: unknown;
       metadata?: Record<string, unknown>;
     };
   };
@@ -109,6 +117,53 @@ export async function stripeProgramWebhookResponse(request: Request, rawConfigur
     if (typeof event.id !== 'string' || typeof event.type !== 'string') {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid Stripe event');
     }
+    const payloadDigest = createHash('sha256').update(rawBody).digest('hex');
+    const session = event.data?.object;
+    if (event.type === 'checkout.session.expired') {
+      const purchaseId = session?.metadata?.['purchase_id'];
+      if (
+        typeof session?.id !== 'string' ||
+        typeof purchaseId !== 'string' ||
+        typeof event.livemode !== 'boolean'
+      ) {
+        throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe checkout event');
+      }
+      await expireProgramCheckout(db.prisma, {
+        configurationId: configuration.id,
+        providerEventId: event.id,
+        eventType: event.type,
+        payloadDigest,
+        purchaseId: uuid.parse(purchaseId),
+        checkoutSessionId: session.id,
+        livemode: event.livemode,
+      });
+      return json({ received: true }, requestId);
+    }
+    if (event.type === 'charge.refunded') {
+      if (
+        typeof session?.payment_intent !== 'string' ||
+        typeof session.amount !== 'number' ||
+        typeof session.amount_refunded !== 'number' ||
+        typeof session.currency !== 'string' ||
+        typeof session.refunded !== 'boolean' ||
+        typeof event.livemode !== 'boolean'
+      ) {
+        throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe refund event');
+      }
+      await refundPaidProgramPurchase(db.prisma, {
+        configurationId: configuration.id,
+        providerEventId: event.id,
+        eventType: event.type,
+        payloadDigest,
+        paymentIntentId: session.payment_intent,
+        amount: session.amount,
+        amountRefunded: session.amount_refunded,
+        currency: session.currency,
+        fullyRefunded: session.refunded,
+        livemode: event.livemode,
+      });
+      return json({ received: true }, requestId);
+    }
     if (event.type !== 'checkout.session.completed') {
       await db.prisma.paymentWebhookEvent.upsert({
         where: {
@@ -122,7 +177,7 @@ export async function stripeProgramWebhookResponse(request: Request, rawConfigur
           paymentConfigurationId: configuration.id,
           providerEventId: event.id,
           eventType: event.type,
-          payloadDigest: createHash('sha256').update(rawBody).digest('hex'),
+          payloadDigest,
           status: 'IGNORED',
           processedAt: new Date(),
         },
@@ -130,7 +185,6 @@ export async function stripeProgramWebhookResponse(request: Request, rawConfigur
       });
       return json({ received: true }, requestId);
     }
-    const session = event.data?.object;
     const purchaseId = session?.metadata?.['purchase_id'];
     if (
       session?.payment_status !== 'paid' ||
@@ -146,7 +200,7 @@ export async function stripeProgramWebhookResponse(request: Request, rawConfigur
       configurationId: configuration.id,
       providerEventId: event.id,
       eventType: event.type,
-      payloadDigest: createHash('sha256').update(rawBody).digest('hex'),
+      payloadDigest,
       purchaseId: uuid.parse(purchaseId),
       checkoutSessionId: session.id,
       paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,

@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260918213000_add_program_purchases';
+export const LATEST_DATABASE_MIGRATION = '20260918223000_add_program_purchase_lifecycle';

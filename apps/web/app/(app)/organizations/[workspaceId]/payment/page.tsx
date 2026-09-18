@@ -372,7 +372,10 @@ export default async function OrganizationPaymentPage({
           <div className="settings-card__notice">
             <strong>Stripeに登録するWebhook URL</strong>
             <p className="break-all">{webhookUrl}</p>
-            <p>送信イベントは checkout.session.completed を選んでください。</p>
+            <p>
+              送信イベントは checkout.session.completed、checkout.session.expired、 charge.refunded
+              を選んでください。
+            </p>
           </div>
         ) : null}
         <p>カード番号など購入者の決済情報は、この画面には入力しません。</p>
@@ -467,7 +470,7 @@ export default async function OrganizationPaymentPage({
           <li>この団体の所有者・管理者だけが設定できます。</li>
         </ul>
         <p>
-          有効化後の購入はStripeの画面で行われ、署名を確認できた入金だけが利用開始に反映されます。
+          有効化後の購入はStripeの画面で行われ、署名を確認できた入金だけが利用開始に反映されます。全額返金とCheckout期限切れも自動で台帳へ反映します。
         </p>
       </section>
     </main>

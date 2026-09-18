@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const lifecycleMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260918223000_add_program_purchase_lifecycle/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('program purchase persistence', () => {
   it('scopes purchases to an organization and service with provider idempotency', () => {
@@ -24,5 +31,13 @@ describe('program purchase persistence', () => {
     expect(schema).toContain('@@unique([paymentConfigurationId, providerEventId])');
     expect(schema).toContain('payloadDigest');
     expect(schema).not.toContain('rawPayload');
+  });
+
+  it('records checkout expiry and refunds with consistent lifecycle timestamps', () => {
+    expect(schema).toContain('expiredAt');
+    expect(schema).toContain('refundedAt');
+    expect(lifecycleMigration).toContain('program_purchases_lifecycle_timestamps_check');
+    expect(lifecycleMigration).toContain('program_purchases_status_checkout_expires_at_idx');
+    expect(lifecycleMigration).toContain('program_purchases_paid_enrollment_fkey');
   });
 });
