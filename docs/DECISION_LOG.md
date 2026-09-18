@@ -2417,3 +2417,12 @@
 - Tenant boundary: `ResaleItem`はWorkspace、Group、Enrollment、EnrollmentのMembership、Owner Userを複合外部キーで結び、別会員・別運営団体の商品を参照できないようにする。
 - Concurrency: 作成はEnrollment単位のidempotency key、更新はrevisionによる楽観ロックを使う。商品状態は前進のみ許可する。
 - Scope: この段階ではDB、Repository、domain validationまでを実装する。PolicyからAssignment/Event/Snapshotを一括更新するOrchestratorとWeb/API/Job接続は次の作業単位とする。
+
+## 2026-09-18: AI物販V1の無料Enrollmentと次Action評価を既存Cronへ接続する
+
+- Enrollment: `ServiceProgram.settings.moduleKey = AI_RESALE_V1`かつ`FREE_7D`、自動登録が明示されたProgramだけを対象にする。公開サービス登録と同じtransactionでEnrollmentを作り、既存会員はCronで補完する。
+- Clock: `ProgramEnrollment.startsAt`は公開サービスへの同意時刻とOffering利用開始時刻の遅い方を正本とし、既存会員を開始前の期間で不利にしない。Program dayはProgram設定のtimezoneで計算し、無料期間は開始時刻から7暦日後までとする。
+- Orchestration: Policyは判断だけを行い、RepositoryがAssignmentとProgress Snapshotを同一transactionで保存する。DAY7分類はEvent、Snapshot、Enrollment完了を同一transactionで保存する。
+- Idempotency: Enrollmentは既存unique key、DAY7はEnrollment単位のevent idempotency key、Action評価はSnapshot revisionとAssignment sequenceで競合を検出する。
+- Boundary: サービス名、料金、LINE ChannelをPolicyへ埋め込まない。Program固有設定はServiceProgramが所有し、固定fallback文はAI障害時にも現在Actionを表示するためCapability側が所有する。
+- Scope: この段階では自動Enrollment、Runtime Orchestrator、定期評価までとし、利用者向けAction API/UI、結果入力、LINE通知、Offer UIは後続作業とする。

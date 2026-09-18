@@ -53,6 +53,9 @@ importers:
       '@bunshin/capability-fortune':
         specifier: workspace:*
         version: link:../../packages/capability-fortune
+      '@bunshin/capability-resale':
+        specifier: workspace:*
+        version: link:../../packages/capability-resale
       '@bunshin/capability-social':
         specifier: workspace:*
         version: link:../../packages/capability-social
