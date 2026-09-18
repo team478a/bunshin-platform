@@ -11,6 +11,7 @@ export { PrismaCommercialUsageService } from './commercial-usage';
 export { PrismaCommercialBillingService } from './commercial-billing';
 export type {
   SaveOrganizationCommercialContractInput,
+  PrepareCustomQuoteInvoiceInput,
   TransitionTenantInvoiceInput,
 } from './commercial-billing';
 export type {
