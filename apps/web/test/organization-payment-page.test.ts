@@ -35,6 +35,9 @@ describe('organization payment settings page', () => {
     expect(source).toContain("where: { workspaceId: workspace.id, status: 'FAILED' }");
     expect(source).toContain('最近の購入');
     expect(source).toContain('要確認の決済通知');
+    expect(source).toContain('recoverFailedPaymentWebhook');
+    expect(source).toContain('Stripeから再取得して処理');
+    expect(source).toContain('webhookEventId');
   });
 
   it('shows gross payments, cumulative refunds, and net sales', () => {

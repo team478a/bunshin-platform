@@ -17,6 +17,7 @@ import {
   purchaseStatusLabel,
   yen,
 } from '../../../../../src/payments/payment-operations';
+import { recoverFailedPaymentWebhook } from '../../../../../src/payments/payment-webhook-recovery';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,7 @@ const saveSchema = z.object({
   reason: z.string().trim().min(3).max(500),
 });
 const actionSchema = z.object({ workspaceId: z.uuid(), reason: z.string().trim().min(3).max(500) });
+const webhookRecoverySchema = actionSchema.extend({ webhookEventId: z.uuid() });
 
 async function requirePaymentManager(workspaceId: string, userId: string) {
   const db = await import('@bunshin/database');
@@ -271,6 +273,27 @@ async function pauseConfiguration(formData: FormData) {
   redirect(paymentPath(parsed.data.workspaceId, 'disabled'));
 }
 
+async function recoverWebhook(formData: FormData) {
+  'use server';
+  const user = await actor();
+  const parsed = webhookRecoverySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/organizations?error=invalid-payment-action');
+  const { db } = await requirePaymentManager(parsed.data.workspaceId, user.userId);
+  let result = 'webhook-recovered';
+  try {
+    await recoverFailedPaymentWebhook(db.prisma, {
+      workspaceId: parsed.data.workspaceId,
+      webhookEventId: parsed.data.webhookEventId,
+      actorUserId: user.userId,
+      reason: parsed.data.reason,
+    });
+  } catch {
+    result = 'webhook-recovery-failed';
+  }
+  revalidatePath(paymentPath(parsed.data.workspaceId));
+  redirect(paymentPath(parsed.data.workspaceId, result));
+}
+
 const results: Record<string, string> = {
   saved: '設定を下書き保存しました。次に接続確認をしてください。',
   verified: 'Stripeとの接続を確認しました。「決済接続を有効にする」を押すと使用できます。',
@@ -282,6 +305,9 @@ const results: Record<string, string> = {
   'invalid-webhook-secret': 'Webhook署名シークレット（whsec_ で始まる値）を入力してください。',
   'verification-required': '接続確認が完了した設定だけ有効にできます。',
   'webhook-required': '決済を有効にする前にWebhook署名シークレットを登録してください。',
+  'webhook-recovered': 'Stripeから決済通知を再取得し、処理を完了しました。',
+  'webhook-recovery-failed':
+    '再処理できませんでした。Stripeの取引状態と接続設定を確認してください。',
 };
 const statusLabel = {
   DRAFT: '下書き',
@@ -529,7 +555,7 @@ export default async function OrganizationPaymentPage({
           <>
             <p>
               {failedWebhookCount.toLocaleString('ja-JP')}
-              件の失敗記録があります。購入状態とStripeの取引を照合し、解消しない場合はワタシワークス運営へ連絡してください。
+              件の失敗記録があります。Stripe側の問題や一時障害を解消した後、理由を入力して再処理できます。
             </p>
             <div className="table-scroll">
               <table>
@@ -538,6 +564,7 @@ export default async function OrganizationPaymentPage({
                     <th>受信日時</th>
                     <th>通知</th>
                     <th>エラー分類</th>
+                    <th>再処理</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -546,6 +573,25 @@ export default async function OrganizationPaymentPage({
                       <td>{paymentDate(event.receivedAt)}</td>
                       <td>{event.eventType}</td>
                       <td>{event.errorCategory ?? '詳細確認が必要'}</td>
+                      <td>
+                        <form action={recoverWebhook} className="stack stack--compact">
+                          <input type="hidden" name="workspaceId" value={workspace.id} />
+                          <input type="hidden" name="webhookEventId" value={event.id} />
+                          <label>
+                            <span className="sr-only">再処理する理由</span>
+                            <input
+                              name="reason"
+                              minLength={3}
+                              maxLength={500}
+                              required
+                              placeholder="例：Stripe接続を修正済み"
+                            />
+                          </label>
+                          <button className="button button--secondary" type="submit">
+                            Stripeから再取得して処理
+                          </button>
+                        </form>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
