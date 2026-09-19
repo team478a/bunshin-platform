@@ -1,4 +1,3 @@
-import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -27,9 +26,7 @@ async function startInvoicePayment(formData: FormData) {
   } catch {
     redirect(`/organizations/${input.data.workspaceId}/usage?payment=error`);
   }
-  // Nextのproduction typed routesは外部URLをRouteへ絞るため、検証済みStripe URLを明示する。
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-  redirect(checkoutUrl as Route);
+  redirect(checkoutUrl as `https://${string}`);
 }
 
 function yen(value: number | null): string {
