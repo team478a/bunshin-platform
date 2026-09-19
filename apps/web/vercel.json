@@ -19,6 +19,7 @@
     { "path": "/api/internal/assets/purge-expired", "schedule": "30 17 * * *" },
     { "path": "/api/internal/fortune/purge-expired", "schedule": "45 17 * * *" },
     { "path": "/api/internal/payments/expire-programs", "schedule": "10 17 * * *" },
+    { "path": "/api/internal/commercial-billing/reminders", "schedule": "0 0 * * *" },
     { "path": "/api/internal/commercial-usage/finalize", "schedule": "15 16 1 * *" }
   ],
   "functions": {
