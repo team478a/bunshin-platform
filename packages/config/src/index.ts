@@ -28,6 +28,8 @@ const serverSchema = z
     AI_PROVIDER_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     ADMIN_EMAIL_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
     PAYMENT_CONFIG_KEY_VERSION: z.coerce.number().int().positive().default(1),
+    PLATFORM_BILLING_STRIPE_SECRET_KEY: z.string().min(8).optional(),
+    PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET: z.string().min(8).optional(),
     LINE_DEEP_LINK_KEY_VERSION: z.coerce.number().int().positive().default(1),
     LINE_OFFICIAL_ACCOUNT_URL: officialLineAccountUrlSchema.optional(),
     VIDEO_RENDER_WEBHOOK_KEY_VERSION: z.coerce.number().int().positive().default(1),
@@ -131,6 +133,42 @@ const serverSchema = z
         code: 'custom',
         path: ['RESEND_ADMIN_ALERT_API_KEY'],
         message: 'Resend administrator alert configuration must be provided together',
+      });
+    }
+    const platformBillingValues = [
+      value.PLATFORM_BILLING_STRIPE_SECRET_KEY,
+      value.PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET,
+    ];
+    if (
+      platformBillingValues.some((item) => item !== undefined) &&
+      platformBillingValues.some((item) => item === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PLATFORM_BILLING_STRIPE_SECRET_KEY'],
+        message: 'Platform billing Stripe configuration must be provided together',
+      });
+    }
+    if (
+      value.PLATFORM_BILLING_STRIPE_SECRET_KEY &&
+      !value.PLATFORM_BILLING_STRIPE_SECRET_KEY.startsWith(
+        value.APP_ENV === 'production' ? 'sk_live_' : 'sk_test_',
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PLATFORM_BILLING_STRIPE_SECRET_KEY'],
+        message: 'Platform billing Stripe key does not match APP_ENV',
+      });
+    }
+    if (
+      value.PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET &&
+      !value.PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET.startsWith('whsec_')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET'],
+        message: 'Platform billing Stripe webhook secret is invalid',
       });
     }
     if (value.RESEND_ADMIN_ALERT_TO) {

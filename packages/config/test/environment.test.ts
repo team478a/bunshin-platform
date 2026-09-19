@@ -129,4 +129,27 @@ describe('environment validation', () => {
       }).RESEND_ADMIN_ALERT_FROM,
     ).toBe('alerts@example.com');
   });
+
+  it('requires both platform billing Stripe secrets together', () => {
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        PLATFORM_BILLING_STRIPE_SECRET_KEY: 'sk_test_platform_key',
+      }),
+    ).toThrow('PLATFORM_BILLING_STRIPE_SECRET_KEY');
+    expect(
+      parseServerEnvironment({
+        ...valid,
+        PLATFORM_BILLING_STRIPE_SECRET_KEY: 'sk_test_platform_key',
+        PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET: 'whsec_platform_secret',
+      }).PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET,
+    ).toBe('whsec_platform_secret');
+    expect(() =>
+      parseServerEnvironment({
+        ...valid,
+        PLATFORM_BILLING_STRIPE_SECRET_KEY: 'sk_live_platform_key',
+        PLATFORM_BILLING_STRIPE_WEBHOOK_SECRET: 'whsec_platform_secret',
+      }),
+    ).toThrow('PLATFORM_BILLING_STRIPE_SECRET_KEY');
+  });
 });

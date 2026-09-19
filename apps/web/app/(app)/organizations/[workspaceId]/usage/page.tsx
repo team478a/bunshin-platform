@@ -1,9 +1,34 @@
+import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { createCommercialInvoiceCheckout } from '../../../../../src/payments/commercial-invoice-payment';
 
 export const dynamic = 'force-dynamic';
+
+const invoicePaymentSchema = z.object({ workspaceId: z.uuid(), invoiceId: z.uuid() });
+
+async function startInvoicePayment(formData: FormData) {
+  'use server';
+  const input = invoicePaymentSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/organizations?payment=invalid');
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect('/login');
+  const db = await import('@bunshin/database');
+  let checkoutUrl: string;
+  try {
+    checkoutUrl = (
+      await createCommercialInvoiceCheckout(db.prisma, {
+        ...input.data,
+        actorUserId: actor.userId,
+      })
+    ).checkoutUrl;
+  } catch {
+    redirect(`/organizations/${input.data.workspaceId}/usage?payment=error`);
+  }
+  redirect(checkoutUrl as Route);
+}
 
 function yen(value: number | null): string {
   return value === null ? '個別見積' : `${value.toLocaleString('ja-JP')}円`;
@@ -16,8 +41,10 @@ function invoiceStatusLabel(status: 'DRAFT' | 'ISSUED' | 'PAID' | 'VOID', dueAt:
 
 export default async function OrganizationUsagePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ workspaceId: string }>;
+  searchParams: Promise<{ payment?: string }>;
 }) {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) redirect('/login');
@@ -42,6 +69,7 @@ export default async function OrganizationUsagePage({
     new db.PrismaCommercialBillingService().dashboard(workspaceId.data),
   ]);
   if (!dashboard || !billing) notFound();
+  const query = await searchParams;
 
   return (
     <main className="app-page">
@@ -51,6 +79,20 @@ export default async function OrganizationUsagePage({
         <p>今月、サービス機能を1回以上使った参加者の人数と現在の料金帯です。</p>
         <Link href={`/organizations/${dashboard.workspace.id}/manage`}>← 団体管理へ戻る</Link>
       </header>
+
+      {query.payment === 'success' ? (
+        <p className="notice notice--success">
+          お支払いを受け付けました。入金確認後、自動的に「入金済み」へ更新されます。
+        </p>
+      ) : null}
+      {query.payment === 'cancelled' ? (
+        <p className="notice">お支払いは完了していません。請求一覧から再開できます。</p>
+      ) : null}
+      {query.payment === 'error' ? (
+        <p className="notice notice--danger">
+          オンライン決済を開始できませんでした。設定を確認するか運営へお問い合わせください。
+        </p>
+      ) : null}
 
       <section className="operations-overview" aria-label="今月の利用人数と料金">
         <div>
@@ -113,6 +155,7 @@ export default async function OrganizationUsagePage({
                   <th>金額</th>
                   <th>状態</th>
                   <th>支払期限</th>
+                  <th>お支払い</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,6 +169,23 @@ export default async function OrganizationUsagePage({
                       <td>
                         {invoice.dueAt?.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' }) ??
                           '未発行'}
+                      </td>
+                      <td>
+                        {invoice.status === 'ISSUED' &&
+                        billing.organizationCommercialContract?.billingMode ===
+                          'EXTERNAL_BILLING' ? (
+                          <form action={startInvoicePayment}>
+                            <input type="hidden" name="workspaceId" value={billing.id} />
+                            <input type="hidden" name="invoiceId" value={invoice.id} />
+                            <button className="button button--small" type="submit">
+                              Stripeで支払う
+                            </button>
+                          </form>
+                        ) : invoice.status === 'PAID' ? (
+                          '支払済み'
+                        ) : (
+                          '—'
+                        )}
                       </td>
                     </tr>
                   ))}
