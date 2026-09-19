@@ -13,6 +13,14 @@
 
 `apps/web/vercel.json`にもframework、build command、Function regionを定義している。Vercel ProjectのRoot Directoryが`apps/web`であるため、設定fileも同directoryへ置く。
 
+### Production branch
+
+VercelのProduction Branchは`production`に設定する。`apps/web/vercel.json`は`production`だけGit連携デプロイを許可し、`main`、Pull Request、その他の作業ブランチからVercel Deploymentを作成しない。
+
+通常の開発は作業ブランチから`main`へPull Requestをマージする。公開するときだけ、GitHub上で`main`から`production`へのPull Requestを作成し、差分とCIを確認してマージする。`production`へ直接pushせず、force pushもしない。
+
+初回切替時は、Vercel Project SettingsのGit設定でもProduction Branchを`production`へ変更する。リポジトリ設定だけではVercel側のProduction Branch指定は変更されない。切替後、`main`への更新でDeploymentが作成されず、`production`へのマージでProduction Deploymentが1件作成されることを確認する。
+
 ## Environment Separation
 
 - Production: `APP_ENV=production`、production Supabase project
@@ -27,11 +35,12 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 
 ## Deployment Order
 
-1. CIのtypecheck/lint/test/buildが成功していることを確認する。
+1. `main`でCIのtypecheck/lint/test/buildが成功していることを確認する。
 2. migrationがある場合はbackupと互換性を確認する。
-3. 承認済み手順で対象環境へ`prisma migrate deploy`する。
-4. Webをdeployする。
-5. `/api/health/live`と`/api/health/ready`を確認する。
+3. `main`から`production`へのPull Requestを作成し、公開差分を確認する。
+4. 承認済み手順で対象環境へ`prisma migrate deploy`する。
+5. Pull Requestを`production`へマージし、Vercel Production Deploymentを開始する。
+6. `/api/health/live`と`/api/health/ready`を確認する。
 
 Vercel buildは手順3の抜けを`db:assert-ready`で検出し、最新migrationが未適用なら公開前に停止する。`Production Health Smoke`は15分ごとにも実行し、正式ドメインのreadinessで`databaseSchema: current`を確認する。
 

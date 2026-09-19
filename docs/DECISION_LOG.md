@@ -2509,3 +2509,11 @@
 - Security: 秘密鍵とWebhook署名シークレットは用途分離したAES-GCMで暗号化し、平文の再表示、監査ログへの保存、別Workspaceからの参照を許可しない。
 - Activation: 秘密鍵の保存だけでは利用開始せず、Stripe APIでアカウントを確認した設定だけを有効化できる。保存、接続確認、有効化、停止を監査する。
 - Scope: この段階は決済接続設定までとし、購入画面、Checkout、Webhookによる入金確定、返金は後続作業とする。
+
+## 2026-09-19: Vercelの自動デプロイをproductionブランチへ限定する
+
+- Cost control: Pull Request、作業ブランチ、`main`の更新ではVercel Deploymentを作成せず、ビルド費用の重複を防ぐ。
+- Branch roles: `main`を開発統合先、`production`を本番公開先とする。公開は`main`から`production`へのPull Requestで行う。
+- Enforcement: `apps/web/vercel.json`は全ブランチを既定で無効化し、`production`だけを明示的に許可する。回帰テストで設定を固定する。
+- Operations: Vercel Project SettingsのProduction Branchも`production`へ変更する。`production`への直接pushとforce pushは行わない。
+- Consequence: `main`へのマージだけでは本番へ反映されない。公開担当者は差分とCIを確認してrelease Pull Requestを`production`へマージする。
