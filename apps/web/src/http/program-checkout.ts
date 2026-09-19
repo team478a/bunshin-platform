@@ -6,20 +6,20 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
-import {
-  completePaidProgramPurchase,
-  createProgramCheckout,
-  expireProgramCheckout,
-  refundPaidProgramPurchase,
-} from '../payments/program-purchase';
+import { createDirectProgramCheckout, createProgramCheckout } from '../payments/program-purchase';
 import {
   AesGcmPaymentSecretCrypto,
   currentPaymentEnvironment,
   verifyStripeWebhookSignature,
 } from '../payments/secure-configuration';
+import {
+  processStripeProgramEvent,
+  type StripeProgramEvent,
+} from '../payments/stripe-program-event';
 
 const uuid = z.string().uuid();
 const checkoutSchema = z.object({ offeringId: uuid, idempotencyKey: uuid }).strict();
+const directCheckoutSchema = z.object({ idempotencyKey: uuid }).strict();
 
 const json = (data: unknown, requestId: string, status = 200) =>
   Response.json({ data, requestId }, { status, headers: { 'cache-control': 'private, no-store' } });
@@ -67,24 +67,39 @@ export async function createProgramCheckoutResponse(
   }
 }
 
-type StripeEvent = {
-  id?: unknown;
-  type?: unknown;
-  livemode?: unknown;
-  data?: {
-    object?: {
-      id?: unknown;
-      payment_status?: unknown;
-      payment_intent?: unknown;
-      amount_total?: unknown;
-      amount?: unknown;
-      amount_refunded?: unknown;
-      currency?: unknown;
-      refunded?: unknown;
-      metadata?: Record<string, unknown>;
-    };
-  };
-};
+export async function createDirectProgramCheckoutResponse(
+  request: Request,
+  serviceSlug: string,
+  rawOfferingId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const [actor, value] = await Promise.all([
+      (await currentUserProvider()).getCurrentUser(),
+      directCheckoutSchema.parseAsync(request.json()),
+    ]);
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, db] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      import('@bunshin/database'),
+    ]);
+    const data = await createDirectProgramCheckout(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      buyerUserId: actor.userId,
+      offeringId: uuid.parse(rawOfferingId),
+      idempotencyKey: value.idempotencyKey,
+      serviceSlug,
+    });
+    return json(data, requestId, 201);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
 
 export async function stripeProgramWebhookResponse(request: Request, rawConfigurationId: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
@@ -113,101 +128,9 @@ export async function stripeProgramWebhookResponse(request: Request, rawConfigur
     if (!verifyStripeWebhookSignature({ rawBody, signatureHeader: signature, webhookSecret })) {
       throw new ApplicationError('FORBIDDEN', 'invalid Stripe signature');
     }
-    const event = JSON.parse(rawBody) as StripeEvent;
-    if (typeof event.id !== 'string' || typeof event.type !== 'string') {
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid Stripe event');
-    }
+    const event = JSON.parse(rawBody) as StripeProgramEvent;
     const payloadDigest = createHash('sha256').update(rawBody).digest('hex');
-    const session = event.data?.object;
-    if (event.type === 'checkout.session.expired') {
-      const purchaseId = session?.metadata?.['purchase_id'];
-      if (
-        typeof session?.id !== 'string' ||
-        typeof purchaseId !== 'string' ||
-        typeof event.livemode !== 'boolean'
-      ) {
-        throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe checkout event');
-      }
-      await expireProgramCheckout(db.prisma, {
-        configurationId: configuration.id,
-        providerEventId: event.id,
-        eventType: event.type,
-        payloadDigest,
-        purchaseId: uuid.parse(purchaseId),
-        checkoutSessionId: session.id,
-        livemode: event.livemode,
-      });
-      return json({ received: true }, requestId);
-    }
-    if (event.type === 'charge.refunded') {
-      if (
-        typeof session?.payment_intent !== 'string' ||
-        typeof session.amount !== 'number' ||
-        typeof session.amount_refunded !== 'number' ||
-        typeof session.currency !== 'string' ||
-        typeof session.refunded !== 'boolean' ||
-        typeof event.livemode !== 'boolean'
-      ) {
-        throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe refund event');
-      }
-      await refundPaidProgramPurchase(db.prisma, {
-        configurationId: configuration.id,
-        providerEventId: event.id,
-        eventType: event.type,
-        payloadDigest,
-        paymentIntentId: session.payment_intent,
-        amount: session.amount,
-        amountRefunded: session.amount_refunded,
-        currency: session.currency,
-        fullyRefunded: session.refunded,
-        livemode: event.livemode,
-      });
-      return json({ received: true }, requestId);
-    }
-    if (event.type !== 'checkout.session.completed') {
-      await db.prisma.paymentWebhookEvent.upsert({
-        where: {
-          paymentConfigurationId_providerEventId: {
-            paymentConfigurationId: configuration.id,
-            providerEventId: event.id,
-          },
-        },
-        create: {
-          workspaceId: configuration.workspaceId,
-          paymentConfigurationId: configuration.id,
-          providerEventId: event.id,
-          eventType: event.type,
-          payloadDigest,
-          status: 'IGNORED',
-          processedAt: new Date(),
-        },
-        update: {},
-      });
-      return json({ received: true }, requestId);
-    }
-    const purchaseId = session?.metadata?.['purchase_id'];
-    if (
-      session?.payment_status !== 'paid' ||
-      typeof session.id !== 'string' ||
-      typeof purchaseId !== 'string' ||
-      typeof session.amount_total !== 'number' ||
-      typeof session.currency !== 'string' ||
-      typeof event.livemode !== 'boolean'
-    ) {
-      throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe checkout event');
-    }
-    await completePaidProgramPurchase(db.prisma, {
-      configurationId: configuration.id,
-      providerEventId: event.id,
-      eventType: event.type,
-      payloadDigest,
-      purchaseId: uuid.parse(purchaseId),
-      checkoutSessionId: session.id,
-      paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,
-      amountTotal: session.amount_total,
-      currency: session.currency,
-      livemode: event.livemode,
-    });
+    await processStripeProgramEvent(db.prisma, configuration.id, event, payloadDigest);
     return json({ received: true }, requestId);
   } catch (error) {
     return failure(error, requestId);

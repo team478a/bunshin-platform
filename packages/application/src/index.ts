@@ -1394,7 +1394,7 @@ export function isLineNotificationSuppressed(
   return start < end ? local >= start && local < end : local >= start || local < end;
 }
 
-export const LEGAL_DOCUMENT_TYPES = ['TERMS', 'PRIVACY'] as const;
+export const LEGAL_DOCUMENT_TYPES = ['TERMS', 'PRIVACY', 'COMMERCE_DISCLOSURE'] as const;
 export type LegalDocumentType = (typeof LEGAL_DOCUMENT_TYPES)[number];
 export type LegalDocumentStatus = 'DRAFT' | 'PUBLISHED' | 'RETIRED';
 export interface LegalDocument {
@@ -2524,6 +2524,7 @@ export * from './badge-reward-operations';
 export * from './service-foundation';
 export * from './service-staff-role';
 export * from './program-core';
+export * from './program-commerce';
 export * from './program-definition';
 export * from './program-definition-presets';
 export * from './program-runtime';

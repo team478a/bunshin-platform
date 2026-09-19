@@ -5,6 +5,9 @@ import {
   AesGcmPaymentSecretCrypto,
   StripeAccountConnectionTestAdapter,
   StripeCheckoutAdapter,
+  StripeCommercialInvoiceCheckoutAdapter,
+  StripeCheckoutSessionRetrievalAdapter,
+  StripeEventRetrievalAdapter,
   verifyStripeWebhookSignature,
 } from '../src/payments/secure-configuration';
 
@@ -86,6 +89,67 @@ describe('OEM payment secure configuration', () => {
     }
     expect(options.body.toString()).toContain(
       'line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=29800',
+    );
+  });
+
+  it('creates a platform invoice Checkout with immutable JPY billing metadata', async () => {
+    const request = vi.fn().mockResolvedValue(
+      Response.json({
+        id: 'cs_test_invoice123',
+        url: 'https://checkout.stripe.com/c/invoice',
+        expires_at: 10,
+      }),
+    );
+    vi.stubGlobal('fetch', request);
+
+    await expect(
+      new StripeCommercialInvoiceCheckoutAdapter().create({
+        secretKey: 'sk_test_platform',
+        idempotencyKey: 'invoice-checkout-1',
+        invoiceId: 'invoice-id',
+        workspaceId: 'workspace-id',
+        invoiceNumber: 'WW-2026-09-001',
+        billingEmail: 'billing@example.com',
+        amountYen: 19_800,
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+      }),
+    ).resolves.toMatchObject({ id: 'cs_test_invoice123' });
+
+    const options = request.mock.calls[0]![1] as RequestInit;
+    expect(options.headers).toMatchObject({ 'idempotency-key': 'invoice-checkout-1' });
+    expect(options.body).toBeInstanceOf(URLSearchParams);
+    if (!(options.body instanceof URLSearchParams)) {
+      throw new Error('Expected Stripe request body to be URLSearchParams');
+    }
+    expect(options.body.get('line_items[0][price_data][currency]')).toBe('jpy');
+    expect(options.body.get('line_items[0][price_data][unit_amount]')).toBe('19800');
+    expect(options.body.get('metadata[invoice_id]')).toBe('invoice-id');
+    expect(options.body.get('metadata[workspace_id]')).toBe('workspace-id');
+    expect(options.body.get('invoice_creation[enabled]')).toBe('true');
+  });
+
+  it('retrieves a Stripe event with the organization secret without persisting its payload', async () => {
+    const request = vi.fn().mockResolvedValue(Response.json({ id: 'evt_failed123' }));
+    vi.stubGlobal('fetch', request);
+    await expect(
+      new StripeEventRetrievalAdapter().retrieve('sk_test_private', 'evt_failed123'),
+    ).resolves.toEqual({ id: 'evt_failed123' });
+    expect(request).toHaveBeenCalledWith(
+      'https://api.stripe.com/v1/events/evt_failed123',
+      expect.objectContaining({ headers: { authorization: 'Bearer sk_test_private' } }),
+    );
+  });
+
+  it('retrieves one Checkout Session using the organization secret', async () => {
+    const request = vi.fn().mockResolvedValue(Response.json({ id: 'cs_test_pending123' }));
+    vi.stubGlobal('fetch', request);
+    await expect(
+      new StripeCheckoutSessionRetrievalAdapter().retrieve('sk_test_private', 'cs_test_pending123'),
+    ).resolves.toEqual({ id: 'cs_test_pending123' });
+    expect(request).toHaveBeenCalledWith(
+      'https://api.stripe.com/v1/checkout/sessions/cs_test_pending123',
+      expect.objectContaining({ headers: { authorization: 'Bearer sk_test_private' } }),
     );
   });
 

@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 
 type DocumentValue = {
   id: string;
-  type: 'TERMS' | 'PRIVACY';
+  type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE';
   version: number;
   title: string;
   content: string;
@@ -78,6 +78,7 @@ export function LegalDocumentEditor({ initialDocuments }: { initialDocuments: Do
           <select name="type">
             <option value="TERMS">利用規約</option>
             <option value="PRIVACY">プライバシー</option>
+            <option value="COMMERCE_DISCLOSURE">特定商取引法に基づく表示</option>
           </select>
         </label>
         <label>

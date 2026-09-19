@@ -2509,3 +2509,59 @@
 - Security: 秘密鍵とWebhook署名シークレットは用途分離したAES-GCMで暗号化し、平文の再表示、監査ログへの保存、別Workspaceからの参照を許可しない。
 - Activation: 秘密鍵の保存だけでは利用開始せず、Stripe APIでアカウントを確認した設定だけを有効化できる。保存、接続確認、有効化、停止を監査する。
 - Scope: この段階は決済接続設定までとし、購入画面、Checkout、Webhookによる入金確定、返金は後続作業とする。
+
+## 2026-09-19: Vercelの自動デプロイをproductionブランチへ限定する
+
+- Cost control: Pull Request、作業ブランチ、`main`の更新ではVercel Deploymentを作成せず、ビルド費用の重複を防ぐ。
+- Branch roles: `main`を開発統合先、`production`を本番公開先とする。公開は`main`から`production`へのPull Requestで行う。
+- Enforcement: `apps/web/vercel.json`は全ブランチを既定で無効化し、`production`だけを明示的に許可する。回帰テストで設定を固定する。
+- Operations: Vercel Project SettingsのProduction Branchも`production`へ変更する。`production`への直接pushとforce pushは行わない。
+- Consequence: `main`へのマージだけでは本番へ反映されない。公開担当者は差分とCIを確認してrelease Pull Requestを`production`へマージする。
+
+## 2026-09-19: 共通Program販売はversioned Offeringと運営団体所有の決済を再利用する
+
+- Product boundary: AI物販専用DAY7 Offerは変更せず、共通の有料Programを`PROGRAM_ACCESS / DIRECT`のversioned termsとして`ProgramOffering`へ保存する。
+- Server authority: 価格、期間、通貨、Membership、Workspace、Service Groupはサーバー側のOfferingと認証主体から解決し、ブラウザー入力を請求根拠にしない。
+- Entitlement: Stripeの署名済みWebhookで入金確認後にだけ期間付き`ProgramEnrollment`を作り、購入時点のOffering条件と決済参照をsnapshotへ残す。
+- Legal gate: 新規販売とCheckoutにはサービス単位の利用規約、プライバシーポリシー、特定商取引法に基づく表示の公開を必須とする。商取引表示は参加登録の同意対象には含めない。
+- Lifecycle: 商品停止・改版後も開始済みCheckoutの正当な入金は履行し、購入済みEnrollmentは維持する。直接購入の重複はApplication判定とDB部分一意indexで防ぎ、Checkout作成失敗は`FAILED`へ移して再試行を可能にする。
+- Limitation: 現行の一会員・一Program制約を維持するため、同一Programの更新購入はこの作業範囲に含めない。
+
+## 2026-09-19: 失敗した決済WebhookはStripeの正本Eventから再処理する
+
+- Payload: カード情報やProvider payloadの保持範囲を増やさず、失敗台帳にはEvent ID、digest、分類だけを保存する。
+- Recovery: 運営団体の暗号化済みStripe秘密鍵で同じEvent IDを再取得し、初回受信と同じdispatcherへ渡す。
+- Isolation: Workspace、実行環境、Provider、設定状態、FAILED状態を再処理前に照合し、再取得したEvent IDの一致も必須とする。
+- Idempotency: 購入、Enrollment、返金、Webhook台帳の既存冪等性を再利用し、再処理専用の状態変更経路を作らない。
+- Audit: 運営者の理由を必須にし、要求・成功・失敗を既存の決済設定監査履歴へ追記する。秘密値やProvider responseは監査へ含めない。
+
+## 2026-09-19: Webhook未着の支払い待ちはStripe Checkoutの正本状態と照合する
+
+- Scope: `CHECKOUT_OPEN`かつ保存済みSession IDを持つ、自Workspace・現在環境の購入だけを手動照合できる。
+- Authority: 運営団体の暗号化済みStripe秘密鍵でSessionを再取得し、Session IDと`metadata.purchase_id`を内部購入台帳と照合する。
+- Transition: `paid`は既存の購入確定、`expired`は既存の期限切れdispatcherへ渡し、未払い・受付中は状態を変更しない。
+- Idempotency: 照合用Event IDとdigestを作り、購入・Enrollment・Event台帳の既存冪等性を利用する。遅延Webhookも別Eventとして安全に処理する。
+- Audit: 照合理由を必須とし、要求・成功・変化なし・失敗を決済設定監査へ追記する。Stripe response本文は保持しない。
+
+# 2026-09-19: OEM決済の異議申立ては返金と分離し、利用権を可逆に停止する
+
+- Boundary: Stripeの署名検証後にWorkspace、Payment Configuration、Payment Intent、金額、通貨、実行環境を照合し、他団体の購入を更新しない。
+- Lifecycle: 開始時は `DISPUTED`、勝訴は `PAID`へ復旧、敗訴は `CHARGEBACK_LOST` とする。異議申立て前のEnrollment状態をSnapshotし、勝訴時だけ可逆に戻す。
+- Accounting: 係争額と返金額を別カラムで保存し、差引売上は二重控除を避けるため両者の大きい方を総額から除く。
+- Ordering: 解決済みの同一Disputeに遅延した開始イベントが届いても再開しない。Webhook Event IDとProgram Action Eventの冪等Keyで再送を無害化する。
+- Privacy: StripeのWebhook本文や証拠は保存せず、Dispute ID、状態、金額、時刻とdigestだけを保持する。
+
+## 2026-09-19: OEM月額利用料は基盤側Stripeで請求台帳と一対一に回収する
+
+- Separation: OEM各社がエンドユーザー売上を受け取る決済接続と、ワタシワークスがOEM月額利用料を回収するStripeを分離する。
+- Authority: Checkoutの金額、請求番号、Workspaceは確定MAUから作成済みの`TenantInvoice`だけを正本とし、ブラウザー入力を請求根拠にしない。
+- Payment: `EXTERNAL_BILLING`契約の`ISSUED`請求だけを団体OWNER/ADMINが支払い、署名済みWebhookで金額・通貨・Session・Workspaceを照合して`PAID`へ更新する。
+- Idempotency: Stripe Event IDを専用台帳で一意にし、Checkout作成にも請求単位のidempotency keyを付ける。Webhook本文とカード情報は保存しない。
+- Scope: 今回はHosted Checkoutと自動入金消込までとし、カード保存による無操作の自動課金、督促、税計算は後続作業へ分離する。
+
+## 2026-09-19: サービス固有の禁止語は生成境界で適用する
+
+- Scope: 千ノ国メディア（`sennokuni-media`）では英字の独立語`OVE`を禁止し、生成文では`ORI`を使用する。
+- Isolation: 表記ルールはService slugに結び付け、ワタシワークス公式や他の運営団体・サービスには適用しない。
+- Enforcement: AIへの表記指示に加え、週間計画、投稿戦略、投稿本文、再生成案を保存・品質確認する前にサーバー側で正規化する。
+- Boundary: 共通生成Providerへ千ノ国固有語を直書きせず、サービス固有Policyとして外側から適用する。

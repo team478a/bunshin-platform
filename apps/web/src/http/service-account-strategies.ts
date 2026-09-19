@@ -20,6 +20,7 @@ import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
+import { applyServiceContentTerminology } from '../services/service-content-terminology';
 
 const uuidSchema = z.string().uuid();
 const generateSchema = z
@@ -242,7 +243,10 @@ export function generateServiceAccountStrategyResponse(
             ...(parsed.data.destinationDetail === undefined
               ? {}
               : { destinationDetail: parsed.data.destinationDetail }),
-            ...result.output,
+            ...applyServiceContentTerminology(
+              result.output,
+              serviceKnowledge.contentTerminologyPolicy,
+            ),
             status: 'PROPOSED',
           }),
         );

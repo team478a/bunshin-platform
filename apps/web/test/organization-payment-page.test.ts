@@ -35,12 +35,22 @@ describe('organization payment settings page', () => {
     expect(source).toContain("where: { workspaceId: workspace.id, status: 'FAILED' }");
     expect(source).toContain('最近の購入');
     expect(source).toContain('要確認の決済通知');
+    expect(source).toContain('recoverFailedPaymentWebhook');
+    expect(source).toContain('Stripeから再取得して処理');
+    expect(source).toContain('webhookEventId');
+    expect(source).toContain('reconcilePendingProgramPurchase');
+    expect(source).toContain('Stripeの状態を確認');
+    expect(source).toContain("purchase.status === 'CHECKOUT_OPEN'");
   });
 
-  it('shows gross payments, cumulative refunds, and net sales', () => {
-    expect(source).toContain('_sum: { amountYen: true, refundedAmountYen: true }');
+  it('shows gross payments, refunds, disputes, and net sales', () => {
+    expect(source).toContain(
+      '_sum: { amountYen: true, refundedAmountYen: true, disputedAmountYen: true }',
+    );
     expect(source).toContain('差引売上');
     expect(source).toContain('返金総額');
     expect(source).toContain('purchase.refundedAmountYen');
+    expect(source).toContain('purchase.disputedAmountYen');
+    expect(source).toContain('charge.dispute.created');
   });
 });

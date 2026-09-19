@@ -10,6 +10,8 @@ import {
 describe('payment operations presentation', () => {
   it('uses operator-friendly purchase labels', () => {
     expect(purchaseStatusLabel.PAID).toBe('入金済み');
+    expect(purchaseStatusLabel.DISPUTED).toBe('カード会社の確認中');
+    expect(purchaseStatusLabel.CHARGEBACK_LOST).toBe('チャージバック確定');
     expect(purchaseStatusLabel.REFUNDED).toBe('全額返金済み');
     expect(purchaseStatusLabel.CHECKOUT_OPEN).toBe('支払い待ち');
   });
@@ -21,6 +23,13 @@ describe('payment operations presentation', () => {
     expect(paymentOperationsMessage({ failedWebhookCount: 0, waitingPurchaseCount: 3 })).toContain(
       '支払い待ち',
     );
+    expect(
+      paymentOperationsMessage({
+        failedWebhookCount: 0,
+        waitingPurchaseCount: 3,
+        disputedPurchaseCount: 1,
+      }),
+    ).toContain('異議申立て');
     expect(paymentOperationsMessage({ failedWebhookCount: 0, waitingPurchaseCount: 0 })).toContain(
       '確認が必要な決済はありません',
     );
@@ -36,5 +45,7 @@ describe('payment operations presentation', () => {
     expect(netPaidAmount(29_800, 5_000)).toBe(24_800);
     expect(netPaidAmount(29_800, 29_800)).toBe(0);
     expect(netPaidAmount(29_800, 40_000)).toBe(0);
+    expect(netPaidAmount(29_800, 5_000, 8_000)).toBe(21_800);
+    expect(netPaidAmount(29_800, 29_800, 29_800)).toBe(0);
   });
 });

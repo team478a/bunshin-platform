@@ -13,6 +13,16 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const checkoutMigration = readFileSync(
+  join(
+    process.cwd(),
+    'prisma',
+    'migrations',
+    '20260919230000_add_oem_invoice_checkout',
+    'migration.sql',
+  ),
+  'utf8',
+);
 
 describe('OEM contract and invoice schema', () => {
   it('binds one invoice to one tenant monthly usage snapshot', () => {
@@ -37,5 +47,15 @@ describe('OEM contract and invoice schema', () => {
     expect(migration).toContain('"payment_terms_days" BETWEEN 0 AND 365');
     expect(migration).toContain('"amount_yen" >= 0');
     expect(migration).toContain('tenant_invoices_status_timestamps');
+  });
+
+  it('tracks hosted payment identity and deduplicates platform billing webhooks', () => {
+    expect(schema).toContain('model CommercialBillingWebhookEvent');
+    expect(schema).toContain('providerCheckoutSessionId String?');
+    expect(checkoutMigration).toContain('commercial_billing_webhook_events');
+    expect(checkoutMigration).toContain('commercial_billing_webhook_events_provider_event_id_key');
+    expect(checkoutMigration).toContain(
+      'FOREIGN KEY ("workspace_id", "invoice_id") REFERENCES "tenant_invoices"',
+    );
   });
 });

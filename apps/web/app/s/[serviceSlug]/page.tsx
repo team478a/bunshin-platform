@@ -140,7 +140,10 @@ export default async function ServiceEntryPage({
               <h2 id="registration-title">{copy.title}</h2>
               <p>{copy.description}</p>
               <ParticipationForm
-                documents={participation.legalDocuments}
+                documents={participation.legalDocuments.filter(
+                  (document): document is typeof document & { type: 'TERMS' | 'PRIVACY' } =>
+                    document.type === 'TERMS' || document.type === 'PRIVACY',
+                )}
                 requiresApproval={participation.registrationMode === 'APPROVAL_REQUIRED'}
                 referralCode={referralCode}
                 referralClickId={referralClickId}
@@ -188,6 +191,11 @@ export default async function ServiceEntryPage({
           )}
           {participation.legalDocuments.some(({ type }) => type === 'PRIVACY') && (
             <Link href={`/s/${configuration.slug}/privacy` as Route}>プライバシー</Link>
+          )}
+          {participation.legalDocuments.some(({ type }) => type === 'COMMERCE_DISCLOSURE') && (
+            <Link href={`/s/${configuration.slug}/commerce` as Route}>
+              特定商取引法に基づく表示
+            </Link>
           )}
           {configuration.poweredByEnabled && <small>Powered by ワタシワークス</small>}
         </footer>
