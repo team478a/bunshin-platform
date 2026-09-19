@@ -2221,6 +2221,7 @@ model Workspace {
   paymentConfigurationAudits     OrganizationPaymentConfigurationAudit[]
   programPurchases               ProgramPurchase[]
   paymentWebhookEvents           PaymentWebhookEvent[]
+  commercialBillingWebhookEvents CommercialBillingWebhookEvent[]
 
   @@index([status])
   @@map("workspaces")
@@ -3142,6 +3143,14 @@ model TenantInvoice {
   amountYen                Int               @map("amount_yen")
   externalInvoiceReference String?           @map("external_invoice_reference") @db.VarChar(200)
   paymentReference         String?           @map("payment_reference") @db.VarChar(200)
+  paymentProvider          PaymentProvider?  @map("payment_provider")
+  providerCheckoutSessionId String?          @unique @map("provider_checkout_session_id") @db.VarChar(200)
+  providerPaymentIntentId  String?            @map("provider_payment_intent_id") @db.VarChar(200)
+  checkoutUrl              String?            @map("checkout_url") @db.VarChar(2000)
+  checkoutExpiresAt        DateTime?          @map("checkout_expires_at") @db.Timestamptz(6)
+  paymentAttemptedAt       DateTime?          @map("payment_attempted_at") @db.Timestamptz(6)
+  paymentFailedAt          DateTime?          @map("payment_failed_at") @db.Timestamptz(6)
+  paymentFailureCategory   String?            @map("payment_failure_category") @db.VarChar(80)
   notes                    String?           @db.VarChar(1000)
   issuedAt                 DateTime?         @map("issued_at") @db.Timestamptz(6)
   dueAt                    DateTime?         @map("due_at") @db.Timestamptz(6)
@@ -3154,12 +3163,35 @@ model TenantInvoice {
   contract                 OrganizationCommercialContract @relation(fields: [workspaceId, contractId], references: [workspaceId, id], onDelete: Restrict)
   monthlyUsage             TenantMonthlyUsage @relation(fields: [workspaceId, monthlyUsageId], references: [workspaceId, id], onDelete: Restrict)
   updatedBy                User              @relation("TenantInvoiceUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  billingWebhookEvents     CommercialBillingWebhookEvent[]
 
   @@unique([workspaceId, monthlyUsageId])
   @@unique([workspaceId, id])
   @@index([workspaceId, status, periodStart])
   @@index([status, dueAt])
   @@map("tenant_invoices")
+}
+
+/// ワタシワークスがOEM運営団体へ請求するStripe Webhookの冪等台帳。本文やカード情報は保存しない。
+model CommercialBillingWebhookEvent {
+  id              String                    @id @default(uuid()) @db.Uuid
+  workspaceId     String                    @map("workspace_id") @db.Uuid
+  invoiceId       String                    @map("invoice_id") @db.Uuid
+  provider        PaymentProvider           @default(STRIPE)
+  providerEventId String                    @map("provider_event_id") @db.VarChar(200)
+  eventType       String                    @map("event_type") @db.VarChar(120)
+  status          PaymentWebhookEventStatus @default(RECEIVED)
+  payloadDigest   String                    @map("payload_digest") @db.VarChar(64)
+  errorCategory   String?                   @map("error_category") @db.VarChar(80)
+  receivedAt      DateTime                  @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt     DateTime?                 @map("processed_at") @db.Timestamptz(6)
+  workspace       Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invoice         TenantInvoice             @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([provider, providerEventId])
+  @@index([workspaceId, status, receivedAt])
+  @@index([invoiceId, receivedAt])
+  @@map("commercial_billing_webhook_events")
 }
 
 /// 契約・請求状態の変更履歴。金額や入金状態を誰が変更したかを追跡する。

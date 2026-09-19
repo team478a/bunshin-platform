@@ -2550,3 +2550,11 @@
 - Accounting: 係争額と返金額を別カラムで保存し、差引売上は二重控除を避けるため両者の大きい方を総額から除く。
 - Ordering: 解決済みの同一Disputeに遅延した開始イベントが届いても再開しない。Webhook Event IDとProgram Action Eventの冪等Keyで再送を無害化する。
 - Privacy: StripeのWebhook本文や証拠は保存せず、Dispute ID、状態、金額、時刻とdigestだけを保持する。
+
+## 2026-09-19: OEM月額利用料は基盤側Stripeで請求台帳と一対一に回収する
+
+- Separation: OEM各社がエンドユーザー売上を受け取る決済接続と、ワタシワークスがOEM月額利用料を回収するStripeを分離する。
+- Authority: Checkoutの金額、請求番号、Workspaceは確定MAUから作成済みの`TenantInvoice`だけを正本とし、ブラウザー入力を請求根拠にしない。
+- Payment: `EXTERNAL_BILLING`契約の`ISSUED`請求だけを団体OWNER/ADMINが支払い、署名済みWebhookで金額・通貨・Session・Workspaceを照合して`PAID`へ更新する。
+- Idempotency: Stripe Event IDを専用台帳で一意にし、Checkout作成にも請求単位のidempotency keyを付ける。Webhook本文とカード情報は保存しない。
+- Scope: 今回はHosted Checkoutと自動入金消込までとし、カード保存による無操作の自動課金、督促、税計算は後続作業へ分離する。
