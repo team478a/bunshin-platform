@@ -26,7 +26,7 @@ async function startInvoicePayment(formData: FormData) {
   } catch {
     redirect(`/organizations/${input.data.workspaceId}/usage?payment=error`);
   }
-  redirect(checkoutUrl as `https://${string}`);
+  redirect(`https://${checkoutUrl.slice('https://'.length)}`);
 }
 
 function yen(value: number | null): string {
