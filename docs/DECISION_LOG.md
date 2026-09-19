@@ -2534,3 +2534,11 @@
 - Transition: `paid`は既存の購入確定、`expired`は既存の期限切れdispatcherへ渡し、未払い・受付中は状態を変更しない。
 - Idempotency: 照合用Event IDとdigestを作り、購入・Enrollment・Event台帳の既存冪等性を利用する。遅延Webhookも別Eventとして安全に処理する。
 - Audit: 照合理由を必須とし、要求・成功・変化なし・失敗を決済設定監査へ追記する。Stripe response本文は保持しない。
+
+# 2026-09-19: OEM決済の異議申立ては返金と分離し、利用権を可逆に停止する
+
+- Boundary: Stripeの署名検証後にWorkspace、Payment Configuration、Payment Intent、金額、通貨、実行環境を照合し、他団体の購入を更新しない。
+- Lifecycle: 開始時は `DISPUTED`、勝訴は `PAID`へ復旧、敗訴は `CHARGEBACK_LOST` とする。異議申立て前のEnrollment状態をSnapshotし、勝訴時だけ可逆に戻す。
+- Accounting: 係争額と返金額を別カラムで保存し、差引売上は二重控除を避けるため両者の大きい方を総額から除く。
+- Ordering: 解決済みの同一Disputeに遅延した開始イベントが届いても再開しない。Webhook Event IDとProgram Action Eventの冪等Keyで再送を無害化する。
+- Privacy: StripeのWebhook本文や証拠は保存せず、Dispute ID、状態、金額、時刻とdigestだけを保持する。

@@ -13,6 +13,7 @@ vi.mock('../src/payments/secure-configuration', () => ({
 }));
 
 import {
+  applyProgramPaymentDispute,
   expireEndedPaidProgramEnrollments,
   expireProgramCheckout,
   refundPaidProgramPurchase,
@@ -124,6 +125,13 @@ describe('program payment lifecycle', () => {
       }),
     ).resolves.toBe(true);
 
+    expect(tx.programPurchase.findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-a',
+        paymentConfigurationId: 'configuration-a',
+        providerPaymentIntentId: 'pi-a',
+      },
+    });
     expect(enrollmentUpdate).toHaveBeenCalledWith({
       where: {
         id: 'paid-a',
@@ -274,6 +282,275 @@ describe('program payment lifecycle', () => {
       where: { id: 'purchase-a' },
       data: { refundedAmountYen: 8_000 },
     });
+  });
+
+  it('suspends only the paid enrollment when a verified dispute opens', async () => {
+    const enrollmentUpdate = vi.fn().mockResolvedValue({ count: 1 });
+    const purchaseUpdate = vi.fn();
+    const tx = {
+      organizationPaymentConfiguration: { findFirst: vi.fn().mockResolvedValue(configuration) },
+      paymentWebhookEvent: {
+        upsert: vi.fn().mockResolvedValue({ id: 'webhook-a', status: 'RECEIVED' }),
+        update: vi.fn(),
+      },
+      programPurchase: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'purchase-a',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          buyerUserId: 'user-a',
+          sourceEnrollmentId: null,
+          paidEnrollmentId: 'paid-a',
+          amountYen: 29_800,
+          refundedAmountYen: 0,
+          disputedAmountYen: 0,
+          currency: 'JPY',
+          status: 'PAID',
+          providerDisputeId: null,
+          disputeStatus: null,
+          disputedAt: null,
+          disputeResolvedAt: null,
+          enrollmentStatusBeforeDispute: null,
+        }),
+        update: purchaseUpdate,
+      },
+      programEnrollment: {
+        findFirst: vi.fn().mockResolvedValue({
+          status: 'ACTIVE',
+          endsAt: new Date('2026-12-18T00:00:00.000Z'),
+        }),
+        updateMany: enrollmentUpdate,
+      },
+      programActionEvent: { create: vi.fn() },
+    };
+    const client = { $transaction: transactionWith(tx) } as unknown as PrismaClient;
+
+    await expect(
+      applyProgramPaymentDispute(client, {
+        configurationId: configuration.id,
+        providerEventId: 'evt-dispute-created',
+        eventType: 'charge.dispute.created',
+        payloadDigest: 'digest',
+        paymentIntentId: 'pi-a',
+        disputeId: 'du-a',
+        amount: 29_800,
+        currency: 'jpy',
+        disputeStatus: 'needs_response',
+        livemode: false,
+      }),
+    ).resolves.toBe(true);
+
+    expect(enrollmentUpdate).toHaveBeenCalledWith({
+      where: {
+        id: 'paid-a',
+        workspaceId: 'workspace-a',
+        groupId: 'group-a',
+        status: { in: ['ACTIVE', 'COMPLETED'] },
+      },
+      data: { status: 'CANCELLED' },
+    });
+    expect(purchaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'purchase-a' },
+      data: expect.objectContaining({
+        status: 'DISPUTED',
+        providerDisputeId: 'du-a',
+        disputedAmountYen: 29_800,
+        enrollmentStatusBeforeDispute: 'ACTIVE',
+      }),
+    });
+    expect(tx.programActionEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ eventType: 'PAYMENT_DISPUTED' }),
+      }),
+    );
+  });
+
+  it('restores access when the organization wins the dispute', async () => {
+    const enrollmentUpdate = vi.fn().mockResolvedValue({ count: 1 });
+    const purchaseUpdate = vi.fn();
+    const tx = {
+      organizationPaymentConfiguration: { findFirst: vi.fn().mockResolvedValue(configuration) },
+      paymentWebhookEvent: {
+        upsert: vi.fn().mockResolvedValue({ id: 'webhook-a', status: 'RECEIVED' }),
+        update: vi.fn(),
+      },
+      programPurchase: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'purchase-a',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          buyerUserId: 'user-a',
+          sourceEnrollmentId: null,
+          paidEnrollmentId: 'paid-a',
+          amountYen: 29_800,
+          currency: 'JPY',
+          status: 'DISPUTED',
+          providerDisputeId: 'du-a',
+          disputedAt: new Date('2026-09-18T00:00:00.000Z'),
+          disputeResolvedAt: null,
+          enrollmentStatusBeforeDispute: 'ACTIVE',
+        }),
+        update: purchaseUpdate,
+      },
+      programEnrollment: {
+        findFirst: vi.fn().mockResolvedValue({
+          status: 'CANCELLED',
+          endsAt: new Date('2099-12-18T00:00:00.000Z'),
+        }),
+        updateMany: enrollmentUpdate,
+      },
+      programActionEvent: { create: vi.fn() },
+    };
+    const client = { $transaction: transactionWith(tx) } as unknown as PrismaClient;
+
+    await applyProgramPaymentDispute(client, {
+      configurationId: configuration.id,
+      providerEventId: 'evt-dispute-won',
+      eventType: 'charge.dispute.closed',
+      payloadDigest: 'digest',
+      paymentIntentId: 'pi-a',
+      disputeId: 'du-a',
+      amount: 29_800,
+      currency: 'JPY',
+      disputeStatus: 'won',
+      livemode: false,
+    });
+
+    expect(enrollmentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'ACTIVE' } }),
+    );
+    expect(purchaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'purchase-a' },
+      data: expect.objectContaining({
+        status: 'PAID',
+        disputedAmountYen: 0,
+        disputeStatus: 'won',
+      }),
+    });
+  });
+
+  it('keeps access cancelled and removes disputed revenue after a lost chargeback', async () => {
+    const enrollmentUpdate = vi.fn().mockResolvedValue({ count: 1 });
+    const purchaseUpdate = vi.fn();
+    const tx = {
+      organizationPaymentConfiguration: { findFirst: vi.fn().mockResolvedValue(configuration) },
+      paymentWebhookEvent: {
+        upsert: vi.fn().mockResolvedValue({ id: 'webhook-a', status: 'RECEIVED' }),
+        update: vi.fn(),
+      },
+      programPurchase: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'purchase-a',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          buyerUserId: 'user-a',
+          sourceEnrollmentId: 'free-a',
+          paidEnrollmentId: 'paid-a',
+          amountYen: 29_800,
+          currency: 'JPY',
+          status: 'DISPUTED',
+          providerDisputeId: 'du-a',
+          disputedAt: new Date('2026-09-18T00:00:00.000Z'),
+          disputeResolvedAt: null,
+          enrollmentStatusBeforeDispute: 'ACTIVE',
+        }),
+        update: purchaseUpdate,
+      },
+      programEnrollment: {
+        findFirst: vi.fn().mockResolvedValue({
+          status: 'CANCELLED',
+          endsAt: new Date('2026-12-18T00:00:00.000Z'),
+        }),
+        updateMany: enrollmentUpdate,
+      },
+      programActionEvent: { create: vi.fn() },
+    };
+    const client = { $transaction: transactionWith(tx) } as unknown as PrismaClient;
+
+    await applyProgramPaymentDispute(client, {
+      configurationId: configuration.id,
+      providerEventId: 'evt-dispute-lost',
+      eventType: 'charge.dispute.closed',
+      payloadDigest: 'digest',
+      paymentIntentId: 'pi-a',
+      disputeId: 'du-a',
+      amount: 29_800,
+      currency: 'JPY',
+      disputeStatus: 'lost',
+      livemode: false,
+    });
+
+    expect(enrollmentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'CANCELLED' } }),
+    );
+    expect(purchaseUpdate).toHaveBeenCalledWith({
+      where: { id: 'purchase-a' },
+      data: expect.objectContaining({
+        status: 'CHARGEBACK_LOST',
+        disputedAmountYen: 29_800,
+        disputeStatus: 'lost',
+      }),
+    });
+    expect(tx.programActionEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ eventType: 'PAYMENT_CHARGEBACK_LOST' }),
+      }),
+    );
+  });
+
+  it('does not reopen a resolved dispute when an older event arrives late', async () => {
+    const webhookUpdate = vi.fn();
+    const tx = {
+      organizationPaymentConfiguration: { findFirst: vi.fn().mockResolvedValue(configuration) },
+      paymentWebhookEvent: {
+        upsert: vi.fn().mockResolvedValue({ id: 'webhook-a', status: 'RECEIVED' }),
+        update: webhookUpdate,
+      },
+      programPurchase: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'purchase-a',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          paidEnrollmentId: 'paid-a',
+          amountYen: 29_800,
+          currency: 'JPY',
+          status: 'PAID',
+          providerDisputeId: 'du-a',
+          disputedAt: new Date('2026-09-18T00:00:00.000Z'),
+          disputeResolvedAt: new Date('2026-09-19T00:00:00.000Z'),
+        }),
+        update: vi.fn(),
+      },
+      programEnrollment: { findFirst: vi.fn(), updateMany: vi.fn() },
+      programActionEvent: { create: vi.fn() },
+    };
+    const client = { $transaction: transactionWith(tx) } as unknown as PrismaClient;
+
+    await expect(
+      applyProgramPaymentDispute(client, {
+        configurationId: configuration.id,
+        providerEventId: 'evt-dispute-late',
+        eventType: 'charge.dispute.created',
+        payloadDigest: 'digest',
+        paymentIntentId: 'pi-a',
+        disputeId: 'du-a',
+        amount: 29_800,
+        currency: 'JPY',
+        disputeStatus: 'needs_response',
+        livemode: false,
+      }),
+    ).resolves.toBe(false);
+
+    expect(webhookUpdate).toHaveBeenCalledWith({
+      where: { id: 'webhook-a' },
+      data: {
+        status: 'IGNORED',
+        errorCategory: 'DISPUTE_ALREADY_RESOLVED',
+        processedAt: expect.any(Date),
+      },
+    });
+    expect(tx.programEnrollment.findFirst).not.toHaveBeenCalled();
+    expect(tx.programPurchase.update).not.toHaveBeenCalled();
   });
 
   it('expires ended paid enrollments without touching unrelated programs', async () => {

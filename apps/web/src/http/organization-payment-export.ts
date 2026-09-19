@@ -11,10 +11,15 @@ type PaymentExportRow = {
   status: string;
   amountYen: number;
   refundedAmountYen: number;
+  disputedAmountYen: number;
   currency: string;
   createdAt: Date;
   paidAt: Date | null;
   refundedAt: Date | null;
+  disputedAt: Date | null;
+  disputeResolvedAt: Date | null;
+  providerDisputeId: string | null;
+  disputeStatus: string | null;
   expiredAt: Date | null;
   providerCheckoutSessionId: string | null;
   providerPaymentIntentId: string | null;
@@ -34,14 +39,19 @@ export function organizationPaymentCsvRows(
       'サービス',
       '決済額（円）',
       '返金額（円）',
+      '係争・チャージバック額（円）',
       '差引額（円）',
       '通貨',
       '状態',
       '入金日時',
       '返金完了日時',
+      '異議申立て開始日時',
+      '異議申立て解決日時',
+      '異議申立て状態',
       '期限切れ日時',
       'Stripe Checkout ID',
       'Stripe Payment Intent ID',
+      'Stripe Dispute ID',
     ],
     ...purchases.map((purchase) => [
       purchase.id,
@@ -51,14 +61,22 @@ export function organizationPaymentCsvRows(
       groupNames.get(purchase.groupId) ?? '削除済みのサービス',
       purchase.amountYen,
       purchase.refundedAmountYen,
-      Math.max(0, purchase.amountYen - purchase.refundedAmountYen),
+      purchase.disputedAmountYen,
+      Math.max(
+        0,
+        purchase.amountYen - Math.max(purchase.refundedAmountYen, purchase.disputedAmountYen),
+      ),
       purchase.currency,
       purchase.status,
       purchase.paidAt?.toISOString() ?? null,
       purchase.refundedAt?.toISOString() ?? null,
+      purchase.disputedAt?.toISOString() ?? null,
+      purchase.disputeResolvedAt?.toISOString() ?? null,
+      purchase.disputeStatus,
       purchase.expiredAt?.toISOString() ?? null,
       purchase.providerCheckoutSessionId,
       purchase.providerPaymentIntentId,
+      purchase.providerDisputeId,
     ]),
   ];
 }
@@ -99,13 +117,18 @@ export async function organizationPaymentExportResponse(request: Request, rawWor
         status: true,
         amountYen: true,
         refundedAmountYen: true,
+        disputedAmountYen: true,
         currency: true,
         createdAt: true,
         paidAt: true,
         refundedAt: true,
+        disputedAt: true,
+        disputeResolvedAt: true,
+        disputeStatus: true,
         expiredAt: true,
         providerCheckoutSessionId: true,
         providerPaymentIntentId: true,
+        providerDisputeId: true,
         buyer: { select: { displayName: true, email: true } },
       },
     });

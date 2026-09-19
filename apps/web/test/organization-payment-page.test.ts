@@ -43,10 +43,14 @@ describe('organization payment settings page', () => {
     expect(source).toContain("purchase.status === 'CHECKOUT_OPEN'");
   });
 
-  it('shows gross payments, cumulative refunds, and net sales', () => {
-    expect(source).toContain('_sum: { amountYen: true, refundedAmountYen: true }');
+  it('shows gross payments, refunds, disputes, and net sales', () => {
+    expect(source).toContain(
+      '_sum: { amountYen: true, refundedAmountYen: true, disputedAmountYen: true }',
+    );
     expect(source).toContain('差引売上');
     expect(source).toContain('返金総額');
     expect(source).toContain('purchase.refundedAmountYen');
+    expect(source).toContain('purchase.disputedAmountYen');
+    expect(source).toContain('charge.dispute.created');
   });
 });
