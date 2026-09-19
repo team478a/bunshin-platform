@@ -32,8 +32,13 @@ export default async function CommercialBillingOperationsPage({
   const now = new Date();
   const data = await new db.PrismaCommercialBillingService().operationsDashboard(now);
   const status = (await searchParams).status;
+  const reminderFailureInvoiceIds = new Set(
+    data.reminderFailures.map((failure) => failure.entityId),
+  );
+  const invoicesById = new Map(data.invoices.map((invoice) => [invoice.id, invoice]));
   const invoices = data.invoices.filter((invoice) => {
     if (status === 'OVERDUE') return isTenantInvoiceOverdue(invoice, now);
+    if (status === 'REMINDER_FAILED') return reminderFailureInvoiceIds.has(invoice.id);
     if (status === 'DRAFT' || status === 'ISSUED' || status === 'PAID' || status === 'VOID') {
       return invoice.status === status;
     }
@@ -75,7 +80,40 @@ export default async function CommercialBillingOperationsPage({
             {data.summary.draftCount}件／{yen(data.summary.draftAmountYen)}
           </strong>
         </div>
+        <div>
+          <span>案内送信の要確認</span>
+          <strong>{reminderFailureInvoiceIds.size}件</strong>
+        </div>
       </section>
+
+      {data.reminderFailures.length > 0 ? (
+        <section className="settings-card">
+          <h2>自動案内メールの要確認</h2>
+          <p>
+            自動送信に失敗した請求があります。対象団体の画面で管理者メール設定を確認し、手動再送してください。
+          </p>
+          <ul className="summary-list">
+            {data.reminderFailures.map((failure) => {
+              const invoice = invoicesById.get(failure.entityId);
+              if (!invoice) return null;
+              return (
+                <li key={failure.id}>
+                  <span>
+                    {invoice.workspace.name}／{invoice.invoiceNumber}／
+                    {failure.action.startsWith('OVERDUE_') ? '期限超過案内' : '支払い案内'}（
+                    {failure.occurredAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}）
+                  </span>
+                  <strong>
+                    <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
+                      確認・再送
+                    </Link>
+                  </strong>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="settings-card">
         <div className="management-section__heading">
@@ -106,6 +144,12 @@ export default async function CommercialBillingOperationsPage({
           <Link className="button button--secondary" href="/admin/commercial-billing?status=PAID">
             入金済み
           </Link>
+          <Link
+            className="button button--secondary"
+            href="/admin/commercial-billing?status=REMINDER_FAILED"
+          >
+            案内送信失敗（{reminderFailureInvoiceIds.size}）
+          </Link>
         </div>
         {invoices.length === 0 ? (
           <p>該当する請求はありません。</p>
@@ -121,6 +165,7 @@ export default async function CommercialBillingOperationsPage({
                   <th>金額</th>
                   <th>状態</th>
                   <th>支払期限</th>
+                  <th>自動案内</th>
                   <th>確認</th>
                 </tr>
               </thead>
@@ -143,6 +188,7 @@ export default async function CommercialBillingOperationsPage({
                         {invoice.dueAt?.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' }) ??
                           '—'}
                       </td>
+                      <td>{reminderFailureInvoiceIds.has(invoice.id) ? '要確認' : '—'}</td>
                       <td>
                         <Link href={`/admin/organizations/${invoice.workspaceId}/commercial`}>
                           詳細・更新
