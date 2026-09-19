@@ -226,6 +226,27 @@ function localDateTime(value: Date | null): string {
     .slice(0, 16);
 }
 
+function memberLabel(member: {
+  user: { displayName: string; email: string | null };
+  serviceMemberBusinessProfile: { businessName: string } | null;
+}): string {
+  const name = member.user.displayName || member.user.email || '名前未設定';
+  const businessName = member.serviceMemberBusinessProfile?.businessName.trim();
+  return businessName && businessName !== name ? `${businessName} ／ ${name}` : name;
+}
+
+function lastUsedLabel(lastUsedAt: Date | null): string {
+  if (!lastUsedAt) return 'まだ利用記録がありません';
+  return lastUsedAt.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 const roleLabel = { MANAGER: 'グループ管理者', PARTICIPANT: '参加者' } as const;
 const serviceRoleLabel = {
   SERVICE_OWNER: 'サービス所有者',
@@ -307,7 +328,9 @@ export default async function GroupMemberFeaturesPage({
           serviceRole: true,
           status: true,
           consentedAt: true,
+          lastUsedAt: true,
           user: { select: { displayName: true, email: true } },
+          serviceMemberBusinessProfile: { select: { businessName: true } },
           serviceOnboardingResponse: { select: { completedAt: true } },
           featureAssignments: true,
         },
@@ -486,7 +509,7 @@ export default async function GroupMemberFeaturesPage({
           <div className="admin-list">
             {pendingMemberships.map((membership) => (
               <article className="admin-list__item" key={membership.id}>
-                <h3>{membership.user.displayName}</h3>
+                <h3>{memberLabel(membership)}</h3>
                 <p>{membership.user.email ?? 'メールアドレスなし'}</p>
                 <form className="form-stack" action={approveParticipation}>
                   {query.service && (
@@ -530,7 +553,7 @@ export default async function GroupMemberFeaturesPage({
                 .filter((membership) => membership.status !== 'PENDING_APPROVAL')
                 .map((membership) => (
                   <option key={membership.id} value={membership.id}>
-                    {membership.user.displayName}（
+                    {memberLabel(membership)}（
                     {group.serviceConfiguration
                       ? serviceRoleLabel[membership.serviceRole]
                       : roleLabel[membership.role]}
@@ -548,10 +571,17 @@ export default async function GroupMemberFeaturesPage({
         </form>
         {selectedMember ? (
           <>
-            <p>
-              選択中：{selectedMember.user.displayName} ／{' '}
-              {selectedMember.user.email ?? 'メールなし'}
-            </p>
+            <p>選択中：{memberLabel(selectedMember)}</p>
+            <dl className="member-management-overview__stats">
+              <div>
+                <dt>連絡先</dt>
+                <dd>{selectedMember.user.email ?? 'メールアドレスなし'}</dd>
+              </div>
+              <div>
+                <dt>最終利用</dt>
+                <dd>{lastUsedLabel(selectedMember.lastUsedAt)}</dd>
+              </div>
+            </dl>
             {group.serviceConfiguration ? (
               <section className="settings-card settings-card--nested">
                 <h3>初回設定の状況</h3>
