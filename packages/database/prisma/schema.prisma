@@ -100,6 +100,8 @@ enum ProgramPurchaseStatus {
   CREATED
   CHECKOUT_OPEN
   PAID
+  DISPUTED
+  CHARGEBACK_LOST
   FAILED
   EXPIRED
   CANCELLED
@@ -3051,15 +3053,21 @@ model ProgramPurchase {
   status                    ProgramPurchaseStatus             @default(CREATED)
   amountYen                 Int                               @map("amount_yen")
   refundedAmountYen         Int                               @default(0) @map("refunded_amount_yen")
+  disputedAmountYen         Int                               @default(0) @map("disputed_amount_yen")
   currency                  String                            @default("JPY") @db.VarChar(3)
   idempotencyKey            String                            @map("idempotency_key") @db.VarChar(200)
   providerCheckoutSessionId String?                           @unique @map("provider_checkout_session_id") @db.VarChar(200)
   providerPaymentIntentId   String?                           @unique @map("provider_payment_intent_id") @db.VarChar(200)
+  providerDisputeId         String?                           @map("provider_dispute_id") @db.VarChar(200)
+  disputeStatus             String?                           @map("dispute_status") @db.VarChar(40)
+  enrollmentStatusBeforeDispute ProgramEnrollmentStatus?     @map("enrollment_status_before_dispute")
   paidEnrollmentId          String?                           @unique @map("paid_enrollment_id") @db.Uuid
   checkoutExpiresAt         DateTime?                         @map("checkout_expires_at") @db.Timestamptz(6)
   paidAt                    DateTime?                         @map("paid_at") @db.Timestamptz(6)
   expiredAt                 DateTime?                         @map("expired_at") @db.Timestamptz(6)
   refundedAt                DateTime?                         @map("refunded_at") @db.Timestamptz(6)
+  disputedAt                DateTime?                         @map("disputed_at") @db.Timestamptz(6)
+  disputeResolvedAt         DateTime?                         @map("dispute_resolved_at") @db.Timestamptz(6)
   metadata                  Json
   createdAt                 DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                 DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -3073,6 +3081,7 @@ model ProgramPurchase {
   @@unique([workspaceId, groupId, paidEnrollmentId])
   @@index([workspaceId, groupId, buyerUserId, status])
   @@index([paymentConfigurationId, status, createdAt])
+  @@index([paymentConfigurationId, providerDisputeId])
   @@index([status, checkoutExpiresAt])
   @@map("program_purchases")
 }

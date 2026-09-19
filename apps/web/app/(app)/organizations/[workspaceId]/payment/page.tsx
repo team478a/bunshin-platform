@@ -394,10 +394,14 @@ export default async function OrganizationPaymentPage({
         status: true,
         amountYen: true,
         refundedAmountYen: true,
+        disputedAmountYen: true,
+        disputeStatus: true,
         createdAt: true,
         paidAt: true,
         expiredAt: true,
         refundedAt: true,
+        disputedAt: true,
+        disputeResolvedAt: true,
         buyer: { select: { displayName: true, email: true } },
       },
     }),
@@ -408,7 +412,7 @@ export default async function OrganizationPaymentPage({
     }),
     db.prisma.programPurchase.aggregate({
       where: { workspaceId: workspace.id, paidAt: { not: null } },
-      _sum: { amountYen: true, refundedAmountYen: true },
+      _sum: { amountYen: true, refundedAmountYen: true, disputedAmountYen: true },
     }),
     db.prisma.paymentWebhookEvent.findMany({
       where: { workspaceId: workspace.id, status: 'FAILED' },
@@ -439,9 +443,12 @@ export default async function OrganizationPaymentPage({
     (countByStatus.get('CREATED') ?? 0) + (countByStatus.get('CHECKOUT_OPEN') ?? 0);
   const paidPurchaseCount = countByStatus.get('PAID') ?? 0;
   const refundedPurchaseCount = countByStatus.get('REFUNDED') ?? 0;
+  const disputedPurchaseCount = countByStatus.get('DISPUTED') ?? 0;
+  const chargebackLostPurchaseCount = countByStatus.get('CHARGEBACK_LOST') ?? 0;
   const grossAmountYen = paidAmounts._sum.amountYen ?? 0;
   const refundedAmountYen = paidAmounts._sum.refundedAmountYen ?? 0;
-  const netAmountYen = netPaidAmount(grossAmountYen, refundedAmountYen);
+  const disputedAmountYen = paidAmounts._sum.disputedAmountYen ?? 0;
+  const netAmountYen = netPaidAmount(grossAmountYen, refundedAmountYen, disputedAmountYen);
   const result = (await searchParams).result;
   const webhookUrl = configuration
     ? new URL(
@@ -490,7 +497,13 @@ export default async function OrganizationPaymentPage({
 
       <section className="settings-card" aria-labelledby="payment-operations-title">
         <h2 id="payment-operations-title">決済の運用状況</h2>
-        <p>{paymentOperationsMessage({ failedWebhookCount, waitingPurchaseCount })}</p>
+        <p>
+          {paymentOperationsMessage({
+            failedWebhookCount,
+            waitingPurchaseCount,
+            disputedPurchaseCount,
+          })}
+        </p>
         <div className="operations-overview" aria-label="売上と購入状況">
           <div>
             <span>差引売上</span>
@@ -505,6 +518,10 @@ export default async function OrganizationPaymentPage({
             <strong>{yen(refundedAmountYen)}</strong>
           </div>
           <div>
+            <span>係争・チャージバック額</span>
+            <strong>{yen(disputedAmountYen)}</strong>
+          </div>
+          <div>
             <span>入金済み</span>
             <strong>{paidPurchaseCount.toLocaleString('ja-JP')}件</strong>
           </div>
@@ -515,6 +532,14 @@ export default async function OrganizationPaymentPage({
           <div>
             <span>全額返金</span>
             <strong>{refundedPurchaseCount.toLocaleString('ja-JP')}件</strong>
+          </div>
+          <div>
+            <span>カード会社の確認中</span>
+            <strong>{disputedPurchaseCount.toLocaleString('ja-JP')}件</strong>
+          </div>
+          <div>
+            <span>チャージバック確定</span>
+            <strong>{chargebackLostPurchaseCount.toLocaleString('ja-JP')}件</strong>
           </div>
         </div>
       </section>
@@ -559,11 +584,21 @@ export default async function OrganizationPaymentPage({
                       {purchase.refundedAmountYen > 0 ? (
                         <small>返金 {yen(purchase.refundedAmountYen)}</small>
                       ) : null}
+                      {purchase.disputedAmountYen > 0 ? (
+                        <small>係争中・チャージバック {yen(purchase.disputedAmountYen)}</small>
+                      ) : null}
                     </td>
-                    <td>{purchaseStatusLabel[purchase.status]}</td>
+                    <td>
+                      {purchaseStatusLabel[purchase.status]}
+                      {purchase.disputeStatus ? (
+                        <small>Stripe: {purchase.disputeStatus}</small>
+                      ) : null}
+                    </td>
                     <td>
                       {paymentDate(
                         purchase.refundedAt ??
+                          purchase.disputeResolvedAt ??
+                          purchase.disputedAt ??
                           purchase.paidAt ??
                           purchase.expiredAt ??
                           purchase.createdAt,
@@ -667,8 +702,9 @@ export default async function OrganizationPaymentPage({
             <strong>Stripeに登録するWebhook URL</strong>
             <p className="break-all">{webhookUrl}</p>
             <p>
-              送信イベントは checkout.session.completed、checkout.session.expired、 charge.refunded
-              を選んでください。
+              送信イベントは checkout.session.completed、checkout.session.expired、
+              charge.refunded、charge.dispute.created、charge.dispute.updated、
+              charge.dispute.closed を選んでください。
             </p>
           </div>
         ) : null}
@@ -764,7 +800,7 @@ export default async function OrganizationPaymentPage({
           <li>この団体の所有者・管理者だけが設定できます。</li>
         </ul>
         <p>
-          有効化後の購入はStripeの画面で行われ、署名を確認できた入金だけが利用開始に反映されます。全額返金とCheckout期限切れも自動で台帳へ反映します。
+          有効化後の購入はStripeの画面で行われ、署名を確認できた入金だけが利用開始に反映されます。全額返金、Checkout期限切れ、カード会社への異議申立てと解決結果も自動で台帳と利用状態へ反映します。
         </p>
       </section>
     </main>

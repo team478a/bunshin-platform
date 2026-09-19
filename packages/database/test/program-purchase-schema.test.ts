@@ -37,6 +37,20 @@ const commerceDisclosureMigration = readFileSync(
   ),
   'utf8',
 );
+const disputeStatusMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260919205000_add_program_purchase_dispute_statuses/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const disputeMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260919210000_add_program_purchase_disputes/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('program purchase persistence', () => {
   it('scopes purchases to an organization and service with provider idempotency', () => {
@@ -80,5 +94,21 @@ describe('program purchase persistence', () => {
     expect(commerceDisclosureMigration).toContain(
       `ALTER TYPE "LegalDocumentType" ADD VALUE 'COMMERCE_DISCLOSURE'`,
     );
+  });
+
+  it('records reversible disputes separately from refunds', () => {
+    expect(schema).toContain('DISPUTED');
+    expect(schema).toContain('CHARGEBACK_LOST');
+    expect(schema).toContain('disputedAmountYen');
+    expect(schema).toContain('enrollmentStatusBeforeDispute');
+    expect(disputeStatusMigration).toContain(
+      `ALTER TYPE "ProgramPurchaseStatus" ADD VALUE 'DISPUTED'`,
+    );
+    expect(disputeStatusMigration).toContain(
+      `ALTER TYPE "ProgramPurchaseStatus" ADD VALUE 'CHARGEBACK_LOST'`,
+    );
+    expect(disputeMigration).toContain('program_purchases_disputed_amount_yen_check');
+    expect(disputeMigration).toContain('provider_dispute_id');
+    expect(disputeMigration).toContain("'CREATED', 'CHECKOUT_OPEN', 'PAID', 'DISPUTED'");
   });
 });

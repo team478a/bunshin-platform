@@ -3,6 +3,7 @@ import { ApplicationError } from '@bunshin/shared';
 import type { PrismaClient } from '@bunshin/database';
 import { z } from 'zod';
 import {
+  applyProgramPaymentDispute,
   completePaidProgramPurchase,
   expireProgramCheckout,
   refundPaidProgramPurchase,
@@ -23,6 +24,7 @@ export type StripeProgramEvent = {
       amount_refunded?: unknown;
       currency?: unknown;
       refunded?: unknown;
+      status?: unknown;
       metadata?: Record<string, unknown>;
     };
   };
@@ -91,6 +93,40 @@ export async function processStripeProgramEvent(
       amountRefunded: session.amount_refunded,
       currency: session.currency,
       fullyRefunded: session.refunded,
+      livemode: event.livemode,
+    });
+    return;
+  }
+
+  if (
+    [
+      'charge.dispute.created',
+      'charge.dispute.updated',
+      'charge.dispute.closed',
+      'charge.dispute.funds_withdrawn',
+      'charge.dispute.funds_reinstated',
+    ].includes(event.type)
+  ) {
+    if (
+      typeof session?.id !== 'string' ||
+      typeof session.payment_intent !== 'string' ||
+      typeof session.amount !== 'number' ||
+      typeof session.currency !== 'string' ||
+      typeof session.status !== 'string' ||
+      typeof event.livemode !== 'boolean'
+    ) {
+      throw new ApplicationError('VALIDATION_ERROR', 'incomplete Stripe dispute event');
+    }
+    await applyProgramPaymentDispute(db, {
+      configurationId: configuration.id,
+      providerEventId: event.id,
+      eventType: event.type,
+      payloadDigest,
+      paymentIntentId: session.payment_intent,
+      disputeId: session.id,
+      amount: session.amount,
+      currency: session.currency,
+      disputeStatus: session.status,
       livemode: event.livemode,
     });
     return;

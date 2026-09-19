@@ -15,10 +15,15 @@ describe('organization payment CSV', () => {
           status: 'PAID',
           amountYen: 29_800,
           refundedAmountYen: 5_000,
+          disputedAmountYen: 8_000,
           currency: 'JPY',
           createdAt: new Date('2026-09-18T00:00:00.000Z'),
           paidAt: new Date('2026-09-18T00:01:00.000Z'),
           refundedAt: null,
+          disputedAt: new Date('2026-09-18T00:02:00.000Z'),
+          disputeResolvedAt: null,
+          providerDisputeId: 'du-a',
+          disputeStatus: 'under_review',
           expiredAt: null,
           providerCheckoutSessionId: '=unsafe',
           providerPaymentIntentId: 'pi-a',
@@ -29,7 +34,8 @@ describe('organization payment CSV', () => {
     );
     const output = csv(rows);
 
-    expect(output).toContain('"29800","5000","24800"');
+    expect(output).toContain('"29800","5000","8000","21800"');
+    expect(output).toContain('under_review');
     expect(output).toContain('サービスA');
     expect(output).toContain("'=unsafe");
     expect(output.charCodeAt(0)).toBe(0xfeff);

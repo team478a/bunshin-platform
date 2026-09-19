@@ -9,6 +9,8 @@ describe('payment program lifecycle boundaries', () => {
     const dispatcher = source('../src/payments/stripe-program-event.ts');
     expect(dispatcher).toContain("event.type === 'checkout.session.expired'");
     expect(dispatcher).toContain("event.type === 'charge.refunded'");
+    expect(dispatcher).toContain("'charge.dispute.created'");
+    expect(dispatcher).toContain("'charge.dispute.closed'");
     expect(webhook).toContain('verifyStripeWebhookSignature');
     expect(webhook).toContain('processStripeProgramEvent');
   });

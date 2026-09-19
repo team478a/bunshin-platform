@@ -1,0 +1,2 @@
+ALTER TYPE "ProgramPurchaseStatus" ADD VALUE 'DISPUTED';
+ALTER TYPE "ProgramPurchaseStatus" ADD VALUE 'CHARGEBACK_LOST';
