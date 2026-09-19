@@ -2995,6 +2995,7 @@ model OrganizationCommercialContract {
   billingName               String                     @map("billing_name") @db.VarChar(200)
   billingEmail              String                     @map("billing_email") @db.VarChar(320)
   paymentTermsDays          Int                        @default(30) @map("payment_terms_days")
+  automaticRemindersEnabled Boolean                    @default(false) @map("automatic_reminders_enabled")
   externalCustomerReference String?                    @map("external_customer_reference") @db.VarChar(200)
   startsAt                  DateTime?                   @map("starts_at") @db.Timestamptz(6)
   endsAt                    DateTime?                   @map("ends_at") @db.Timestamptz(6)

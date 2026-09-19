@@ -20,6 +20,10 @@ const contractSchema = z.object({
   billingName: z.string().trim().min(1).max(200),
   billingEmail: z.email().max(320),
   paymentTermsDays: z.coerce.number().int().min(0).max(365),
+  automaticRemindersEnabled: z
+    .string()
+    .optional()
+    .transform((value) => value === 'on'),
   externalCustomerReference: z.string().trim().max(200).optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
@@ -495,6 +499,19 @@ export default async function OrganizationCommercialPage({
                     required
                   />
                 </label>
+                <label className="field field--checkbox">
+                  <input
+                    name="automaticRemindersEnabled"
+                    type="checkbox"
+                    defaultChecked={
+                      billing.organizationCommercialContract?.automaticRemindersEnabled
+                    }
+                  />
+                  <span>支払期限の3日前と期限超過後に、請求先へ案内メールを自動送信する</span>
+                </label>
+                <p>
+                  初期状態は停止です。管理者メールの接続確認が完了している場合だけ送信します。同じ請求・同じ段階の案内は1回だけです。
+                </p>
                 <label className="field">
                   <span className="field__label">見積条件・メモ（任意）</span>
                   <input className="field__control" name="notes" maxLength={1000} />
