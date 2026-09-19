@@ -4,6 +4,7 @@ import {
   parseAiResaleOfferTerms,
   parseAiResaleRuntimeSettings,
 } from '@bunshin/capability-resale';
+import { parseProgramProductTerms } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@bunshin/database';
@@ -14,6 +15,112 @@ import {
 } from './secure-configuration';
 
 type Db = PrismaClient | Prisma.TransactionClient;
+type CheckoutDependencies = {
+  crypto: Pick<AesGcmPaymentSecretCrypto, 'decrypt'>;
+  stripe: Pick<StripeCheckoutAdapter, 'create'>;
+};
+
+async function validatedDirectPurchaseContext(
+  db: Db,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    buyerUserId: string;
+    offeringId: string;
+  },
+  options: { requireActivePayment?: boolean; requireActiveOffering?: boolean } = {},
+) {
+  const now = new Date();
+  const [offering, paymentConfiguration, membership] = await Promise.all([
+    db.programOffering.findFirst({
+      where: {
+        id: input.offeringId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status:
+          options.requireActiveOffering === false
+            ? { in: ['ACTIVE', 'SUSPENDED', 'SUPERSEDED'] }
+            : 'ACTIVE',
+        isFree: false,
+        ...(options.requireActiveOffering === false
+          ? {}
+          : {
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            }),
+      },
+    }),
+    db.organizationPaymentConfiguration.findUnique({
+      where: {
+        workspaceId_environment_provider: {
+          workspaceId: input.workspaceId,
+          environment: currentPaymentEnvironment(),
+          provider: 'STRIPE',
+        },
+      },
+    }),
+    db.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.buyerUserId,
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+      },
+    }),
+  ]);
+  const terms = offering ? parseProgramProductTerms(offering.termsSnapshot) : null;
+  if (!offering || !membership || !terms) {
+    throw new ApplicationError('NOT_FOUND', 'program product unavailable');
+  }
+  if (options.requireActiveOffering !== false) {
+    const legalDocuments = await db.serviceLegalDocument.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        type: { in: ['TERMS', 'PRIVACY', 'COMMERCE_DISCLOSURE'] },
+        status: 'PUBLISHED',
+        effectiveAt: { lte: now },
+      },
+      select: { type: true },
+    });
+    if (new Set(legalDocuments.map(({ type }) => type)).size !== 3) {
+      throw new ApplicationError('CONFIGURATION_ERROR', 'commerce legal documents are not ready');
+    }
+  }
+  if (
+    !paymentConfiguration ||
+    ((options.requireActivePayment ?? true)
+      ? paymentConfiguration.status !== 'ACTIVE'
+      : !['ACTIVE', 'DISABLED'].includes(paymentConfiguration.status)) ||
+    !paymentConfiguration.lastVerifiedAt ||
+    !paymentConfiguration.encryptedWebhookSecret
+  ) {
+    throw new ApplicationError('CONFIGURATION_ERROR', 'organization payment is not active');
+  }
+  const [program, enrolled] = await Promise.all([
+    db.serviceProgram.findFirst({
+      where: {
+        id: offering.serviceProgramId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+      },
+    }),
+    db.programEnrollment.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membership.id,
+        serviceProgramId: offering.serviceProgramId,
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (!program) throw new ApplicationError('NOT_FOUND', 'program product unavailable');
+  if (enrolled) throw new ApplicationError('CONFLICT', 'member already has this program');
+  return { offering, paymentConfiguration, membership, program, terms };
+}
 
 async function validatedPurchaseContext(
   db: Db,
@@ -115,7 +222,7 @@ export async function createProgramCheckout(
     idempotencyKey: string;
     serviceSlug: string;
   },
-  dependencies = {
+  dependencies: CheckoutDependencies = {
     crypto: new AesGcmPaymentSecretCrypto(),
     stripe: new StripeCheckoutAdapter(),
   },
@@ -155,22 +262,137 @@ export async function createProgramCheckout(
         metadata: { moduleKey: AI_RESALE_V1_MODULE_KEY, offerKey: context.terms.offerKey },
       },
     }));
-  if (purchase.status === 'PAID') {
-    throw new ApplicationError('CONFLICT', 'purchase already paid');
+  if (['PAID', 'DISPUTED', 'CHARGEBACK_LOST', 'REFUNDED'].includes(purchase.status)) {
+    throw new ApplicationError('CONFLICT', 'purchase already settled');
   }
   const baseUrl = getServerEnvironment().APP_URL;
   const returnPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs/${input.sourceEnrollmentId}`;
-  const session = await dependencies.stripe.create({
-    secretKey: dependencies.crypto.decrypt(context.paymentConfiguration.encryptedSecretKey),
-    idempotencyKey: `program-purchase-${purchase.id}`,
-    purchaseId: purchase.id,
-    workspaceId: purchase.workspaceId,
-    offeringId: purchase.programOfferingId,
-    productName: context.program.displayName,
-    amountYen: purchase.amountYen,
-    successUrl: new URL(`${returnPath}?payment=success`, baseUrl).toString(),
-    cancelUrl: new URL(`${returnPath}?payment=cancelled`, baseUrl).toString(),
+  let session;
+  try {
+    session = await dependencies.stripe.create({
+      secretKey: dependencies.crypto.decrypt(context.paymentConfiguration.encryptedSecretKey),
+      idempotencyKey: `program-purchase-${purchase.id}`,
+      purchaseId: purchase.id,
+      workspaceId: purchase.workspaceId,
+      offeringId: purchase.programOfferingId,
+      productName: context.program.displayName,
+      amountYen: purchase.amountYen,
+      successUrl: new URL(`${returnPath}?payment=success`, baseUrl).toString(),
+      cancelUrl: new URL(`${returnPath}?payment=cancelled`, baseUrl).toString(),
+    });
+  } catch (error) {
+    await client.programPurchase.updateMany({
+      where: { id: purchase.id, status: 'CREATED' },
+      data: { status: 'FAILED' },
+    });
+    throw error;
+  }
+  await client.programPurchase.update({
+    where: { id: purchase.id },
+    data: {
+      status: 'CHECKOUT_OPEN',
+      providerCheckoutSessionId: session.id,
+      checkoutExpiresAt: session.expiresAt,
+    },
   });
+  return { checkoutUrl: session.url };
+}
+
+export async function createDirectProgramCheckout(
+  client: PrismaClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    buyerUserId: string;
+    offeringId: string;
+    idempotencyKey: string;
+    serviceSlug: string;
+  },
+  dependencies: CheckoutDependencies = {
+    crypto: new AesGcmPaymentSecretCrypto(),
+    stripe: new StripeCheckoutAdapter(),
+  },
+) {
+  const context = await validatedDirectPurchaseContext(client, input);
+  const existing = await client.programPurchase.findUnique({
+    where: {
+      workspaceId_groupId_idempotencyKey: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    },
+  });
+  if (
+    existing &&
+    (existing.buyerUserId !== input.buyerUserId ||
+      existing.sourceEnrollmentId !== null ||
+      existing.programOfferingId !== input.offeringId)
+  ) {
+    throw new ApplicationError('CONFLICT', 'idempotency key already used');
+  }
+  const unsettled = await client.programPurchase.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      buyerUserId: input.buyerUserId,
+      programOfferingId: input.offeringId,
+      OR: [
+        { status: 'PAID' },
+        { status: 'DISPUTED' },
+        { status: 'CREATED' },
+        { status: 'CHECKOUT_OPEN', checkoutExpiresAt: { gt: new Date() } },
+      ],
+      ...(existing ? { id: { not: existing.id } } : {}),
+    },
+    select: { id: true },
+  });
+  if (unsettled) throw new ApplicationError('CONFLICT', 'purchase already exists');
+  const purchase =
+    existing ??
+    (await client.programPurchase.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        buyerUserId: input.buyerUserId,
+        groupMembershipId: context.membership.id,
+        sourceEnrollmentId: null,
+        programOfferingId: context.offering.id,
+        paymentConfigurationId: context.paymentConfiguration.id,
+        amountYen: context.terms.amountYen,
+        currency: context.terms.currency,
+        idempotencyKey: input.idempotencyKey,
+        metadata: {
+          productKind: context.terms.productKind,
+          purchaseMode: context.terms.purchaseMode,
+        },
+      },
+    }));
+  if (['PAID', 'DISPUTED', 'CHARGEBACK_LOST', 'REFUNDED'].includes(purchase.status)) {
+    throw new ApplicationError('CONFLICT', 'purchase already settled');
+  }
+  const baseUrl = getServerEnvironment().APP_URL;
+  const returnPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs`;
+  let session;
+  try {
+    session = await dependencies.stripe.create({
+      secretKey: dependencies.crypto.decrypt(context.paymentConfiguration.encryptedSecretKey),
+      idempotencyKey: `program-purchase-${purchase.id}`,
+      purchaseId: purchase.id,
+      workspaceId: purchase.workspaceId,
+      offeringId: purchase.programOfferingId,
+      productName: context.program.displayName,
+      amountYen: purchase.amountYen,
+      successUrl: new URL(`${returnPath}?payment=success`, baseUrl).toString(),
+      cancelUrl: new URL(`${returnPath}?payment=cancelled`, baseUrl).toString(),
+    });
+  } catch (error) {
+    await client.programPurchase.updateMany({
+      where: { id: purchase.id, status: 'CREATED' },
+      data: { status: 'FAILED' },
+    });
+    throw error;
+  }
   await client.programPurchase.update({
     where: { id: purchase.id },
     data: {
@@ -260,43 +482,75 @@ export async function completePaidProgramPurchase(
           });
           return purchase.paidEnrollmentId;
         }
-        const context = await validatedPurchaseContext(
-          tx,
-          {
-            workspaceId: purchase.workspaceId,
-            groupId: purchase.groupId,
-            buyerUserId: purchase.buyerUserId,
-            sourceEnrollmentId: purchase.sourceEnrollmentId,
-            offeringId: purchase.programOfferingId,
-          },
-          { requireActivePayment: false },
-        );
-        const progress = await tx.programProgressSnapshot.findUnique({
-          where: { programEnrollmentId: context.source.id },
-        });
-        if (!['NOT_STARTED', 'PARTIAL', 'LISTED'].includes(progress?.bottleneckKey ?? '')) {
+        const legacyContext = purchase.sourceEnrollmentId
+          ? await validatedPurchaseContext(
+              tx,
+              {
+                workspaceId: purchase.workspaceId,
+                groupId: purchase.groupId,
+                buyerUserId: purchase.buyerUserId,
+                sourceEnrollmentId: purchase.sourceEnrollmentId,
+                offeringId: purchase.programOfferingId,
+              },
+              { requireActivePayment: false },
+            )
+          : null;
+        const directContext = purchase.sourceEnrollmentId
+          ? null
+          : await validatedDirectPurchaseContext(
+              tx,
+              {
+                workspaceId: purchase.workspaceId,
+                groupId: purchase.groupId,
+                buyerUserId: purchase.buyerUserId,
+                offeringId: purchase.programOfferingId,
+              },
+              { requireActivePayment: false, requireActiveOffering: false },
+            );
+        if (!legacyContext && !directContext) {
+          throw new ApplicationError('NOT_FOUND', 'purchase target unavailable');
+        }
+        const progress = legacyContext
+          ? await tx.programProgressSnapshot.findUnique({
+              where: { programEnrollmentId: legacyContext.source.id },
+            })
+          : null;
+        if (
+          legacyContext &&
+          !['NOT_STARTED', 'PARTIAL', 'LISTED'].includes(progress?.bottleneckKey ?? '')
+        ) {
           throw new ApplicationError('FORBIDDEN', 'DAY7 classification required');
         }
+        const program = legacyContext?.program ?? directContext!.program;
+        const offering = legacyContext?.offering ?? directContext!.offering;
+        const supportMode = legacyContext?.runtime.supportMode ?? directContext!.terms.supportMode;
+        const durationDays = legacyContext?.terms.durationDays ?? directContext!.terms.durationDays;
+        const timeZone = legacyContext?.runtime.timeZone ?? directContext!.terms.timeZone;
+        const termsSnapshot = legacyContext
+          ? { ...legacyContext.terms, supportModes: [...legacyContext.terms.supportModes] }
+          : { ...directContext!.terms };
         const now = new Date();
         const enrollment = await tx.programEnrollment.create({
           data: {
             workspaceId: purchase.workspaceId,
             groupId: purchase.groupId,
             groupMembershipId: purchase.groupMembershipId,
-            serviceProgramId: context.program.id,
-            programOfferingId: context.offering.id,
+            serviceProgramId: program.id,
+            programOfferingId: offering.id,
             status: 'ACTIVE',
-            supportMode: context.runtime.supportMode,
-            goalSnapshot: {
-              source: 'STRIPE_CHECKOUT',
-              freeEnrollmentId: context.source.id,
-              classification: progress!.bottleneckKey,
-            },
+            supportMode,
+            goalSnapshot: legacyContext
+              ? {
+                  source: 'STRIPE_CHECKOUT',
+                  freeEnrollmentId: legacyContext.source.id,
+                  classification: progress!.bottleneckKey,
+                }
+              : { source: 'DIRECT_STRIPE_CHECKOUT' },
             offeringSnapshot: {
-              version: context.offering.version,
+              version: offering.version,
               isFree: false,
-              priceReference: context.offering.priceReference,
-              terms: { ...context.terms, supportModes: [...context.terms.supportModes] },
+              priceReference: offering.priceReference,
+              terms: termsSnapshot,
               paymentConfirmation: {
                 provider: 'STRIPE',
                 checkoutSessionId: input.checkoutSessionId,
@@ -308,8 +562,8 @@ export async function completePaidProgramPurchase(
             startsAt: now,
             endsAt: (await import('@bunshin/database')).addProgramCalendarDays(
               now,
-              context.terms.durationDays,
-              context.runtime.timeZone,
+              durationDays,
+              timeZone,
             ),
           },
         });
@@ -317,7 +571,7 @@ export async function completePaidProgramPurchase(
           data: {
             workspaceId: purchase.workspaceId,
             groupId: purchase.groupId,
-            programEnrollmentId: context.source.id,
+            programEnrollmentId: legacyContext?.source.id ?? enrollment.id,
             eventType: 'PAID_ENROLLED',
             sourceResourceType: 'PROGRAM_ENROLLMENT',
             sourceResourceId: enrollment.id,
@@ -325,7 +579,7 @@ export async function completePaidProgramPurchase(
             metadata: {
               paidEnrollmentId: enrollment.id,
               purchaseId: purchase.id,
-              offeringId: context.offering.id,
+              offeringId: offering.id,
               amountYen: purchase.amountYen,
               provider: 'STRIPE',
             },
@@ -607,7 +861,7 @@ export async function refundPaidProgramPurchase(
           });
           return false;
         }
-        if (purchase.status !== 'PAID' || !purchase.paidEnrollmentId) {
+        if (!['PAID', 'DISPUTED'].includes(purchase.status) || !purchase.paidEnrollmentId) {
           await tx.paymentWebhookEvent.update({
             where: { id: webhook.id },
             data: { status: 'FAILED', errorCategory: 'PURCHASE_NOT_PAID', processedAt: now },
@@ -627,7 +881,7 @@ export async function refundPaidProgramPurchase(
           data: {
             workspaceId: purchase.workspaceId,
             groupId: purchase.groupId,
-            programEnrollmentId: purchase.sourceEnrollmentId,
+            programEnrollmentId: purchase.sourceEnrollmentId ?? purchase.paidEnrollmentId,
             eventType: 'PAYMENT_REFUNDED',
             sourceResourceType: 'PROGRAM_ENROLLMENT',
             sourceResourceId: purchase.paidEnrollmentId,
@@ -653,6 +907,250 @@ export async function refundPaidProgramPurchase(
         await tx.paymentWebhookEvent.update({
           where: { id: webhook.id },
           data: { status: 'PROCESSED', processedAt: now },
+        });
+        return true;
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  } catch (error) {
+    await recordFailedWebhookEvent(client, input);
+    throw error;
+  }
+}
+
+const openDisputeStatuses = new Set([
+  'needs_response',
+  'under_review',
+  'warning_needs_response',
+  'warning_under_review',
+]);
+const restoredDisputeStatuses = new Set(['won', 'warning_closed', 'prevented']);
+
+export async function applyProgramPaymentDispute(
+  client: PrismaClient,
+  input: {
+    configurationId: string;
+    providerEventId: string;
+    eventType: string;
+    payloadDigest: string;
+    paymentIntentId: string;
+    disputeId: string;
+    amount: number;
+    currency: string;
+    disputeStatus: string;
+    livemode: boolean;
+  },
+) {
+  try {
+    return await client.$transaction(
+      async (tx) => {
+        const configuration = await requireWebhookConfiguration(tx, input);
+        const webhook = await receiveWebhookEvent(tx, {
+          ...input,
+          workspaceId: configuration.workspaceId,
+        });
+        if (webhook.status === 'PROCESSED' || webhook.status === 'IGNORED') return false;
+        const purchase = await tx.programPurchase.findFirst({
+          where: {
+            workspaceId: configuration.workspaceId,
+            paymentConfigurationId: configuration.id,
+            providerPaymentIntentId: input.paymentIntentId,
+          },
+        });
+        if (
+          !purchase ||
+          input.amount <= 0 ||
+          input.amount > purchase.amountYen ||
+          purchase.currency.toLowerCase() !== input.currency.toLowerCase() ||
+          !purchase.paidEnrollmentId
+        ) {
+          await tx.paymentWebhookEvent.update({
+            where: { id: webhook.id },
+            data: { status: 'FAILED', errorCategory: 'PURCHASE_MISMATCH', processedAt: new Date() },
+          });
+          throw new ApplicationError('FORBIDDEN', 'purchase verification failed');
+        }
+        const now = new Date();
+        if (purchase.status === 'REFUNDED') {
+          await tx.paymentWebhookEvent.update({
+            where: { id: webhook.id },
+            data: {
+              status: 'IGNORED',
+              errorCategory: 'PURCHASE_ALREADY_REFUNDED',
+              processedAt: now,
+            },
+          });
+          return false;
+        }
+        if (purchase.providerDisputeId === input.disputeId && purchase.disputeResolvedAt) {
+          await tx.paymentWebhookEvent.update({
+            where: { id: webhook.id },
+            data: {
+              status: 'IGNORED',
+              errorCategory: 'DISPUTE_ALREADY_RESOLVED',
+              processedAt: now,
+            },
+          });
+          return false;
+        }
+        const enrollment = await tx.programEnrollment.findFirst({
+          where: {
+            id: purchase.paidEnrollmentId,
+            workspaceId: purchase.workspaceId,
+            groupId: purchase.groupId,
+          },
+          select: { status: true, endsAt: true },
+        });
+        if (!enrollment) {
+          await tx.paymentWebhookEvent.update({
+            where: { id: webhook.id },
+            data: { status: 'FAILED', errorCategory: 'ENROLLMENT_MISMATCH', processedAt: now },
+          });
+          throw new ApplicationError('FORBIDDEN', 'paid enrollment verification failed');
+        }
+
+        let eventType: 'PAYMENT_DISPUTED' | 'PAYMENT_DISPUTE_WON' | 'PAYMENT_CHARGEBACK_LOST';
+        if (openDisputeStatuses.has(input.disputeStatus)) {
+          if (!['PAID', 'DISPUTED'].includes(purchase.status)) {
+            await tx.paymentWebhookEvent.update({
+              where: { id: webhook.id },
+              data: {
+                status: 'IGNORED',
+                errorCategory: 'PURCHASE_ALREADY_SETTLED',
+                processedAt: now,
+              },
+            });
+            return false;
+          }
+          await tx.programEnrollment.updateMany({
+            where: {
+              id: purchase.paidEnrollmentId,
+              workspaceId: purchase.workspaceId,
+              groupId: purchase.groupId,
+              status: { in: ['ACTIVE', 'COMPLETED'] },
+            },
+            data: { status: 'CANCELLED' },
+          });
+          await tx.programPurchase.update({
+            where: { id: purchase.id },
+            data: {
+              status: 'DISPUTED',
+              providerDisputeId: input.disputeId,
+              disputeStatus: input.disputeStatus,
+              disputedAmountYen: input.amount,
+              disputedAt:
+                purchase.providerDisputeId === input.disputeId ? (purchase.disputedAt ?? now) : now,
+              disputeResolvedAt: null,
+              enrollmentStatusBeforeDispute:
+                purchase.providerDisputeId === input.disputeId
+                  ? (purchase.enrollmentStatusBeforeDispute ?? enrollment.status)
+                  : enrollment.status,
+            },
+          });
+          eventType = 'PAYMENT_DISPUTED';
+        } else if (restoredDisputeStatuses.has(input.disputeStatus)) {
+          if (purchase.status === 'CHARGEBACK_LOST') {
+            await tx.paymentWebhookEvent.update({
+              where: { id: webhook.id },
+              data: {
+                status: 'IGNORED',
+                errorCategory: 'CHARGEBACK_ALREADY_LOST',
+                processedAt: now,
+              },
+            });
+            return false;
+          }
+          const priorStatus = purchase.enrollmentStatusBeforeDispute;
+          const restoredStatus =
+            enrollment.endsAt && enrollment.endsAt <= now
+              ? 'EXPIRED'
+              : priorStatus === 'COMPLETED'
+                ? 'COMPLETED'
+                : 'ACTIVE';
+          if (purchase.status === 'DISPUTED') {
+            await tx.programEnrollment.updateMany({
+              where: {
+                id: purchase.paidEnrollmentId,
+                workspaceId: purchase.workspaceId,
+                groupId: purchase.groupId,
+                status: 'CANCELLED',
+              },
+              data: { status: restoredStatus },
+            });
+          }
+          await tx.programPurchase.update({
+            where: { id: purchase.id },
+            data: {
+              status: 'PAID',
+              providerDisputeId: input.disputeId,
+              disputeStatus: input.disputeStatus,
+              disputedAmountYen: 0,
+              disputeResolvedAt: now,
+            },
+          });
+          eventType = 'PAYMENT_DISPUTE_WON';
+        } else if (input.disputeStatus === 'lost') {
+          await tx.programEnrollment.updateMany({
+            where: {
+              id: purchase.paidEnrollmentId,
+              workspaceId: purchase.workspaceId,
+              groupId: purchase.groupId,
+              status: { in: ['ACTIVE', 'COMPLETED', 'CANCELLED'] },
+            },
+            data: { status: 'CANCELLED' },
+          });
+          await tx.programPurchase.update({
+            where: { id: purchase.id },
+            data: {
+              status: 'CHARGEBACK_LOST',
+              providerDisputeId: input.disputeId,
+              disputeStatus: input.disputeStatus,
+              disputedAmountYen: input.amount,
+              disputedAt:
+                purchase.providerDisputeId === input.disputeId ? (purchase.disputedAt ?? now) : now,
+              disputeResolvedAt: now,
+              enrollmentStatusBeforeDispute:
+                purchase.providerDisputeId === input.disputeId
+                  ? (purchase.enrollmentStatusBeforeDispute ?? enrollment.status)
+                  : enrollment.status,
+            },
+          });
+          eventType = 'PAYMENT_CHARGEBACK_LOST';
+        } else {
+          await tx.paymentWebhookEvent.update({
+            where: { id: webhook.id },
+            data: {
+              status: 'IGNORED',
+              errorCategory: 'UNSUPPORTED_DISPUTE_STATUS',
+              processedAt: now,
+            },
+          });
+          return false;
+        }
+        await tx.programActionEvent.create({
+          data: {
+            workspaceId: purchase.workspaceId,
+            groupId: purchase.groupId,
+            programEnrollmentId: purchase.sourceEnrollmentId ?? purchase.paidEnrollmentId,
+            eventType,
+            sourceResourceType: 'PROGRAM_ENROLLMENT',
+            sourceResourceId: purchase.paidEnrollmentId,
+            idempotencyKey: `stripe:dispute:${input.providerEventId}`,
+            metadata: {
+              purchaseId: purchase.id,
+              paidEnrollmentId: purchase.paidEnrollmentId,
+              providerDisputeId: input.disputeId,
+              disputeStatus: input.disputeStatus,
+              amountYen: input.amount,
+              provider: 'STRIPE',
+            },
+            actorUserId: purchase.buyerUserId,
+            occurredAt: now,
+          },
+        });
+        await tx.paymentWebhookEvent.update({
+          where: { id: webhook.id },
+          data: { status: 'PROCESSED', errorCategory: null, processedAt: now },
         });
         return true;
       },
@@ -705,7 +1203,7 @@ export async function expireEndedPaidProgramEnrollments(
         data: {
           workspaceId: purchase.workspaceId,
           groupId: purchase.groupId,
-          programEnrollmentId: purchase.sourceEnrollmentId,
+          programEnrollmentId: purchase.sourceEnrollmentId ?? purchase.paidEnrollmentId!,
           eventType: 'PAID_PROGRAM_EXPIRED',
           sourceResourceType: 'PROGRAM_ENROLLMENT',
           sourceResourceId: purchase.paidEnrollmentId!,

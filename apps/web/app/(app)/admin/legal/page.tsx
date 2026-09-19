@@ -21,7 +21,7 @@ export default async function LegalAdminPage() {
     return (
       <main>
         <h1>法務文書管理</h1>
-        <p>利用規約とプライバシーポリシーを版管理して公開します。</p>
+        <p>利用規約、プライバシーポリシー、特定商取引法に基づく表示を版管理して公開します。</p>
         <LegalDocumentEditor
           initialDocuments={documents.map((value) => ({
             ...value,
