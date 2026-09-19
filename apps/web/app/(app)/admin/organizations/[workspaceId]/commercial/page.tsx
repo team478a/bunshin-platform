@@ -264,6 +264,20 @@ export default async function OrganizationCommercialPage({
   ]);
   if (!dashboard || !billing) notFound();
   const { current } = dashboard;
+  const latestReminderEvents = new Map<string, (typeof billing.commercialBillingAudits)[number]>();
+  for (const audit of billing.commercialBillingAudits) {
+    const reminderKind = audit.action.startsWith('PAYMENT_GUIDANCE_')
+      ? 'INITIAL'
+      : audit.action.startsWith('OVERDUE_REMINDER_')
+        ? 'OVERDUE'
+        : null;
+    if (!reminderKind) continue;
+    const key = `${audit.entityId}:${reminderKind}`;
+    if (!latestReminderEvents.has(key)) latestReminderEvents.set(key, audit);
+  }
+  const reminderFailures = [...latestReminderEvents.values()].filter((audit) =>
+    audit.action.endsWith('_FAILED'),
+  );
 
   return (
     <main className="app-page">
@@ -404,6 +418,19 @@ export default async function OrganizationCommercialPage({
               defaultValue={billing.organizationCommercialContract?.paymentTermsDays ?? 30}
             />
           </label>
+          <label className="field field--checkbox">
+            <input
+              name="automaticRemindersEnabled"
+              type="checkbox"
+              defaultChecked={
+                billing.organizationCommercialContract?.automaticRemindersEnabled ?? false
+              }
+            />
+            <span>支払期限の3日前と期限超過後に、請求先へ案内メールを自動送信する</span>
+          </label>
+          <p className="field__hint">
+            初期状態は停止です。管理者メールの接続確認が完了している場合だけ送信します。同じ請求・同じ段階の案内は1回だけです。
+          </p>
           <label className="field">
             <span className="field__label">外部顧客番号（任意）</span>
             <input
@@ -499,19 +526,6 @@ export default async function OrganizationCommercialPage({
                     required
                   />
                 </label>
-                <label className="field field--checkbox">
-                  <input
-                    name="automaticRemindersEnabled"
-                    type="checkbox"
-                    defaultChecked={
-                      billing.organizationCommercialContract?.automaticRemindersEnabled
-                    }
-                  />
-                  <span>支払期限の3日前と期限超過後に、請求先へ案内メールを自動送信する</span>
-                </label>
-                <p>
-                  初期状態は停止です。管理者メールの接続確認が完了している場合だけ送信します。同じ請求・同じ段階の案内は1回だけです。
-                </p>
                 <label className="field">
                   <span className="field__label">見積条件・メモ（任意）</span>
                   <input className="field__control" name="notes" maxLength={1000} />
@@ -654,6 +668,12 @@ export default async function OrganizationCommercialPage({
 
       <section className="settings-card">
         <h2>契約・請求の変更履歴</h2>
+        {reminderFailures.length > 0 ? (
+          <p className="notice notice--danger">
+            未解決の自動案内メール送信失敗が{reminderFailures.length}
+            件あります。管理者メール設定を確認し、対象請求の「支払い案内をメールする」から再送してください。再送に成功すると要確認表示は解消されます。
+          </p>
+        ) : null}
         {billing.commercialBillingAudits.length === 0 ? (
           <p>変更履歴はまだありません。</p>
         ) : (
@@ -671,6 +691,8 @@ export default async function OrganizationCommercialPage({
                     VOID: '取消',
                     PAYMENT_GUIDANCE_SENT: '支払い案内メール送信',
                     OVERDUE_REMINDER_SENT: '期限超過メール送信',
+                    PAYMENT_GUIDANCE_FAILED: '支払い案内メール送信失敗',
+                    OVERDUE_REMINDER_FAILED: '期限超過メール送信失敗',
                   }[audit.action] ?? audit.action}
                 </span>
                 <strong>
