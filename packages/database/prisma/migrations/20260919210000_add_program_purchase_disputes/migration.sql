@@ -1,6 +1,3 @@
-ALTER TYPE "ProgramPurchaseStatus" ADD VALUE 'DISPUTED';
-ALTER TYPE "ProgramPurchaseStatus" ADD VALUE 'CHARGEBACK_LOST';
-
 ALTER TABLE "program_purchases"
   ADD COLUMN "disputed_amount_yen" INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN "provider_dispute_id" VARCHAR(200),
