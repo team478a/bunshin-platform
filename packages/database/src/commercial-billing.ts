@@ -97,7 +97,7 @@ export class PrismaCommercialBillingService {
         commercialBillingAudits: {
           orderBy: { occurredAt: 'desc' },
           take: 20,
-          select: { id: true, entityType: true, action: true, occurredAt: true },
+          select: { id: true, entityType: true, entityId: true, action: true, occurredAt: true },
         },
         tenantMonthlyUsage: {
           where: { status: 'FINALIZED', calculatedPriceYen: null, invoice: null },
