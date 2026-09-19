@@ -2518,3 +2518,11 @@
 - Legal gate: 新規販売とCheckoutにはサービス単位の利用規約、プライバシーポリシー、特定商取引法に基づく表示の公開を必須とする。商取引表示は参加登録の同意対象には含めない。
 - Lifecycle: 商品停止・改版後も開始済みCheckoutの正当な入金は履行し、購入済みEnrollmentは維持する。直接購入の重複はApplication判定とDB部分一意indexで防ぎ、Checkout作成失敗は`FAILED`へ移して再試行を可能にする。
 - Limitation: 現行の一会員・一Program制約を維持するため、同一Programの更新購入はこの作業範囲に含めない。
+
+## 2026-09-19: 失敗した決済WebhookはStripeの正本Eventから再処理する
+
+- Payload: カード情報やProvider payloadの保持範囲を増やさず、失敗台帳にはEvent ID、digest、分類だけを保存する。
+- Recovery: 運営団体の暗号化済みStripe秘密鍵で同じEvent IDを再取得し、初回受信と同じdispatcherへ渡す。
+- Isolation: Workspace、実行環境、Provider、設定状態、FAILED状態を再処理前に照合し、再取得したEvent IDの一致も必須とする。
+- Idempotency: 購入、Enrollment、返金、Webhook台帳の既存冪等性を再利用し、再処理専用の状態変更経路を作らない。
+- Audit: 運営者の理由を必須にし、要求・成功・失敗を既存の決済設定監査履歴へ追記する。秘密値やProvider responseは監査へ含めない。

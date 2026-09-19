@@ -6,9 +6,11 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'u
 describe('payment program lifecycle boundaries', () => {
   it('accepts only the supported Stripe lifecycle events', () => {
     const webhook = source('../src/http/program-checkout.ts');
-    expect(webhook).toContain("event.type === 'checkout.session.expired'");
-    expect(webhook).toContain("event.type === 'charge.refunded'");
+    const dispatcher = source('../src/payments/stripe-program-event.ts');
+    expect(dispatcher).toContain("event.type === 'checkout.session.expired'");
+    expect(dispatcher).toContain("event.type === 'charge.refunded'");
     expect(webhook).toContain('verifyStripeWebhookSignature');
+    expect(webhook).toContain('processStripeProgramEvent');
   });
 
   it('runs paid program expiration behind the protected production cron', () => {
