@@ -38,6 +38,7 @@ import { OpenAIMissionContentGenerator } from '../providers/openai-mission-conte
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import { campaignContentSignature } from './campaign-content-signature';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
+import { applyServiceContentTerminology } from './service-content-terminology';
 
 interface Input {
   workspaceId: string;
@@ -413,6 +414,13 @@ export class DailyMissionGenerationService {
       };
       stage = 'content:0';
       let content = await generateWithQuota('content:0', () => generator.execute(contentInput));
+      content = {
+        ...content,
+        output: applyServiceContentTerminology(
+          content.output,
+          serviceKnowledge?.contentTerminologyPolicy ?? null,
+        ),
+      };
       await usage('content:0', 'CONTENT_GENERATOR', content);
       const checker = new CheckMissionQuality(
         new OpenAIMissionQualityChecker({
@@ -447,6 +455,13 @@ export class DailyMissionGenerationService {
             ),
           }),
         );
+        content = {
+          ...content,
+          output: applyServiceContentTerminology(
+            content.output,
+            serviceKnowledge?.contentTerminologyPolicy ?? null,
+          ),
+        };
         await usage('content:1', 'CONTENT_REPAIR', content);
         stage = 'quality:1';
         quality = await generateWithQuota('quality:1', () => checker.execute(qualityInput()));

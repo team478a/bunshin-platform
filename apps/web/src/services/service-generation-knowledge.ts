@@ -11,6 +11,10 @@ import {
   type ServiceContentAssistanceLevel,
 } from './service-onboarding-settings';
 import { businessContentMixKnowledge } from './business-content-mix';
+import {
+  serviceContentTerminologyKnowledge,
+  serviceContentTerminologyPolicy,
+} from './service-content-terminology';
 
 export interface ServiceGenerationKnowledgeScope {
   workspaceId: string;
@@ -208,65 +212,78 @@ export async function resolveServiceContentAssistanceLevel(
 
 export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKnowledgeScope) {
   const db = await import('@bunshin/database');
-  const [chunks, businessProfile, contentAssistanceLevel, registrationPolicy, executionResults] =
-    await Promise.all([
-      new GroupKnowledgeService(
-        new db.PrismaGroupKnowledgeRepository(),
-      ).listApprovedChunksForGeneration({
-        ...scope,
-        productPackVersionId: null,
-      }),
-      db.prisma.serviceMemberBusinessProfile.findFirst({
-        where: {
-          workspaceId: scope.workspaceId,
-          groupId: scope.groupId,
-          userId: scope.actorUserId,
-          groupMembership: { status: 'ACTIVE' },
-        },
-        select: {
-          otherIndustryText: true,
-          businessName: true,
-          region: true,
-          productService: true,
-          primaryPurpose: true,
-          targetAudience: true,
-          websiteUrl: true,
-          businessFeatures: true,
-          priceInformation: true,
-          preferredTone: true,
-          requiredContent: true,
-          forbiddenContent: true,
-          primaryIndustry: { select: { key: true, name: true } },
-        },
-      }),
-      resolveServiceContentAssistanceLevel(scope),
-      db.prisma.serviceRegistrationPolicy.findFirst({
-        where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
-        select: { onboardingConfig: true, surveyConfig: true },
-      }),
-      scope.bunshinId
-        ? db.prisma.missionActivity.findMany({
-            where: {
-              workspaceId: scope.workspaceId,
-              bunshinId: scope.bunshinId,
-              actorUserId: scope.actorUserId,
-              type: { in: [...MISSION_EXECUTION_RESULT_TYPES, 'POSTED'] },
-              dailyMission: { bunshin: { groupId: scope.groupId } },
-            },
-            select: {
-              type: true,
-              dailyMission: { select: { missionDate: true, topic: true } },
-            },
-            orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-            take: 5,
-          })
-        : Promise.resolve([]),
-    ]);
+  const [
+    chunks,
+    businessProfile,
+    contentAssistanceLevel,
+    registrationPolicy,
+    serviceConfiguration,
+    executionResults,
+  ] = await Promise.all([
+    new GroupKnowledgeService(
+      new db.PrismaGroupKnowledgeRepository(),
+    ).listApprovedChunksForGeneration({
+      ...scope,
+      productPackVersionId: null,
+    }),
+    db.prisma.serviceMemberBusinessProfile.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        userId: scope.actorUserId,
+        groupMembership: { status: 'ACTIVE' },
+      },
+      select: {
+        otherIndustryText: true,
+        businessName: true,
+        region: true,
+        productService: true,
+        primaryPurpose: true,
+        targetAudience: true,
+        websiteUrl: true,
+        businessFeatures: true,
+        priceInformation: true,
+        preferredTone: true,
+        requiredContent: true,
+        forbiddenContent: true,
+        primaryIndustry: { select: { key: true, name: true } },
+      },
+    }),
+    resolveServiceContentAssistanceLevel(scope),
+    db.prisma.serviceRegistrationPolicy.findFirst({
+      where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+      select: { onboardingConfig: true, surveyConfig: true },
+    }),
+    db.prisma.serviceConfiguration.findFirst({
+      where: { workspaceId: scope.workspaceId, groupId: scope.groupId },
+      select: { slug: true },
+    }),
+    scope.bunshinId
+      ? db.prisma.missionActivity.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            bunshinId: scope.bunshinId,
+            actorUserId: scope.actorUserId,
+            type: { in: [...MISSION_EXECUTION_RESULT_TYPES, 'POSTED'] },
+            dailyMission: { bunshin: { groupId: scope.groupId } },
+          },
+          select: {
+            type: true,
+            dailyMission: { select: { missionDate: true, topic: true } },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+          take: 5,
+        })
+      : Promise.resolve([]),
+  ]);
   const dailyIdeaDelivery = readServiceOnboardingSettings(
     registrationPolicy?.onboardingConfig,
     registrationPolicy?.surveyConfig,
   ).dailyIdeaDelivery;
   const businessContentMixEnabled = Boolean(businessProfile && dailyIdeaDelivery.enabled);
+  const contentTerminologyPolicy = serviceConfiguration
+    ? serviceContentTerminologyPolicy(serviceConfiguration.slug)
+    : null;
   const knowledge = serviceKnowledgeForPrompt(chunks);
   const executionKnowledge = executionResultKnowledgeForPrompt(
     executionResults.map((result) => ({
@@ -301,8 +318,10 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     contentAssistanceLevel,
     dailyIdeaDelivery,
     businessContentMixEnabled,
+    contentTerminologyPolicy,
     businessProfile: normalizedBusinessProfile,
     officialKnowledge: [
+      ...serviceContentTerminologyKnowledge(contentTerminologyPolicy),
       ...businessProfileKnowledgeForPrompt(
         businessProfile?.primaryIndustry
           ? {

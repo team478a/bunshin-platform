@@ -41,6 +41,10 @@ import { OpenAIMissionContentGenerator } from '../providers/openai-mission-conte
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import { campaignContentSignature } from './campaign-content-signature';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
+import {
+  applyServiceContentTerminology,
+  type ServiceContentTerminologyPolicy,
+} from './service-content-terminology';
 
 interface Input {
   workspaceId: string;
@@ -334,6 +338,16 @@ export class MissionContentVariantGenerationService {
         ({ type, title, content }) => ({ type, title, content }),
       );
       let businessProfile: MissionContentGeneratorInput['businessProfile'] = null;
+      const currentServiceKnowledge =
+        input.serviceSafeMode && input.groupId
+          ? await loadServiceGenerationKnowledge({
+              workspaceId: input.workspaceId,
+              groupId: input.groupId,
+              actorUserId: input.actorUserId,
+            })
+          : null;
+      const contentTerminologyPolicy: ServiceContentTerminologyPolicy | null =
+        currentServiceKnowledge?.contentTerminologyPolicy ?? null;
       if (campaign) {
         const chunks = await new GroupKnowledgeService(
           new db.PrismaGroupKnowledgeRepository(),
@@ -352,11 +366,7 @@ export class MissionContentVariantGenerationService {
             content: chunk.content.trim(),
           }));
       } else if (input.serviceSafeMode && input.groupId) {
-        const serviceKnowledge = await loadServiceGenerationKnowledge({
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          actorUserId: input.actorUserId,
-        });
+        const serviceKnowledge = currentServiceKnowledge!;
         businessProfile = serviceKnowledge.businessProfile;
         groupKnowledge = serviceKnowledge.groupKnowledge.filter(({ chunkId }) =>
           snapshotGroupKnowledgeIds.has(chunkId),
@@ -366,6 +376,7 @@ export class MissionContentVariantGenerationService {
           ({ type, title }) =>
             type === 'SERVICE_BUSINESS_PROFILE' ||
             type === 'SERVICE_INDUSTRY_SAFETY' ||
+            type === 'SERVICE_CONTENT_TERMINOLOGY' ||
             allowedLabels.has(title),
         );
       }
@@ -485,6 +496,10 @@ export class MissionContentVariantGenerationService {
       let content = await generateWithQuota('variant-content:0', () =>
         generator.execute(contentInput),
       );
+      content = {
+        ...content,
+        output: applyServiceContentTerminology(content.output, contentTerminologyPolicy),
+      };
       await usage('variant-content:0', 'MISSION_CONTENT_VARIANT', content);
       const checker = new CheckMissionQuality(
         new OpenAIMissionQualityChecker({ apiKey: runtime.apiKey, model: runtime.model }),
@@ -512,6 +527,10 @@ export class MissionContentVariantGenerationService {
             ),
           }),
         );
+        content = {
+          ...content,
+          output: applyServiceContentTerminology(content.output, contentTerminologyPolicy),
+        };
         await usage('variant-content:1', 'MISSION_CONTENT_VARIANT_REPAIR', content);
         quality = await generateWithQuota('variant-quality:1', () =>
           checker.execute(qualityInput()),
