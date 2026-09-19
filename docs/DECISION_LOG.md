@@ -2526,3 +2526,11 @@
 - Isolation: Workspace、実行環境、Provider、設定状態、FAILED状態を再処理前に照合し、再取得したEvent IDの一致も必須とする。
 - Idempotency: 購入、Enrollment、返金、Webhook台帳の既存冪等性を再利用し、再処理専用の状態変更経路を作らない。
 - Audit: 運営者の理由を必須にし、要求・成功・失敗を既存の決済設定監査履歴へ追記する。秘密値やProvider responseは監査へ含めない。
+
+## 2026-09-19: Webhook未着の支払い待ちはStripe Checkoutの正本状態と照合する
+
+- Scope: `CHECKOUT_OPEN`かつ保存済みSession IDを持つ、自Workspace・現在環境の購入だけを手動照合できる。
+- Authority: 運営団体の暗号化済みStripe秘密鍵でSessionを再取得し、Session IDと`metadata.purchase_id`を内部購入台帳と照合する。
+- Transition: `paid`は既存の購入確定、`expired`は既存の期限切れdispatcherへ渡し、未払い・受付中は状態を変更しない。
+- Idempotency: 照合用Event IDとdigestを作り、購入・Enrollment・Event台帳の既存冪等性を利用する。遅延Webhookも別Eventとして安全に処理する。
+- Audit: 照合理由を必須とし、要求・成功・変化なし・失敗を決済設定監査へ追記する。Stripe response本文は保持しない。

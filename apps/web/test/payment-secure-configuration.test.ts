@@ -5,6 +5,7 @@ import {
   AesGcmPaymentSecretCrypto,
   StripeAccountConnectionTestAdapter,
   StripeCheckoutAdapter,
+  StripeCheckoutSessionRetrievalAdapter,
   StripeEventRetrievalAdapter,
   verifyStripeWebhookSignature,
 } from '../src/payments/secure-configuration';
@@ -98,6 +99,18 @@ describe('OEM payment secure configuration', () => {
     ).resolves.toEqual({ id: 'evt_failed123' });
     expect(request).toHaveBeenCalledWith(
       'https://api.stripe.com/v1/events/evt_failed123',
+      expect.objectContaining({ headers: { authorization: 'Bearer sk_test_private' } }),
+    );
+  });
+
+  it('retrieves one Checkout Session using the organization secret', async () => {
+    const request = vi.fn().mockResolvedValue(Response.json({ id: 'cs_test_pending123' }));
+    vi.stubGlobal('fetch', request);
+    await expect(
+      new StripeCheckoutSessionRetrievalAdapter().retrieve('sk_test_private', 'cs_test_pending123'),
+    ).resolves.toEqual({ id: 'cs_test_pending123' });
+    expect(request).toHaveBeenCalledWith(
+      'https://api.stripe.com/v1/checkout/sessions/cs_test_pending123',
       expect.objectContaining({ headers: { authorization: 'Bearer sk_test_private' } }),
     );
   });

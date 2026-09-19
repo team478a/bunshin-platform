@@ -38,6 +38,9 @@ describe('organization payment settings page', () => {
     expect(source).toContain('recoverFailedPaymentWebhook');
     expect(source).toContain('Stripeから再取得して処理');
     expect(source).toContain('webhookEventId');
+    expect(source).toContain('reconcilePendingProgramPurchase');
+    expect(source).toContain('Stripeの状態を確認');
+    expect(source).toContain("purchase.status === 'CHECKOUT_OPEN'");
   });
 
   it('shows gross payments, cumulative refunds, and net sales', () => {
