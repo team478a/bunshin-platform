@@ -12175,6 +12175,7 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
           where: {
             workspaceId: configuration.workspaceId,
             groupId: configuration.groupId,
+            type: { in: ['TERMS', 'PRIVACY'] },
             status: 'PUBLISHED',
             effectiveAt: { lte: input.now },
           },

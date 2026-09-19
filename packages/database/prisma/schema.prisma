@@ -1294,6 +1294,7 @@ enum LineNotificationFrequency {
 enum LegalDocumentType {
   TERMS
   PRIVACY
+  COMMERCE_DISCLOSURE
 }
 
 enum LegalDocumentStatus {
@@ -3043,7 +3044,7 @@ model ProgramPurchase {
   groupId                   String                            @map("group_id") @db.Uuid
   buyerUserId               String                            @map("buyer_user_id") @db.Uuid
   groupMembershipId         String                            @map("group_membership_id") @db.Uuid
-  sourceEnrollmentId        String                            @map("source_enrollment_id") @db.Uuid
+  sourceEnrollmentId        String?                           @map("source_enrollment_id") @db.Uuid
   programOfferingId         String                            @map("program_offering_id") @db.Uuid
   paymentConfigurationId    String                            @map("payment_configuration_id") @db.Uuid
   provider                  PaymentProvider                   @default(STRIPE)

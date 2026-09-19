@@ -8,6 +8,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
 import {
   completePaidProgramPurchase,
+  createDirectProgramCheckout,
   createProgramCheckout,
   expireProgramCheckout,
   refundPaidProgramPurchase,
@@ -20,6 +21,7 @@ import {
 
 const uuid = z.string().uuid();
 const checkoutSchema = z.object({ offeringId: uuid, idempotencyKey: uuid }).strict();
+const directCheckoutSchema = z.object({ idempotencyKey: uuid }).strict();
 
 const json = (data: unknown, requestId: string, status = 200) =>
   Response.json({ data, requestId }, { status, headers: { 'cache-control': 'private, no-store' } });
@@ -58,6 +60,40 @@ export async function createProgramCheckoutResponse(
       buyerUserId: actor.userId,
       sourceEnrollmentId: uuid.parse(rawEnrollmentId),
       offeringId: value.offeringId,
+      idempotencyKey: value.idempotencyKey,
+      serviceSlug,
+    });
+    return json(data, requestId, 201);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function createDirectProgramCheckoutResponse(
+  request: Request,
+  serviceSlug: string,
+  rawOfferingId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const [actor, value] = await Promise.all([
+      (await currentUserProvider()).getCurrentUser(),
+      directCheckoutSchema.parseAsync(request.json()),
+    ]);
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, db] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      import('@bunshin/database'),
+    ]);
+    const data = await createDirectProgramCheckout(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      buyerUserId: actor.userId,
+      offeringId: uuid.parse(rawOfferingId),
       idempotencyKey: value.idempotencyKey,
       serviceSlug,
     });

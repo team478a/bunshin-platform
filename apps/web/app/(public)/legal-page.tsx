@@ -1,6 +1,10 @@
 import type { LegalDocumentType } from '@bunshin/application';
 
-export async function LegalPage({ type }: { type: LegalDocumentType }) {
+export async function LegalPage({
+  type,
+}: {
+  type: Extract<LegalDocumentType, 'TERMS' | 'PRIVACY'>;
+}) {
   const db = await import('@bunshin/database');
   const document = await new db.PrismaLegalDocumentRepository().findPublished(type);
   if (!document)

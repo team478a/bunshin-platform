@@ -4,6 +4,7 @@ import {
   parseAiResaleOfferTerms,
   parseAiResaleRuntimeSettings,
 } from '@bunshin/capability-resale';
+import { parseProgramProductTerms } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 import type { Prisma, PrismaClient } from '@bunshin/database';
@@ -14,6 +15,112 @@ import {
 } from './secure-configuration';
 
 type Db = PrismaClient | Prisma.TransactionClient;
+type CheckoutDependencies = {
+  crypto: Pick<AesGcmPaymentSecretCrypto, 'decrypt'>;
+  stripe: Pick<StripeCheckoutAdapter, 'create'>;
+};
+
+async function validatedDirectPurchaseContext(
+  db: Db,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    buyerUserId: string;
+    offeringId: string;
+  },
+  options: { requireActivePayment?: boolean; requireActiveOffering?: boolean } = {},
+) {
+  const now = new Date();
+  const [offering, paymentConfiguration, membership] = await Promise.all([
+    db.programOffering.findFirst({
+      where: {
+        id: input.offeringId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status:
+          options.requireActiveOffering === false
+            ? { in: ['ACTIVE', 'SUSPENDED', 'SUPERSEDED'] }
+            : 'ACTIVE',
+        isFree: false,
+        ...(options.requireActiveOffering === false
+          ? {}
+          : {
+              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
+            }),
+      },
+    }),
+    db.organizationPaymentConfiguration.findUnique({
+      where: {
+        workspaceId_environment_provider: {
+          workspaceId: input.workspaceId,
+          environment: currentPaymentEnvironment(),
+          provider: 'STRIPE',
+        },
+      },
+    }),
+    db.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.buyerUserId,
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+      },
+    }),
+  ]);
+  const terms = offering ? parseProgramProductTerms(offering.termsSnapshot) : null;
+  if (!offering || !membership || !terms) {
+    throw new ApplicationError('NOT_FOUND', 'program product unavailable');
+  }
+  if (options.requireActiveOffering !== false) {
+    const legalDocuments = await db.serviceLegalDocument.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        type: { in: ['TERMS', 'PRIVACY', 'COMMERCE_DISCLOSURE'] },
+        status: 'PUBLISHED',
+        effectiveAt: { lte: now },
+      },
+      select: { type: true },
+    });
+    if (new Set(legalDocuments.map(({ type }) => type)).size !== 3) {
+      throw new ApplicationError('CONFIGURATION_ERROR', 'commerce legal documents are not ready');
+    }
+  }
+  if (
+    !paymentConfiguration ||
+    ((options.requireActivePayment ?? true)
+      ? paymentConfiguration.status !== 'ACTIVE'
+      : !['ACTIVE', 'DISABLED'].includes(paymentConfiguration.status)) ||
+    !paymentConfiguration.lastVerifiedAt ||
+    !paymentConfiguration.encryptedWebhookSecret
+  ) {
+    throw new ApplicationError('CONFIGURATION_ERROR', 'organization payment is not active');
+  }
+  const [program, enrolled] = await Promise.all([
+    db.serviceProgram.findFirst({
+      where: {
+        id: offering.serviceProgramId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+      },
+    }),
+    db.programEnrollment.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membership.id,
+        serviceProgramId: offering.serviceProgramId,
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (!program) throw new ApplicationError('NOT_FOUND', 'program product unavailable');
+  if (enrolled) throw new ApplicationError('CONFLICT', 'member already has this program');
+  return { offering, paymentConfiguration, membership, program, terms };
+}
 
 async function validatedPurchaseContext(
   db: Db,
@@ -115,7 +222,7 @@ export async function createProgramCheckout(
     idempotencyKey: string;
     serviceSlug: string;
   },
-  dependencies = {
+  dependencies: CheckoutDependencies = {
     crypto: new AesGcmPaymentSecretCrypto(),
     stripe: new StripeCheckoutAdapter(),
   },
@@ -160,17 +267,129 @@ export async function createProgramCheckout(
   }
   const baseUrl = getServerEnvironment().APP_URL;
   const returnPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs/${input.sourceEnrollmentId}`;
-  const session = await dependencies.stripe.create({
-    secretKey: dependencies.crypto.decrypt(context.paymentConfiguration.encryptedSecretKey),
-    idempotencyKey: `program-purchase-${purchase.id}`,
-    purchaseId: purchase.id,
-    workspaceId: purchase.workspaceId,
-    offeringId: purchase.programOfferingId,
-    productName: context.program.displayName,
-    amountYen: purchase.amountYen,
-    successUrl: new URL(`${returnPath}?payment=success`, baseUrl).toString(),
-    cancelUrl: new URL(`${returnPath}?payment=cancelled`, baseUrl).toString(),
+  let session;
+  try {
+    session = await dependencies.stripe.create({
+      secretKey: dependencies.crypto.decrypt(context.paymentConfiguration.encryptedSecretKey),
+      idempotencyKey: `program-purchase-${purchase.id}`,
+      purchaseId: purchase.id,
+      workspaceId: purchase.workspaceId,
+      offeringId: purchase.programOfferingId,
+      productName: context.program.displayName,
+      amountYen: purchase.amountYen,
+      successUrl: new URL(`${returnPath}?payment=success`, baseUrl).toString(),
+      cancelUrl: new URL(`${returnPath}?payment=cancelled`, baseUrl).toString(),
+    });
+  } catch (error) {
+    await client.programPurchase.updateMany({
+      where: { id: purchase.id, status: 'CREATED' },
+      data: { status: 'FAILED' },
+    });
+    throw error;
+  }
+  await client.programPurchase.update({
+    where: { id: purchase.id },
+    data: {
+      status: 'CHECKOUT_OPEN',
+      providerCheckoutSessionId: session.id,
+      checkoutExpiresAt: session.expiresAt,
+    },
   });
+  return { checkoutUrl: session.url };
+}
+
+export async function createDirectProgramCheckout(
+  client: PrismaClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    buyerUserId: string;
+    offeringId: string;
+    idempotencyKey: string;
+    serviceSlug: string;
+  },
+  dependencies: CheckoutDependencies = {
+    crypto: new AesGcmPaymentSecretCrypto(),
+    stripe: new StripeCheckoutAdapter(),
+  },
+) {
+  const context = await validatedDirectPurchaseContext(client, input);
+  const existing = await client.programPurchase.findUnique({
+    where: {
+      workspaceId_groupId_idempotencyKey: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    },
+  });
+  if (
+    existing &&
+    (existing.buyerUserId !== input.buyerUserId ||
+      existing.sourceEnrollmentId !== null ||
+      existing.programOfferingId !== input.offeringId)
+  ) {
+    throw new ApplicationError('CONFLICT', 'idempotency key already used');
+  }
+  const unsettled = await client.programPurchase.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      groupId: input.groupId,
+      buyerUserId: input.buyerUserId,
+      programOfferingId: input.offeringId,
+      OR: [
+        { status: 'PAID' },
+        { status: 'CREATED' },
+        { status: 'CHECKOUT_OPEN', checkoutExpiresAt: { gt: new Date() } },
+      ],
+      ...(existing ? { id: { not: existing.id } } : {}),
+    },
+    select: { id: true },
+  });
+  if (unsettled) throw new ApplicationError('CONFLICT', 'purchase already exists');
+  const purchase =
+    existing ??
+    (await client.programPurchase.create({
+      data: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        buyerUserId: input.buyerUserId,
+        groupMembershipId: context.membership.id,
+        sourceEnrollmentId: null,
+        programOfferingId: context.offering.id,
+        paymentConfigurationId: context.paymentConfiguration.id,
+        amountYen: context.terms.amountYen,
+        currency: context.terms.currency,
+        idempotencyKey: input.idempotencyKey,
+        metadata: {
+          productKind: context.terms.productKind,
+          purchaseMode: context.terms.purchaseMode,
+        },
+      },
+    }));
+  if (purchase.status === 'PAID') throw new ApplicationError('CONFLICT', 'purchase already paid');
+  const baseUrl = getServerEnvironment().APP_URL;
+  const returnPath = `/s/${encodeURIComponent(input.serviceSlug)}/programs`;
+  let session;
+  try {
+    session = await dependencies.stripe.create({
+      secretKey: dependencies.crypto.decrypt(context.paymentConfiguration.encryptedSecretKey),
+      idempotencyKey: `program-purchase-${purchase.id}`,
+      purchaseId: purchase.id,
+      workspaceId: purchase.workspaceId,
+      offeringId: purchase.programOfferingId,
+      productName: context.program.displayName,
+      amountYen: purchase.amountYen,
+      successUrl: new URL(`${returnPath}?payment=success`, baseUrl).toString(),
+      cancelUrl: new URL(`${returnPath}?payment=cancelled`, baseUrl).toString(),
+    });
+  } catch (error) {
+    await client.programPurchase.updateMany({
+      where: { id: purchase.id, status: 'CREATED' },
+      data: { status: 'FAILED' },
+    });
+    throw error;
+  }
   await client.programPurchase.update({
     where: { id: purchase.id },
     data: {
@@ -260,43 +479,75 @@ export async function completePaidProgramPurchase(
           });
           return purchase.paidEnrollmentId;
         }
-        const context = await validatedPurchaseContext(
-          tx,
-          {
-            workspaceId: purchase.workspaceId,
-            groupId: purchase.groupId,
-            buyerUserId: purchase.buyerUserId,
-            sourceEnrollmentId: purchase.sourceEnrollmentId,
-            offeringId: purchase.programOfferingId,
-          },
-          { requireActivePayment: false },
-        );
-        const progress = await tx.programProgressSnapshot.findUnique({
-          where: { programEnrollmentId: context.source.id },
-        });
-        if (!['NOT_STARTED', 'PARTIAL', 'LISTED'].includes(progress?.bottleneckKey ?? '')) {
+        const legacyContext = purchase.sourceEnrollmentId
+          ? await validatedPurchaseContext(
+              tx,
+              {
+                workspaceId: purchase.workspaceId,
+                groupId: purchase.groupId,
+                buyerUserId: purchase.buyerUserId,
+                sourceEnrollmentId: purchase.sourceEnrollmentId,
+                offeringId: purchase.programOfferingId,
+              },
+              { requireActivePayment: false },
+            )
+          : null;
+        const directContext = purchase.sourceEnrollmentId
+          ? null
+          : await validatedDirectPurchaseContext(
+              tx,
+              {
+                workspaceId: purchase.workspaceId,
+                groupId: purchase.groupId,
+                buyerUserId: purchase.buyerUserId,
+                offeringId: purchase.programOfferingId,
+              },
+              { requireActivePayment: false, requireActiveOffering: false },
+            );
+        if (!legacyContext && !directContext) {
+          throw new ApplicationError('NOT_FOUND', 'purchase target unavailable');
+        }
+        const progress = legacyContext
+          ? await tx.programProgressSnapshot.findUnique({
+              where: { programEnrollmentId: legacyContext.source.id },
+            })
+          : null;
+        if (
+          legacyContext &&
+          !['NOT_STARTED', 'PARTIAL', 'LISTED'].includes(progress?.bottleneckKey ?? '')
+        ) {
           throw new ApplicationError('FORBIDDEN', 'DAY7 classification required');
         }
+        const program = legacyContext?.program ?? directContext!.program;
+        const offering = legacyContext?.offering ?? directContext!.offering;
+        const supportMode = legacyContext?.runtime.supportMode ?? directContext!.terms.supportMode;
+        const durationDays = legacyContext?.terms.durationDays ?? directContext!.terms.durationDays;
+        const timeZone = legacyContext?.runtime.timeZone ?? directContext!.terms.timeZone;
+        const termsSnapshot = legacyContext
+          ? { ...legacyContext.terms, supportModes: [...legacyContext.terms.supportModes] }
+          : { ...directContext!.terms };
         const now = new Date();
         const enrollment = await tx.programEnrollment.create({
           data: {
             workspaceId: purchase.workspaceId,
             groupId: purchase.groupId,
             groupMembershipId: purchase.groupMembershipId,
-            serviceProgramId: context.program.id,
-            programOfferingId: context.offering.id,
+            serviceProgramId: program.id,
+            programOfferingId: offering.id,
             status: 'ACTIVE',
-            supportMode: context.runtime.supportMode,
-            goalSnapshot: {
-              source: 'STRIPE_CHECKOUT',
-              freeEnrollmentId: context.source.id,
-              classification: progress!.bottleneckKey,
-            },
+            supportMode,
+            goalSnapshot: legacyContext
+              ? {
+                  source: 'STRIPE_CHECKOUT',
+                  freeEnrollmentId: legacyContext.source.id,
+                  classification: progress!.bottleneckKey,
+                }
+              : { source: 'DIRECT_STRIPE_CHECKOUT' },
             offeringSnapshot: {
-              version: context.offering.version,
+              version: offering.version,
               isFree: false,
-              priceReference: context.offering.priceReference,
-              terms: { ...context.terms, supportModes: [...context.terms.supportModes] },
+              priceReference: offering.priceReference,
+              terms: termsSnapshot,
               paymentConfirmation: {
                 provider: 'STRIPE',
                 checkoutSessionId: input.checkoutSessionId,
@@ -308,8 +559,8 @@ export async function completePaidProgramPurchase(
             startsAt: now,
             endsAt: (await import('@bunshin/database')).addProgramCalendarDays(
               now,
-              context.terms.durationDays,
-              context.runtime.timeZone,
+              durationDays,
+              timeZone,
             ),
           },
         });
@@ -317,7 +568,7 @@ export async function completePaidProgramPurchase(
           data: {
             workspaceId: purchase.workspaceId,
             groupId: purchase.groupId,
-            programEnrollmentId: context.source.id,
+            programEnrollmentId: legacyContext?.source.id ?? enrollment.id,
             eventType: 'PAID_ENROLLED',
             sourceResourceType: 'PROGRAM_ENROLLMENT',
             sourceResourceId: enrollment.id,
@@ -325,7 +576,7 @@ export async function completePaidProgramPurchase(
             metadata: {
               paidEnrollmentId: enrollment.id,
               purchaseId: purchase.id,
-              offeringId: context.offering.id,
+              offeringId: offering.id,
               amountYen: purchase.amountYen,
               provider: 'STRIPE',
             },
@@ -627,7 +878,7 @@ export async function refundPaidProgramPurchase(
           data: {
             workspaceId: purchase.workspaceId,
             groupId: purchase.groupId,
-            programEnrollmentId: purchase.sourceEnrollmentId,
+            programEnrollmentId: purchase.sourceEnrollmentId ?? purchase.paidEnrollmentId,
             eventType: 'PAYMENT_REFUNDED',
             sourceResourceType: 'PROGRAM_ENROLLMENT',
             sourceResourceId: purchase.paidEnrollmentId,
@@ -705,7 +956,7 @@ export async function expireEndedPaidProgramEnrollments(
         data: {
           workspaceId: purchase.workspaceId,
           groupId: purchase.groupId,
-          programEnrollmentId: purchase.sourceEnrollmentId,
+          programEnrollmentId: purchase.sourceEnrollmentId ?? purchase.paidEnrollmentId!,
           eventType: 'PAID_PROGRAM_EXPIRED',
           sourceResourceType: 'PROGRAM_ENROLLMENT',
           sourceResourceId: purchase.paidEnrollmentId!,

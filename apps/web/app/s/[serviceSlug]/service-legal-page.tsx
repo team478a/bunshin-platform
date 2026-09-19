@@ -13,7 +13,7 @@ export async function ServiceLegalPage({
   type,
 }: {
   serviceSlug: string;
-  type: 'TERMS' | 'PRIVACY';
+  type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE';
 }) {
   try {
     const service = await resolvePublicServiceContext(serviceSlug);
@@ -22,7 +22,12 @@ export async function ServiceLegalPage({
       new db.PrismaServiceParticipationRepository(),
     ).findView({ slug: serviceSlug, actorUserId: null });
     const document = participation.legalDocuments.find((item) => item.type === type) ?? null;
-    const label = type === 'TERMS' ? '利用規約' : 'プライバシーポリシー';
+    const label =
+      type === 'TERMS'
+        ? '利用規約'
+        : type === 'PRIVACY'
+          ? 'プライバシーポリシー'
+          : '特定商取引法に基づく表示';
     const style = {
       '--service-primary': service.configuration.brand.primaryColor,
       '--service-secondary': service.configuration.brand.secondaryColor,

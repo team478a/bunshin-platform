@@ -7,7 +7,7 @@ export interface ServiceParticipationView {
   membership: GroupMembership | null;
   legalDocuments: Array<{
     id: string;
-    type: 'TERMS' | 'PRIVACY';
+    type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE';
     version: number;
     title: string;
     content: string;

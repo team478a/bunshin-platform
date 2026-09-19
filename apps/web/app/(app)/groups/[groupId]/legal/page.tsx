@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const createSchema = z.object({
   workspaceId: z.uuid(),
   groupId: z.uuid(),
-  type: z.enum(['TERMS', 'PRIVACY']),
+  type: z.enum(['TERMS', 'PRIVACY', 'COMMERCE_DISCLOSURE']),
   title: z.string().trim().min(1).max(200),
   content: z.string().trim().min(1).max(100_000),
   reason: z.string().trim().min(5).max(1000),
@@ -219,7 +219,9 @@ export default async function ServiceLegalPage({
       <header className="app-page__heading">
         <p className="eyebrow">サービス運営</p>
         <h1>{service.displayName}の法務文書</h1>
-        <p>参加者が登録時に確認する利用規約とプライバシーポリシーを管理します。</p>
+        <p>
+          利用規約、プライバシーポリシー、有料商品を販売する際の特定商取引法に基づく表示を管理します。
+        </p>
         <a
           href={
             query.service
@@ -253,6 +255,7 @@ export default async function ServiceLegalPage({
             <select className="field__control" name="type">
               <option value="TERMS">利用規約</option>
               <option value="PRIVACY">プライバシーポリシー</option>
+              <option value="COMMERCE_DISCLOSURE">特定商取引法に基づく表示</option>
             </select>
           </label>
           <label className="field">
@@ -292,7 +295,12 @@ export default async function ServiceLegalPage({
             <article className="admin-list__item" key={document.id}>
               <h3>{document.title}</h3>
               <p>
-                {document.type === 'TERMS' ? '利用規約' : 'プライバシー'}・第{document.version}版・
+                {document.type === 'TERMS'
+                  ? '利用規約'
+                  : document.type === 'PRIVACY'
+                    ? 'プライバシーポリシー'
+                    : '特定商取引法に基づく表示'}
+                ・第{document.version}版・
                 {document.status === 'DRAFT'
                   ? '下書き'
                   : document.status === 'PUBLISHED'
