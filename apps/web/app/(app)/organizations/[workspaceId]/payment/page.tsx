@@ -18,6 +18,7 @@ import {
   yen,
 } from '../../../../../src/payments/payment-operations';
 import { recoverFailedPaymentWebhook } from '../../../../../src/payments/payment-webhook-recovery';
+import { reconcilePendingProgramPurchase } from '../../../../../src/payments/payment-checkout-reconciliation';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ const saveSchema = z.object({
 });
 const actionSchema = z.object({ workspaceId: z.uuid(), reason: z.string().trim().min(3).max(500) });
 const webhookRecoverySchema = actionSchema.extend({ webhookEventId: z.uuid() });
+const purchaseReconciliationSchema = actionSchema.extend({ purchaseId: z.uuid() });
 
 async function requirePaymentManager(workspaceId: string, userId: string) {
   const db = await import('@bunshin/database');
@@ -294,6 +296,28 @@ async function recoverWebhook(formData: FormData) {
   redirect(paymentPath(parsed.data.workspaceId, result));
 }
 
+async function reconcilePurchase(formData: FormData) {
+  'use server';
+  const user = await actor();
+  const parsed = purchaseReconciliationSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect('/organizations?error=invalid-payment-action');
+  const { db } = await requirePaymentManager(parsed.data.workspaceId, user.userId);
+  let result = 'payment-reconciliation-failed';
+  try {
+    const outcome = await reconcilePendingProgramPurchase(db.prisma, {
+      workspaceId: parsed.data.workspaceId,
+      purchaseId: parsed.data.purchaseId,
+      actorUserId: user.userId,
+      reason: parsed.data.reason,
+    });
+    result = `payment-reconciled-${outcome.toLowerCase()}`;
+  } catch {
+    // The provider error and credentials remain server-side. The operator receives an actionable summary.
+  }
+  revalidatePath(paymentPath(parsed.data.workspaceId));
+  redirect(paymentPath(parsed.data.workspaceId, result));
+}
+
 const results: Record<string, string> = {
   saved: '設定を下書き保存しました。次に接続確認をしてください。',
   verified: 'Stripeとの接続を確認しました。「決済接続を有効にする」を押すと使用できます。',
@@ -308,6 +332,11 @@ const results: Record<string, string> = {
   'webhook-recovered': 'Stripeから決済通知を再取得し、処理を完了しました。',
   'webhook-recovery-failed':
     '再処理できませんでした。Stripeの取引状態と接続設定を確認してください。',
+  'payment-reconciled-paid': 'Stripeで入金を確認し、購入者の利用を開始しました。',
+  'payment-reconciled-expired': 'Stripeで期限切れを確認し、支払い待ちを終了しました。',
+  'payment-reconciled-unchanged': 'Stripeではまだ支払い待ちです。時間を置いて確認してください。',
+  'payment-reconciliation-failed':
+    'Stripeと照合できませんでした。決済接続とCheckoutの状態を確認してください。',
 };
 const statusLabel = {
   DRAFT: '下書き',
@@ -513,6 +542,7 @@ export default async function OrganizationPaymentPage({
                   <th>決済・返金</th>
                   <th>状態</th>
                   <th>状態更新日時</th>
+                  <th>支払い確認</th>
                 </tr>
               </thead>
               <tbody>
@@ -537,6 +567,29 @@ export default async function OrganizationPaymentPage({
                           purchase.paidAt ??
                           purchase.expiredAt ??
                           purchase.createdAt,
+                      )}
+                    </td>
+                    <td>
+                      {purchase.status === 'CHECKOUT_OPEN' ? (
+                        <form action={reconcilePurchase} className="stack stack--compact">
+                          <input type="hidden" name="workspaceId" value={workspace.id} />
+                          <input type="hidden" name="purchaseId" value={purchase.id} />
+                          <label>
+                            <span className="sr-only">支払い状態を確認する理由</span>
+                            <input
+                              name="reason"
+                              minLength={3}
+                              maxLength={500}
+                              required
+                              placeholder="例：入金後も待機中のため"
+                            />
+                          </label>
+                          <button className="button button--secondary" type="submit">
+                            Stripeの状態を確認
+                          </button>
+                        </form>
+                      ) : (
+                        '—'
                       )}
                     </td>
                   </tr>
