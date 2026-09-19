@@ -51,21 +51,30 @@ function replaceTerminology(value: string, rules: ServiceContentTerminologyRule[
   }, value);
 }
 
+function applyTerminologyToValue(
+  value: unknown,
+  policy: ServiceContentTerminologyPolicy | null,
+): unknown {
+  if (!policy) return value;
+  if (typeof value === 'string') return replaceTerminology(value, policy.rules);
+  if (Array.isArray(value)) {
+    const items: unknown[] = value;
+    return items.map((item) => applyTerminologyToValue(item, policy));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        applyTerminologyToValue(item, policy),
+      ]),
+    );
+  }
+  return value;
+}
+
 export function applyServiceContentTerminology<T>(
   value: T,
   policy: ServiceContentTerminologyPolicy | null,
 ): T {
-  if (!policy) return value;
-  if (typeof value === 'string') return replaceTerminology(value, policy.rules) as T;
-  if (Array.isArray(value))
-    return value.map((item) => applyServiceContentTerminology(item, policy)) as T;
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        applyServiceContentTerminology(item, policy),
-      ]),
-    ) as T;
-  }
-  return value;
+  return applyTerminologyToValue(value, policy) as T;
 }
