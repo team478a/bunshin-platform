@@ -17,6 +17,7 @@ export interface SaveOrganizationCommercialContractInput {
   billingName: string;
   billingEmail: string;
   paymentTermsDays: number;
+  automaticRemindersEnabled: boolean;
   externalCustomerReference?: string | null;
   startsAt?: Date | null;
   endsAt?: Date | null;
@@ -233,6 +234,7 @@ export class PrismaCommercialBillingService {
       billingName: requiredText(input.billingName, 200),
       billingEmail: requiredText(input.billingEmail, 320),
       paymentTermsDays: input.paymentTermsDays,
+      automaticRemindersEnabled: input.automaticRemindersEnabled,
       externalCustomerReference: optionalText(input.externalCustomerReference, 200),
       startsAt: input.startsAt ?? null,
       endsAt: input.endsAt ?? null,

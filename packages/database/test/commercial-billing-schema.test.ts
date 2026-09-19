@@ -23,6 +23,16 @@ const checkoutMigration = readFileSync(
   ),
   'utf8',
 );
+const reminderMigration = readFileSync(
+  join(
+    process.cwd(),
+    'prisma',
+    'migrations',
+    '20260920010000_add_commercial_billing_reminders',
+    'migration.sql',
+  ),
+  'utf8',
+);
 
 describe('OEM contract and invoice schema', () => {
   it('binds one invoice to one tenant monthly usage snapshot', () => {
@@ -56,6 +66,13 @@ describe('OEM contract and invoice schema', () => {
     expect(checkoutMigration).toContain('commercial_billing_webhook_events_provider_event_id_key');
     expect(checkoutMigration).toContain(
       'FOREIGN KEY ("workspace_id", "invoice_id") REFERENCES "tenant_invoices"',
+    );
+  });
+
+  it('keeps automatic reminders disabled until an operator opts in', () => {
+    expect(schema).toContain('automaticRemindersEnabled Boolean');
+    expect(reminderMigration).toContain(
+      '"automatic_reminders_enabled" BOOLEAN NOT NULL DEFAULT false',
     );
   });
 });

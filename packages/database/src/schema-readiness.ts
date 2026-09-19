@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260919230000_add_oem_invoice_checkout';
+export const LATEST_DATABASE_MIGRATION = '20260920010000_add_commercial_billing_reminders';
