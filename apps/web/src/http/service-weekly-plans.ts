@@ -13,6 +13,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { createWeeklyPlanGenerationService } from '../services/weekly-plan-generation';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
+import { applyServiceContentTerminology } from '../services/service-content-terminology';
 import { buildBusinessContentSchedule } from '../services/business-content-mix';
 import { weeklyPlanDto } from './weekly-plans';
 
@@ -139,6 +140,8 @@ export function generateServiceWeeklyPlanResponse(
         includeGrantedKnowledge: false,
         includeCampaigns: true,
         additionalKnowledge: serviceKnowledge.officialKnowledge,
+        transformGeneratedOutput: (output) =>
+          applyServiceContentTerminology(output, serviceKnowledge.contentTerminologyPolicy),
         ...(serviceKnowledge.businessContentMixEnabled
           ? {
               businessContentSchedule: buildBusinessContentSchedule({

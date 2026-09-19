@@ -2558,3 +2558,10 @@
 - Payment: `EXTERNAL_BILLING`契約の`ISSUED`請求だけを団体OWNER/ADMINが支払い、署名済みWebhookで金額・通貨・Session・Workspaceを照合して`PAID`へ更新する。
 - Idempotency: Stripe Event IDを専用台帳で一意にし、Checkout作成にも請求単位のidempotency keyを付ける。Webhook本文とカード情報は保存しない。
 - Scope: 今回はHosted Checkoutと自動入金消込までとし、カード保存による無操作の自動課金、督促、税計算は後続作業へ分離する。
+
+## 2026-09-19: サービス固有の禁止語は生成境界で適用する
+
+- Scope: 千ノ国メディア（`sennokuni-media`）では英字の独立語`OVE`を禁止し、生成文では`ORI`を使用する。
+- Isolation: 表記ルールはService slugに結び付け、ワタシワークス公式や他の運営団体・サービスには適用しない。
+- Enforcement: AIへの表記指示に加え、週間計画、投稿戦略、投稿本文、再生成案を保存・品質確認する前にサーバー側で正規化する。
+- Boundary: 共通生成Providerへ千ノ国固有語を直書きせず、サービス固有Policyとして外側から適用する。

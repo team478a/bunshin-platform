@@ -20,6 +20,7 @@ import {
   type SocialAccountStrategyRepository,
   type SocialProfileRepository,
   type WeeklyPlannerInput,
+  type WeeklyPlannerOutput,
   type WeeklyPlannerPort,
   type WeeklyPlanRepository,
 } from '@bunshin/capability-social';
@@ -137,6 +138,7 @@ export class WeeklyPlanGenerationService {
       includeGrantedKnowledge?: boolean;
       includeCampaigns?: boolean;
       additionalKnowledge?: Array<{ type: string; title: string; content: string }>;
+      transformGeneratedOutput?: (output: WeeklyPlannerOutput) => WeeklyPlannerOutput;
       businessContentSchedule?: WeeklyPlannerInput['businessContentSchedule'];
     },
   ) {
@@ -237,6 +239,9 @@ export class WeeklyPlanGenerationService {
               : {}),
           }),
       });
+      const generatedOutput = input.transformGeneratedOutput
+        ? input.transformGeneratedOutput(result.output)
+        : result.output;
       stage = 'SAVE_PLAN';
       const plan = await new CreateGeneratedWeeklyPlan(
         this.dependencies.plans,
@@ -245,7 +250,7 @@ export class WeeklyPlanGenerationService {
         ...input,
         weekStartDate: input.weekStartDate,
         timezone,
-        ...result.output,
+        ...generatedOutput,
       });
       await this.dependencies.recordUsage({
         ...input,

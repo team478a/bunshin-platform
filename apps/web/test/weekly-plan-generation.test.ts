@@ -196,6 +196,25 @@ describe('WeeklyPlanGenerationService', () => {
     expect(createGeneratedPlan).toHaveBeenCalledWith(expect.objectContaining(serviceScope));
   });
 
+  it('transforms service-specific generated text before saving the weekly plan', async () => {
+    await service().execute({
+      ...scope,
+      groupId: 'service-1',
+      weekStartDate: '2026-08-24',
+      timezone: 'Asia/Tokyo',
+      usageIdempotencyKey: 'service-request:terminology',
+      existingPolicy: 'CONFLICT',
+      transformGeneratedOutput: (output) => ({
+        ...output,
+        strategySummary: output.strategySummary.replace('今週', '次週'),
+      }),
+    });
+
+    expect(createGeneratedPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ strategySummary: '次週の方針' }),
+    );
+  });
+
   it('returns an existing week without calling the provider in idempotent job mode', async () => {
     listPlans.mockResolvedValue([generatedPlan]);
     const result = await service().execute({
