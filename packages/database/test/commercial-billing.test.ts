@@ -1,6 +1,42 @@
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { PrismaCommercialBillingService } from '../src/commercial-billing';
+import {
+  PrismaCommercialBillingService,
+  unresolvedCommercialReminderFailures,
+} from '../src/commercial-billing';
+
+describe('unresolvedCommercialReminderFailures', () => {
+  const audit = (action: string, occurredAt: string, entityId = 'invoice-a') => ({
+    id: `${action}-${occurredAt}`,
+    workspaceId: 'workspace-a',
+    entityId,
+    action,
+    occurredAt: new Date(occurredAt),
+  });
+
+  it('keeps only the latest unresolved failure for each invoice and reminder kind', () => {
+    const failures = unresolvedCommercialReminderFailures([
+      audit('PAYMENT_GUIDANCE_FAILED', '2026-09-20T00:00:00.000Z'),
+      audit('PAYMENT_GUIDANCE_SENT', '2026-09-20T01:00:00.000Z'),
+      audit('OVERDUE_REMINDER_FAILED', '2026-09-21T00:00:00.000Z'),
+      audit('OVERDUE_REMINDER_FAILED', '2026-09-20T23:00:00.000Z'),
+    ]);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.action).toBe('OVERDUE_REMINDER_FAILED');
+    expect(failures[0]?.occurredAt.toISOString()).toBe('2026-09-21T00:00:00.000Z');
+  });
+
+  it('does not mix reminder history between organizations', () => {
+    const failure = audit('PAYMENT_GUIDANCE_FAILED', '2026-09-20T00:00:00.000Z');
+    const success = {
+      ...audit('PAYMENT_GUIDANCE_SENT', '2026-09-20T01:00:00.000Z'),
+      workspaceId: 'workspace-b',
+    };
+
+    expect(unresolvedCommercialReminderFailures([failure, success])).toEqual([failure]);
+  });
+});
 
 describe('PrismaCommercialBillingService', () => {
   it('does not activate billing without an OEM entitlement', async () => {

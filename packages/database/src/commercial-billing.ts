@@ -59,6 +59,31 @@ function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+type CommercialReminderAudit = {
+  workspaceId: string;
+  entityId: string;
+  action: string;
+  occurredAt: Date;
+};
+
+export function unresolvedCommercialReminderFailures<T extends CommercialReminderAudit>(
+  audits: T[],
+): T[] {
+  const latest = new Map<string, T>();
+  for (const audit of audits) {
+    const kind = audit.action.startsWith('PAYMENT_GUIDANCE_')
+      ? 'INITIAL'
+      : audit.action.startsWith('OVERDUE_REMINDER_')
+        ? 'OVERDUE'
+        : null;
+    if (!kind) continue;
+    const key = `${audit.workspaceId}:${audit.entityId}:${kind}`;
+    const current = latest.get(key);
+    if (!current || audit.occurredAt > current.occurredAt) latest.set(key, audit);
+  }
+  return [...latest.values()].filter((audit) => audit.action.endsWith('_FAILED'));
+}
+
 export class PrismaCommercialBillingService {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -145,10 +170,39 @@ export class PrismaCommercialBillingService {
         },
       }),
     ]);
+    const issuedInvoiceIds = invoices
+      .filter((invoice) => invoice.status === 'ISSUED')
+      .map((invoice) => invoice.id);
+    const reminderAudits = issuedInvoiceIds.length
+      ? await this.client.commercialBillingAudit.findMany({
+          where: {
+            entityType: 'INVOICE',
+            entityId: { in: issuedInvoiceIds },
+            action: {
+              in: [
+                'PAYMENT_GUIDANCE_SENT',
+                'OVERDUE_REMINDER_SENT',
+                'PAYMENT_GUIDANCE_FAILED',
+                'OVERDUE_REMINDER_FAILED',
+              ],
+            },
+          },
+          orderBy: { occurredAt: 'desc' },
+          take: 5000,
+          select: {
+            id: true,
+            workspaceId: true,
+            entityId: true,
+            action: true,
+            occurredAt: true,
+          },
+        })
+      : [];
     return {
       activeContracts,
       summary: summarizeCommercialInvoices(invoices, now),
       invoices,
+      reminderFailures: unresolvedCommercialReminderFailures(reminderAudits),
     };
   }
 
