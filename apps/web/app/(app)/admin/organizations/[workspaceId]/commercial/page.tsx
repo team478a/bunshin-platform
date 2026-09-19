@@ -1,8 +1,14 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
+import {
+  AesGcmAdminEmailSecretCrypto,
+  currentAdminEmailEnvironment,
+} from '../../../../../../src/email/secure-admin-email-configuration';
+import { CommercialBillingReminderResend } from '../../../../../../src/email/commercial-billing-reminder';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +38,7 @@ const customQuoteSchema = z.object({
   amountYen: z.coerce.number().int().positive().max(1_000_000_000),
   notes: z.string().trim().max(1000).optional(),
 });
+const reminderSchema = z.object({ workspaceId: z.uuid(), invoiceId: z.uuid() });
 
 const EVENT_LABELS: Record<string, string> = {
   POST_VIEW: '投稿案を表示',
@@ -161,6 +168,74 @@ async function prepareCustomQuoteInvoice(formData: FormData) {
   redirect(`/admin/organizations/${input.data.workspaceId}/commercial?customQuoteSaved=1`);
 }
 
+async function sendInvoiceReminder(formData: FormData) {
+  'use server';
+  const input = reminderSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const returnPath = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  const now = new Date();
+  const invoice = await db.prisma.tenantInvoice.findFirst({
+    where: {
+      id: input.data.invoiceId,
+      workspaceId: input.data.workspaceId,
+      status: 'ISSUED',
+      dueAt: { not: null },
+    },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      amountYen: true,
+      dueAt: true,
+      checkoutUrl: true,
+      checkoutExpiresAt: true,
+      contract: { select: { billingName: true, billingEmail: true } },
+    },
+  });
+  if (!invoice?.dueAt) redirect(`${returnPath}?error=reminder-target` as Route);
+  const repository = new db.PrismaAdminEmailConfigurationRepository();
+  const configuration = await repository.active({ environment: currentAdminEmailEnvironment() });
+  if (!configuration) redirect(`${returnPath}?error=reminder-email` as Route);
+  const overdue = invoice.dueAt < now;
+  const reminderKind = overdue ? 'OVERDUE' : 'INITIAL';
+  const localDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  try {
+    await new CommercialBillingReminderResend().send({
+      apiKey: new AesGcmAdminEmailSecretCrypto().decrypt(configuration.encryptedApiKey),
+      from: configuration.configuration.fromEmail,
+      to: invoice.contract.billingEmail,
+      invoiceNumber: invoice.invoiceNumber,
+      billingName: invoice.contract.billingName,
+      amountYen: invoice.amountYen,
+      dueAt: invoice.dueAt,
+      checkoutUrl:
+        invoice.checkoutUrl && invoice.checkoutExpiresAt && invoice.checkoutExpiresAt > now
+          ? invoice.checkoutUrl
+          : null,
+      overdue,
+      idempotencyKey: `commercial-${invoice.id}-${reminderKind}-${localDate}`,
+    });
+    await db.prisma.commercialBillingAudit.create({
+      data: {
+        workspaceId: input.data.workspaceId,
+        actorUserId: actor.userId,
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        action: overdue ? 'OVERDUE_REMINDER_SENT' : 'PAYMENT_GUIDANCE_SENT',
+        afterData: {
+          recipient: invoice.contract.billingEmail,
+          reminderKind,
+          sentAt: now.toISOString(),
+        },
+      },
+    });
+  } catch {
+    redirect(`${returnPath}?error=reminder-send` as Route);
+  }
+  revalidatePath(returnPath);
+  redirect(`${returnPath}?reminderSent=1` as Route);
+}
+
 export default async function OrganizationCommercialPage({
   params,
   searchParams,
@@ -173,6 +248,7 @@ export default async function OrganizationCommercialPage({
     prepared?: string;
     invoiceUpdated?: string;
     customQuoteSaved?: string;
+    reminderSent?: string;
   }>;
 }) {
   const workspaceId = z.uuid().safeParse((await params).workspaceId);
@@ -214,9 +290,18 @@ export default async function OrganizationCommercialPage({
       {query.customQuoteSaved === '1' ? (
         <p className="notice notice--success">個別見積の金額で請求記録を作成しました。</p>
       ) : null}
+      {query.reminderSent === '1' ? (
+        <p className="notice notice--success">請求先へメールを送信し、履歴を保存しました。</p>
+      ) : null}
       {query.error ? (
         <p className="notice notice--danger">
-          保存または更新できませんでした。入力内容と現在の状態を確認してください。
+          {query.error === 'reminder-email'
+            ? '送信できる管理者メール設定がありません。管理者メールの接続確認と利用開始を確認してください。'
+            : query.error === 'reminder-target'
+              ? 'この請求は案内メールを送れる状態ではありません。請求状態と支払期限を確認してください。'
+              : query.error === 'reminder-send'
+                ? '請求案内メールを送信できませんでした。メール設定と送信サービスの状態を確認してください。'
+                : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
         </p>
       ) : null}
 
@@ -464,18 +549,32 @@ export default async function OrganizationCommercialPage({
                   </form>
                 ) : null}
                 {invoice.status === 'ISSUED' ? (
-                  <form className="form-stack" action={transitionInvoice}>
-                    <input type="hidden" name="workspaceId" value={billing.id} />
-                    <input type="hidden" name="invoiceId" value={invoice.id} />
-                    <input type="hidden" name="action" value="MARK_PAID" />
-                    <label className="field">
-                      <span className="field__label">入金参照番号（任意）</span>
-                      <input className="field__control" name="paymentReference" maxLength={200} />
-                    </label>
-                    <button className="button" type="submit">
-                      入金済みにする
-                    </button>
-                  </form>
+                  <>
+                    <form className="form-stack" action={sendInvoiceReminder}>
+                      <input type="hidden" name="workspaceId" value={billing.id} />
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <p>
+                        送信先：{billing.organizationCommercialContract?.billingEmail ?? '未設定'}
+                      </p>
+                      <button className="button button--secondary" type="submit">
+                        {invoice.dueAt && invoice.dueAt < new Date()
+                          ? '期限超過の案内をメールする'
+                          : '支払い案内をメールする'}
+                      </button>
+                    </form>
+                    <form className="form-stack" action={transitionInvoice}>
+                      <input type="hidden" name="workspaceId" value={billing.id} />
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <input type="hidden" name="action" value="MARK_PAID" />
+                      <label className="field">
+                        <span className="field__label">入金参照番号（任意）</span>
+                        <input className="field__control" name="paymentReference" maxLength={200} />
+                      </label>
+                      <button className="button" type="submit">
+                        入金済みにする
+                      </button>
+                    </form>
+                  </>
                 ) : null}
                 {invoice.status === 'DRAFT' || invoice.status === 'ISSUED' ? (
                   <form action={transitionInvoice}>
@@ -553,6 +652,8 @@ export default async function OrganizationCommercialPage({
                     ISSUE: '請求済み',
                     MARK_PAID: '入金済み',
                     VOID: '取消',
+                    PAYMENT_GUIDANCE_SENT: '支払い案内メール送信',
+                    OVERDUE_REMINDER_SENT: '期限超過メール送信',
                   }[audit.action] ?? audit.action}
                 </span>
                 <strong>
