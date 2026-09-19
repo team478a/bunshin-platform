@@ -2509,3 +2509,12 @@
 - Security: 秘密鍵とWebhook署名シークレットは用途分離したAES-GCMで暗号化し、平文の再表示、監査ログへの保存、別Workspaceからの参照を許可しない。
 - Activation: 秘密鍵の保存だけでは利用開始せず、Stripe APIでアカウントを確認した設定だけを有効化できる。保存、接続確認、有効化、停止を監査する。
 - Scope: この段階は決済接続設定までとし、購入画面、Checkout、Webhookによる入金確定、返金は後続作業とする。
+
+## 2026-09-19: 共通Program販売はversioned Offeringと運営団体所有の決済を再利用する
+
+- Product boundary: AI物販専用DAY7 Offerは変更せず、共通の有料Programを`PROGRAM_ACCESS / DIRECT`のversioned termsとして`ProgramOffering`へ保存する。
+- Server authority: 価格、期間、通貨、Membership、Workspace、Service Groupはサーバー側のOfferingと認証主体から解決し、ブラウザー入力を請求根拠にしない。
+- Entitlement: Stripeの署名済みWebhookで入金確認後にだけ期間付き`ProgramEnrollment`を作り、購入時点のOffering条件と決済参照をsnapshotへ残す。
+- Legal gate: 新規販売とCheckoutにはサービス単位の利用規約、プライバシーポリシー、特定商取引法に基づく表示の公開を必須とする。商取引表示は参加登録の同意対象には含めない。
+- Lifecycle: 商品停止・改版後も開始済みCheckoutの正当な入金は履行し、購入済みEnrollmentは維持する。直接購入の重複はApplication判定とDB部分一意indexで防ぎ、Checkout作成失敗は`FAILED`へ移して再試行を可能にする。
+- Limitation: 現行の一会員・一Program制約を維持するため、同一Programの更新購入はこの作業範囲に含めない。

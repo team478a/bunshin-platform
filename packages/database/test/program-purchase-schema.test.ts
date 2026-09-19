@@ -23,6 +23,20 @@ const refundAmountMigration = readFileSync(
   ),
   'utf8',
 );
+const directPurchaseMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260919190000_allow_direct_program_purchases/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const commerceDisclosureMigration = readFileSync(
+  new URL(
+    '../prisma/migrations/20260919200000_add_commerce_disclosure_legal_document/migration.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('program purchase persistence', () => {
   it('scopes purchases to an organization and service with provider idempotency', () => {
@@ -53,5 +67,18 @@ describe('program purchase persistence', () => {
     expect(refundAmountMigration).toContain('refunded_amount_yen');
     expect(refundAmountMigration).toContain('program_purchases_refunded_amount_yen_check');
     expect(refundAmountMigration).toContain('"refunded_amount_yen" <= "amount_yen"');
+  });
+
+  it('allows direct purchases without inventing a source enrollment', () => {
+    expect(schema).toContain('sourceEnrollmentId        String?');
+    expect(directPurchaseMigration).toContain('ALTER COLUMN "source_enrollment_id" DROP NOT NULL');
+    expect(directPurchaseMigration).toContain('program_purchases_one_unsettled_direct_product_key');
+    expect(directPurchaseMigration).toContain("\"status\" IN ('CREATED', 'CHECKOUT_OPEN', 'PAID')");
+  });
+
+  it('supports a versioned commerce disclosure for each service seller', () => {
+    expect(commerceDisclosureMigration).toContain(
+      `ALTER TYPE "LegalDocumentType" ADD VALUE 'COMMERCE_DISCLOSURE'`,
+    );
   });
 });

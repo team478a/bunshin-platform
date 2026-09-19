@@ -1,9 +1,12 @@
 import { notFound, redirect } from 'next/navigation';
+import { parseProgramProductTerms } from '@bunshin/application';
 import { parseAiResaleOfferTerms, parseAiResaleRuntimeSettings } from '@bunshin/capability-resale';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { currentPaymentEnvironment } from '../../../../../src/payments/secure-configuration';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ProgramManagementEditor } from './program-management-editor';
+import { ProgramProductAdmin } from './program-product-admin';
 import { AiResaleOfferAdmin } from './ai-resale-offer-admin';
 
 export const dynamic = 'force-dynamic';
@@ -29,57 +32,96 @@ export default async function ServiceProgramsPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [templates, versions, servicePrograms, offerings, enrollments, memberships] =
-    await Promise.all([
-      db.prisma.programTemplate.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          status: 'ACTIVE',
-          OR: [{ visibility: 'PLATFORM' }, { ownerGroupId: service.serviceId }],
-        },
-      }),
-      db.prisma.programTemplateVersion.findMany({
-        where: { workspaceId: service.workspaceId, status: 'PUBLISHED' },
-        orderBy: { version: 'desc' },
-      }),
-      db.prisma.serviceProgram.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          status: { in: ['DRAFT', 'ACTIVE', 'SUSPENDED'] },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      db.prisma.programOffering.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          status: 'ACTIVE',
-          isFree: true,
-        },
-        orderBy: { version: 'desc' },
-      }),
-      db.prisma.programEnrollment.findMany({
-        where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-        select: {
-          id: true,
-          serviceProgramId: true,
-          groupMembershipId: true,
-          status: true,
-          updatedAt: true,
-        },
-      }),
-      db.prisma.groupMembership.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          status: 'ACTIVE',
-          serviceRole: 'PARTICIPANT',
-        },
-        select: { id: true, user: { select: { displayName: true, email: true } } },
-        orderBy: { user: { displayName: 'asc' } },
-      }),
-    ]);
+  const [
+    templates,
+    versions,
+    servicePrograms,
+    offerings,
+    productOfferings,
+    enrollments,
+    memberships,
+    paymentConfiguration,
+    commerceDocuments,
+  ] = await Promise.all([
+    db.prisma.programTemplate.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        status: 'ACTIVE',
+        OR: [{ visibility: 'PLATFORM' }, { ownerGroupId: service.serviceId }],
+      },
+    }),
+    db.prisma.programTemplateVersion.findMany({
+      where: { workspaceId: service.workspaceId, status: 'PUBLISHED' },
+      orderBy: { version: 'desc' },
+    }),
+    db.prisma.serviceProgram.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: { in: ['DRAFT', 'ACTIVE', 'SUSPENDED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    db.prisma.programOffering.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        isFree: true,
+      },
+      orderBy: { version: 'desc' },
+    }),
+    db.prisma.programOffering.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        isFree: false,
+      },
+      orderBy: { version: 'desc' },
+    }),
+    db.prisma.programEnrollment.findMany({
+      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+      select: {
+        id: true,
+        serviceProgramId: true,
+        groupMembershipId: true,
+        status: true,
+        updatedAt: true,
+      },
+    }),
+    db.prisma.groupMembership.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        serviceRole: 'PARTICIPANT',
+      },
+      select: { id: true, user: { select: { displayName: true, email: true } } },
+      orderBy: { user: { displayName: 'asc' } },
+    }),
+    db.prisma.organizationPaymentConfiguration.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        environment: currentPaymentEnvironment(),
+        provider: 'STRIPE',
+        status: 'ACTIVE',
+        lastVerifiedAt: { not: null },
+        encryptedWebhookSecret: { not: null },
+      },
+      select: { id: true },
+    }),
+    db.prisma.serviceLegalDocument.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        type: { in: ['TERMS', 'PRIVACY', 'COMMERCE_DISCLOSURE'] },
+        status: 'PUBLISHED',
+        effectiveAt: { lte: new Date() },
+      },
+      select: { type: true },
+    }),
+  ]);
   const adoptedVersionIds = new Set(
     servicePrograms.map((program) => program.programTemplateVersionId),
   );
@@ -123,6 +165,34 @@ export default async function ServiceProgramsPage({
       return [];
     }
   });
+  const aiProgramIds = new Set(aiPrograms.map(({ program }) => program.id));
+  const productPrograms = servicePrograms
+    .filter((program) => program.status === 'ACTIVE' && !aiProgramIds.has(program.id))
+    .map((program) => {
+      const productOffering = productOfferings.find(
+        (offering) => offering.serviceProgramId === program.id,
+      );
+      const product = productOffering
+        ? parseProgramProductTerms(productOffering.termsSnapshot)
+        : null;
+      const version = versions.find((item) => item.id === program.programTemplateVersionId);
+      const definedModes = readModes(version?.definition);
+      const freeOffering = offerings.find((offering) => offering.serviceProgramId === program.id);
+      const supportModes =
+        definedModes.length > 0
+          ? definedModes
+          : product
+            ? [product.supportMode]
+            : readModes(freeOffering?.termsSnapshot);
+      return {
+        id: program.id,
+        name: program.displayName,
+        description: program.description,
+        supportModes,
+        product: productOffering && product ? { offeringId: productOffering.id, ...product } : null,
+      };
+    })
+    .filter((program) => program.supportModes.length > 0);
   const freeProgramIds = aiPrograms
     .filter(({ settings }) => settings.policyKey === 'FREE_7D')
     .map(({ program }) => program.id);
@@ -251,7 +321,7 @@ export default async function ServiceProgramsPage({
         <header className="app-page__heading">
           <p className="eyebrow">サービス管理者</p>
           <h1>実践プログラム</h1>
-          <p>公式プログラムを選び、参加者へ必要な内容を無料で割り当てます。</p>
+          <p>公式プログラムを選び、無料割り当てまたは有料販売の条件を設定します。</p>
           <a href={`/s/${serviceSlug}/home`}>← サービスのホームへ戻る</a>
         </header>
         <ProgramManagementEditor
@@ -263,6 +333,12 @@ export default async function ServiceProgramsPage({
             name: membership.user.displayName,
             email: membership.user.email,
           }))}
+        />
+        <ProgramProductAdmin
+          serviceSlug={serviceSlug}
+          paymentEnabled={paymentConfiguration !== null}
+          legalReady={new Set(commerceDocuments.map(({ type }) => type)).size === 3}
+          programs={productPrograms}
         />
         <AiResaleOfferAdmin
           serviceSlug={serviceSlug}
