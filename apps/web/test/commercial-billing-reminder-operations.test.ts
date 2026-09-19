@@ -42,4 +42,19 @@ describe('commercial billing reminder operations', () => {
     expect(page).toContain('未解決の自動案内メール送信失敗');
     expect(page).toContain('支払い案内をメールする');
   });
+
+  it('tests the saved billing recipient separately from the contract save form', () => {
+    const contractFormStart = page.indexOf('<form className="form-stack" action={saveContract}>');
+    const contractFormEnd = page.indexOf('</form>', contractFormStart);
+    const contractForm = page.slice(contractFormStart, contractFormEnd);
+    const testFormStart = page.indexOf('action={sendBillingRecipientTest}');
+
+    expect(testFormStart).toBeGreaterThan(contractFormEnd);
+    expect(contractForm).not.toContain('sendBillingRecipientTest');
+    expect(page).toContain('請求先へテストメールを送る');
+    expect(page).toContain('organizationCommercialContract.billingEmail');
+    expect(page).toContain("action: 'BILLING_EMAIL_TEST_SENT'");
+    expect(page).toContain("action: 'BILLING_EMAIL_TEST_FAILED'");
+    expect(page).toContain('recipientTestSent=1');
+  });
 });

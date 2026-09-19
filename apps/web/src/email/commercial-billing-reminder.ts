@@ -14,6 +14,47 @@ export interface CommercialBillingReminderInput {
   idempotencyKey: string;
 }
 
+export interface CommercialBillingRecipientTestInput {
+  apiKey: string;
+  from: string;
+  to: string;
+  billingName: string;
+  idempotencyKey: string;
+}
+
+export class CommercialBillingRecipientTestResend {
+  constructor(private readonly request: typeof fetch = fetch) {}
+
+  async send(input: CommercialBillingRecipientTestInput): Promise<void> {
+    const response = await this.request('https://api.resend.com/emails', {
+      method: 'POST',
+      redirect: 'error',
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        authorization: `Bearer ${input.apiKey}`,
+        'content-type': 'application/json',
+        'idempotency-key': input.idempotencyKey,
+        'user-agent': 'bunshin-commercial-billing/1.0',
+      },
+      body: JSON.stringify({
+        from: input.from,
+        to: [input.to],
+        subject: '【ワタシワークス】請求先メールの接続確認',
+        text: [
+          `${input.billingName} ご担当者様`,
+          '',
+          'ワタシワークスの請求先メールが正しく届くことを確認するためのテストメールです。',
+          'このメールによるお支払いや操作は必要ありません。',
+          '',
+          '心当たりがない場合は、ワタシワークス運営までお問い合わせください。',
+        ].join('\n'),
+      }),
+    });
+    if (!response.ok)
+      throw new ApplicationError('INTERNAL_ERROR', 'commercial billing recipient test unavailable');
+  }
+}
+
 export class CommercialBillingReminderResend {
   constructor(private readonly request: typeof fetch = fetch) {}
 
