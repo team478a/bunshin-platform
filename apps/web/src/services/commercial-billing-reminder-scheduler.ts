@@ -1,4 +1,5 @@
 import 'server-only';
+import { createLogger } from '@bunshin/observability';
 import {
   AesGcmAdminEmailSecretCrypto,
   currentAdminEmailEnvironment,
@@ -18,6 +19,9 @@ export function commercialReminderKind(dueAt: Date, now: Date): CommercialRemind
 
 const actionFor = (kind: CommercialReminderKind) =>
   kind === 'OVERDUE' ? 'OVERDUE_REMINDER_SENT' : 'PAYMENT_GUIDANCE_SENT';
+
+const failureActionFor = (kind: CommercialReminderKind) =>
+  kind === 'OVERDUE' ? 'OVERDUE_REMINDER_FAILED' : 'PAYMENT_GUIDANCE_FAILED';
 
 export async function runCommercialBillingReminders(now = new Date()) {
   const db = await import('@bunshin/database');
@@ -66,6 +70,7 @@ export async function runCommercialBillingReminders(now = new Date()) {
   const sentActions = new Set(audits.map(({ entityId, action }) => `${entityId}:${action}`));
   const apiKey = new AesGcmAdminEmailSecretCrypto().decrypt(configuration.encryptedApiKey);
   const sender = new CommercialBillingReminderResend();
+  const logger = createLogger();
   const localDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   let sent = 0;
   let skipped = 0;
@@ -113,8 +118,37 @@ export async function runCommercialBillingReminders(now = new Date()) {
       });
       sentActions.add(`${invoice.id}:${action}`);
       sent += 1;
-    } catch {
+    } catch (error) {
       failed += 1;
+      logger.error('commercial billing reminder delivery failed', {
+        workspaceId: invoice.workspaceId,
+        invoiceId: invoice.id,
+        reminderKind: kind,
+        errorCode: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
+      });
+      try {
+        await db.prisma.commercialBillingAudit.create({
+          data: {
+            workspaceId: invoice.workspaceId,
+            actorUserId: invoice.contract.updatedByUserId,
+            entityType: 'INVOICE',
+            entityId: invoice.id,
+            action: failureActionFor(kind),
+            afterData: {
+              reminderKind: kind,
+              attemptedAt: now.toISOString(),
+              automatic: true,
+            },
+          },
+        });
+      } catch (auditError) {
+        logger.error('commercial billing reminder failure audit could not be saved', {
+          workspaceId: invoice.workspaceId,
+          invoiceId: invoice.id,
+          reminderKind: kind,
+          errorCode: auditError instanceof Error ? auditError.name : 'UNKNOWN_ERROR',
+        });
+      }
     }
   }
   return { configurationReady: true, candidates: candidates.length, sent, skipped, failed };
