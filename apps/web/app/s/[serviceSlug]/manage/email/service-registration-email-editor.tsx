@@ -26,7 +26,10 @@ export function ServiceRegistrationEmailEditor({
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const text = (name: string) => String(form.get(name) ?? '');
+    const text = (name: string) => {
+      const entry = form.get(name);
+      return typeof entry === 'string' ? entry : '';
+    };
     setSaving(true);
     setMessage('保存しています…');
     const response = await fetch(endpoint, {
