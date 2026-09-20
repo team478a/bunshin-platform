@@ -148,7 +148,7 @@ describe('PrismaCommercialBillingService', () => {
         paymentTermsDays: 30,
       },
     };
-    const update = vi.fn().mockImplementation(({ data }) => ({ ...invoice, ...data }));
+    const update = vi.fn().mockResolvedValue({ ...invoice, status: 'ISSUED' });
     const rawClient = {
       tenantInvoice: { findFirst: vi.fn().mockResolvedValue(invoice), update },
       commercialBillingAudit: { create: vi.fn().mockResolvedValue({ id: 'audit' }) },
