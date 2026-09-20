@@ -68,3 +68,6 @@ ALTER TABLE "service_registration_email_deliveries"
   ADD CONSTRAINT "service_registration_email_deliveries_email_configuration_fkey"
   FOREIGN KEY ("email_configuration_id")
   REFERENCES "service_registration_email_configurations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "service_registration_email_configurations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "service_registration_email_deliveries" ENABLE ROW LEVEL SECURITY;
