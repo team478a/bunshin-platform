@@ -109,13 +109,12 @@ export class DailyMissionGenerationService {
         if (input.existingPolicy === 'RETURN') return existing;
         throw new ApplicationError('CONFLICT', 'daily mission already exists');
       }
-      const recentFormats = (
-        await new ListDailyMissions(missions).execute({
-          ...scope,
-          from: daysBefore(input.missionDate, 7),
-          to: daysBefore(input.missionDate, 1),
-        })
-      ).map(({ format }) => format);
+      const recentMissions = await new ListDailyMissions(missions).execute({
+        ...scope,
+        from: daysBefore(input.missionDate, 7),
+        to: daysBefore(input.missionDate, 1),
+      });
+      const recentFormats = recentMissions.map(({ format }) => format);
       const productPack = input.serviceSafeMode
         ? null
         : await new ProductPackService(new db.PrismaProductPackRepository()).resolveForGeneration(
@@ -584,6 +583,17 @@ export class DailyMissionGenerationService {
             issueCodes: safety.inspected.issueCodes,
           });
       }
+      if (
+        recentMissions.some(
+          (recentMission) =>
+            recentMission.content !== null &&
+            JSON.stringify(recentMission.content) === JSON.stringify(missionContent),
+        )
+      )
+        throw new ApplicationError(
+          'CONTENT_REJECTED',
+          'generated mission duplicates recent content',
+        );
       stage = 'persist';
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,

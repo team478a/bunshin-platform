@@ -2,7 +2,7 @@ import 'server-only';
 import { CreateDailyMission, type BusinessContentCategory } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
-const FALLBACK_VERSION = 'business-daily-ready-fallback-v2';
+const FALLBACK_VERSION = 'business-daily-ready-fallback-v3';
 
 const angles = [
   'お客様からよく聞かれる質問を一つ選び、短く答える',
@@ -22,6 +22,21 @@ const categoryAngles: Record<BusinessContentCategory, string> = {
   PRODUCT_SERVICE: '商品やサービスの特徴と、どんな方に向いているか',
 };
 
+const photoDirections = [
+  '商品やサービスの全体が分かる写真を、明るい場所で正面から撮ります',
+  '準備中の手元や道具を一つ選び、少し斜め上から撮ります',
+  'お客様が利用する場面を想像できる場所を、広めの構図で撮ります',
+  '品質のために大切にしている細部へ近づき、アップで撮ります',
+  '商品やサービスと一緒に使う物を一つ添え、横から撮ります',
+  '入口、看板、パッケージなど目印になる物を中央に置いて撮ります',
+  'スタッフが準備した成果物を、背景を整えて撮ります',
+] as const;
+
+function dailyIndex(missionDate: string): number {
+  const value = new Date(`${missionDate}T00:00:00.000Z`).getTime();
+  return Number.isFinite(value) ? Math.floor(value / 86_400_000) : 0;
+}
+
 function hashtag(value: string) {
   const normalized = value.replace(/[\s#・、。,.!！?？()（）/\\]+/g, '');
   return normalized ? `#${normalized.slice(0, 40)}` : null;
@@ -37,10 +52,11 @@ export function buildServiceDailyIdeaFallback(input: {
   preferredTone?: string | null;
   category?: BusinessContentCategory | null;
 }) {
-  const day = Number(input.missionDate.slice(-2));
+  const rotation = Math.abs(dailyIndex(input.missionDate));
+  const dailyAngle = angles[rotation % angles.length]!;
   const angle = input.category
-    ? categoryAngles[input.category]
-    : angles[Number.isFinite(day) ? day % angles.length : 0]!;
+    ? `${categoryAngles[input.category]}。今日は「${dailyAngle}」という切り口で伝える`
+    : dailyAngle;
   const topic = `${input.targetAudience}へ伝える「${input.productService}」の話`;
   const feature = input.businessFeatures?.trim()
     ? `私たちは、${input.businessFeatures.trim()}を大切にしています。`
@@ -58,7 +74,7 @@ export function buildServiceDailyIdeaFallback(input: {
     reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。`,
     body,
     hashtags,
-    photoInstruction: `「${input.productService}」が分かる商品、道具、店内の場所のいずれか一つを、明るい場所で正面から撮ります。画面の中央に主役を置き、周りの不要な物は片付けます。`,
+    photoInstruction: `「${input.productService}」に関係する被写体を使います。${photoDirections[rotation % photoDirections.length]}。周りの不要な物は片付けます。`,
   };
 }
 
