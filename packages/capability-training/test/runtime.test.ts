@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AiTrainingV1Policy } from '../src/index';
 import {
   AiTrainingParticipantService,
+  parseAiTrainingActionDisplay,
   type AiTrainingParticipantState,
   type AiTrainingRuntimeCandidate,
   type AiTrainingRuntimeRepository,
@@ -88,6 +89,7 @@ class MemoryRepository implements AiTrainingRuntimeRepository {
         display: value.displaySnapshot,
         presentedAt: value.evaluatedAt,
         reevaluateAt: value.decision.reevaluateAt,
+        submission: null,
       },
     };
     return Promise.resolve('APPLIED' as const);
@@ -118,6 +120,7 @@ describe('AiTrainingParticipantService', () => {
 
     expect(state.action?.actionKey).toBe('AI_BASIC');
     expect(state.action?.display.reasonCode).toBe('AI_FOUNDATION_NOT_COMPLETED');
+    expect(state.action?.display.task).toContain('AIに任せたい仕事');
     expect(repository.writes).toBe(1);
   });
 
@@ -139,5 +142,23 @@ describe('AiTrainingParticipantService', () => {
       expect.objectContaining<Partial<TrainingRuntimeError>>({ code: 'CONFIGURATION_ERROR' }),
     );
     expect(repository.writes).toBe(0);
+  });
+});
+
+describe('AI training display snapshot compatibility', () => {
+  it('restores the fixed task for assignments created before task text was added', () => {
+    const display = parseAiTrainingActionDisplay({
+      schemaVersion: 1,
+      actionKey: 'AI_BASIC',
+      mode: 'WORK',
+      reasonCode: 'AI_FOUNDATION_NOT_COMPLETED',
+      title: 'AIの基本を知る',
+      reason: '最初の課題です。',
+      instructions: ['回答を作る'],
+      estimatedMinutes: 5,
+      renderer: 'TRAINING_FIXED_V1',
+    });
+
+    expect(display?.task).toContain('AIに任せたい仕事');
   });
 });

@@ -7,6 +7,7 @@ export { addProgramCalendarDays, PrismaAiResaleRuntimeRepository } from './resal
 export { PrismaAiResaleParticipantRepository } from './resale-participant';
 export { PrismaTrainingAnswerRepository } from './training-answer';
 export { PrismaAiTrainingRuntimeRepository } from './training-runtime';
+export { PrismaTrainingParticipantProfileRepository } from './training-profile';
 export { PrismaAiResaleOfferRepository } from './resale-offer';
 export { PrismaServiceNotificationPreferenceRepository } from './service-notification-preference';
 export { PrismaCommercialUsageService } from './commercial-usage';

@@ -102,16 +102,22 @@ async function resolveScope(
   }
 }
 
-function participantAction(row: {
-  id: string;
-  sequence: number;
-  missionDefinitionKey: string;
-  actionMode: 'WORK' | 'WAIT';
-  status: string;
-  displaySnapshot: unknown;
-  presentedAt: Date;
-  reevaluateAt: Date | null;
-}): AiTrainingParticipantAction | null {
+function participantAction(
+  row: {
+    id: string;
+    sequence: number;
+    missionDefinitionKey: string;
+    actionMode: 'WORK' | 'WAIT';
+    status: string;
+    displaySnapshot: unknown;
+    presentedAt: Date;
+    reevaluateAt: Date | null;
+  },
+  submission: {
+    id: string;
+    evaluationStatus: 'PENDING' | 'READY' | 'FAILED';
+  } | null,
+): AiTrainingParticipantAction | null {
   if (row.status !== 'PRESENTED' && row.status !== 'STARTED') return null;
   const display = parseAiTrainingActionDisplay(row.displaySnapshot);
   if (
@@ -130,6 +136,9 @@ function participantAction(row: {
     display,
     presentedAt: row.presentedAt,
     reevaluateAt: row.reevaluateAt,
+    submission: submission
+      ? { answerId: submission.id, evaluationStatus: submission.evaluationStatus }
+      : null,
   };
 }
 
@@ -189,6 +198,18 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
           },
         })
       : null;
+    const submission = assignment
+      ? await this.client.trainingMissionAnswer.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            programEnrollmentId: scope.enrollment.id,
+            missionAssignmentId: assignment.id,
+            userId: input.actorUserId,
+          },
+          select: { id: true, evaluationStatus: true },
+        })
+      : null;
     return {
       enrollmentId: scope.enrollment.id,
       programName: scope.program.displayName,
@@ -196,7 +217,7 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
       startsAt: scope.enrollment.startsAt!,
       endsAt: scope.enrollment.endsAt,
       profile: profile ? { role: profile.role, aiLevel: profile.aiLevel } : null,
-      action: assignment ? participantAction(assignment) : null,
+      action: assignment ? participantAction(assignment, submission) : null,
     };
   }
 
