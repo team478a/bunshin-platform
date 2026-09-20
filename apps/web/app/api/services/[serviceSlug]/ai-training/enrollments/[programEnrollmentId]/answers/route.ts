@@ -1,4 +1,4 @@
-import { submitAiTrainingAnswerResponse } from '../../../../../../../src/http/ai-training-participant';
+import { submitAiTrainingAnswerResponse } from '../../../../../../../../src/http/ai-training-participant';
 
 export async function POST(
   request: Request,
