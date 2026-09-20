@@ -12124,11 +12124,23 @@ async function enqueueRegistrationCompleteEmail(
     now: Date;
   },
 ) {
-  const [emailConfiguration, user] = await Promise.all([
+  const [emailConfiguration, user, template] = await Promise.all([
     tx.serviceRegistrationEmailConfiguration.findUnique({ where: { groupId: input.groupId } }),
     tx.user.findUnique({
       where: { id: input.userId },
       select: { email: true, displayName: true },
+    }),
+    tx.serviceMessageTemplate.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        configurationId: input.configurationId,
+        channel: 'EMAIL',
+        purpose: 'REGISTRATION_COMPLETE',
+        isActive: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { subject: true, body: true },
     }),
   ]);
   if (!emailConfiguration?.enabled || !emailConfiguration.lastVerifiedAt || !user?.email) return;
@@ -12150,8 +12162,8 @@ async function enqueueRegistrationCompleteEmail(
         fromName: emailConfiguration.fromName,
         fromEmail: emailConfiguration.fromEmail,
         replyToEmail: emailConfiguration.replyToEmail,
-        subject: personalize(emailConfiguration.subject),
-        body: personalize(emailConfiguration.body),
+        subject: personalize(template?.subject ?? emailConfiguration.subject),
+        body: personalize(template?.body ?? emailConfiguration.body),
         nextAttemptAt: input.now,
       },
     ],
