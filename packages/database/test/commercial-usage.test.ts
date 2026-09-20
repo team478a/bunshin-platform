@@ -98,6 +98,7 @@ describe('PrismaCommercialUsageService', () => {
       },
       serviceUsageEvent: { groupBy: serviceUsageGroupBy },
       aiUsageEvent: { aggregate: aiUsageAggregate, count: aiUsageCount },
+      commercialPricingSchedule: { findFirst: vi.fn().mockResolvedValue(null) },
     } as unknown as PrismaClient;
 
     const rows = await new PrismaCommercialUsageService(client).profitabilityDashboard(

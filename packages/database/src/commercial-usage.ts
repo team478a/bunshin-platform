@@ -280,7 +280,7 @@ export class PrismaCommercialUsageService {
             },
           }),
         ]);
-        const pricing = quoteOemMauPrice(users.length);
+        const pricing = await this.quote(users.length, snapshotDate(period.key));
         const aiCost = pricedAi._sum.estimatedCostUsdMicros ?? 0n;
         if (aiCost > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('AI cost is too large');
         return {
