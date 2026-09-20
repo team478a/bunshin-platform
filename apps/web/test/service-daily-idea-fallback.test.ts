@@ -18,6 +18,7 @@ describe('service daily idea fallback', () => {
       targetAudience: '近隣で働く人',
       businessFeatures: '毎朝仕込んだ料理を提供しています',
       category: 'HELPFUL_EXPERTISE',
+      variationKey: 'bunshin-1',
     });
     const second = buildServiceDailyIdeaFallback({
       missionDate: '2026-09-07',
@@ -27,6 +28,7 @@ describe('service daily idea fallback', () => {
       targetAudience: '近隣で働く人',
       businessFeatures: '毎朝仕込んだ料理を提供しています',
       category: 'HELPFUL_EXPERTISE',
+      variationKey: 'bunshin-1',
     });
     expect(first).toEqual(second);
     expect(first.body).toContain('毎朝仕込んだ料理を提供しています');
@@ -53,6 +55,15 @@ describe('service daily idea fallback', () => {
     expect(
       new Set([first.photoInstruction, second.photoInstruction, third.photoInstruction]).size,
     ).toBe(3);
+
+    const anotherParticipant = buildServiceDailyIdeaFallback({
+      ...input,
+      missionDate: '2026-09-17',
+      variationKey: 'a-different-bunshin',
+    });
+    expect(`${anotherParticipant.body}\n${anotherParticipant.photoInstruction}`).not.toBe(
+      `${first.body}\n${first.photoInstruction}`,
+    );
   });
 
   it('falls back only for provider, quality and quota failures', () => {

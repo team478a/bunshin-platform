@@ -37,6 +37,12 @@ function dailyIndex(missionDate: string): number {
   return Number.isFinite(value) ? Math.floor(value / 86_400_000) : 0;
 }
 
+function stableIndex(value: string): number {
+  let hash = 0;
+  for (const character of value) hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
+  return hash;
+}
+
 function hashtag(value: string) {
   const normalized = value.replace(/[\s#・、。,.!！?？()（）/\\]+/g, '');
   return normalized ? `#${normalized.slice(0, 40)}` : null;
@@ -51,9 +57,14 @@ export function buildServiceDailyIdeaFallback(input: {
   businessFeatures?: string | null;
   preferredTone?: string | null;
   category?: BusinessContentCategory | null;
+  variationKey?: string;
 }) {
+  const participantVariation = stableIndex(input.variationKey ?? 'shared');
   const rotation = Math.abs(dailyIndex(input.missionDate));
-  const dailyAngle = angles[rotation % angles.length]!;
+  const angleIndex = (rotation + participantVariation) % angles.length;
+  const photoIndex =
+    (rotation * 3 + Math.floor(participantVariation / angles.length)) % angles.length;
+  const dailyAngle = angles[angleIndex]!;
   const angle = input.category
     ? `${categoryAngles[input.category]}。今日は「${dailyAngle}」という切り口で伝える`
     : dailyAngle;
@@ -74,7 +85,7 @@ export function buildServiceDailyIdeaFallback(input: {
     reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。`,
     body,
     hashtags,
-    photoInstruction: `「${input.productService}」に関係する被写体を使います。${photoDirections[rotation % photoDirections.length]}。周りの不要な物は片付けます。`,
+    photoInstruction: `「${input.productService}」に関係する被写体を使います。${photoDirections[photoIndex]}。周りの不要な物は片付けます。`,
   };
 }
 
@@ -149,6 +160,7 @@ export async function createServiceDailyIdeaFallback(input: {
     businessFeatures: profile.businessFeatures,
     preferredTone: profile.preferredTone,
     category: weeklyItem?.businessContentCategory ?? null,
+    variationKey: input.bunshinId,
   });
   return new CreateDailyMission(
     new db.PrismaDailyMissionRepository(),

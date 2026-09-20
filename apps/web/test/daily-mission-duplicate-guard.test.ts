@@ -8,9 +8,10 @@ const source = readFileSync(
 
 describe('daily mission duplicate guard', () => {
   it('compares generated content with the participant own recent missions before persistence', () => {
-    expect(source).toContain('recentMissions.some');
+    expect(source).toContain('recentMissions.find');
     expect(source).toContain("'CONTENT_REJECTED'");
-    expect(source).toContain('generated mission duplicates recent content');
-    expect(source.indexOf('recentMissions.some')).toBeLessThan(source.indexOf("stage = 'persist'"));
+    expect(source).toContain('generated mission is too similar to recent content');
+    expect(source).toContain('simhashSimilarityBasisPoints');
+    expect(source.indexOf('recentMissions.find')).toBeLessThan(source.indexOf("stage = 'persist'"));
   });
 });

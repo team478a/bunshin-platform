@@ -27,6 +27,7 @@ import {
   GroupKnowledgeService,
   selectGroupKnowledgeChunksForPrompt,
   applyExternalLinkPlacement,
+  simhashSimilarityBasisPoints,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -342,6 +343,11 @@ export class DailyMissionGenerationService {
           socialProfile: profile,
           facePolicy: bunshin.personality?.facePolicy ?? 'FULL_ANONYMOUS',
           recentFormats,
+          recentTopics: recentMissions.map(({ missionDate, topic, angle }) => ({
+            missionDate,
+            topic,
+            angle,
+          })),
           bunshin: bunshinContext,
           approvedStrategy: strategy,
           weeklyPlan,
@@ -583,16 +589,20 @@ export class DailyMissionGenerationService {
             issueCodes: safety.inspected.issueCodes,
           });
       }
-      if (
-        recentMissions.some(
-          (recentMission) =>
-            recentMission.content !== null &&
-            JSON.stringify(recentMission.content) === JSON.stringify(missionContent),
-        )
-      )
+      const candidateSignature = campaignContentSignature(missionContent);
+      const repeatedContent = recentMissions.find((recentMission) => {
+        if (recentMission.content === null) return false;
+        const recentSignature = campaignContentSignature(recentMission.content);
+        return (
+          recentSignature.contentFingerprint === candidateSignature.contentFingerprint ||
+          simhashSimilarityBasisPoints(recentSignature.simhash, candidateSignature.simhash) >= 9_500
+        );
+      });
+      if (repeatedContent)
         throw new ApplicationError(
           'CONTENT_REJECTED',
-          'generated mission duplicates recent content',
+          'generated mission is too similar to recent content',
+          { recentMissionDate: repeatedContent.missionDate },
         );
       stage = 'persist';
       const created = await new CreateDailyMission(missions, assignments).execute({

@@ -6,6 +6,7 @@ const input = {
   timezone: 'Asia/Tokyo',
   platform: 'X' as const,
   availableMinutes: 5 as const,
+  recentTopics: [{ missionDate: '2026-08-20', topic: '前日のテーマ', angle: '前日の切り口' }],
   bunshin: {
     name: '投稿パートナー',
     objectiveSummary: '継続',
@@ -89,7 +90,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v7-business-mix',
+      promptVersion: 'daily-mission-planner-v8-recent-topics',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -114,6 +115,8 @@ describe('OpenAIDailyMissionPlanner', () => {
     expect(request.input[1]?.content).toContain('いっしょに');
     expect(request.input[1]?.content).toContain('初心者向け抽出教室');
     expect(request.input[1]?.content).toContain('HELPFUL_EXPERTISE');
+    expect(request.input[1]?.content).toContain('前日のテーマ');
+    expect(request.input[0]?.content).toContain('言い換えだけの企画を避け');
     expect(request.input[0]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
   });
 

@@ -233,6 +233,13 @@ export class WeeklyPlanGenerationService {
               ...(input.additionalKnowledge ?? []),
             ],
             campaigns,
+            recentPlanTopics: existingPlans.slice(0, 4).flatMap((plan) =>
+              plan.items.map(({ goal, angle }) => ({
+                weekStartDate: plan.weekStartDate,
+                goal,
+                angle,
+              })),
+            ),
             ...(recentPerformance ? { recentPerformance } : {}),
             ...(input.businessContentSchedule
               ? { businessContentSchedule: input.businessContentSchedule }
