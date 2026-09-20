@@ -110,7 +110,7 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         for (const membershipId of eligibleMembershipIds)
           if (!consented.has(membershipId)) eligibleMembershipIds.delete(membershipId);
       }
-      if (criteria.kind === 'AI_RESALE_ACTION') {
+      if (criteria.kind === 'AI_RESALE_ACTION' || criteria.kind === 'AI_TRAINING_ACTION') {
         if (
           typeof criteria.programEnrollmentId !== 'string' ||
           typeof criteria.assignmentId !== 'string'
@@ -147,6 +147,10 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
               select: { id: true },
             }),
           ]);
+          const expectedModuleFilter =
+            criteria.kind === 'AI_TRAINING_ACTION'
+              ? { path: ['moduleKey'], equals: 'AI_TRAINING_V1' }
+              : { path: ['moduleKey'], equals: 'AI_RESALE_V1' };
           const program = enrollment
             ? await db.prisma.serviceProgram.findFirst({
                 where: {
@@ -154,7 +158,7 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
                   workspaceId: broadcast.workspaceId,
                   groupId: broadcast.groupId,
                   status: 'ACTIVE',
-                  settings: { path: ['moduleKey'], equals: 'AI_RESALE_V1' },
+                  settings: expectedModuleFilter,
                 },
                 select: { id: true },
               })

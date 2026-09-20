@@ -289,3 +289,4 @@ export function createAiTrainingV1Definition(): ProgramDefinitionV1 {
 }
 
 export * from './runtime';
+export * from './line-action';

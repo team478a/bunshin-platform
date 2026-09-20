@@ -43,6 +43,10 @@ import {
   scheduleAiResaleOfferLineDeliveries,
   type AiResaleOfferLineScheduleSummary,
 } from '../services/ai-resale-offer-line-scheduler';
+import {
+  scheduleAiTrainingActionLineDeliveries,
+  type AiTrainingActionLineScheduleSummary,
+} from '../services/ai-training-action-line-scheduler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -69,6 +73,7 @@ export interface MissionSchedulerPort {
       aiResale?: AiResaleRuntimeBatchSummary;
       aiResaleLine?: AiResaleActionLineScheduleSummary;
       aiResaleOfferLine?: AiResaleOfferLineScheduleSummary;
+      aiTrainingLine?: AiTrainingActionLineScheduleSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -257,6 +262,17 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           truncated: false,
         }),
       );
+      const aiTrainingLine = await scheduleAiTrainingActionLineDeliveries({ environment }).catch(
+        () => ({
+          programs: 0,
+          candidates: 0,
+          broadcasts: 0,
+          recipients: 0,
+          skipped: 0,
+          failures: 1,
+          truncated: false,
+        }),
+      );
       return {
         ...missionResult,
         trend: trendResult,
@@ -266,6 +282,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         aiResale: aiResaleResult,
         aiResaleLine,
         aiResaleOfferLine,
+        aiTrainingLine,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };
