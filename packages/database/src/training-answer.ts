@@ -1,4 +1,4 @@
-import { type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 
 export type TrainingAnswerSubmissionResult =
@@ -123,9 +123,8 @@ export class PrismaTrainingAnswerRepository {
         return { outcome: 'SUBMITTED', answer, eventId: event.id } as const;
       });
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
-        throw error;
-      }
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError)) throw error;
+      if (error.code !== 'P2002') throw error;
       const event = await this.client.programActionEvent.findUnique({ where: eventWhere });
       if (event) return this.resultForExistingEvent(input, event);
       return { outcome: 'CONFLICT' };
