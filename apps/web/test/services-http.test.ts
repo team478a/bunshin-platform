@@ -230,7 +230,7 @@ describe('service admin HTTP', () => {
     );
   });
 
-  it('creates the free business service with public LINE-only registration', async () => {
+  it('creates the free business service with public operator-selected registration channels', async () => {
     const response = await createServiceResponse(
       request({
         ...body,
@@ -248,8 +248,8 @@ describe('service admin HTTP', () => {
         configuration: expect.objectContaining({
           registration: expect.objectContaining({
             mode: 'PUBLIC',
-            emailEnabled: false,
-            lineEnabled: true,
+            emailEnabled: true,
+            lineEnabled: false,
             inviteCodeEnabled: false,
             referralEnabled: false,
             onboardingConfig: expect.objectContaining({

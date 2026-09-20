@@ -64,7 +64,7 @@ describe('public service context', () => {
     });
   });
 
-  it('applies public LINE-only registration to an existing free business service', async () => {
+  it('applies public registration while retaining the configured channels', async () => {
     state.findPublicBySlug.mockResolvedValue({
       ...configuration,
       registration: {
@@ -82,8 +82,8 @@ describe('public service context', () => {
       configuration: {
         registration: {
           mode: 'PUBLIC',
-          emailEnabled: false,
-          lineEnabled: true,
+          emailEnabled: true,
+          lineEnabled: false,
           inviteCodeEnabled: false,
           referralEnabled: false,
         },
