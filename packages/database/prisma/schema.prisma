@@ -2986,6 +2986,19 @@ model TenantMonthlyUsage {
   @@map("tenant_monthly_usage")
 }
 
+/// OEM MAU料金表。適用開始月以降の未確定利用量だけが参照する。
+model CommercialPricingSchedule {
+  id              String   @id @default(uuid()) @db.Uuid
+  version         String   @unique @db.VarChar(80)
+  effectiveFrom   DateTime @unique @map("effective_from") @db.Date
+  tiers           Json
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([effectiveFrom])
+  @@map("commercial_pricing_schedules")
+}
+
 /// OEM運営団体の請求条件。決済Providerに依存せず、契約状態と請求先を一か所で管理する。
 model OrganizationCommercialContract {
   id                        String                     @id @default(uuid()) @db.Uuid

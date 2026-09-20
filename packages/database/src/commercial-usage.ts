@@ -2,6 +2,8 @@ import {
   commercialMonthPeriod,
   COMMERCIAL_USAGE_EVENT_TYPES,
   type CommercialUsageEventType,
+  type MauPricingTier,
+  quoteMauPrice,
   quoteOemMauPrice,
 } from '@bunshin/application';
 import { Prisma } from '@prisma/client';
@@ -59,6 +61,44 @@ function validateText(value: string, maximum: number, label: string): string {
 
 export class PrismaCommercialUsageService {
   constructor(private readonly client: PrismaClient = prisma) {}
+
+  async listPricingSchedules() {
+    return this.client.commercialPricingSchedule.findMany({ orderBy: { effectiveFrom: 'desc' } });
+  }
+
+  async createPricingSchedule(input: {
+    version: string;
+    effectiveFrom: Date;
+    tiers: MauPricingTier[];
+    createdByUserId: string;
+    now?: Date;
+  }) {
+    quoteMauPrice(0, input.version, input.tiers);
+    const nextMonth = snapshotDate(commercialMonthPeriod(input.now ?? new Date(), 1).key);
+    if (
+      Number.isNaN(input.effectiveFrom.getTime()) ||
+      input.effectiveFrom.getUTCDate() !== 1 ||
+      input.effectiveFrom < nextMonth
+    )
+      throw new Error('pricing schedule must start in a future month');
+    return this.client.commercialPricingSchedule.create({
+      data: {
+        version: input.version,
+        effectiveFrom: input.effectiveFrom,
+        createdByUserId: input.createdByUserId,
+        tiers: input.tiers as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private async quote(mau: number, periodStart: Date) {
+    const schedule = await this.client.commercialPricingSchedule.findFirst({
+      where: { effectiveFrom: { lte: periodStart } },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+    if (!schedule) return quoteOemMauPrice(mau);
+    return quoteMauPrice(mau, schedule.version, schedule.tiers as unknown as MauPricingTier[]);
+  }
 
   async record(input: RecordCommercialUsageInput): Promise<RecordCommercialUsageResult> {
     if (!(COMMERCIAL_USAGE_EVENT_TYPES as readonly string[]).includes(input.eventType))
@@ -171,7 +211,7 @@ export class PrismaCommercialUsageService {
       current: {
         month: period.key,
         mau: users.length,
-        pricing: quoteOemMauPrice(users.length),
+        pricing: await this.quote(users.length, snapshotDate(period.key)),
         eventCounts: eventCounts.map((row) => ({
           eventType: row.eventType,
           count: row._count._all,
@@ -218,7 +258,7 @@ export class PrismaCommercialUsageService {
       by: ['userId'],
       where: { workspaceId, occurredAt: { gte: period.start, lt: period.end } },
     });
-    const pricing = quoteOemMauPrice(users.length);
+    const pricing = await this.quote(users.length, periodStart);
     const finalizedAt = new Date();
     return this.client.tenantMonthlyUsage.upsert({
       where: { workspaceId_periodStart: { workspaceId, periodStart } },

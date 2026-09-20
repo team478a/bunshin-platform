@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260920090000_add_tenant_invoice_document_snapshot';
+export const LATEST_DATABASE_MIGRATION = '20260920150000_add_commercial_pricing_schedules';
