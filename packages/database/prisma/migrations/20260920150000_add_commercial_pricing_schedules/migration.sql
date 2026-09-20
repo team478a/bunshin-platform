@@ -11,3 +11,5 @@ CREATE TABLE "commercial_pricing_schedules" (
 CREATE UNIQUE INDEX "commercial_pricing_schedules_version_key" ON "commercial_pricing_schedules"("version");
 CREATE UNIQUE INDEX "commercial_pricing_schedules_effective_from_key" ON "commercial_pricing_schedules"("effective_from");
 CREATE INDEX "commercial_pricing_schedules_effective_from_idx" ON "commercial_pricing_schedules"("effective_from");
+
+ALTER TABLE "commercial_pricing_schedules" ENABLE ROW LEVEL SECURITY;

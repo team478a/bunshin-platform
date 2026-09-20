@@ -14,6 +14,9 @@ describe('commercial pricing schedule schema', () => {
     expect(migration).toContain('CREATE TABLE "commercial_pricing_schedules"');
     expect(migration).toContain('commercial_pricing_schedules_version_key');
     expect(migration).toContain('commercial_pricing_schedules_effective_from_key');
+    expect(migration).toContain(
+      'ALTER TABLE "commercial_pricing_schedules" ENABLE ROW LEVEL SECURITY',
+    );
     expect(migration).toContain('"tiers" JSONB NOT NULL');
   });
 });
