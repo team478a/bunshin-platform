@@ -233,7 +233,7 @@ export function ServiceEditor({
         {businessFreeCreation ? (
           <section className="service-template-preview">
             <h3>参加方法は無料運用に合わせて設定されます</h3>
-            <p>誰でもLINEから登録できます。メール、招待コード、紹介元記録は使用しません。</p>
+            <p>誰でも登録できます。メールとLINEは下の項目で選べます。</p>
             <input type="hidden" name="registrationMode" value="PUBLIC" />
           </section>
         ) : (
@@ -267,37 +267,37 @@ export function ServiceEditor({
           プライバシーポリシーURL
           <input name="privacyUrl" type="url" placeholder="https://..." />
         </label>
-        {businessFreeCreation ? (
-          <input type="hidden" name="lineEnabled" value="on" />
-        ) : (
-          <fieldset>
-            <legend>登録に使う方法</legend>
-            <label>
-              <input name="emailEnabled" type="checkbox" defaultChecked={template.emailEnabled} />{' '}
-              メール
-            </label>
-            <label>
-              <input name="lineEnabled" type="checkbox" defaultChecked={template.lineEnabled} />{' '}
-              LINE
-            </label>
-            <label>
-              <input
-                name="inviteCodeEnabled"
-                type="checkbox"
-                defaultChecked={template.inviteCodeEnabled}
-              />{' '}
-              招待コード
-            </label>
-            <label>
-              <input
-                name="referralEnabled"
-                type="checkbox"
-                defaultChecked={template.referralEnabled}
-              />{' '}
-              紹介元を記録
-            </label>
-          </fieldset>
-        )}
+        <fieldset>
+          <legend>登録に使う方法</legend>
+          <label>
+            <input name="emailEnabled" type="checkbox" defaultChecked={template.emailEnabled} />{' '}
+            メール
+          </label>
+          <label>
+            <input name="lineEnabled" type="checkbox" defaultChecked={template.lineEnabled} /> LINE
+          </label>
+          {!businessFreeCreation ? (
+            <>
+              <label>
+                <input
+                  name="inviteCodeEnabled"
+                  type="checkbox"
+                  defaultChecked={template.inviteCodeEnabled}
+                />{' '}
+                招待コード
+              </label>
+              <label>
+                <input
+                  name="referralEnabled"
+                  type="checkbox"
+                  defaultChecked={template.referralEnabled}
+                />{' '}
+                紹介元を記録
+              </label>
+            </>
+          ) : null}
+          <small>メールだけ、LINEだけ、または両方を選べます。</small>
+        </fieldset>
         <label>
           <input name="poweredByEnabled" type="checkbox" defaultChecked /> 「Powered by
           ワタシワークス」を表示する

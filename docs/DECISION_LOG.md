@@ -2616,3 +2616,10 @@
 - Payment method: 初回のStripe Checkoutで`off_session`利用を設定し、成功済みPaymentIntentをStripe APIで再確認してからCustomer IDとPayment Method IDだけを保存する。
 - Sensitive data: カード番号、Webhook本文、Stripe応答本文は保存しない。
 - Rollout: 本変更は支払方法の準備までとし、実際の日次自動回収と未払い停止は準備済み契約だけを対象とする後続作業へ分離する。
+
+# 2026-09-20: OEM登録チャネルを運用テンプレートから分離する
+
+- Registration channel: サービス運営者はメールのみ、LINEのみ、または両方をサービス単位で選択できる。
+- Existing service: ワタシワークス公式を含む既存サービスの保存値は変更せず、運営者が明示保存した場合だけ変更する。
+- Business free policy: 公開登録、招待コード停止、紹介元記録停止、毎日配信の制約は維持するが、企業向けであることを理由にLINE専用へ強制しない。
+- Email boundary: 認証メールと登録完了後の自動返信は分離し、OEM固有の送信元・本文・資格情報は後続のメール配信基盤で扱う。

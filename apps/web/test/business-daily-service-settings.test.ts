@@ -7,7 +7,7 @@ import {
 import { DEFAULT_SERVICE_DAILY_IDEA_DELIVERY } from '../src/services/service-onboarding-settings';
 
 describe('business daily service settings', () => {
-  it('locks the free service to LINE, daily ready-to-use text delivery', () => {
+  it('keeps the selected login channels and locks daily ready-to-use text delivery', () => {
     const value = enforceBusinessDailyServiceSettings({
       businessProfileEnabled: true,
       emailEnabled: true,
@@ -28,8 +28,8 @@ describe('business daily service settings', () => {
     });
 
     expect(value).toMatchObject({
-      emailEnabled: false,
-      lineEnabled: true,
+      emailEnabled: true,
+      lineEnabled: false,
       inviteCodeEnabled: false,
       referralEnabled: false,
       dailyIdeaDelivery: {
@@ -57,7 +57,7 @@ describe('business daily service settings', () => {
     expect(enforceBusinessDailyServiceSettings(value)).toBe(value);
   });
 
-  it('locks free business registration to public LINE access', () => {
+  it('keeps selected login channels while enforcing public free registration', () => {
     expect(
       enforceBusinessFreeRegistrationSettings({
         businessProfileEnabled: true,
@@ -70,14 +70,14 @@ describe('business daily service settings', () => {
     ).toEqual({
       businessProfileEnabled: true,
       registrationMode: 'PUBLIC',
-      emailEnabled: false,
-      lineEnabled: true,
+      emailEnabled: true,
+      lineEnabled: false,
       inviteCodeEnabled: false,
       referralEnabled: false,
     });
   });
 
-  it('applies the lock in both the operator form and the save endpoint', () => {
+  it('lets the operator select email and LINE while retaining the free-service policy', () => {
     const editor = readFileSync(
       new URL(
         '../app/s/[serviceSlug]/manage/settings/service-settings-editor.tsx',
@@ -90,8 +90,9 @@ describe('business daily service settings', () => {
       'utf8',
     );
 
-    expect(editor).toContain('disabled={businessFreeSettingsLocked}');
-    expect(editor).toContain('企業向け無料サービスはLINEだけを使用します。');
+    expect(editor).toContain("emailEnabled: data.has('emailEnabled')");
+    expect(editor).toContain("lineEnabled: data.has('lineEnabled')");
+    expect(editor).toContain('メールだけ、LINEだけ、または両方を選べます。');
     expect(endpoint).toContain('enforceBusinessDailyServiceSettings(parsedValue)');
     expect(endpoint).toContain('enforceBusinessFreeRegistrationSettings(');
   });
