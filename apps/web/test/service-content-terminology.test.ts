@@ -16,9 +16,29 @@ describe('service content terminology', () => {
         { forbidden: '戦国メタバース', replacement: '千ノ国メディア' },
       ],
       allowedExamples: ['戦国時代', '戦国武将', '戦国文化'],
+      forbiddenUrlFragments: ['project=sengoku-influencer'],
     });
     expect(serviceContentTerminologyPolicy('watashi-works-official')).toBeNull();
     expect(serviceContentTerminologyKnowledge(policy)[0]?.content).toContain('「OVE」は使用禁止');
+  });
+
+  it('removes an obsolete campaign URL that would create a prohibited link preview', () => {
+    const policy = serviceContentTerminologyPolicy('sennokuni-media');
+    const result = applyServiceContentTerminology(
+      {
+        body: '概要はこちら\nhttps://sengoku-ai.com/a/example?project=sengoku-influencer\n戦国時代を紹介します。',
+        safeUrl: 'https://example.com/history',
+      },
+      policy,
+    );
+
+    expect(result).toEqual({
+      body: '概要はこちら\n\n戦国時代を紹介します。',
+      safeUrl: 'https://example.com/history',
+    });
+    expect(serviceContentTerminologyKnowledge(policy)[0]?.content).toContain(
+      '旧企画リンクは使用禁止',
+    );
   });
 
   it('blocks obsolete Sennokuni product names without blocking historical expressions', () => {

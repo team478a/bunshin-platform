@@ -2607,4 +2607,5 @@
 - Scope: `sennokuni-media`だけで「戦国インフルエンサー」「戦国メタバース」を禁止し、生成時は「千ノ国メディア」へ置換する。
 - Historical terms: 「戦国時代」「戦国武将」「戦国文化」は一般的な歴史表現として許可し、部分一致する「戦国」だけを禁止しない。
 - Enforcement: サービス固有Knowledgeで生成前に指示し、生成後は本文・見出し・スライド等の全テキスト項目へ同じPolicyを適用する。
+- Link preview: 外部サイトのOGPに禁止語が残る旧企画URL（`project=sengoku-influencer`）は生成結果から除外し、SNS側で禁止語のプレビューが再表示されないようにする。
 - Existing settings: 千ノ国メディアの保存済みOnboarding・Survey設定と利用者マニュアルに残る旧名称も「千ノ国メディア」へ更新する。
