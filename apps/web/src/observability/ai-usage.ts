@@ -13,7 +13,7 @@ export async function recordAiUsageSafely(input: RecordAiUsageInput) {
   } catch (error) {
     logger.error('AI usage persistence failed', {
       workspaceId: input.workspaceId,
-      bunshinId: input.bunshinId,
+      bunshinId: input.bunshinId ?? undefined,
       taskType: input.taskType,
       status: input.status,
       errorCode: 'AI_USAGE_PERSISTENCE_FAILED',
