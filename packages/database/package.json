@@ -24,6 +24,7 @@
     "@bunshin/capability-social": "workspace:*",
     "@bunshin/capability-fortune": "workspace:*",
     "@bunshin/capability-resale": "workspace:*",
+    "@bunshin/capability-training": "workspace:*",
     "@bunshin/platform-domain": "workspace:*",
     "@bunshin/shared": "workspace:*",
     "@prisma/client": "6.19.3"

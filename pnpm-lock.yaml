@@ -59,6 +59,9 @@ importers:
       '@bunshin/capability-social':
         specifier: workspace:*
         version: link:../../packages/capability-social
+      '@bunshin/capability-training':
+        specifier: workspace:*
+        version: link:../../packages/capability-training
       '@bunshin/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -225,6 +228,9 @@ importers:
       '@bunshin/capability-social':
         specifier: workspace:*
         version: link:../capability-social
+      '@bunshin/capability-training':
+        specifier: workspace:*
+        version: link:../capability-training
       '@bunshin/platform-domain':
         specifier: workspace:*
         version: link:../platform-domain

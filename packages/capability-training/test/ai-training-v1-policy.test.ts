@@ -55,6 +55,34 @@ describe('AiTrainingV1Policy', () => {
         .actionKey,
     ).toBe('MANAGER_PROCESS_REVIEW');
   });
+  it('advances through role missions without reassigning completed work', () => {
+    const foundation = [
+      'AI_BASIC',
+      'CHATGPT_BASIC',
+      'PROMPT_BASIC',
+      'PROMPT_CONDITION',
+      'PROMPT_FORMAT',
+    ];
+    expect(
+      policy.evaluate({
+        ...base,
+        completedMissionKeys: [...foundation, 'SALES_EMAIL'],
+      }).actionKey,
+    ).toBe('SALES_HEARING');
+
+    const finished = policy.evaluate({
+      ...base,
+      completedMissionKeys: [
+        ...foundation,
+        'SALES_EMAIL',
+        'SALES_HEARING',
+        'SALES_PROPOSAL',
+        'SALES_FOLLOW_UP',
+      ],
+    });
+    expect(finished).toMatchObject({ actionKey: 'WAIT', mode: 'WAIT' });
+    expect(finished.reevaluateAt).toEqual(new Date('2026-09-22T00:00:00.000Z'));
+  });
   it('prioritizes review, recovery and wait deterministically', () => {
     expect(policy.evaluate({ ...base, recentFailures: 2 }).actionKey).toBe('PROMPT_REVIEW');
     expect(

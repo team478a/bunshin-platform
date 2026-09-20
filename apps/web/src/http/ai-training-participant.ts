@@ -1,4 +1,9 @@
 import 'server-only';
+import {
+  AiTrainingParticipantService,
+  AiTrainingV1Policy,
+  TrainingRuntimeError,
+} from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -18,13 +23,45 @@ const submissionSchema = z
 const response = (data: unknown, requestId: string) =>
   Response.json({ data, requestId }, { headers: { 'cache-control': 'private, no-store' } });
 
+const mappedError = (error: unknown) => {
+  if (!(error instanceof TrainingRuntimeError)) return error;
+  return new ApplicationError(error.code === 'NOT_FOUND' ? 'NOT_FOUND' : 'CONFLICT', error.message);
+};
+
 const failure = (error: unknown, requestId: string) => {
-  const mapped = toApiError(error, requestId);
+  const mapped = toApiError(mappedError(error), requestId);
   return Response.json(mapped.body, {
     status: mapped.status,
     headers: { 'cache-control': 'private, no-store' },
   });
 };
+
+export async function getAiTrainingCurrentMissionResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const data = await new AiTrainingParticipantService(
+      new db.PrismaAiTrainingRuntimeRepository(db.prisma),
+      new AiTrainingV1Policy(),
+    ).current({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId: uuid.parse(rawEnrollmentId),
+      now: new Date(),
+    });
+    return response(data, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
 
 export async function submitAiTrainingAnswerResponse(
   request: Request,
