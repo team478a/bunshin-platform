@@ -62,20 +62,21 @@ export function saveServiceMessageTemplateResponse(request: Request, serviceSlug
     if (!request.headers.get('content-type')?.startsWith('application/json'))
       throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
     const value = saveSchema.parse(await request.json());
+    const { id, ...template } = value;
     if (value.channel === 'EMAIL' && !value.subject)
       throw new ApplicationError('VALIDATION_ERROR', 'メールテンプレートには件名が必要です');
     if (value.channel === 'LINE' && value.subject)
       throw new ApplicationError('VALIDATION_ERROR', 'LINEテンプレートに件名は設定できません');
     const { actor, service } = await context(serviceSlug);
     const db = await import('@bunshin/database');
-    if (value.id) {
+    if (id) {
       const existing = await db.prisma.serviceMessageTemplate.findFirst({
-        where: { id: value.id, workspaceId: service.workspaceId, groupId: service.serviceId },
+        where: { id, workspaceId: service.workspaceId, groupId: service.serviceId },
       });
       if (!existing) throw new ApplicationError('NOT_FOUND', 'template not found');
       return db.prisma.serviceMessageTemplate.update({
         where: { id: existing.id },
-        data: { ...value, subject: value.subject || null, updatedByUserId: actor.userId },
+        data: { ...template, subject: template.subject || null, updatedByUserId: actor.userId },
       });
     }
     return db.prisma.serviceMessageTemplate.create({
