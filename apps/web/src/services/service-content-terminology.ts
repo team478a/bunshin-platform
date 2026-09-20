@@ -5,13 +5,21 @@ export interface ServiceContentTerminologyRule {
 
 export interface ServiceContentTerminologyPolicy {
   rules: ServiceContentTerminologyRule[];
+  allowedExamples?: string[];
+  forbiddenUrlFragments?: string[];
 }
 
 const SERVICE_CONTENT_TERMINOLOGY_POLICIES: Readonly<
   Record<string, ServiceContentTerminologyPolicy>
 > = {
   'sennokuni-media': {
-    rules: [{ forbidden: 'OVE', replacement: 'ORI' }],
+    rules: [
+      { forbidden: 'OVE', replacement: 'ORI' },
+      { forbidden: '戦国インフルエンサー', replacement: '千ノ国メディア' },
+      { forbidden: '戦国メタバース', replacement: '千ノ国メディア' },
+    ],
+    allowedExamples: ['戦国時代', '戦国武将', '戦国文化'],
+    forbiddenUrlFragments: ['project=sengoku-influencer'],
   },
 };
 
@@ -27,12 +35,19 @@ export function serviceContentTerminologyKnowledge(policy: ServiceContentTermino
     {
       type: 'SERVICE_CONTENT_TERMINOLOGY',
       title: 'サービス固有の表記ルール',
-      content: policy.rules
-        .map(
-          ({ forbidden, replacement }) =>
-            `「${forbidden}」は使用禁止。入力資料に含まれていても、出力では必ず「${replacement}」を使用する。`,
-        )
-        .join('\n'),
+      content:
+        policy.rules
+          .map(
+            ({ forbidden, replacement }) =>
+              `「${forbidden}」は使用禁止。入力資料に含まれていても、出力では必ず「${replacement}」を使用する。`,
+          )
+          .join('\n') +
+        (policy.allowedExamples?.length
+          ? `\n${policy.allowedExamples.map((value) => `「${value}」は使用可能。`).join('')}`
+          : '') +
+        (policy.forbiddenUrlFragments?.length
+          ? `\nURLに${policy.forbiddenUrlFragments.map((value) => `「${value}」`).join('、')}を含む旧企画リンクは使用禁止。出力へ含めない。`
+          : ''),
     },
   ];
 }
@@ -51,12 +66,32 @@ function replaceTerminology(value: string, rules: ServiceContentTerminologyRule[
   }, value);
 }
 
+function removeForbiddenUrls(value: string, fragments: string[]) {
+  if (fragments.length === 0) return value;
+  return value
+    .replace(/https?:\/\/[^\s<>"'）)]+/giu, (url) =>
+      fragments.some((fragment) =>
+        url.toLocaleLowerCase('en-US').includes(fragment.toLocaleLowerCase('en-US')),
+      )
+        ? ''
+        : url,
+    )
+    .replace(/[ \t]+\n/gu, '\n')
+    .replace(/[ \t]{2,}/gu, ' ')
+    .trim();
+}
+
 function applyTerminologyToValue(
   value: unknown,
   policy: ServiceContentTerminologyPolicy | null,
 ): unknown {
   if (!policy) return value;
-  if (typeof value === 'string') return replaceTerminology(value, policy.rules);
+  if (typeof value === 'string') {
+    return removeForbiddenUrls(
+      replaceTerminology(value, policy.rules),
+      policy.forbiddenUrlFragments ?? [],
+    );
+  }
   if (Array.isArray(value)) {
     const items: unknown[] = value;
     return items.map((item) => applyTerminologyToValue(item, policy));

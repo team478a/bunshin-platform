@@ -164,7 +164,7 @@ describe('service onboarding settings', () => {
     );
     expect(
       serviceOnboardingChoicePreset(
-        '千ノ国メタバースを、どのようなきっかけで知りましたか？（例：知人からの紹介）',
+        '千ノ国メディアを、どのようなきっかけで知りましたか？（例：知人からの紹介）',
       )?.options,
     ).toContain('友人・知人からの紹介');
     expect(serviceOnboardingChoicePreset('運営者が自由に追加した質問')).toBeNull();

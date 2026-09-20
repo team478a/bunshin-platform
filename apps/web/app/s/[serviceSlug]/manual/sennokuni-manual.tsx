@@ -147,7 +147,7 @@ export function SennokuniManual() {
             <div className="easy-manual__questions">
               <div>
                 <strong>質問1</strong>
-                <span>千ノ国メタバースを知ったきっかけ</span>
+                <span>千ノ国メディアを知ったきっかけ</span>
                 <small>知人の紹介、説明会、イベント、SNSなど</small>
               </div>
               <div>
