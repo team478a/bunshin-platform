@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260920150000_add_commercial_pricing_schedules';
+export const LATEST_DATABASE_MIGRATION = '20260920173000_replace_sennokuni_obsolete_terms';

@@ -5,13 +5,19 @@ export interface ServiceContentTerminologyRule {
 
 export interface ServiceContentTerminologyPolicy {
   rules: ServiceContentTerminologyRule[];
+  allowedExamples?: string[];
 }
 
 const SERVICE_CONTENT_TERMINOLOGY_POLICIES: Readonly<
   Record<string, ServiceContentTerminologyPolicy>
 > = {
   'sennokuni-media': {
-    rules: [{ forbidden: 'OVE', replacement: 'ORI' }],
+    rules: [
+      { forbidden: 'OVE', replacement: 'ORI' },
+      { forbidden: '戦国インフルエンサー', replacement: '千ノ国メディア' },
+      { forbidden: '戦国メタバース', replacement: '千ノ国メディア' },
+    ],
+    allowedExamples: ['戦国時代', '戦国武将', '戦国文化'],
   },
 };
 
@@ -27,12 +33,16 @@ export function serviceContentTerminologyKnowledge(policy: ServiceContentTermino
     {
       type: 'SERVICE_CONTENT_TERMINOLOGY',
       title: 'サービス固有の表記ルール',
-      content: policy.rules
-        .map(
-          ({ forbidden, replacement }) =>
-            `「${forbidden}」は使用禁止。入力資料に含まれていても、出力では必ず「${replacement}」を使用する。`,
-        )
-        .join('\n'),
+      content:
+        policy.rules
+          .map(
+            ({ forbidden, replacement }) =>
+              `「${forbidden}」は使用禁止。入力資料に含まれていても、出力では必ず「${replacement}」を使用する。`,
+          )
+          .join('\n') +
+        (policy.allowedExamples?.length
+          ? `\n${policy.allowedExamples.map((value) => `「${value}」は使用可能。`).join('')}`
+          : ''),
     },
   ];
 }
