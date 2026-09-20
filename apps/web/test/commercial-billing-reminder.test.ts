@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CommercialBillingReminderResend } from '../src/email/commercial-billing-reminder';
+import {
+  CommercialBillingRecipientTestResend,
+  CommercialBillingReminderResend,
+} from '../src/email/commercial-billing-reminder';
 
 const input = {
   apiKey: 'secret',
@@ -58,5 +61,45 @@ describe('CommercialBillingReminderResend', () => {
     await expect(new CommercialBillingReminderResend(request).send(input)).rejects.toThrow(
       'commercial billing reminder unavailable',
     );
+  });
+});
+
+describe('CommercialBillingRecipientTestResend', () => {
+  it('sends a harmless connection test to the saved billing recipient', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await new CommercialBillingRecipientTestResend(request).send({
+      apiKey: 'secret',
+      from: 'billing@example.com',
+      to: 'customer@example.com',
+      billingName: '運営会社A',
+      idempotencyKey: 'commercial-recipient-test-contract-2026-09-20',
+    });
+
+    const [, init] = request.mock.calls[0]!;
+    const payload = JSON.parse(init?.body as string) as {
+      to: string[];
+      subject: string;
+      text: string;
+    };
+    expect(payload.to).toEqual(['customer@example.com']);
+    expect(payload.subject).toBe('【ワタシワークス】請求先メールの接続確認');
+    expect(payload.text).toContain('お支払いや操作は必要ありません');
+    expect(payload.text).not.toContain('請求番号');
+    expect(new Headers(init?.headers).get('idempotency-key')).toContain('recipient-test');
+  });
+
+  it('fails closed when the email provider rejects the test', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
+
+    await expect(
+      new CommercialBillingRecipientTestResend(request).send({
+        apiKey: 'secret',
+        from: 'billing@example.com',
+        to: 'customer@example.com',
+        billingName: '運営会社A',
+        idempotencyKey: 'test',
+      }),
+    ).rejects.toThrow('commercial billing recipient test unavailable');
   });
 });

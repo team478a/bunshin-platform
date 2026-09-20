@@ -31,6 +31,12 @@ export interface TransitionTenantInvoiceInput {
   externalInvoiceReference?: string | null;
   paymentReference?: string | null;
   notes?: string | null;
+  documentIssuer?: {
+    name: string;
+    postalCode?: string | null;
+    address: string;
+    registrationNumber?: string | null;
+  };
   now?: Date;
 }
 
@@ -57,6 +63,73 @@ function requiredText(value: string, maximum: number): string {
 
 function jsonSnapshot(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function invoiceDocumentSnapshot(
+  invoice: {
+    invoiceNumber: string;
+    periodStart: Date;
+    periodEnd: Date;
+    mau: number;
+    amountYen: number;
+    workspace: { name: string; legalName: string | null; address: string | null };
+    contract: { billingName: string; billingEmail: string; paymentTermsDays: number };
+  },
+  issuer: NonNullable<TransitionTenantInvoiceInput['documentIssuer']>,
+  issuedAt: Date,
+) {
+  const taxYen = Math.floor((invoice.amountYen * 10) / 110);
+  return jsonSnapshot({
+    version: 1,
+    invoiceNumber: invoice.invoiceNumber,
+    issuedAt: issuedAt.toISOString(),
+    dueAt: tenantInvoiceDueAt(issuedAt, invoice.contract.paymentTermsDays).toISOString(),
+    periodStart: invoice.periodStart.toISOString(),
+    periodEnd: invoice.periodEnd.toISOString(),
+    description: `ワタシワークス OEM月額利用料（${invoice.mau.toLocaleString('ja-JP')} MAU）`,
+    quantity: 1,
+    taxRatePercent: 10,
+    subtotalYen: invoice.amountYen - taxYen,
+    taxYen,
+    totalYen: invoice.amountYen,
+    issuer: {
+      name: requiredText(issuer.name, 200),
+      postalCode: optionalText(issuer.postalCode, 20),
+      address: requiredText(issuer.address, 500),
+      registrationNumber: optionalText(issuer.registrationNumber, 30),
+    },
+    recipient: {
+      name: invoice.contract.billingName,
+      email: invoice.contract.billingEmail,
+      organizationName: invoice.workspace.legalName ?? invoice.workspace.name,
+      address: invoice.workspace.address,
+    },
+  });
+}
+
+type CommercialReminderAudit = {
+  workspaceId: string;
+  entityId: string;
+  action: string;
+  occurredAt: Date;
+};
+
+export function unresolvedCommercialReminderFailures<T extends CommercialReminderAudit>(
+  audits: T[],
+): T[] {
+  const latest = new Map<string, T>();
+  for (const audit of audits) {
+    const kind = audit.action.startsWith('PAYMENT_GUIDANCE_')
+      ? 'INITIAL'
+      : audit.action.startsWith('OVERDUE_REMINDER_')
+        ? 'OVERDUE'
+        : null;
+    if (!kind) continue;
+    const key = `${audit.workspaceId}:${audit.entityId}:${kind}`;
+    const current = latest.get(key);
+    if (!current || audit.occurredAt > current.occurredAt) latest.set(key, audit);
+  }
+  return [...latest.values()].filter((audit) => audit.action.endsWith('_FAILED'));
 }
 
 export class PrismaCommercialBillingService {
@@ -89,6 +162,7 @@ export class PrismaCommercialBillingService {
             paymentFailedAt: true,
             paymentFailureCategory: true,
             notes: true,
+            documentSnapshot: true,
             issuedAt: true,
             dueAt: true,
             paidAt: true,
@@ -145,10 +219,39 @@ export class PrismaCommercialBillingService {
         },
       }),
     ]);
+    const issuedInvoiceIds = invoices
+      .filter((invoice) => invoice.status === 'ISSUED')
+      .map((invoice) => invoice.id);
+    const reminderAudits = issuedInvoiceIds.length
+      ? await this.client.commercialBillingAudit.findMany({
+          where: {
+            entityType: 'INVOICE',
+            entityId: { in: issuedInvoiceIds },
+            action: {
+              in: [
+                'PAYMENT_GUIDANCE_SENT',
+                'OVERDUE_REMINDER_SENT',
+                'PAYMENT_GUIDANCE_FAILED',
+                'OVERDUE_REMINDER_FAILED',
+              ],
+            },
+          },
+          orderBy: { occurredAt: 'desc' },
+          take: 5000,
+          select: {
+            id: true,
+            workspaceId: true,
+            entityId: true,
+            action: true,
+            occurredAt: true,
+          },
+        })
+      : [];
     return {
       activeContracts,
       summary: summarizeCommercialInvoices(invoices, now),
       invoices,
+      reminderFailures: unresolvedCommercialReminderFailures(reminderAudits),
     };
   }
 
@@ -345,7 +448,12 @@ export class PrismaCommercialBillingService {
   async transitionInvoice(input: TransitionTenantInvoiceInput) {
     const invoice = await this.client.tenantInvoice.findFirst({
       where: { id: input.invoiceId, workspaceId: input.workspaceId },
-      include: { contract: { select: { paymentTermsDays: true } } },
+      include: {
+        workspace: { select: { name: true, legalName: true, address: true } },
+        contract: {
+          select: { billingName: true, billingEmail: true, paymentTermsDays: true },
+        },
+      },
     });
     if (!invoice) throw new Error('invoice not found');
     const status = nextTenantInvoiceStatus(invoice.status, input.action);
@@ -358,12 +466,15 @@ export class PrismaCommercialBillingService {
       paymentReference: optionalText(input.paymentReference, 200) ?? invoice.paymentReference,
       notes: optionalText(input.notes, 1000) ?? invoice.notes,
     };
+    if (input.action === 'ISSUE' && !input.documentIssuer)
+      throw new Error('invoice document issuer is required');
     const data =
-      input.action === 'ISSUE'
+      input.action === 'ISSUE' && input.documentIssuer
         ? {
             ...common,
             issuedAt: now,
             dueAt: tenantInvoiceDueAt(now, invoice.contract.paymentTermsDays),
+            documentSnapshot: invoiceDocumentSnapshot(invoice, input.documentIssuer, now),
           }
         : input.action === 'MARK_PAID'
           ? { ...common, paidAt: now }

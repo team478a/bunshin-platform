@@ -965,6 +965,7 @@ export interface WeeklyPlannerInput {
   contentPillars: Array<{ id: string; title: string; description: string | null; weight: number }>;
   grantedKnowledge: Array<{ type: string; title: string; content: string }>;
   campaigns?: CampaignPlanningContext[];
+  recentPlanTopics?: Array<{ weekStartDate: string; goal: string; angle: string }>;
   recentPerformance?: {
     periodDays: number;
     postedCount: number;
@@ -1056,6 +1057,7 @@ export class GenerateWeeklyPlan {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid generated weekly items');
     const pillarIds = new Set(input.contentPillars.map(({ id }) => id));
     const dates = new Set<string>();
+    const topicAngles = new Set<string>();
     const campaignValues = input.campaigns ?? [];
     const campaigns = new Map(campaignValues.map((campaign) => [campaign.id, campaign]));
     const start = new Date(`${weekStartDate}T00:00:00Z`).valueOf();
@@ -1091,11 +1093,17 @@ export class GenerateWeeklyPlan {
         (!scheduledBusinessCategory || item.businessContentCategory !== scheduledBusinessCategory)
       )
         throw new ApplicationError('VALIDATION_ERROR', 'generated business content mix is invalid');
+      const goal = weeklyText(item.goal, 200, 'goal');
+      const angle = weeklyText(item.angle, 500, 'angle');
+      const topicAngle = `${goal}\n${angle}`.normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
+      if (topicAngles.has(topicAngle))
+        throw new ApplicationError('VALIDATION_ERROR', 'generated weekly topics must be unique');
+      topicAngles.add(topicAngle);
       return {
         scheduledDate,
         contentPillarId: item.contentPillarId,
-        goal: weeklyText(item.goal, 200, 'goal'),
-        angle: weeklyText(item.angle, 500, 'angle'),
+        goal,
+        angle,
         recommendedFormat: weeklyFormat(item.recommendedFormat),
         notes: weeklyNullable(item.notes, 1000) ?? null,
         campaignId,
@@ -1386,6 +1394,7 @@ export interface DailyMissionPlannerInput {
   };
   facePolicy: FacePolicy;
   recentFormats?: SocialPreferredFormat[];
+  recentTopics?: Array<{ missionDate: string; topic: string; angle: string }>;
   approvedStrategy: SocialAccountStrategy;
   weeklyPlan: WeeklyPlan;
   contentPillars: ContentPillar[];
@@ -1451,6 +1460,7 @@ export interface DailyMissionPlannerProviderInput {
   timezone: string;
   platform: SocialPlatform;
   availableMinutes: 3 | 5 | 10 | 20;
+  recentTopics?: Array<{ missionDate: string; topic: string; angle: string }>;
   bunshin: DailyMissionPlannerInput['bunshin'];
   approvedStrategy: {
     concept: string;
@@ -1581,6 +1591,7 @@ export class GenerateDailyMissionBrief {
       timezone: timezoneValue,
       platform: input.socialProfile.platform,
       availableMinutes: input.approvedStrategy.availableMinutes,
+      ...(input.recentTopics ? { recentTopics: input.recentTopics } : {}),
       bunshin: input.bunshin,
       approvedStrategy: {
         concept: input.approvedStrategy.concept,

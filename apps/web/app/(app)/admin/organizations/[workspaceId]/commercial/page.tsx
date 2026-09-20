@@ -8,7 +8,11 @@ import {
   AesGcmAdminEmailSecretCrypto,
   currentAdminEmailEnvironment,
 } from '../../../../../../src/email/secure-admin-email-configuration';
-import { CommercialBillingReminderResend } from '../../../../../../src/email/commercial-billing-reminder';
+import {
+  CommercialBillingRecipientTestResend,
+  CommercialBillingReminderResend,
+} from '../../../../../../src/email/commercial-billing-reminder';
+import { currentPlatformBillingIssuer } from '../../../../../../src/commercial-invoice-document';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +47,7 @@ const customQuoteSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 const reminderSchema = z.object({ workspaceId: z.uuid(), invoiceId: z.uuid() });
+const recipientTestSchema = z.object({ workspaceId: z.uuid() });
 
 const EVENT_LABELS: Record<string, string> = {
   POST_VIEW: '投稿案を表示',
@@ -145,6 +150,7 @@ async function transitionInvoice(formData: FormData) {
       externalInvoiceReference: input.data.externalInvoiceReference ?? null,
       paymentReference: input.data.paymentReference ?? null,
       notes: input.data.notes ?? null,
+      ...(input.data.action === 'ISSUE' ? { documentIssuer: currentPlatformBillingIssuer() } : {}),
     });
   } catch {
     redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=invoice`);
@@ -240,6 +246,59 @@ async function sendInvoiceReminder(formData: FormData) {
   redirect(`${returnPath}?reminderSent=1` as Route);
 }
 
+async function sendBillingRecipientTest(formData: FormData) {
+  'use server';
+  const input = recipientTestSchema.safeParse(Object.fromEntries(formData));
+  if (!input.success) redirect('/admin/organizations?error=invalid');
+  const { actor, db } = await requireSuperAdmin();
+  const returnPath = `/admin/organizations/${input.data.workspaceId}/commercial` as Route;
+  const contract = await db.prisma.organizationCommercialContract.findUnique({
+    where: { workspaceId: input.data.workspaceId },
+    select: { id: true, billingName: true, billingEmail: true },
+  });
+  if (!contract) redirect(`${returnPath}?error=recipient-test-target` as Route);
+  const repository = new db.PrismaAdminEmailConfigurationRepository();
+  const configuration = await repository.active({ environment: currentAdminEmailEnvironment() });
+  if (!configuration) redirect(`${returnPath}?error=recipient-test-email` as Route);
+  const now = new Date();
+  const localDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  try {
+    await new CommercialBillingRecipientTestResend().send({
+      apiKey: new AesGcmAdminEmailSecretCrypto().decrypt(configuration.encryptedApiKey),
+      from: configuration.configuration.fromEmail,
+      to: contract.billingEmail,
+      billingName: contract.billingName,
+      idempotencyKey: `commercial-recipient-test-${contract.id}-${localDate}`,
+    });
+    await db.prisma.commercialBillingAudit.create({
+      data: {
+        workspaceId: input.data.workspaceId,
+        actorUserId: actor.userId,
+        entityType: 'CONTRACT',
+        entityId: contract.id,
+        action: 'BILLING_EMAIL_TEST_SENT',
+        afterData: { recipient: contract.billingEmail, sentAt: now.toISOString() },
+      },
+    });
+  } catch {
+    await db.prisma.commercialBillingAudit
+      .create({
+        data: {
+          workspaceId: input.data.workspaceId,
+          actorUserId: actor.userId,
+          entityType: 'CONTRACT',
+          entityId: contract.id,
+          action: 'BILLING_EMAIL_TEST_FAILED',
+          afterData: { recipient: contract.billingEmail, failedAt: now.toISOString() },
+        },
+      })
+      .catch(() => undefined);
+    redirect(`${returnPath}?error=recipient-test-send` as Route);
+  }
+  revalidatePath(returnPath);
+  redirect(`${returnPath}?recipientTestSent=1` as Route);
+}
+
 export default async function OrganizationCommercialPage({
   params,
   searchParams,
@@ -253,6 +312,7 @@ export default async function OrganizationCommercialPage({
     invoiceUpdated?: string;
     customQuoteSaved?: string;
     reminderSent?: string;
+    recipientTestSent?: string;
   }>;
 }) {
   const workspaceId = z.uuid().safeParse((await params).workspaceId);
@@ -311,15 +371,26 @@ export default async function OrganizationCommercialPage({
       {query.reminderSent === '1' ? (
         <p className="notice notice--success">請求先へメールを送信し、履歴を保存しました。</p>
       ) : null}
+      {query.recipientTestSent === '1' ? (
+        <p className="notice notice--success">
+          保存済みの請求先へテストメールを送信し、履歴を保存しました。
+        </p>
+      ) : null}
       {query.error ? (
         <p className="notice notice--danger">
-          {query.error === 'reminder-email'
-            ? '送信できる管理者メール設定がありません。管理者メールの接続確認と利用開始を確認してください。'
-            : query.error === 'reminder-target'
-              ? 'この請求は案内メールを送れる状態ではありません。請求状態と支払期限を確認してください。'
-              : query.error === 'reminder-send'
-                ? '請求案内メールを送信できませんでした。メール設定と送信サービスの状態を確認してください。'
-                : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
+          {query.error === 'recipient-test-target'
+            ? '先に契約・請求先を保存してからテストしてください。'
+            : query.error === 'recipient-test-email'
+              ? '送信できる管理者メール設定がありません。管理者メールの接続確認と利用開始を確認してください。'
+              : query.error === 'recipient-test-send'
+                ? '請求先へのテストメールを送信できませんでした。請求先と管理者メール設定を確認してください。'
+                : query.error === 'reminder-email'
+                  ? '送信できる管理者メール設定がありません。管理者メールの接続確認と利用開始を確認してください。'
+                  : query.error === 'reminder-target'
+                    ? 'この請求は案内メールを送れる状態ではありません。請求状態と支払期限を確認してください。'
+                    : query.error === 'reminder-send'
+                      ? '請求案内メールを送信できませんでした。メール設定と送信サービスの状態を確認してください。'
+                      : '保存または更新できませんでした。入力内容と現在の状態を確認してください。'}
         </p>
       ) : null}
 
@@ -464,6 +535,23 @@ export default async function OrganizationCommercialPage({
             契約・請求先を保存
           </button>
         </form>
+        {billing.organizationCommercialContract ? (
+          <div className="settings-stack service-template-preview">
+            <h3>請求先メールをテスト</h3>
+            <p>実際の請求を始める前に、保存済みの請求先へ支払い不要の接続確認メールを送ります。</p>
+            <p>
+              送信先：<strong>{billing.organizationCommercialContract.billingEmail}</strong>
+            </p>
+            <form action={sendBillingRecipientTest}>
+              <input type="hidden" name="workspaceId" value={dashboard.workspace.id} />
+              <button className="button button--secondary" type="submit">
+                請求先へテストメールを送る
+              </button>
+            </form>
+          </div>
+        ) : (
+          <p className="field__hint">契約・請求先を保存してからテストしてください。</p>
+        )}
       </section>
 
       <section className="settings-card">
@@ -556,6 +644,14 @@ export default async function OrganizationCommercialPage({
                     支払期限：
                     {invoice.dueAt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}
                   </p>
+                ) : null}
+                {invoice.documentSnapshot && invoice.status !== 'DRAFT' ? (
+                  <a
+                    className="button button--secondary"
+                    href={`/api/organizations/${billing.id}/invoices/${invoice.id}/document`}
+                  >
+                    請求書PDFをダウンロード
+                  </a>
                 ) : null}
                 {invoice.status === 'DRAFT' ? (
                   <form className="form-stack" action={transitionInvoice}>
@@ -693,6 +789,9 @@ export default async function OrganizationCommercialPage({
                     OVERDUE_REMINDER_SENT: '期限超過メール送信',
                     PAYMENT_GUIDANCE_FAILED: '支払い案内メール送信失敗',
                     OVERDUE_REMINDER_FAILED: '期限超過メール送信失敗',
+                    BILLING_EMAIL_TEST_SENT: '請求先テストメール送信',
+                    BILLING_EMAIL_TEST_FAILED: '請求先テストメール送信失敗',
+                    DOCUMENT_DOWNLOADED: '請求書PDFダウンロード',
                   }[audit.action] ?? audit.action}
                 </span>
                 <strong>

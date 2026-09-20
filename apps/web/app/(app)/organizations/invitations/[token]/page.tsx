@@ -97,6 +97,34 @@ async function acceptInvitation(formData: FormData) {
         },
         update: { role: grantedRole, status: 'ACTIVE' },
       });
+      if (grantedRole === 'ADMIN' && entitlement?.oemEnabled) {
+        const groups = await tx.group.findMany({
+          where: { workspaceId: found.workspaceId, status: 'ACTIVE' },
+          select: { id: true },
+        });
+        for (const group of groups) {
+          await tx.groupMembership.upsert({
+            where: { groupId_userId: { groupId: group.id, userId: user.userId } },
+            create: {
+              workspaceId: found.workspaceId,
+              groupId: group.id,
+              userId: user.userId,
+              role: 'MANAGER',
+              serviceRole: 'SERVICE_ADMIN',
+              status: 'ACTIVE',
+              consentedAt: now,
+            },
+            update: {
+              role: 'MANAGER',
+              serviceRole: 'SERVICE_ADMIN',
+              status: 'ACTIVE',
+              consentedAt: now,
+              declinedAt: null,
+              revokedAt: null,
+            },
+          });
+        }
+      }
       return { workspaceId: found.workspaceId } as const;
     },
     { isolationLevel: 'Serializable' },

@@ -70,6 +70,16 @@ describe('GenerateWeeklyPlan', () => {
       { ...output, items: [output.items[0]!, { ...output.items[0]!, goal: '別の目的' }] },
     ],
     [
+      'duplicate topic and angle',
+      {
+        ...output,
+        items: [
+          output.items[0]!,
+          { ...output.items[0]!, scheduledDate: '2026-08-18', goal: '共感を得る' },
+        ],
+      },
+    ],
+    [
       'unknown pillar',
       { ...output, items: [{ ...output.items[0]!, contentPillarId: 'outside-scope' }] },
     ],

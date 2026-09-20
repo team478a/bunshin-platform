@@ -33,6 +33,16 @@ const reminderMigration = readFileSync(
   ),
   'utf8',
 );
+const documentMigration = readFileSync(
+  join(
+    process.cwd(),
+    'prisma',
+    'migrations',
+    '20260920090000_add_tenant_invoice_document_snapshot',
+    'migration.sql',
+  ),
+  'utf8',
+);
 
 describe('OEM contract and invoice schema', () => {
   it('binds one invoice to one tenant monthly usage snapshot', () => {
@@ -74,5 +84,10 @@ describe('OEM contract and invoice schema', () => {
     expect(reminderMigration).toContain(
       '"automatic_reminders_enabled" BOOLEAN NOT NULL DEFAULT false',
     );
+  });
+
+  it('stores immutable invoice document facts on the tenant invoice', () => {
+    expect(schema).toContain('documentSnapshot         Json?');
+    expect(documentMigration).toContain('ADD COLUMN "document_snapshot" JSONB');
   });
 });
