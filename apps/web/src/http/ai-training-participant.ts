@@ -2,6 +2,8 @@ import 'server-only';
 import {
   AiTrainingParticipantService,
   AiTrainingV1Policy,
+  TRAINING_AI_LEVELS,
+  TRAINING_ROLES,
   TrainingRuntimeError,
 } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -17,6 +19,13 @@ const submissionSchema = z
     missionAssignmentId: uuid,
     answer: z.string().trim().min(1).max(10_000),
     idempotencyKey: z.string().uuid(),
+  })
+  .strict();
+const profileSchema = z
+  .object({
+    role: z.enum(TRAINING_ROLES),
+    aiLevel: z.enum(TRAINING_AI_LEVELS),
+    idempotencyKey: uuid,
   })
   .strict();
 
@@ -58,6 +67,55 @@ export async function getAiTrainingCurrentMissionResponse(
       now: new Date(),
     });
     return response(data, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function saveAiTrainingProfileResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, value] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      profileSchema.parseAsync(request.json()),
+    ]);
+    const programEnrollmentId = uuid.parse(rawEnrollmentId);
+    const db = await import('@bunshin/database');
+    const result = await new db.PrismaTrainingParticipantProfileRepository(db.prisma).save({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId,
+      ...value,
+      occurredAt: new Date(),
+    });
+    if (result.outcome === 'NOT_FOUND') {
+      throw new ApplicationError('NOT_FOUND', 'AI training enrollment not found');
+    }
+    if (result.outcome === 'CONFLICT') {
+      throw new ApplicationError('CONFLICT', 'AI training profile could not be saved');
+    }
+    const state = await new AiTrainingParticipantService(
+      new db.PrismaAiTrainingRuntimeRepository(db.prisma),
+      new AiTrainingV1Policy(),
+    ).current({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId,
+      now: new Date(),
+    });
+    return response({ status: result.outcome, state }, requestId);
   } catch (error) {
     return failure(error, requestId);
   }

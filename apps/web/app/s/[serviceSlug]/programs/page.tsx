@@ -205,6 +205,13 @@ export default async function MemberProgramsPage({
               (item) => item.programEnrollmentId === enrollment.id,
             );
             const goal = goals.find((item) => item.programEnrollmentId === enrollment.id);
+            const moduleKey =
+              program.settings &&
+              typeof program.settings === 'object' &&
+              !Array.isArray(program.settings) &&
+              typeof program.settings['moduleKey'] === 'string'
+                ? program.settings['moduleKey']
+                : null;
             return {
               enrollmentId: enrollment.id,
               name: program?.displayName ?? '実践プログラム',
@@ -215,13 +222,9 @@ export default async function MemberProgramsPage({
               memberMayChoose: policy?.memberMayChoose ?? false,
               preferredMode: preference?.preferredSupportMode ?? enrollment.supportMode,
               notes: preference?.notes ?? '',
-              actionHref:
-                program?.settings &&
-                typeof program.settings === 'object' &&
-                !Array.isArray(program.settings) &&
-                program.settings['moduleKey'] === 'AI_RESALE_V1'
-                  ? `/s/${serviceSlug}/programs/${enrollment.id}`
-                  : null,
+              actionHref: ['AI_RESALE_V1', 'AI_TRAINING_V1'].includes(moduleKey ?? '')
+                ? `/s/${serviceSlug}/programs/${enrollment.id}`
+                : null,
               currentGoal: goal
                 ? `${goal.title}：${goal.targetValue.toString()} ${goal.unit}`
                 : null,
