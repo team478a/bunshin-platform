@@ -2,9 +2,13 @@ import 'server-only';
 import { getServerEnvironment } from '@bunshin/config';
 import { Prisma, type PrismaClient } from '@bunshin/database';
 import { ApplicationError } from '@bunshin/shared';
-import { StripeCommercialInvoiceCheckoutAdapter } from './secure-configuration';
+import {
+  StripeCommercialInvoiceCheckoutAdapter,
+  StripePaymentMethodRetrievalAdapter,
+} from './secure-configuration';
 
 type CheckoutAdapter = Pick<StripeCommercialInvoiceCheckoutAdapter, 'create'>;
+type PaymentMethodAdapter = Pick<StripePaymentMethodRetrievalAdapter, 'retrieve'>;
 
 export interface StripeCommercialBillingEvent {
   id?: unknown;
@@ -90,6 +94,8 @@ export async function createCommercialInvoiceCheckout(
     amountYen: invoice.amountYen,
     successUrl: new URL(`${returnPath}?payment=success`, configuration.appUrl).toString(),
     cancelUrl: new URL(`${returnPath}?payment=cancelled`, configuration.appUrl).toString(),
+    savePaymentMethod: invoice.contract.automaticCollectionEnabled,
+    customerId: invoice.contract.stripeCustomerId,
   });
   const updated = await client.tenantInvoice.updateMany({
     where: { id: invoice.id, workspaceId: invoice.workspaceId, status: 'ISSUED' },
@@ -140,6 +146,7 @@ export async function processCommercialBillingStripeEvent(
   client: PrismaClient,
   event: StripeCommercialBillingEvent,
   payloadDigest: string,
+  paymentMethodAdapter: PaymentMethodAdapter = new StripePaymentMethodRetrievalAdapter(),
 ) {
   const identity = requiredEventIdentity(event);
   if (!['checkout.session.completed', 'checkout.session.expired'].includes(identity.eventType)) {
@@ -147,6 +154,7 @@ export async function processCommercialBillingStripeEvent(
   }
   const invoice = await client.tenantInvoice.findFirst({
     where: { id: identity.invoiceId, workspaceId: identity.workspaceId },
+    include: { contract: true },
   });
   if (!invoice) throw new ApplicationError('NOT_FOUND', 'billing invoice not found');
   if (
@@ -178,6 +186,12 @@ export async function processCommercialBillingStripeEvent(
   ) {
     throw new ApplicationError('VALIDATION_ERROR', 'invalid Stripe payment intent');
   }
+  const savedPaymentMethod =
+    identity.eventType === 'checkout.session.completed' &&
+    invoice.contract.automaticCollectionEnabled &&
+    typeof paymentIntent === 'string'
+      ? await paymentMethodAdapter.retrieve(platformStripeConfiguration().secretKey, paymentIntent)
+      : null;
 
   try {
     return await client.$transaction(async (tx) => {
@@ -232,6 +246,19 @@ export async function processCommercialBillingStripeEvent(
             action: 'PAYMENT_CONFIRMED',
             beforeData: JSON.parse(JSON.stringify(invoice)) as Prisma.InputJsonValue,
             afterData: JSON.parse(JSON.stringify(updated)) as Prisma.InputJsonValue,
+          },
+        });
+      }
+      if (savedPaymentMethod) {
+        await tx.organizationCommercialContract.updateMany({
+          where: {
+            id: invoice.contractId,
+            workspaceId: invoice.workspaceId,
+            automaticCollectionEnabled: true,
+          },
+          data: {
+            stripeCustomerId: savedPaymentMethod.customerId,
+            stripePaymentMethodId: savedPaymentMethod.paymentMethodId,
           },
         });
       }

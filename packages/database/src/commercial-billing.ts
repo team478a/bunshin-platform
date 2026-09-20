@@ -18,6 +18,7 @@ export interface SaveOrganizationCommercialContractInput {
   billingEmail: string;
   paymentTermsDays: number;
   automaticRemindersEnabled: boolean;
+  automaticCollectionEnabled: boolean;
   externalCustomerReference?: string | null;
   startsAt?: Date | null;
   endsAt?: Date | null;
@@ -338,6 +339,7 @@ export class PrismaCommercialBillingService {
       billingEmail: requiredText(input.billingEmail, 320),
       paymentTermsDays: input.paymentTermsDays,
       automaticRemindersEnabled: input.automaticRemindersEnabled,
+      automaticCollectionEnabled: input.automaticCollectionEnabled,
       externalCustomerReference: optionalText(input.externalCustomerReference, 200),
       startsAt: input.startsAt ?? null,
       endsAt: input.endsAt ?? null,
@@ -347,10 +349,15 @@ export class PrismaCommercialBillingService {
       const before = await tx.organizationCommercialContract.findUnique({
         where: { workspaceId: input.workspaceId },
       });
+      const consentData = {
+        automaticCollectionConsentAt: input.automaticCollectionEnabled
+          ? (before?.automaticCollectionConsentAt ?? new Date())
+          : null,
+      };
       const saved = await tx.organizationCommercialContract.upsert({
         where: { workspaceId: input.workspaceId },
-        create: { workspaceId: input.workspaceId, ...contractData },
-        update: contractData,
+        create: { workspaceId: input.workspaceId, ...contractData, ...consentData },
+        update: { ...contractData, ...consentData },
       });
       await tx.commercialBillingAudit.create({
         data: {

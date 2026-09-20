@@ -8,6 +8,7 @@ import {
   StripeCommercialInvoiceCheckoutAdapter,
   StripeCheckoutSessionRetrievalAdapter,
   StripeEventRetrievalAdapter,
+  StripePaymentMethodRetrievalAdapter,
   verifyStripeWebhookSignature,
 } from '../src/payments/secure-configuration';
 
@@ -113,6 +114,8 @@ describe('OEM payment secure configuration', () => {
         amountYen: 19_800,
         successUrl: 'https://example.com/success',
         cancelUrl: 'https://example.com/cancel',
+        savePaymentMethod: true,
+        customerId: null,
       }),
     ).resolves.toMatchObject({ id: 'cs_test_invoice123' });
 
@@ -127,6 +130,31 @@ describe('OEM payment secure configuration', () => {
     expect(options.body.get('metadata[invoice_id]')).toBe('invoice-id');
     expect(options.body.get('metadata[workspace_id]')).toBe('workspace-id');
     expect(options.body.get('invoice_creation[enabled]')).toBe('true');
+    expect(options.body.get('customer_creation')).toBe('always');
+    expect(options.body.get('payment_intent_data[setup_future_usage]')).toBe('off_session');
+  });
+
+  it('retrieves only a successful Stripe payment method reference', async () => {
+    const request = vi.fn().mockResolvedValue(
+      Response.json({
+        id: 'pi_platform123',
+        status: 'succeeded',
+        customer: 'cus_platform123',
+        payment_method: 'pm_platform123',
+      }),
+    );
+    vi.stubGlobal('fetch', request);
+
+    await expect(
+      new StripePaymentMethodRetrievalAdapter().retrieve('sk_test_platform', 'pi_platform123'),
+    ).resolves.toEqual({
+      customerId: 'cus_platform123',
+      paymentMethodId: 'pm_platform123',
+    });
+    expect(request).toHaveBeenCalledWith(
+      'https://api.stripe.com/v1/payment_intents/pi_platform123',
+      expect.objectContaining({ headers: { authorization: 'Bearer sk_test_platform' } }),
+    );
   });
 
   it('retrieves a Stripe event with the organization secret without persisting its payload', async () => {

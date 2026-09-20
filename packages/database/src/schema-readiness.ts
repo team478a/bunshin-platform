@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260920173000_replace_sennokuni_obsolete_terms';
+export const LATEST_DATABASE_MIGRATION = '20260920190000_add_oem_automatic_collection_consent';
