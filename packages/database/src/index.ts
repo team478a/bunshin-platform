@@ -9482,17 +9482,26 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async record(input: RecordAiUsageInput): Promise<void> {
-    const accessible = await this.client.bunshin.findFirst({
-      where: {
-        id: input.bunshinId,
-        workspaceId: input.workspaceId,
-        workspace: {
-          memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
-        },
-      },
-      select: { id: true },
-    });
-    if (accessible === null) throw new ApplicationError('NOT_FOUND', 'bunshin not found');
+    const accessible = input.bunshinId
+      ? await this.client.bunshin.findFirst({
+          where: {
+            id: input.bunshinId,
+            workspaceId: input.workspaceId,
+            workspace: {
+              memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
+            },
+          },
+          select: { id: true },
+        })
+      : await this.client.workspaceMembership.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        });
+    if (accessible === null) throw new ApplicationError('NOT_FOUND', 'AI usage scope not found');
     await this.client.aiUsageEvent.upsert({
       where: {
         workspaceId_actorUserId_idempotencyKey: {
