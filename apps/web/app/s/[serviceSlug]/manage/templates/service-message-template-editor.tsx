@@ -19,6 +19,11 @@ const purposeLabels: Record<Template['purpose'], string> = {
   GENERAL_ANNOUNCEMENT: '任意のお知らせ',
 };
 
+const formText = (form: FormData, field: string) => {
+  const value = form.get(field);
+  return typeof value === 'string' ? value : '';
+};
+
 export function ServiceMessageTemplateEditor({
   serviceSlug,
   initialTemplates,
@@ -38,14 +43,14 @@ export function ServiceMessageTemplateEditor({
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const channel = String(form.get('channel')) as Template['channel'];
+    const channel = formText(form, 'channel') as Template['channel'];
     const body = {
       ...(editing ? { id: editing.id } : {}),
       channel,
-      purpose: String(form.get('purpose')),
-      name: String(form.get('name')),
-      subject: channel === 'EMAIL' ? String(form.get('subject')) : '',
-      body: String(form.get('body')),
+      purpose: formText(form, 'purpose'),
+      name: formText(form, 'name'),
+      subject: channel === 'EMAIL' ? formText(form, 'subject') : '',
+      body: formText(form, 'body'),
       isActive: form.has('isActive'),
     };
     setMessage('保存しています…');
