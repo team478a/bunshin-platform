@@ -5,7 +5,7 @@ import {
   type ProgramDefinitionV1,
 } from '@bunshin/application';
 
-export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_1';
+export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_2';
 export const AI_TRAINING_V1_MODULE_KEY = 'AI_TRAINING_V1';
 export const TRAINING_ROLES = ['SALES', 'OFFICE', 'MANAGER', 'OTHER'] as const;
 export const TRAINING_AI_LEVELS = ['BEGINNER', 'INTERMEDIATE'] as const;
@@ -62,6 +62,10 @@ export interface AiTrainingV1DecisionContext {
 const DAY_MS = 86_400_000;
 const completed = (context: AiTrainingV1DecisionContext, key: TrainingActionKey) =>
   context.completedMissionKeys.includes(key);
+const firstIncomplete = (
+  context: AiTrainingV1DecisionContext,
+  missionKeys: readonly Exclude<TrainingActionKey, 'WAIT'>[],
+) => missionKeys.find((key) => !completed(context, key));
 const work = (actionKey: Exclude<TrainingActionKey, 'WAIT'>, reasonCode: string) =>
   defineNextActionDecision({
     actionKey,
@@ -101,12 +105,34 @@ export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1Decision
       return work('PROMPT_CONDITION', 'PROMPT_CONDITIONS_REQUIRED');
     if (!completed(context, 'PROMPT_FORMAT'))
       return work('PROMPT_FORMAT', 'PROMPT_FORMAT_REQUIRED');
-    if (context.role === 'SALES') return work('SALES_EMAIL', 'ROLE_SALES_AND_FOUNDATION_COMPLETE');
-    if (context.role === 'OFFICE')
-      return work('DOCUMENT_SUMMARY', 'ROLE_OFFICE_AND_FOUNDATION_COMPLETE');
-    if (context.role === 'MANAGER')
-      return work('MANAGER_PROCESS_REVIEW', 'ROLE_MANAGER_AND_FOUNDATION_COMPLETE');
-    return work('EMAIL_WRITING', 'FOUNDATION_COMPLETE_GENERAL_PRACTICE');
+    const roleMissions =
+      context.role === 'SALES'
+        ? (['SALES_EMAIL', 'SALES_HEARING', 'SALES_PROPOSAL', 'SALES_FOLLOW_UP'] as const)
+        : context.role === 'OFFICE'
+          ? ([
+              'DOCUMENT_SUMMARY',
+              'OFFICE_MINUTES',
+              'OFFICE_DOCUMENT',
+              'OFFICE_EXCEL',
+              'OFFICE_DATA',
+            ] as const)
+          : context.role === 'MANAGER'
+            ? ([
+                'MANAGER_PROCESS_REVIEW',
+                'MANAGER_IMPROVEMENT',
+                'MANAGER_AI_DESIGN',
+                'MANAGER_TEAM_GUIDANCE',
+                'MANAGER_AI_RULES',
+              ] as const)
+            : ([
+                'EMAIL_WRITING',
+                'DOCUMENT_SUMMARY',
+                'DOCUMENT_PROOFREAD',
+                'IDEA_GENERATION',
+              ] as const);
+    const nextMission = firstIncomplete(context, roleMissions);
+    if (nextMission) return work(nextMission, `ROLE_${context.role}_NEXT_PRACTICE`);
+    return wait(new Date(context.now.getTime() + DAY_MS));
   }
 }
 
@@ -261,3 +287,5 @@ export function createAiTrainingV1Definition(): ProgramDefinitionV1 {
     ],
   };
 }
+
+export * from './runtime';
