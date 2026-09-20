@@ -1,4 +1,5 @@
-import { Prisma, PrismaClient, prisma } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { prisma } from './index';
 
 export type TrainingAnswerSubmissionResult =
   | {
