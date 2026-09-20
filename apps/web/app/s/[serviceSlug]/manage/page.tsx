@@ -60,6 +60,11 @@ const sections = [
     href: 'line',
   },
   {
+    title: '登録完了メール',
+    description: '登録後の案内文、送信者、返信先、自社メール配信を設定します。',
+    href: 'email',
+  },
+  {
     title: 'ポイントとバッジ',
     description: 'ポイント数や獲得条件を決め、参加者へのボーナスとバッジを管理します。',
     href: 'points',
@@ -971,7 +976,7 @@ export default async function ServiceManagementHome({
                 <p>{section.description}</p>
                 <Link
                   className="button button--secondary"
-                  href={`/s/${configuration.slug}/manage/${section.href}`}
+                  href={`/s/${configuration.slug}/manage/${section.href}` as Route}
                 >
                   開く
                 </Link>

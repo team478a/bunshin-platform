@@ -12102,6 +12102,53 @@ export class PrismaServiceFoundationRepository implements ServiceFoundationRepos
   }
 }
 
+async function enqueueRegistrationCompleteEmail(
+  tx: Prisma.TransactionClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    configurationId: string;
+    groupMembershipId: string;
+    userId: string;
+    serviceName: string;
+    now: Date;
+  },
+) {
+  const [emailConfiguration, user] = await Promise.all([
+    tx.serviceRegistrationEmailConfiguration.findUnique({ where: { groupId: input.groupId } }),
+    tx.user.findUnique({
+      where: { id: input.userId },
+      select: { email: true, displayName: true },
+    }),
+  ]);
+  if (!emailConfiguration?.enabled || !emailConfiguration.lastVerifiedAt || !user?.email) return;
+  const personalize = (value: string) =>
+    value
+      .replaceAll('{{name}}', user.displayName || 'ご利用者')
+      .replaceAll('{{serviceName}}', input.serviceName);
+  await tx.serviceRegistrationEmailDelivery.createMany({
+    data: [
+      {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        configurationId: input.configurationId,
+        emailConfigurationId: emailConfiguration.id,
+        groupMembershipId: input.groupMembershipId,
+        userId: input.userId,
+        recipientEmail: user.email,
+        recipientName: user.displayName,
+        fromName: emailConfiguration.fromName,
+        fromEmail: emailConfiguration.fromEmail,
+        replyToEmail: emailConfiguration.replyToEmail,
+        subject: personalize(emailConfiguration.subject),
+        body: personalize(emailConfiguration.body),
+        nextAttemptAt: input.now,
+      },
+    ],
+    skipDuplicates: true,
+  });
+}
+
 export class PrismaServiceParticipationRepository implements ServiceParticipationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -12372,6 +12419,15 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
             skipDuplicates: true,
           });
         if (status === 'ACTIVE') {
+          await enqueueRegistrationCompleteEmail(tx, {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            configurationId: configuration.id,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            serviceName: configuration.displayName,
+            now: input.now,
+          });
           await autoEnrollAiResaleForRegistration(tx, { membership, now: input.now });
         }
         return groupMembershipRecord(membership);
@@ -12585,6 +12641,20 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
         ],
         skipDuplicates: true,
       });
+      const emailService = await tx.serviceConfiguration.findUnique({
+        where: { groupId: input.serviceId },
+        select: { id: true, displayName: true },
+      });
+      if (emailService)
+        await enqueueRegistrationCompleteEmail(tx, {
+          workspaceId: input.workspaceId,
+          groupId: input.serviceId,
+          configurationId: emailService.id,
+          groupMembershipId: target.id,
+          userId: target.userId,
+          serviceName: emailService.displayName,
+          now: input.now,
+        });
       return groupMembershipRecord(updated);
     });
   }

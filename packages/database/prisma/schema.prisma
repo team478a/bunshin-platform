@@ -162,6 +162,19 @@ enum ServiceNotificationChannel {
   EMAIL
 }
 
+enum ServiceRegistrationEmailProviderMode {
+  PLATFORM
+  DEDICATED_RESEND
+}
+
+enum ServiceRegistrationEmailDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 enum ServiceMembershipEventType {
   REGISTRATION_COMPLETED
   FIRST_SERVICE_USE
@@ -2492,6 +2505,7 @@ model ServiceConfiguration {
   updatedBy            User                        @relation("ServiceConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   brand                ServiceBrand?
   registration         ServiceRegistrationPolicy?
+  registrationEmailConfiguration ServiceRegistrationEmailConfiguration?
   audits               ServiceConfigurationAudit[]
   legalDocuments       ServiceLegalDocument[]
   commercialSetting    ServiceCommercialSetting?
@@ -2603,6 +2617,66 @@ model ServiceRegistrationPolicy {
   @@unique([workspaceId, groupId, configurationId])
   @@index([workspaceId, groupId, mode])
   @@map("service_registration_policies")
+}
+
+model ServiceRegistrationEmailConfiguration {
+  id                  String                               @id @default(uuid()) @db.Uuid
+  workspaceId         String                               @map("workspace_id") @db.Uuid
+  groupId             String                               @unique @map("group_id") @db.Uuid
+  configurationId     String                               @unique @map("configuration_id") @db.Uuid
+  enabled             Boolean                              @default(false)
+  providerMode        ServiceRegistrationEmailProviderMode @default(PLATFORM) @map("provider_mode")
+  encryptedApiKey     String?                              @map("encrypted_api_key") @db.Text
+  apiKeyMask          String?                              @map("api_key_mask") @db.VarChar(16)
+  keyVersion          Int                                  @default(1) @map("key_version")
+  fromName            String                               @map("from_name") @db.VarChar(120)
+  fromEmail           String                               @map("from_email") @db.VarChar(320)
+  replyToEmail        String?                              @map("reply_to_email") @db.VarChar(320)
+  subject             String                               @db.VarChar(200)
+  body                String                               @db.Text
+  lastVerifiedAt      DateTime?                            @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory   String?                              @map("last_error_category") @db.VarChar(80)
+  updatedByUserId     String                               @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  configuration       ServiceConfiguration                 @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  deliveries          ServiceRegistrationEmailDelivery[]
+
+  @@unique([workspaceId, groupId], map: "service_registration_email_configurations_workspace_group_key")
+  @@unique([workspaceId, groupId, configurationId], map: "service_registration_email_configurations_scope_key")
+  @@index([enabled, providerMode])
+  @@map("service_registration_email_configurations")
+}
+
+model ServiceRegistrationEmailDelivery {
+  id                    String                                 @id @default(uuid()) @db.Uuid
+  workspaceId           String                                 @map("workspace_id") @db.Uuid
+  groupId               String                                 @map("group_id") @db.Uuid
+  configurationId       String                                 @map("configuration_id") @db.Uuid
+  emailConfigurationId  String                                 @map("email_configuration_id") @db.Uuid
+  groupMembershipId     String                                 @map("group_membership_id") @db.Uuid
+  userId                String                                 @map("user_id") @db.Uuid
+  recipientEmail        String                                 @map("recipient_email") @db.VarChar(320)
+  recipientName         String?                                @map("recipient_name") @db.VarChar(120)
+  fromName              String                                 @map("from_name") @db.VarChar(120)
+  fromEmail             String                                 @map("from_email") @db.VarChar(320)
+  replyToEmail          String?                                @map("reply_to_email") @db.VarChar(320)
+  subject               String                                 @db.VarChar(200)
+  body                  String                                 @db.Text
+  status                ServiceRegistrationEmailDeliveryStatus @default(PENDING)
+  attemptCount          Int                                    @default(0) @map("attempt_count")
+  nextAttemptAt         DateTime                               @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  providerMessageId     String?                                @map("provider_message_id") @db.VarChar(200)
+  lastErrorCategory     String?                                @map("last_error_category") @db.VarChar(80)
+  sentAt                DateTime?                              @map("sent_at") @db.Timestamptz(6)
+  createdAt             DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  emailConfiguration    ServiceRegistrationEmailConfiguration  @relation(fields: [emailConfigurationId], references: [id], onDelete: Restrict)
+
+  @@unique([groupMembershipId, emailConfigurationId])
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId, groupId, createdAt])
+  @@map("service_registration_email_deliveries")
 }
 
 /// 占いサービス固有の公開停止スイッチと安全な運用上限。
