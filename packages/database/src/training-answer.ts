@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 
 export type TrainingAnswerSubmissionResult =
@@ -114,7 +114,7 @@ export class PrismaTrainingAnswerRepository {
             metadata: {
               missionDefinitionKey: assignment.missionDefinitionKey,
               answerLength: input.answer.length,
-            } as Prisma.InputJsonValue,
+            },
             actorUserId: input.actorUserId,
             occurredAt: input.occurredAt,
           },
