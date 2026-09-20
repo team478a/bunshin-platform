@@ -123,6 +123,69 @@ describe('PrismaCommercialBillingService', () => {
     );
   });
 
+  it('freezes recipient, issuer, and tax facts when an invoice is issued', async () => {
+    const now = new Date('2026-09-20T00:00:00.000Z');
+    const invoice = {
+      id: 'invoice-a',
+      workspaceId: 'workspace-a',
+      invoiceNumber: 'WW-202609-A',
+      status: 'DRAFT',
+      periodStart: new Date('2026-08-01T00:00:00.000Z'),
+      periodEnd: new Date('2026-09-01T00:00:00.000Z'),
+      mau: 75,
+      amountYen: 19_800,
+      externalInvoiceReference: null,
+      paymentReference: null,
+      notes: null,
+      workspace: {
+        name: '運営団体A',
+        legalName: '株式会社A',
+        address: '東京都千代田区1-1',
+      },
+      contract: {
+        billingName: '株式会社A 経理部',
+        billingEmail: 'billing@example.com',
+        paymentTermsDays: 30,
+      },
+    };
+    const update = vi.fn().mockResolvedValue({ ...invoice, status: 'ISSUED' });
+    const rawClient = {
+      tenantInvoice: { findFirst: vi.fn().mockResolvedValue(invoice), update },
+      commercialBillingAudit: { create: vi.fn().mockResolvedValue({ id: 'audit' }) },
+    };
+    const client = {
+      ...rawClient,
+      $transaction: vi.fn((callback: (tx: typeof rawClient) => unknown) => callback(rawClient)),
+    } as unknown as PrismaClient;
+
+    await new PrismaCommercialBillingService(client).transitionInvoice({
+      workspaceId: 'workspace-a',
+      invoiceId: 'invoice-a',
+      actorUserId: 'actor',
+      action: 'ISSUE',
+      now,
+      documentIssuer: {
+        name: '和愛株式会社',
+        address: '兵庫県神戸市北区大沢町簾326番地の1',
+        registrationNumber: 'T1234567890123',
+      },
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'invoice-a' },
+      data: expect.objectContaining({
+        documentSnapshot: expect.objectContaining({
+          invoiceNumber: 'WW-202609-A',
+          subtotalYen: 18_000,
+          taxYen: 1_800,
+          totalYen: 19_800,
+          issuer: expect.objectContaining({ name: '和愛株式会社' }),
+          recipient: expect.objectContaining({ name: '株式会社A 経理部' }),
+        }),
+      }),
+    });
+  });
+
   it('does not create a fixed-price invoice for a custom quote month', async () => {
     const create = vi.fn();
     const rawClient = {

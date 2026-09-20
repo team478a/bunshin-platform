@@ -155,6 +155,7 @@ export default async function OrganizationUsagePage({
                   <th>状態</th>
                   <th>支払期限</th>
                   <th>お支払い</th>
+                  <th>請求書</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,6 +169,18 @@ export default async function OrganizationUsagePage({
                       <td>
                         {invoice.dueAt?.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' }) ??
                           '未発行'}
+                      </td>
+                      <td>
+                        {invoice.documentSnapshot ? (
+                          <a
+                            className="button button--small button--secondary"
+                            href={`/api/organizations/${billing.id}/invoices/${invoice.id}/document`}
+                          >
+                            PDFを保存
+                          </a>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td>
                         {invoice.status === 'ISSUED' &&
