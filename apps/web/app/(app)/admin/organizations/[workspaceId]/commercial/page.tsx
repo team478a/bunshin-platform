@@ -12,6 +12,7 @@ import {
   CommercialBillingRecipientTestResend,
   CommercialBillingReminderResend,
 } from '../../../../../../src/email/commercial-billing-reminder';
+import { currentPlatformBillingIssuer } from '../../../../../../src/commercial-invoice-document';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,6 +150,7 @@ async function transitionInvoice(formData: FormData) {
       externalInvoiceReference: input.data.externalInvoiceReference ?? null,
       paymentReference: input.data.paymentReference ?? null,
       notes: input.data.notes ?? null,
+      ...(input.data.action === 'ISSUE' ? { documentIssuer: currentPlatformBillingIssuer() } : {}),
     });
   } catch {
     redirect(`/admin/organizations/${input.data.workspaceId}/commercial?error=invoice`);
@@ -643,6 +645,14 @@ export default async function OrganizationCommercialPage({
                     {invoice.dueAt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}
                   </p>
                 ) : null}
+                {invoice.documentSnapshot && invoice.status !== 'DRAFT' ? (
+                  <a
+                    className="button button--secondary"
+                    href={`/api/organizations/${billing.id}/invoices/${invoice.id}/document`}
+                  >
+                    請求書PDFをダウンロード
+                  </a>
+                ) : null}
                 {invoice.status === 'DRAFT' ? (
                   <form className="form-stack" action={transitionInvoice}>
                     <input type="hidden" name="workspaceId" value={billing.id} />
@@ -781,6 +791,7 @@ export default async function OrganizationCommercialPage({
                     OVERDUE_REMINDER_FAILED: '期限超過メール送信失敗',
                     BILLING_EMAIL_TEST_SENT: '請求先テストメール送信',
                     BILLING_EMAIL_TEST_FAILED: '請求先テストメール送信失敗',
+                    DOCUMENT_DOWNLOADED: '請求書PDFダウンロード',
                   }[audit.action] ?? audit.action}
                 </span>
                 <strong>

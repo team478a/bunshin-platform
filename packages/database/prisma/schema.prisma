@@ -3153,6 +3153,7 @@ model TenantInvoice {
   paymentFailedAt          DateTime?          @map("payment_failed_at") @db.Timestamptz(6)
   paymentFailureCategory   String?            @map("payment_failure_category") @db.VarChar(80)
   notes                    String?           @db.VarChar(1000)
+  documentSnapshot         Json?             @map("document_snapshot")
   issuedAt                 DateTime?         @map("issued_at") @db.Timestamptz(6)
   dueAt                    DateTime?         @map("due_at") @db.Timestamptz(6)
   paidAt                   DateTime?         @map("paid_at") @db.Timestamptz(6)
