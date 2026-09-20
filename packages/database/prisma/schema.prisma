@@ -175,6 +175,20 @@ enum ServiceRegistrationEmailDeliveryStatus {
   SKIPPED
 }
 
+/// サービス運営者が管理する配信文面の送信チャネル。
+enum ServiceMessageTemplateChannel {
+  EMAIL
+  LINE
+}
+
+/// 配信の目的。実際の送信は既存のメール／LINE配信機能が担当する。
+enum ServiceMessageTemplatePurpose {
+  REGISTRATION_COMPLETE
+  REMINDER
+  WEEKLY_REPORT
+  GENERAL_ANNOUNCEMENT
+}
+
 enum ServiceMembershipEventType {
   REGISTRATION_COMPLETED
   FIRST_SERVICE_USE
@@ -2506,6 +2520,7 @@ model ServiceConfiguration {
   brand                ServiceBrand?
   registration         ServiceRegistrationPolicy?
   registrationEmailConfiguration ServiceRegistrationEmailConfiguration?
+  messageTemplates      ServiceMessageTemplate[]
   audits               ServiceConfigurationAudit[]
   legalDocuments       ServiceLegalDocument[]
   commercialSetting    ServiceCommercialSetting?
@@ -2677,6 +2692,31 @@ model ServiceRegistrationEmailDelivery {
   @@index([status, nextAttemptAt])
   @@index([workspaceId, groupId, createdAt])
   @@map("service_registration_email_deliveries")
+}
+
+/// サービス単位の再利用可能な配信テンプレート。
+/// 秘密情報や送信先は保持せず、配信時に本文をスナップショットする。
+model ServiceMessageTemplate {
+  id              String                        @id @default(uuid()) @db.Uuid
+  workspaceId     String                        @map("workspace_id") @db.Uuid
+  groupId         String                        @map("group_id") @db.Uuid
+  configurationId String                        @map("configuration_id") @db.Uuid
+  channel         ServiceMessageTemplateChannel
+  purpose         ServiceMessageTemplatePurpose
+  name            String                        @db.VarChar(120)
+  subject         String?                       @db.VarChar(200)
+  body            String                        @db.Text
+  isActive        Boolean                       @default(true) @map("is_active")
+  createdByUserId String                        @map("created_by_user_id") @db.Uuid
+  updatedByUserId String                        @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  configuration   ServiceConfiguration          @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, channel, purpose, isActive])
+  @@index([configurationId, updatedAt])
+  @@map("service_message_templates")
 }
 
 /// 占いサービス固有の公開停止スイッチと安全な運用上限。

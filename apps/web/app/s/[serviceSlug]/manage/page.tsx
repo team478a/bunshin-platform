@@ -65,6 +65,11 @@ const sections = [
     href: 'email',
   },
   {
+    title: '配信テンプレート',
+    description: 'メールとLINEの案内文を用途別に保存し、配信準備に使います。',
+    href: 'templates',
+  },
+  {
     title: 'ポイントとバッジ',
     description: 'ポイント数や獲得条件を決め、参加者へのボーナスとバッジを管理します。',
     href: 'points',

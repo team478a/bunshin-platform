@@ -26,6 +26,16 @@ export default async function ServiceLinePage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
+  const templates = await db.prisma.serviceMessageTemplate.findMany({
+    where: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      channel: 'LINE',
+      isActive: true,
+    },
+    select: { id: true, name: true, purpose: true, body: true },
+    orderBy: [{ purpose: 'asc' }, { updatedAt: 'desc' }],
+  });
   const environment = currentLineEnvironment();
   const result = await new ListGroupLineConfigurations(
     new db.PrismaGroupLineConfigurationRepository(),
@@ -128,6 +138,7 @@ export default async function ServiceLinePage({
               : ''
           }
           initialReason={weeklyReportTemplate ? '参加者へ週次レポートを案内' : ''}
+          templates={templates}
         />
         <section className="settings-card">
           <LineDeliveryRetryPanel
