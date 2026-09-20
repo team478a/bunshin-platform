@@ -126,6 +126,10 @@ export default async function OrganizationsAdminPage({
             運営団体を作成する
           </button>
         </form>
+        <p>OEM提供を始める場合は、団体・サービス・契約・招待をまとめて作成できます。</p>
+        <Link className="button button--secondary" href="/admin/oem-onboarding">
+          OEM標準環境をまとめて作る
+        </Link>
       </section>
       <section className="settings-card">
         <h2>作成済みの運営団体</h2>
