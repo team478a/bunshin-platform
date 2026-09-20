@@ -72,4 +72,63 @@ describe('PrismaCommercialUsageService', () => {
     );
     expect(serviceUsageEventCreate).not.toHaveBeenCalled();
   });
+
+  it('builds a tenant-separated current-month profitability view', async () => {
+    const serviceUsageGroupBy = vi
+      .fn()
+      .mockResolvedValueOnce([{ userId: 'member-a' }, { userId: 'member-b' }])
+      .mockResolvedValueOnce([{ userId: 'member-c' }]);
+    const aiUsageAggregate = vi
+      .fn()
+      .mockResolvedValueOnce({
+        _count: { _all: 3 },
+        _sum: { estimatedCostUsdMicros: 12_500n },
+      })
+      .mockResolvedValueOnce({
+        _count: { _all: 1 },
+        _sum: { estimatedCostUsdMicros: 7_500n },
+      });
+    const aiUsageCount = vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+    const client = {
+      workspace: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'workspace-a', name: '運営団体A' },
+          { id: 'workspace-b', name: '運営団体B' },
+        ]),
+      },
+      serviceUsageEvent: { groupBy: serviceUsageGroupBy },
+      aiUsageEvent: { aggregate: aiUsageAggregate, count: aiUsageCount },
+    } as unknown as PrismaClient;
+
+    const rows = await new PrismaCommercialUsageService(client).profitabilityDashboard(
+      new Date('2026-09-20T00:00:00.000Z'),
+    );
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        mau: 2,
+        revenueYen: 19_800,
+        aiCostUsdMicros: 12_500,
+        pricedAiCalls: 3,
+        unpricedAiCalls: 1,
+      }),
+      expect.objectContaining({
+        workspaceId: 'workspace-b',
+        mau: 1,
+        revenueYen: 19_800,
+        aiCostUsdMicros: 7_500,
+        pricedAiCalls: 1,
+        unpricedAiCalls: 0,
+      }),
+    ]);
+    expect(serviceUsageGroupBy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ where: expect.objectContaining({ workspaceId: 'workspace-a' }) }),
+    );
+    expect(serviceUsageGroupBy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ where: expect.objectContaining({ workspaceId: 'workspace-b' }) }),
+    );
+  });
 });

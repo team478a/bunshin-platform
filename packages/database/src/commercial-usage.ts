@@ -42,6 +42,18 @@ export interface CommercialUsageDashboard {
   }>;
 }
 
+export interface CommercialProfitabilityRow {
+  workspaceId: string;
+  workspaceName: string;
+  month: string;
+  mau: number;
+  revenueYen: number | null;
+  pricingTierKey: string;
+  aiCostUsdMicros: number;
+  pricedAiCalls: number;
+  unpricedAiCalls: number;
+}
+
 function snapshotDate(monthKey: string): Date {
   return new Date(`${monthKey}-01T00:00:00.000Z`);
 }
@@ -187,6 +199,63 @@ export class PrismaCommercialUsageService {
         finalizedAt: row.finalizedAt,
       })),
     };
+  }
+
+  async profitabilityDashboard(now = new Date()): Promise<CommercialProfitabilityRow[]> {
+    const period = commercialMonthPeriod(now);
+    const organizations = await this.client.workspace.findMany({
+      where: {
+        type: 'ORGANIZATION',
+        status: 'ACTIVE',
+        organizationEntitlement: { is: { oemEnabled: true, suspended: false } },
+      },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+
+    return Promise.all(
+      organizations.map(async (organization) => {
+        const [users, pricedAi, unpricedAiCalls] = await Promise.all([
+          this.client.serviceUsageEvent.groupBy({
+            by: ['userId'],
+            where: {
+              workspaceId: organization.id,
+              occurredAt: { gte: period.start, lt: period.end },
+            },
+          }),
+          this.client.aiUsageEvent.aggregate({
+            where: {
+              workspaceId: organization.id,
+              occurredAt: { gte: period.start, lt: period.end },
+              estimatedCostUsdMicros: { not: null },
+            },
+            _count: { _all: true },
+            _sum: { estimatedCostUsdMicros: true },
+          }),
+          this.client.aiUsageEvent.count({
+            where: {
+              workspaceId: organization.id,
+              occurredAt: { gte: period.start, lt: period.end },
+              estimatedCostUsdMicros: null,
+            },
+          }),
+        ]);
+        const pricing = quoteOemMauPrice(users.length);
+        const aiCost = pricedAi._sum.estimatedCostUsdMicros ?? 0n;
+        if (aiCost > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('AI cost is too large');
+        return {
+          workspaceId: organization.id,
+          workspaceName: organization.name,
+          month: period.key,
+          mau: users.length,
+          revenueYen: pricing.priceYen,
+          pricingTierKey: pricing.tierKey,
+          aiCostUsdMicros: Number(aiCost),
+          pricedAiCalls: pricedAi._count._all,
+          unpricedAiCalls,
+        };
+      }),
+    );
   }
 
   async finalizePreviousMonth(workspaceId: string, now = new Date()) {
