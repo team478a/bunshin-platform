@@ -28,6 +28,10 @@ const contractSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'on'),
+  automaticCollectionEnabled: z
+    .string()
+    .optional()
+    .transform((value) => value === 'on'),
   externalCustomerReference: z.string().trim().max(200).optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
@@ -501,6 +505,19 @@ export default async function OrganizationCommercialPage({
           </label>
           <p className="field__hint">
             初期状態は停止です。管理者メールの接続確認が完了している場合だけ送信します。同じ請求・同じ段階の案内は1回だけです。
+          </p>
+          <label className="field field--checkbox">
+            <input
+              name="automaticCollectionEnabled"
+              type="checkbox"
+              defaultChecked={
+                billing.organizationCommercialContract?.automaticCollectionEnabled ?? false
+              }
+            />
+            <span>契約上の同意を確認し、次回以降の月額料金を保存カードから回収する</span>
+          </label>
+          <p className="field__hint">
+            初期状態は停止です。有効化後、団体管理者が最初のStripe支払いを完了すると支払方法が保存されます。カード番号はワタシワークスへ保存しません。
           </p>
           <label className="field">
             <span className="field__label">外部顧客番号（任意）</span>

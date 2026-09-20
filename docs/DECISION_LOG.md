@@ -2609,3 +2609,10 @@
 - Enforcement: サービス固有Knowledgeで生成前に指示し、生成後は本文・見出し・スライド等の全テキスト項目へ同じPolicyを適用する。
 - Link preview: 外部サイトのOGPに禁止語が残る旧企画URL（`project=sengoku-influencer`）は生成結果から除外し、SNS側で禁止語のプレビューが再表示されないようにする。
 - Existing settings: 千ノ国メディアの保存済みOnboarding・Survey設定と利用者マニュアルに残る旧名称も「千ノ国メディア」へ更新する。
+
+# 2026-09-20: OEM自動回収は明示同意と初回支払い後に準備する
+
+- Default: 既存・新規契約とも自動回収は停止から開始し、システム管理者が契約上の同意を確認した団体だけ有効化する。
+- Payment method: 初回のStripe Checkoutで`off_session`利用を設定し、成功済みPaymentIntentをStripe APIで再確認してからCustomer IDとPayment Method IDだけを保存する。
+- Sensitive data: カード番号、Webhook本文、Stripe応答本文は保存しない。
+- Rollout: 本変更は支払方法の準備までとし、実際の日次自動回収と未払い停止は準備済み契約だけを対象とする後続作業へ分離する。

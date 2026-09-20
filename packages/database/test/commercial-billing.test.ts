@@ -58,6 +58,7 @@ describe('PrismaCommercialBillingService', () => {
         billingEmail: 'billing@example.com',
         paymentTermsDays: 30,
         automaticRemindersEnabled: false,
+        automaticCollectionEnabled: false,
       }),
     ).rejects.toThrow('OEM entitlement is required');
   });
