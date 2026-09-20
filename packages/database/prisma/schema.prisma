@@ -442,6 +442,70 @@ model ProgramProgressSnapshot {
   @@map("program_progress_snapshots")
 }
 
+enum TrainingParticipantRole {
+  SALES
+  OFFICE
+  MANAGER
+  OTHER
+}
+
+enum TrainingParticipantAiLevel {
+  BEGINNER
+  INTERMEDIATE
+}
+
+enum TrainingAnswerEvaluationStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+/// AI研修Pilotだけが使う、Enrollment単位の選定入力。
+model TrainingParticipantProfile {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  workspaceId         String                     @map("workspace_id") @db.Uuid
+  groupId             String                     @map("group_id") @db.Uuid
+  programEnrollmentId String                     @unique @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String                     @map("group_membership_id") @db.Uuid
+  userId              String                     @map("user_id") @db.Uuid
+  role                TrainingParticipantRole
+  aiLevel             TrainingParticipantAiLevel @map("ai_level")
+  currentTopic        String?                    @map("current_topic") @db.VarChar(80)
+  needsReview         Boolean                    @default(false) @map("needs_review")
+  recentSuccesses     Int                        @default(0) @map("recent_successes")
+  recentFailures      Int                        @default(0) @map("recent_failures")
+  streak              Int                        @default(0)
+  updatedByUserId     String                     @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, programEnrollmentId])
+  @@index([workspaceId, groupId, userId])
+  @@map("training_participant_profiles")
+}
+
+/// 自由記述の回答と構造化済み評価。提出・評価の監査はProgramActionEventへ残す。
+model TrainingMissionAnswer {
+  id                  String                         @id @default(uuid()) @db.Uuid
+  workspaceId         String                         @map("workspace_id") @db.Uuid
+  groupId             String                         @map("group_id") @db.Uuid
+  programEnrollmentId String                         @map("program_enrollment_id") @db.Uuid
+  missionAssignmentId String                         @unique @map("mission_assignment_id") @db.Uuid
+  userId              String                         @map("user_id") @db.Uuid
+  answer              String                         @db.Text
+  evaluationStatus    TrainingAnswerEvaluationStatus @default(PENDING) @map("evaluation_status")
+  evaluation          Json?                          @map("evaluation")
+  evaluatedAt         DateTime?                      @map("evaluated_at") @db.Timestamptz(3)
+  createdAt           DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, programEnrollmentId, createdAt])
+  @@index([workspaceId, groupId, userId, updatedAt])
+  @@map("training_mission_answers")
+}
+
 model ResaleItem {
   id                  String              @id @default(uuid()) @db.Uuid
   workspaceId         String              @map("workspace_id") @db.Uuid
