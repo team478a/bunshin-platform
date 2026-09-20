@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commercialMonthPeriod, quoteOemMauPrice } from '../src/commercial-usage';
+import { commercialMonthPeriod, quoteMauPrice, quoteOemMauPrice } from '../src/commercial-usage';
 
 describe('OEM MAU pricing', () => {
   it.each([
@@ -23,6 +23,24 @@ describe('OEM MAU pricing', () => {
       priceYen: null,
       customQuoteRequired: true,
     });
+  });
+
+  it('quotes a versioned replacement schedule without changing the default', () => {
+    expect(
+      quoteMauPrice(80, 'oem-mau-jpy-v2', [
+        { tierKey: 'STARTER', upperLimit: 100, priceYen: 22_000 },
+      ]),
+    ).toMatchObject({ pricingVersion: 'oem-mau-jpy-v2', tierKey: 'STARTER', priceYen: 22_000 });
+    expect(quoteOemMauPrice(80).priceYen).toBe(19_800);
+  });
+
+  it('rejects overlapping or unsorted tiers', () => {
+    expect(() =>
+      quoteMauPrice(1, 'v2', [
+        { tierKey: 'A', upperLimit: 100, priceYen: 1 },
+        { tierKey: 'B', upperLimit: 100, priceYen: 2 },
+      ]),
+    ).toThrow('invalid pricing tier');
   });
 });
 

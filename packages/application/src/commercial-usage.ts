@@ -12,10 +12,15 @@ export type CommercialUsageEventType = (typeof COMMERCIAL_USAGE_EVENT_TYPES)[num
 export const OEM_MAU_PRICING_VERSION = 'oem-mau-jpy-v1';
 export const OEM_MAU_TIME_ZONE = 'Asia/Tokyo';
 
+export interface MauPricingTier {
+  tierKey: string;
+  upperLimit: number;
+  priceYen: number;
+}
+
 export interface MauPricingQuote {
-  pricingVersion: typeof OEM_MAU_PRICING_VERSION;
-  tierKey:
-    'MAU_0_100' | 'MAU_101_300' | 'MAU_301_500' | 'MAU_501_1000' | 'MAU_1001_3000' | 'CUSTOM';
+  pricingVersion: string;
+  tierKey: string;
   mau: number;
   priceYen: number | null;
   upperLimit: number | null;
@@ -32,11 +37,32 @@ const PRICING_TIERS = [
 ] as const;
 
 export function quoteOemMauPrice(mau: number): MauPricingQuote {
+  return quoteMauPrice(mau, OEM_MAU_PRICING_VERSION, PRICING_TIERS);
+}
+
+export function quoteMauPrice(
+  mau: number,
+  pricingVersion: string,
+  tiers: readonly MauPricingTier[],
+): MauPricingQuote {
   if (!Number.isInteger(mau) || mau < 0) throw new Error('MAU must be a non-negative integer');
-  const tier = PRICING_TIERS.find((candidate) => mau <= candidate.upperLimit);
+  if (!pricingVersion.trim() || tiers.length === 0) throw new Error('invalid pricing schedule');
+  let previousLimit = 0;
+  for (const tier of tiers) {
+    if (
+      !tier.tierKey.trim() ||
+      !Number.isInteger(tier.upperLimit) ||
+      tier.upperLimit <= previousLimit ||
+      !Number.isInteger(tier.priceYen) ||
+      tier.priceYen < 0
+    )
+      throw new Error('invalid pricing tier');
+    previousLimit = tier.upperLimit;
+  }
+  const tier = tiers.find((candidate) => mau <= candidate.upperLimit);
   if (!tier) {
     return {
-      pricingVersion: OEM_MAU_PRICING_VERSION,
+      pricingVersion,
       tierKey: 'CUSTOM',
       mau,
       priceYen: null,
@@ -46,7 +72,7 @@ export function quoteOemMauPrice(mau: number): MauPricingQuote {
     };
   }
   return {
-    pricingVersion: OEM_MAU_PRICING_VERSION,
+    pricingVersion,
     tierKey: tier.tierKey,
     mau,
     priceYen: tier.priceYen,
