@@ -176,6 +176,8 @@ export class PrismaTrainingAnswerRepository {
         updatedAt: true,
       },
     });
-    return answer ? { outcome: 'ALREADY_SUBMITTED', answer, eventId: event.id } : { outcome: 'CONFLICT' };
+    return answer
+      ? { outcome: 'ALREADY_SUBMITTED', answer, eventId: event.id }
+      : { outcome: 'CONFLICT' };
   }
 }

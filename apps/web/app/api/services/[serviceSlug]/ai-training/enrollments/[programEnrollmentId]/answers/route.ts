@@ -2,9 +2,7 @@ import { submitAiTrainingAnswerResponse } from '../../../../../../../../../src/h
 
 export async function POST(
   request: Request,
-  {
-    params,
-  }: { params: Promise<{ serviceSlug: string; programEnrollmentId: string }> },
+  { params }: { params: Promise<{ serviceSlug: string; programEnrollmentId: string }> },
 ) {
   const { serviceSlug, programEnrollmentId } = await params;
   return submitAiTrainingAnswerResponse(request, serviceSlug, programEnrollmentId);
