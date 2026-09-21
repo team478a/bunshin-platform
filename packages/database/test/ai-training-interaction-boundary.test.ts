@@ -22,4 +22,11 @@ describe('AI training interaction boundary', () => {
     expect(source).toContain("{ isolationLevel: 'Serializable' }");
     expect(source).not.toContain('message: input.');
   });
+
+  it('stores a bounded reminder time when the participant chooses later', () => {
+    expect(source).toContain("input.interactionType === 'TRAINING_POSTPONED'");
+    expect(source).toContain('parseAiTrainingOperationsSettings(program.settings)');
+    expect(source).toContain('.postponedReminderHours');
+    expect(source).toContain('remindAt: new Date(');
+  });
 });

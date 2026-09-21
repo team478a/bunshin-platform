@@ -236,3 +236,4 @@ export * from './learning-catalog';
 export * from './mission-quality';
 export * from './skill-evaluation';
 export * from './growth';
+export * from './operations';

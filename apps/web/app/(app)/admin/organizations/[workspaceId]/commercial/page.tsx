@@ -24,6 +24,8 @@ const contractSchema = z.object({
   billingName: z.string().trim().min(1).max(200),
   billingEmail: z.email().max(320),
   paymentTermsDays: z.coerce.number().int().min(0).max(365),
+  reminderLeadDays: z.coerce.number().int().min(0).max(30),
+  overdueReminderIntervalDays: z.coerce.number().int().min(1).max(30),
   automaticRemindersEnabled: z
     .string()
     .optional()
@@ -503,8 +505,36 @@ export default async function OrganizationCommercialPage({
             />
             <span>支払期限の3日前と期限超過後に、請求先へ案内メールを自動送信する</span>
           </label>
+          <div className="form-grid form-grid--two">
+            <label className="field">
+              <span className="field__label">期限前の案内（日数）</span>
+              <input
+                className="field__control"
+                name="reminderLeadDays"
+                type="number"
+                min={0}
+                max={30}
+                required
+                defaultValue={billing.organizationCommercialContract?.reminderLeadDays ?? 3}
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">期限超過後の再案内間隔（日数）</span>
+              <input
+                className="field__control"
+                name="overdueReminderIntervalDays"
+                type="number"
+                min={1}
+                max={30}
+                required
+                defaultValue={
+                  billing.organizationCommercialContract?.overdueReminderIntervalDays ?? 7
+                }
+              />
+            </label>
+          </div>
           <p className="field__hint">
-            初期状態は停止です。管理者メールの接続確認が完了している場合だけ送信します。同じ請求・同じ段階の案内は1回だけです。
+            初期状態は停止です。管理者メールの接続確認が完了している場合だけ送信します。期限前案内は1回、期限超過後は設定した間隔で再案内します。
           </p>
           <label className="field field--checkbox">
             <input

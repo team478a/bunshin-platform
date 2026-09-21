@@ -44,6 +44,10 @@ function platformStripeConfiguration() {
   };
 }
 
+export function platformBillingStripeSecretKey(): string {
+  return platformStripeConfiguration().secretKey;
+}
+
 export function platformBillingWebhookSecret(): string {
   return platformStripeConfiguration().webhookSecret;
 }

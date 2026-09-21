@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260921150000_add_training_toolkit_items';
+export const LATEST_DATABASE_MIGRATION = '20260921180000_add_commercial_reminder_schedule';

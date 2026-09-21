@@ -1,5 +1,6 @@
 import {
   AI_TRAINING_V1_MODULE_KEY,
+  parseAiTrainingOperationsSettings,
   type TrainingInteractionType,
 } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
@@ -58,7 +59,7 @@ export class PrismaTrainingInteractionRepository {
               status: 'ACTIVE',
               settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
             },
-            select: { id: true },
+            select: { id: true, settings: true },
           });
           if (!program) return { outcome: 'NOT_FOUND' } as const;
           const assignment = await tx.programMissionAssignment.findFirst({
@@ -90,7 +91,21 @@ export class PrismaTrainingInteractionRepository {
               sourceResourceId: assignment.id,
               idempotencyKey: input.idempotencyKey,
               schemaVersion: 1,
-              metadata: { missionDefinitionKey: assignment.missionDefinitionKey },
+              metadata: {
+                missionDefinitionKey: assignment.missionDefinitionKey,
+                ...(input.interactionType === 'TRAINING_POSTPONED'
+                  ? {
+                      remindAt: new Date(
+                        input.occurredAt.getTime() +
+                          parseAiTrainingOperationsSettings(program.settings)
+                            .postponedReminderHours *
+                            60 *
+                            60 *
+                            1000,
+                      ).toISOString(),
+                    }
+                  : {}),
+              },
               actorUserId: input.actorUserId,
               occurredAt: input.occurredAt,
             },
