@@ -9,6 +9,7 @@ export { PrismaTrainingAnswerRepository } from './training-answer';
 export { PrismaTrainingInteractionRepository } from './training-interaction';
 export { PrismaTrainingToolkitRepository } from './training-toolkit';
 export type { SaveTrainingToolkitItemResult, TrainingToolkitItemView } from './training-toolkit';
+export { PrismaTrainingGrowthRepository } from './training-growth';
 export { PrismaAiTrainingRuntimeRepository } from './training-runtime';
 export { PrismaTrainingParticipantProfileRepository } from './training-profile';
 export { PrismaAiResaleOfferRepository } from './resale-offer';

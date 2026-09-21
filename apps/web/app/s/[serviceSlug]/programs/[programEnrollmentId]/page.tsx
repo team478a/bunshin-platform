@@ -136,6 +136,12 @@ export default async function ProgramParticipantPage({
                 : null,
             }}
           />
+          <a
+            className="button button--secondary button--full"
+            href={`/s/${serviceSlug}/programs/${programEnrollmentId}/growth`}
+          >
+            自分の成長を見る
+          </a>
           <a className="button button--secondary button--full" href={`/s/${serviceSlug}/programs`}>
             参加中のプログラムへ戻る
           </a>
