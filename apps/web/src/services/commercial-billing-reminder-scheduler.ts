@@ -6,14 +6,18 @@ import {
 } from '../email/secure-admin-email-configuration';
 import { CommercialBillingReminderResend } from '../email/commercial-billing-reminder';
 
-const THREE_DAYS = 3 * 24 * 60 * 60 * 1_000;
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 export type CommercialReminderKind = 'INITIAL' | 'OVERDUE';
 
-export function commercialReminderKind(dueAt: Date, now: Date): CommercialReminderKind | null {
+export function commercialReminderKind(
+  dueAt: Date,
+  now: Date,
+  reminderLeadDays = 3,
+): CommercialReminderKind | null {
   const remaining = dueAt.getTime() - now.getTime();
   if (remaining <= 0) return 'OVERDUE';
-  if (remaining <= THREE_DAYS) return 'INITIAL';
+  if (remaining <= reminderLeadDays * DAY_MS) return 'INITIAL';
   return null;
 }
 
@@ -34,7 +38,7 @@ export async function runCommercialBillingReminders(now = new Date()) {
   const candidates = await db.prisma.tenantInvoice.findMany({
     where: {
       status: 'ISSUED',
-      dueAt: { not: null, lte: new Date(now.getTime() + THREE_DAYS) },
+      dueAt: { not: null, lte: new Date(now.getTime() + 30 * DAY_MS) },
       contract: {
         status: 'ACTIVE',
         automaticRemindersEnabled: true,
@@ -53,7 +57,13 @@ export async function runCommercialBillingReminders(now = new Date()) {
       checkoutUrl: true,
       checkoutExpiresAt: true,
       contract: {
-        select: { billingName: true, billingEmail: true, updatedByUserId: true },
+        select: {
+          billingName: true,
+          billingEmail: true,
+          updatedByUserId: true,
+          reminderLeadDays: true,
+          overdueReminderIntervalDays: true,
+        },
       },
     },
   });
@@ -64,10 +74,16 @@ export async function runCommercialBillingReminders(now = new Date()) {
           entityId: { in: candidates.map(({ id }) => id) },
           action: { in: ['PAYMENT_GUIDANCE_SENT', 'OVERDUE_REMINDER_SENT'] },
         },
-        select: { entityId: true, action: true },
+        select: { entityId: true, action: true, occurredAt: true },
       })
     : [];
   const sentActions = new Set(audits.map(({ entityId, action }) => `${entityId}:${action}`));
+  const latestOverdue = new Map<string, Date>();
+  for (const audit of audits) {
+    if (audit.action !== 'OVERDUE_REMINDER_SENT') continue;
+    const current = latestOverdue.get(audit.entityId);
+    if (!current || audit.occurredAt > current) latestOverdue.set(audit.entityId, audit.occurredAt);
+  }
   const apiKey = new AesGcmAdminEmailSecretCrypto().decrypt(configuration.encryptedApiKey);
   const sender = new CommercialBillingReminderResend();
   const logger = createLogger();
@@ -78,10 +94,17 @@ export async function runCommercialBillingReminders(now = new Date()) {
 
   for (const invoice of candidates) {
     if (!invoice.dueAt) continue;
-    const kind = commercialReminderKind(invoice.dueAt, now);
+    const kind = commercialReminderKind(invoice.dueAt, now, invoice.contract.reminderLeadDays);
     if (!kind) continue;
     const action = actionFor(kind);
-    if (sentActions.has(`${invoice.id}:${action}`)) {
+    const previousOverdue = latestOverdue.get(invoice.id);
+    const overdueAgainAt = previousOverdue
+      ? new Date(previousOverdue.getTime() + invoice.contract.overdueReminderIntervalDays * DAY_MS)
+      : null;
+    if (
+      (kind === 'INITIAL' && sentActions.has(`${invoice.id}:${action}`)) ||
+      (kind === 'OVERDUE' && overdueAgainAt && overdueAgainAt > now)
+    ) {
       skipped += 1;
       continue;
     }
@@ -117,6 +140,7 @@ export async function runCommercialBillingReminders(now = new Date()) {
         },
       });
       sentActions.add(`${invoice.id}:${action}`);
+      if (kind === 'OVERDUE') latestOverdue.set(invoice.id, now);
       sent += 1;
     } catch (error) {
       failed += 1;

@@ -1,6 +1,10 @@
 import 'server-only';
 import { CreateDailyMission, type BusinessContentCategory } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
+import {
+  applyServiceContentTerminology,
+  serviceContentTerminologyPolicy,
+} from './service-content-terminology';
 
 const FALLBACK_VERSION = 'business-daily-ready-fallback-v3';
 
@@ -58,6 +62,7 @@ export function buildServiceDailyIdeaFallback(input: {
   preferredTone?: string | null;
   category?: BusinessContentCategory | null;
   variationKey?: string;
+  serviceSlug?: string;
 }) {
   const participantVariation = stableIndex(input.variationKey ?? 'shared');
   const rotation = Math.abs(dailyIndex(input.missionDate));
@@ -78,15 +83,18 @@ export function buildServiceDailyIdeaFallback(input: {
     hashtag(input.productService),
   ].filter((value): value is string => Boolean(value));
   const body = `${input.targetAudience}の皆さまへ。\n\n今日は「${angle}」をご紹介します。\n\n${feature}\n\n${input.productService}について気になることがあれば、いつでもお気軽にご相談ください。`;
-  return {
-    version: FALLBACK_VERSION,
-    topic,
-    angle,
-    reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。`,
-    body,
-    hashtags,
-    photoInstruction: `「${input.productService}」に関係する被写体を使います。${photoDirections[photoIndex]}。周りの不要な物は片付けます。`,
-  };
+  return applyServiceContentTerminology(
+    {
+      version: FALLBACK_VERSION,
+      topic,
+      angle,
+      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。`,
+      body,
+      hashtags,
+      photoInstruction: `「${input.productService}」に関係する被写体を使います。${photoDirections[photoIndex]}。周りの不要な物は片付けます。`,
+    },
+    input.serviceSlug ? serviceContentTerminologyPolicy(input.serviceSlug) : null,
+  );
 }
 
 export function shouldUseServiceDailyIdeaFallback(error: unknown) {
@@ -106,7 +114,7 @@ export async function createServiceDailyIdeaFallback(input: {
   assistanceLevel?: 'IDEA_ONLY' | 'GUIDED' | 'READY_TO_USE';
 }) {
   const db = await import('@bunshin/database');
-  const [profile, socialProfile, weeklyItem] = await Promise.all([
+  const [profile, socialProfile, weeklyItem, serviceConfiguration] = await Promise.all([
     db.prisma.serviceMemberBusinessProfile.findFirst({
       where: {
         workspaceId: input.workspaceId,
@@ -147,6 +155,14 @@ export async function createServiceDailyIdeaFallback(input: {
       orderBy: { createdAt: 'asc' },
       select: { id: true, businessContentCategory: true },
     }),
+    db.prisma.serviceConfiguration.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        group: { status: 'ACTIVE' },
+      },
+      select: { slug: true },
+    }),
   ]);
   if (!profile?.primaryIndustry || !socialProfile) {
     throw new ApplicationError('NOT_FOUND', 'service business profile is unavailable');
@@ -161,6 +177,7 @@ export async function createServiceDailyIdeaFallback(input: {
     preferredTone: profile.preferredTone,
     category: weeklyItem?.businessContentCategory ?? null,
     variationKey: input.bunshinId,
+    ...(serviceConfiguration ? { serviceSlug: serviceConfiguration.slug } : {}),
   });
   return new CreateDailyMission(
     new db.PrismaDailyMissionRepository(),

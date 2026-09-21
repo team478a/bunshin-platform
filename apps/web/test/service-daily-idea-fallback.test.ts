@@ -66,6 +66,22 @@ describe('service daily idea fallback', () => {
     );
   });
 
+  it('applies service terminology to the fallback path', () => {
+    const result = buildServiceDailyIdeaFallback({
+      missionDate: '2026-09-21',
+      industry: '情報発信',
+      businessName: '千ノ国メディア',
+      productService: 'OVE会員向け情報',
+      targetAudience: 'OVEを学ぶ会員',
+      businessFeatures: 'OVEの考え方を届けています',
+      serviceSlug: 'sennokuni-media',
+    });
+
+    expect(JSON.stringify(result)).not.toMatch(/OVE/i);
+    expect(result.body).toContain('ORI');
+    expect(result.photoInstruction).toContain('ORI');
+  });
+
   it('falls back only for provider, quality and quota failures', () => {
     expect(
       shouldUseServiceDailyIdeaFallback(

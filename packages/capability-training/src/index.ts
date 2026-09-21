@@ -5,6 +5,7 @@ import {
   type ProgramDefinitionV1,
 } from '@bunshin/application';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
+import type { TrainingGoalKey } from './learning-catalog';
 
 export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_3';
 export const AI_TRAINING_V1_MODULE_KEY = 'AI_TRAINING_V1';
@@ -51,6 +52,7 @@ export interface AiTrainingV1DecisionContext {
   now: Date;
   role: TrainingRole;
   aiLevel: TrainingAiLevel;
+  learningGoalKey: TrainingGoalKey | null;
   currentPhase: 'FOUNDATION' | 'PRACTICE' | 'APPLICATION';
   completedMissionKeys: readonly string[];
   completedMissionCount: number;
@@ -100,6 +102,23 @@ const reviewMission = (context: AiTrainingV1DecisionContext) => {
   return previous?.reviewMissionKey ?? 'PROMPT_REVIEW';
 };
 
+const goalMission = (
+  context: AiTrainingV1DecisionContext,
+): Exclude<TrainingActionKey, 'WAIT'> | null => {
+  if (context.learningGoalKey === 'CREATE_SALES_EMAIL' && context.role === 'SALES')
+    return 'SALES_EMAIL';
+  if (
+    context.learningGoalKey === 'ORGANIZE_MEETING_MINUTES' &&
+    ['OFFICE', 'MANAGER'].includes(context.role)
+  )
+    return 'OFFICE_MINUTES';
+  if (context.learningGoalKey === 'DRAFT_PROPOSAL' && ['SALES', 'MANAGER'].includes(context.role))
+    return 'SALES_PROPOSAL';
+  if (context.learningGoalKey === 'IMPROVE_WORK_WITH_AI' && context.role === 'MANAGER')
+    return 'MANAGER_PROCESS_REVIEW';
+  return null;
+};
+
 export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1DecisionContext> {
   evaluate(context: AiTrainingV1DecisionContext): NextActionDecision {
     if (context.activeWaitUntil && context.activeWaitUntil > context.now)
@@ -120,6 +139,9 @@ export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1Decision
       return work('PROMPT_CONDITION', 'PROMPT_CONDITIONS_REQUIRED');
     if (!completed(context, 'PROMPT_FORMAT'))
       return work('PROMPT_FORMAT', 'PROMPT_FORMAT_REQUIRED');
+    const selectedForGoal = goalMission(context);
+    if (selectedForGoal && !completed(context, selectedForGoal))
+      return work(selectedForGoal, 'LEARNING_GOAL_PRIORITY');
     const roleMissions =
       context.role === 'SALES'
         ? (['SALES_EMAIL', 'SALES_HEARING', 'SALES_PROPOSAL', 'SALES_FOLLOW_UP'] as const)
@@ -214,3 +236,4 @@ export * from './learning-catalog';
 export * from './mission-quality';
 export * from './skill-evaluation';
 export * from './growth';
+export * from './operations';

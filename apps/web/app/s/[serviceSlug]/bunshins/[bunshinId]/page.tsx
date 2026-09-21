@@ -56,6 +56,10 @@ import {
   type PostPerformanceView,
 } from '../../../../../src/services/post-performance';
 import { recordCommercialUsageSafely } from '../../../../../src/services/commercial-usage';
+import {
+  applyServiceContentTerminology,
+  serviceContentTerminologyPolicy,
+} from '../../../../../src/services/service-content-terminology';
 
 export const dynamic = 'force-dynamic';
 
@@ -186,6 +190,7 @@ export default async function ServiceBunshinDetailPage({
     }
     const missionRepository = new db.PrismaDailyMissionRepository();
     const missionRecords = await new ListDailyMissions(missionRepository).execute(scope);
+    const contentTerminologyPolicy = serviceContentTerminologyPolicy(service.configuration.slug);
     const engagementRepository = new db.PrismaMissionEngagementRepository();
     const videoProjects = isBusinessDailyService
       ? []
@@ -238,7 +243,7 @@ export default async function ServiceBunshinDetailPage({
         ? [
             {
               dailyMissionId: mission.id,
-              topic: mission.topic,
+              topic: applyServiceContentTerminology(mission.topic, contentTerminologyPolicy),
               postedAt: post.postedAt.toISOString(),
               ...performance,
             },
@@ -285,13 +290,13 @@ export default async function ServiceBunshinDetailPage({
       format: mission.format,
       assistanceLevel: mission.assistanceLevel,
       estimatedMinutes: mission.estimatedMinutes,
-      topic: mission.topic,
-      angle: mission.angle,
-      reason: mission.reason,
+      topic: applyServiceContentTerminology(mission.topic, contentTerminologyPolicy),
+      angle: applyServiceContentTerminology(mission.angle, contentTerminologyPolicy),
+      reason: applyServiceContentTerminology(mission.reason, contentTerminologyPolicy),
       campaignId: mission.campaignId,
       classification: mission.classification,
       qualityScore: mission.qualityScore,
-      content: mission.content,
+      content: applyServiceContentTerminology(mission.content, contentTerminologyPolicy),
       decision: missionStates[index]!.decision.decision,
       rejectionReason: missionStates[index]!.decision.rejectionReason,
       platform: socialProfiles.find(({ id }) => id === mission.socialProfileId)?.platform ?? null,
@@ -314,7 +319,7 @@ export default async function ServiceBunshinDetailPage({
         ? {
             businessAction: businessGrowthActionForMission({
               missionDate: mission.missionDate,
-              topic: mission.topic,
+              topic: applyServiceContentTerminology(mission.topic, contentTerminologyPolicy),
               ...(businessProgramProfile
                 ? { programStartedAt: businessProgramProfile.createdAt }
                 : {}),
@@ -347,7 +352,7 @@ export default async function ServiceBunshinDetailPage({
         : missionVariants[index]!.map(({ id, sequence, content, qualityScore, selectedAt }) => ({
             id,
             sequence,
-            content,
+            content: applyServiceContentTerminology(content, contentTerminologyPolicy),
             qualityScore,
             selectedAt: selectedAt?.toISOString() ?? null,
           })),
