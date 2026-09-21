@@ -4,6 +4,7 @@ import {
   type NextActionPolicy,
   type ProgramDefinitionV1,
 } from '@bunshin/application';
+import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 
 export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_2';
 export const AI_TRAINING_V1_MODULE_KEY = 'AI_TRAINING_V1';
@@ -136,101 +137,6 @@ export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1Decision
   }
 }
 
-type Mission = {
-  key: TrainingActionKey;
-  title: string;
-  phaseKey: 'FOUNDATION' | 'PRACTICE' | 'APPLICATION';
-  estimatedMinutes: number;
-};
-
-const missions: Mission[] = [
-  { key: 'AI_BASIC', title: 'AIの基本を知る', phaseKey: 'FOUNDATION', estimatedMinutes: 5 },
-  {
-    key: 'CHATGPT_BASIC',
-    title: 'ChatGPTの基本を試す',
-    phaseKey: 'FOUNDATION',
-    estimatedMinutes: 5,
-  },
-  {
-    key: 'PROMPT_BASIC',
-    title: '指示を分かりやすく書く',
-    phaseKey: 'FOUNDATION',
-    estimatedMinutes: 5,
-  },
-  { key: 'PROMPT_CONDITION', title: '条件を指定する', phaseKey: 'FOUNDATION', estimatedMinutes: 5 },
-  {
-    key: 'PROMPT_FORMAT',
-    title: '出力形式を指定する',
-    phaseKey: 'FOUNDATION',
-    estimatedMinutes: 5,
-  },
-  { key: 'PROMPT_REVIEW', title: '指示を見直す', phaseKey: 'FOUNDATION', estimatedMinutes: 4 },
-  { key: 'EMAIL_WRITING', title: 'メールを作る', phaseKey: 'PRACTICE', estimatedMinutes: 8 },
-  { key: 'DOCUMENT_SUMMARY', title: '文章を要約する', phaseKey: 'PRACTICE', estimatedMinutes: 8 },
-  { key: 'DOCUMENT_PROOFREAD', title: '文章を整える', phaseKey: 'PRACTICE', estimatedMinutes: 8 },
-  { key: 'IDEA_GENERATION', title: 'アイデアを出す', phaseKey: 'PRACTICE', estimatedMinutes: 8 },
-  { key: 'SALES_EMAIL', title: '営業メールを作る', phaseKey: 'PRACTICE', estimatedMinutes: 10 },
-  {
-    key: 'SALES_HEARING',
-    title: 'ヒアリングを準備する',
-    phaseKey: 'PRACTICE',
-    estimatedMinutes: 10,
-  },
-  {
-    key: 'SALES_PROPOSAL',
-    title: '提案の骨子を作る',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 12,
-  },
-  {
-    key: 'SALES_FOLLOW_UP',
-    title: 'フォロー文を作る',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 8,
-  },
-  { key: 'OFFICE_MINUTES', title: '議事録を整える', phaseKey: 'PRACTICE', estimatedMinutes: 10 },
-  { key: 'OFFICE_DOCUMENT', title: '社内文書を作る', phaseKey: 'PRACTICE', estimatedMinutes: 10 },
-  {
-    key: 'OFFICE_EXCEL',
-    title: 'Excel作業を補助する',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 12,
-  },
-  { key: 'OFFICE_DATA', title: 'データを整理する', phaseKey: 'APPLICATION', estimatedMinutes: 12 },
-  {
-    key: 'MANAGER_PROCESS_REVIEW',
-    title: '業務を棚卸しする',
-    phaseKey: 'PRACTICE',
-    estimatedMinutes: 10,
-  },
-  {
-    key: 'MANAGER_IMPROVEMENT',
-    title: '業務改善案を作る',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 12,
-  },
-  {
-    key: 'MANAGER_AI_DESIGN',
-    title: 'AI活用を設計する',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 12,
-  },
-  {
-    key: 'MANAGER_TEAM_GUIDANCE',
-    title: '部下へのAI活用指示を作る',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 12,
-  },
-  {
-    key: 'MANAGER_AI_RULES',
-    title: '社内AIルールを作る',
-    phaseKey: 'APPLICATION',
-    estimatedMinutes: 12,
-  },
-  { key: 'RECOVERY', title: 'もう一度、小さく始める', phaseKey: 'FOUNDATION', estimatedMinutes: 3 },
-  { key: 'WAIT', title: '今日は待つ', phaseKey: 'PRACTICE', estimatedMinutes: 1 },
-];
-
 export function createAiTrainingV1Definition(): ProgramDefinitionV1 {
   return {
     schemaVersion: 1,
@@ -270,7 +176,7 @@ export function createAiTrainingV1Definition(): ProgramDefinitionV1 {
         goals: ['継続して使う形を作る'],
       },
     ],
-    missions: missions.map((mission) => ({
+    missions: AI_TRAINING_MISSION_QUALITY.map((mission) => ({
       key: mission.key,
       routeKey: 'PERSONALIZED',
       phaseKey: mission.phaseKey,
@@ -291,3 +197,4 @@ export function createAiTrainingV1Definition(): ProgramDefinitionV1 {
 export * from './runtime';
 export * from './line-action';
 export * from './learning-catalog';
+export * from './mission-quality';

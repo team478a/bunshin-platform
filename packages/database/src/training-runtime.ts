@@ -6,6 +6,7 @@ import {
   TRAINING_GOAL_KEYS,
   TRAINING_TOPIC_KEYS,
   TRAINING_USE_CASE_KEYS,
+  getAiTrainingMissionQuality,
   parseAiTrainingActionDisplay,
   parseAiTrainingRuntimeSettings,
   type AiTrainingParticipantAction,
@@ -93,21 +94,27 @@ async function resolveScope(
     const settings = parseAiTrainingRuntimeSettings(program.settings);
     if (!settings) return null;
     const definition = parseProgramDefinition(version.definition);
-    const missions = definition.missions.flatMap((mission) =>
-      mission.capability === 'AI_TRAINING' &&
-      isTrainingActionKey(mission.key) &&
-      ['FOUNDATION', 'PRACTICE', 'APPLICATION'].includes(mission.phaseKey)
-        ? [
-            {
-              key: mission.key,
-              routeKey: mission.routeKey,
-              phaseKey: mission.phaseKey as TrainingMissionDefinition['phaseKey'],
-              title: mission.title,
-              estimatedMinutes: mission.estimatedMinutes,
-            },
-          ]
-        : [],
-    );
+    const missions = definition.missions.flatMap((mission) => {
+      if (
+        mission.capability !== 'AI_TRAINING' ||
+        !isTrainingActionKey(mission.key) ||
+        !['FOUNDATION', 'PRACTICE', 'APPLICATION'].includes(mission.phaseKey)
+      ) {
+        return [];
+      }
+      const quality = getAiTrainingMissionQuality(mission.key);
+      if (!quality) throw new Error(`missing AI training mission quality: ${mission.key}`);
+      return [
+        {
+          key: mission.key,
+          routeKey: mission.routeKey,
+          phaseKey: mission.phaseKey as TrainingMissionDefinition['phaseKey'],
+          title: mission.title,
+          estimatedMinutes: mission.estimatedMinutes,
+          quality,
+        },
+      ];
+    });
     return { enrollment, membership, program, settings, missions };
   } catch {
     return null;

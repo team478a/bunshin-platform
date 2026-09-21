@@ -44,6 +44,13 @@ export type TrainingParticipantState = {
       task: string;
       instructions: string[];
       estimatedMinutes: number | null;
+      learningObjective?: string;
+      businessScenario?: string;
+      constraints?: readonly string[];
+      successCriteria?: readonly string[];
+      commonMistakes?: readonly string[];
+      evaluationCriteria?: readonly string[];
+      difficulty?: 'EASY' | 'STANDARD' | 'CHALLENGE';
     };
     reevaluateAt: string | null;
     submission: {
@@ -528,10 +535,52 @@ export function AiTrainingCard({
         </p>
       ) : null}
       <p className="training-reason">{action.display.reason}</p>
+      {action.display.learningObjective ? (
+        <div className="training-learning-objective">
+          <strong>今回できるようになること</strong>
+          <p>{action.display.learningObjective}</p>
+        </div>
+      ) : null}
+      {action.display.businessScenario ? (
+        <div className="training-scenario">
+          <strong>実務の場面</strong>
+          <p>{action.display.businessScenario}</p>
+        </div>
+      ) : null}
       <div className="training-task">
         <strong>課題</strong>
         <p>{action.display.task}</p>
       </div>
+      {action.display.constraints?.length ? (
+        <div className="training-quality-list">
+          <strong>条件</strong>
+          <ul>
+            {action.display.constraints.map((constraint) => (
+              <li key={constraint}>{constraint}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {action.display.successCriteria?.length ? (
+        <div className="training-quality-list training-quality-list--success">
+          <strong>確認ポイント</strong>
+          <ul>
+            {action.display.successCriteria.map((criterion) => (
+              <li key={criterion}>{criterion}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {action.display.commonMistakes?.length ? (
+        <details className="training-common-mistakes">
+          <summary>よくある失敗を見る</summary>
+          <ul>
+            {action.display.commonMistakes.map((mistake) => (
+              <li key={mistake}>{mistake}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       {action.display.instructions.length ? (
         <ol className="resale-action-card__steps">
           {action.display.instructions.map((instruction) => (

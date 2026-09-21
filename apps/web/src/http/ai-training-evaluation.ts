@@ -88,7 +88,7 @@ export async function evaluateAiTrainingAnswerResponse(
         groupId: service.serviceId,
         programEnrollmentId: enrollmentId,
       },
-      select: { missionDefinitionKey: true },
+      select: { missionDefinitionKey: true, displaySnapshot: true },
     });
     if (!assignment) throw new ApplicationError('NOT_FOUND', 'training mission not found');
     const runtime = await resolveOpenAiRuntimeConfiguration();
@@ -110,6 +110,7 @@ export async function evaluateAiTrainingAnswerResponse(
           }).evaluate({
             missionDefinitionKey: assignment.missionDefinitionKey,
             answer: answer.answer,
+            displaySnapshot: assignment.displaySnapshot,
           });
         },
       });

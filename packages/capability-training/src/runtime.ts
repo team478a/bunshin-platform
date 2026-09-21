@@ -11,6 +11,12 @@ import type {
   TrainingTopicKey,
   TrainingUseCaseKey,
 } from './learning-catalog';
+import {
+  AI_TRAINING_MISSION_QUALITY_VERSION,
+  getAiTrainingMissionQuality,
+  type TrainingMissionDifficulty,
+  type TrainingMissionQualityDefinition,
+} from './mission-quality';
 
 export interface AiTrainingRuntimeSettings {
   moduleKey: 'AI_TRAINING_V1';
@@ -24,10 +30,11 @@ export interface TrainingMissionDefinition {
   phaseKey: 'FOUNDATION' | 'PRACTICE' | 'APPLICATION';
   title: string;
   estimatedMinutes: number | null;
+  quality: TrainingMissionQualityDefinition;
 }
 
 export interface AiTrainingActionDisplaySnapshot {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   actionKey: TrainingActionKey;
   mode: 'WORK' | 'WAIT';
   reasonCode: string;
@@ -36,7 +43,15 @@ export interface AiTrainingActionDisplaySnapshot {
   task: string;
   instructions: string[];
   estimatedMinutes: number | null;
-  renderer: 'TRAINING_FIXED_V1';
+  renderer: 'TRAINING_FIXED_V1' | 'TRAINING_PRACTICE_V2';
+  learningObjective?: string;
+  businessScenario?: string;
+  constraints?: readonly string[];
+  successCriteria?: readonly string[];
+  commonMistakes?: readonly string[];
+  evaluationCriteria?: readonly string[];
+  difficulty?: TrainingMissionDifficulty;
+  qualityVersion?: typeof AI_TRAINING_MISSION_QUALITY_VERSION;
 }
 
 export interface AiTrainingParticipantAction {
@@ -150,43 +165,6 @@ const reasonText: Record<string, string> = {
   TRAINING_REEVALUATION_PENDING: '次の判定時刻までは新しい課題を増やさず、待つ時間です。',
 };
 
-const missionTasks: Record<TrainingActionKey, string> = {
-  AI_BASIC: 'AIに任せたい仕事を1つ選び、「何をしてほしいか」を1文で書いてください。',
-  CHATGPT_BASIC: 'ChatGPTへ実際に送りたい質問を、相手に話すような言葉で書いてください。',
-  PROMPT_BASIC: '目的と依頼内容が伝わる指示を1つ作ってください。',
-  PROMPT_CONDITION: '作った指示に、対象・長さ・注意点などの条件を2つ以上加えてください。',
-  PROMPT_FORMAT: '表、箇条書き、メール文など、希望する出力形式を含む指示を書いてください。',
-  PROMPT_REVIEW: '前回の指示を、目的・条件・出力形式が分かる形に書き直してください。',
-  EMAIL_WRITING:
-    '仕事で使うメールを1つ選び、相手・目的・伝える内容を含むAIへの指示を書いてください。',
-  DOCUMENT_SUMMARY:
-    '要約したい文章を想定し、残すべき情報と希望する長さをAIへ伝える指示を書いてください。',
-  DOCUMENT_PROOFREAD: '直したい文章を想定し、読み手と希望する文体を含む校正指示を書いてください。',
-  IDEA_GENERATION:
-    '仕事上のテーマを1つ決め、条件を付けてアイデアを出してもらう指示を書いてください。',
-  SALES_EMAIL: '見込み客へ送る営業メールを作るため、相手・商品・目的を含む指示を書いてください。',
-  SALES_HEARING:
-    '商談前に確認したいことを整理するため、顧客像を含むヒアリング項目作成の指示を書いてください。',
-  SALES_PROPOSAL: '顧客の課題と提案内容を想定し、提案書の骨子を作る指示を書いてください。',
-  SALES_FOLLOW_UP: '商談後の状況を想定し、押しつけないフォロー文を作る指示を書いてください。',
-  OFFICE_MINUTES:
-    '会議内容を想定し、決定事項と担当・期限が分かる議事録作成の指示を書いてください。',
-  OFFICE_DOCUMENT: '作りたい社内文書を1つ選び、読み手・目的・必要項目を含む指示を書いてください。',
-  OFFICE_EXCEL: 'Excelで困っている作業を1つ選び、列の内容と期待する結果を説明してください。',
-  OFFICE_DATA: '整理したいデータを想定し、分類方法と完成形をAIへ伝える指示を書いてください。',
-  MANAGER_PROCESS_REVIEW:
-    'チームの業務を1つ選び、手順・担当・困りごとを洗い出すAIへの指示を書いてください。',
-  MANAGER_IMPROVEMENT:
-    '改善したい業務を1つ選び、制約条件を含めて改善案を求める指示を書いてください。',
-  MANAGER_AI_DESIGN: 'AIを使いたい業務を1つ選び、人が確認する工程を含む活用手順を書いてください。',
-  MANAGER_TEAM_GUIDANCE:
-    '部下へAI活用を依頼する場面を想定し、目的・禁止事項・確認方法を含む指示を書いてください。',
-  MANAGER_AI_RULES:
-    '社内でAIを安全に使うため、入力禁止情報と確認事項を含むルール案を書いてください。',
-  RECOVERY: '今の仕事でAIに手伝ってほしいことを、短い1文だけ書いてください。',
-  WAIT: '今日は新しい課題はありません。次の判定時刻まで、そのままお待ちください。',
-};
-
 export function parseAiTrainingRuntimeSettings(value: unknown): AiTrainingRuntimeSettings | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const settings = value as Record<string, unknown>;
@@ -213,19 +191,27 @@ export function renderAiTrainingAction(
   mission: TrainingMissionDefinition,
 ): AiTrainingActionDisplaySnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     actionKey: mission.key,
     mode: decision.mode,
     reasonCode: decision.reasonCode,
     title: mission.title,
     reason: reasonText[decision.reasonCode] ?? '現在の進捗に合う課題として選ばれました。',
-    task: missionTasks[mission.key],
+    task: mission.quality.task,
     instructions:
       decision.mode === 'WAIT'
         ? []
         : ['課題の内容を確認する', '自分の仕事を思い浮かべて回答を作る', '回答欄から提出する'],
     estimatedMinutes: mission.estimatedMinutes,
-    renderer: 'TRAINING_FIXED_V1',
+    renderer: 'TRAINING_PRACTICE_V2',
+    learningObjective: mission.quality.learningObjective,
+    businessScenario: mission.quality.businessScenario,
+    constraints: mission.quality.constraints,
+    successCriteria: mission.quality.successCriteria,
+    commonMistakes: mission.quality.commonMistakes,
+    evaluationCriteria: mission.quality.evaluationCriteria,
+    difficulty: mission.quality.difficulty,
+    qualityVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
   };
 }
 
@@ -235,10 +221,11 @@ export function parseAiTrainingActionDisplay(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const display = value as Record<string, unknown>;
   const actionKey = display['actionKey'];
+  const quality = typeof actionKey === 'string' ? getAiTrainingMissionQuality(actionKey) : null;
   if (
-    display['schemaVersion'] !== 1 ||
+    !quality ||
+    ![1, 2].includes(Number(display['schemaVersion'])) ||
     typeof actionKey !== 'string' ||
-    !(actionKey in missionTasks) ||
     !['WORK', 'WAIT'].includes(String(display['mode'])) ||
     typeof display['reasonCode'] !== 'string' ||
     typeof display['title'] !== 'string' ||
@@ -250,19 +237,36 @@ export function parseAiTrainingActionDisplay(
       display['estimatedMinutes'] === null ||
       (typeof display['estimatedMinutes'] === 'number' && display['estimatedMinutes'] >= 0)
     ) ||
-    display['renderer'] !== 'TRAINING_FIXED_V1'
+    !['TRAINING_FIXED_V1', 'TRAINING_PRACTICE_V2'].includes(String(display['renderer']))
   ) {
     return null;
   }
   return {
     ...(display as unknown as AiTrainingActionDisplaySnapshot),
     actionKey: actionKey as TrainingActionKey,
-    task:
-      typeof display['task'] === 'string'
-        ? display['task']
-        : missionTasks[actionKey as TrainingActionKey],
+    task: typeof display['task'] === 'string' ? display['task'] : quality.task,
+    learningObjective:
+      typeof display['learningObjective'] === 'string'
+        ? display['learningObjective']
+        : quality.learningObjective,
+    businessScenario:
+      typeof display['businessScenario'] === 'string'
+        ? display['businessScenario']
+        : quality.businessScenario,
+    constraints: stringArray(display['constraints']) ?? quality.constraints,
+    successCriteria: stringArray(display['successCriteria']) ?? quality.successCriteria,
+    commonMistakes: stringArray(display['commonMistakes']) ?? quality.commonMistakes,
+    evaluationCriteria: stringArray(display['evaluationCriteria']) ?? quality.evaluationCriteria,
+    difficulty: isDifficulty(display['difficulty']) ? display['difficulty'] : quality.difficulty,
+    qualityVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
   };
 }
+
+const stringArray = (value: unknown): readonly string[] | null =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : null;
+
+const isDifficulty = (value: unknown): value is TrainingMissionDifficulty =>
+  ['EASY', 'STANDARD', 'CHALLENGE'].includes(String(value));
 
 const contextFor = (
   candidate: AiTrainingRuntimeCandidate,
