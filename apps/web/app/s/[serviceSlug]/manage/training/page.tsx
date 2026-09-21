@@ -1,7 +1,12 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import { revalidatePath } from 'next/cache';
+import {
+  AI_TRAINING_HELP_RESOLVED_EVENT,
+  AI_TRAINING_V1_MODULE_KEY,
+  parseAiTrainingOperationsSettings,
+} from '@bunshin/capability-training';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
 import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
@@ -29,6 +34,98 @@ const engagementLabel = {
   COMPLETED: '修了',
 } as const;
 
+const formText = (formData: FormData, key: string) => {
+  const value = formData.get(key);
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+async function updateTrainingOperations(formData: FormData) {
+  'use server';
+  const serviceSlug = formText(formData, 'serviceSlug');
+  const programId = formText(formData, 'programId');
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor || !serviceSlug || !programId) return;
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
+  if (!service) return;
+  const db = await import('@bunshin/database');
+  const program = await db.prisma.serviceProgram.findFirst({
+    where: {
+      id: programId,
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
+    },
+    select: { id: true, settings: true },
+  });
+  if (!program || typeof program.settings !== 'object' || program.settings === null) return;
+  const hour = Number(formText(formData, 'notificationHour'));
+  const reminderHours = Number(formText(formData, 'postponedReminderHours'));
+  await db.prisma.serviceProgram.update({
+    where: { id: program.id },
+    data: {
+      settings: {
+        ...(program.settings as Record<string, unknown>),
+        trainingOperations: {
+          notificationsEnabled: formData.get('notificationsEnabled') === 'on',
+          notificationHour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 9,
+          postponedReminderEnabled: formData.get('postponedReminderEnabled') === 'on',
+          postponedReminderHours:
+            Number.isInteger(reminderHours) && reminderHours >= 1 && reminderHours <= 168
+              ? reminderHours
+              : 24,
+          helpQueueEnabled: formData.get('helpQueueEnabled') === 'on',
+        },
+      },
+    },
+  });
+  revalidatePath(`/s/${serviceSlug}/manage/training`);
+}
+
+async function resolveTrainingHelp(formData: FormData) {
+  'use server';
+  const serviceSlug = formText(formData, 'serviceSlug');
+  const helpEventId = formText(formData, 'helpEventId');
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor || !serviceSlug || !helpEventId) return;
+  const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
+  if (!service) return;
+  const db = await import('@bunshin/database');
+  const help = await db.prisma.programActionEvent.findFirst({
+    where: {
+      id: helpEventId,
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      eventType: 'HELP_REQUESTED',
+    },
+  });
+  if (!help) return;
+  await db.prisma.programActionEvent.upsert({
+    where: {
+      workspaceId_groupId_idempotencyKey: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        idempotencyKey: `training-help-resolved:${help.id}`,
+      },
+    },
+    update: {},
+    create: {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      programEnrollmentId: help.programEnrollmentId,
+      missionAssignmentId: help.missionAssignmentId,
+      eventType: AI_TRAINING_HELP_RESOLVED_EVENT,
+      sourceResourceType: 'PROGRAM_ACTION_EVENT',
+      sourceResourceId: help.id,
+      idempotencyKey: `training-help-resolved:${help.id}`,
+      schemaVersion: 1,
+      metadata: { helpRequestEventId: help.id },
+      actorUserId: actor.userId,
+      occurredAt: new Date(),
+    },
+  });
+  revalidatePath(`/s/${serviceSlug}/manage/training`);
+}
+
 export default async function AiTrainingAdminPage({
   params,
 }: {
@@ -48,7 +145,7 @@ export default async function AiTrainingAdminPage({
       status: { in: ['ACTIVE', 'SUSPENDED'] },
       settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
     },
-    select: { id: true, displayName: true },
+    select: { id: true, displayName: true, settings: true },
     orderBy: { createdAt: 'desc' },
   });
   const programIds = programs.map(({ id }) => id);
@@ -211,6 +308,33 @@ export default async function AiTrainingAdminPage({
     })),
     toolkitEnrollmentIds: toolkitItems.map(({ programEnrollmentId }) => programEnrollmentId),
   });
+  const helpEvents =
+    enrollmentIds.length === 0
+      ? []
+      : await db.prisma.programActionEvent.findMany({
+          where: {
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            programEnrollmentId: { in: enrollmentIds },
+            eventType: { in: ['HELP_REQUESTED', AI_TRAINING_HELP_RESOLVED_EVENT] },
+          },
+          orderBy: { occurredAt: 'desc' },
+        });
+  const resolvedHelpIds = new Set(
+    helpEvents.flatMap((event) =>
+      event.eventType === AI_TRAINING_HELP_RESOLVED_EVENT &&
+      typeof event.metadata === 'object' &&
+      event.metadata !== null &&
+      !Array.isArray(event.metadata) &&
+      typeof (event.metadata as Record<string, unknown>)['helpRequestEventId'] === 'string'
+        ? [(event.metadata as Record<string, unknown>)['helpRequestEventId'] as string]
+        : [],
+    ),
+  );
+  const enrollmentById = new Map(enrollments.map((item) => [item.id, item]));
+  const unresolvedHelp = helpEvents.filter(
+    (event) => event.eventType === 'HELP_REQUESTED' && !resolvedHelpIds.has(event.id),
+  );
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -257,6 +381,107 @@ export default async function AiTrainingAdminPage({
                 {dashboard.totals.active}
                 人です。継続率は、受講中で直近7日以内に研修を進めた人の割合です。
               </p>
+            </section>
+
+            <section className="settings-card">
+              <h2>配信と受講支援の設定</h2>
+              <p>時刻は日本時間です。「後でやる」の再通知は、受講者が押した時点から数えます。</p>
+              {programs.map((program) => {
+                const settings = parseAiTrainingOperationsSettings(program.settings);
+                return (
+                  <form
+                    action={updateTrainingOperations}
+                    key={program.id}
+                    className="settings-form"
+                  >
+                    <input type="hidden" name="serviceSlug" value={serviceSlug} />
+                    <input type="hidden" name="programId" value={program.id} />
+                    <h3>{program.displayName}</h3>
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="notificationsEnabled"
+                        defaultChecked={settings.notificationsEnabled}
+                      />{' '}
+                      毎日のLINE通知を送る
+                    </label>
+                    <label>
+                      通知時刻
+                      <select
+                        name="notificationHour"
+                        defaultValue={String(settings.notificationHour)}
+                      >
+                        {Array.from({ length: 24 }, (_, hour) => (
+                          <option value={hour} key={hour}>
+                            {hour}:00
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="postponedReminderEnabled"
+                        defaultChecked={settings.postponedReminderEnabled}
+                      />{' '}
+                      「後でやる」の人へ再通知する
+                    </label>
+                    <label>
+                      再通知までの時間
+                      <input
+                        type="number"
+                        name="postponedReminderHours"
+                        min="1"
+                        max="168"
+                        defaultValue={settings.postponedReminderHours}
+                      />
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="helpQueueEnabled"
+                        defaultChecked={settings.helpQueueEnabled}
+                      />{' '}
+                      「困った」を支援一覧へ表示する
+                    </label>
+                    <button className="button" type="submit">
+                      設定を保存
+                    </button>
+                  </form>
+                );
+              })}
+            </section>
+
+            <section className="settings-card">
+              <h2>対応が必要な「困った」</h2>
+              <p>受講者が支援を求めた課題だけを表示します。対応後に完了へ変更してください。</p>
+              {unresolvedHelp.length === 0 ? (
+                <p>未対応の依頼はありません。</p>
+              ) : (
+                <div className="training-admin__participants">
+                  {unresolvedHelp.map((event) => {
+                    const enrollment = enrollmentById.get(event.programEnrollmentId);
+                    const membership = enrollment
+                      ? membershipById.get(enrollment.groupMembershipId)
+                      : null;
+                    return (
+                      <article className="training-admin__participant" key={event.id}>
+                        <h3>
+                          {membership?.user.displayName || membership?.user.email || '参加者'}
+                        </h3>
+                        <p>{dateTimeLabel(event.occurredAt)} に支援を依頼しました。</p>
+                        <form action={resolveTrainingHelp}>
+                          <input type="hidden" name="serviceSlug" value={serviceSlug} />
+                          <input type="hidden" name="helpEventId" value={event.id} />
+                          <button className="button button--secondary" type="submit">
+                            対応済みにする
+                          </button>
+                        </form>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             <section className="settings-card training-admin__analytics">
