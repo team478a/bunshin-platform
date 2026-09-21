@@ -12,6 +12,7 @@ describe('daily mission duplicate guard', () => {
     expect(source).toContain("'CONTENT_REJECTED'");
     expect(source).toContain('generated mission is too similar to recent content');
     expect(source).toContain('simhashSimilarityBasisPoints');
+    expect(source).toContain('from: daysBefore(input.missionDate, 28)');
     expect(source.indexOf('recentMissions.find')).toBeLessThan(source.indexOf("stage = 'persist'"));
   });
 });
