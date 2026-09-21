@@ -27,7 +27,7 @@ describe('service external tracking boundary', () => {
   });
 
   it('constrains resources again inside the repository', () => {
-    const database = source('../../packages/database/src/index.ts');
+    const database = source('../../packages/database/src/external-tracking.ts');
     expect(database).toContain('private readonly serviceId?: string');
     expect(database).toContain('private serviceMatches(groupId: string)');
     expect(database).toContain("role: 'MANAGER'");
