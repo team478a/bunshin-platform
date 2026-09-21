@@ -23,6 +23,10 @@ const toolkit = readFileSync(
   ),
   'utf8',
 );
+const growth = readFileSync(
+  new URL('../app/s/[serviceSlug]/programs/[programEnrollmentId]/growth/page.tsx', import.meta.url),
+  'utf8',
+);
 
 describe('AI training participant UI', () => {
   it('dispatches the existing program page by the scoped module key', () => {
@@ -57,6 +61,11 @@ describe('AI training participant UI', () => {
     expect(card).toContain('My AI Toolkitに保存する');
     expect(card).toContain('My AI Toolkitを見る');
     expect(toolkit).toContain('内容をコピーする');
+    expect(page).toContain('自分の成長を見る');
+    expect(growth).toContain('AI活用レベル');
+    expect(growth).toContain('今週の学習');
+    expect(growth).toContain('得意と、次に伸ばす力');
+    expect(growth).toContain('できるようになったこと');
     expect(page).toContain('difficultyGuidance: trainingState.action.display.difficultyGuidance');
   });
 

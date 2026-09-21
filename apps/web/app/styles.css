@@ -4149,6 +4149,124 @@ a {
   line-height: 1.7;
 }
 
+.training-growth-hero {
+  display: grid;
+  gap: 1rem;
+}
+
+.training-growth-hero > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+  justify-items: center;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--service-primary) 8%, white);
+}
+
+.training-growth-level {
+  color: var(--service-primary);
+  font-size: clamp(2.6rem, 12vw, 4rem);
+  line-height: 1;
+}
+
+.training-growth-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.training-growth-stats div {
+  padding: 0.85rem;
+  border: 1px solid #e2e6ed;
+  border-radius: 0.8rem;
+  background: #fff;
+}
+
+.training-growth-stats dt {
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+.training-growth-stats dd {
+  margin: 0.25rem 0 0;
+  color: #172033;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.training-growth-next {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+}
+
+.training-growth-focus {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.training-growth-focus div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border-radius: 0.8rem;
+  background: #f5f7fa;
+}
+
+.training-growth-focus span,
+.training-growth-skill span {
+  color: #667085;
+  font-size: 0.85rem;
+}
+
+.training-growth-skills {
+  display: grid;
+  gap: 1rem;
+}
+
+.training-growth-skill {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.training-growth-skill > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.training-growth-skill__bar {
+  display: block;
+  height: 0.6rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4e7ec;
+}
+
+.training-growth-skill__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--service-primary);
+}
+
+.training-growth-achievements {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.training-growth-achievements li {
+  padding: 0.8rem 1rem;
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--service-primary) 7%, white);
+  font-weight: 700;
+}
+
 .resale-offer-card {
   display: grid;
   gap: 1rem;
