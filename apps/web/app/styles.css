@@ -8086,6 +8086,85 @@ body:has(.app-shell) > .site-footer {
   margin: 0;
 }
 
+.training-admin__participants {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.training-admin__participant {
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-background);
+}
+
+.training-admin__participant-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.training-admin__participant-heading h3,
+.training-admin__participant-heading p {
+  margin: 0;
+}
+
+.training-admin__participant-heading p {
+  color: var(--color-text-muted);
+}
+
+.training-admin__participant-heading > strong {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-size: 0.82rem;
+}
+
+.training-admin__participant-heading > strong[data-engagement='NEEDS_SUPPORT'],
+.training-admin__participant-heading > strong[data-engagement='INACTIVE'] {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.training-admin__participant-heading > strong[data-engagement='COMPLETED'] {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.training-admin__participant dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.training-admin__participant dl div {
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.training-admin__participant dt {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.training-admin__participant dd {
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .training-admin__participant dl {
+    grid-template-columns: 1fr;
+  }
+}
+
 .weekly-report__participant-list header span {
   flex: 0 0 auto;
   padding: 0.25rem 0.55rem;

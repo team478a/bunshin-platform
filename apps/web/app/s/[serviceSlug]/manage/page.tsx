@@ -95,6 +95,11 @@ const sections = [
     href: 'programs',
   },
   {
+    title: 'AI研修の進み具合',
+    description: '受講者の進捗、現在の課題、苦手領域、最終実施日を確認します。',
+    href: 'training',
+  },
+  {
     title: '動画生成の状況',
     description: 'このサービス内で作られている動画とAI場面の進み具合を確認します。',
     href: 'video-operations',
