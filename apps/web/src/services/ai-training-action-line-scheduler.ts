@@ -6,6 +6,7 @@ import {
   AiTrainingParticipantService,
   AiTrainingV1Policy,
   buildAiTrainingActionLineMessage,
+  parseAiTrainingOperationsSettings,
   parseAiTrainingActionDisplay,
 } from '@bunshin/capability-training';
 import { getServerEnvironment } from '@bunshin/config';
@@ -49,7 +50,7 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
       status: 'ACTIVE',
       settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
     },
-    select: { id: true, workspaceId: true, groupId: true },
+    select: { id: true, workspaceId: true, groupId: true, settings: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     take: 500,
   });
@@ -61,6 +62,18 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
       break;
     }
     try {
+      const operations = parseAiTrainingOperationsSettings(program.settings);
+      const tokyoHour = Number(
+        new Intl.DateTimeFormat('en-US', {
+          hour: '2-digit',
+          hourCycle: 'h23',
+          timeZone: 'Asia/Tokyo',
+        }).format(now),
+      );
+      if (!operations.notificationsEnabled || tokyoHour !== operations.notificationHour) {
+        summary.skipped += 1;
+        continue;
+      }
       const remaining = limit - summary.candidates;
       const runtimeCandidates = await db.prisma.$queryRaw<
         Array<{ programEnrollmentId: string; participantUserId: string }>

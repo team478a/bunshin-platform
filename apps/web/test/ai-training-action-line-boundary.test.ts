@@ -46,6 +46,13 @@ describe('AI training current Action LINE boundary', () => {
     expect(missionScheduler).toContain('aiTrainingLine');
   });
 
+  it('honors the service notification switch and Japan-time delivery hour', () => {
+    expect(scheduler).toContain('parseAiTrainingOperationsSettings(program.settings)');
+    expect(scheduler).toContain('operations.notificationsEnabled');
+    expect(scheduler).toContain('tokyoHour !== operations.notificationHour');
+    expect(scheduler).toContain("timeZone: 'Asia/Tokyo'");
+  });
+
   it('links to the authenticated participant page, which preserves the return path through login', () => {
     expect(scheduler).toContain('/programs/${encodeURIComponent(candidate.programEnrollmentId)}');
     expect(page).toContain('resolveAuthenticatedMemberServicePage');
