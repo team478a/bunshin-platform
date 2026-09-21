@@ -48,6 +48,7 @@ const candidate = (): AiTrainingRuntimeCandidate => ({
   profile: {
     role: 'SALES',
     aiLevel: 'BEGINNER',
+    learningGoalKey: 'CREATE_SALES_EMAIL',
     needsReview: false,
     recentSuccesses: 0,
     recentFailures: 0,
@@ -178,6 +179,7 @@ describe('AI training adaptive difficulty', () => {
       now,
       role: 'SALES' as const,
       aiLevel: 'INTERMEDIATE' as const,
+      learningGoalKey: 'CREATE_SALES_EMAIL' as const,
       currentPhase: 'PRACTICE' as const,
       completedMissionKeys: [],
       completedMissionCount: 5,
@@ -220,6 +222,7 @@ describe('AI training adaptive difficulty', () => {
       now,
       role: 'SALES' as const,
       aiLevel: 'INTERMEDIATE' as const,
+      learningGoalKey: 'CREATE_SALES_EMAIL' as const,
       currentPhase: 'PRACTICE' as const,
       completedMissionKeys: [],
       completedMissionCount: 8,

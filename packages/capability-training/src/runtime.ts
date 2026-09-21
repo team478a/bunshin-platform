@@ -100,6 +100,7 @@ export interface AiTrainingRuntimeCandidate {
   profile: {
     role: TrainingRole;
     aiLevel: TrainingAiLevel;
+    learningGoalKey: TrainingGoalKey | null;
     needsReview: boolean;
     recentSuccesses: number;
     recentFailures: number;
@@ -159,6 +160,7 @@ const reasonText: Record<string, string> = {
   BEGINNER_PROMPT_FOUNDATION_REQUIRED: 'AI初心者向けに、分かりやすい指示の作り方から練習します。',
   PROMPT_CONDITIONS_REQUIRED: '希望する結果を得るために、条件の伝え方を身につける段階です。',
   PROMPT_FORMAT_REQUIRED: '仕事で使いやすい形に整える指定を練習する段階です。',
+  LEARNING_GOAL_PRIORITY: '最初に選んだ「できるようになりたいこと」へ近づく実務課題です。',
   ROLE_SALES_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の営業実務課題へ進みます。',
   ROLE_OFFICE_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の事務実務課題へ進みます。',
   ROLE_MANAGER_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の管理職向け課題へ進みます。',
@@ -343,6 +345,7 @@ const contextFor = (
   now,
   role: candidate.profile.role,
   aiLevel: candidate.profile.aiLevel,
+  learningGoalKey: candidate.profile.learningGoalKey,
   currentPhase: candidate.currentPhase,
   completedMissionKeys: candidate.completedMissionKeys,
   completedMissionCount: candidate.completedMissionCount,
