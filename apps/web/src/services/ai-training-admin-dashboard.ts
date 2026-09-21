@@ -1,3 +1,9 @@
+import {
+  TRAINING_SKILL_KEYS,
+  TRAINING_SKILL_LABELS,
+  type TrainingSkillKey,
+} from '@bunshin/capability-training';
+
 type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
 type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
 
@@ -104,6 +110,12 @@ function latestDate(values: Array<Date | null | undefined>): Date | null {
   }, null);
 }
 
+function topicLabel(value: string | null | undefined): string | null {
+  return value && TRAINING_SKILL_KEYS.includes(value as TrainingSkillKey)
+    ? TRAINING_SKILL_LABELS[value as TrainingSkillKey]
+    : (value ?? null);
+}
+
 export function buildAiTrainingAdminDashboard(
   input: readonly AiTrainingAdminParticipantInput[],
   now: Date,
@@ -136,7 +148,7 @@ export function buildAiTrainingAdminDashboard(
       roleLabel: item.profile ? roleLabels[item.profile.role] : '未設定',
       aiLevelLabel: item.profile ? aiLevelLabels[item.profile.aiLevel] : '未設定',
       completedMissionCount,
-      currentTopic: item.profile?.currentTopic ?? item.progress?.phaseKey ?? '未設定',
+      currentTopic: topicLabel(item.profile?.currentTopic) ?? item.progress?.phaseKey ?? '未設定',
       currentMission: currentMissionTitle(item),
       weakArea: latestWeakArea(item),
       lastActivityAt,

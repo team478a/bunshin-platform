@@ -1,4 +1,5 @@
 import type { TrainingActionKey } from './index';
+import { AI_TRAINING_MISSION_SKILLS, type TrainingSkillKey } from './skill-evaluation';
 
 export const AI_TRAINING_MISSION_QUALITY_VERSION = 'AI_TRAINING_MISSION_QUALITY_V1';
 
@@ -19,9 +20,10 @@ export type TrainingMissionQualityDefinition = {
   difficulty: TrainingMissionDifficulty;
   reviewMissionKey: TrainingActionKey | null;
   nextCandidates: readonly TrainingActionKey[];
+  skillKeys: readonly TrainingSkillKey[];
 };
 
-const definitions = [
+const baseDefinitions = [
   {
     key: 'AI_BASIC',
     title: 'AIへ仕事を頼む基本',
@@ -427,9 +429,12 @@ const definitions = [
     reviewMissionKey: null,
     nextCandidates: [],
   },
-] as const satisfies readonly TrainingMissionQualityDefinition[];
+] as const satisfies readonly Omit<TrainingMissionQualityDefinition, 'skillKeys'>[];
 
-export const AI_TRAINING_MISSION_QUALITY = definitions;
+export const AI_TRAINING_MISSION_QUALITY = baseDefinitions.map((definition) => ({
+  ...definition,
+  skillKeys: AI_TRAINING_MISSION_SKILLS[definition.key],
+})) satisfies readonly TrainingMissionQualityDefinition[];
 
 export function getAiTrainingMissionQuality(key: string): TrainingMissionQualityDefinition | null {
   return AI_TRAINING_MISSION_QUALITY.find((definition) => definition.key === key) ?? null;

@@ -2646,3 +2646,11 @@
 - Version: 初版を`AI_TRAINING_MISSION_QUALITY_V1`として固定し、公開後の意味変更は新しいVersionで行う。
 - Compatibility: 既存Assignmentの`TRAINING_FIXED_V1`表示スナップショットは読み取り時にCatalogから不足項目を補い、進行中の受講者を止めない。
 - Scope: Skill別評価、難易度の動的変更、Mission遷移への利用は後続PRとし、本変更では25課題の実務定義と評価入力の整合を確立する。
+
+# 2026-09-21: AI研修の進級判定はSkill評価をDomain Ruleで確定する
+
+- Skills: V1では指示構造、背景設定、条件指定、出力制御、実務活用、改善力の6能力に固定する。
+- AI boundary: AIは理解度と能力別スコア、根拠、次の推奨能力を構造化して返すが、PASS/REVIEWを決定しない。
+- Domain rule: 理解度と対象能力がすべて60以上の場合だけPASSとし、未達の場合は対象能力のうち最低スコアを復習対象にする。
+- Projection: 評価全文は既存`TrainingMissionAnswer`、監査は`ProgramActionEvent`に維持し、Enrollment単位の現在値だけを`TrainingParticipantProfile.skillScores`へJSONで投影する。
+- Scope: 既存値のうち今回評価した能力だけを更新する。動的難易度、復習Mission、進級への接続は次のAdaptive Policy PRで扱う。

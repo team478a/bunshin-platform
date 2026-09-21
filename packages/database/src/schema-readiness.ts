@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260921090000_add_training_initial_assessment';
+export const LATEST_DATABASE_MIGRATION = '20260921120000_add_training_skill_state';
