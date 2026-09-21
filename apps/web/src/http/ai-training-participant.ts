@@ -54,6 +54,7 @@ const interactionSchema = z
     idempotencyKey: uuid,
   })
   .strict();
+const toolkitSaveSchema = z.object({ answerId: uuid, idempotencyKey: uuid }).strict();
 
 const response = (data: unknown, requestId: string) =>
   Response.json({ data, requestId }, { headers: { 'cache-control': 'private, no-store' } });
@@ -216,6 +217,71 @@ export async function recordAiTrainingInteractionResponse(
     }
     if (result.outcome === 'CONFLICT') {
       throw new ApplicationError('CONFLICT', 'training interaction could not be recorded');
+    }
+    return response(result, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function listAiTrainingToolkitResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
+    const db = await import('@bunshin/database');
+    const items = await new db.PrismaTrainingToolkitRepository(db.prisma).list({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId: uuid.parse(rawEnrollmentId),
+    });
+    if (!items) throw new ApplicationError('NOT_FOUND', 'AI training toolkit not found');
+    return response({ items }, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function saveAiTrainingToolkitItemResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, value] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      toolkitSaveSchema.parseAsync(request.json()),
+    ]);
+    const db = await import('@bunshin/database');
+    const result = await new db.PrismaTrainingToolkitRepository(db.prisma).save({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId: uuid.parse(rawEnrollmentId),
+      ...value,
+      occurredAt: new Date(),
+    });
+    if (result.outcome === 'NOT_FOUND') {
+      throw new ApplicationError('NOT_FOUND', 'evaluated training answer not found');
+    }
+    if (result.outcome === 'NOT_ELIGIBLE') {
+      throw new ApplicationError('CONFLICT', 'only passed training answers can be saved');
+    }
+    if (result.outcome === 'CONFLICT') {
+      throw new ApplicationError('CONFLICT', 'training toolkit item could not be saved');
     }
     return response(result, requestId);
   } catch (error) {

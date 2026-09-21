@@ -513,6 +513,27 @@ model TrainingMissionAnswer {
   @@map("training_mission_answers")
 }
 
+/// 合格済みのAI研修回答から、本人が明示的に保存した再利用用成果物。
+model TrainingToolkitItem {
+  id                      String   @id @default(uuid()) @db.Uuid
+  workspaceId             String   @map("workspace_id") @db.Uuid
+  groupId                 String   @map("group_id") @db.Uuid
+  programEnrollmentId     String   @map("program_enrollment_id") @db.Uuid
+  missionAssignmentId     String   @map("mission_assignment_id") @db.Uuid
+  trainingMissionAnswerId String   @unique @map("training_mission_answer_id") @db.Uuid
+  userId                  String   @map("user_id") @db.Uuid
+  missionDefinitionKey    String   @map("mission_definition_key") @db.VarChar(80)
+  title                   String   @db.VarChar(160)
+  contentSnapshot         String   @map("content_snapshot") @db.Text
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, programEnrollmentId, createdAt])
+  @@index([workspaceId, groupId, userId, createdAt])
+  @@map("training_toolkit_items")
+}
+
 model ResaleItem {
   id                  String              @id @default(uuid()) @db.Uuid
   workspaceId         String              @map("workspace_id") @db.Uuid
