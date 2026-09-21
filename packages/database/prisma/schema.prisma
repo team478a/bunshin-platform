@@ -470,6 +470,12 @@ model TrainingParticipantProfile {
   userId              String                     @map("user_id") @db.Uuid
   role                TrainingParticipantRole
   aiLevel             TrainingParticipantAiLevel @map("ai_level")
+  aiUseCases          Json                       @default("[]") @map("ai_use_cases")
+  workChallenges      Json                       @default("[]") @map("work_challenges")
+  preferredTopics     Json                       @default("[]") @map("preferred_topics")
+  dailyMinutes        Int                        @default(10) @map("daily_minutes")
+  learningGoalKey     String?                    @map("learning_goal_key") @db.VarChar(80)
+  assessmentVersion   String                     @default("AI_TRAINING_CATALOG_V1") @map("assessment_version") @db.VarChar(80)
   currentTopic        String?                    @map("current_topic") @db.VarChar(80)
   needsReview         Boolean                    @default(false) @map("needs_review")
   recentSuccesses     Int                        @default(0) @map("recent_successes")

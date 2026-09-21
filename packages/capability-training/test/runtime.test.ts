@@ -24,7 +24,16 @@ const baseState = (): AiTrainingParticipantState => ({
   enrollmentStatus: 'ACTIVE',
   startsAt: now,
   endsAt: null,
-  profile: { role: 'SALES', aiLevel: 'BEGINNER' },
+  profile: {
+    role: 'SALES',
+    aiLevel: 'BEGINNER',
+    aiUseCases: ['EMAIL'],
+    workChallenges: ['WRITING_TAKES_TIME'],
+    preferredTopics: ['SALES_EMAIL'],
+    dailyMinutes: 10,
+    learningGoalKey: 'CREATE_SALES_EMAIL',
+  },
+  goal: { title: '営業メールをAIで作れる' },
   action: null,
 });
 

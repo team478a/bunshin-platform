@@ -2630,3 +2630,11 @@
 - Authentication: ログイン用のメールマジックリンクは認証基盤の責務として維持し、運営者向け本文編集の対象にしない。
 - Provider: 共通メール基盤とOEM専用Resend APIキーを選択できる。専用キーはサービス・環境に紐づく暗号化データとして保存する。
 - Safety: テスト送信成功前は送信キューを作らず、配信は冪等・最大3回・サービス単位の履歴管理とする。
+
+# 2026-09-21: AI研修の初期診断は既存ProfileとProgram Goalへ分けて保存する
+
+- Assessment: 職種、AI経験、現在の利用用途、困りごと、希望テーマ、1日の学習時間、Learning CatalogのGoal Keyを既存`TrainingParticipantProfile`へ保存する。
+- Goal: 利用者へ表示する30日後の目標は新しいGoalテーブルを作らず、既存`ProgramMemberGoal`を正本として同一トランザクションで更新する。
+- Catalog: 選択肢は`AI_TRAINING_CATALOG_V1`として固定Keyと表示文を分離し、将来Service別Catalogへ差し替えられる境界を研修Capability内に置く。
+- Privacy: 初期診断は選択式とし、顧客名、個人情報、社外秘を収集する自由入力欄は設けない。
+- UX: スマートフォンで情報量が集中しないよう、診断を4段階に分け、現在位置と戻る操作を表示する。

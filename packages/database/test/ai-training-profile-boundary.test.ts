@@ -16,8 +16,9 @@ describe('AI training participant profile boundary', () => {
     );
   });
 
-  it('records an idempotent audit event for each accepted update', () => {
-    expect(source).toContain("eventType: 'TRAINING_PROFILE_UPDATED'");
+  it('records the assessment, existing goal model and an idempotent audit event', () => {
+    expect(source).toContain('tx.programMemberGoal.create');
+    expect(source).toContain("eventType: 'TRAINING_INITIAL_ASSESSMENT_COMPLETED'");
     expect(source).toContain("sourceResourceType: 'TRAINING_PARTICIPANT_PROFILE'");
     expect(source).toContain('idempotencyKey: input.idempotencyKey');
     expect(source).toContain("{ isolationLevel: 'Serializable' }");

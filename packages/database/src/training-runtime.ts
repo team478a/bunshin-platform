@@ -2,6 +2,10 @@ import { parseProgramDefinition } from '@bunshin/application';
 import {
   AI_TRAINING_V1_MODULE_KEY,
   TRAINING_ACTION_KEYS,
+  TRAINING_CHALLENGE_KEYS,
+  TRAINING_GOAL_KEYS,
+  TRAINING_TOPIC_KEYS,
+  TRAINING_USE_CASE_KEYS,
   parseAiTrainingActionDisplay,
   parseAiTrainingRuntimeSettings,
   type AiTrainingParticipantAction,
@@ -25,6 +29,14 @@ type Scope = {
 
 function isTrainingActionKey(value: string): value is TrainingActionKey {
   return TRAINING_ACTION_KEYS.includes(value as TrainingActionKey);
+}
+
+function selectedKeys<const Values extends readonly string[]>(value: unknown, allowed: Values) {
+  return Array.isArray(value)
+    ? value.filter((item): item is Values[number] =>
+        typeof item === 'string' ? allowed.includes(item as Values[number]) : false,
+      )
+    : [];
 }
 
 async function resolveScope(
@@ -169,7 +181,7 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
   async findState(input: Parameters<AiTrainingRuntimeRepository['findState']>[0]) {
     const scope = await resolveScope(this.client, input, ['ACTIVE', 'COMPLETED', 'EXPIRED']);
     if (!scope) return null;
-    const [profile, progress] = await Promise.all([
+    const [profile, progress, goal] = await Promise.all([
       this.client.trainingParticipantProfile.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -185,6 +197,17 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
           groupId: input.groupId,
           programEnrollmentId: scope.enrollment.id,
         },
+      }),
+      this.client.programMemberGoal.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: scope.enrollment.id,
+          groupMembershipId: scope.membership.id,
+          status: 'ACTIVE',
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        select: { title: true },
       }),
     ]);
     const assignment = progress?.currentAssignmentId
@@ -216,7 +239,23 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
       enrollmentStatus: scope.enrollment.status as AiTrainingParticipantState['enrollmentStatus'],
       startsAt: scope.enrollment.startsAt!,
       endsAt: scope.enrollment.endsAt,
-      profile: profile ? { role: profile.role, aiLevel: profile.aiLevel } : null,
+      profile:
+        profile &&
+        profile.learningGoalKey &&
+        TRAINING_GOAL_KEYS.includes(profile.learningGoalKey as (typeof TRAINING_GOAL_KEYS)[number])
+          ? {
+              role: profile.role,
+              aiLevel: profile.aiLevel,
+              aiUseCases: selectedKeys(profile.aiUseCases, TRAINING_USE_CASE_KEYS),
+              workChallenges: selectedKeys(profile.workChallenges, TRAINING_CHALLENGE_KEYS),
+              preferredTopics: selectedKeys(profile.preferredTopics, TRAINING_TOPIC_KEYS),
+              dailyMinutes: [5, 10, 15].includes(profile.dailyMinutes)
+                ? (profile.dailyMinutes as 5 | 10 | 15)
+                : 10,
+              learningGoalKey: profile.learningGoalKey as (typeof TRAINING_GOAL_KEYS)[number],
+            }
+          : null,
+      goal,
       action: assignment ? participantAction(assignment, submission) : null,
     };
   }

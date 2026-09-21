@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260920234500_allow_program_ai_usage_without_bunshin';
+export const LATEST_DATABASE_MIGRATION = '20260921090000_add_training_initial_assessment';

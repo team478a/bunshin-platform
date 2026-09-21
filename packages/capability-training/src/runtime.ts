@@ -5,6 +5,12 @@ import type {
   TrainingAiLevel,
   TrainingRole,
 } from './index';
+import type {
+  TrainingChallengeKey,
+  TrainingGoalKey,
+  TrainingTopicKey,
+  TrainingUseCaseKey,
+} from './learning-catalog';
 
 export interface AiTrainingRuntimeSettings {
   moduleKey: 'AI_TRAINING_V1';
@@ -54,7 +60,16 @@ export interface AiTrainingParticipantState {
   enrollmentStatus: 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
   startsAt: Date;
   endsAt: Date | null;
-  profile: { role: TrainingRole; aiLevel: TrainingAiLevel } | null;
+  profile: {
+    role: TrainingRole;
+    aiLevel: TrainingAiLevel;
+    aiUseCases: TrainingUseCaseKey[];
+    workChallenges: TrainingChallengeKey[];
+    preferredTopics: TrainingTopicKey[];
+    dailyMinutes: 5 | 10 | 15;
+    learningGoalKey: TrainingGoalKey;
+  } | null;
+  goal: { title: string } | null;
   action: AiTrainingParticipantAction | null;
 }
 
