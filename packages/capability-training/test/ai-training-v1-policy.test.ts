@@ -16,6 +16,7 @@ const base = {
   lastMissionKey: null,
   streak: 0,
   bottleneckKey: null,
+  skillScores: {},
   activityBaselineAt: now,
   lastActionAt: now,
   pauseAfterDays: 7,
@@ -85,6 +86,17 @@ describe('AiTrainingV1Policy', () => {
   });
   it('prioritizes review, recovery and wait deterministically', () => {
     expect(policy.evaluate({ ...base, recentFailures: 2 }).actionKey).toBe('PROMPT_REVIEW');
+    expect(
+      policy.evaluate({
+        ...base,
+        needsReview: true,
+        recentFailures: 1,
+        lastMissionKey: 'SALES_PROPOSAL',
+      }),
+    ).toMatchObject({
+      actionKey: 'SALES_EMAIL',
+      reasonCode: 'PREVIOUS_MISSION_REQUIRES_REVIEW',
+    });
     expect(
       policy.evaluate({ ...base, lastActionAt: new Date('2026-09-10T00:00:00.000Z') }).actionKey,
     ).toBe('RECOVERY');

@@ -6,7 +6,7 @@ import {
 } from '@bunshin/application';
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 
-export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_2';
+export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_3';
 export const AI_TRAINING_V1_MODULE_KEY = 'AI_TRAINING_V1';
 export const TRAINING_ROLES = ['SALES', 'OFFICE', 'MANAGER', 'OTHER'] as const;
 export const TRAINING_AI_LEVELS = ['BEGINNER', 'INTERMEDIATE'] as const;
@@ -54,6 +54,7 @@ export interface AiTrainingV1DecisionContext {
   lastMissionKey: string | null;
   streak: number;
   bottleneckKey: string | null;
+  skillScores: Readonly<Record<string, number>>;
   activityBaselineAt: Date;
   lastActionAt: Date | null;
   pauseAfterDays: number;
@@ -86,6 +87,13 @@ const wait = (reevaluateAt: Date) =>
     reevaluateAt,
   });
 
+const reviewMission = (context: AiTrainingV1DecisionContext) => {
+  const previous = context.lastMissionKey
+    ? AI_TRAINING_MISSION_QUALITY.find(({ key }) => key === context.lastMissionKey)
+    : null;
+  return previous?.reviewMissionKey ?? 'PROMPT_REVIEW';
+};
+
 export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1DecisionContext> {
   evaluate(context: AiTrainingV1DecisionContext): NextActionDecision {
     if (context.activeWaitUntil && context.activeWaitUntil > context.now)
@@ -95,8 +103,8 @@ export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1Decision
     const baseline = context.lastActionAt ?? context.activityBaselineAt;
     if (context.now.getTime() - baseline.getTime() >= context.pauseAfterDays * DAY_MS)
       return work('RECOVERY', 'USER_ACTIVITY_PAUSED');
-    if (context.needsReview || context.recentFailures >= 2)
-      return work('PROMPT_REVIEW', 'RECENT_FAILURES_REQUIRE_REVIEW');
+    if (context.needsReview || context.recentFailures > 0)
+      return work(reviewMission(context), 'PREVIOUS_MISSION_REQUIRES_REVIEW');
     if (!completed(context, 'AI_BASIC')) return work('AI_BASIC', 'AI_FOUNDATION_NOT_COMPLETED');
     if (!completed(context, 'CHATGPT_BASIC'))
       return work('CHATGPT_BASIC', 'CHATGPT_FOUNDATION_NOT_COMPLETED');
