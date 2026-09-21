@@ -2,6 +2,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+const planningSource = readFileSync(new URL('../src/mission-planning.ts', import.meta.url), 'utf8');
+const dailyMissionSource = readFileSync(
+  new URL('../src/daily-missions.ts', import.meta.url),
+  'utf8',
+);
+const progressSource = readFileSync(new URL('../src/mission-progress.ts', import.meta.url), 'utf8');
 
 describe('service Bunshin owner boundary', () => {
   it('limits normal service lists to the actor-owned Bunshins', () => {
@@ -30,16 +36,16 @@ describe('service Bunshin owner boundary', () => {
 
   it('keeps social profiles inside the requested service and owner boundary', () => {
     const start = source.indexOf('export class PrismaSocialProfileRepository');
-    const end = source.indexOf('export class PrismaContentPillarRepository', start);
+    const end = source.indexOf('export class PrismaSocialAccountStrategyRepository', start);
     const repository = source.slice(start, end);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
 
   it('keeps content pillars inside the requested service and owner boundary', () => {
-    const start = source.indexOf('export class PrismaContentPillarRepository');
-    const end = source.indexOf('export class PrismaWeeklyPlanRepository', start);
-    const repository = source.slice(start, end);
+    const start = planningSource.indexOf('export class PrismaContentPillarRepository');
+    const end = planningSource.indexOf('export class PrismaWeeklyPlanRepository', start);
+    const repository = planningSource.slice(start, end);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
@@ -53,33 +59,30 @@ describe('service Bunshin owner boundary', () => {
   });
 
   it('keeps weekly plans inside the requested service and owner boundary', () => {
-    const start = source.indexOf('export class PrismaWeeklyPlanRepository');
-    const end = source.indexOf('const missionDate', start);
-    const repository = source.slice(start, end);
+    const start = planningSource.indexOf('export class PrismaWeeklyPlanRepository');
+    const repository = planningSource.slice(start);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
 
   it('keeps daily missions inside the requested service and owner boundary', () => {
-    const start = source.indexOf('export class PrismaDailyMissionRepository');
-    const end = source.indexOf('export class PrismaMissionDecisionRepository', start);
-    const repository = source.slice(start, end);
+    const start = dailyMissionSource.indexOf('export class PrismaDailyMissionRepository');
+    const repository = dailyMissionSource.slice(start);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
 
   it('keeps mission decisions and activities inside the service owner boundary', () => {
-    const start = source.indexOf('export class PrismaMissionEngagementRepository');
-    const end = source.indexOf('function achievementBadge', start);
-    const repository = source.slice(start, end);
+    const start = progressSource.indexOf('export class PrismaMissionEngagementRepository');
+    const end = progressSource.indexOf('function achievementBadge', start);
+    const repository = progressSource.slice(start, end);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
 
   it('keeps posting and feedback inside the service owner boundary', () => {
-    const start = source.indexOf('export class PrismaMissionOutcomeRepository');
-    const end = source.indexOf('function workspace(', start);
-    const repository = source.slice(start, end);
+    const start = progressSource.indexOf('export class PrismaMissionOutcomeRepository');
+    const repository = progressSource.slice(start);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });

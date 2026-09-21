@@ -22,7 +22,7 @@ describe('business growth roadmap boundary', () => {
 
   it('uses the business profile start date for screen and LINE actions', () => {
     const detail = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
-    const database = source('../../packages/database/src/index.ts');
+    const database = source('../../packages/database/src/mission-generation.ts');
     expect(detail).toContain('programStartedAt: businessProgramProfile.createdAt');
     expect(database).toContain('programStartedAt: businessProfile.createdAt');
   });
