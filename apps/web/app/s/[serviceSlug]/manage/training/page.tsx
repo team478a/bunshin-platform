@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
+import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 
@@ -71,9 +72,9 @@ export default async function AiTrainingAdminPage({
         });
   const enrollmentIds = enrollments.map(({ id }) => id);
   const membershipIds = enrollments.map(({ groupMembershipId }) => groupMembershipId);
-  const [memberships, profiles, snapshots, assignments, answers] =
+  const [memberships, profiles, snapshots, assignments, answers, toolkitItems] =
     enrollmentIds.length === 0
-      ? [[], [], [], [], []]
+      ? [[], [], [], [], [], []]
       : await Promise.all([
           db.prisma.groupMembership.findMany({
             where: {
@@ -101,6 +102,7 @@ export default async function AiTrainingAdminPage({
               currentTopic: true,
               needsReview: true,
               recentFailures: true,
+              learningGoalKey: true,
               updatedAt: true,
             },
           }),
@@ -139,8 +141,21 @@ export default async function AiTrainingAdminPage({
               programEnrollmentId: { in: enrollmentIds },
               evaluationStatus: 'READY',
             },
-            select: { programEnrollmentId: true, evaluation: true, updatedAt: true },
+            select: {
+              programEnrollmentId: true,
+              evaluation: true,
+              evaluatedAt: true,
+              updatedAt: true,
+            },
             orderBy: { updatedAt: 'desc' },
+          }),
+          db.prisma.trainingToolkitItem.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              programEnrollmentId: { in: enrollmentIds },
+            },
+            select: { programEnrollmentId: true },
           }),
         ]);
   const programById = new Map(programs.map((item) => [item.id, item]));
@@ -182,6 +197,20 @@ export default async function AiTrainingAdminPage({
     }),
     new Date(),
   );
+  const analytics = buildAiTrainingPilotAnalytics({
+    enrollmentIds,
+    assessedEnrollmentIds: profiles.map(({ programEnrollmentId }) => programEnrollmentId),
+    goalEnrollmentIds: profiles.flatMap(({ programEnrollmentId, learningGoalKey }) =>
+      learningGoalKey ? [programEnrollmentId] : [],
+    ),
+    presentedEnrollmentIds: assignments.map(({ programEnrollmentId }) => programEnrollmentId),
+    answers: answers.map(({ programEnrollmentId, evaluation, evaluatedAt }) => ({
+      programEnrollmentId,
+      evaluation,
+      evaluatedAt,
+    })),
+    toolkitEnrollmentIds: toolkitItems.map(({ programEnrollmentId }) => programEnrollmentId),
+  });
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -228,6 +257,74 @@ export default async function AiTrainingAdminPage({
                 {dashboard.totals.active}
                 人です。継続率は、受講中で直近7日以内に研修を進めた人の割合です。
               </p>
+            </section>
+
+            <section className="settings-card training-admin__analytics">
+              <h2>Pilotの利用状況</h2>
+              <p>登録から実務成果物の保存まで、どこで止まっているかを確認できます。</p>
+              <div className="training-analytics-grid">
+                <article>
+                  <strong>{analytics.assessmentCompletionPercent}%</strong>
+                  <span>初期診断完了</span>
+                  <small>
+                    {analytics.assessmentCompleted} / {analytics.participants}人
+                  </small>
+                </article>
+                <article>
+                  <strong>{analytics.goalSelectionPercent}%</strong>
+                  <span>Goal選択</span>
+                  <small>
+                    {analytics.goalSelected} / {analytics.assessmentCompleted}人
+                  </small>
+                </article>
+                <article>
+                  <strong>{analytics.missionStartPercent}%</strong>
+                  <span>課題開始</span>
+                  <small>
+                    {analytics.missionStarted} / {analytics.assessmentCompleted}人
+                  </small>
+                </article>
+                <article>
+                  <strong>{analytics.answerPercent}%</strong>
+                  <span>回答</span>
+                  <small>
+                    {analytics.answered} / {analytics.missionStarted}人
+                  </small>
+                </article>
+              </div>
+            </section>
+
+            <section className="settings-card training-admin__analytics">
+              <h2>学習品質と実務定着</h2>
+              <p>評価後に復習できたか、Skillが改善したか、成果物を残せたかを確認します。</p>
+              <div className="training-analytics-grid">
+                <article>
+                  <strong>{analytics.passPercent}%</strong>
+                  <span>PASS率</span>
+                  <small>
+                    PASS {analytics.passedEvaluations}件 / REVIEW {analytics.reviewEvaluations}件
+                  </small>
+                </article>
+                <article>
+                  <strong>{analytics.retryPercent}%</strong>
+                  <span>再回答率</span>
+                  <small>
+                    {analytics.retriedParticipants} / {analytics.reviewParticipants}人
+                  </small>
+                </article>
+                <article>
+                  <strong>{analytics.skillImprovementPercent}%</strong>
+                  <span>Skill改善</span>
+                  <small>
+                    {analytics.skillImprovedParticipants} / {analytics.skillMeasuredParticipants}人
+                  </small>
+                </article>
+                <article>
+                  <strong>{analytics.toolkitSavePercent}%</strong>
+                  <span>Toolkit保存</span>
+                  <small>{analytics.toolkitSavedParticipants}人が保存</small>
+                </article>
+              </div>
             </section>
 
             <section className="settings-card">

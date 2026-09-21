@@ -4267,6 +4267,35 @@ a {
   font-weight: 700;
 }
 
+.training-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.85rem;
+}
+
+.training-analytics-grid article {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid #e2e6ed;
+  border-radius: 0.85rem;
+  background: #f8fafc;
+}
+
+.training-analytics-grid strong {
+  color: var(--service-primary, #3451b2);
+  font-size: 1.8rem;
+}
+
+.training-analytics-grid span {
+  color: #172033;
+  font-weight: 700;
+}
+
+.training-analytics-grid small {
+  color: #667085;
+}
+
 .resale-offer-card {
   display: grid;
   gap: 1rem;
