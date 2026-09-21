@@ -28,6 +28,7 @@ describe('AI training mission quality catalog', () => {
         expect(mission.constraints.length).toBeGreaterThan(0);
         expect(mission.successCriteria.length).toBeGreaterThan(0);
         expect(mission.evaluationCriteria.length).toBeGreaterThan(0);
+        expect(mission.skillKeys.length).toBeGreaterThan(0);
       }
       if (mission.reviewMissionKey) expect(keys.has(mission.reviewMissionKey)).toBe(true);
       for (const next of mission.nextCandidates) expect(keys.has(next)).toBe(true);

@@ -1,4 +1,5 @@
 import 'server-only';
+import { mergeTrainingSkillScores, trainingSkillBottleneckKey } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -171,6 +172,21 @@ export async function evaluateAiTrainingAnswerResponse(
         },
       });
       if (updated.count !== 1) return 'ALREADY_EVALUATED' as const;
+      const participantProfile = await tx.trainingParticipantProfile.findFirst({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          programEnrollmentId: enrollmentId,
+          userId: actor.userId,
+        },
+        select: { skillScores: true },
+      });
+      if (!participantProfile)
+        throw new ApplicationError('NOT_FOUND', 'training participant profile not found');
+      const skillScores = mergeTrainingSkillScores(
+        participantProfile.skillScores,
+        evaluated.evaluation,
+      );
       await tx.programActionEvent.create({
         data: {
           workspaceId: service.workspaceId,
@@ -185,6 +201,10 @@ export async function evaluateAiTrainingAnswerResponse(
           metadata: {
             result: evaluated.evaluation.result,
             understanding: evaluated.evaluation.understanding,
+            skills: evaluated.evaluation.skills,
+            evaluatedSkillKeys: evaluated.evaluation.evaluatedSkillKeys,
+            recommendedNextSkill: evaluated.evaluation.recommendedNextSkill,
+            evaluationRuleVersion: evaluated.evaluation.evaluationRuleVersion,
           },
           actorUserId: actor.userId,
           occurredAt: evaluatedAt,
@@ -232,12 +252,16 @@ export async function evaluateAiTrainingAnswerResponse(
               recentSuccesses: { increment: 1 },
               recentFailures: 0,
               streak: { increment: 1 },
+              skillScores,
+              currentTopic: evaluated.evaluation.recommendedNextSkill,
             }
           : {
               needsReview: true,
               recentFailures: { increment: 1 },
               recentSuccesses: 0,
               streak: 0,
+              skillScores,
+              currentTopic: evaluated.evaluation.recommendedNextSkill,
             },
       });
       await tx.programProgressSnapshot.updateMany({
@@ -248,7 +272,9 @@ export async function evaluateAiTrainingAnswerResponse(
         },
         data: {
           currentAssignmentId: null,
-          bottleneckKey: passed ? null : 'TRAINING_REVIEW_REQUIRED',
+          bottleneckKey: passed
+            ? null
+            : trainingSkillBottleneckKey(evaluated.evaluation.recommendedNextSkill),
           ...(passed ? { completedMissionCount: { increment: 1 } } : {}),
           revision: { increment: 1 },
           lastActionAt: evaluatedAt,

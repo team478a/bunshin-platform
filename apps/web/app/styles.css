@@ -3980,6 +3980,57 @@ a {
   font-weight: 700;
 }
 
+.training-skill-results {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #dfe3eb;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.training-skill-results h3 {
+  margin: 0;
+  color: #17233d;
+  font-size: 1rem;
+}
+
+.training-skill-result {
+  display: grid;
+  gap: 8px;
+}
+
+.training-skill-result > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.training-skill-result strong {
+  color: #26334d;
+  font-size: 0.9rem;
+}
+
+.training-skill-result > div span {
+  color: #65718a;
+  font-size: 0.78rem;
+}
+
+.training-skill-result__bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ebf1;
+}
+
+.training-skill-result__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--service-primary);
+}
+
 .training-feedback {
   display: grid;
   gap: 8px;

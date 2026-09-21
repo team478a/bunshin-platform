@@ -14,11 +14,18 @@ describe('OpenAiTrainingAnswerEvaluator', () => {
                 {
                   type: 'output_text',
                   text: JSON.stringify({
-                    result: 'PASS',
                     understanding: 82,
+                    skills: {
+                      promptStructure: 84,
+                      contextSetting: 76,
+                      constraintSetting: 65,
+                      outputControl: 64,
+                      businessApplication: 70,
+                      revisionSkill: 62,
+                    },
                     strengths: ['目的を明確に書けています'],
                     weaknesses: ['出力形式を追加するとさらに良くなります'],
-                    nextRecommendation: '次の実務課題へ進む',
+                    recommendedNextSkill: 'businessApplication',
                   }),
                 },
               ],
@@ -37,6 +44,8 @@ describe('OpenAiTrainingAnswerEvaluator', () => {
     }).evaluate({ missionDefinitionKey: 'PROMPT_BASIC', answer: '目的と条件を書きます。' });
 
     expect(result.evaluation).toMatchObject({ result: 'PASS', understanding: 82 });
+    expect(result.evaluation.skills.contextSetting).toBe(76);
+    expect(result.evaluation.evaluatedSkillKeys).toEqual(['promptStructure', 'contextSetting']);
     expect(result.inputTokens).toBe(120);
     expect(result.estimatedCostUsdMicros).toBe(25);
     const body = fetcher.mock.calls[0]?.[1]?.body;
@@ -52,6 +61,7 @@ describe('OpenAiTrainingAnswerEvaluator', () => {
     expect(gradingInput['evaluationCriteria']).toEqual(
       expect.arrayContaining([expect.any(String)]),
     );
+    expect(gradingInput['evaluatedSkillKeys']).toEqual(['promptStructure', 'contextSetting']);
   });
 
   it('rejects an evaluation outside the allowed schema', async () => {
@@ -64,11 +74,18 @@ describe('OpenAiTrainingAnswerEvaluator', () => {
                 {
                   type: 'output_text',
                   text: JSON.stringify({
-                    result: 'PASS',
                     understanding: 120,
+                    skills: {
+                      promptStructure: 80,
+                      contextSetting: 70,
+                      constraintSetting: 60,
+                      outputControl: 60,
+                      businessApplication: 60,
+                      revisionSkill: 60,
+                    },
                     strengths: [],
                     weaknesses: [],
-                    nextRecommendation: '次へ',
+                    recommendedNextSkill: 'promptStructure',
                   }),
                 },
               ],

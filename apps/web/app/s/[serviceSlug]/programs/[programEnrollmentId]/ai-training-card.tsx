@@ -3,11 +3,13 @@
 import {
   TRAINING_CHALLENGES,
   TRAINING_GOALS,
+  TRAINING_SKILL_LABELS,
   TRAINING_TOPICS,
   TRAINING_USE_CASES,
   recommendedTrainingGoalKeys,
   type TrainingChallengeKey,
   type TrainingGoalKey,
+  type TrainingSkillKey,
   type TrainingTopicKey,
   type TrainingUseCaseKey,
 } from '@bunshin/capability-training';
@@ -63,10 +65,17 @@ export type TrainingParticipantState = {
 type Evaluation = {
   result: 'PASS' | 'REVIEW';
   understanding: number;
+  skills: Record<TrainingSkillKey, number>;
+  evaluatedSkillKeys: readonly TrainingSkillKey[];
   strengths: string[];
   weaknesses: string[];
+  recommendedNextSkill: TrainingSkillKey;
   nextRecommendation: string;
+  evaluationRuleVersion: string;
 };
+
+const skillStateLabel = (score: number) =>
+  score >= 80 ? 'よくできています' : score >= 60 ? 'できています' : '練習中です';
 
 const roleLabels: Record<TrainingRole, string> = {
   SALES: '営業・接客',
@@ -481,6 +490,30 @@ export function AiTrainingCard({
         <div className="training-score" aria-label={`理解度 ${evaluation.understanding}点`}>
           <strong>{evaluation.understanding}</strong>
           <span>理解度 / 100</span>
+        </div>
+        <div className="training-skill-results">
+          <h3>今回確認した力</h3>
+          {evaluation.evaluatedSkillKeys.map((skill) => {
+            const score = evaluation.skills[skill];
+            return (
+              <div className="training-skill-result" key={skill}>
+                <div>
+                  <strong>{TRAINING_SKILL_LABELS[skill]}</strong>
+                  <span>{skillStateLabel(score)}</span>
+                </div>
+                <span
+                  className="training-skill-result__bar"
+                  role="meter"
+                  aria-label={`${TRAINING_SKILL_LABELS[skill]} ${score}点`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={score}
+                >
+                  <span style={{ width: `${score}%` }} />
+                </span>
+              </div>
+            );
+          })}
         </div>
         {evaluation.strengths.length ? (
           <div className="training-feedback training-feedback--good">
