@@ -5,6 +5,7 @@ import {
   TRAINING_CHALLENGE_KEYS,
   TRAINING_GOAL_KEYS,
   TRAINING_AI_LEVELS,
+  TRAINING_INTERACTION_TYPES,
   TRAINING_ROLES,
   TRAINING_TOPIC_KEYS,
   TRAINING_USE_CASE_KEYS,
@@ -44,6 +45,13 @@ const profileSchema = z
         message: '「まだ使っていない」は単独で選択してください',
       });
     }
+  })
+  .strict();
+const interactionSchema = z
+  .object({
+    missionAssignmentId: uuid,
+    interactionType: z.enum(TRAINING_INTERACTION_TYPES),
+    idempotencyKey: uuid,
   })
   .strict();
 
@@ -170,6 +178,44 @@ export async function submitAiTrainingAnswerResponse(
     }
     if (result.outcome === 'CONFLICT') {
       throw new ApplicationError('CONFLICT', 'training answer has already been submitted');
+    }
+    return response(result, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function recordAiTrainingInteractionResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, value] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      interactionSchema.parseAsync(request.json()),
+    ]);
+    const db = await import('@bunshin/database');
+    const result = await new db.PrismaTrainingInteractionRepository(db.prisma).record({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId: uuid.parse(rawEnrollmentId),
+      ...value,
+      occurredAt: new Date(),
+    });
+    if (result.outcome === 'NOT_FOUND') {
+      throw new ApplicationError('NOT_FOUND', 'training mission not found');
+    }
+    if (result.outcome === 'CONFLICT') {
+      throw new ApplicationError('CONFLICT', 'training interaction could not be recorded');
     }
     return response(result, requestId);
   } catch (error) {

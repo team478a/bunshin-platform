@@ -17,6 +17,7 @@ import { useRef, useState, type FormEvent } from 'react';
 
 type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
 type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
+type TrainingInteractionType = 'HINT_VIEWED' | 'HELP_REQUESTED' | 'TRAINING_POSTPONED';
 
 export type TrainingParticipantState = {
   enrollmentId: string;
@@ -46,14 +47,14 @@ export type TrainingParticipantState = {
       task: string;
       instructions: string[];
       estimatedMinutes: number | null;
-      learningObjective?: string;
-      businessScenario?: string;
-      constraints?: readonly string[];
-      successCriteria?: readonly string[];
-      commonMistakes?: readonly string[];
-      evaluationCriteria?: readonly string[];
-      difficulty?: 'EASY' | 'STANDARD' | 'CHALLENGE';
-      difficultyGuidance?: string;
+      learningObjective?: string | undefined;
+      businessScenario?: string | undefined;
+      constraints?: readonly string[] | undefined;
+      successCriteria?: readonly string[] | undefined;
+      commonMistakes?: readonly string[] | undefined;
+      evaluationCriteria?: readonly string[] | undefined;
+      difficulty?: 'EASY' | 'STANDARD' | 'CHALLENGE' | undefined;
+      difficultyGuidance?: string | undefined;
     };
     reevaluateAt: string | null;
     submission: {
@@ -126,12 +127,17 @@ export function AiTrainingCard({
   const [setupStep, setSetupStep] = useState(1);
   const [answer, setAnswer] = useState('');
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [hintVisible, setHintVisible] = useState(false);
+  const [helpVisible, setHelpVisible] = useState(false);
+  const [postponed, setPostponed] = useState(false);
+  const [interactionSaving, setInteractionSaving] = useState<TrainingInteractionType | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const profileKey = useRef<string | null>(null);
   const answerKey = useRef<string | null>(null);
   const evaluationKey = useRef<string | null>(null);
+  const interactionKeys = useRef<Partial<Record<TrainingInteractionType, string>>>({});
   const action = state.action;
   const recommendedGoals = recommendedTrainingGoalKeys(role);
 
@@ -240,6 +246,31 @@ export function AiTrainingCard({
     }
   }
 
+  async function recordInteraction(interactionType: TrainingInteractionType) {
+    if (!action || action.mode !== 'WORK') return;
+    setInteractionSaving(interactionType);
+    setError('');
+    interactionKeys.current[interactionType] ??= crypto.randomUUID();
+    try {
+      await readPayload(
+        await fetch(`${endpoint}/actions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            missionAssignmentId: action.id,
+            interactionType,
+            idempotencyKey: interactionKeys.current[interactionType],
+          }),
+        }),
+      );
+    } catch (cause) {
+      delete interactionKeys.current[interactionType];
+      setError(cause instanceof Error ? cause.message : '操作を記録できませんでした。');
+    } finally {
+      setInteractionSaving(null);
+    }
+  }
+
   async function loadNextMission() {
     setSaving(true);
     setError('');
@@ -250,6 +281,10 @@ export function AiTrainingCard({
       setState(data);
       setAnswer('');
       setEvaluation(null);
+      setHintVisible(false);
+      setHelpVisible(false);
+      setPostponed(false);
+      interactionKeys.current = {};
       setMessage('次の課題を表示しました。');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '次の課題を取得できませんでした。');
@@ -552,7 +587,11 @@ export function AiTrainingCard({
           }}
           disabled={saving}
         >
-          {saving ? '更新しています…' : '次の課題を見る'}
+          {saving
+            ? '更新しています…'
+            : evaluation.result === 'REVIEW'
+              ? '復習してもう一度回答する'
+              : '次の課題を見る'}
         </button>
       </section>
     );
@@ -597,6 +636,68 @@ export function AiTrainingCard({
         <strong>課題</strong>
         <p>{action.display.task}</p>
       </div>
+      {action.mode === 'WORK' ? (
+        <div className="training-support-actions" aria-label="課題のサポート">
+          <button
+            className="button button--secondary"
+            type="button"
+            aria-expanded={hintVisible}
+            onClick={() => {
+              setHintVisible(true);
+              void recordInteraction('HINT_VIEWED');
+            }}
+            disabled={interactionSaving !== null}
+          >
+            {interactionSaving === 'HINT_VIEWED' ? '表示しています…' : 'ヒントを見る'}
+          </button>
+          <button
+            className="button button--secondary"
+            type="button"
+            aria-expanded={helpVisible}
+            onClick={() => {
+              setHelpVisible(true);
+              setHintVisible(true);
+              void recordInteraction('HELP_REQUESTED');
+            }}
+            disabled={interactionSaving !== null}
+          >
+            {interactionSaving === 'HELP_REQUESTED' ? '確認しています…' : '困った'}
+          </button>
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() => {
+              setPostponed(true);
+              void recordInteraction('TRAINING_POSTPONED');
+            }}
+            disabled={interactionSaving !== null || postponed}
+          >
+            {postponed ? '後で再開できます' : '後でやる'}
+          </button>
+        </div>
+      ) : null}
+      {hintVisible ? (
+        <div className="training-hint" role="status">
+          <strong>ヒント</strong>
+          <p>
+            まず「{action.display.successCriteria?.[0] ?? '課題の目的'}」を確認し、
+            {action.display.constraints?.[0]
+              ? `「${action.display.constraints[0]}」から書き始めてみましょう。`
+              : '伝えたい内容を一つに絞って書き始めてみましょう。'}
+          </p>
+        </div>
+      ) : null}
+      {helpVisible ? (
+        <div className="notice training-help" role="status">
+          <strong>小さく分けて進めましょう</strong>
+          <p>上のヒントを使って最初の1文だけ書いてください。短い回答でもAIが改善点を伝えます。</p>
+        </div>
+      ) : null}
+      {postponed ? (
+        <p className="notice notice--success" role="status">
+          この画面を閉じても大丈夫です。次に開いたとき、同じ課題から続けられます。
+        </p>
+      ) : null}
       {action.display.constraints?.length ? (
         <div className="training-quality-list">
           <strong>条件</strong>
