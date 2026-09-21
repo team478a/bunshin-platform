@@ -1,5 +1,16 @@
 'use client';
 
+import {
+  TRAINING_CHALLENGES,
+  TRAINING_GOALS,
+  TRAINING_TOPICS,
+  TRAINING_USE_CASES,
+  recommendedTrainingGoalKeys,
+  type TrainingChallengeKey,
+  type TrainingGoalKey,
+  type TrainingTopicKey,
+  type TrainingUseCaseKey,
+} from '@bunshin/capability-training';
 import { useRef, useState, type FormEvent } from 'react';
 
 type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
@@ -11,7 +22,16 @@ export type TrainingParticipantState = {
   enrollmentStatus: 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
   startsAt: string;
   endsAt: string | null;
-  profile: { role: TrainingRole; aiLevel: TrainingAiLevel } | null;
+  profile: {
+    role: TrainingRole;
+    aiLevel: TrainingAiLevel;
+    aiUseCases: TrainingUseCaseKey[];
+    workChallenges: TrainingChallengeKey[];
+    preferredTopics: TrainingTopicKey[];
+    dailyMinutes: 5 | 10 | 15;
+    learningGoalKey: TrainingGoalKey;
+  } | null;
+  goal: { title: string } | null;
   action: {
     id: string;
     sequence: number;
@@ -65,6 +85,22 @@ export function AiTrainingCard({
   const [aiLevel, setAiLevel] = useState<TrainingAiLevel>(
     initialState.profile?.aiLevel ?? 'BEGINNER',
   );
+  const [aiUseCases, setAiUseCases] = useState<TrainingUseCaseKey[]>(
+    initialState.profile?.aiUseCases ?? ['NOT_YET'],
+  );
+  const [workChallenges, setWorkChallenges] = useState<TrainingChallengeKey[]>(
+    initialState.profile?.workChallenges ?? [],
+  );
+  const [preferredTopics, setPreferredTopics] = useState<TrainingTopicKey[]>(
+    initialState.profile?.preferredTopics ?? [],
+  );
+  const [dailyMinutes, setDailyMinutes] = useState<5 | 10 | 15>(
+    initialState.profile?.dailyMinutes ?? 10,
+  );
+  const [learningGoalKey, setLearningGoalKey] = useState<TrainingGoalKey>(
+    initialState.profile?.learningGoalKey ?? 'USE_AI_IN_DAILY_WORK',
+  );
+  const [setupStep, setSetupStep] = useState(1);
   const [answer, setAnswer] = useState('');
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [saving, setSaving] = useState(false);
@@ -74,6 +110,7 @@ export function AiTrainingCard({
   const answerKey = useRef<string | null>(null);
   const evaluationKey = useRef<string | null>(null);
   const action = state.action;
+  const recommendedGoals = recommendedTrainingGoalKeys(role);
 
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${state.enrollmentId}`;
 
@@ -93,11 +130,23 @@ export function AiTrainingCard({
     setMessage('');
     profileKey.current ??= crypto.randomUUID();
     try {
+      if (!workChallenges.length || !preferredTopics.length) {
+        throw new Error('困っていることと、学びたいテーマを1つ以上選んでください。');
+      }
       const data = (await readPayload(
         await fetch(`${endpoint}/profile`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ role, aiLevel, idempotencyKey: profileKey.current }),
+          body: JSON.stringify({
+            role,
+            aiLevel,
+            aiUseCases,
+            workChallenges,
+            preferredTopics,
+            dailyMinutes,
+            learningGoalKey,
+            idempotencyKey: profileKey.current,
+          }),
         }),
       )) as { state: TrainingParticipantState };
       setState(data.state);
@@ -199,49 +248,205 @@ export function AiTrainingCard({
   if (!state.profile) {
     return (
       <section className="service-entry__card training-card" aria-labelledby="training-setup-title">
-        <p className="eyebrow">最初に2つだけ教えてください</p>
-        <h2 id="training-setup-title">あなたに合う研修を準備します</h2>
-        <p>回答に合わせて、今日取り組む課題を変えます。</p>
+        <p className="eyebrow">最初のかんたん診断 {setupStep} / 4</p>
+        <div className="training-setup-progress" aria-label={`診断 ${setupStep} / 4`}>
+          <span style={{ width: `${setupStep * 25}%` }} />
+        </div>
+        <h2 id="training-setup-title">
+          {setupStep === 1
+            ? 'あなたの仕事とAI経験'
+            : setupStep === 2
+              ? '今の使い方と困りごと'
+              : setupStep === 3
+                ? '学べる内容を選ぶ'
+                : '30日後の目標を決める'}
+        </h2>
+        <p>今の仕事、経験、困りごとに合わせて、毎日の課題を変えます。</p>
         <form
           className="form-stack"
           onSubmit={(event) => {
             void saveProfile(event);
           }}
         >
-          <fieldset className="training-choice-group">
-            <legend>今の仕事に近いもの</legend>
-            {(Object.keys(roleLabels) as TrainingRole[]).map((value) => (
-              <label key={value} className="training-choice">
-                <input
-                  type="radio"
-                  name="role"
-                  value={value}
-                  checked={role === value}
-                  onChange={() => setRole(value)}
-                />
-                <span>{roleLabels[value]}</span>
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="training-choice-group">
-            <legend>AI・ChatGPTの経験</legend>
-            {(Object.keys(levelLabels) as TrainingAiLevel[]).map((value) => (
-              <label key={value} className="training-choice">
-                <input
-                  type="radio"
-                  name="aiLevel"
-                  value={value}
-                  checked={aiLevel === value}
-                  onChange={() => setAiLevel(value)}
-                />
-                <span>{levelLabels[value]}</span>
-              </label>
-            ))}
-          </fieldset>
+          {setupStep === 1 ? (
+            <>
+              <fieldset className="training-choice-group">
+                <legend>今の仕事に近いもの</legend>
+                {(Object.keys(roleLabels) as TrainingRole[]).map((value) => (
+                  <label key={value} className="training-choice">
+                    <input
+                      type="radio"
+                      name="role"
+                      checked={role === value}
+                      onChange={() => setRole(value)}
+                    />
+                    <span>{roleLabels[value]}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="training-choice-group">
+                <legend>AI・ChatGPTの経験</legend>
+                {(Object.keys(levelLabels) as TrainingAiLevel[]).map((value) => (
+                  <label key={value} className="training-choice">
+                    <input
+                      type="radio"
+                      name="aiLevel"
+                      checked={aiLevel === value}
+                      onChange={() => setAiLevel(value)}
+                    />
+                    <span>{levelLabels[value]}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </>
+          ) : null}
+          {setupStep === 2 ? (
+            <>
+              <fieldset className="training-choice-group">
+                <legend>今、AIを使っている業務（複数選択可）</legend>
+                {TRAINING_USE_CASES.map((option) => (
+                  <label key={option.key} className="training-choice">
+                    <input
+                      type="checkbox"
+                      checked={aiUseCases.includes(option.key)}
+                      onChange={() =>
+                        setAiUseCases((current) => {
+                          if (option.key === 'NOT_YET') return ['NOT_YET'];
+                          const choices = current.filter((value) => value !== 'NOT_YET');
+                          return choices.includes(option.key)
+                            ? choices.filter((value) => value !== option.key)
+                            : [...choices, option.key];
+                        })
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="training-choice-group">
+                <legend>仕事で困っていること（複数選択可）</legend>
+                {TRAINING_CHALLENGES.map((option) => (
+                  <label key={option.key} className="training-choice">
+                    <input
+                      type="checkbox"
+                      checked={workChallenges.includes(option.key)}
+                      onChange={() =>
+                        setWorkChallenges((current) =>
+                          current.includes(option.key)
+                            ? current.filter((value) => value !== option.key)
+                            : [...current, option.key],
+                        )
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </>
+          ) : null}
+          {setupStep === 3 ? (
+            <fieldset className="training-choice-group training-catalog">
+              <legend>学びたいテーマ（6つまで）</legend>
+              <p className="training-field-help">
+                AIでできる仕事の例です。気になるものを選んでください。
+              </p>
+              {TRAINING_TOPICS.map((option) => (
+                <label key={option.key} className="training-choice">
+                  <input
+                    type="checkbox"
+                    checked={preferredTopics.includes(option.key)}
+                    disabled={!preferredTopics.includes(option.key) && preferredTopics.length >= 6}
+                    onChange={() =>
+                      setPreferredTopics((current) =>
+                        current.includes(option.key)
+                          ? current.filter((value) => value !== option.key)
+                          : [...current, option.key],
+                      )
+                    }
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+          {setupStep === 4 ? (
+            <>
+              <fieldset className="training-choice-group training-goal-options">
+                <legend>30日後にできるようになりたいこと</legend>
+                {TRAINING_GOALS.map((goal) => (
+                  <label key={goal.key} className="training-choice training-goal-choice">
+                    <input
+                      type="radio"
+                      name="learningGoal"
+                      checked={learningGoalKey === goal.key}
+                      onChange={() => setLearningGoalKey(goal.key)}
+                    />
+                    <span>
+                      <strong>{goal.label}</strong>
+                      {recommendedGoals.includes(goal.key) ? <small>あなたにおすすめ</small> : null}
+                      {goal.description ? <em>{goal.description}</em> : null}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="training-choice-group training-time-options">
+                <legend>1日に使える時間</legend>
+                {([5, 10, 15] as const).map((minutes) => (
+                  <label key={minutes} className="training-choice">
+                    <input
+                      type="radio"
+                      name="dailyMinutes"
+                      checked={dailyMinutes === minutes}
+                      onChange={() => setDailyMinutes(minutes)}
+                    />
+                    <span>{minutes}分</span>
+                  </label>
+                ))}
+              </fieldset>
+              <p className="training-privacy-note">
+                顧客名、個人情報、社外秘の内容は入力しないでください。この診断では選択肢だけを保存します。
+              </p>
+            </>
+          ) : null}
           {error ? <p className="notice notice--error">{error}</p> : null}
-          <button className="button button--primary button--full" disabled={saving}>
-            {saving ? '準備しています…' : '今日の研修を始める'}
-          </button>
+          <div className="training-setup-actions">
+            {setupStep > 1 ? (
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => {
+                  setError('');
+                  setSetupStep((current) => current - 1);
+                }}
+              >
+                戻る
+              </button>
+            ) : null}
+            {setupStep < 4 ? (
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => {
+                  if (setupStep === 2 && !workChallenges.length) {
+                    setError('困っていることを1つ以上選んでください。');
+                    return;
+                  }
+                  if (setupStep === 3 && !preferredTopics.length) {
+                    setError('学びたいテーマを1つ以上選んでください。');
+                    return;
+                  }
+                  setError('');
+                  setSetupStep((current) => current + 1);
+                }}
+              >
+                次へ
+              </button>
+            ) : (
+              <button className="button button--primary" disabled={saving}>
+                {saving ? '準備しています…' : 'この内容で研修を始める'}
+              </button>
+            )}
+          </div>
         </form>
       </section>
     );
@@ -316,6 +521,12 @@ export function AiTrainingCard({
       </div>
       <p className="eyebrow">今日やること</p>
       <h2 id="training-action-title">{action.display.title}</h2>
+      {state.goal ? (
+        <p className="training-current-goal">
+          <strong>あなたの目標</strong>
+          <span>{state.goal.title}</span>
+        </p>
+      ) : null}
       <p className="training-reason">{action.display.reason}</p>
       <div className="training-task">
         <strong>課題</strong>

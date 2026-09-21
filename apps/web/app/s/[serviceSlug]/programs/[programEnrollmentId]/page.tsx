@@ -107,6 +107,7 @@ export default async function ProgramParticipantPage({
               startsAt: trainingState.startsAt.toISOString(),
               endsAt: trainingState.endsAt?.toISOString() ?? null,
               profile: trainingState.profile,
+              goal: trainingState.goal,
               action: trainingState.action
                 ? {
                     id: trainingState.action.id,

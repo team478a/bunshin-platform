@@ -2,8 +2,12 @@ import 'server-only';
 import {
   AiTrainingParticipantService,
   AiTrainingV1Policy,
+  TRAINING_CHALLENGE_KEYS,
+  TRAINING_GOAL_KEYS,
   TRAINING_AI_LEVELS,
   TRAINING_ROLES,
+  TRAINING_TOPIC_KEYS,
+  TRAINING_USE_CASE_KEYS,
   TrainingRuntimeError,
 } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -25,7 +29,21 @@ const profileSchema = z
   .object({
     role: z.enum(TRAINING_ROLES),
     aiLevel: z.enum(TRAINING_AI_LEVELS),
+    aiUseCases: z.array(z.enum(TRAINING_USE_CASE_KEYS)).min(1).max(6),
+    workChallenges: z.array(z.enum(TRAINING_CHALLENGE_KEYS)).min(1).max(6),
+    preferredTopics: z.array(z.enum(TRAINING_TOPIC_KEYS)).min(1).max(6),
+    dailyMinutes: z.union([z.literal(5), z.literal(10), z.literal(15)]),
+    learningGoalKey: z.enum(TRAINING_GOAL_KEYS),
     idempotencyKey: uuid,
+  })
+  .superRefine((value, context) => {
+    if (value.aiUseCases.includes('NOT_YET') && value.aiUseCases.length > 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['aiUseCases'],
+        message: '「まだ使っていない」は単独で選択してください',
+      });
+    }
   })
   .strict();
 
