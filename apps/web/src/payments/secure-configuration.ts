@@ -214,6 +214,8 @@ export class StripeCommercialInvoiceCheckoutAdapter {
     amountYen: number;
     successUrl: string;
     cancelUrl: string;
+    savePaymentMethod?: boolean;
+    customerId?: string | null;
   }): Promise<StripeCheckoutSession> {
     const body = new URLSearchParams({
       mode: 'payment',
@@ -221,7 +223,6 @@ export class StripeCommercialInvoiceCheckoutAdapter {
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       client_reference_id: input.invoiceId,
-      customer_email: input.billingEmail,
       'invoice_creation[enabled]': 'true',
       'line_items[0][price_data][currency]': 'jpy',
       'line_items[0][price_data][unit_amount]': String(input.amountYen),
@@ -233,6 +234,14 @@ export class StripeCommercialInvoiceCheckoutAdapter {
       'payment_intent_data[metadata][invoice_id]': input.invoiceId,
       'payment_intent_data[metadata][workspace_id]': input.workspaceId,
     });
+    if (input.customerId) body.set('customer', input.customerId);
+    else {
+      body.set('customer_email', input.billingEmail);
+      if (input.savePaymentMethod) body.set('customer_creation', 'always');
+    }
+    if (input.savePaymentMethod) {
+      body.set('payment_intent_data[setup_future_usage]', 'off_session');
+    }
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
@@ -270,6 +279,41 @@ export class StripeCommercialInvoiceCheckoutAdapter {
       expiresAt:
         typeof payload.expires_at === 'number' ? new Date(payload.expires_at * 1000) : null,
     };
+  }
+}
+
+export class StripePaymentMethodRetrievalAdapter {
+  async retrieve(secretKey: string, paymentIntentId: string) {
+    if (!/^pi_[A-Za-z0-9_]+$/.test(paymentIntentId)) {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid Stripe PaymentIntent identifier');
+    }
+    const response = await fetch(
+      `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(paymentIntentId)}`,
+      {
+        headers: { authorization: `Bearer ${secretKey}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    if (!response.ok) {
+      throw new ApplicationError('INTERNAL_ERROR', '保存する支払方法を確認できませんでした');
+    }
+    const payload = (await response.json()) as {
+      id?: unknown;
+      status?: unknown;
+      customer?: unknown;
+      payment_method?: unknown;
+    };
+    if (
+      payload.id !== paymentIntentId ||
+      payload.status !== 'succeeded' ||
+      typeof payload.customer !== 'string' ||
+      !payload.customer.startsWith('cus_') ||
+      typeof payload.payment_method !== 'string' ||
+      !payload.payment_method.startsWith('pm_')
+    ) {
+      throw new ApplicationError('INTERNAL_ERROR', 'Stripeの支払方法情報が不完全です');
+    }
+    return { customerId: payload.customer, paymentMethodId: payload.payment_method };
   }
 }
 

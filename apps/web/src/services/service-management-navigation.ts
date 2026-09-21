@@ -4,11 +4,21 @@ const BUSINESS_DAILY_SECTION_HREFS = new Set([
   'members',
   'knowledge',
   'line',
+  'email',
+  'templates',
   'settings',
   'legal',
 ]);
 
-const FORTUNE_SECTION_HREFS = new Set(['members', 'line', 'settings', 'legal', 'fortune']);
+const FORTUNE_SECTION_HREFS = new Set([
+  'members',
+  'line',
+  'email',
+  'templates',
+  'settings',
+  'legal',
+  'fortune',
+]);
 const IMAGE_MANAGEMENT_SECTION_HREFS = new Set(['referral-rewards', 'credits', 'image-operations']);
 
 export function selectServiceManagementSections<T extends { href: string }>(

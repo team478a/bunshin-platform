@@ -25,8 +25,6 @@ export function enforceBusinessFreeRegistrationSettings<T extends BusinessFreeRe
   return {
     ...value,
     registrationMode: 'PUBLIC',
-    emailEnabled: false,
-    lineEnabled: true,
     inviteCodeEnabled: false,
     referralEnabled: false,
   };
@@ -60,8 +58,6 @@ export function enforceBusinessDailyServiceSettings<T extends BusinessDailyServi
   if (!value.businessProfileEnabled) return value;
   return {
     ...value,
-    emailEnabled: false,
-    lineEnabled: true,
     inviteCodeEnabled: false,
     referralEnabled: false,
     dailyIdeaDelivery: enforceBusinessDailyDeliverySettings(true, value.dailyIdeaDelivery),

@@ -162,6 +162,33 @@ enum ServiceNotificationChannel {
   EMAIL
 }
 
+enum ServiceRegistrationEmailProviderMode {
+  PLATFORM
+  DEDICATED_RESEND
+}
+
+enum ServiceRegistrationEmailDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// サービス運営者が管理する配信文面の送信チャネル。
+enum ServiceMessageTemplateChannel {
+  EMAIL
+  LINE
+}
+
+/// 配信の目的。実際の送信は既存のメール／LINE配信機能が担当する。
+enum ServiceMessageTemplatePurpose {
+  REGISTRATION_COMPLETE
+  REMINDER
+  WEEKLY_REPORT
+  GENERAL_ANNOUNCEMENT
+}
+
 enum ServiceMembershipEventType {
   REGISTRATION_COMPLETED
   FIRST_SERVICE_USE
@@ -413,6 +440,98 @@ model ProgramProgressSnapshot {
   @@index([workspaceId, groupId, phaseKey, stateKey])
   @@index([workspaceId, groupId, nextEvaluationAt])
   @@map("program_progress_snapshots")
+}
+
+enum TrainingParticipantRole {
+  SALES
+  OFFICE
+  MANAGER
+  OTHER
+}
+
+enum TrainingParticipantAiLevel {
+  BEGINNER
+  INTERMEDIATE
+}
+
+enum TrainingAnswerEvaluationStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+/// AI研修Pilotだけが使う、Enrollment単位の選定入力。
+model TrainingParticipantProfile {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  workspaceId         String                     @map("workspace_id") @db.Uuid
+  groupId             String                     @map("group_id") @db.Uuid
+  programEnrollmentId String                     @unique @map("program_enrollment_id") @db.Uuid
+  groupMembershipId   String                     @map("group_membership_id") @db.Uuid
+  userId              String                     @map("user_id") @db.Uuid
+  role                TrainingParticipantRole
+  aiLevel             TrainingParticipantAiLevel @map("ai_level")
+  aiUseCases          Json                       @default("[]") @map("ai_use_cases")
+  workChallenges      Json                       @default("[]") @map("work_challenges")
+  preferredTopics     Json                       @default("[]") @map("preferred_topics")
+  dailyMinutes        Int                        @default(10) @map("daily_minutes")
+  learningGoalKey     String?                    @map("learning_goal_key") @db.VarChar(80)
+  assessmentVersion   String                     @default("AI_TRAINING_CATALOG_V1") @map("assessment_version") @db.VarChar(80)
+  skillScores         Json                       @default("{}") @map("skill_scores")
+  currentTopic        String?                    @map("current_topic") @db.VarChar(80)
+  needsReview         Boolean                    @default(false) @map("needs_review")
+  recentSuccesses     Int                        @default(0) @map("recent_successes")
+  recentFailures      Int                        @default(0) @map("recent_failures")
+  streak              Int                        @default(0)
+  updatedByUserId     String                     @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@unique([workspaceId, groupId, programEnrollmentId])
+  @@index([workspaceId, groupId, userId])
+  @@map("training_participant_profiles")
+}
+
+/// 自由記述の回答と構造化済み評価。提出・評価の監査はProgramActionEventへ残す。
+model TrainingMissionAnswer {
+  id                  String                         @id @default(uuid()) @db.Uuid
+  workspaceId         String                         @map("workspace_id") @db.Uuid
+  groupId             String                         @map("group_id") @db.Uuid
+  programEnrollmentId String                         @map("program_enrollment_id") @db.Uuid
+  missionAssignmentId String                         @unique @map("mission_assignment_id") @db.Uuid
+  userId              String                         @map("user_id") @db.Uuid
+  answer              String                         @db.Text
+  evaluationStatus    TrainingAnswerEvaluationStatus @default(PENDING) @map("evaluation_status")
+  evaluation          Json?                          @map("evaluation")
+  evaluatedAt         DateTime?                      @map("evaluated_at") @db.Timestamptz(3)
+  createdAt           DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, programEnrollmentId, createdAt])
+  @@index([workspaceId, groupId, userId, updatedAt])
+  @@map("training_mission_answers")
+}
+
+/// 合格済みのAI研修回答から、本人が明示的に保存した再利用用成果物。
+model TrainingToolkitItem {
+  id                      String   @id @default(uuid()) @db.Uuid
+  workspaceId             String   @map("workspace_id") @db.Uuid
+  groupId                 String   @map("group_id") @db.Uuid
+  programEnrollmentId     String   @map("program_enrollment_id") @db.Uuid
+  missionAssignmentId     String   @map("mission_assignment_id") @db.Uuid
+  trainingMissionAnswerId String   @unique @map("training_mission_answer_id") @db.Uuid
+  userId                  String   @map("user_id") @db.Uuid
+  missionDefinitionKey    String   @map("mission_definition_key") @db.VarChar(80)
+  title                   String   @db.VarChar(160)
+  contentSnapshot         String   @map("content_snapshot") @db.Text
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, programEnrollmentId, createdAt])
+  @@index([workspaceId, groupId, userId, createdAt])
+  @@map("training_toolkit_items")
 }
 
 model ResaleItem {
@@ -2492,6 +2611,8 @@ model ServiceConfiguration {
   updatedBy            User                        @relation("ServiceConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: Restrict)
   brand                ServiceBrand?
   registration         ServiceRegistrationPolicy?
+  registrationEmailConfiguration ServiceRegistrationEmailConfiguration?
+  messageTemplates      ServiceMessageTemplate[]
   audits               ServiceConfigurationAudit[]
   legalDocuments       ServiceLegalDocument[]
   commercialSetting    ServiceCommercialSetting?
@@ -2603,6 +2724,91 @@ model ServiceRegistrationPolicy {
   @@unique([workspaceId, groupId, configurationId])
   @@index([workspaceId, groupId, mode])
   @@map("service_registration_policies")
+}
+
+model ServiceRegistrationEmailConfiguration {
+  id                  String                               @id @default(uuid()) @db.Uuid
+  workspaceId         String                               @map("workspace_id") @db.Uuid
+  groupId             String                               @unique @map("group_id") @db.Uuid
+  configurationId     String                               @unique @map("configuration_id") @db.Uuid
+  enabled             Boolean                              @default(false)
+  providerMode        ServiceRegistrationEmailProviderMode @default(PLATFORM) @map("provider_mode")
+  encryptedApiKey     String?                              @map("encrypted_api_key") @db.Text
+  apiKeyMask          String?                              @map("api_key_mask") @db.VarChar(16)
+  keyVersion          Int                                  @default(1) @map("key_version")
+  fromName            String                               @map("from_name") @db.VarChar(120)
+  fromEmail           String                               @map("from_email") @db.VarChar(320)
+  replyToEmail        String?                              @map("reply_to_email") @db.VarChar(320)
+  subject             String                               @db.VarChar(200)
+  body                String                               @db.Text
+  lastVerifiedAt      DateTime?                            @map("last_verified_at") @db.Timestamptz(6)
+  lastErrorCategory   String?                              @map("last_error_category") @db.VarChar(80)
+  updatedByUserId     String                               @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  configuration       ServiceConfiguration                 @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  deliveries          ServiceRegistrationEmailDelivery[]
+
+  @@unique([workspaceId, groupId], map: "service_registration_email_configurations_workspace_group_key")
+  @@unique([workspaceId, groupId, configurationId], map: "service_registration_email_configurations_scope_key")
+  @@index([enabled, providerMode])
+  @@map("service_registration_email_configurations")
+}
+
+model ServiceRegistrationEmailDelivery {
+  id                    String                                 @id @default(uuid()) @db.Uuid
+  workspaceId           String                                 @map("workspace_id") @db.Uuid
+  groupId               String                                 @map("group_id") @db.Uuid
+  configurationId       String                                 @map("configuration_id") @db.Uuid
+  emailConfigurationId  String                                 @map("email_configuration_id") @db.Uuid
+  groupMembershipId     String                                 @map("group_membership_id") @db.Uuid
+  userId                String                                 @map("user_id") @db.Uuid
+  recipientEmail        String                                 @map("recipient_email") @db.VarChar(320)
+  recipientName         String?                                @map("recipient_name") @db.VarChar(120)
+  fromName              String                                 @map("from_name") @db.VarChar(120)
+  fromEmail             String                                 @map("from_email") @db.VarChar(320)
+  replyToEmail          String?                                @map("reply_to_email") @db.VarChar(320)
+  subject               String                                 @db.VarChar(200)
+  body                  String                                 @db.Text
+  status                ServiceRegistrationEmailDeliveryStatus @default(PENDING)
+  attemptCount          Int                                    @default(0) @map("attempt_count")
+  nextAttemptAt         DateTime                               @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  providerMessageId     String?                                @map("provider_message_id") @db.VarChar(200)
+  lastErrorCategory     String?                                @map("last_error_category") @db.VarChar(80)
+  sentAt                DateTime?                              @map("sent_at") @db.Timestamptz(6)
+  createdAt             DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  emailConfiguration    ServiceRegistrationEmailConfiguration  @relation(fields: [emailConfigurationId], references: [id], onDelete: Restrict)
+
+  @@unique([groupMembershipId, emailConfigurationId])
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId, groupId, createdAt])
+  @@map("service_registration_email_deliveries")
+}
+
+/// サービス単位の再利用可能な配信テンプレート。
+/// 秘密情報や送信先は保持せず、配信時に本文をスナップショットする。
+model ServiceMessageTemplate {
+  id              String                        @id @default(uuid()) @db.Uuid
+  workspaceId     String                        @map("workspace_id") @db.Uuid
+  groupId         String                        @map("group_id") @db.Uuid
+  configurationId String                        @map("configuration_id") @db.Uuid
+  channel         ServiceMessageTemplateChannel
+  purpose         ServiceMessageTemplatePurpose
+  name            String                        @db.VarChar(120)
+  subject         String?                       @db.VarChar(200)
+  body            String                        @db.Text
+  isActive        Boolean                       @default(true) @map("is_active")
+  createdByUserId String                        @map("created_by_user_id") @db.Uuid
+  updatedByUserId String                        @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  configuration   ServiceConfiguration          @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId, id])
+  @@index([workspaceId, groupId, channel, purpose, isActive])
+  @@index([configurationId, updatedAt])
+  @@map("service_message_templates")
 }
 
 /// 占いサービス固有の公開停止スイッチと安全な運用上限。
@@ -3009,6 +3215,10 @@ model OrganizationCommercialContract {
   billingEmail              String                     @map("billing_email") @db.VarChar(320)
   paymentTermsDays          Int                        @default(30) @map("payment_terms_days")
   automaticRemindersEnabled Boolean                    @default(false) @map("automatic_reminders_enabled")
+  automaticCollectionEnabled Boolean                   @default(false) @map("automatic_collection_enabled")
+  automaticCollectionConsentAt DateTime?               @map("automatic_collection_consent_at") @db.Timestamptz(6)
+  stripeCustomerId          String?                    @map("stripe_customer_id") @db.VarChar(200)
+  stripePaymentMethodId     String?                    @map("stripe_payment_method_id") @db.VarChar(200)
   externalCustomerReference String?                    @map("external_customer_reference") @db.VarChar(200)
   startsAt                  DateTime?                   @map("starts_at") @db.Timestamptz(6)
   endsAt                    DateTime?                   @map("ends_at") @db.Timestamptz(6)
@@ -5887,7 +6097,7 @@ model Bunshin {
 model AiUsageEvent {
   id                     String        @id @default(uuid()) @db.Uuid
   workspaceId            String        @map("workspace_id") @db.Uuid
-  bunshinId              String        @map("bunshin_id") @db.Uuid
+  bunshinId              String?       @map("bunshin_id") @db.Uuid
   actorUserId            String        @map("actor_user_id") @db.Uuid
   taskType               String        @map("task_type") @db.VarChar(80)
   provider               String        @db.VarChar(40)
@@ -5904,7 +6114,7 @@ model AiUsageEvent {
   occurredAt             DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   workspace              Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin                Bunshin       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  bunshin                Bunshin?      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   actor                  User          @relation("AiUsageActor", fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, actorUserId, idempotencyKey])

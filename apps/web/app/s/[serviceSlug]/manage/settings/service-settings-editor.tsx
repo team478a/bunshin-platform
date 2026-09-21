@@ -60,9 +60,9 @@ export function suggestedOnboardingCopy(operationStyle: string) {
       welcomeMessage:
         'お答えいただいた内容を使って、あなたがご自身のSNSに投稿できる文章を作ります。むずかしく考えず、今のあなたに近い内容をお答えください。',
       questions: [
-        '千ノ国メタバースを、どのようなきっかけで知りましたか？（例：知人からの紹介、説明会・イベント、SNS、すでに活動している）',
+        '千ノ国メディアを、どのようなきっかけで知りましたか？（例：知人からの紹介、説明会・イベント、SNS、すでに活動している）',
         '普段、SNSでは主にどのような方とつながっていますか？（例：友人・知人、家族・親戚、地域の方、仕事関係、同じ趣味の方）',
-        '千ノ国メタバースについて、実際に感じたことや伝えたいことを教えてください。（まだない場合は「まだありません」で大丈夫です）',
+        '千ノ国メディアについて、実際に感じたことや伝えたいことを教えてください。（まだない場合は「まだありません」で大丈夫です）',
       ],
     };
   }
@@ -170,8 +170,8 @@ export function ServiceSettingsEditor({
           secondaryColor: text('secondaryColor'),
           fontFamily: text('fontFamily'),
           registrationMode: text('registrationMode'),
-          emailEnabled: businessFreeSettingsLocked ? false : data.has('emailEnabled'),
-          lineEnabled: businessFreeSettingsLocked ? true : data.has('lineEnabled'),
+          emailEnabled: data.has('emailEnabled'),
+          lineEnabled: data.has('lineEnabled'),
           inviteCodeEnabled: businessFreeSettingsLocked ? false : data.has('inviteCodeEnabled'),
           referralEnabled: businessFreeSettingsLocked ? false : data.has('referralEnabled'),
           trendResearchEnabled: data.has('trendResearchEnabled'),
@@ -319,8 +319,7 @@ export function ServiceSettingsEditor({
           <input
             name="emailEnabled"
             type="checkbox"
-            defaultChecked={!businessFreeSettingsLocked && value.registration.emailEnabled}
-            disabled={businessFreeSettingsLocked}
+            defaultChecked={value.registration.emailEnabled}
           />{' '}
           メールを使う
         </label>
@@ -328,8 +327,7 @@ export function ServiceSettingsEditor({
           <input
             name="lineEnabled"
             type="checkbox"
-            defaultChecked={businessFreeSettingsLocked || value.registration.lineEnabled}
-            disabled={businessFreeSettingsLocked}
+            defaultChecked={value.registration.lineEnabled}
           />{' '}
           LINEを使う
         </label>
@@ -351,11 +349,7 @@ export function ServiceSettingsEditor({
           />{' '}
           紹介元を記録する
         </label>
-        <small>
-          {businessFreeSettingsLocked
-            ? '企業向け無料サービスはLINEだけを使用します。'
-            : 'メールかLINEのどちらか一つは必ず選んでください。'}
-        </small>
+        <small>メールだけ、LINEだけ、または両方を選べます。少なくとも一つを選んでください。</small>
       </fieldset>
       <fieldset>
         <legend>話題を使った投稿案</legend>

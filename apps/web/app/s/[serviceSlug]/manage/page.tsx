@@ -60,6 +60,16 @@ const sections = [
     href: 'line',
   },
   {
+    title: '登録完了メール',
+    description: '登録後の案内文、送信者、返信先、自社メール配信を設定します。',
+    href: 'email',
+  },
+  {
+    title: '配信テンプレート',
+    description: 'メールとLINEの案内文を用途別に保存し、配信準備に使います。',
+    href: 'templates',
+  },
+  {
     title: 'ポイントとバッジ',
     description: 'ポイント数や獲得条件を決め、参加者へのボーナスとバッジを管理します。',
     href: 'points',
@@ -83,6 +93,11 @@ const sections = [
     title: '実践プログラム',
     description: '参加者に提供するコースや、選べる支援内容を管理します。',
     href: 'programs',
+  },
+  {
+    title: 'AI研修の進み具合',
+    description: '受講者の進捗、現在の課題、苦手領域、最終実施日を確認します。',
+    href: 'training',
   },
   {
     title: '動画生成の状況',
@@ -971,7 +986,7 @@ export default async function ServiceManagementHome({
                 <p>{section.description}</p>
                 <Link
                   className="button button--secondary"
-                  href={`/s/${configuration.slug}/manage/${section.href}`}
+                  href={`/s/${configuration.slug}/manage/${section.href}` as Route}
                 >
                   開く
                 </Link>

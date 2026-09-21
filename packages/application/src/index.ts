@@ -113,7 +113,7 @@ export interface PersonalityLearningOutcomeMetrics {
 
 export interface RecordAiUsageInput {
   workspaceId: string;
-  bunshinId: string;
+  bunshinId: string | null;
   actorUserId: string;
   taskType: string;
   provider: string;

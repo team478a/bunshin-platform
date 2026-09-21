@@ -141,6 +141,16 @@ export default async function OrganizationUsagePage({
               }
             </p>
             <p>請求先：{billing.organizationCommercialContract.billingName}</p>
+            {billing.organizationCommercialContract.automaticCollectionEnabled ? (
+              <p>
+                自動支払い：
+                {billing.organizationCommercialContract.stripePaymentMethodId
+                  ? '準備済み'
+                  : '最初のStripe支払い後に有効になります'}
+              </p>
+            ) : (
+              <p>自動支払い：利用していません</p>
+            )}
           </>
         )}
         {billing.tenantInvoices.filter((invoice) => invoice.status !== 'DRAFT').length === 0 ? (

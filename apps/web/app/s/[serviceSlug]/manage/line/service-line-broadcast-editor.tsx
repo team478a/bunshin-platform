@@ -10,6 +10,7 @@ type Broadcast = {
   recipients: Record<string, number>;
 };
 type Industry = { id: string; name: string };
+type LineTemplate = { id: string; name: string; purpose: string; body: string };
 const purposeOptions = [
   ['ATTRACT', '集客'],
   ['RESERVATION', '予約'],
@@ -24,11 +25,13 @@ export function ServiceLineBroadcastEditor({
   initialTitle = '',
   initialMessage = '',
   initialReason = '',
+  templates = [],
 }: {
   serviceSlug: string;
   initialTitle?: string;
   initialMessage?: string;
   initialReason?: string;
+  templates?: LineTemplate[];
 }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
@@ -37,6 +40,8 @@ export function ServiceLineBroadcastEditor({
   const [industryId, setIndustryId] = useState('');
   const [purpose, setPurpose] = useState('');
   const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [title, setTitle] = useState(initialTitle);
+  const [body, setBody] = useState(initialMessage);
   const scheduledCount = broadcasts.filter((broadcast) => broadcast.status === 'SCHEDULED').length;
   const failedCount = broadcasts.reduce(
     (total, broadcast) => total + (broadcast.recipients.FAILED ?? 0),
@@ -150,6 +155,28 @@ export function ServiceLineBroadcastEditor({
         </span>
       </div>
       <form className="line-broadcast-form" onSubmit={(event) => void submit(event)}>
+        {templates.length ? (
+          <label className="field line-broadcast-form__wide">
+            <span className="field__label">保存済みテンプレートを使う</span>
+            <select
+              className="field__control"
+              defaultValue=""
+              onChange={(event) => {
+                const template = templates.find((item) => item.id === event.target.value);
+                if (!template) return;
+                setTitle(template.name);
+                setBody(template.body);
+              }}
+            >
+              <option value="">選ばずに入力する</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <fieldset className="line-broadcast-targets">
           <legend>送信対象</legend>
           <p>業種と目的を両方選ぶと、両方に一致する参加者だけが対象になります。</p>
@@ -211,7 +238,8 @@ export function ServiceLineBroadcastEditor({
             <input
               className="field__control"
               name="title"
-              defaultValue={initialTitle}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
               required
               maxLength={120}
               placeholder="例：今週のお知らせ"
@@ -222,7 +250,8 @@ export function ServiceLineBroadcastEditor({
             <textarea
               className="field__control line-broadcast-form__message"
               name="message"
-              defaultValue={initialMessage}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
               required
               maxLength={5000}
               rows={7}

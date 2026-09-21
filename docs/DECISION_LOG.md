@@ -2601,3 +2601,56 @@
 - Tax: 既存の決済総額を変えず税込総額として扱い、10%内税を表示する。登録番号は確認済みの環境設定がある場合だけ表示する。
 - Access: システム管理者と対象団体のOWNER/ADMINだけが、請求済みまたは入金済み文書を取得できる。
 - Audit: 再発行専用の可変文書を作らず同じSnapshotから再生成し、各ダウンロードを既存の請求監査へ記録する。
+
+# 2026-09-20: 千ノ国メディアの旧企画名を生成禁止にする
+
+- Scope: `sennokuni-media`だけで「戦国インフルエンサー」「戦国メタバース」を禁止し、生成時は「千ノ国メディア」へ置換する。
+- Historical terms: 「戦国時代」「戦国武将」「戦国文化」は一般的な歴史表現として許可し、部分一致する「戦国」だけを禁止しない。
+- Enforcement: サービス固有Knowledgeで生成前に指示し、生成後は本文・見出し・スライド等の全テキスト項目へ同じPolicyを適用する。
+- Link preview: 外部サイトのOGPに禁止語が残る旧企画URL（`project=sengoku-influencer`）は生成結果から除外し、SNS側で禁止語のプレビューが再表示されないようにする。
+- Existing settings: 千ノ国メディアの保存済みOnboarding・Survey設定と利用者マニュアルに残る旧名称も「千ノ国メディア」へ更新する。
+
+# 2026-09-20: OEM自動回収は明示同意と初回支払い後に準備する
+
+- Default: 既存・新規契約とも自動回収は停止から開始し、システム管理者が契約上の同意を確認した団体だけ有効化する。
+- Payment method: 初回のStripe Checkoutで`off_session`利用を設定し、成功済みPaymentIntentをStripe APIで再確認してからCustomer IDとPayment Method IDだけを保存する。
+- Sensitive data: カード番号、Webhook本文、Stripe応答本文は保存しない。
+- Rollout: 本変更は支払方法の準備までとし、実際の日次自動回収と未払い停止は準備済み契約だけを対象とする後続作業へ分離する。
+
+# 2026-09-20: OEM登録チャネルを運用テンプレートから分離する
+
+- Registration channel: サービス運営者はメールのみ、LINEのみ、または両方をサービス単位で選択できる。
+- Existing service: ワタシワークス公式を含む既存サービスの保存値は変更せず、運営者が明示保存した場合だけ変更する。
+- Business free policy: 公開登録、招待コード停止、紹介元記録停止、毎日配信の制約は維持するが、企業向けであることを理由にLINE専用へ強制しない。
+- Email boundary: 認証メールと登録完了後の自動返信は分離し、OEM固有の送信元・本文・資格情報は後続のメール配信基盤で扱う。
+
+# 2026-09-20: OEMの登録完了メールは認証メールから分離する
+
+- Registration email: 登録・承認完了後の案内メールはサービス単位で設定・配信する。
+- Authentication: ログイン用のメールマジックリンクは認証基盤の責務として維持し、運営者向け本文編集の対象にしない。
+- Provider: 共通メール基盤とOEM専用Resend APIキーを選択できる。専用キーはサービス・環境に紐づく暗号化データとして保存する。
+- Safety: テスト送信成功前は送信キューを作らず、配信は冪等・最大3回・サービス単位の履歴管理とする。
+
+# 2026-09-21: AI研修の初期診断は既存ProfileとProgram Goalへ分けて保存する
+
+- Assessment: 職種、AI経験、現在の利用用途、困りごと、希望テーマ、1日の学習時間、Learning CatalogのGoal Keyを既存`TrainingParticipantProfile`へ保存する。
+- Goal: 利用者へ表示する30日後の目標は新しいGoalテーブルを作らず、既存`ProgramMemberGoal`を正本として同一トランザクションで更新する。
+- Catalog: 選択肢は`AI_TRAINING_CATALOG_V1`として固定Keyと表示文を分離し、将来Service別Catalogへ差し替えられる境界を研修Capability内に置く。
+- Privacy: 初期診断は選択式とし、顧客名、個人情報、社外秘を収集する自由入力欄は設けない。
+- UX: スマートフォンで情報量が集中しないよう、診断を4段階に分け、現在位置と戻る操作を表示する。
+
+# 2026-09-21: AI研修の課題品質は研修Capability内のVersioned Catalogを正本にする
+
+- Boundary: 共通`ProgramDefinition V1`は課題の識別・進行管理に維持し、学習目的、実務場面、条件、成功基準、よくある失敗、評価基準はAI研修Capability固有のCatalogへ置く。
+- Consistency: 課題画面の表示スナップショットとAI回答評価は同じCatalogを参照し、表示した条件と異なる基準で評価しない。
+- Version: 初版を`AI_TRAINING_MISSION_QUALITY_V1`として固定し、公開後の意味変更は新しいVersionで行う。
+- Compatibility: 既存Assignmentの`TRAINING_FIXED_V1`表示スナップショットは読み取り時にCatalogから不足項目を補い、進行中の受講者を止めない。
+- Scope: Skill別評価、難易度の動的変更、Mission遷移への利用は後続PRとし、本変更では25課題の実務定義と評価入力の整合を確立する。
+
+# 2026-09-21: AI研修の進級判定はSkill評価をDomain Ruleで確定する
+
+- Skills: V1では指示構造、背景設定、条件指定、出力制御、実務活用、改善力の6能力に固定する。
+- AI boundary: AIは理解度と能力別スコア、根拠、次の推奨能力を構造化して返すが、PASS/REVIEWを決定しない。
+- Domain rule: 理解度と対象能力がすべて60以上の場合だけPASSとし、未達の場合は対象能力のうち最低スコアを復習対象にする。
+- Projection: 評価全文は既存`TrainingMissionAnswer`、監査は`ProgramActionEvent`に維持し、Enrollment単位の現在値だけを`TrainingParticipantProfile.skillScores`へJSONで投影する。
+- Scope: 既存値のうち今回評価した能力だけを更新する。動的難易度、復習Mission、進級への接続は次のAdaptive Policy PRで扱う。

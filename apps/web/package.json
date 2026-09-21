@@ -16,6 +16,7 @@
     "@bunshin/capability-social": "workspace:*",
     "@bunshin/capability-fortune": "workspace:*",
     "@bunshin/capability-resale": "workspace:*",
+    "@bunshin/capability-training": "workspace:*",
     "@bunshin/config": "workspace:*",
     "@bunshin/database": "workspace:*",
     "@bunshin/observability": "workspace:*",
