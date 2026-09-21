@@ -13,6 +13,11 @@ describe('commercialReminderKind', () => {
     expect(commercialReminderKind(new Date('2026-09-20T00:00:00.001Z'), now)).toBe('INITIAL');
   });
 
+  it('uses the contract-specific initial reminder window', () => {
+    expect(commercialReminderKind(new Date('2026-09-30T00:00:00.000Z'), now, 10)).toBe('INITIAL');
+    expect(commercialReminderKind(new Date('2026-09-30T00:00:00.001Z'), now, 10)).toBeNull();
+  });
+
   it('selects the overdue reminder at and after the deadline', () => {
     expect(commercialReminderKind(now, now)).toBe('OVERDUE');
     expect(commercialReminderKind(new Date('2026-09-19T23:59:59.999Z'), now)).toBe('OVERDUE');

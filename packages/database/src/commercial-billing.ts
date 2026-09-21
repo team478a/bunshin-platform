@@ -18,6 +18,8 @@ export interface SaveOrganizationCommercialContractInput {
   billingEmail: string;
   paymentTermsDays: number;
   automaticRemindersEnabled: boolean;
+  reminderLeadDays: number;
+  overdueReminderIntervalDays: number;
   automaticCollectionEnabled: boolean;
   externalCustomerReference?: string | null;
   startsAt?: Date | null;
@@ -323,6 +325,15 @@ export class PrismaCommercialBillingService {
       input.paymentTermsDays > 365
     )
       throw new Error('invalid payment terms');
+    if (
+      !Number.isInteger(input.reminderLeadDays) ||
+      input.reminderLeadDays < 0 ||
+      input.reminderLeadDays > 30 ||
+      !Number.isInteger(input.overdueReminderIntervalDays) ||
+      input.overdueReminderIntervalDays < 1 ||
+      input.overdueReminderIntervalDays > 30
+    )
+      throw new Error('invalid reminder schedule');
     if (input.startsAt && input.endsAt && input.startsAt >= input.endsAt)
       throw new Error('invalid contract period');
     const workspace = await this.client.workspace.findFirst({
@@ -339,6 +350,8 @@ export class PrismaCommercialBillingService {
       billingEmail: requiredText(input.billingEmail, 320),
       paymentTermsDays: input.paymentTermsDays,
       automaticRemindersEnabled: input.automaticRemindersEnabled,
+      reminderLeadDays: input.reminderLeadDays,
+      overdueReminderIntervalDays: input.overdueReminderIntervalDays,
       automaticCollectionEnabled: input.automaticCollectionEnabled,
       externalCustomerReference: optionalText(input.externalCustomerReference, 200),
       startsAt: input.startsAt ?? null,

@@ -81,6 +81,8 @@ describe('OEM contract and invoice schema', () => {
 
   it('keeps automatic reminders disabled until an operator opts in', () => {
     expect(schema).toContain('automaticRemindersEnabled Boolean');
+    expect(schema).toContain('reminderLeadDays');
+    expect(schema).toContain('overdueReminderIntervalDays');
     expect(reminderMigration).toContain(
       '"automatic_reminders_enabled" BOOLEAN NOT NULL DEFAULT false',
     );
