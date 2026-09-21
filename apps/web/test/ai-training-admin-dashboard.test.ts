@@ -5,6 +5,11 @@ import {
   type AiTrainingAdminParticipantInput,
 } from '../src/services/ai-training-admin-dashboard';
 
+const page = readFileSync(
+  new URL('../app/s/[serviceSlug]/manage/training/page.tsx', import.meta.url),
+  'utf8',
+);
+
 const now = new Date('2026-09-21T00:00:00.000Z');
 
 function participant(
@@ -103,18 +108,21 @@ describe('AI training admin dashboard', () => {
   });
 
   it('keeps every dashboard query inside workspace, service, and enrollment boundaries', () => {
-    const page = readFileSync(
-      new URL('../app/s/[serviceSlug]/manage/training/page.tsx', import.meta.url),
-      'utf8',
-    );
-
-    expect(page.match(/workspaceId: service\.workspaceId/g)?.length).toBeGreaterThanOrEqual(6);
-    expect(page.match(/groupId: service\.serviceId/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(page.match(/workspaceId: service\.workspaceId/g)?.length).toBeGreaterThanOrEqual(7);
+    expect(page.match(/groupId: service\.serviceId/g)?.length).toBeGreaterThanOrEqual(7);
     expect(page).toContain('programEnrollmentId: { in: enrollmentIds }');
     expect(page).toContain("serviceRole: 'PARTICIPANT'");
-    expect(page).toContain(
-      'select: { programEnrollmentId: true, evaluation: true, updatedAt: true }',
-    );
+    expect(page).toContain('evaluatedAt: true');
     expect(page).not.toContain('answer: true');
+  });
+
+  it('shows the pilot funnel, learning quality, skill improvement, and toolkit use', () => {
+    expect(page).toContain('buildAiTrainingPilotAnalytics');
+    expect(page).toContain('初期診断完了');
+    expect(page).toContain('Goal選択');
+    expect(page).toContain('課題開始');
+    expect(page).toContain('再回答率');
+    expect(page).toContain('Skill改善');
+    expect(page).toContain('Toolkit保存');
   });
 });
