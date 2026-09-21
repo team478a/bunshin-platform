@@ -336,6 +336,13 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
       profile: {
         role: profile.role,
         aiLevel: profile.aiLevel,
+        learningGoalKey:
+          profile.learningGoalKey &&
+          TRAINING_GOAL_KEYS.includes(
+            profile.learningGoalKey as (typeof TRAINING_GOAL_KEYS)[number],
+          )
+            ? (profile.learningGoalKey as (typeof TRAINING_GOAL_KEYS)[number])
+            : null,
         needsReview: profile.needsReview,
         recentSuccesses: profile.recentSuccesses,
         recentFailures: profile.recentFailures,
