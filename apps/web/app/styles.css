@@ -4103,6 +4103,52 @@ a {
   font-weight: 700;
 }
 
+.training-toolkit-save {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--service-primary) 25%, #d7dce5);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--service-primary) 5%, white);
+}
+
+.training-toolkit-save h3,
+.training-toolkit-save p {
+  margin: 0;
+}
+
+.training-toolkit-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.training-toolkit-item {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.training-toolkit-item h2,
+.training-toolkit-item__date {
+  margin: 0;
+}
+
+.training-toolkit-item__date {
+  color: #667085;
+  font-size: 0.875rem;
+}
+
+.training-toolkit-item pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border-radius: 0.85rem;
+  background: #f5f7fa;
+  color: #172033;
+  font: inherit;
+  line-height: 1.7;
+}
+
 .resale-offer-card {
   display: grid;
   gap: 1rem;

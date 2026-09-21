@@ -16,6 +16,13 @@ const http = readFileSync(
   new URL('../src/http/ai-training-participant.ts', import.meta.url),
   'utf8',
 );
+const toolkit = readFileSync(
+  new URL(
+    '../app/s/[serviceSlug]/programs/[programEnrollmentId]/toolkit/toolkit-list.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('AI training participant UI', () => {
   it('dispatches the existing program page by the scoped module key', () => {
@@ -47,6 +54,9 @@ describe('AI training participant UI', () => {
     expect(card).toContain('後でやる');
     expect(card).toContain('復習してもう一度回答する');
     expect(card).toContain('同じ課題から続けられます');
+    expect(card).toContain('My AI Toolkitに保存する');
+    expect(card).toContain('My AI Toolkitを見る');
+    expect(toolkit).toContain('内容をコピーする');
     expect(page).toContain('difficultyGuidance: trainingState.action.display.difficultyGuidance');
   });
 
@@ -60,5 +70,7 @@ describe('AI training participant UI', () => {
     expect(card).toContain('idempotencyKey: interactionKeys.current[interactionType]');
     expect(http).toContain('PrismaTrainingInteractionRepository');
     expect(http).toContain('TRAINING_INTERACTION_TYPES');
+    expect(card).toContain('idempotencyKey: toolkitKey.current');
+    expect(http).toContain('PrismaTrainingToolkitRepository');
   });
 });

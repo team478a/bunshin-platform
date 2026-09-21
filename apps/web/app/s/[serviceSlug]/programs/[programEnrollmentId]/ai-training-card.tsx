@@ -132,12 +132,15 @@ export function AiTrainingCard({
   const [postponed, setPostponed] = useState(false);
   const [interactionSaving, setInteractionSaving] = useState<TrainingInteractionType | null>(null);
   const [saving, setSaving] = useState(false);
+  const [toolkitSaving, setToolkitSaving] = useState(false);
+  const [toolkitSaved, setToolkitSaved] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const profileKey = useRef<string | null>(null);
   const answerKey = useRef<string | null>(null);
   const evaluationKey = useRef<string | null>(null);
   const interactionKeys = useRef<Partial<Record<TrainingInteractionType, string>>>({});
+  const toolkitKey = useRef<string | null>(null);
   const action = state.action;
   const recommendedGoals = recommendedTrainingGoalKeys(role);
 
@@ -268,6 +271,30 @@ export function AiTrainingCard({
       setError(cause instanceof Error ? cause.message : '操作を記録できませんでした。');
     } finally {
       setInteractionSaving(null);
+    }
+  }
+
+  async function saveToToolkit() {
+    const answerId = state.action?.submission?.answerId;
+    if (!answerId || evaluation?.result !== 'PASS') return;
+    setToolkitSaving(true);
+    setError('');
+    toolkitKey.current ??= crypto.randomUUID();
+    try {
+      await readPayload(
+        await fetch(`${endpoint}/toolkit`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ answerId, idempotencyKey: toolkitKey.current }),
+        }),
+      );
+      toolkitKey.current = null;
+      setToolkitSaved(true);
+      setMessage('この回答をMy AI Toolkitへ保存しました。');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '成果物を保存できませんでした。');
+    } finally {
+      setToolkitSaving(false);
     }
   }
 
@@ -579,6 +606,33 @@ export function AiTrainingCard({
         ) : null}
         <p className="training-recommendation">{evaluation.nextRecommendation}</p>
         {message ? <p className="notice notice--success">{message}</p> : null}
+        {error ? <p className="notice notice--error">{error}</p> : null}
+        {evaluation.result === 'PASS' ? (
+          <div className="training-toolkit-save">
+            <h3>仕事でまた使う回答ですか？</h3>
+            <p>必要なものだけを、自分専用のMy AI Toolkitへ保存できます。</p>
+            <button
+              className="button button--secondary button--full"
+              type="button"
+              onClick={() => {
+                void saveToToolkit();
+              }}
+              disabled={toolkitSaving || toolkitSaved}
+            >
+              {toolkitSaving
+                ? '保存しています…'
+                : toolkitSaved
+                  ? 'My AI Toolkitに保存済み'
+                  : 'My AI Toolkitに保存する'}
+            </button>
+          </div>
+        ) : null}
+        <a
+          className="button button--secondary button--full"
+          href={`/s/${encodeURIComponent(serviceSlug)}/programs/${state.enrollmentId}/toolkit`}
+        >
+          My AI Toolkitを見る
+        </a>
         <button
           className="button button--primary button--full"
           type="button"
