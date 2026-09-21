@@ -6,6 +6,7 @@ import {
   StripeAccountConnectionTestAdapter,
   StripeCheckoutAdapter,
   StripeCommercialInvoiceCheckoutAdapter,
+  StripeCommercialInvoiceCollectionAdapter,
   StripeCheckoutSessionRetrievalAdapter,
   StripeEventRetrievalAdapter,
   StripePaymentMethodRetrievalAdapter,
@@ -155,6 +156,40 @@ describe('OEM payment secure configuration', () => {
       'https://api.stripe.com/v1/payment_intents/pi_platform123',
       expect.objectContaining({ headers: { authorization: 'Bearer sk_test_platform' } }),
     );
+  });
+
+  it('collects a saved payment method off-session with immutable invoice metadata', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(Response.json({ id: 'pi_auto123', status: 'succeeded' }));
+    vi.stubGlobal('fetch', request);
+    await expect(
+      new StripeCommercialInvoiceCollectionAdapter().collect({
+        secretKey: 'sk_test_platform',
+        idempotencyKey: 'platform-invoice-auto:invoice-id',
+        invoiceId: 'invoice-id',
+        workspaceId: 'workspace-id',
+        invoiceNumber: 'WW-2026-09-001',
+        amountYen: 19_800,
+        customerId: 'cus_platform123',
+        paymentMethodId: 'pm_platform123',
+      }),
+    ).resolves.toEqual({
+      paymentIntentId: 'pi_auto123',
+      outcome: 'SUCCEEDED',
+      failureCategory: null,
+    });
+    const options = request.mock.calls[0]![1] as RequestInit;
+    expect(options.headers).toMatchObject({
+      'idempotency-key': 'platform-invoice-auto:invoice-id',
+    });
+    expect(options.body).toBeInstanceOf(URLSearchParams);
+    const body = options.body as URLSearchParams;
+    expect(body.get('amount')).toBe('19800');
+    expect(body.get('currency')).toBe('jpy');
+    expect(body.get('off_session')).toBe('true');
+    expect(body.get('confirm')).toBe('true');
+    expect(body.get('metadata[workspace_id]')).toBe('workspace-id');
   });
 
   it('retrieves a Stripe event with the organization secret without persisting its payload', async () => {
