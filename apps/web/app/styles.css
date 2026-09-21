@@ -3941,6 +3941,43 @@ a {
   line-height: 1.75;
 }
 
+.training-support-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.training-support-actions .button {
+  min-height: 50px;
+  padding-inline: 8px;
+  white-space: normal;
+}
+
+.training-hint {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--service-primary) 28%, #dfe3eb);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--service-primary) 6%, white);
+}
+
+.training-hint strong {
+  color: var(--service-primary);
+}
+
+.training-hint p,
+.training-help p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+@media (max-width: 420px) {
+  .training-support-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .training-answer {
   min-height: 180px;
   resize: vertical;

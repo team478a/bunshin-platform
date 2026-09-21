@@ -298,7 +298,15 @@ export class PrismaAiTrainingRuntimeRepository implements AiTrainingRuntimeRepos
           groupId: input.groupId,
           programEnrollmentId: scope.enrollment.id,
           actorUserId: input.actorUserId,
-          eventType: { in: ['ANSWER_SUBMITTED', 'MISSION_STARTED', 'HELP_REQUESTED'] },
+          eventType: {
+            in: [
+              'ANSWER_SUBMITTED',
+              'MISSION_STARTED',
+              'HINT_VIEWED',
+              'HELP_REQUESTED',
+              'TRAINING_POSTPONED',
+            ],
+          },
         },
         orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       }),

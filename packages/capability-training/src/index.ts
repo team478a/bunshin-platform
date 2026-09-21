@@ -10,6 +10,11 @@ export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_3';
 export const AI_TRAINING_V1_MODULE_KEY = 'AI_TRAINING_V1';
 export const TRAINING_ROLES = ['SALES', 'OFFICE', 'MANAGER', 'OTHER'] as const;
 export const TRAINING_AI_LEVELS = ['BEGINNER', 'INTERMEDIATE'] as const;
+export const TRAINING_INTERACTION_TYPES = [
+  'HINT_VIEWED',
+  'HELP_REQUESTED',
+  'TRAINING_POSTPONED',
+] as const;
 export const TRAINING_ACTION_KEYS = [
   'AI_BASIC',
   'CHATGPT_BASIC',
@@ -39,6 +44,7 @@ export const TRAINING_ACTION_KEYS = [
 ] as const;
 export type TrainingRole = (typeof TRAINING_ROLES)[number];
 export type TrainingAiLevel = (typeof TRAINING_AI_LEVELS)[number];
+export type TrainingInteractionType = (typeof TRAINING_INTERACTION_TYPES)[number];
 export type TrainingActionKey = (typeof TRAINING_ACTION_KEYS)[number];
 
 export interface AiTrainingV1DecisionContext {

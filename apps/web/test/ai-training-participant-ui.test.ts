@@ -42,6 +42,12 @@ describe('AI training participant UI', () => {
     expect(card).toContain('skillStateLabel');
     expect(card).toContain('回答の確認を再開する');
     expect(card).toContain('次の課題を見る');
+    expect(card).toContain('ヒントを見る');
+    expect(card).toContain('困った');
+    expect(card).toContain('後でやる');
+    expect(card).toContain('復習してもう一度回答する');
+    expect(card).toContain('同じ課題から続けられます');
+    expect(page).toContain('difficultyGuidance: trainingState.action.display.difficultyGuidance');
   });
 
   it('uses same-origin authenticated endpoints and idempotency keys', () => {
@@ -51,5 +57,8 @@ describe('AI training participant UI', () => {
     expect(card).toContain('idempotencyKey: profileKey.current');
     expect(card).toContain('idempotencyKey: answerKey.current');
     expect(card).toContain('idempotencyKey: evaluationKey.current');
+    expect(card).toContain('idempotencyKey: interactionKeys.current[interactionType]');
+    expect(http).toContain('PrismaTrainingInteractionRepository');
+    expect(http).toContain('TRAINING_INTERACTION_TYPES');
   });
 });
