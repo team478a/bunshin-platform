@@ -2638,3 +2638,11 @@
 - Catalog: 選択肢は`AI_TRAINING_CATALOG_V1`として固定Keyと表示文を分離し、将来Service別Catalogへ差し替えられる境界を研修Capability内に置く。
 - Privacy: 初期診断は選択式とし、顧客名、個人情報、社外秘を収集する自由入力欄は設けない。
 - UX: スマートフォンで情報量が集中しないよう、診断を4段階に分け、現在位置と戻る操作を表示する。
+
+# 2026-09-21: AI研修の課題品質は研修Capability内のVersioned Catalogを正本にする
+
+- Boundary: 共通`ProgramDefinition V1`は課題の識別・進行管理に維持し、学習目的、実務場面、条件、成功基準、よくある失敗、評価基準はAI研修Capability固有のCatalogへ置く。
+- Consistency: 課題画面の表示スナップショットとAI回答評価は同じCatalogを参照し、表示した条件と異なる基準で評価しない。
+- Version: 初版を`AI_TRAINING_MISSION_QUALITY_V1`として固定し、公開後の意味変更は新しいVersionで行う。
+- Compatibility: 既存Assignmentの`TRAINING_FIXED_V1`表示スナップショットは読み取り時にCatalogから不足項目を補い、進行中の受講者を止めない。
+- Scope: Skill別評価、難易度の動的変更、Mission遷移への利用は後続PRとし、本変更では25課題の実務定義と評価入力の整合を確立する。

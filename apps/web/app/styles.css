@@ -3858,6 +3858,68 @@ a {
   line-height: 1.75;
 }
 
+.training-learning-objective,
+.training-scenario,
+.training-quality-list {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f6f7fb;
+}
+
+.training-learning-objective strong,
+.training-scenario strong,
+.training-quality-list strong {
+  color: #526078;
+  font-size: 0.8rem;
+}
+
+.training-learning-objective p,
+.training-scenario p {
+  margin: 0;
+  color: #17233d;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.training-learning-objective {
+  border-left: 4px solid var(--service-primary);
+  background: color-mix(in srgb, var(--service-primary) 6%, white);
+}
+
+.training-quality-list ul,
+.training-common-mistakes ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #26334d;
+  line-height: 1.65;
+}
+
+.training-quality-list--success {
+  background: #f0f8f3;
+}
+
+.training-common-mistakes {
+  padding: 14px 16px;
+  border: 1px solid #dfe3eb;
+  border-radius: 14px;
+  color: #526078;
+  background: #fff;
+}
+
+.training-common-mistakes summary {
+  cursor: pointer;
+  color: #26334d;
+  font-weight: 700;
+}
+
+.training-common-mistakes ul {
+  margin-top: 10px;
+}
+
 .training-task {
   display: grid;
   gap: 8px;

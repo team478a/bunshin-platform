@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AiTrainingV1Policy } from '../src/index';
+import { AiTrainingV1Policy, getAiTrainingMissionQuality } from '../src/index';
 import {
   AiTrainingParticipantService,
   parseAiTrainingActionDisplay,
@@ -68,6 +68,7 @@ const candidate = (): AiTrainingRuntimeCandidate => ({
       phaseKey: 'FOUNDATION',
       title: 'AIの基本を知る',
       estimatedMinutes: 5,
+      quality: getAiTrainingMissionQuality('AI_BASIC')!,
     },
   ],
 });
@@ -129,7 +130,11 @@ describe('AiTrainingParticipantService', () => {
 
     expect(state.action?.actionKey).toBe('AI_BASIC');
     expect(state.action?.display.reasonCode).toBe('AI_FOUNDATION_NOT_COMPLETED');
-    expect(state.action?.display.task).toContain('AIに任せたい仕事');
+    expect(state.action?.display.task).toContain('AIに任せたい作業');
+    expect(state.action?.display.learningObjective).toContain('AIに任せる作業');
+    expect(state.action?.display.businessScenario).toContain('今日の仕事');
+    expect(state.action?.display.successCriteria).toContain('作業内容が具体的');
+    expect(state.action?.display.schemaVersion).toBe(2);
     expect(repository.writes).toBe(1);
   });
 
@@ -168,6 +173,8 @@ describe('AI training display snapshot compatibility', () => {
       renderer: 'TRAINING_FIXED_V1',
     });
 
-    expect(display?.task).toContain('AIに任せたい仕事');
+    expect(display?.task).toContain('AIに任せたい作業');
+    expect(display?.learningObjective).toContain('AIに任せる作業');
+    expect(display?.successCriteria).toContain('作業内容が具体的');
   });
 });

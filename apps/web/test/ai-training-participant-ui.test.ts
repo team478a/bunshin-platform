@@ -33,6 +33,10 @@ describe('AI training participant UI', () => {
     expect(card).toContain('1日に使える時間');
     expect(card).toContain('この内容で研修を始める');
     expect(card).toContain('あなたの目標');
+    expect(card).toContain('今回できるようになること');
+    expect(card).toContain('実務の場面');
+    expect(card).toContain('確認ポイント');
+    expect(card).toContain('よくある失敗を見る');
     expect(card).toContain('あなたの回答');
     expect(card).toContain('回答の確認を再開する');
     expect(card).toContain('次の課題を見る');
