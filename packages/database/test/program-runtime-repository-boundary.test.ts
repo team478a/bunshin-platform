@@ -2,11 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(join(process.cwd(), 'src', 'index.ts'), 'utf8');
-const runtime = source.slice(
-  source.indexOf('export class PrismaProgramRuntimeRepository'),
-  source.indexOf('export class PrismaServiceStaffRoleRepository'),
-);
+const source = readFileSync(join(process.cwd(), 'src', 'program-runtime.ts'), 'utf8');
+const runtime = source.slice(source.indexOf('export class PrismaProgramRuntimeRepository'));
 
 describe('program runtime repository boundary', () => {
   it('checks workspace, group and enrollment together', () => {

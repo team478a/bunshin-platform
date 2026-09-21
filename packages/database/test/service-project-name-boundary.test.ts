@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const repositorySource = readFileSync(
-  fileURLToPath(new URL('../src/index.ts', import.meta.url)),
+  fileURLToPath(new URL('../src/service-foundation.ts', import.meta.url)),
   'utf8',
 );
 
