@@ -3,6 +3,7 @@ import { AiTrainingV1Policy, getAiTrainingMissionQuality } from '../src/index';
 import {
   AiTrainingParticipantService,
   parseAiTrainingActionDisplay,
+  resolveTrainingMissionDifficulty,
   type AiTrainingParticipantState,
   type AiTrainingRuntimeCandidate,
   type AiTrainingRuntimeRepository,
@@ -51,6 +52,7 @@ const candidate = (): AiTrainingRuntimeCandidate => ({
     recentSuccesses: 0,
     recentFailures: 0,
     streak: 0,
+    skillScores: {},
   },
   currentPhase: 'FOUNDATION',
   completedMissionKeys: [],
@@ -134,7 +136,9 @@ describe('AiTrainingParticipantService', () => {
     expect(state.action?.display.learningObjective).toContain('AIに任せる作業');
     expect(state.action?.display.businessScenario).toContain('今日の仕事');
     expect(state.action?.display.successCriteria).toContain('作業内容が具体的');
-    expect(state.action?.display.schemaVersion).toBe(2);
+    expect(state.action?.display.schemaVersion).toBe(3);
+    expect(state.action?.display.difficulty).toBe('EASY');
+    expect(state.action?.display.difficultyReasonCode).toBe('FOUNDATION_EASY');
     expect(repository.writes).toBe(1);
   });
 
@@ -156,6 +160,101 @@ describe('AiTrainingParticipantService', () => {
       expect.objectContaining<Partial<TrainingRuntimeError>>({ code: 'CONFIGURATION_ERROR' }),
     );
     expect(repository.writes).toBe(0);
+  });
+});
+
+describe('AI training adaptive difficulty', () => {
+  const salesMission = {
+    key: 'SALES_EMAIL' as const,
+    routeKey: 'PERSONALIZED',
+    phaseKey: 'PRACTICE' as const,
+    title: '営業メールを作る',
+    estimatedMinutes: 10,
+    quality: getAiTrainingMissionQuality('SALES_EMAIL')!,
+  };
+
+  it('uses standard difficulty until relevant skills are consistently strong', () => {
+    const context = {
+      now,
+      role: 'SALES' as const,
+      aiLevel: 'INTERMEDIATE' as const,
+      currentPhase: 'PRACTICE' as const,
+      completedMissionKeys: [],
+      completedMissionCount: 5,
+      recentSuccesses: 2,
+      recentFailures: 0,
+      needsReview: false,
+      lastMissionKey: 'PROMPT_FORMAT',
+      streak: 2,
+      bottleneckKey: null,
+      skillScores: {
+        businessApplication: 90,
+        contextSetting: 90,
+        constraintSetting: 90,
+        outputControl: 90,
+      },
+      activityBaselineAt: now,
+      lastActionAt: now,
+      pauseAfterDays: 7,
+      activeWaitUntil: null,
+    };
+    const decision = new AiTrainingV1Policy().evaluate({
+      ...context,
+      completedMissionKeys: [
+        'AI_BASIC',
+        'CHATGPT_BASIC',
+        'PROMPT_BASIC',
+        'PROMPT_CONDITION',
+        'PROMPT_FORMAT',
+      ],
+    });
+
+    expect(resolveTrainingMissionDifficulty(context, decision, salesMission)).toEqual({
+      difficulty: 'STANDARD',
+      reasonCode: 'PRACTICE_STANDARD',
+    });
+  });
+
+  it('promotes to challenge only after consecutive success and high relevant skill scores', () => {
+    const context = {
+      now,
+      role: 'SALES' as const,
+      aiLevel: 'INTERMEDIATE' as const,
+      currentPhase: 'PRACTICE' as const,
+      completedMissionKeys: [],
+      completedMissionCount: 8,
+      recentSuccesses: 3,
+      recentFailures: 0,
+      needsReview: false,
+      lastMissionKey: 'SALES_HEARING',
+      streak: 3,
+      bottleneckKey: null,
+      skillScores: {
+        businessApplication: 85,
+        contextSetting: 82,
+        constraintSetting: 88,
+        outputControl: 81,
+      },
+      activityBaselineAt: now,
+      lastActionAt: now,
+      pauseAfterDays: 7,
+      activeWaitUntil: null,
+    };
+    const decision = new AiTrainingV1Policy().evaluate({
+      ...context,
+      completedMissionKeys: [
+        'AI_BASIC',
+        'CHATGPT_BASIC',
+        'PROMPT_BASIC',
+        'PROMPT_CONDITION',
+        'PROMPT_FORMAT',
+      ],
+    });
+
+    expect(resolveTrainingMissionDifficulty(context, decision, salesMission)).toEqual({
+      difficulty: 'CHALLENGE',
+      reasonCode: 'STABLE_HIGH_SCORE_CHALLENGE',
+    });
   });
 });
 

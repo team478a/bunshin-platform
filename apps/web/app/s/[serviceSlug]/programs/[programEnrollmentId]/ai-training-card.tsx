@@ -53,6 +53,7 @@ export type TrainingParticipantState = {
       commonMistakes?: readonly string[];
       evaluationCriteria?: readonly string[];
       difficulty?: 'EASY' | 'STANDARD' | 'CHALLENGE';
+      difficultyGuidance?: string;
     };
     reevaluateAt: string | null;
     submission: {
@@ -88,6 +89,12 @@ const levelLabels: Record<TrainingAiLevel, string> = {
   BEGINNER: 'ほとんど使ったことがない',
   INTERMEDIATE: '何度か使ったことがある',
 };
+
+const difficultyLabels = {
+  EASY: 'やさしく確認',
+  STANDARD: '実務練習',
+  CHALLENGE: '応用チャレンジ',
+} as const;
 
 export function AiTrainingCard({
   serviceSlug,
@@ -555,6 +562,9 @@ export function AiTrainingCard({
     <section className="service-entry__card training-card" aria-labelledby="training-action-title">
       <div className="resale-action-card__meta">
         <span>あなた向け課題</span>
+        {action.display.difficulty ? (
+          <span>{difficultyLabels[action.display.difficulty]}</span>
+        ) : null}
         {action.display.estimatedMinutes !== null ? (
           <span>目安 {action.display.estimatedMinutes}分</span>
         ) : null}
@@ -568,6 +578,9 @@ export function AiTrainingCard({
         </p>
       ) : null}
       <p className="training-reason">{action.display.reason}</p>
+      {action.display.difficultyGuidance ? (
+        <p className="training-field-help">{action.display.difficultyGuidance}</p>
+      ) : null}
       {action.display.learningObjective ? (
         <div className="training-learning-objective">
           <strong>今回できるようになること</strong>

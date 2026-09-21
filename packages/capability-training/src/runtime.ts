@@ -34,7 +34,7 @@ export interface TrainingMissionDefinition {
 }
 
 export interface AiTrainingActionDisplaySnapshot {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   actionKey: TrainingActionKey;
   mode: 'WORK' | 'WAIT';
   reasonCode: string;
@@ -43,7 +43,7 @@ export interface AiTrainingActionDisplaySnapshot {
   task: string;
   instructions: string[];
   estimatedMinutes: number | null;
-  renderer: 'TRAINING_FIXED_V1' | 'TRAINING_PRACTICE_V2';
+  renderer: 'TRAINING_FIXED_V1' | 'TRAINING_PRACTICE_V2' | 'TRAINING_ADAPTIVE_V3';
   learningObjective?: string;
   businessScenario?: string;
   constraints?: readonly string[];
@@ -51,6 +51,8 @@ export interface AiTrainingActionDisplaySnapshot {
   commonMistakes?: readonly string[];
   evaluationCriteria?: readonly string[];
   difficulty?: TrainingMissionDifficulty;
+  difficultyReasonCode?: TrainingDifficultyReasonCode;
+  difficultyGuidance?: string;
   qualityVersion?: typeof AI_TRAINING_MISSION_QUALITY_VERSION;
 }
 
@@ -102,6 +104,7 @@ export interface AiTrainingRuntimeCandidate {
     recentSuccesses: number;
     recentFailures: number;
     streak: number;
+    skillScores: Readonly<Record<string, number>>;
   };
   currentPhase: 'FOUNDATION' | 'PRACTICE' | 'APPLICATION';
   completedMissionKeys: readonly string[];
@@ -160,9 +163,52 @@ const reasonText: Record<string, string> = {
   ROLE_OFFICE_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の事務実務課題へ進みます。',
   ROLE_MANAGER_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の管理職向け課題へ進みます。',
   ROLE_OTHER_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の実務課題へ進みます。',
-  RECENT_FAILURES_REQUIRE_REVIEW: '直近の結果をもとに、苦手な部分を短く復習します。',
+  PREVIOUS_MISSION_REQUIRES_REVIEW:
+    '直近の結果をもとに、前の課題で難しかった部分を短く復習します。',
   USER_ACTIVITY_PAUSED: '無理なく再開できる小さな課題から始めます。',
   TRAINING_REEVALUATION_PENDING: '次の判定時刻までは新しい課題を増やさず、待つ時間です。',
+};
+
+export type TrainingDifficultyReasonCode =
+  | 'RECOVERY_OR_REVIEW_EASY'
+  | 'FOUNDATION_EASY'
+  | 'STABLE_HIGH_SCORE_CHALLENGE'
+  | 'PRACTICE_STANDARD';
+
+export type TrainingDifficultyDecision = {
+  difficulty: TrainingMissionDifficulty;
+  reasonCode: TrainingDifficultyReasonCode;
+};
+
+export function resolveTrainingMissionDifficulty(
+  context: AiTrainingV1DecisionContext,
+  decision: NextActionDecision,
+  mission: TrainingMissionDefinition,
+): TrainingDifficultyDecision {
+  if (
+    decision.actionKey === 'RECOVERY' ||
+    decision.reasonCode === 'PREVIOUS_MISSION_REQUIRES_REVIEW'
+  ) {
+    return { difficulty: 'EASY', reasonCode: 'RECOVERY_OR_REVIEW_EASY' };
+  }
+  if (mission.quality.difficulty === 'EASY') {
+    return { difficulty: 'EASY', reasonCode: 'FOUNDATION_EASY' };
+  }
+  const skillScores = mission.quality.skillKeys.map((key) => context.skillScores[key]);
+  const hasStableHighScore =
+    context.recentSuccesses >= 3 &&
+    context.streak >= 3 &&
+    skillScores.length > 0 &&
+    skillScores.every((score) => typeof score === 'number' && score >= 80);
+  return hasStableHighScore
+    ? { difficulty: 'CHALLENGE', reasonCode: 'STABLE_HIGH_SCORE_CHALLENGE' }
+    : { difficulty: 'STANDARD', reasonCode: 'PRACTICE_STANDARD' };
+}
+
+const difficultyGuidance: Record<TrainingMissionDifficulty, string> = {
+  EASY: 'まずは1つずつ確認しながら進めます。すべてを一度で完璧にする必要はありません。',
+  STANDARD: '実際の仕事でそのまま使える内容を目指して取り組みます。',
+  CHALLENGE: 'これまでの力を使い、例外や確認方法まで含む実践的な回答に挑戦します。',
 };
 
 export function parseAiTrainingRuntimeSettings(value: unknown): AiTrainingRuntimeSettings | null {
@@ -189,9 +235,10 @@ export function parseAiTrainingRuntimeSettings(value: unknown): AiTrainingRuntim
 export function renderAiTrainingAction(
   decision: NextActionDecision,
   mission: TrainingMissionDefinition,
+  difficultyDecision: TrainingDifficultyDecision,
 ): AiTrainingActionDisplaySnapshot {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     actionKey: mission.key,
     mode: decision.mode,
     reasonCode: decision.reasonCode,
@@ -203,14 +250,16 @@ export function renderAiTrainingAction(
         ? []
         : ['課題の内容を確認する', '自分の仕事を思い浮かべて回答を作る', '回答欄から提出する'],
     estimatedMinutes: mission.estimatedMinutes,
-    renderer: 'TRAINING_PRACTICE_V2',
+    renderer: 'TRAINING_ADAPTIVE_V3',
     learningObjective: mission.quality.learningObjective,
     businessScenario: mission.quality.businessScenario,
     constraints: mission.quality.constraints,
     successCriteria: mission.quality.successCriteria,
     commonMistakes: mission.quality.commonMistakes,
     evaluationCriteria: mission.quality.evaluationCriteria,
-    difficulty: mission.quality.difficulty,
+    difficulty: difficultyDecision.difficulty,
+    difficultyReasonCode: difficultyDecision.reasonCode,
+    difficultyGuidance: difficultyGuidance[difficultyDecision.difficulty],
     qualityVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
   };
 }
@@ -224,7 +273,7 @@ export function parseAiTrainingActionDisplay(
   const quality = typeof actionKey === 'string' ? getAiTrainingMissionQuality(actionKey) : null;
   if (
     !quality ||
-    ![1, 2].includes(Number(display['schemaVersion'])) ||
+    ![1, 2, 3].includes(Number(display['schemaVersion'])) ||
     typeof actionKey !== 'string' ||
     !['WORK', 'WAIT'].includes(String(display['mode'])) ||
     typeof display['reasonCode'] !== 'string' ||
@@ -237,7 +286,9 @@ export function parseAiTrainingActionDisplay(
       display['estimatedMinutes'] === null ||
       (typeof display['estimatedMinutes'] === 'number' && display['estimatedMinutes'] >= 0)
     ) ||
-    !['TRAINING_FIXED_V1', 'TRAINING_PRACTICE_V2'].includes(String(display['renderer']))
+    !['TRAINING_FIXED_V1', 'TRAINING_PRACTICE_V2', 'TRAINING_ADAPTIVE_V3'].includes(
+      String(display['renderer']),
+    )
   ) {
     return null;
   }
@@ -258,6 +309,15 @@ export function parseAiTrainingActionDisplay(
     commonMistakes: stringArray(display['commonMistakes']) ?? quality.commonMistakes,
     evaluationCriteria: stringArray(display['evaluationCriteria']) ?? quality.evaluationCriteria,
     difficulty: isDifficulty(display['difficulty']) ? display['difficulty'] : quality.difficulty,
+    ...(isDifficultyReasonCode(display['difficultyReasonCode'])
+      ? { difficultyReasonCode: display['difficultyReasonCode'] }
+      : {}),
+    difficultyGuidance:
+      typeof display['difficultyGuidance'] === 'string'
+        ? display['difficultyGuidance']
+        : difficultyGuidance[
+            isDifficulty(display['difficulty']) ? display['difficulty'] : quality.difficulty
+          ],
     qualityVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
   };
 }
@@ -267,6 +327,14 @@ const stringArray = (value: unknown): readonly string[] | null =>
 
 const isDifficulty = (value: unknown): value is TrainingMissionDifficulty =>
   ['EASY', 'STANDARD', 'CHALLENGE'].includes(String(value));
+
+const isDifficultyReasonCode = (value: unknown): value is TrainingDifficultyReasonCode =>
+  [
+    'RECOVERY_OR_REVIEW_EASY',
+    'FOUNDATION_EASY',
+    'STABLE_HIGH_SCORE_CHALLENGE',
+    'PRACTICE_STANDARD',
+  ].includes(String(value));
 
 const contextFor = (
   candidate: AiTrainingRuntimeCandidate,
@@ -284,6 +352,7 @@ const contextFor = (
   lastMissionKey: candidate.lastMissionKey,
   streak: candidate.profile.streak,
   bottleneckKey: candidate.bottleneckKey,
+  skillScores: candidate.profile.skillScores,
   activityBaselineAt: candidate.activityBaselineAt,
   lastActionAt: candidate.lastActionAt,
   pauseAfterDays: candidate.settings.pauseAfterDays,
@@ -310,7 +379,8 @@ export class AiTrainingParticipantService {
     if (state.action && (!waiting || waiting > input.now)) return state;
     const candidate = await this.repository.findCandidate(input);
     if (!candidate) return state;
-    const decision = this.policy.evaluate(contextFor(candidate, input.now));
+    const context = contextFor(candidate, input.now);
+    const decision = this.policy.evaluate(context);
     const mission = candidate.missions.find(({ key }) => key === decision.actionKey);
     if (!mission) {
       throw new TrainingRuntimeError(
@@ -322,7 +392,11 @@ export class AiTrainingParticipantService {
       candidate,
       decision,
       mission,
-      displaySnapshot: renderAiTrainingAction(decision, mission),
+      displaySnapshot: renderAiTrainingAction(
+        decision,
+        mission,
+        resolveTrainingMissionDifficulty(context, decision, mission),
+      ),
       evaluatedAt: input.now,
     });
     if (result === 'NOT_FOUND')
