@@ -53,6 +53,14 @@ describe('AI training current Action LINE boundary', () => {
     expect(scheduler).toContain("timeZone: 'Asia/Tokyo'");
   });
 
+  it('sends each due postponed interaction once with its own automation key', () => {
+    expect(scheduler).toContain('ai-training-postponed:${environment}:${eventId}');
+    expect(scheduler).toContain('event."event_type" = \'TRAINING_POSTPONED\'');
+    expect(scheduler).toContain('event."metadata"->>\'remindAt\'');
+    expect(scheduler).toContain('operations.postponedReminderEnabled');
+    expect(scheduler).toContain("'AI研修の再通知'");
+  });
+
   it('links to the authenticated participant page, which preserves the return path through login', () => {
     expect(scheduler).toContain('/programs/${encodeURIComponent(candidate.programEnrollmentId)}');
     expect(page).toContain('resolveAuthenticatedMemberServicePage');

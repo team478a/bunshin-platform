@@ -23,6 +23,8 @@ export type AiTrainingActionLineScheduleSummary = {
 
 const automationKey = (environment: JobEnvironment, assignmentId: string) =>
   `ai-training-action:${environment}:${assignmentId}`;
+const postponedAutomationKey = (environment: JobEnvironment, eventId: string) =>
+  `ai-training-postponed:${environment}:${eventId}`;
 
 export async function scheduleAiTrainingActionLineDeliveries(input: {
   environment: JobEnvironment;
@@ -121,6 +123,7 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
       summary.failures += runtimeResults.filter((result) => result.status === 'rejected').length;
       if (runtimeCandidates.length > remaining) summary.truncated = true;
       const keyPrefix = `ai-training-action:${input.environment}:`;
+      const postponedKeyPrefix = `ai-training-postponed:${input.environment}:`;
       const [configuration, actor, routingPolicy, candidateRows] = await Promise.all([
         db.prisma.serviceConfiguration.findFirst({
           where: {
@@ -161,6 +164,7 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
             programEnrollmentId: string;
             groupMembershipId: string;
             currentAssignmentId: string;
+            postponedEventId: string | null;
             broadcastId: string | null;
           }>
         >`
@@ -168,6 +172,7 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
             enrollment."id" AS "programEnrollmentId",
             enrollment."group_membership_id" AS "groupMembershipId",
             progress."current_assignment_id" AS "currentAssignmentId",
+            postponed."id" AS "postponedEventId",
             broadcast."id" AS "broadcastId"
           FROM "program_enrollments" enrollment
           INNER JOIN "group_memberships" membership
@@ -190,8 +195,25 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
             AND assignment."program_enrollment_id" = enrollment."id"
             AND assignment."workspace_id" = enrollment."workspace_id"
             AND assignment."group_id" = enrollment."group_id"
+          LEFT JOIN LATERAL (
+            SELECT event."id"
+            FROM "program_action_events" event
+            WHERE event."workspace_id" = enrollment."workspace_id"
+              AND event."group_id" = enrollment."group_id"
+              AND event."program_enrollment_id" = enrollment."id"
+              AND event."mission_assignment_id" = assignment."id"
+              AND event."event_type" = 'TRAINING_POSTPONED'
+              AND ${operations.postponedReminderEnabled}
+              AND NULLIF(event."metadata"->>'remindAt', '')::timestamptz <= ${now}
+            ORDER BY event."occurred_at" DESC, event."id" DESC
+            LIMIT 1
+          ) postponed ON TRUE
           LEFT JOIN "service_line_broadcasts" broadcast
-            ON broadcast."automation_key" = (${keyPrefix} || assignment."id"::text)
+            ON broadcast."automation_key" = CASE
+              WHEN postponed."id" IS NOT NULL
+                THEN (${postponedKeyPrefix} || postponed."id"::text)
+              ELSE (${keyPrefix} || assignment."id"::text)
+            END
           WHERE enrollment."workspace_id" = ${program.workspaceId}::uuid
             AND enrollment."group_id" = ${program.groupId}::uuid
             AND enrollment."service_program_id" = ${program.id}::uuid
@@ -321,7 +343,9 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
           summary.skipped += 1;
           continue;
         }
-        const key = automationKey(input.environment, assignment.id);
+        const key = candidate.postponedEventId
+          ? postponedAutomationKey(input.environment, candidate.postponedEventId)
+          : automationKey(input.environment, assignment.id);
         if (candidate.broadcastId) {
           await new EnqueueJob(new db.PrismaJobRepository()).enqueue({
             environment: input.environment,
@@ -352,7 +376,11 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
             data: {
               workspaceId: program.workspaceId,
               groupId: program.groupId,
-              title: display.mode === 'WAIT' ? '研修の待機案内' : '今日のAIトレーニング',
+              title: candidate.postponedEventId
+                ? 'AI研修の再通知'
+                : display.mode === 'WAIT'
+                  ? '研修の待機案内'
+                  : '今日のAIトレーニング',
               message,
               automationKey: key,
               segmentCriteria: {
@@ -361,6 +389,7 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
                 assignmentId: assignment.id,
                 actionKey: display.actionKey,
                 actionMode: display.mode,
+                postponedEventId: candidate.postponedEventId,
               },
               status: 'SCHEDULED',
               scheduledAt: now,
@@ -391,6 +420,7 @@ export async function scheduleAiTrainingActionLineDeliveries(input: {
                 assignmentId: assignment.id,
                 actionKey: display.actionKey,
                 actionMode: display.mode,
+                postponedEventId: candidate.postponedEventId,
               },
               reason: 'AI研修Pilotの現在課題を参加者本人へ通知',
               performedByUserId: actor.userId,
