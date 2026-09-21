@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260921180000_add_commercial_reminder_schedule';
+export const LATEST_DATABASE_MIGRATION = '20260921183000_repair_sennokuni_mission_terms';

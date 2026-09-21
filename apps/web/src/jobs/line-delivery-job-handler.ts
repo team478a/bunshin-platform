@@ -13,6 +13,10 @@ import { LineMessagingApiAdapter } from '../line/messaging-provider';
 import { HkdfMissionDeepLinkSigner } from '../line/mission-deep-link-signer';
 import { lineEndpointUrls } from '../line/secure-configuration';
 import { SupabaseSocialImageStorage } from '../social-image-storage';
+import {
+  applyServiceContentTerminology,
+  serviceContentTerminologyPolicy,
+} from '../services/service-content-terminology';
 
 export function createLineDeliveryJobHandler(): LineDeliveryJobHandler {
   return {
@@ -29,6 +33,18 @@ export function createLineDeliveryJobHandler(): LineDeliveryJobHandler {
         bunshinId,
         actorUserId: job.requestedBy,
       });
+      const serviceConfiguration = delivery.groupId
+        ? await db.prisma.serviceConfiguration.findFirst({
+            where: {
+              workspaceId: delivery.workspaceId,
+              groupId: delivery.groupId,
+              group: { status: 'ACTIVE' },
+            },
+            select: { slug: true },
+          })
+        : null;
+      const terminologyPolicy = serviceContentTerminologyPolicy(serviceConfiguration?.slug ?? '');
+      const notificationSummaries = new db.PrismaLineMissionNotificationSummaryRepository();
       const imageGroupId = delivery.groupId;
       const automaticImageRequest = imageGroupId
         ? await db.prisma.socialImageGenerationRequest.findFirst({
@@ -54,7 +70,12 @@ export function createLineDeliveryJobHandler(): LineDeliveryJobHandler {
         deliveries,
         new ActiveLineDeliveryConfigurationAdapter(),
         new db.PrismaLineConnectionRepository(),
-        new db.PrismaLineMissionNotificationSummaryRepository(),
+        {
+          async resolve(input) {
+            const summary = await notificationSummaries.resolve(input);
+            return summary ? applyServiceContentTerminology(summary, terminologyPolicy) : null;
+          },
+        },
         new db.PrismaLineDeliveryPreferenceRepository(),
         new LineMessagingApiAdapter(),
       ).execute({

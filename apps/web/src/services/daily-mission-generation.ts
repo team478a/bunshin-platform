@@ -112,7 +112,7 @@ export class DailyMissionGenerationService {
       }
       const recentMissions = await new ListDailyMissions(missions).execute({
         ...scope,
-        from: daysBefore(input.missionDate, 7),
+        from: daysBefore(input.missionDate, 28),
         to: daysBefore(input.missionDate, 1),
       });
       const recentFormats = recentMissions.map(({ format }) => format);
@@ -546,6 +546,10 @@ export class DailyMissionGenerationService {
           };
         }
       }
+      missionContent = applyServiceContentTerminology(
+        missionContent,
+        serviceKnowledge?.contentTerminologyPolicy ?? null,
+      );
       const campaignSignature = campaign ? campaignContentSignature(missionContent) : null;
       const similarity =
         campaign && campaignSignature
