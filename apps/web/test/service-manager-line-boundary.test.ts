@@ -12,7 +12,7 @@ describe('service manager dedicated LINE boundary', () => {
   });
 
   it('allows the scoped service operator, group manager, or platform operations staff', () => {
-    const repository = source('../../packages/database/src/index.ts');
+    const repository = source('../../packages/database/src/oem-line-configuration.ts');
     expect(repository).toContain("role: 'MANAGER'");
     expect(repository).toContain("serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] }");
     expect(repository).toContain("group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } }");
