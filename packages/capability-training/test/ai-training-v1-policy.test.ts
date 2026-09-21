@@ -7,6 +7,7 @@ const base = {
   now,
   role: 'SALES' as const,
   aiLevel: 'BEGINNER' as const,
+  learningGoalKey: 'CREATE_SALES_EMAIL' as const,
   currentPhase: 'FOUNDATION' as const,
   completedMissionKeys: [],
   completedMissionCount: 0,
@@ -48,13 +49,50 @@ describe('AiTrainingV1Policy', () => {
       'PROMPT_FORMAT',
     ];
     expect(
-      policy.evaluate({ ...base, role: 'OFFICE', aiLevel: 'INTERMEDIATE', completedMissionKeys })
-        .actionKey,
+      policy.evaluate({
+        ...base,
+        role: 'OFFICE',
+        aiLevel: 'INTERMEDIATE',
+        learningGoalKey: null,
+        completedMissionKeys,
+      }).actionKey,
     ).toBe('DOCUMENT_SUMMARY');
     expect(
-      policy.evaluate({ ...base, role: 'MANAGER', aiLevel: 'INTERMEDIATE', completedMissionKeys })
-        .actionKey,
+      policy.evaluate({
+        ...base,
+        role: 'MANAGER',
+        aiLevel: 'INTERMEDIATE',
+        learningGoalKey: null,
+        completedMissionKeys,
+      }).actionKey,
     ).toBe('MANAGER_PROCESS_REVIEW');
+  });
+  it('prioritizes the selected learning goal after foundations', () => {
+    const completedMissionKeys = [
+      'AI_BASIC',
+      'CHATGPT_BASIC',
+      'PROMPT_BASIC',
+      'PROMPT_CONDITION',
+      'PROMPT_FORMAT',
+    ];
+    expect(
+      policy.evaluate({
+        ...base,
+        role: 'OFFICE',
+        aiLevel: 'INTERMEDIATE',
+        learningGoalKey: 'ORGANIZE_MEETING_MINUTES',
+        completedMissionKeys,
+      }),
+    ).toMatchObject({ actionKey: 'OFFICE_MINUTES', reasonCode: 'LEARNING_GOAL_PRIORITY' });
+    expect(
+      policy.evaluate({
+        ...base,
+        role: 'MANAGER',
+        aiLevel: 'INTERMEDIATE',
+        learningGoalKey: 'DRAFT_PROPOSAL',
+        completedMissionKeys,
+      }),
+    ).toMatchObject({ actionKey: 'SALES_PROPOSAL', reasonCode: 'LEARNING_GOAL_PRIORITY' });
   });
   it('advances through role missions without reassigning completed work', () => {
     const foundation = [
