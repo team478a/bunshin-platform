@@ -48,7 +48,28 @@ describe('daily mission learning history', () => {
     expect(result.feedbackSummary).toContain('売り込みが強い');
     expect(result.feedbackSummary).toContain('同じ原稿や単なる言い換えは再利用しない');
     expect(result.behaviorSummary).toContain('別案2を選択');
+    expect(result.feedbackSummary).toContain('1件だけでは傾向と断定しない');
+    expect(result.fallbackPreference).toBe('STANDARD');
+  });
+
+  it('changes fallback only after the same concern is observed multiple times', () => {
+    const rejection = (date: string) => ({
+      decision: 'REJECTED' as const,
+      rejectionReason: 'TOO_SALESY' as const,
+      rejectionDetail: null,
+      decidedAt: new Date(`${date}T02:00:00.000Z`),
+      dailyMission: mission(date, '申込み案内'),
+    });
+    const result = summarizeMissionLearningHistory({
+      activities: [],
+      variants: [],
+      feedback: [],
+      decisions: [rejection('2026-09-20'), rejection('2026-09-19')],
+      posts: [],
+      socialInsights: [],
+    });
     expect(result.fallbackPreference).toBe('SOFT_CTA');
+    expect(result.feedbackSummary).toContain('売り込みが強いが2回');
   });
 
   it('connects per-post performance to its topic without inventing conclusions', () => {

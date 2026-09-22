@@ -23,6 +23,10 @@ import {
   readServiceOnboardingSettings,
 } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
+import {
+  nextOnboardingRefinement,
+  readServiceOnboardingAnswers,
+} from '../../../../src/services/service-onboarding-response';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
@@ -70,7 +74,7 @@ export default async function ServiceMemberHome({
       role: true,
       serviceRole: true,
       user: { select: { displayName: true } },
-      serviceOnboardingResponse: { select: { id: true } },
+      serviceOnboardingResponse: { select: { id: true, answers: true } },
       serviceMemberBusinessProfile: { select: { id: true, createdAt: true } },
       featureAssignments: {
         where: { status: 'ENABLED' },
@@ -95,6 +99,10 @@ export default async function ServiceMemberHome({
   const isBusinessDailyService = onboarding.businessProfileEnabled;
   const promptOnlyImages = isPromptOnlyImageService(service.configuration.slug);
   const announcement = readServiceAnnouncement(service.configuration.registration.onboardingConfig);
+  const onboardingRefinement = nextOnboardingRefinement(
+    onboarding.questions,
+    readServiceOnboardingAnswers(membership.serviceOnboardingResponse?.answers),
+  );
   if (
     (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) ||
     (onboarding.businessProfileEnabled && !membership.serviceMemberBusinessProfile)
@@ -204,6 +212,21 @@ export default async function ServiceMemberHome({
             <p style={{ whiteSpace: 'pre-wrap' }}>{announcement.message}</p>
           </section>
         )}
+
+        {onboardingRefinement ? (
+          <section className="service-entry__card" aria-labelledby="profile-refinement-title">
+            <p className="eyebrow">あなた向けの内容をもっと正確に</p>
+            <h2 id="profile-refinement-title">今日は1つだけ教えてください</h2>
+            <p>{onboardingRefinement.question}</p>
+            <p>回答は次回以降の投稿案づくりに使います。</p>
+            <Link
+              className="button button--secondary button--full"
+              href={`/s/${service.configuration.slug}/onboarding?refine=1` as Route}
+            >
+              1問に答える
+            </Link>
+          </section>
+        ) : null}
 
         {businessProgram ? (
           <section className="service-entry__card business-roadmap-summary">

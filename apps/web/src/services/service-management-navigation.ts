@@ -1,6 +1,7 @@
 const BUSINESS_DAILY_SECTION_HREFS = new Set([
   '90-day-report',
   'weekly-report',
+  'personalization',
   'members',
   'knowledge',
   'line',
