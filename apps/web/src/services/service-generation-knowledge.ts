@@ -351,7 +351,7 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
             dailyMission: { select: { missionDate: true, topic: true, angle: true } },
           },
           orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-          take: 6,
+          take: 12,
         })
       : Promise.resolve([]),
     scope.bunshinId
@@ -373,7 +373,7 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
             dailyMission: { select: { missionDate: true, topic: true, angle: true } },
           },
           orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
-          take: 8,
+          take: 12,
         })
       : Promise.resolve([]),
     scope.bunshinId

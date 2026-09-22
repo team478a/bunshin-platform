@@ -72,24 +72,47 @@ const mission = (value: MissionReference) =>
   `${day(value.missionDate)}「${clean(value.topic, 100)}」(${clean(value.angle, 120)})`;
 
 function feedbackSummary(input: MissionLearningHistoryInput) {
-  const ratings = input.feedback
-    .slice(0, 6)
-    .map((item) => `${mission(item.dailyMission)}: ${feedbackLabels[item.rating]}`);
-  const rejections = input.decisions
+  const recentFeedback = input.feedback.slice(0, 12);
+  const recentRejections = input.decisions
     .filter(
       (item): item is typeof item & { rejectionReason: RejectionReason } =>
         item.decision === 'REJECTED' && item.rejectionReason !== null,
     )
-    .slice(0, 6)
-    .map((item) => {
+    .slice(0, 12);
+  if (recentFeedback.length === 0 && recentRejections.length === 0) return '';
+  const rejectionCounts = new Map<RejectionReason, number>();
+  for (const item of recentRejections)
+    rejectionCounts.set(item.rejectionReason, (rejectionCounts.get(item.rejectionReason) ?? 0) + 1);
+  const topicRatings = new Map<string, { good: number; bad: number }>();
+  for (const item of recentFeedback) {
+    const topic = clean(item.dailyMission.topic, 100);
+    const counts = topicRatings.get(topic) ?? { good: 0, bad: 0 };
+    if (item.rating === 'GOOD') counts.good += 1;
+    if (item.rating === 'BAD') counts.bad += 1;
+    topicRatings.set(topic, counts);
+  }
+  const established = [
+    ...[...rejectionCounts.entries()]
+      .filter(([, count]) => count >= 2)
+      .map(([reason, count]) => `${rejectionLabels[reason]}が${count}回`),
+    ...[...topicRatings.entries()].flatMap(([topic, counts]) => [
+      ...(counts.good >= 2 ? [`「${topic}」系が良かった${counts.good}回`] : []),
+      ...(counts.bad >= 2 ? [`「${topic}」系が良くなかった${counts.bad}回`] : []),
+    ]),
+  ];
+  const observations = [
+    ...recentFeedback
+      .slice(0, 6)
+      .map((item) => `${mission(item.dailyMission)}: ${feedbackLabels[item.rating]}`),
+    ...recentRejections.slice(0, 6).map((item) => {
       const detail = item.rejectionDetail ? `（${clean(item.rejectionDetail)}）` : '';
       return `${mission(item.dailyMission)}: 不採用=${rejectionLabels[item.rejectionReason]}${detail}`;
-    });
-  if (ratings.length === 0 && rejections.length === 0) return '';
+    }),
+  ];
   return [
-    ratings.length ? `本人の投稿後評価:\n${ratings.join('\n')}` : null,
-    rejections.length ? `本人の企画選択:\n${rejections.join('\n')}` : null,
-    '反映方針: 良かった要素は別の疑問・場面・具体例で発展させる。低評価や不採用の理由は繰り返さない。同じ原稿や単なる言い換えは再利用しない。',
+    established.length ? `複数回から確認できた傾向:\n${established.join('\n')}` : null,
+    `個別の記録（1件だけでは傾向と断定しない）:\n${observations.join('\n')}`,
+    '反映方針: 複数回確認できた傾向を優先する。1件だけの評価は参考情報として扱う。同じ原稿や単なる言い換えは再利用しない。良かった読者価値は、別の疑問・場面・具体例へ展開する。低評価や不採用の理由は繰り返さない。',
   ]
     .filter((value): value is string => Boolean(value))
     .join('\n');
@@ -160,13 +183,21 @@ function performanceSummary(input: MissionLearningHistoryInput) {
 }
 
 export function summarizeMissionLearningHistory(input: MissionLearningHistoryInput) {
-  const latestRejection = input.decisions.find(
-    (item) => item.decision === 'REJECTED' && item.rejectionReason !== null,
-  )?.rejectionReason;
+  const rejectionCounts = input.decisions
+    .filter(
+      (item): item is typeof item & { rejectionReason: RejectionReason } =>
+        item.decision === 'REJECTED' && item.rejectionReason !== null,
+    )
+    .slice(0, 12)
+    .reduce((counts, item) => {
+      counts.set(item.rejectionReason, (counts.get(item.rejectionReason) ?? 0) + 1);
+      return counts;
+    }, new Map<RejectionReason, number>());
   const fallbackPreference: FallbackFeedbackPreference =
-    latestRejection === 'TOO_SALESY'
+    (rejectionCounts.get('TOO_SALESY') ?? 0) >= 2
       ? 'SOFT_CTA'
-      : latestRejection === 'TOO_DIFFICULT' || latestRejection === 'TOO_MUCH_WORK'
+      : (rejectionCounts.get('TOO_DIFFICULT') ?? 0) + (rejectionCounts.get('TOO_MUCH_WORK') ?? 0) >=
+          2
         ? 'SIMPLE'
         : 'STANDARD';
   return {

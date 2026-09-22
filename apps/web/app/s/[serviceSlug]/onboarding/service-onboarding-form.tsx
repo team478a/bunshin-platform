@@ -3,18 +3,25 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { serviceOnboardingChoicePreset } from '../../../../src/services/service-onboarding-settings';
+import { isLowInformationOnboardingAnswer } from '../../../../src/services/service-onboarding-response';
 
 const OTHER = '__OTHER__';
 
 export function ServiceOnboardingForm({
   serviceSlug,
   questions,
+  initialAnswers,
+  focusQuestionIndex,
+  editMode,
   businessProfileEnabled,
   industries,
   initialBusinessProfile,
 }: {
   serviceSlug: string;
   questions: string[];
+  initialAnswers: string[];
+  focusQuestionIndex: number | null;
+  editMode: boolean;
   businessProfileEnabled: boolean;
   industries: Array<{ id: string; key: string; name: string }>;
   initialBusinessProfile: {
@@ -36,8 +43,15 @@ export function ServiceOnboardingForm({
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  const [selections, setSelections] = useState(() => questions.map(() => ''));
-  const [customAnswers, setCustomAnswers] = useState(() => questions.map(() => ''));
+  const [selections, setSelections] = useState(() =>
+    questions.map((question, index) => {
+      const answer = initialAnswers[index] ?? '';
+      const preset = serviceOnboardingChoicePreset(question);
+      if (!preset || !answer) return '';
+      return preset.options.includes(answer) ? answer : OTHER;
+    }),
+  );
+  const [customAnswers, setCustomAnswers] = useState(() => [...initialAnswers]);
   const [businessProfile, setBusinessProfile] = useState(() => ({
     primaryIndustryId: initialBusinessProfile?.primaryIndustryId ?? '',
     otherIndustryText: initialBusinessProfile?.otherIndustryText ?? '',
@@ -70,7 +84,11 @@ export function ServiceOnboardingForm({
       Boolean(businessProfile.targetAudience.trim()) &&
       Boolean(businessProfile.businessFeatures.trim()) &&
       Boolean(businessProfile.preferredTone.trim()));
-  const complete = answers.every(Boolean) && businessComplete;
+  const focusedAnswer = focusQuestionIndex === null ? null : (answers[focusQuestionIndex] ?? '');
+  const complete =
+    answers.every(Boolean) &&
+    businessComplete &&
+    (!editMode || focusedAnswer === null || !isLowInformationOnboardingAnswer(focusedAnswer));
   const updateBusiness = (key: keyof typeof businessProfile, value: string) =>
     setBusinessProfile((current) => ({ ...current, [key]: value }));
 
@@ -108,16 +126,18 @@ export function ServiceOnboardingForm({
     const result = (await response.json()) as { data?: { bunshinId?: string | null } };
     const bunshinId = result.data?.bunshinId;
     router.replace(
-      businessProfileEnabled && bunshinId
-        ? `/s/${encodeURIComponent(serviceSlug)}/diagnosis`
-        : `/s/${encodeURIComponent(serviceSlug)}/bunshins/new`,
+      editMode
+        ? `/s/${encodeURIComponent(serviceSlug)}/home`
+        : businessProfileEnabled && bunshinId
+          ? `/s/${encodeURIComponent(serviceSlug)}/diagnosis`
+          : `/s/${encodeURIComponent(serviceSlug)}/bunshins/new`,
     );
     router.refresh();
   }
 
   return (
     <form action={submit} className="service-onboarding-form">
-      {businessProfileEnabled ? (
+      {businessProfileEnabled && !editMode ? (
         <fieldset className="service-onboarding-question">
           <legend>事業について教えてください</legend>
           <label>
@@ -267,6 +287,7 @@ export function ServiceOnboardingForm({
         </fieldset>
       ) : null}
       {questions.map((question, index) => {
+        if (focusQuestionIndex !== null && focusQuestionIndex !== index) return null;
         const preset = serviceOnboardingChoicePreset(question);
         if (!preset) {
           return (
@@ -353,7 +374,7 @@ export function ServiceOnboardingForm({
         type="submit"
         disabled={saving || !complete}
       >
-        {saving ? '保存しています…' : '回答してはじめる'}
+        {saving ? '保存しています…' : editMode ? '回答を保存する' : '回答してはじめる'}
       </button>
       {message && <p role="alert">{message}</p>}
     </form>

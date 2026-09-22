@@ -16,7 +16,8 @@ describe('service first-post guided setup', () => {
     expect(onboardingForm).toContain('result.data?.bunshinId');
     expect(onboardingForm).toContain('/diagnosis`');
     expect(onboardingForm).toContain(': `/s/${encodeURIComponent(serviceSlug)}/bunshins/new`');
-    expect(onboardingForm).not.toContain('/home`');
+    expect(onboardingForm).toContain('editMode');
+    expect(onboardingForm).toContain('? `/s/${encodeURIComponent(serviceSlug)}/home`');
     expect(proposals).toContain('useEffect');
   });
 

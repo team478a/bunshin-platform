@@ -2654,3 +2654,10 @@
 - Domain rule: 理解度と対象能力がすべて60以上の場合だけPASSとし、未達の場合は対象能力のうち最低スコアを復習対象にする。
 - Projection: 評価全文は既存`TrainingMissionAnswer`、監査は`ProgramActionEvent`に維持し、Enrollment単位の現在値だけを`TrainingParticipantProfile.skillScores`へJSONで投影する。
 - Scope: 既存値のうち今回評価した能力だけを更新する。動的難易度、復習Mission、進級への接続は次のAdaptive Policy PRで扱う。
+
+# 2026-09-23: 個別化精度を段階的な回答・複数回傾向・生成根拠で強化する
+
+- Choice: 参加者の情報不足は新テーブルを作らず、ServiceOnboardingResponseの回答を1問ずつ補完し、既存の生成コンテキストへ翌日以降反映する。
+- Learning: 単発の評価や不採用理由は参考情報に留め、同じ傾向が直近履歴で2回以上確認された場合だけfallback方針を変更する。良かった投稿も原稿を再利用せず、読者価値を別の疑問・場面へ展開する。
+- Audit: 運営者にはGenerationContextSnapshotの情報種別・参照件数・生成経路・品質結果だけを表示し、本人の回答本文やMemory本文は表示しない。
+- Boundary: 集計と表示はWorkspace・Service配下のBunshinに限定し、User/Bunshin間の履歴を混在させない。

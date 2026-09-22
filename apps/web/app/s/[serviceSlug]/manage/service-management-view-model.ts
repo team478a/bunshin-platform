@@ -10,6 +10,11 @@ export const serviceManagementSections = [
     href: 'weekly-report',
   },
   {
+    title: '個別化の確認',
+    description: '参加者ごとに、どの情報を根拠に投稿案が作られたかと生成経路を確認します。',
+    href: 'personalization',
+  },
+  {
     title: '参加者・運営者と利用権限',
     description: '参加者の招待、運営担当者の役割、参加者ごとの「利用する・停止する」を管理します。',
     href: 'members',
