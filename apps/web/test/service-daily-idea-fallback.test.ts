@@ -47,9 +47,28 @@ describe('service daily idea fallback', () => {
     expect(first.body).not.toContain('紹介しましょう');
     expect(first.hashtags).toEqual(['#テスト食堂', '#飲食', '#日替わり定食']);
     expect(first.photoInstruction).toContain('日替わり定食');
-    expect(first.reason).toContain('business-daily-personalized-fallback-v4');
+    expect(first.reason).toContain('business-daily-personalized-fallback-v5-feedback-loop');
     expect(first.body).toContain(personalized.strategyTarget);
     expect(first.body).toContain(personalized.socialPurpose);
+  });
+
+  it('softens the fallback CTA after the user rejects sales-heavy content', () => {
+    const result = buildServiceDailyIdeaFallback({
+      missionDate: '2026-09-22',
+      industry: '情報発信',
+      businessName: '千ノ国メディア',
+      productService: 'ORI会員向け情報',
+      targetAudience: '歴史に興味がある人',
+      businessFeatures: 'ORIの公式情報を分かりやすく届けています',
+      category: 'HELPFUL_EXPERTISE',
+      feedbackPreference: 'SOFT_CTA',
+      ...personalized,
+    });
+
+    expect(result.cta).toContain('保存');
+    expect(result.body).toContain('保存');
+    expect(result.body).not.toContain('お気軽にお尋ねください');
+    expect(result.reason).toContain('SOFT_CTA');
   });
 
   it('does not mistake a changed angle or image for new substantive content', () => {

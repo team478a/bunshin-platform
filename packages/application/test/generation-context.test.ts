@@ -39,6 +39,8 @@ const payload = (): GenerationContextSnapshotPayload => ({
     recentMissions: [{ id: 'mission-previous' }],
     recentActivities: [{ id: 'activity-1' }],
     recentVariants: [{ id: 'variant-selection-1' }],
+    recentFeedback: [{ id: 'feedback-1' }],
+    recentDecisions: [{ id: 'decision-1' }],
     postRecords: [{ id: 'post-1' }],
     socialInsights: [{ id: 'insight-1' }],
   },

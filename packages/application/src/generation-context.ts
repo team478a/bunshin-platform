@@ -43,6 +43,8 @@ export interface GenerationContextSnapshotPayload {
     recentMissions: GenerationContextReference[];
     recentActivities: GenerationContextReference[];
     recentVariants: GenerationContextReference[];
+    recentFeedback?: GenerationContextReference[];
+    recentDecisions?: GenerationContextReference[];
     postRecords: GenerationContextReference[];
     socialInsights: GenerationContextReference[];
   };
@@ -117,6 +119,14 @@ export function validateGenerationContextSnapshot(payload: GenerationContextSnap
     requireUniqueReferences(
       payload.personalization.recentVariants,
       'personalization.recentVariants',
+    );
+    requireUniqueReferences(
+      payload.personalization.recentFeedback ?? [],
+      'personalization.recentFeedback',
+    );
+    requireUniqueReferences(
+      payload.personalization.recentDecisions ?? [],
+      'personalization.recentDecisions',
     );
     requireUniqueReferences(payload.personalization.postRecords, 'personalization.postRecords');
     requireUniqueReferences(
