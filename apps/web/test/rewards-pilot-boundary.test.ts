@@ -6,7 +6,10 @@ const badgesPage = readFileSync('app/(app)/badges/page.tsx', 'utf8');
 const pointsApi = readFileSync('app/api/workspaces/[workspaceId]/points/route.ts', 'utf8');
 const badgesApi = readFileSync('src/http/badge-user-experience.ts', 'utf8');
 const membersPage = readFileSync('app/(app)/groups/[groupId]/members/page.tsx', 'utf8');
-const servicePointsPage = readFileSync('app/s/[serviceSlug]/manage/points/page.tsx', 'utf8');
+const servicePointsPage = [
+  readFileSync('app/s/[serviceSlug]/manage/points/page.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/actions.ts', 'utf8'),
+].join('\n');
 
 describe('rewards pilot web boundary', () => {
   it.each([pointsPage, badgesPage])(
