@@ -1,10 +1,15 @@
 import 'server-only';
-import { CreateDailyMission, type BusinessContentCategory } from '@bunshin/capability-social';
+import {
+  CreateDailyMission,
+  ListDailyMissions,
+  type BusinessContentCategory,
+} from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import {
   applyServiceContentTerminology,
   serviceContentTerminologyPolicy,
 } from './service-content-terminology';
+import { inspectDailyMissionContent } from './daily-mission-content-quality';
 
 const FALLBACK_VERSION = 'business-daily-ready-fallback-v3';
 
@@ -35,6 +40,27 @@ const photoDirections = [
   '入口、看板、パッケージなど目印になる物を中央に置いて撮ります',
   'スタッフが準備した成果物を、背景を整えて撮ります',
 ] as const;
+
+const fallbackIntroductions: Record<
+  BusinessContentCategory,
+  (input: {
+    businessName: string;
+    productService: string;
+    targetAudience: string;
+    approvedFact: string;
+  }) => string
+> = {
+  HELPFUL_EXPERTISE: ({ productService, targetAudience, approvedFact }) =>
+    `${targetAudience}の皆さまが${productService}を選ぶときに、知っておいていただきたいことがあります。\n\n${approvedFact}`,
+  COMPANY_STAFF: ({ businessName, productService, approvedFact }) =>
+    `${businessName}が${productService}をご案内するときに、大切にしていることがあります。\n\n${approvedFact}`,
+  FAQ_PROBLEM: ({ productService, targetAudience, approvedFact }) =>
+    `${targetAudience}の皆さまから、${productService}についてご相談をいただくことがあります。\n\nご案内の基本は次のとおりです。${approvedFact}`,
+  CASE_STUDY: ({ productService, targetAudience, approvedFact }) =>
+    `${targetAudience}の皆さまが${productService}を検討する場面で、先に確認していただきたいことがあります。\n\n${approvedFact}`,
+  PRODUCT_SERVICE: ({ productService, targetAudience, approvedFact }) =>
+    `${targetAudience}の皆さまへ、${productService}についてお伝えします。\n\n${approvedFact}`,
+};
 
 function dailyIndex(missionDate: string): number {
   const value = new Date(`${missionDate}T00:00:00.000Z`).getTime();
@@ -74,15 +100,21 @@ export function buildServiceDailyIdeaFallback(input: {
     ? `${categoryAngles[input.category]}。今日は「${dailyAngle}」という切り口で伝える`
     : dailyAngle;
   const topic = `${input.targetAudience}へ伝える「${input.productService}」の話`;
-  const feature = input.businessFeatures?.trim()
-    ? `私たちは、${input.businessFeatures.trim()}を大切にしています。`
+  const approvedFact = input.businessFeatures?.trim()
+    ? input.businessFeatures.trim().replace(/[。.!！]+$/u, '。')
     : `${input.businessName}では、分かりやすいご案内を大切にしています。`;
   const hashtags = [
     hashtag(input.businessName),
     hashtag(input.industry),
     hashtag(input.productService),
   ].filter((value): value is string => Boolean(value));
-  const body = `${input.targetAudience}の皆さまへ。\n\n今日は「${angle}」をご紹介します。\n\n${feature}\n\n${input.productService}について気になることがあれば、いつでもお気軽にご相談ください。`;
+  const category = input.category ?? 'PRODUCT_SERVICE';
+  const body = `${fallbackIntroductions[category]({
+    businessName: input.businessName,
+    productService: input.productService,
+    targetAudience: input.targetAudience,
+    approvedFact,
+  })}\n\n気になる点は、${input.businessName}へお気軽にお尋ねください。`;
   return applyServiceContentTerminology(
     {
       version: FALLBACK_VERSION,
@@ -100,7 +132,7 @@ export function buildServiceDailyIdeaFallback(input: {
 export function shouldUseServiceDailyIdeaFallback(error: unknown) {
   if (!(error instanceof ApplicationError)) return false;
   return (
-    ['AI_PROVIDER_UNAVAILABLE', 'CONTENT_REJECTED', 'INTERNAL_ERROR'].includes(error.code) ||
+    ['AI_PROVIDER_UNAVAILABLE', 'INTERNAL_ERROR'].includes(error.code) ||
     (error.code === 'FORBIDDEN' && error.message.includes('AI generation limit'))
   );
 }
@@ -179,8 +211,36 @@ export async function createServiceDailyIdeaFallback(input: {
     variationKey: input.bunshinId,
     ...(serviceConfiguration ? { serviceSlug: serviceConfiguration.slug } : {}),
   });
+  const missionRepository = new db.PrismaDailyMissionRepository();
+  const from = new Date(`${input.missionDate}T00:00:00.000Z`);
+  from.setUTCDate(from.getUTCDate() - 28);
+  const recentMissions = await new ListDailyMissions(missionRepository).execute({
+    workspaceId: input.workspaceId,
+    groupId: input.groupId,
+    bunshinId: input.bunshinId,
+    actorUserId: input.actorUserId,
+    from: from.toISOString().slice(0, 10),
+    to: new Date(new Date(`${input.missionDate}T00:00:00.000Z`).getTime() - 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+  });
+  const content = {
+    body: idea.body,
+    threadParts: [],
+    cta: '気になることがあれば、コメントやメッセージでお気軽にお尋ねください。',
+    caption: idea.body,
+    hashtags: idea.hashtags,
+    photoInstruction: idea.photoInstruction,
+  } as const;
+  const issue = inspectDailyMissionContent({ content, recentMissions });
+  if (issue)
+    throw new ApplicationError(
+      'CONTENT_REJECTED',
+      'fallback mission failed the same novelty gate as normal generation',
+      issue,
+    );
   return new CreateDailyMission(
-    new db.PrismaDailyMissionRepository(),
+    missionRepository,
     new db.PrismaBunshinCapabilityAssignmentRepository(),
   ).execute({
     ...input,
@@ -194,13 +254,6 @@ export async function createServiceDailyIdeaFallback(input: {
     angle: idea.angle,
     reason: idea.reason,
     qualityScore: null,
-    content: {
-      body: idea.body,
-      threadParts: [],
-      cta: '気になることがあれば、コメントやメッセージでお気軽にお尋ねください。',
-      caption: idea.body,
-      hashtags: idea.hashtags,
-      photoInstruction: idea.photoInstruction,
-    },
+    content,
   });
 }

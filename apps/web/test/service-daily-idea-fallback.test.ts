@@ -7,6 +7,7 @@ import {
   buildServiceDailyIdeaFallback,
   shouldUseServiceDailyIdeaFallback,
 } from '../src/services/service-daily-idea-fallback';
+import { inspectDailyMissionContent } from '../src/services/daily-mission-content-quality';
 
 describe('service daily idea fallback', () => {
   it('builds a deterministic ready-to-post fallback from service business facts', () => {
@@ -38,7 +39,7 @@ describe('service daily idea fallback', () => {
     expect(first.reason).toContain('business-daily-ready-fallback-v3');
   });
 
-  it('changes both the post and image direction on consecutive delivery days', () => {
+  it('does not mistake a changed angle or image for new substantive content', () => {
     const input = {
       industry: '情報発信',
       businessName: '千ノ国メディア',
@@ -51,7 +52,7 @@ describe('service daily idea fallback', () => {
     const second = buildServiceDailyIdeaFallback({ ...input, missionDate: '2026-09-18' });
     const third = buildServiceDailyIdeaFallback({ ...input, missionDate: '2026-09-19' });
 
-    expect(new Set([first.body, second.body, third.body]).size).toBe(3);
+    expect(new Set([first.body, second.body, third.body]).size).toBe(1);
     expect(
       new Set([first.photoInstruction, second.photoInstruction, third.photoInstruction]).size,
     ).toBe(3);
@@ -64,6 +65,28 @@ describe('service daily idea fallback', () => {
     expect(`${anotherParticipant.body}\n${anotherParticipant.photoInstruction}`).not.toBe(
       `${first.body}\n${first.photoInstruction}`,
     );
+
+    const asContent = (idea: typeof first) => ({
+      body: idea.body,
+      threadParts: [],
+      cta: 'お問い合わせください。',
+      caption: idea.body,
+      hashtags: idea.hashtags,
+      photoInstruction: idea.photoInstruction,
+    });
+    expect(
+      inspectDailyMissionContent({
+        content: asContent(second),
+        recentMissions: [
+          {
+            missionDate: '2026-09-17',
+            topic: first.topic,
+            angle: first.angle,
+            content: asContent(first),
+          },
+        ],
+      })?.code,
+    ).toMatch(/EXACT_RECENT_CONTENT|SUBSTANTIAL_RECENT_OVERLAP/);
   });
 
   it('applies service terminology to the fallback path', () => {
@@ -88,6 +111,11 @@ describe('service daily idea fallback', () => {
         new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'provider unavailable'),
       ),
     ).toBe(true);
+    expect(
+      shouldUseServiceDailyIdeaFallback(
+        new ApplicationError('CONTENT_REJECTED', 'candidate duplicates recent content'),
+      ),
+    ).toBe(false);
     expect(
       shouldUseServiceDailyIdeaFallback(
         new ApplicationError('FORBIDDEN', 'service monthly AI generation limit reached'),
