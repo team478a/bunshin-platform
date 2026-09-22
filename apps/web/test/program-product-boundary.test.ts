@@ -3,10 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 const products = readFileSync(new URL('../src/http/program-products.ts', import.meta.url), 'utf8');
 const checkout = readFileSync(new URL('../src/http/program-checkout.ts', import.meta.url), 'utf8');
-const purchase = readFileSync(
-  new URL('../src/payments/program-purchase.ts', import.meta.url),
-  'utf8',
-);
+const purchase = ['program-purchase.ts', 'program-purchase-context.ts']
+  .map((file) => readFileSync(new URL(`../src/payments/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 
 describe('generic program commerce boundaries', () => {
   it('configures products only through a managed service scope and versions conditions', () => {
