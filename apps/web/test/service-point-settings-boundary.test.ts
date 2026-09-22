@@ -6,10 +6,19 @@ const page = readFileSync(
   fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/page.tsx', import.meta.url)),
   'utf8',
 );
-const processor = readFileSync(
-  fileURLToPath(new URL('../../../packages/database/src/index.ts', import.meta.url)),
-  'utf8',
-);
+const processor = [
+  'point-account.ts',
+  'point-ledger.ts',
+  'point-redemption.ts',
+  'point-activity.ts',
+]
+  .map((file) =>
+    readFileSync(
+      fileURLToPath(new URL(`../../../packages/database/src/${file}`, import.meta.url)),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const schema = readFileSync(
   fileURLToPath(new URL('../../../packages/database/prisma/schema.prisma', import.meta.url)),
   'utf8',

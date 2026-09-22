@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const repository = readFileSync('src/index.ts', 'utf8');
+const repository = readFileSync('src/point-activity.ts', 'utf8');
 
 describe('point activity service scope', () => {
   it('counts weekly posts only in the service that received the activity', () => {
