@@ -2,83 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
-import { compareGroupKnowledgeVersions } from '../../src/knowledge/group-knowledge-version-diff';
-
-type SourceData = {
-  id: string;
-  type: 'PDF' | 'VIDEO' | 'URL' | 'TEXT';
-  title: string;
-  sourceUri: string | null;
-  originalFileName: string | null;
-  productPackVersionId: string | null;
-  status: 'DRAFT' | 'PROCESSING' | 'REVIEW_REQUIRED' | 'ACTIVE' | 'FAILED' | 'ARCHIVED';
-  version: number;
-  failureCode: string | null;
-  updatedAt: string;
-};
-
-type Source = SourceData & { generationCount: number; lastUsedAt: string | null };
-
-const typeLabel = { PDF: 'PDF', VIDEO: '動画', URL: 'Webページ', TEXT: '入力した文章' } as const;
-const statusLabel = {
-  DRAFT: '読み取り待ち',
-  PROCESSING: '読み取り中',
-  REVIEW_REQUIRED: '内容の確認待ち',
-  ACTIVE: '投稿づくりに利用中',
-  FAILED: '読み取りに失敗',
-  ARCHIVED: '利用停止',
-} as const;
-
-const failureMessage: Record<string, string> = {
-  GROUP_KNOWLEDGE_PROVIDER_ERROR:
-    '外部サービスが混み合っているか、一時的に接続できませんでした。もう一度読み取れます。',
-  GROUP_KNOWLEDGE_VALIDATION_ERROR:
-    '資料の内容または形式を読み取れませんでした。ファイルやURLを確認してください。',
-  GROUP_KNOWLEDGE_FORBIDDEN: 'この資料を読み取る権限を確認できませんでした。',
-  GROUP_KNOWLEDGE_NOT_FOUND: '登録した資料が見つかりませんでした。',
-  GROUP_KNOWLEDGE_CONFLICT: '別の処理と重なりました。少し待ってからもう一度お試しください。',
-  GROUP_KNOWLEDGE_WEB_RESPONSE_TOO_LARGE:
-    'Webページ全体が2MBを超えています。必要な内容だけのページ、PDF、または文章で登録してください。',
-  GROUP_KNOWLEDGE_WEB_TEXT_TOO_LARGE:
-    'Webページの本文が長すぎます。内容を複数のページに分けて登録してください。',
-  GROUP_KNOWLEDGE_VIDEO_TOO_LARGE:
-    '動画が25MBを超えています。短く分けるか、画質を下げてから登録してください。',
-  SOURCE_NOT_FOUND: '登録した資料が見つかりませんでした。',
-  SOURCE_NOT_PROCESSABLE: 'この資料の形式には対応していません。',
-};
-
-function friendlyFailure(code: string) {
-  return failureMessage[code] ?? '内容を読み取れませんでした。もう一度お試しください。';
-}
-
-function usageDateTime(value: string) {
-  return new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Asia/Tokyo',
-  }).format(new Date(value));
-}
-
-function ProductScopeField({
-  productVersions,
-}: {
-  productVersions: Array<{ id: string; label: string }>;
-}) {
-  return (
-    <label className="field">
-      <span className="field__label">この資料を使う範囲</span>
-      <select className="field__control" name="productPackVersionId" defaultValue="">
-        <option value="">グループのすべての投稿で使う</option>
-        {productVersions.map((item) => (
-          <option key={item.id} value={item.id}>
-            商品「{item.label}」の投稿だけで使う
-          </option>
-        ))}
-      </select>
-      <small>商品専用の資料を選ぶと、その商品の投稿では共通資料より優先して使います。</small>
-    </label>
-  );
-}
+import { GroupKnowledgeLibrary } from './group-knowledge-library';
+import { GroupKnowledgeReviewPanel } from './group-knowledge-review-panel';
+import { GroupKnowledgeSourceForms } from './group-knowledge-source-forms';
+import type {
+  GroupKnowledgeReview,
+  GroupKnowledgeSource as Source,
+  GroupKnowledgeSourceData as SourceData,
+  ProductVersionOption,
+} from './group-knowledge-types';
 
 export function GroupKnowledgeManager({
   workspaceId,
@@ -88,7 +20,7 @@ export function GroupKnowledgeManager({
 }: {
   workspaceId: string;
   groupId: string;
-  productVersions: Array<{ id: string; label: string }>;
+  productVersions: ProductVersionOption[];
   initialSources: Source[];
 }) {
   const [sources, setSources] = useState(initialSources);
@@ -98,22 +30,7 @@ export function GroupKnowledgeManager({
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [scopeFilter, setScopeFilter] = useState('ALL');
-  const [review, setReview] = useState<{
-    source: Source;
-    chunks: Array<{
-      id: string;
-      type: string;
-      content: string;
-      sourceLabel: string;
-      pageNumber: number | null;
-      startSeconds: number | null;
-      endSeconds: number | null;
-    }>;
-    previousVersion: {
-      version: number;
-      chunks: Array<{ id: string; content: string }>;
-    } | null;
-  } | null>(null);
+  const [review, setReview] = useState<GroupKnowledgeReview | null>(null);
   const fileForm = useRef<HTMLFormElement>(null);
   const urlForm = useRef<HTMLFormElement>(null);
   const textForm = useRef<HTMLFormElement>(null);
@@ -508,480 +425,50 @@ export function GroupKnowledgeManager({
 
   return (
     <>
-      <section className="settings-card knowledge-upload-card">
-        <div className="knowledge-section-heading">
-          <div>
-            <p className="eyebrow">いちばん簡単な方法</p>
-            <h2>資料をアップロード</h2>
-          </div>
-          <span className="knowledge-type-badge">PDF・動画</span>
-        </div>
-        <p>PDFや動画をまとめて選べます。資料名はファイル名から自動で入ります。</p>
-        <form ref={fileForm} className="form-stack" onSubmit={(event) => void saveFile(event)}>
-          <label className="field">
-            <span className="field__label">ファイルを選ぶ</span>
-            <input
-              className="field__control"
-              name="file"
-              type="file"
-              accept="application/pdf,video/mp4,video/quicktime"
-              multiple
-              required
-            />
-            <small>一度に10件まで選べます。PDFは1件50MBまで、動画は1件25MBまでです。</small>
-          </label>
-          <label className="field">
-            <span className="field__label">1件だけ選ぶ場合の名前（書かなくても大丈夫）</span>
-            <input
-              className="field__control"
-              name="title"
-              maxLength={200}
-              placeholder="空欄ならファイル名を使います"
-            />
-          </label>
-          <ProductScopeField productVersions={productVersions} />
-          <label className="field">
-            <span>
-              <input name="rightsConfirmed" type="checkbox" required />
-              この資料をワタシワークスで使っても大丈夫です
-            </span>
-          </label>
-          <button className="button button--primary" type="submit" disabled={saving}>
-            選んだ資料をまとめて追加する
-          </button>
-        </form>
-      </section>
-
-      <section className="settings-card knowledge-add-card">
-        <div className="knowledge-section-heading">
-          <h2>公式Webページを追加</h2>
-          <span className="knowledge-type-badge">URL</span>
-        </div>
-        <p>商品ページや公開FAQのURLを登録できます。</p>
-        <form
-          ref={urlForm}
-          className="form-stack"
-          onSubmit={(event) => void saveSimple(event, 'URL')}
-        >
-          <label className="field">
-            <span className="field__label">名前（書かなくても大丈夫）</span>
-            <input className="field__control" name="title" maxLength={200} />
-          </label>
-          <label className="field">
-            <span className="field__label">WebページのURL</span>
-            <input
-              className="field__control"
-              name="sourceUri"
-              type="url"
-              inputMode="url"
-              required
-              placeholder="https://example.jp/faq"
-            />
-          </label>
-          <ProductScopeField productVersions={productVersions} />
-          <button className="button button--primary" type="submit" disabled={saving}>
-            Webページを保存する
-          </button>
-        </form>
-      </section>
-
-      <section className="settings-card knowledge-add-card">
-        <div className="knowledge-section-heading">
-          <h2>文章を直接追加</h2>
-          <span className="knowledge-type-badge">FAQ・説明文</span>
-        </div>
-        <p>短いFAQや社内で決めた説明文は、そのまま入力できます。</p>
-        <form
-          ref={textForm}
-          className="form-stack"
-          onSubmit={(event) => void saveSimple(event, 'TEXT')}
-        >
-          <label className="field">
-            <span className="field__label">名前（書かなくても大丈夫）</span>
-            <input className="field__control" name="title" maxLength={200} />
-          </label>
-          <label className="field">
-            <span className="field__label">内容</span>
-            <textarea
-              className="field__control"
-              name="content"
-              maxLength={8000}
-              rows={8}
-              required
-              placeholder="例：Q. 返品できますか？ A. 商品到着後7日以内に…"
-            />
-          </label>
-          <ProductScopeField productVersions={productVersions} />
-          <button className="button button--primary" type="submit" disabled={saving}>
-            文章を保存する
-          </button>
-        </form>
-      </section>
-
+      <GroupKnowledgeSourceForms
+        fileForm={fileForm}
+        urlForm={urlForm}
+        textForm={textForm}
+        productVersions={productVersions}
+        saving={saving}
+        saveFile={saveFile}
+        saveSimple={saveSimple}
+      />
       {message ? (
         <p className="notice notice--success" role="status" aria-live="polite">
           {message}
         </p>
       ) : null}
-
       {review ? (
-        <section className="settings-card">
-          <h2>読み取った内容を確認</h2>
-          <p>
-            <strong>{review.source.title}</strong>
-          </p>
-          {review.previousVersion ? (
-            <details>
-              <summary>前の第{review.previousVersion.version}版との違いを確認する</summary>
-              <p>左がこれまで使っていた内容、右が今回の内容です。</p>
-              <ul className="plain-list">
-                {compareGroupKnowledgeVersions(review.previousVersion.chunks, review.chunks).map(
-                  (row) => (
-                    <li
-                      key={`${row.index}-${row.previous?.id ?? 'none'}-${row.current?.id ?? 'none'}`}
-                    >
-                      <strong>
-                        {row.status === 'UNCHANGED'
-                          ? '変更なし'
-                          : row.status === 'CHANGED'
-                            ? '内容が変わりました'
-                            : row.status === 'ADDED'
-                              ? '新しく追加されました'
-                              : '今回の版では削除されました'}
-                      </strong>
-                      <div className="form-grid">
-                        <div>
-                          <small>前の内容</small>
-                          <p>{row.previous?.content ?? 'ありません'}</p>
-                        </div>
-                        <div>
-                          <small>今回の内容</small>
-                          <p>{row.current?.content ?? 'ありません'}</p>
-                        </div>
-                      </div>
-                    </li>
-                  ),
-                )}
-              </ul>
-            </details>
-          ) : null}
-          {review.chunks.length === 0 ? (
-            <p>読み取った内容はまだありません。</p>
-          ) : (
-            <ol className="plain-list">
-              {review.chunks.map((chunk) => (
-                <li key={chunk.id}>
-                  <strong>{chunk.sourceLabel}</strong>
-                  {chunk.pageNumber ? `（${chunk.pageNumber}ページ）` : ''}
-                  {chunk.startSeconds !== null ? `（${chunk.startSeconds}秒から）` : ''}
-                  {review.source.status === 'REVIEW_REQUIRED' ? (
-                    <textarea
-                      className="field__control"
-                      rows={6}
-                      maxLength={8000}
-                      value={chunk.content}
-                      aria-label={`${chunk.sourceLabel}の読み取り内容`}
-                      onChange={(event) =>
-                        setReview((current) =>
-                          current
-                            ? {
-                                ...current,
-                                chunks: current.chunks.map((item) =>
-                                  item.id === chunk.id
-                                    ? { ...item, content: event.target.value }
-                                    : item,
-                                ),
-                              }
-                            : null,
-                        )
-                      }
-                    />
-                  ) : (
-                    <p>{chunk.content}</p>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-          {review.source.status === 'REVIEW_REQUIRED' && review.chunks.length > 0 ? (
-            <>
-              <button type="button" disabled={saving} onClick={() => void saveReview()}>
-                修正した内容を保存する
-              </button>
-              <button
-                className="button"
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  void (async () => {
-                    if (await saveReview()) await changeState(review.source.id, 'approve');
-                  })()
-                }
-              >
-                確認して投稿づくりに使う
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void changeState(review.source.id, 'retry')}
-              >
-                内容をもう一度読み取る
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void changeState(review.source.id, 'archive')}
-              >
-                この資料を使わない
-              </button>
-            </>
-          ) : null}
-          <button type="button" disabled={saving} onClick={() => setReview(null)}>
-            閉じる
-          </button>
-        </section>
+        <GroupKnowledgeReviewPanel
+          review={review}
+          setReview={setReview}
+          saving={saving}
+          saveReview={saveReview}
+          changeState={changeState}
+        />
       ) : null}
-
-      <section className="settings-card knowledge-library-card">
-        <h2>保存したナレッジ</h2>
-        <div className="knowledge-status-summary" aria-label="登録した資料の状態">
-          <span>
-            すべて<strong>{sources.length}</strong>
-          </span>
-          <span>
-            利用中<strong>{statusCounts.active}</strong>
-          </span>
-          <span>
-            確認待ち<strong>{statusCounts.review}</strong>
-          </span>
-          <span>
-            読み取り中<strong>{statusCounts.processing}</strong>
-          </span>
-          <span>
-            失敗<strong>{statusCounts.failed}</strong>
-          </span>
-        </div>
-        <button
-          className="button button--secondary"
-          type="button"
-          disabled={saving}
-          onClick={() => void refreshSources(true)}
-        >
-          最新の状態に更新する
-        </button>
-        {hasPendingSources ? (
-          <p>読み取り中の資料は5秒ごとに自動確認します。この画面を開いたままで大丈夫です。</p>
-        ) : null}
-        <div className="form-grid">
-          <label className="field">
-            <span className="field__label">資料名で探す</span>
-            <input
-              className="field__control"
-              type="search"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="資料名、ファイル名、URL"
-            />
-          </label>
-          <label className="field">
-            <span className="field__label">資料の種類</span>
-            <select
-              className="field__control"
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-            >
-              <option value="ALL">すべて</option>
-              <option value="PDF">PDF</option>
-              <option value="VIDEO">動画</option>
-              <option value="URL">Webページ</option>
-              <option value="TEXT">入力した文章</option>
-            </select>
-          </label>
-          <label className="field">
-            <span className="field__label">現在の状態</span>
-            <select
-              className="field__control"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="ALL">すべて</option>
-              {Object.entries(statusLabel).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span className="field__label">使う範囲</span>
-            <select
-              className="field__control"
-              value={scopeFilter}
-              onChange={(event) => setScopeFilter(event.target.value)}
-            >
-              <option value="ALL">すべて</option>
-              <option value="COMMON">グループのすべての投稿</option>
-              {productVersions.map((item) => (
-                <option key={item.id} value={item.id}>
-                  商品「{item.label}」の投稿だけ
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {searchText || typeFilter !== 'ALL' || statusFilter !== 'ALL' || scopeFilter !== 'ALL' ? (
-          <button
-            type="button"
-            onClick={() => {
-              setSearchText('');
-              setTypeFilter('ALL');
-              setStatusFilter('ALL');
-              setScopeFilter('ALL');
-            }}
-          >
-            絞り込みをすべて戻す
-          </button>
-        ) : null}
-        {sources.length === 0 ? <p>保存した資料はまだありません。</p> : null}
-        {sources.length > 0 && visibleSources.length === 0 ? (
-          <p>条件に合う資料はありません。検索や絞り込みを変えてください。</p>
-        ) : null}
-        <ul className="plain-list knowledge-source-list">
-          {visibleSources.map((source) => (
-            <li key={source.id}>
-              <div className="knowledge-source-list__heading">
-                <div>
-                  <strong>{source.title}</strong>
-                  <span>
-                    {typeLabel[source.type]} ／ 第{source.version}版
-                  </span>
-                </div>
-                <span
-                  className={`knowledge-status knowledge-status--${source.status.toLowerCase()}`}
-                >
-                  {statusLabel[source.status]}
-                </span>
-              </div>
-              <p className="knowledge-source-list__detail">
-                投稿案での利用：
-                {source.generationCount > 0 && source.lastUsedAt
-                  ? `${source.generationCount}回（最後：${usageDateTime(source.lastUsedAt)}）`
-                  : 'まだありません'}
-              </p>
-              <p className="knowledge-source-list__detail">
-                使う範囲：
-                {source.productPackVersionId
-                  ? `商品「${
-                      productVersions.find((item) => item.id === source.productPackVersionId)
-                        ?.label ?? '登録済みの商品'
-                    }」の投稿だけ`
-                  : 'グループのすべての投稿'}
-              </p>
-              {source.status !== 'ARCHIVED' ? (
-                <form
-                  key={`${source.id}-${source.productPackVersionId ?? 'common'}`}
-                  className="form-stack"
-                  onSubmit={(event) => void changeProductScope(event, source.id)}
-                >
-                  <label className="field">
-                    <span className="field__label">使う範囲を変更</span>
-                    <select
-                      className="field__control"
-                      name="productPackVersionId"
-                      defaultValue={source.productPackVersionId ?? ''}
-                    >
-                      <option value="">グループのすべての投稿</option>
-                      {productVersions.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          商品「{item.label}」の投稿だけ
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="submit" disabled={saving}>
-                    使う範囲を保存する
-                  </button>
-                </form>
-              ) : null}
-              {source.originalFileName ? (
-                <>
-                  <br />
-                  ファイル：{source.originalFileName}
-                </>
-              ) : null}
-              {source.sourceUri ? (
-                <>
-                  <br />
-                  登録先：{source.sourceUri}
-                </>
-              ) : null}
-              {source.failureCode ? (
-                <>
-                  <br />
-                  {friendlyFailure(source.failureCode)}
-                </>
-              ) : null}
-              {['FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
-                <>
-                  <br />
-                  <button
-                    className="button"
-                    type="button"
-                    disabled={saving}
-                    onClick={() => void changeState(source.id, 'retry')}
-                  >
-                    {source.status === 'FAILED' ? 'もう一度読み取る' : '内容を読み取り直す'}
-                  </button>
-                </>
-              ) : null}
-              {['REVIEW_REQUIRED', 'ACTIVE'].includes(source.status) ? (
-                <>
-                  <br />
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => void openReview(source.id)}
-                  >
-                    内容を確認する
-                  </button>
-                </>
-              ) : null}
-              {source.status === 'ACTIVE' ? (
-                <>
-                  {source.type === 'URL' &&
-                  (source.productPackVersionId === null ||
-                    productVersions.some((item) => item.id === source.productPackVersionId)) ? (
-                    <button
-                      className="button"
-                      type="button"
-                      disabled={saving}
-                      onClick={() => void refreshUrlSource(source)}
-                    >
-                      Webページの最新内容を読み取る
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => void changeState(source.id, 'archive')}
-                  >
-                    利用を停止する
-                  </button>
-                </>
-              ) : null}
-              {['DRAFT', 'FAILED', 'REVIEW_REQUIRED'].includes(source.status) ? (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void changeState(source.id, 'archive')}
-                >
-                  この資料を使わない
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
+      <GroupKnowledgeLibrary
+        sources={sources}
+        visibleSources={visibleSources}
+        productVersions={productVersions}
+        saving={saving}
+        hasPendingSources={hasPendingSources}
+        statusCounts={statusCounts}
+        searchText={searchText}
+        setSearchText={setSearchText}
+        typeFilter={typeFilter}
+        setTypeFilter={setTypeFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        scopeFilter={scopeFilter}
+        setScopeFilter={setScopeFilter}
+        refreshSources={refreshSources}
+        changeProductScope={changeProductScope}
+        changeState={changeState}
+        openReview={openReview}
+        refreshUrlSource={refreshUrlSource}
+      />
     </>
   );
 }
