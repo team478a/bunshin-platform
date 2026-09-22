@@ -19,8 +19,26 @@ const topics = [
   ['城門', '門の正面に立ったときの視界を見ると、侵入を防ぐ仕組みを体感できます。'],
 ] as const;
 
-const textContent = (profile: string, topic: string, detail: string): MissionContent => ({
-  body: `${profile}さんへ。今日のテーマは${topic}です。${detail}次に資料の写真を一枚確認してみましょう。`,
+const participants = [
+  {
+    key: 'A',
+    evidence: '歴史好きの初心者がInstagramで保存しやすいように',
+    sourceTypes: ['BUNSHIN_PROFILE', 'SOCIAL_PROFILE', 'ACCOUNT_STRATEGY'],
+  },
+  {
+    key: 'B',
+    evidence: 'メタバース経験者がThreadsでORIへの関心を言葉にできるように',
+    sourceTypes: ['ONBOARDING_RESPONSE', 'SOCIAL_PROFILE', 'ACCOUNT_STRATEGY'],
+  },
+  {
+    key: 'C',
+    evidence: 'SNS発信経験者が千ノ国の店舗と経済圏の価値を伝えられるように',
+    sourceTypes: ['BUNSHIN_PROFILE', 'BUSINESS_PROFILE', 'RECENT_ACTIVITY'],
+  },
+] as const;
+
+const textContent = (evidence: string, topic: string, detail: string): MissionContent => ({
+  body: `${evidence}、今日のテーマは${topic}です。${detail}次に資料の写真を一枚確認してみましょう。`,
   threadParts: [],
   cta: '気になった点を一つメモしてください。',
   caption: `${topic}の見方を一つ紹介します。${detail}`,
@@ -29,9 +47,9 @@ const textContent = (profile: string, topic: string, detail: string): MissionCon
 });
 
 describe('three-participant 14-day non-production simulation', () => {
-  it.each(['初心者', '歴史好き', '地域ガイド'])(
-    '%s receives 14 substantively distinct candidates across a week boundary',
-    (profile) => {
+  it.each(participants)(
+    '$key receives 14 substantively distinct and evidence-based candidates across a week boundary',
+    (participant) => {
       const history: Array<{
         missionDate: string;
         topic: string;
@@ -40,7 +58,8 @@ describe('three-participant 14-day non-production simulation', () => {
       }> = [];
       for (const [index, [topic, detail]] of topics.entries()) {
         const missionDate = new Date(Date.UTC(2026, 8, 7 + index)).toISOString().slice(0, 10);
-        const candidate = textContent(profile, topic, detail);
+        const candidate = textContent(participant.evidence, topic, detail);
+        expect(JSON.stringify(candidate)).toContain(participant.evidence);
         expect(
           inspectDailyMissionContent({ content: candidate, recentMissions: history }),
         ).toBeNull();
@@ -52,8 +71,23 @@ describe('three-participant 14-day non-production simulation', () => {
     },
   );
 
+  it('keeps meaningful horizontal differences on the same date and records their source types', () => {
+    const generated = participants.map((participant) => ({
+      participant: participant.key,
+      sourceTypes: participant.sourceTypes,
+      content: textContent(participant.evidence, topics[0][0], topics[0][1]),
+    }));
+    expect(new Set(generated.map(({ content }) => content.body)).size).toBe(3);
+    for (const item of generated) {
+      expect(item.sourceTypes.length).toBeGreaterThan(0);
+      expect(item.content.body).toContain(
+        participants.find(({ key }) => key === item.participant)!.evidence,
+      );
+    }
+  });
+
   it('rejects the duplicate candidate and accepts one bounded alternate proposal', () => {
-    const previous = textContent('初心者', topics[0][0], topics[0][1]);
+    const previous = textContent(participants[0].evidence, topics[0][0], topics[0][1]);
     expect(
       inspectDailyMissionContent({
         content: previous,
@@ -69,7 +103,7 @@ describe('three-participant 14-day non-production simulation', () => {
     ).not.toBeNull();
     expect(
       inspectDailyMissionContent({
-        content: textContent('初心者', topics[1][0], topics[1][1]),
+        content: textContent(participants[0].evidence, topics[1][0], topics[1][1]),
         recentMissions: [
           {
             missionDate: '2026-09-07',

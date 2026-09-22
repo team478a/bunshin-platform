@@ -33,6 +33,19 @@ export interface GenerationContextSnapshotPayload {
     issueCodes: string[];
     repairCount: number;
   };
+  personalization?: {
+    mode: 'AI' | 'FALLBACK';
+    sourceTypes: string[];
+    availableSourceTypes?: string[];
+    onboardingResponse: GenerationContextReference | null;
+    businessProfile: GenerationContextReference | null;
+    weeklyPlanItem: GenerationContextReference;
+    recentMissions: GenerationContextReference[];
+    recentActivities: GenerationContextReference[];
+    recentVariants: GenerationContextReference[];
+    postRecords: GenerationContextReference[];
+    socialInsights: GenerationContextReference[];
+  };
 }
 
 export interface GenerationContextSnapshot {
@@ -91,6 +104,45 @@ export function validateGenerationContextSnapshot(payload: GenerationContextSnap
   requireUniqueReferences(payload.knowledge, 'knowledge');
   requireUniqueReferences(payload.groupKnowledge ?? [], 'groupKnowledge');
   requireUniqueReferences(payload.trendCandidates, 'trendCandidates');
+  if (payload.personalization) {
+    requireText(payload.personalization.weeklyPlanItem.id, 'personalization.weeklyPlanItem.id');
+    requireUniqueReferences(
+      payload.personalization.recentMissions,
+      'personalization.recentMissions',
+    );
+    requireUniqueReferences(
+      payload.personalization.recentActivities,
+      'personalization.recentActivities',
+    );
+    requireUniqueReferences(
+      payload.personalization.recentVariants,
+      'personalization.recentVariants',
+    );
+    requireUniqueReferences(payload.personalization.postRecords, 'personalization.postRecords');
+    requireUniqueReferences(
+      payload.personalization.socialInsights,
+      'personalization.socialInsights',
+    );
+    if (
+      payload.personalization.sourceTypes.length === 0 ||
+      new Set(payload.personalization.sourceTypes).size !==
+        payload.personalization.sourceTypes.length
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid personalization.sourceTypes');
+    if (
+      payload.personalization.availableSourceTypes !== undefined &&
+      (payload.personalization.availableSourceTypes.length === 0 ||
+        new Set(payload.personalization.availableSourceTypes).size !==
+          payload.personalization.availableSourceTypes.length ||
+        payload.personalization.sourceTypes.some(
+          (type) => !payload.personalization!.availableSourceTypes!.includes(type),
+        ))
+    )
+      throw new ApplicationError(
+        'VALIDATION_ERROR',
+        'invalid personalization.availableSourceTypes',
+      );
+  }
   for (const memory of payload.selectedMemories) {
     requireText(memory.summary, 'selectedMemory.summary');
     requireText(memory.selectionReason, 'selectedMemory.selectionReason');

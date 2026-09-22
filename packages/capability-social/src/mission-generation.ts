@@ -42,6 +42,28 @@ export interface MissionBusinessProfileContext {
   forbiddenContent?: string | null;
 }
 
+export const MISSION_PERSONALIZATION_SOURCE_TYPES = [
+  'BUNSHIN_PROFILE',
+  'ONBOARDING_RESPONSE',
+  'BUSINESS_PROFILE',
+  'SOCIAL_PROFILE',
+  'ACCOUNT_STRATEGY',
+  'USER_MEMORY',
+  'RECENT_ACTIVITY',
+  'POST_PERFORMANCE',
+] as const;
+export type MissionPersonalizationSourceType =
+  (typeof MISSION_PERSONALIZATION_SOURCE_TYPES)[number];
+export interface MissionPersonalizationSignal {
+  type: MissionPersonalizationSourceType;
+  label: string;
+  value: string;
+}
+export interface MissionPersonalizationContext {
+  signals: MissionPersonalizationSignal[];
+  instruction: string;
+}
+
 export interface DailyMissionPlannerInput {
   workspaceId: string;
   bunshinId: string;
@@ -78,6 +100,7 @@ export interface DailyMissionPlannerInput {
   businessProfile?: MissionBusinessProfileContext | null;
   trendIdeas?: TrendIdeaCandidate[];
   campaign?: CampaignPlanningContext | null;
+  personalization?: MissionPersonalizationContext;
 }
 
 const PLATFORM_FORMAT_PRIORITY: Record<SocialPlatform, readonly SocialPreferredFormat[]> = {
@@ -159,6 +182,7 @@ export interface DailyMissionPlannerProviderInput {
   contentPillar: { title: string; description: string | null };
   grantedKnowledge: DailyMissionPlannerInput['grantedKnowledge'];
   businessProfile?: MissionBusinessProfileContext | null;
+  personalization?: MissionPersonalizationContext;
   trendIdeas?: Array<{
     topic: string;
     hook: string;
@@ -173,6 +197,8 @@ export interface DailyMissionPlannerOutput {
   reason: string;
   estimatedMinutes: number;
   usedTrendIdea: boolean;
+  personalizationSourceTypes?: MissionPersonalizationSourceType[];
+  personalizationReason?: string;
 }
 
 export interface DailyMissionPlannerResult {
@@ -287,6 +313,7 @@ export class GenerateDailyMissionBrief {
         businessContentCategory: item.businessContentCategory ?? null,
       },
       campaign: input.campaign ?? null,
+      ...(input.personalization ? { personalization: input.personalization } : {}),
       contentPillar: { title: pillar.title, description: pillar.description },
       grantedKnowledge: input.grantedKnowledge,
       businessProfile: input.businessProfile ?? null,
@@ -311,22 +338,44 @@ export class GenerateDailyMissionBrief {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid trend usage decision');
     if (result.output.usedTrendIdea && trendIdeas.length === 0)
       throw new ApplicationError('VALIDATION_ERROR', 'trend idea was not available');
-    return {
-      ...result,
-      output: {
-        missionDate,
-        socialProfileId: input.socialProfile.id,
-        weeklyPlanItemId: item.id,
-        format: selectedFormat,
-        topic: missionString(result.output.topic, 200, 'topic'),
-        angle: missionString(result.output.angle, 500, 'angle'),
-        reason: missionString(result.output.reason, 1000, 'reason'),
-        estimatedMinutes,
-        campaignId: item.campaignId,
-        classification: item.classification,
-        ...(result.output.usedTrendIdea ? { trendCandidateId: trendIdeas[0]!.id } : {}),
-      } satisfies DailyMissionBrief,
+    let personalizationSourceTypes: MissionPersonalizationSourceType[] | undefined;
+    let personalizationReason: string | undefined;
+    if (input.personalization) {
+      const available = new Set(input.personalization.signals.map(({ type }) => type));
+      const selected = result.output.personalizationSourceTypes;
+      if (
+        !Array.isArray(selected) ||
+        selected.length < 1 ||
+        selected.some((type) => !MISSION_PERSONALIZATION_SOURCE_TYPES.includes(type)) ||
+        selected.some((type) => !available.has(type)) ||
+        new Set(selected).size !== selected.length
+      )
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid personalization source decision');
+      personalizationSourceTypes = selected;
+      personalizationReason = missionString(
+        result.output.personalizationReason ?? '',
+        500,
+        'personalization reason',
+      );
+    }
+    const output: DailyMissionBrief = {
+      missionDate,
+      socialProfileId: input.socialProfile.id,
+      weeklyPlanItemId: item.id,
+      format: selectedFormat,
+      topic: missionString(result.output.topic, 200, 'topic'),
+      angle: missionString(result.output.angle, 500, 'angle'),
+      reason: missionString(result.output.reason, 1000, 'reason'),
+      estimatedMinutes,
+      campaignId: item.campaignId,
+      classification: item.classification,
     };
+    if (personalizationSourceTypes && personalizationReason) {
+      output.personalizationSourceTypes = personalizationSourceTypes;
+      output.personalizationReason = personalizationReason;
+    }
+    if (result.output.usedTrendIdea) output.trendCandidateId = trendIdeas[0]!.id;
+    return { ...result, output };
   }
 }
 
@@ -347,6 +396,7 @@ export interface MissionContentGeneratorInput {
   }>;
   selectedMemories: SelectedBunshinMemory[];
   campaign?: CampaignPlanningContext | null;
+  personalization?: MissionPersonalizationContext;
   /** Existing Mission content that must be rewritten into a meaningfully different proposal. */
   variantSourceContent?: MissionContent;
   variantInstructions?: string[];
@@ -359,7 +409,14 @@ export interface MissionContentGeneratorProviderInput extends Omit<
 > {
   brief: Pick<
     DailyMissionBrief,
-    'missionDate' | 'format' | 'topic' | 'angle' | 'reason' | 'estimatedMinutes'
+    | 'missionDate'
+    | 'format'
+    | 'topic'
+    | 'angle'
+    | 'reason'
+    | 'estimatedMinutes'
+    | 'personalizationSourceTypes'
+    | 'personalizationReason'
   >;
   selectedMemories: Array<Omit<SelectedBunshinMemory, 'id'>>;
 }
@@ -402,7 +459,16 @@ export class GenerateMissionContent {
         missionString(value, 500, 'repair instruction'),
       );
     }
-    const { missionDate, format, topic, angle, reason, estimatedMinutes } = input.brief;
+    const {
+      missionDate,
+      format,
+      topic,
+      angle,
+      reason,
+      estimatedMinutes,
+      personalizationSourceTypes,
+      personalizationReason,
+    } = input.brief;
     const selectedMemories = input.selectedMemories.map(
       ({ type, summary, content, selectionReason }) => ({
         type,
@@ -413,7 +479,17 @@ export class GenerateMissionContent {
     );
     const result = await this.generator.generate({
       ...input,
-      brief: { missionDate, format, topic, angle, reason, estimatedMinutes },
+      brief: {
+        missionDate,
+        format,
+        topic,
+        angle,
+        reason,
+        estimatedMinutes,
+        ...(personalizationSourceTypes && personalizationReason
+          ? { personalizationSourceTypes, personalizationReason }
+          : {}),
+      },
       selectedMemories,
     });
     const output = normalizeMissionContent(input.brief.format, result.output);
@@ -450,6 +526,7 @@ export interface MissionQualityCheckerInput {
     angle: string;
     contentExcerpt: string;
   }>;
+  personalization?: MissionPersonalizationContext;
 }
 
 export interface MissionQualityCheckerProviderInput extends Omit<
@@ -458,7 +535,14 @@ export interface MissionQualityCheckerProviderInput extends Omit<
 > {
   brief: Pick<
     DailyMissionBrief,
-    'missionDate' | 'format' | 'topic' | 'angle' | 'reason' | 'estimatedMinutes'
+    | 'missionDate'
+    | 'format'
+    | 'topic'
+    | 'angle'
+    | 'reason'
+    | 'estimatedMinutes'
+    | 'personalizationSourceTypes'
+    | 'personalizationReason'
   >;
   selectedMemories: Array<Omit<SelectedBunshinMemory, 'id'>>;
 }
@@ -581,7 +665,16 @@ export class CheckMissionQuality {
   async execute(input: MissionQualityCheckerInput) {
     assertPlatformFormat(input.platform, input.brief.format);
     const content = normalizeMissionContent(input.brief.format, input.content);
-    const { missionDate, format, topic, angle, reason, estimatedMinutes } = input.brief;
+    const {
+      missionDate,
+      format,
+      topic,
+      angle,
+      reason,
+      estimatedMinutes,
+      personalizationSourceTypes,
+      personalizationReason,
+    } = input.brief;
     const selectedMemories = input.selectedMemories.map(
       ({ type, summary, content, selectionReason }) => ({
         type,
@@ -592,7 +685,17 @@ export class CheckMissionQuality {
     );
     const result = await this.checker.check({
       ...input,
-      brief: { missionDate, format, topic, angle, reason, estimatedMinutes },
+      brief: {
+        missionDate,
+        format,
+        topic,
+        angle,
+        reason,
+        estimatedMinutes,
+        ...(personalizationSourceTypes && personalizationReason
+          ? { personalizationSourceTypes, personalizationReason }
+          : {}),
+      },
       content,
       selectedMemories,
     });

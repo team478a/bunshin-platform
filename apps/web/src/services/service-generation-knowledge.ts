@@ -12,6 +12,10 @@ import {
 } from './service-onboarding-settings';
 import { businessContentMixKnowledge } from './business-content-mix';
 import {
+  readServiceOnboardingAnswers,
+  serviceOnboardingProposalContext,
+} from './service-onboarding-response';
+import {
   serviceContentTerminologyKnowledge,
   serviceContentTerminologyPolicy,
 } from './service-content-terminology';
@@ -219,6 +223,11 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     registrationPolicy,
     serviceConfiguration,
     executionResults,
+    onboardingResponse,
+    recentActivities,
+    recentVariants,
+    recentPostRecords,
+    recentSocialInsights,
   ] = await Promise.all([
     new GroupKnowledgeService(
       new db.PrismaGroupKnowledgeRepository(),
@@ -234,6 +243,7 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
         groupMembership: { status: 'ACTIVE' },
       },
       select: {
+        id: true,
         otherIndustryText: true,
         businessName: true,
         region: true,
@@ -275,6 +285,75 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
           take: 5,
         })
       : Promise.resolve([]),
+    db.prisma.serviceOnboardingResponse.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        userId: scope.actorUserId,
+        groupMembership: { status: 'ACTIVE' },
+      },
+      select: { id: true, answers: true },
+    }),
+    scope.bunshinId
+      ? db.prisma.missionActivity.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            bunshinId: scope.bunshinId,
+            actorUserId: scope.actorUserId,
+            dailyMission: { bunshin: { groupId: scope.groupId } },
+          },
+          select: { id: true, type: true, dailyMissionId: true, occurredAt: true },
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+          take: 12,
+        })
+      : Promise.resolve([]),
+    scope.bunshinId
+      ? db.prisma.missionContentVariantSelection.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            bunshinId: scope.bunshinId,
+            actorUserId: scope.actorUserId,
+            dailyMission: { bunshin: { groupId: scope.groupId } },
+          },
+          select: { id: true, variantId: true, dailyMissionId: true, selectedAt: true },
+          orderBy: [{ selectedAt: 'desc' }, { id: 'desc' }],
+          take: 5,
+        })
+      : Promise.resolve([]),
+    scope.bunshinId
+      ? db.prisma.postRecord.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            bunshinId: scope.bunshinId,
+            actorUserId: scope.actorUserId,
+            dailyMission: { bunshin: { groupId: scope.groupId } },
+          },
+          select: { id: true, dailyMissionId: true, postedAt: true, manualMetrics: true },
+          orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
+          take: 5,
+        })
+      : Promise.resolve([]),
+    scope.bunshinId
+      ? db.prisma.socialInsightSnapshot.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            userId: scope.actorUserId,
+            bunshinId: scope.bunshinId,
+          },
+          select: {
+            id: true,
+            observedOn: true,
+            followers: true,
+            reach: true,
+            impressions: true,
+            profileViews: true,
+            interactions: true,
+          },
+          orderBy: [{ observedOn: 'desc' }, { id: 'desc' }],
+          take: 3,
+        })
+      : Promise.resolve([]),
   ]);
   const dailyIdeaDelivery = readServiceOnboardingSettings(
     registrationPolicy?.onboardingConfig,
@@ -313,6 +392,36 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
         forbiddenContent: businessProfile.forbiddenContent,
       }
     : null;
+  const onboardingAnswers = readServiceOnboardingAnswers(onboardingResponse?.answers);
+  const behaviorSummary = [
+    recentActivities.length
+      ? `直近の操作: ${recentActivities
+          .slice(0, 8)
+          .map(({ type }) => type)
+          .join('、')}`
+      : null,
+    recentVariants.length ? `本人が別案を選んだ回数（直近記録）: ${recentVariants.length}` : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join('\n');
+  const performanceSummary = [
+    recentPostRecords.length ? `投稿完了記録（直近）: ${recentPostRecords.length}件` : null,
+    recentSocialInsights.length
+      ? `最新SNS記録: ${[
+          recentSocialInsights[0]?.followers == null
+            ? null
+            : `フォロワー${recentSocialInsights[0].followers}`,
+          recentSocialInsights[0]?.reach == null ? null : `リーチ${recentSocialInsights[0].reach}`,
+          recentSocialInsights[0]?.interactions == null
+            ? null
+            : `反応${recentSocialInsights[0].interactions}`,
+        ]
+          .filter(Boolean)
+          .join('、')}`
+      : null,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join('\n');
   return {
     ...knowledge,
     contentAssistanceLevel,
@@ -320,6 +429,19 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     businessContentMixEnabled,
     contentTerminologyPolicy,
     businessProfile: normalizedBusinessProfile,
+    personalization: {
+      onboardingContext: serviceOnboardingProposalContext(onboardingAnswers),
+      behaviorSummary,
+      performanceSummary,
+      references: {
+        onboardingResponseId: onboardingResponse?.id ?? null,
+        businessProfileId: businessProfile?.id ?? null,
+        recentActivityIds: recentActivities.map(({ id }) => id),
+        recentVariantSelectionIds: recentVariants.map(({ id }) => id),
+        recentPostRecordIds: recentPostRecords.map(({ id }) => id),
+        recentSocialInsightIds: recentSocialInsights.map(({ id }) => id),
+      },
+    },
     officialKnowledge: [
       ...serviceContentTerminologyKnowledge(contentTerminologyPolicy),
       ...businessProfileKnowledgeForPrompt(

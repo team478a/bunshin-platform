@@ -40,6 +40,10 @@ import { campaignContentSignature } from './campaign-content-signature';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 import { applyServiceContentTerminology } from './service-content-terminology';
 import {
+  buildMissionPersonalizationContext,
+  personalizationSourceTypes,
+} from './daily-mission-personalization';
+import {
   inspectDailyMissionContent,
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
@@ -297,6 +301,15 @@ export class DailyMissionGenerationService {
         ctaStrategy: strategy.ctaStrategy,
         postingPolicy: strategy.postingPolicy,
       };
+      const plannerPersonalization = buildMissionPersonalizationContext({
+        bunshin: bunshinContext,
+        socialProfile: profile,
+        strategy,
+        businessProfile: serviceKnowledge?.businessProfile ?? null,
+        onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
+        behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+        performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
+      });
       const knowledge = [
         ...(serviceKnowledge?.officialKnowledge ??
           granted.map(({ type, title, content }) => ({ type, title, content }))),
@@ -373,6 +386,7 @@ export class DailyMissionGenerationService {
           businessProfile: serviceKnowledge?.businessProfile ?? null,
           trendIdeas,
           campaign,
+          personalization: plannerPersonalization,
         }),
       );
       await usage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
@@ -416,6 +430,16 @@ export class DailyMissionGenerationService {
                 content: memory.content,
                 selectionReason: '本人がDaily Actionで残した最近の素材',
               }));
+      const personalization = buildMissionPersonalizationContext({
+        bunshin: bunshinContext,
+        socialProfile: profile,
+        strategy,
+        businessProfile: serviceKnowledge?.businessProfile ?? null,
+        onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
+        behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+        performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
+        selectedMemories,
+      });
       const generator = new GenerateMissionContent(
         new OpenAIMissionContentGenerator({
           apiKey,
@@ -433,6 +457,7 @@ export class DailyMissionGenerationService {
         groupKnowledge,
         selectedMemories,
         campaign,
+        personalization,
       };
       const applyTerminology = <
         T extends { output: Parameters<typeof applyServiceContentTerminology>[0] },
@@ -466,6 +491,7 @@ export class DailyMissionGenerationService {
         selectedMemories,
         groupKnowledge,
         recentContent: recentMissionQualityContext(recentMissions),
+        personalization,
       });
       let repairCount = 0;
       const qualityIssueCodes = new Set<string>();
@@ -695,6 +721,31 @@ export class DailyMissionGenerationService {
               verdict: 'PASS',
               issueCodes: [...qualityIssueCodes],
               repairCount,
+            },
+            personalization: {
+              mode: 'AI',
+              sourceTypes: brief.output.personalizationSourceTypes ?? [],
+              availableSourceTypes: personalizationSourceTypes(personalization),
+              onboardingResponse: serviceKnowledge?.personalization.references.onboardingResponseId
+                ? { id: serviceKnowledge.personalization.references.onboardingResponseId }
+                : null,
+              businessProfile: serviceKnowledge?.personalization.references.businessProfileId
+                ? { id: serviceKnowledge.personalization.references.businessProfileId }
+                : null,
+              weeklyPlanItem: { id: weeklyItem.id },
+              recentMissions: recentMissions.map(({ id }) => ({ id })),
+              recentActivities: (
+                serviceKnowledge?.personalization.references.recentActivityIds ?? []
+              ).map((id) => ({ id })),
+              recentVariants: (
+                serviceKnowledge?.personalization.references.recentVariantSelectionIds ?? []
+              ).map((id) => ({ id })),
+              postRecords: (
+                serviceKnowledge?.personalization.references.recentPostRecordIds ?? []
+              ).map((id) => ({ id })),
+              socialInsights: (
+                serviceKnowledge?.personalization.references.recentSocialInsightIds ?? []
+              ).map((id) => ({ id })),
             },
           },
         },

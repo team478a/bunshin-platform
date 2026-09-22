@@ -10,6 +10,17 @@ import {
 import { inspectDailyMissionContent } from '../src/services/daily-mission-content-quality';
 
 describe('service daily idea fallback', () => {
+  const personalized = {
+    platform: 'INSTAGRAM',
+    socialPurpose: '歴史好きへ分かりやすく届ける',
+    strategyTarget: '地域の歴史に興味がある初心者',
+    strategyPositioning: '難しい史料を身近な言葉で紹介します。',
+    weeklyGoal: '保存される歴史情報を届ける',
+    weeklyAngle: '城跡で最初に見る場所',
+    bunshinObjective: '歴史を身近に感じてもらう',
+    bunshinAudience: '歴史に興味を持ち始めた人',
+  };
+
   it('builds a deterministic ready-to-post fallback from service business facts', () => {
     const first = buildServiceDailyIdeaFallback({
       missionDate: '2026-09-07',
@@ -19,7 +30,7 @@ describe('service daily idea fallback', () => {
       targetAudience: '近隣で働く人',
       businessFeatures: '毎朝仕込んだ料理を提供しています',
       category: 'HELPFUL_EXPERTISE',
-      variationKey: 'bunshin-1',
+      ...personalized,
     });
     const second = buildServiceDailyIdeaFallback({
       missionDate: '2026-09-07',
@@ -29,14 +40,16 @@ describe('service daily idea fallback', () => {
       targetAudience: '近隣で働く人',
       businessFeatures: '毎朝仕込んだ料理を提供しています',
       category: 'HELPFUL_EXPERTISE',
-      variationKey: 'bunshin-1',
+      ...personalized,
     });
     expect(first).toEqual(second);
     expect(first.body).toContain('毎朝仕込んだ料理を提供しています');
     expect(first.body).not.toContain('紹介しましょう');
     expect(first.hashtags).toEqual(['#テスト食堂', '#飲食', '#日替わり定食']);
     expect(first.photoInstruction).toContain('日替わり定食');
-    expect(first.reason).toContain('business-daily-ready-fallback-v3');
+    expect(first.reason).toContain('business-daily-personalized-fallback-v4');
+    expect(first.body).toContain(personalized.strategyTarget);
+    expect(first.body).toContain(personalized.socialPurpose);
   });
 
   it('does not mistake a changed angle or image for new substantive content', () => {
@@ -47,24 +60,22 @@ describe('service daily idea fallback', () => {
       targetAudience: '会員',
       businessFeatures: '分かりやすい情報を届けています',
       category: 'HELPFUL_EXPERTISE' as const,
+      ...personalized,
     };
     const first = buildServiceDailyIdeaFallback({ ...input, missionDate: '2026-09-17' });
-    const second = buildServiceDailyIdeaFallback({ ...input, missionDate: '2026-09-18' });
-    const third = buildServiceDailyIdeaFallback({ ...input, missionDate: '2026-09-19' });
-
-    expect(new Set([first.body, second.body, third.body]).size).toBe(1);
-    expect(
-      new Set([first.photoInstruction, second.photoInstruction, third.photoInstruction]).size,
-    ).toBe(3);
-
     const anotherParticipant = buildServiceDailyIdeaFallback({
       ...input,
       missionDate: '2026-09-17',
-      variationKey: 'a-different-bunshin',
+      platform: 'THREADS',
+      socialPurpose: 'ORIの体験を言葉で共有する',
+      strategyTarget: 'メタバース経験がありORIに関心がある人',
+      strategyPositioning: 'オンライン体験からORIの価値を紹介します。',
+      bunshinObjective: 'ORIを自分の言葉で紹介する',
+      bunshinAudience: 'メタバースに関心がある人',
     });
-    expect(`${anotherParticipant.body}\n${anotherParticipant.photoInstruction}`).not.toBe(
-      `${first.body}\n${first.photoInstruction}`,
-    );
+    expect(anotherParticipant.body).not.toBe(first.body);
+    expect(anotherParticipant.body).toContain('メタバース経験がありORIに関心がある人');
+    expect(first.body).toContain('地域の歴史に興味がある初心者');
 
     const asContent = (idea: typeof first) => ({
       body: idea.body,
@@ -76,7 +87,7 @@ describe('service daily idea fallback', () => {
     });
     expect(
       inspectDailyMissionContent({
-        content: asContent(second),
+        content: asContent(first),
         recentMissions: [
           {
             missionDate: '2026-09-17',
@@ -98,6 +109,7 @@ describe('service daily idea fallback', () => {
       targetAudience: 'OVEを学ぶ会員',
       businessFeatures: 'OVEの考え方を届けています',
       serviceSlug: 'sennokuni-media',
+      ...personalized,
     });
 
     expect(JSON.stringify(result)).not.toMatch(/OVE/i);

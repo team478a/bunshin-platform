@@ -238,6 +238,53 @@ describe('GenerateDailyMissionBrief', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
+  it('records only personalization source types that were available for this user', async () => {
+    const personalization = {
+      signals: [
+        {
+          type: 'BUNSHIN_PROFILE' as const,
+          label: '本人のBunshin設定',
+          value: '歴史好きの初心者へ写真で伝える',
+        },
+      ],
+      instruction: '本人固有情報を企画へ反映する',
+    };
+    const result = await new GenerateDailyMissionBrief(
+      provider({
+        ...output,
+        personalizationSourceTypes: ['BUNSHIN_PROFILE'],
+        personalizationReason: '本人が歴史好きの初心者へ届けたい設定だから',
+      }),
+    ).execute({ ...input, personalization });
+
+    expect(result.output.personalizationSourceTypes).toEqual(['BUNSHIN_PROFILE']);
+    expect(result.output.personalizationReason).toContain('歴史好き');
+  });
+
+  it('rejects a claimed personalization source that was not supplied', async () => {
+    await expect(
+      new GenerateDailyMissionBrief(
+        provider({
+          ...output,
+          personalizationSourceTypes: ['POST_PERFORMANCE'],
+          personalizationReason: '投稿実績を使った',
+        }),
+      ).execute({
+        ...input,
+        personalization: {
+          signals: [
+            {
+              type: 'BUNSHIN_PROFILE',
+              label: '本人のBunshin設定',
+              value: '歴史好きの初心者へ写真で伝える',
+            },
+          ],
+          instruction: '本人固有情報を企画へ反映する',
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
   it('replaces the weekly suggestion with a safe format from the scoped profile', async () => {
     const planner = provider();
     const result = await new GenerateDailyMissionBrief(planner).execute({

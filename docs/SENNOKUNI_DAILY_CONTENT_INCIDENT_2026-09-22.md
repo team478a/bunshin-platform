@@ -151,17 +151,83 @@ ORIの考え方を分かりやすく届けることを大切にしています�
 - `apps/web/src/services/service-daily-idea-fallback.ts`: `CONTENT_REJECTED` の迂回廃止、作成指示を本文へ埋め込む処理の廃止、予備案への同一品質ゲート適用。
 - `apps/web/src/services/mission-content-variant-generation.ts`: 再生成でも直近28日の提示済み原稿を照合。
 - `apps/web/src/providers/openai-mission-quality-checker.ts`: 最近の本文と意味上の重複を審査するPrompt v7。
-- `packages/capability-social/src/mission-generation.ts`: 品質審査入力へ最近の本文Contextを追加。
+- `packages/capability-social/src/mission-generation.ts`: 品質審査入力へ最近の本文Contextと個別化根拠の検証を追加。
+- `apps/web/src/services/daily-mission-personalization.ts`: Bunshin、SNS、戦略、Onboarding、Memory、利用履歴、投稿実績をユーザー固有signalへ変換。
+- `apps/web/src/services/service-generation-knowledge.ts`: Service/User/Bunshin境界内で個別化情報と参照IDを取得。
+- `packages/application/src/generation-context.ts`: 使用した根拠と利用可能だった根拠、履歴参照IDを既存スナップショットへ追加。
 - `apps/web/test/daily-mission-content-quality.test.ts`: 指示本文、完全一致、実質重複、画像だけの変更を拒否するテスト。
 - `apps/web/test/daily-mission-14-day-simulation.test.ts`: 3名×14日、週またぎ、別企画への再試行を含む非本番シミュレーション。
 - `apps/web/test/daily-mission-duplicate-guard.test.ts`、`openai-mission-intelligence.test.ts`、`service-automatic-jobs.test.ts`、`service-daily-idea-fallback.test.ts`: 既存経路の回帰テスト更新。
 
 ## 10. 検証結果
 
-- `pnpm test`: 25/25タスク成功。Web 284ファイル・1,289件、Application 110ファイル・504件を含む全体テスト成功。
+- `pnpm test`: 25/25タスク成功。Web 285ファイル・1,293件、Application 110ファイル・504件、Capability Social 17ファイル・120件を含む全体テスト成功。
 - `pnpm typecheck`: 25/25タスク成功。
 - `pnpm build`: 13/13タスク成功。Next.js本番ビルド成功。
 - `pnpm --filter web lint`: 成功。
 - `pnpm --filter @bunshin/capability-social typecheck`: 成功。
 - 変更ファイルだけのPrettier確認: 成功。
 - リポジトリ全体の `pnpm format:check` は、このブランチの変更外を含む既存1,935ファイルの警告で失敗した。今回の変更ファイルには警告なし。
+
+## 11. ユーザー個別化の追加調査
+
+日替わりだけではワタシワークスの要件を満たさないため、生成時の情報を次の2種類に分離して確認した。
+
+### 全員共通情報
+
+- 承認済みGroup Knowledge（商品・サービス・ORIの正式情報、FAQ、ルール）
+- サービス別用語ポリシーと禁止表現
+- Product Pack / Campaignの承認済み情報
+- Weekly Planと当日のPlan Item
+- Content Pillar
+
+### ユーザー固有情報
+
+- Bunshinの目的、届けたい相手、人格
+- SocialProfileのSNS、利用目的、希望形式
+- 承認済みAccount Strategyの目標、立ち位置、対象、投稿方針
+- 本人の事業プロフィール
+- Service Onboarding回答
+- 本人のMemoryとDaily Action素材
+- 本人へ過去に提示したDaily Mission
+- 採用、別案選択、投稿完了等の直近Activity
+- 本人のPostRecordとSocial Insight
+
+変更前の通常AI経路ではBunshin、SocialProfile、Strategy、事業プロフィール、選択Memory、過去Mission、Weekly Plan、Group Knowledgeは入力されていた。一方、Onboarding回答、別案選択履歴、投稿実績・反応履歴は生成判断へ明示的に接続されていなかった。また、予備生成は事業プロフィールの一部とBunshin ID由来の巡回値に依存し、本人固有の理由を説明できなかった。
+
+変更後は、共通情報とユーザー固有signalを別フィールドでAIへ渡す。Plannerは利用可能なユーザー固有signalから実際に判断へ使った種別と理由を構造化出力し、存在しない種別、空の理由、共通情報だけの企画を拒否する。Content GeneratorとQuality Checkerにも同じ個別化Contextを渡し、語尾、絵文字、ランダム化だけの差を `PERSONALIZATION_MISSING` として不合格にする。
+
+## 12. 個別化根拠の監査
+
+`GenerationContextSnapshot.payload.personalization` に本文や個人情報を複製せず、次を保存する。
+
+- `mode`: AI生成か予備生成か
+- `sourceTypes`: Plannerが実際に選定根拠として申告した情報種別
+- `availableSourceTypes`: 生成時に利用可能だった情報種別
+- Onboarding Response、事業プロフィール、Weekly Plan Itemの参照ID
+- 重複回避に使った過去Mission ID
+- Activity、別案選択、PostRecord、Social Insightの参照ID
+- 選択MemoryのID、要約、選定理由（既存項目）
+- Group Knowledge、Strategy、SocialProfile、Weekly Plan、Content Pillarの参照ID（既存項目）
+
+これにより「入力として存在した」と「今回の企画理由に使った」を区別し、対象Workspace、Service、User、Bunshinの境界を保ったまま追跡できる。生のOnboarding回答や投稿本文を監査用JSONへ追加保存しない。
+
+## 13. 情報不足時と予備生成
+
+登録直後はBunshin、SocialProfile、承認済みStrategy、当日のWeekly Plan Itemを最低条件とする。利用可能な本人情報がない状態をランダム化で隠さない。
+
+予備生成はBunshin IDから日替わり表現を選ぶ処理を廃止し、本人のSNS目的・対象、承認済みStrategy、本人の事業プロフィール、当日のWeekly Planの目標と切り口を本文へ明示的に反映する。これらを取得できない場合や過去本文と実質重複する場合は、通常品質の「今日の投稿」として保存・配信せず `CONTENT_REJECTED` として記録する。
+
+## 14. 個別化シミュレーション
+
+同じグループ、同じ日、同じWeekly Planを想定し、次の3名を非本番で検証する。
+
+| 利用者 | 固有条件                                    | 投稿へ反映する根拠                                   |
+| ------ | ------------------------------------------- | ---------------------------------------------------- |
+| A      | 初心者、歴史好き、Instagram中心             | 保存しやすい写真中心の説明、初心者向けの具体的な見方 |
+| B      | メタバース経験者、ORIに興味、Threads中心    | ORIへの関心を文章で共有できる切り口                  |
+| C      | SNS発信経験あり、千ノ国の店舗・経済圏に興味 | 店舗・経済圏の価値を伝える訴求                       |
+
+横方向では同日の共通テーマが同じでも、A/B/Cそれぞれの固有条件が本文、切り口、具体例または訴求点へ含まれることを検証する。縦方向では各人14日分について、過去提示済み本文との実質重複がなく、週をまたいでも毎日異なる具体情報を扱うことを検証する。各候補には個別化source typeを併記する。
+
+このテストは決定的な非本番シミュレーションであり、AIの本番出力や14日間の実受信を証明するものではない。修正の本番反映後に、テスト利用者の実データでGenerationContext、Daily Mission、画像、LINE deep linkを同じMission IDで照合する必要がある。
