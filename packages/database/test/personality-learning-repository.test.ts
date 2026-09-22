@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/bunshin-personality.ts', import.meta.url), 'utf8');
 
 describe('Prisma personality learning proposal repository', () => {
   const repository = source.slice(

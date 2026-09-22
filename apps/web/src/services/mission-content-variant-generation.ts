@@ -23,6 +23,7 @@ import {
   GenerateMissionContent,
   GetDailyMission,
   ListContentPillars,
+  ListDailyMissions,
   ListMissionContentVariants,
   ListSocialAccountStrategies,
   ListSocialProfiles,
@@ -40,6 +41,10 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import { campaignContentSignature } from './campaign-content-signature';
+import {
+  inspectDailyMissionContent,
+  recentMissionQualityContext,
+} from './daily-mission-content-quality';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 import {
   applyServiceContentTerminology,
@@ -61,6 +66,12 @@ interface Input {
 
 const VARIANT_SIMILARITY_THRESHOLD_BASIS_POINTS = 8_500;
 const URL_PATTERN = /https?:\/\/[^\s]+/gu;
+
+const daysBefore = (date: string, days: number) => {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() - days);
+  return value.toISOString().slice(0, 10);
+};
 
 export function missionContentSimilarityBasisPoints(left: unknown, right: unknown) {
   return simhashSimilarityBasisPoints(
@@ -190,6 +201,11 @@ export class MissionContentVariantGenerationService {
       const mission = await new GetDailyMission(missions).execute({
         ...scope,
         dailyMissionId: input.dailyMissionId,
+      });
+      const recentMissions = await new ListDailyMissions(missions).execute({
+        ...scope,
+        from: daysBefore(mission.missionDate, 28),
+        to: mission.missionDate,
       });
       const copyAuthorization = await new AuthorizeDailyMissionCopy(missions).execute({
         ...scope,
@@ -480,6 +496,7 @@ export class MissionContentVariantGenerationService {
         grantedKnowledge: knowledge,
         businessProfile,
         groupKnowledge,
+        recentContent: recentMissionQualityContext(recentMissions),
         selectedMemories,
         campaign,
         variantSourceContent: mission.content,
@@ -548,6 +565,13 @@ export class MissionContentVariantGenerationService {
         ...(mission.linkUsage ? { insertedUrl: mission.linkUsage.insertedUrl } : {}),
       });
       assertDifferentFromSource(mission.content, candidate);
+      const noveltyIssue = inspectDailyMissionContent({ content: candidate, recentMissions });
+      if (noveltyIssue)
+        throw new ApplicationError(
+          'CONTENT_REJECTED',
+          'generated variant duplicates presented content',
+          noveltyIssue,
+        );
       if (campaign) {
         const signature = campaignContentSignature(candidate);
         const similarity = await new CampaignSafetyValidationService(

@@ -2,13 +2,23 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const runtime = readFileSync(join(process.cwd(), 'src', 'resale-runtime.ts'), 'utf8');
-const database = readFileSync(join(process.cwd(), 'src', 'index.ts'), 'utf8');
+const runtime = [
+  'resale-runtime-calendar.ts',
+  'resale-runtime-enrollment.ts',
+  'resale-runtime-state.ts',
+  'resale-runtime-repository.ts',
+]
+  .map((file) => readFileSync(join(process.cwd(), 'src', file), 'utf8'))
+  .join('\n');
+const serviceParticipation = readFileSync(
+  join(process.cwd(), 'src', 'service-participation.ts'),
+  'utf8',
+);
 
 describe('AI resale runtime orchestration boundary', () => {
   it('anchors automatic enrollment to public registration in the same transaction', () => {
-    const registration = database.slice(
-      database.indexOf('export class PrismaServiceParticipationRepository'),
+    const registration = serviceParticipation.slice(
+      serviceParticipation.indexOf('export class PrismaServiceParticipationRepository'),
     );
     expect(registration).toContain('autoEnrollAiResaleForRegistration(tx, { membership');
     expect(runtime).toContain("source: 'PUBLIC_REGISTRATION'");

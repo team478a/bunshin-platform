@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
+import type * as ServiceDailyIdeaFallback from '../src/services/service-daily-idea-fallback';
 
 const m = vi.hoisted(() => ({
   scope: vi.fn(),
@@ -12,6 +14,7 @@ const m = vi.hoisted(() => ({
   policy: vi.fn(),
   image: vi.fn(),
   video: vi.fn(),
+  fallback: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@bunshin/database', () => ({
@@ -46,6 +49,10 @@ vi.mock('../src/services/weekly-plan-generation', () => ({
 vi.mock('../src/services/daily-mission-generation', () => ({
   createDailyMissionGenerationService: () => ({ execute: m.daily }),
 }));
+vi.mock('../src/services/service-daily-idea-fallback', async (importOriginal) => {
+  const actual = await importOriginal<typeof ServiceDailyIdeaFallback>();
+  return { ...actual, createServiceDailyIdeaFallback: m.fallback };
+});
 vi.mock('../src/services/automatic-daily-image', () => ({
   queueAutomaticDailyImage: m.image,
 }));
@@ -54,6 +61,7 @@ vi.mock('../src/services/automatic-daily-video', () => ({
 }));
 vi.mock('../src/services/service-generation-knowledge', () => ({
   loadServiceGenerationKnowledge: m.knowledge,
+  resolveServiceContentAssistanceLevel: () => Promise.resolve('READY_TO_USE'),
 }));
 vi.mock('../src/activity-continuity-rule', () => ({
   currentActivityContinuityRule: () => Promise.resolve({ dormancyDays: 7 }),
@@ -92,6 +100,7 @@ describe('service automatic preparation and delivery', () => {
       items: [{ scheduledDate: '2026-09-07' }],
     });
     m.daily.mockResolvedValue({ id: 'mission' });
+    m.fallback.mockResolvedValue({ id: 'fallback-mission' });
     m.prepare.mockResolvedValue({ id: 'delivery' });
     m.policy.mockResolvedValue(null);
     m.image.mockResolvedValue({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
@@ -263,6 +272,45 @@ describe('service automatic preparation and delivery', () => {
     await expect(
       createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' }),
     ).rejects.toThrow('provider unavailable');
+    expect(m.prepare).not.toHaveBeenCalled();
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+  it('does not bypass a content rejection through the fallback path', async () => {
+    m.daily.mockRejectedValue(
+      new ApplicationError('CONTENT_REJECTED', 'candidate duplicates presented content'),
+    );
+    await expect(
+      createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' }),
+    ).rejects.toThrow('candidate duplicates presented content');
+    expect(m.fallback).not.toHaveBeenCalled();
+    expect(m.prepare).not.toHaveBeenCalled();
+  });
+  it('uses a quality-checked fallback only for an unavailable AI provider', async () => {
+    m.policy.mockResolvedValue({
+      onboardingConfig: { dailyIdeaDelivery: { enabled: true } },
+      surveyConfig: null,
+    });
+    m.daily.mockRejectedValue(
+      new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'provider timed out'),
+    );
+    await createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' });
+    expect(m.fallback).toHaveBeenCalled();
+    expect(m.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ dailyMissionId: 'fallback-mission' }),
+    );
+  });
+  it('does not deliver when the provider and its fallback both fail quality', async () => {
+    m.policy.mockResolvedValue({
+      onboardingConfig: { dailyIdeaDelivery: { enabled: true } },
+      surveyConfig: null,
+    });
+    m.daily.mockRejectedValue(new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'quota reached'));
+    m.fallback.mockRejectedValue(
+      new ApplicationError('CONTENT_REJECTED', 'fallback duplicates presented content'),
+    );
+    await expect(
+      createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' }),
+    ).rejects.toThrow('fallback duplicates presented content');
     expect(m.prepare).not.toHaveBeenCalled();
     expect(m.enqueue).not.toHaveBeenCalled();
   });

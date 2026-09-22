@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const repository = readFileSync(join(process.cwd(), 'src/index.ts'), 'utf8');
+const repository = [
+  'external-tracking.ts',
+  'product-catalog.ts',
+  'group-knowledge.ts',
+  'campaign-advertising.ts',
+]
+  .map((file) => readFileSync(join(process.cwd(), 'src', file), 'utf8'))
+  .join('\n');
 
 describe('service content editor authorization', () => {
   it.each([

@@ -22,6 +22,8 @@ describe('service video operations boundary', () => {
   });
 
   it('links the service-only operation screen from the service management home', () => {
-    expect(source('app/s/[serviceSlug]/manage/page.tsx')).toContain("href: 'video-operations'");
+    expect(source('app/s/[serviceSlug]/manage/service-management-view-model.ts')).toContain(
+      "href: 'video-operations'",
+    );
   });
 });

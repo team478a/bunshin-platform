@@ -25,7 +25,7 @@ const source = readFileSync(
   'utf8',
 );
 const badgeCoreSource = readFileSync(
-  fileURLToPath(new URL('../src/index.ts', import.meta.url)),
+  fileURLToPath(new URL('../src/badge-core.ts', import.meta.url)),
   'utf8',
 );
 

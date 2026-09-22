@@ -9,7 +9,7 @@ const migration = readFileSync(
   ),
   'utf8',
 );
-const repository = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+const repository = readFileSync(new URL('../src/service-foundation.ts', import.meta.url), 'utf8');
 
 describe('service staff role persistence', () => {
   it('adds four service roles without replacing the legacy group role', () => {

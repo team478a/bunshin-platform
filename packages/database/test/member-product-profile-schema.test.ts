@@ -9,7 +9,7 @@ const migration = readFileSync(
   ),
   'utf8',
 );
-const repository = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+const repository = readFileSync(new URL('../src/member-product.ts', import.meta.url), 'utf8');
 const archiveMigration = readFileSync(
   new URL(
     '../prisma/migrations/20260906150000_archive_member_product_profiles/migration.sql',

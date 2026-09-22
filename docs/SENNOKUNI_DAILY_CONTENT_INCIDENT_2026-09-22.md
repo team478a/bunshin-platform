@@ -1,0 +1,233 @@
+# 千ノ国メディア 日次投稿資料の内容重複 調査・修正報告
+
+調査日: 2026-09-22（Asia/Tokyo）
+
+## 1. 本番稼働状態
+
+- `origin/main`: `d66b0774f353...`
+- `origin/production`: `a940de4a4b029d12e79f305e21aa653a0f35f414`
+- GitHub Deployments の最新 Production: `a940de4a4b029d12e79f305e21aa653a0f35f414`、`success`、2026-09-21 21:06 JST
+- `https://www.watashi-works.com/api/health/ready`: HTTP 200、`environment=production`、DB schema current（2026-09-22確認）
+- Vercel設定は `production` ブランチだけを本番デプロイ対象にしている。mainとproductionは同一ではない。
+
+過去の重複・OVE対策 PR #776（`3687a4ba`）は本番コミットに含まれている。今回の対象ファイルは、そのコミット以後mainとの間に実質差分がなかった。このため「修正がmainだけにあり本番へ未反映」が今回の直接原因ではない。
+
+## 2. 確認できた直接原因
+
+### 原因1: 品質却下を予備生成で迂回していた
+
+通常生成は直近28日の本人のDaily Missionと比較し、重複時に `CONTENT_REJECTED` を返していた。一方、日次ジョブは `CONTENT_REJECTED` を予備生成へ切り替える対象として扱い、予備案を同じ重複・品質審査へ戻さず `CreateDailyMission` で直接保存していた。
+
+経路:
+
+1. 通常生成が品質不合格または重複を検知
+2. `CONTENT_REJECTED`
+3. `daily-mission-job-handler.ts` が `createServiceDailyIdeaFallback` を実行
+4. 予備案を直接保存
+5. 画像準備
+6. 同じDaily Mission IDでLINE配信を準備
+
+### 原因2: 予備本文は実質固定だった
+
+本番コードの予備本文は次の構造だった。
+
+```text
+{対象者}の皆さまへ。
+
+今日は「{日替わりの作成指示}」をご紹介します。
+
+{固定の事業特徴}
+
+{固定の商品・サービス}について気になることがあれば、いつでもお気軽にご相談ください。
+```
+
+日替わりだったのは7種類の「作成指示」と写真方向で、読者へ渡す具体情報はほぼ固定だった。7日で循環するため、長期運用では文字列としても再発する。
+
+また「お客様からよく聞かれる質問を一つ選び、短く答える」「始めた理由を紹介する」など、投稿を書く人への指示を完成本文として表示していた。
+
+### 原因3: 過去のテストが内容差を検証していなかった
+
+過去の修正では、3日分の `body` が文字列として異なることと、写真指示が異なることだけを確認していた。具体情報、答える疑問、利用場面、読者価値が異なるかは検証していなかった。このため、固定本文に日替わりの指示文を差し込むだけでも合格していた。
+
+## 3. A〜Dの判定
+
+| 区分                                  | 判定             | 根拠                                                                                                                              |
+| ------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| A: 別日に同じ本文                     | コード上発生可能 | 予備案は7日周期で、本文の中心部分は固定。本人の過去提示原稿との照合なし                                                           |
+| B: 表現は違うが内容が同じ             | コード上直接確認 | 日替わりの切り口・写真指示だけを変え、承認済み事業特徴とCTAは固定                                                                 |
+| C: 新本文はあるが古い本文を表示・配信 | 実装上の証拠なし | LINEは保存済み `dailyMissionId` をdeep linkへ入れ、会員画面も同じIDの正本contentを表示。千ノ国の事業者画面ではvariantを表示しない |
+| D: 通常生成失敗後に予備案へ切替       | コード上直接確認 | AI障害、内部エラー、利用上限に加え、品質・重複の `CONTENT_REJECTED` も予備生成対象だった                                          |
+
+報告者固有のA〜D確定には、本番DBの当日・直近7日、生成監査、AI Usage、Job、LINE Deliveryを同じIDで照合する必要がある。この作業環境には本番DB/ログの読み取り資格情報がなく、報告者を一意にする情報もないため、個別レコードは未確認。推測を報告者の確定原因とは扱わない。
+
+## 4. 修正内容
+
+1. 通常生成、予備生成、再生成、修正前に作成済みの当日データへ共通品質ゲートを適用。
+2. 本人へ保存・提示済みのDaily Missionを直近28日照合。投稿完了報告の有無を条件にしない。
+3. 完全一致に加え、本文の実質重複を文字正規化、本文shingle、SimHashの複数信号で検知。
+4. 「質問を一つ選んで答える」等の作成指示を完成本文として出す候補を拒否。
+5. AI品質審査にも直近14件の本人の提示済み本文を渡し、言い換えを含む意味上の重複を `RECENT_CONTENT_DUPLICATE` として判定。
+6. 通常候補が重複または修正可能な品質問題なら、最大2回だけ別企画を再生成。無制限再試行はしない。
+7. `CONTENT_REJECTED` を予備生成で迂回しない。
+8. AI障害・タイムアウト・利用上限時だけ予備案を検討し、予備案も同じ履歴照合を通す。合格できなければ保存・画像生成・LINE配信を行わず、Job失敗として通常成功と区別する。
+9. 同日分がすでに存在しても、作成指示本文または重複本文なら「既存なので成功」として返さず配信を止める。既存行は削除・上書きしない。
+10. 再生成variantも元原稿だけでなく本人の直近提示済み原稿全体と照合。
+
+## 5. 修正前後の本文例
+
+これは本番利用者データの引用ではなく、本番コードと同じ入力を使った再現例である。
+
+修正前:
+
+```text
+会員の皆さまへ。
+
+今日は「お客様からよく聞かれる質問を一つ選び、短く答える」をご紹介します。
+
+私たちは、ORIの考え方を分かりやすく届けることを大切にしています。
+
+会員向け情報について気になることがあれば、いつでもお気軽にご相談ください。
+```
+
+問題点は、質問も答えもなく、投稿作成指示を本文として配っていること。翌日は引用内の指示と写真だけが変わり、具体情報は同じだった。
+
+修正後の予備案（初回だけ）:
+
+```text
+会員の皆さまへ、会員向け情報についてお伝えします。
+
+ORIの考え方を分かりやすく届けることを大切にしています。
+
+気になる点は、千ノ国メディアへお気軽にお尋ねください。
+```
+
+同じ承認済み事実しかない状態で翌日もこの内容になる場合、日付・画像だけを変えて配信せず、品質不合格として停止する。架空の体験・実績・イベントを追加して差を作らない。
+
+## 6. 非本番検証
+
+- 3名（初心者、歴史好き、地域ガイド）×14日、2026-09-07〜2026-09-20をシミュレーション。
+- 週またぎ（9月13日→14日）を含む。
+- 14テーマ: 城跡、古文書、家紋、街道、城下町、甲冑、合戦図、寺社、刀装具、兵糧、書状、陣形、茶の湯、城門。
+- 各日について、具体情報・答える疑問・利用場面が異なる候補は合格。
+- 同一候補は拒否し、1回目の別企画が合格するケースを確認。
+- 日付、見出し、絵文字、写真だけを変えた候補を拒否。
+- AI Provider障害時のみ予備経路へ進むこと、予備案も重複なら保存・配信しないことを確認。
+- `CONTENT_REJECTED` は予備経路へ進まず、LINE配信を作らないことを確認。
+- 同日再実行の既存データ返却前にも品質ゲートがあることを確認。
+- LINEはDaily Mission IDをdeep linkへ固定し、画像も同じDaily Mission IDとcontentの5ページを使う既存テストを確認。
+
+これは非本番の決定的シミュレーションであり、「本番で14日間正常稼働した」という結果ではない。
+
+## 7. 既存データへの対応
+
+- 調査・修正で本番原稿の削除、上書き、再配信は行っていない。
+- 修正前に作成済みの当日原稿は、修正後の品質ゲートで不適切なら新規成功扱い・配信を止める。
+- 過去原稿を一括変更すると監査履歴と既受信内容が不一致になるため、自動上書きしない。
+- 本番資格情報を持つ運営者が、千ノ国サービス内の対象BunshinについてDaily Mission、Generation、AI Usage、Job、LINE Delivery、Deep Linkの直近7日を読み取り専用で抽出し、訂正・再配信対象を確定する必要がある。
+- 訂正や再配信は、対象日、対象人数、原稿ID、新原稿、重複送信防止キーを提示して承認後に実施する。
+
+## 8. 本番確認済み / 未確認
+
+確認済み:
+
+- 本番稼働コミットとDeployment成功
+- 本番health、DB接続、schema current
+- 本番コミットに存在する迂回経路と固定予備本文
+- LINE、会員画面、画像がDaily Mission IDを基準に接続される実装
+
+未確認:
+
+- 報告者のUser/Bunshin ID
+- 報告者の当日・直近7日のDaily Mission IDと本文
+- 各日の通常生成/予備生成/既存再利用の実記録
+- AIエラー、利用上限、品質却下の本番記録
+- 実LINE受信時刻とdeep link消費記録
+- 修正コードを本番へ反映後の実受信
+
+## 9. 変更ファイル
+
+- `apps/web/src/services/daily-mission-content-quality.ts`: 全生成経路で使う本文抽出、作成指示検知、本人の提示済み履歴との実質重複判定。
+- `apps/web/src/services/daily-mission-generation.ts`: 同日既存データの事前審査、履歴付きAI品質審査、上限付き別企画生成、保存直前の共通品質ゲート。
+- `apps/web/src/services/service-daily-idea-fallback.ts`: `CONTENT_REJECTED` の迂回廃止、作成指示を本文へ埋め込む処理の廃止、予備案への同一品質ゲート適用。
+- `apps/web/src/services/mission-content-variant-generation.ts`: 再生成でも直近28日の提示済み原稿を照合。
+- `apps/web/src/providers/openai-mission-quality-checker.ts`: 最近の本文と意味上の重複を審査するPrompt v7。
+- `packages/capability-social/src/mission-generation.ts`: 品質審査入力へ最近の本文Contextと個別化根拠の検証を追加。
+- `apps/web/src/services/daily-mission-personalization.ts`: Bunshin、SNS、戦略、Onboarding、Memory、利用履歴、投稿実績をユーザー固有signalへ変換。
+- `apps/web/src/services/service-generation-knowledge.ts`: Service/User/Bunshin境界内で個別化情報と参照IDを取得。
+- `packages/application/src/generation-context.ts`: 使用した根拠と利用可能だった根拠、履歴参照IDを既存スナップショットへ追加。
+- `apps/web/test/daily-mission-content-quality.test.ts`: 指示本文、完全一致、実質重複、画像だけの変更を拒否するテスト。
+- `apps/web/test/daily-mission-14-day-simulation.test.ts`: 3名×14日、週またぎ、別企画への再試行を含む非本番シミュレーション。
+- `apps/web/test/daily-mission-duplicate-guard.test.ts`、`openai-mission-intelligence.test.ts`、`service-automatic-jobs.test.ts`、`service-daily-idea-fallback.test.ts`: 既存経路の回帰テスト更新。
+
+## 10. 検証結果
+
+- `pnpm test`: 25/25タスク成功。Web 285ファイル・1,293件、Application 110ファイル・504件、Capability Social 17ファイル・120件を含む全体テスト成功。
+- `pnpm typecheck`: 25/25タスク成功。
+- `pnpm build`: 13/13タスク成功。Next.js本番ビルド成功。
+- `pnpm --filter web lint`: 成功。
+- `pnpm --filter @bunshin/capability-social typecheck`: 成功。
+- 変更ファイルだけのPrettier確認: 成功。
+- リポジトリ全体の `pnpm format:check` は、このブランチの変更外を含む既存1,935ファイルの警告で失敗した。今回の変更ファイルには警告なし。
+
+## 11. ユーザー個別化の追加調査
+
+日替わりだけではワタシワークスの要件を満たさないため、生成時の情報を次の2種類に分離して確認した。
+
+### 全員共通情報
+
+- 承認済みGroup Knowledge（商品・サービス・ORIの正式情報、FAQ、ルール）
+- サービス別用語ポリシーと禁止表現
+- Product Pack / Campaignの承認済み情報
+- Weekly Planと当日のPlan Item
+- Content Pillar
+
+### ユーザー固有情報
+
+- Bunshinの目的、届けたい相手、人格
+- SocialProfileのSNS、利用目的、希望形式
+- 承認済みAccount Strategyの目標、立ち位置、対象、投稿方針
+- 本人の事業プロフィール
+- Service Onboarding回答
+- 本人のMemoryとDaily Action素材
+- 本人へ過去に提示したDaily Mission
+- 採用、別案選択、投稿完了等の直近Activity
+- 本人のPostRecordとSocial Insight
+
+変更前の通常AI経路ではBunshin、SocialProfile、Strategy、事業プロフィール、選択Memory、過去Mission、Weekly Plan、Group Knowledgeは入力されていた。一方、Onboarding回答、別案選択履歴、投稿実績・反応履歴は生成判断へ明示的に接続されていなかった。また、予備生成は事業プロフィールの一部とBunshin ID由来の巡回値に依存し、本人固有の理由を説明できなかった。
+
+変更後は、共通情報とユーザー固有signalを別フィールドでAIへ渡す。Plannerは利用可能なユーザー固有signalから実際に判断へ使った種別と理由を構造化出力し、存在しない種別、空の理由、共通情報だけの企画を拒否する。Content GeneratorとQuality Checkerにも同じ個別化Contextを渡し、語尾、絵文字、ランダム化だけの差を `PERSONALIZATION_MISSING` として不合格にする。
+
+## 12. 個別化根拠の監査
+
+`GenerationContextSnapshot.payload.personalization` に本文や個人情報を複製せず、次を保存する。
+
+- `mode`: AI生成か予備生成か
+- `sourceTypes`: Plannerが実際に選定根拠として申告した情報種別
+- `availableSourceTypes`: 生成時に利用可能だった情報種別
+- Onboarding Response、事業プロフィール、Weekly Plan Itemの参照ID
+- 重複回避に使った過去Mission ID
+- Activity、別案選択、PostRecord、Social Insightの参照ID
+- 選択MemoryのID、要約、選定理由（既存項目）
+- Group Knowledge、Strategy、SocialProfile、Weekly Plan、Content Pillarの参照ID（既存項目）
+
+これにより「入力として存在した」と「今回の企画理由に使った」を区別し、対象Workspace、Service、User、Bunshinの境界を保ったまま追跡できる。生のOnboarding回答や投稿本文を監査用JSONへ追加保存しない。
+
+## 13. 情報不足時と予備生成
+
+登録直後はBunshin、SocialProfile、承認済みStrategy、当日のWeekly Plan Itemを最低条件とする。利用可能な本人情報がない状態をランダム化で隠さない。
+
+予備生成はBunshin IDから日替わり表現を選ぶ処理を廃止し、本人のSNS目的・対象、承認済みStrategy、本人の事業プロフィール、当日のWeekly Planの目標と切り口を本文へ明示的に反映する。これらを取得できない場合や過去本文と実質重複する場合は、通常品質の「今日の投稿」として保存・配信せず `CONTENT_REJECTED` として記録する。
+
+## 14. 個別化シミュレーション
+
+同じグループ、同じ日、同じWeekly Planを想定し、次の3名を非本番で検証する。
+
+| 利用者 | 固有条件                                    | 投稿へ反映する根拠                                   |
+| ------ | ------------------------------------------- | ---------------------------------------------------- |
+| A      | 初心者、歴史好き、Instagram中心             | 保存しやすい写真中心の説明、初心者向けの具体的な見方 |
+| B      | メタバース経験者、ORIに興味、Threads中心    | ORIへの関心を文章で共有できる切り口                  |
+| C      | SNS発信経験あり、千ノ国の店舗・経済圏に興味 | 店舗・経済圏の価値を伝える訴求                       |
+
+横方向では同日の共通テーマが同じでも、A/B/Cそれぞれの固有条件が本文、切り口、具体例または訴求点へ含まれることを検証する。縦方向では各人14日分について、過去提示済み本文との実質重複がなく、週をまたいでも毎日異なる具体情報を扱うことを検証する。各候補には個別化source typeを併記する。
+
+このテストは決定的な非本番シミュレーションであり、AIの本番出力や14日間の実受信を証明するものではない。修正の本番反映後に、テスト利用者の実データでGenerationContext、Daily Mission、画像、LINE deep linkを同じMission IDで照合する必要がある。

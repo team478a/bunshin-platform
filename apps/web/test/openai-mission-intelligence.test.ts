@@ -96,7 +96,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v11-business-ready',
+      promptVersion: 'mission-content-generator-v12-personalized',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -305,7 +305,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v6',
+      promptVersion: 'mission-quality-checker-v8-personalized',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;

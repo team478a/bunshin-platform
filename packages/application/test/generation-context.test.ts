@@ -24,6 +24,24 @@ const payload = (): GenerationContextSnapshotPayload => ({
   provider: 'openai',
   model: 'gpt-test',
   quality: { verdict: 'PASS', issueCodes: [], repairCount: 0 },
+  personalization: {
+    mode: 'AI',
+    sourceTypes: ['BUNSHIN_PROFILE', 'SOCIAL_PROFILE'],
+    availableSourceTypes: [
+      'BUNSHIN_PROFILE',
+      'SOCIAL_PROFILE',
+      'ACCOUNT_STRATEGY',
+      'RECENT_ACTIVITY',
+    ],
+    onboardingResponse: { id: 'onboarding-1' },
+    businessProfile: { id: 'business-1' },
+    weeklyPlanItem: { id: 'item-1' },
+    recentMissions: [{ id: 'mission-previous' }],
+    recentActivities: [{ id: 'activity-1' }],
+    recentVariants: [{ id: 'variant-selection-1' }],
+    postRecords: [{ id: 'post-1' }],
+    socialInsights: [{ id: 'insight-1' }],
+  },
 });
 
 class Snapshots implements GenerationContextSnapshotRepository {
@@ -95,6 +113,30 @@ describe('Generation Context Snapshot', () => {
         payload: {
           ...payload(),
           groupKnowledge: [{ id: 'same' }, { id: 'same' }],
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(
+      new RecordGenerationContextSnapshot(repository).execute({
+        ...scope,
+        payload: {
+          ...payload(),
+          personalization: {
+            ...payload().personalization!,
+            recentMissions: [{ id: 'same' }, { id: 'same' }],
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(
+      new RecordGenerationContextSnapshot(repository).execute({
+        ...scope,
+        payload: {
+          ...payload(),
+          personalization: {
+            ...payload().personalization!,
+            sourceTypes: ['POST_PERFORMANCE'],
+          },
         },
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
