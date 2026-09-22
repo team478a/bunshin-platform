@@ -19,6 +19,7 @@ import {
   serviceContentTerminologyKnowledge,
   serviceContentTerminologyPolicy,
 } from './service-content-terminology';
+import { summarizeMissionLearningHistory } from './daily-mission-learning-history';
 
 export interface ServiceGenerationKnowledgeScope {
   workspaceId: string;
@@ -226,6 +227,8 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     onboardingResponse,
     recentActivities,
     recentVariants,
+    recentFeedback,
+    recentDecisions,
     recentPostRecords,
     recentSocialInsights,
   ] = await Promise.all([
@@ -302,7 +305,13 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
             actorUserId: scope.actorUserId,
             dailyMission: { bunshin: { groupId: scope.groupId } },
           },
-          select: { id: true, type: true, dailyMissionId: true, occurredAt: true },
+          select: {
+            id: true,
+            type: true,
+            dailyMissionId: true,
+            occurredAt: true,
+            dailyMission: { select: { missionDate: true, topic: true, angle: true } },
+          },
           orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
           take: 12,
         })
@@ -315,9 +324,56 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
             actorUserId: scope.actorUserId,
             dailyMission: { bunshin: { groupId: scope.groupId } },
           },
-          select: { id: true, variantId: true, dailyMissionId: true, selectedAt: true },
+          select: {
+            id: true,
+            variantId: true,
+            dailyMissionId: true,
+            selectedAt: true,
+            variant: { select: { sequence: true } },
+            dailyMission: { select: { missionDate: true, topic: true, angle: true } },
+          },
           orderBy: [{ selectedAt: 'desc' }, { id: 'desc' }],
           take: 5,
+        })
+      : Promise.resolve([]),
+    scope.bunshinId
+      ? db.prisma.missionFeedback.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            bunshinId: scope.bunshinId,
+            actorUserId: scope.actorUserId,
+            dailyMission: { bunshin: { groupId: scope.groupId } },
+          },
+          select: {
+            id: true,
+            rating: true,
+            updatedAt: true,
+            dailyMission: { select: { missionDate: true, topic: true, angle: true } },
+          },
+          orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+          take: 6,
+        })
+      : Promise.resolve([]),
+    scope.bunshinId
+      ? db.prisma.missionDecision.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            bunshinId: scope.bunshinId,
+            decision: { in: ['ACCEPTED', 'REJECTED'] },
+            dailyMission: {
+              bunshin: { groupId: scope.groupId, ownerUserId: scope.actorUserId },
+            },
+          },
+          select: {
+            id: true,
+            decision: true,
+            rejectionReason: true,
+            rejectionDetail: true,
+            decidedAt: true,
+            dailyMission: { select: { missionDate: true, topic: true, angle: true } },
+          },
+          orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
+          take: 8,
         })
       : Promise.resolve([]),
     scope.bunshinId
@@ -328,7 +384,13 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
             actorUserId: scope.actorUserId,
             dailyMission: { bunshin: { groupId: scope.groupId } },
           },
-          select: { id: true, dailyMissionId: true, postedAt: true, manualMetrics: true },
+          select: {
+            id: true,
+            dailyMissionId: true,
+            postedAt: true,
+            manualMetrics: true,
+            dailyMission: { select: { missionDate: true, topic: true, angle: true } },
+          },
           orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
           take: 5,
         })
@@ -393,35 +455,23 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
       }
     : null;
   const onboardingAnswers = readServiceOnboardingAnswers(onboardingResponse?.answers);
-  const behaviorSummary = [
-    recentActivities.length
-      ? `直近の操作: ${recentActivities
-          .slice(0, 8)
-          .map(({ type }) => type)
-          .join('、')}`
-      : null,
-    recentVariants.length ? `本人が別案を選んだ回数（直近記録）: ${recentVariants.length}` : null,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join('\n');
-  const performanceSummary = [
-    recentPostRecords.length ? `投稿完了記録（直近）: ${recentPostRecords.length}件` : null,
-    recentSocialInsights.length
-      ? `最新SNS記録: ${[
-          recentSocialInsights[0]?.followers == null
-            ? null
-            : `フォロワー${recentSocialInsights[0].followers}`,
-          recentSocialInsights[0]?.reach == null ? null : `リーチ${recentSocialInsights[0].reach}`,
-          recentSocialInsights[0]?.interactions == null
-            ? null
-            : `反応${recentSocialInsights[0].interactions}`,
-        ]
-          .filter(Boolean)
-          .join('、')}`
-      : null,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join('\n');
+  const learningHistory = summarizeMissionLearningHistory({
+    activities: recentActivities,
+    variants: recentVariants,
+    feedback: recentFeedback,
+    decisions: recentDecisions.flatMap((decision) =>
+      decision.decision === 'PENDING'
+        ? []
+        : [
+            {
+              ...decision,
+              decision: decision.decision,
+            },
+          ],
+    ),
+    posts: recentPostRecords,
+    socialInsights: recentSocialInsights,
+  });
   return {
     ...knowledge,
     contentAssistanceLevel,
@@ -431,13 +481,17 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     businessProfile: normalizedBusinessProfile,
     personalization: {
       onboardingContext: serviceOnboardingProposalContext(onboardingAnswers),
-      behaviorSummary,
-      performanceSummary,
+      behaviorSummary: learningHistory.behaviorSummary,
+      feedbackSummary: learningHistory.feedbackSummary,
+      performanceSummary: learningHistory.performanceSummary,
+      fallbackPreference: learningHistory.fallbackPreference,
       references: {
         onboardingResponseId: onboardingResponse?.id ?? null,
         businessProfileId: businessProfile?.id ?? null,
         recentActivityIds: recentActivities.map(({ id }) => id),
         recentVariantSelectionIds: recentVariants.map(({ id }) => id),
+        recentFeedbackIds: recentFeedback.map(({ id }) => id),
+        recentDecisionIds: recentDecisions.map(({ id }) => id),
         recentPostRecordIds: recentPostRecords.map(({ id }) => id),
         recentSocialInsightIds: recentSocialInsights.map(({ id }) => id),
       },

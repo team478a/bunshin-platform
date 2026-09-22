@@ -90,7 +90,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v9-personalized',
+      promptVersion: 'daily-mission-planner-v10-feedback-loop',
       inputTokens: 90,
       outputTokens: 30,
     });

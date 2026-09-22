@@ -61,6 +61,7 @@ describe('daily mission personalization context', () => {
         strategy: strategy(socialProfile, target),
         onboardingContext: `経験: ${target}`,
         behaviorSummary: '直近の操作: ACCEPTED、POSTED',
+        feedbackSummary: '城跡の投稿はGOOD。売り込みの強い投稿は不採用。',
       });
       expect(context.signals.map(({ type }) => type)).toEqual(
         expect.arrayContaining([
@@ -69,11 +70,13 @@ describe('daily mission personalization context', () => {
           'ACCOUNT_STRATEGY',
           'ONBOARDING_RESPONSE',
           'RECENT_ACTIVITY',
+          'FEEDBACK_HISTORY',
         ]),
       );
       expect(context.signals.map(({ value }) => value).join('\n')).toContain(purpose);
       expect(context.signals.map(({ value }) => value).join('\n')).toContain(target);
       expect(context.instruction).toContain('ランダム化');
+      expect(context.instruction).toContain('低評価・不採用理由を避け');
     },
   );
 });

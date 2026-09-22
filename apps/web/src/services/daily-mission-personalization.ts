@@ -31,6 +31,7 @@ export function buildMissionPersonalizationContext(input: {
   businessProfile?: MissionBusinessProfileContext | null;
   onboardingContext?: string | null;
   behaviorSummary?: string | null;
+  feedbackSummary?: string | null;
   performanceSummary?: string | null;
   selectedMemories?: SelectedBunshinMemory[];
 }): MissionPersonalizationContext {
@@ -63,6 +64,7 @@ export function buildMissionPersonalizationContext(input: {
       : null,
     signal('ONBOARDING_RESPONSE', '本人の初期設定回答', [input.onboardingContext]),
     signal('RECENT_ACTIVITY', '本人の最近の選択・利用履歴', [input.behaviorSummary]),
+    signal('FEEDBACK_HISTORY', '本人の評価・不採用理由', [input.feedbackSummary]),
     signal('POST_PERFORMANCE', '本人の投稿実績・反応履歴', [input.performanceSummary]),
     signal(
       'USER_MEMORY',
@@ -80,7 +82,7 @@ export function buildMissionPersonalizationContext(input: {
   return {
     signals,
     instruction:
-      '共通の商品情報だけで企画を決めず、この本人固有signalを少なくとも一つ、topic・angle・具体例・訴求ポイントのいずれかへ意味が分かる形で反映する。ランダム化、語尾、絵文字だけで個人差を作らない。根拠にない体験や実績は追加しない。',
+      '共通の商品情報だけで企画を決めず、この本人固有signalを少なくとも一つ、topic・angle・具体例・訴求ポイントのいずれかへ意味が分かる形で反映する。FEEDBACK_HISTORYとPOST_PERFORMANCEがある場合は、低評価・不採用理由を避け、反応が良かった読者価値を別の疑問・場面・具体例へ発展させる。過去投稿の再利用や単なる言い換えはしない。ランダム化、語尾、絵文字だけで個人差を作らない。根拠にない体験や実績は追加しない。',
   };
 }
 

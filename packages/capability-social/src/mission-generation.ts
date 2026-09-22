@@ -50,6 +50,7 @@ export const MISSION_PERSONALIZATION_SOURCE_TYPES = [
   'ACCOUNT_STRATEGY',
   'USER_MEMORY',
   'RECENT_ACTIVITY',
+  'FEEDBACK_HISTORY',
   'POST_PERFORMANCE',
 ] as const;
 export type MissionPersonalizationSourceType =
