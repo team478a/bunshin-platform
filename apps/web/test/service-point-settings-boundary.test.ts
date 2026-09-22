@@ -2,10 +2,16 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const page = readFileSync(
-  fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/page.tsx', import.meta.url)),
-  'utf8',
-);
+const page = [
+  readFileSync(
+    fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/page.tsx', import.meta.url)),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
+    'utf8',
+  ),
+].join('\n');
 const processor = [
   'point-account.ts',
   'point-ledger.ts',
