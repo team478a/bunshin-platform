@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+const source = [
+  '../src/bunshin-core.ts',
+  '../src/bunshin-capability.ts',
+  '../src/social-profile-strategy.ts',
+  '../src/trend-research.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const planningSource = readFileSync(new URL('../src/mission-planning.ts', import.meta.url), 'utf8');
 const dailyMissionSource = readFileSync(
   new URL('../src/daily-missions.ts', import.meta.url),
