@@ -21,13 +21,18 @@ const servicePage = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
   'utf8',
 );
-const serviceExperience = readFileSync(
-  new URL(
-    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-    import.meta.url,
-  ),
-  'utf8',
-);
+const serviceExperience = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const pointsPage = readFileSync(new URL('../app/(app)/points/page.tsx', import.meta.url), 'utf8');
 
 describe('mission content variant HTTP and UI boundary', () => {

@@ -13,13 +13,18 @@ const detailPage = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
   'utf8',
 );
-const experience = readFileSync(
-  new URL(
-    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-    import.meta.url,
-  ),
-  'utf8',
-);
+const experience = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const imageWorkspace = readFileSync(
   new URL('../app/ui/social-image-workspace.tsx', import.meta.url),
   'utf8',
@@ -48,6 +53,8 @@ describe('service daily mission boundary', () => {
     expect(detailPage).toContain('/daily-missions`}');
     expect(detailPage).toContain('trendContext: mission.trendContext');
     expect(detailPage).toContain('copyAuthorization: missionStates[index]!.copyAuthorization');
+    expect(experience).toContain('useServiceDailyMissionController');
+    expect(experience).toContain('<ServiceDailyMissionList');
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
