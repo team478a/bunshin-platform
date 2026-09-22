@@ -78,13 +78,12 @@ describe('business daily service settings', () => {
   });
 
   it('lets the operator select email and LINE while retaining the free-service policy', () => {
-    const editor = readFileSync(
-      new URL(
-        '../app/s/[serviceSlug]/manage/settings/service-settings-editor.tsx',
-        import.meta.url,
-      ),
-      'utf8',
-    );
+    const editor = [
+      '../app/s/[serviceSlug]/manage/settings/service-settings-editor.tsx',
+      '../app/s/[serviceSlug]/manage/settings/service-basics-fields.tsx',
+    ]
+      .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+      .join('\n');
     const endpoint = readFileSync(
       new URL('../src/http/service-settings.ts', import.meta.url),
       'utf8',
