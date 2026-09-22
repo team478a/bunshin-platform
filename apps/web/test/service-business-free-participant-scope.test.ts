@@ -5,9 +5,13 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 
 const home = source('app/s/[serviceSlug]/home/page.tsx');
 const detail = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
-const missionSection = source(
-  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-);
+const missionSection = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+]
+  .map((file) => source(`app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`))
+  .join('\n');
 const activity = source('app/s/[serviceSlug]/activity/page.tsx');
 const help = source('app/s/[serviceSlug]/help/page.tsx');
 

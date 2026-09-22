@@ -5,9 +5,13 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'u
 const personalPage = source('../app/(app)/bunshins/[bunshinId]/page.tsx');
 const personalMission = source('../app/(app)/bunshins/[bunshinId]/daily-mission-section.tsx');
 const servicePage = source('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
-const serviceMission = source(
-  '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-);
+const serviceMission = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+]
+  .map((file) => source(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`))
+  .join('\n');
 const feedback = source('../app/ui/rewards-action-feedback.tsx');
 
 describe('rewards action feedback', () => {
