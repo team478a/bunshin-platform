@@ -11,6 +11,25 @@ const page = [
     fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
     'utf8',
   ),
+  readFileSync(
+    fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/points-data.ts', import.meta.url)),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../app/s/[serviceSlug]/manage/points/points-operations-sections.tsx',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
 ].join('\n');
 const processor = [
   'point-account.ts',
@@ -48,7 +67,7 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('db.registerPointRecovery');
     expect(page).toContain('db.cancelPointRecovery');
     expect(page).toContain('parsed.data.userId === actor.userId');
-    expect(page).toContain('memberships.filter(({ userId }) => userId !== actor.userId)');
+    expect(page).toContain('memberships.filter(({ userId }) => userId !== actorUserId)');
     expect(page).toContain('運営者自身への付与はできません。');
   });
 
