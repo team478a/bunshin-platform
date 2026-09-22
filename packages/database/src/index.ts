@@ -96,9 +96,8 @@ export type {
   RecordCommercialUsageResult,
 } from './commercial-usage';
 export { PrismaPointBalanceReconciliationRepository } from './point-balance-reconciliation';
-import { Prisma, type PrismaClient, prisma } from './client';
-export { Prisma, prisma };
-export type { PrismaClient };
+export { Prisma, prisma } from './client';
+export type { PrismaClient } from './client';
 export {
   PrismaAdminEmailConfigurationRepository,
   PrismaAiProviderConfigurationRepository,
@@ -126,11 +125,6 @@ export {
   PrismaGroupLineConfigurationRepository,
   PrismaGroupLineConnectionRepository,
 } from './oem-line-configuration';
-import type {
-  PersonalityLearningCandidateRepository,
-  TrendResearchGenerationContextRepository,
-} from '@bunshin/application';
-import { parsePreferredFormats } from '@bunshin/capability-social';
 export { PrismaCommonBadgeProcessorRepository } from './badge-common-processor';
 export { PrismaBadgeUserExperienceRepository } from './badge-user-experience';
 export { PrismaBadgeLineNotificationPreparationRepository } from './badge-line-notification';
@@ -144,8 +138,6 @@ export {
   PrismaBadgeRewardRepository,
 } from './badge-reward';
 export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
-import { ApplicationError } from '@bunshin/shared';
-import { stringArray } from './bunshin-records';
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export {
   getActiveRewardsPilotAccess,
@@ -164,156 +156,8 @@ export {
   PrismaMissionAutomationScopeRepository,
   PrismaTrendResearchAutomationCandidateRepository,
 } from './automation-jobs';
-export class PrismaPersonalityLearningCandidateRepository implements PersonalityLearningCandidateRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
-
-  async listEligible(input: { limit: number; evidenceLimit: number }) {
-    if (
-      !Number.isInteger(input.limit) ||
-      input.limit < 1 ||
-      input.limit > 100 ||
-      !Number.isInteger(input.evidenceLimit) ||
-      input.evidenceLimit < 3 ||
-      input.evidenceLimit > 100
-    )
-      throw new ApplicationError(
-        'VALIDATION_ERROR',
-        'invalid personality learning candidate limit',
-      );
-
-    const scanLimit = Math.min(1_000, (input.limit + 1) * 10);
-    const rows = await this.client.bunshin.findMany({
-      where: {
-        status: { not: 'ARCHIVED' },
-        workspace: { status: 'ACTIVE' },
-        ownerUser: { status: 'ACTIVE' },
-        personality: { isNot: null },
-        personalityVersions: { some: {} },
-        missionFeedback: { some: { rating: 'BAD' } },
-        personalityLearningProposals: { none: { status: 'PENDING' } },
-      },
-      select: {
-        workspaceId: true,
-        id: true,
-        ownerUserId: true,
-        workspace: {
-          select: { memberships: { where: { status: 'ACTIVE' }, select: { userId: true } } },
-        },
-        personalityVersions: { orderBy: { version: 'desc' }, take: 1 },
-        missionFeedback: {
-          where: { rating: 'BAD' },
-          orderBy: { updatedAt: 'desc' },
-          take: input.evidenceLimit,
-          select: {
-            id: true,
-            rating: true,
-            updatedAt: true,
-            dailyMission: { select: { format: true } },
-          },
-        },
-      },
-      orderBy: { id: 'asc' },
-      take: scanLimit,
-    });
-    const candidates = rows.flatMap((row) => {
-      const version = row.personalityVersions[0];
-      if (!version || !row.workspace.memberships.some(({ userId }) => userId === row.ownerUserId))
-        return [];
-      const evidence = row.missionFeedback
-        .filter(({ updatedAt }) => updatedAt > version.createdAt)
-        .map((feedback) => ({
-          feedbackId: feedback.id,
-          rating: 'BAD' as const,
-          missionFormat: feedback.dailyMission.format,
-          occurredAt: feedback.updatedAt,
-        }));
-      if (evidence.length < 3) return [];
-      return [
-        {
-          workspaceId: row.workspaceId,
-          bunshinId: row.id,
-          actorUserId: row.ownerUserId,
-          basedOnVersionId: version.id,
-          currentContent: {
-            tone: version.tone,
-            formality: version.formality,
-            energyLevel: version.energyLevel,
-            expertiseLevel: version.expertiseLevel,
-            sentenceStyle: version.sentenceStyle,
-            firstPerson: version.firstPerson,
-            forbiddenExpressions: stringArray(version.forbiddenExpressions, 'forbiddenExpressions'),
-            preferredExpressions: stringArray(version.preferredExpressions, 'preferredExpressions'),
-            visualDirection: version.visualDirection,
-            facePolicy: version.facePolicy,
-          },
-          evidence,
-        },
-      ];
-    });
-    return {
-      candidates: candidates.slice(0, input.limit),
-      truncated: candidates.length > input.limit || rows.length === scanLimit,
-    };
-  }
-}
-
-export class PrismaTrendResearchGenerationContextRepository implements TrendResearchGenerationContextRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
-
-  async get(input: Parameters<TrendResearchGenerationContextRepository['get']>[0]) {
-    const profile = await this.client.socialProfile.findFirst({
-      where: {
-        id: input.socialProfileId,
-        workspaceId: input.workspaceId,
-        bunshinId: input.bunshinId,
-        status: 'ACTIVE',
-        bunshin: {
-          status: { not: 'ARCHIVED' },
-          ownerUserId: input.actorUserId,
-          ownerUser: { status: 'ACTIVE' },
-          workspace: {
-            status: 'ACTIVE',
-            memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
-          },
-          capabilityAssignments: { some: { capabilityType: 'SOCIAL', status: 'ACTIVE' } },
-        },
-      },
-      include: {
-        accountStrategies: {
-          where: { status: 'APPROVED' },
-          orderBy: { version: 'desc' },
-          take: 1,
-          select: { concept: true, targetSummary: true },
-        },
-        bunshin: {
-          select: {
-            contentPillars: {
-              where: { active: true, deletedAt: null },
-              orderBy: [{ weight: 'desc' }, { id: 'asc' }],
-              take: 5,
-              select: { title: true },
-            },
-          },
-        },
-      },
-    });
-    const strategy = profile?.accountStrategies[0];
-    if (!profile || !strategy) return null;
-    return {
-      workspaceId: profile.workspaceId,
-      bunshinId: profile.bunshinId,
-      actorUserId: input.actorUserId,
-      socialProfileId: profile.id,
-      platform: profile.platform,
-      purpose: profile.purpose,
-      preferredFormats: parsePreferredFormats(profile.preferredFormats),
-      concept: strategy.concept,
-      targetSummary: strategy.targetSummary,
-      contentPillars: profile.bunshin.contentPillars.map(({ title }) => title),
-    };
-  }
-}
-
+export { PrismaPersonalityLearningCandidateRepository } from './personality-learning-candidates';
+export { PrismaTrendResearchGenerationContextRepository } from './trend-research-generation-context';
 export { PrismaAdminAuditLogRepository } from './admin-audit-log';
 export {
   PrismaAccountUnitOfWork,
