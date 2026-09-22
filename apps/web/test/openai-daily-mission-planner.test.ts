@@ -90,7 +90,7 @@ describe('OpenAIDailyMissionPlanner', () => {
 
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'daily-mission-planner-v8-recent-topics',
+      promptVersion: 'daily-mission-planner-v9-personalized',
       inputTokens: 90,
       outputTokens: 30,
     });
@@ -109,6 +109,8 @@ describe('OpenAIDailyMissionPlanner', () => {
       'reason',
       'estimatedMinutes',
       'usedTrendIdea',
+      'personalizationSourceTypes',
+      'personalizationReason',
     ]);
     expect(request.input[1]?.content).toContain('10年の経験');
     expect(request.input[1]?.content).toContain('personality-version-2');
