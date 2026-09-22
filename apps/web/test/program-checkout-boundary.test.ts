@@ -2,10 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const http = readFileSync(new URL('../src/http/program-checkout.ts', import.meta.url), 'utf8');
-const purchase = readFileSync(
-  new URL('../src/payments/program-purchase.ts', import.meta.url),
-  'utf8',
-);
+const purchase = [
+  'program-purchase.ts',
+  'program-purchase-context.ts',
+  'program-payment-webhook-events.ts',
+]
+  .map((file) => readFileSync(new URL(`../src/payments/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 
 describe('OEM program checkout boundary', () => {
   it('authenticates checkout and derives tenant, buyer and amount on the server', () => {

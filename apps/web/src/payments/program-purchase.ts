@@ -1,215 +1,27 @@
 import 'server-only';
-import {
-  AI_RESALE_V1_MODULE_KEY,
-  parseAiResaleOfferTerms,
-  parseAiResaleRuntimeSettings,
-} from '@bunshin/capability-resale';
-import { parseProgramProductTerms } from '@bunshin/application';
+import { AI_RESALE_V1_MODULE_KEY } from '@bunshin/capability-resale';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
-import type { Prisma, PrismaClient } from '@bunshin/database';
+import type { PrismaClient } from '@bunshin/database';
+import {
+  validatedDirectPurchaseContext,
+  validatedPurchaseContext,
+} from './program-purchase-context';
+import {
+  receiveWebhookEvent,
+  recordFailedWebhookEvent,
+  requireWebhookConfiguration,
+} from './program-payment-webhook-events';
 import {
   AesGcmPaymentSecretCrypto,
   currentPaymentEnvironment,
   StripeCheckoutAdapter,
 } from './secure-configuration';
 
-type Db = PrismaClient | Prisma.TransactionClient;
 type CheckoutDependencies = {
   crypto: Pick<AesGcmPaymentSecretCrypto, 'decrypt'>;
   stripe: Pick<StripeCheckoutAdapter, 'create'>;
 };
-
-async function validatedDirectPurchaseContext(
-  db: Db,
-  input: {
-    workspaceId: string;
-    groupId: string;
-    buyerUserId: string;
-    offeringId: string;
-  },
-  options: { requireActivePayment?: boolean; requireActiveOffering?: boolean } = {},
-) {
-  const now = new Date();
-  const [offering, paymentConfiguration, membership] = await Promise.all([
-    db.programOffering.findFirst({
-      where: {
-        id: input.offeringId,
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        status:
-          options.requireActiveOffering === false
-            ? { in: ['ACTIVE', 'SUSPENDED', 'SUPERSEDED'] }
-            : 'ACTIVE',
-        isFree: false,
-        ...(options.requireActiveOffering === false
-          ? {}
-          : {
-              OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-              AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }],
-            }),
-      },
-    }),
-    db.organizationPaymentConfiguration.findUnique({
-      where: {
-        workspaceId_environment_provider: {
-          workspaceId: input.workspaceId,
-          environment: currentPaymentEnvironment(),
-          provider: 'STRIPE',
-        },
-      },
-    }),
-    db.groupMembership.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        userId: input.buyerUserId,
-        serviceRole: 'PARTICIPANT',
-        status: 'ACTIVE',
-      },
-    }),
-  ]);
-  const terms = offering ? parseProgramProductTerms(offering.termsSnapshot) : null;
-  if (!offering || !membership || !terms) {
-    throw new ApplicationError('NOT_FOUND', 'program product unavailable');
-  }
-  if (options.requireActiveOffering !== false) {
-    const legalDocuments = await db.serviceLegalDocument.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        type: { in: ['TERMS', 'PRIVACY', 'COMMERCE_DISCLOSURE'] },
-        status: 'PUBLISHED',
-        effectiveAt: { lte: now },
-      },
-      select: { type: true },
-    });
-    if (new Set(legalDocuments.map(({ type }) => type)).size !== 3) {
-      throw new ApplicationError('CONFIGURATION_ERROR', 'commerce legal documents are not ready');
-    }
-  }
-  if (
-    !paymentConfiguration ||
-    ((options.requireActivePayment ?? true)
-      ? paymentConfiguration.status !== 'ACTIVE'
-      : !['ACTIVE', 'DISABLED'].includes(paymentConfiguration.status)) ||
-    !paymentConfiguration.lastVerifiedAt ||
-    !paymentConfiguration.encryptedWebhookSecret
-  ) {
-    throw new ApplicationError('CONFIGURATION_ERROR', 'organization payment is not active');
-  }
-  const [program, enrolled] = await Promise.all([
-    db.serviceProgram.findFirst({
-      where: {
-        id: offering.serviceProgramId,
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        status: 'ACTIVE',
-      },
-    }),
-    db.programEnrollment.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        groupMembershipId: membership.id,
-        serviceProgramId: offering.serviceProgramId,
-      },
-      select: { id: true },
-    }),
-  ]);
-  if (!program) throw new ApplicationError('NOT_FOUND', 'program product unavailable');
-  if (enrolled) throw new ApplicationError('CONFLICT', 'member already has this program');
-  return { offering, paymentConfiguration, membership, program, terms };
-}
-
-async function validatedPurchaseContext(
-  db: Db,
-  input: {
-    workspaceId: string;
-    groupId: string;
-    buyerUserId: string;
-    sourceEnrollmentId: string;
-    offeringId: string;
-  },
-  options: { requireActivePayment?: boolean } = {},
-) {
-  const [source, offering, paymentConfiguration] = await Promise.all([
-    db.programEnrollment.findFirst({
-      where: {
-        id: input.sourceEnrollmentId,
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        status: 'COMPLETED',
-      },
-    }),
-    db.programOffering.findFirst({
-      where: {
-        id: input.offeringId,
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        status: 'ACTIVE',
-        isFree: false,
-      },
-    }),
-    db.organizationPaymentConfiguration.findUnique({
-      where: {
-        workspaceId_environment_provider: {
-          workspaceId: input.workspaceId,
-          environment: currentPaymentEnvironment(),
-          provider: 'STRIPE',
-        },
-      },
-    }),
-  ]);
-  if (!source || !offering) throw new ApplicationError('NOT_FOUND', 'purchase target unavailable');
-  if (
-    !paymentConfiguration ||
-    ((options.requireActivePayment ?? true)
-      ? paymentConfiguration.status !== 'ACTIVE'
-      : !['ACTIVE', 'DISABLED'].includes(paymentConfiguration.status)) ||
-    !paymentConfiguration.lastVerifiedAt ||
-    !paymentConfiguration.encryptedWebhookSecret
-  ) {
-    throw new ApplicationError('CONFIGURATION_ERROR', 'organization payment is not active');
-  }
-  const [membership, program, selection] = await Promise.all([
-    db.groupMembership.findFirst({
-      where: {
-        id: source.groupMembershipId,
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        userId: input.buyerUserId,
-        serviceRole: 'PARTICIPANT',
-        status: 'ACTIVE',
-      },
-    }),
-    db.serviceProgram.findFirst({
-      where: {
-        id: offering.serviceProgramId,
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        status: 'ACTIVE',
-      },
-    }),
-    db.programActionEvent.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        programEnrollmentId: source.id,
-        sourceResourceType: 'PROGRAM_OFFERING',
-        sourceResourceId: offering.id,
-        eventType: { in: ['STANDARD_OFFER_SELECTED', 'MONITOR_OFFER_SELECTED'] },
-        actorUserId: input.buyerUserId,
-      },
-    }),
-  ]);
-  const terms = parseAiResaleOfferTerms(offering.termsSnapshot);
-  const runtime = program ? parseAiResaleRuntimeSettings(program.settings) : null;
-  if (!membership || !program || !terms || runtime?.policyKey !== 'PAID_90D' || !selection) {
-    throw new ApplicationError('FORBIDDEN', 'selected paid offer required');
-  }
-  return { source, offering, paymentConfiguration, membership, program, terms, runtime };
-}
 
 export async function createProgramCheckout(
   client: PrismaClient,
@@ -636,96 +448,6 @@ export async function completePaidProgramPurchase(
     }
     throw error;
   }
-}
-
-async function requireWebhookConfiguration(
-  db: Db,
-  input: { configurationId: string; livemode: boolean },
-) {
-  const configuration = await db.organizationPaymentConfiguration.findFirst({
-    where: {
-      id: input.configurationId,
-      environment: currentPaymentEnvironment(),
-      provider: 'STRIPE',
-      status: { in: ['ACTIVE', 'DISABLED'] },
-    },
-  });
-  if (!configuration) throw new ApplicationError('NOT_FOUND', 'payment configuration missing');
-  const expectsLive = new AesGcmPaymentSecretCrypto()
-    .decrypt(configuration.encryptedSecretKey)
-    .startsWith('sk_live_');
-  if (input.livemode !== expectsLive) {
-    throw new ApplicationError('FORBIDDEN', 'Stripe mode mismatch');
-  }
-  return configuration;
-}
-
-async function receiveWebhookEvent(
-  db: Db,
-  input: {
-    workspaceId: string;
-    configurationId: string;
-    providerEventId: string;
-    eventType: string;
-    payloadDigest: string;
-  },
-) {
-  return db.paymentWebhookEvent.upsert({
-    where: {
-      paymentConfigurationId_providerEventId: {
-        paymentConfigurationId: input.configurationId,
-        providerEventId: input.providerEventId,
-      },
-    },
-    create: {
-      workspaceId: input.workspaceId,
-      paymentConfigurationId: input.configurationId,
-      providerEventId: input.providerEventId,
-      eventType: input.eventType,
-      payloadDigest: input.payloadDigest,
-      status: 'RECEIVED',
-    },
-    update: {},
-  });
-}
-
-async function recordFailedWebhookEvent(
-  client: PrismaClient,
-  input: {
-    configurationId: string;
-    providerEventId: string;
-    eventType: string;
-    payloadDigest: string;
-  },
-) {
-  const configuration = await client.organizationPaymentConfiguration.findFirst({
-    where: { id: input.configurationId },
-    select: { workspaceId: true },
-  });
-  if (!configuration) return;
-  await client.paymentWebhookEvent.upsert({
-    where: {
-      paymentConfigurationId_providerEventId: {
-        paymentConfigurationId: input.configurationId,
-        providerEventId: input.providerEventId,
-      },
-    },
-    create: {
-      workspaceId: configuration.workspaceId,
-      paymentConfigurationId: input.configurationId,
-      providerEventId: input.providerEventId,
-      eventType: input.eventType,
-      payloadDigest: input.payloadDigest,
-      status: 'FAILED',
-      errorCategory: 'PROCESSING_FAILED',
-      processedAt: new Date(),
-    },
-    update: {
-      status: 'FAILED',
-      errorCategory: 'PROCESSING_FAILED',
-      processedAt: new Date(),
-    },
-  });
 }
 
 export async function expireProgramCheckout(
