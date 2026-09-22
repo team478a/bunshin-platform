@@ -15,7 +15,10 @@ const migration = readFileSync(
   ),
   'utf8',
 );
-const repository = readFileSync(fileURLToPath(new URL('../src/index.ts', import.meta.url)), 'utf8');
+const repository = readFileSync(
+  fileURLToPath(new URL('../src/point-activity.ts', import.meta.url)),
+  'utf8',
+);
 
 describe('point issuance emergency stop', () => {
   it('defaults existing and new services to normal issuance', () => {
