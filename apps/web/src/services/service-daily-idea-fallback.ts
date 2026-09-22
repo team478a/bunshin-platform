@@ -10,9 +10,10 @@ import {
   serviceContentTerminologyPolicy,
 } from './service-content-terminology';
 import { inspectDailyMissionContent } from './daily-mission-content-quality';
+import type { FallbackFeedbackPreference } from './daily-mission-learning-history';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 
-const FALLBACK_VERSION = 'business-daily-personalized-fallback-v4';
+const FALLBACK_VERSION = 'business-daily-personalized-fallback-v5-feedback-loop';
 
 const categoryAngles: Record<BusinessContentCategory, string> = {
   HELPFUL_EXPERTISE: 'お客様が今日から使える、商品・サービス選びの小さなコツ',
@@ -74,6 +75,7 @@ export function buildServiceDailyIdeaFallback(input: {
   weeklyAngle: string;
   bunshinObjective: string;
   bunshinAudience: string;
+  feedbackPreference?: FallbackFeedbackPreference;
 }) {
   const category = input.category ?? 'PRODUCT_SERVICE';
   const angle = `${categoryAngles[category]}。${input.weeklyAngle}`;
@@ -86,6 +88,13 @@ export function buildServiceDailyIdeaFallback(input: {
     hashtag(input.industry),
     hashtag(input.productService),
   ].filter((value): value is string => Boolean(value));
+  const feedbackPreference = input.feedbackPreference ?? 'STANDARD';
+  const closing =
+    feedbackPreference === 'SOFT_CTA'
+      ? 'あとで見返せるよう保存して、必要なときにご確認ください。'
+      : feedbackPreference === 'SIMPLE'
+        ? 'まずは一つだけ確認してみてください。'
+        : `気になる点は${input.businessName}へお気軽にお尋ねください。`;
   const body = `${input.strategyTarget}へ。
 
 ${input.bunshinAudience}に「${input.bunshinObjective}」を届けるため、${input.weeklyGoal}につながる今日の視点は「${input.weeklyAngle}」です。
@@ -99,14 +108,15 @@ ${fallbackIntroductions[category]({
 
 ${input.strategyPositioning}
 
-${input.platform}での「${input.socialPurpose}」に合わせて、気になる点は${input.businessName}へお気軽にお尋ねください。`;
+${input.platform}での「${input.socialPurpose}」に合わせて、${closing}`;
   return applyServiceContentTerminology(
     {
       version: FALLBACK_VERSION,
       topic,
       angle,
-      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。`,
+      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。本人の直近フィードバック調整=${feedbackPreference}。`,
       body,
+      cta: closing,
       hashtags,
       photoInstruction: `「${input.productService}」に関係する被写体を使います。${photoDirections[category]}。周りの不要な物は片付けます。`,
     },
@@ -213,6 +223,12 @@ export async function createServiceDailyIdeaFallback(input: {
       'CONTENT_REJECTED',
       'personalized fallback context is unavailable; do not deliver a shared template',
     );
+  const serviceKnowledge = await loadServiceGenerationKnowledge({
+    workspaceId: input.workspaceId,
+    groupId: input.groupId,
+    actorUserId: input.actorUserId,
+    bunshinId: input.bunshinId,
+  });
   const idea = buildServiceDailyIdeaFallback({
     missionDate: input.missionDate,
     industry: profile.otherIndustryText || profile.primaryIndustry.name,
@@ -230,6 +246,7 @@ export async function createServiceDailyIdeaFallback(input: {
     weeklyAngle: weeklyItem.angle,
     bunshinObjective: bunshin.objectiveSummary,
     bunshinAudience: bunshin.audienceSummary,
+    feedbackPreference: serviceKnowledge.personalization.fallbackPreference,
     ...(serviceConfiguration ? { serviceSlug: serviceConfiguration.slug } : {}),
   });
   const missionRepository = new db.PrismaDailyMissionRepository();
@@ -248,7 +265,7 @@ export async function createServiceDailyIdeaFallback(input: {
   const content = {
     body: idea.body,
     threadParts: [],
-    cta: '気になることがあれば、コメントやメッセージでお気軽にお尋ねください。',
+    cta: idea.cta,
     caption: idea.body,
     hashtags: idea.hashtags,
     photoInstruction: idea.photoInstruction,
@@ -260,12 +277,13 @@ export async function createServiceDailyIdeaFallback(input: {
       'fallback mission failed the same novelty gate as normal generation',
       issue,
     );
-  const serviceKnowledge = await loadServiceGenerationKnowledge({
-    workspaceId: input.workspaceId,
-    groupId: input.groupId,
-    actorUserId: input.actorUserId,
-    bunshinId: input.bunshinId,
-  });
+  const fallbackSourceTypes = [
+    'BUNSHIN_PROFILE',
+    'BUSINESS_PROFILE',
+    'SOCIAL_PROFILE',
+    'ACCOUNT_STRATEGY',
+    ...(serviceKnowledge.personalization.feedbackSummary ? ['FEEDBACK_HISTORY'] : []),
+  ];
   return new CreateDailyMission(
     missionRepository,
     new db.PrismaBunshinCapabilityAssignmentRepository(),
@@ -303,18 +321,8 @@ export async function createServiceDailyIdeaFallback(input: {
         quality: { verdict: 'PASS', issueCodes: [], repairCount: 0 },
         personalization: {
           mode: 'FALLBACK',
-          sourceTypes: [
-            'BUNSHIN_PROFILE',
-            'BUSINESS_PROFILE',
-            'SOCIAL_PROFILE',
-            'ACCOUNT_STRATEGY',
-          ],
-          availableSourceTypes: [
-            'BUNSHIN_PROFILE',
-            'BUSINESS_PROFILE',
-            'SOCIAL_PROFILE',
-            'ACCOUNT_STRATEGY',
-          ],
+          sourceTypes: fallbackSourceTypes,
+          availableSourceTypes: fallbackSourceTypes,
           onboardingResponse: serviceKnowledge.personalization.references.onboardingResponseId
             ? { id: serviceKnowledge.personalization.references.onboardingResponseId }
             : null,
@@ -330,6 +338,14 @@ export async function createServiceDailyIdeaFallback(input: {
             (id) => ({
               id,
             }),
+          ),
+          recentFeedback: serviceKnowledge.personalization.references.recentFeedbackIds.map(
+            (id) => ({
+              id,
+            }),
+          ),
+          recentDecisions: serviceKnowledge.personalization.references.recentDecisionIds.map(
+            (id) => ({ id }),
           ),
           postRecords: serviceKnowledge.personalization.references.recentPostRecordIds.map(
             (id) => ({

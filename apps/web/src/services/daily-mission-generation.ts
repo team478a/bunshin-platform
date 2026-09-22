@@ -308,6 +308,7 @@ export class DailyMissionGenerationService {
         businessProfile: serviceKnowledge?.businessProfile ?? null,
         onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
         behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+        feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
         performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
       });
       const knowledge = [
@@ -437,6 +438,7 @@ export class DailyMissionGenerationService {
         businessProfile: serviceKnowledge?.businessProfile ?? null,
         onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
         behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+        feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
         performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
         selectedMemories,
       });
@@ -739,6 +741,12 @@ export class DailyMissionGenerationService {
               ).map((id) => ({ id })),
               recentVariants: (
                 serviceKnowledge?.personalization.references.recentVariantSelectionIds ?? []
+              ).map((id) => ({ id })),
+              recentFeedback: (
+                serviceKnowledge?.personalization.references.recentFeedbackIds ?? []
+              ).map((id) => ({ id })),
+              recentDecisions: (
+                serviceKnowledge?.personalization.references.recentDecisionIds ?? []
               ).map((id) => ({ id })),
               postRecords: (
                 serviceKnowledge?.personalization.references.recentPostRecordIds ?? []
