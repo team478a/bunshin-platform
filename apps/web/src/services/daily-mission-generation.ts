@@ -27,7 +27,6 @@ import {
   GroupKnowledgeService,
   selectGroupKnowledgeChunksForPrompt,
   applyExternalLinkPlacement,
-  simhashSimilarityBasisPoints,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -40,6 +39,10 @@ import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality
 import { campaignContentSignature } from './campaign-content-signature';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 import { applyServiceContentTerminology } from './service-content-terminology';
+import {
+  inspectDailyMissionContent,
+  recentMissionQualityContext,
+} from './daily-mission-content-quality';
 
 interface Input {
   workspaceId: string;
@@ -106,15 +109,29 @@ export class DailyMissionGenerationService {
           to: input.missionDate,
         })
       ).find(({ missionDate }) => missionDate === input.missionDate);
-      if (existing) {
-        if (input.existingPolicy === 'RETURN') return existing;
-        throw new ApplicationError('CONFLICT', 'daily mission already exists');
-      }
       const recentMissions = await new ListDailyMissions(missions).execute({
         ...scope,
         from: daysBefore(input.missionDate, 28),
         to: daysBefore(input.missionDate, 1),
       });
+      if (existing) {
+        if (input.existingPolicy === 'RETURN') {
+          if (existing.content) {
+            const issue = inspectDailyMissionContent({
+              content: existing.content,
+              recentMissions,
+            });
+            if (issue)
+              throw new ApplicationError(
+                'CONTENT_REJECTED',
+                'existing daily mission is not safe to deliver as a new post',
+                { ...issue, existingDailyMissionId: existing.id },
+              );
+          }
+          return existing;
+        }
+        throw new ApplicationError('CONFLICT', 'daily mission already exists');
+      }
       const recentFormats = recentMissions.map(({ format }) => format);
       const productPack = input.serviceSafeMode
         ? null
@@ -417,15 +434,21 @@ export class DailyMissionGenerationService {
         selectedMemories,
         campaign,
       };
-      stage = 'content:0';
-      let content = await generateWithQuota('content:0', () => generator.execute(contentInput));
-      content = {
-        ...content,
+      const applyTerminology = <
+        T extends { output: Parameters<typeof applyServiceContentTerminology>[0] },
+      >(
+        value: T,
+      ) => ({
+        ...value,
         output: applyServiceContentTerminology(
-          content.output,
+          value.output,
           serviceKnowledge?.contentTerminologyPolicy ?? null,
         ),
-      };
+      });
+      stage = 'content:0';
+      let content = applyTerminology(
+        await generateWithQuota('content:0', () => generator.execute(contentInput)),
+      );
       await usage('content:0', 'CONTENT_GENERATOR', content);
       const checker = new CheckMissionQuality(
         new OpenAIMissionQualityChecker({
@@ -442,38 +465,64 @@ export class DailyMissionGenerationService {
         businessProfile: serviceKnowledge?.businessProfile ?? null,
         selectedMemories,
         groupKnowledge,
+        recentContent: recentMissionQualityContext(recentMissions),
       });
       let repairCount = 0;
       const qualityIssueCodes = new Set<string>();
-      stage = 'quality:0';
-      let quality = await generateWithQuota('quality:0', () => checker.execute(qualityInput()));
-      for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
-      await usage('quality:0', 'QUALITY_CHECKER', quality);
-      if (quality.output.verdict === 'REVISE') {
-        repairCount = 1;
-        stage = 'content:1';
-        content = await generateWithQuota('content:1', () =>
-          generator.execute({
-            ...contentInput,
-            repairInstructions: quality.output.issues.map(
-              ({ repairInstruction }) => repairInstruction,
-            ),
-          }),
+      let quality: Awaited<ReturnType<typeof checker.execute>> | null = null;
+      let noveltyIssue: ReturnType<typeof inspectDailyMissionContent> = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        stage = `quality:${attempt}`;
+        const currentQuality = await generateWithQuota(`quality:${attempt}`, () =>
+          checker.execute(qualityInput()),
         );
-        content = {
-          ...content,
-          output: applyServiceContentTerminology(
-            content.output,
-            serviceKnowledge?.contentTerminologyPolicy ?? null,
+        quality = currentQuality;
+        for (const issue of currentQuality.output.issues) qualityIssueCodes.add(issue.code);
+        await usage(`quality:${attempt}`, 'QUALITY_CHECKER', currentQuality);
+        noveltyIssue =
+          currentQuality.output.verdict === 'PASS'
+            ? inspectDailyMissionContent({ content: content.output, recentMissions })
+            : null;
+        if (currentQuality.output.verdict === 'PASS' && !noveltyIssue) break;
+        if (currentQuality.output.verdict === 'REJECT' || attempt === 2)
+          throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check', {
+            issueCodes: [...qualityIssueCodes],
+            noveltyIssue,
+            attempts: attempt + 1,
+          });
+        repairCount += 1;
+        const semanticDuplicate =
+          noveltyIssue !== null ||
+          currentQuality.output.issues.some(({ code }) => code === 'RECENT_CONTENT_DUPLICATE');
+        stage = `content:${attempt + 1}`;
+        content = applyTerminology(
+          await generateWithQuota(`content:${attempt + 1}`, () =>
+            generator.execute(
+              semanticDuplicate
+                ? {
+                    ...contentInput,
+                    variantSourceContent: content.output,
+                    variantInstructions: [
+                      '過去原稿の言い換えではなく、答える疑問、具体的な情報、利用場面、読者が得る価値を別の企画にする。',
+                      '承認済み情報だけを使い、架空の体験、実績、イベント、サービス説明を追加しない。',
+                    ],
+                  }
+                : {
+                    ...contentInput,
+                    repairInstructions: currentQuality.output.issues.map(
+                      ({ repairInstruction }) => repairInstruction,
+                    ),
+                  },
+            ),
           ),
-        };
-        await usage('content:1', 'CONTENT_REPAIR', content);
-        stage = 'quality:1';
-        quality = await generateWithQuota('quality:1', () => checker.execute(qualityInput()));
-        for (const issue of quality.output.issues) qualityIssueCodes.add(issue.code);
-        await usage('quality:1', 'QUALITY_CHECKER', quality);
+        );
+        await usage(
+          `content:${attempt + 1}`,
+          semanticDuplicate ? 'CONTENT_NOVELTY_RETRY' : 'CONTENT_REPAIR',
+          content,
+        );
       }
-      if (quality.output.verdict !== 'PASS')
+      if (!quality || quality.output.verdict !== 'PASS' || noveltyIssue)
         throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
       let missionContent = content.output;
       let externalLinkUsage:
@@ -593,20 +642,15 @@ export class DailyMissionGenerationService {
             issueCodes: safety.inspected.issueCodes,
           });
       }
-      const candidateSignature = campaignContentSignature(missionContent);
-      const repeatedContent = recentMissions.find((recentMission) => {
-        if (recentMission.content === null) return false;
-        const recentSignature = campaignContentSignature(recentMission.content);
-        return (
-          recentSignature.contentFingerprint === candidateSignature.contentFingerprint ||
-          simhashSimilarityBasisPoints(recentSignature.simhash, candidateSignature.simhash) >= 9_500
-        );
+      const finalNoveltyIssue = inspectDailyMissionContent({
+        content: missionContent,
+        recentMissions,
       });
-      if (repeatedContent)
+      if (finalNoveltyIssue)
         throw new ApplicationError(
           'CONTENT_REJECTED',
           'generated mission is too similar to recent content',
-          { recentMissionDate: repeatedContent.missionDate },
+          finalNoveltyIssue,
         );
       stage = 'persist';
       const created = await new CreateDailyMission(missions, assignments).execute({

@@ -444,6 +444,12 @@ export interface MissionQualityCheckerInput {
   businessProfile?: MissionBusinessProfileContext | null;
   selectedMemories: SelectedBunshinMemory[];
   groupKnowledge?: MissionContentGeneratorInput['groupKnowledge'];
+  recentContent?: Array<{
+    missionDate: string;
+    topic: string;
+    angle: string;
+    contentExcerpt: string;
+  }>;
 }
 
 export interface MissionQualityCheckerProviderInput extends Omit<
