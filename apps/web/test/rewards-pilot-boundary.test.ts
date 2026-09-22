@@ -9,6 +9,9 @@ const membersPage = readFileSync('app/(app)/groups/[groupId]/members/page.tsx', 
 const servicePointsPage = [
   readFileSync('app/s/[serviceSlug]/manage/points/page.tsx', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/actions.ts', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-data.ts', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-operations-sections.tsx', 'utf8'),
 ].join('\n');
 
 describe('rewards pilot web boundary', () => {
@@ -49,7 +52,7 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('<strong>{rewardsPilotActiveCount}人全員</strong>');
     expect(servicePointsPage).toContain('新しく登録した一般参加者も自動で追加されます。');
     expect(servicePointsPage).not.toContain('試験利用者を選ぶ');
-    expect(servicePointsPage).toContain('/admin/groups/${service.serviceId}/features');
+    expect(servicePointsPage).toContain('/admin/groups/${serviceId}/features');
   });
 
   it('lets a phone operator set four weeks without selecting members', () => {

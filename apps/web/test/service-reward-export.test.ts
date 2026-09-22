@@ -6,10 +6,13 @@ const source = readFileSync(
   fileURLToPath(new URL('../src/http/service-reward-export.ts', import.meta.url)),
   'utf8',
 );
-const page = readFileSync(
-  fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/page.tsx', import.meta.url)),
-  'utf8',
-);
+const page = [
+  '../app/s/[serviceSlug]/manage/points/page.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-operations-sections.tsx',
+]
+  .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8'))
+  .join('\n');
 
 describe('service reward export boundaries', () => {
   it('requires a managed service context and scopes every export to the service', () => {
