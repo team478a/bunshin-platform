@@ -5,8 +5,8 @@ const source = readFileSync(
   new URL('../src/http/service-daily-missions.ts', import.meta.url),
   'utf8',
 );
-const generation = readFileSync(
-  new URL('../src/services/daily-mission-generation.ts', import.meta.url),
+const planningContext = readFileSync(
+  new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
 const detailPage = readFileSync(
@@ -40,12 +40,12 @@ describe('service daily mission boundary', () => {
 
   it('uses safe service generation without personal context, while retaining own trend candidates', () => {
     expect(source).toContain('serviceSafeMode: true');
-    expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*null/);
-    expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*\[\]/);
-    expect(generation).toContain('new ListActiveTrendIdeas(');
-    expect(generation).not.toMatch(/const trendIdeas = input\.serviceSafeMode\s*\?\s*\[\]/);
-    expect(generation).toContain('campaign.productPack.groupId !== input.groupId');
-    expect(generation).toContain("'service campaign unavailable'");
+    expect(planningContext).toMatch(/input\.serviceSafeMode\s*\?\s*null/);
+    expect(planningContext).toMatch(/input\.serviceSafeMode\s*\?\s*\[\]/);
+    expect(planningContext).toContain('new ListActiveTrendIdeas(');
+    expect(planningContext).not.toMatch(/const trendIdeas = input\.serviceSafeMode\s*\?\s*\[\]/);
+    expect(planningContext).toContain('campaign.productPack.groupId !== input.scope.groupId');
+    expect(planningContext).toContain("'service campaign unavailable'");
   });
 
   it('connects the service mission view and endpoint', () => {
