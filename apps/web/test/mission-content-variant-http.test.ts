@@ -13,10 +13,16 @@ const personalPage = readFileSync(
   new URL('../app/(app)/bunshins/[bunshinId]/page.tsx', import.meta.url),
   'utf8',
 );
-const personalExperience = readFileSync(
-  new URL('../app/(app)/bunshins/[bunshinId]/daily-mission-section.tsx', import.meta.url),
-  'utf8',
-);
+const personalExperience = [
+  'daily-mission-section.tsx',
+  'personal-daily-mission-controller.ts',
+  'personal-daily-mission-list.tsx',
+  'personal-daily-mission-overview.tsx',
+]
+  .map((file) =>
+    readFileSync(new URL(`../app/(app)/bunshins/[bunshinId]/${file}`, import.meta.url), 'utf8'),
+  )
+  .join('\n');
 const servicePage = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
   'utf8',
