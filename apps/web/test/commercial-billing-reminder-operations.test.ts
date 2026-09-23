@@ -1,10 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const page = readFileSync(
-  new URL('../app/(app)/admin/organizations/[workspaceId]/commercial/page.tsx', import.meta.url),
-  'utf8',
-);
+const page = [
+  'page.tsx',
+  'commercial-admin-dashboard.tsx',
+  'commercial-contract-section.tsx',
+  'commercial-invoice-sections.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/(app)/admin/organizations/[workspaceId]/commercial/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const scheduler = readFileSync(
   new URL('../src/services/commercial-billing-reminder-scheduler.ts', import.meta.url),
   'utf8',
