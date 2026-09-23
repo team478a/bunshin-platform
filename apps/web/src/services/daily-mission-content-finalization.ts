@@ -34,7 +34,7 @@ interface GenerationScope {
   actorUserId: string;
 }
 
-interface ExternalLinkUsage {
+export interface ExternalLinkUsage {
   groupId: string;
   productPackId: string;
   productPackVersionId: string;
@@ -45,7 +45,7 @@ interface ExternalLinkUsage {
   placementTemplateVersion: number | null;
 }
 
-interface CampaignSafetyReceipt {
+export interface CampaignSafetyReceipt {
   campaignId: string;
   missionDate: string;
   signature: ReturnType<typeof campaignContentSignature>;
