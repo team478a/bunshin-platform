@@ -6,7 +6,7 @@ const weeklySource = readFileSync(
   'utf8',
 );
 const dailySource = readFileSync(
-  new URL('../src/services/daily-mission-generation.ts', import.meta.url),
+  new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
 const campaignRepositorySource = readFileSync(
@@ -22,7 +22,7 @@ describe('service campaign generation boundary', () => {
   });
 
   it('requires a resolved campaign to belong to the current service', () => {
-    expect(dailySource).toContain('campaign.productPack.groupId !== input.groupId');
+    expect(dailySource).toContain('campaign.productPack.groupId !== input.scope.groupId');
     expect(dailySource).toContain("'service campaign unavailable'");
     expect(dailySource).not.toContain('service campaign generation is not connected');
   });
