@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const notification = source('src/services/member-tracking-link-notification.ts');
 const transition = source('src/http/external-tracking-links.ts');
-const operations = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
+const linkList = source('app/(app)/admin/external-tracking/external-tracking-link-list.tsx');
 const repository = source('../../packages/database/src/external-tracking-admin.ts');
 
 describe('member tracking link result notification', () => {
@@ -27,8 +27,8 @@ describe('member tracking link result notification', () => {
 
   it('lets an operator request correction while a member link is waiting', () => {
     expect(repository).toContain("status: { in: ['DRAFT', 'ACTIVE'] }");
-    expect(operations).toContain('修正をお願いする');
-    expect(operations).toContain('`/links/${link.id}/suspend`');
+    expect(linkList).toContain('修正をお願いする');
+    expect(linkList).toContain('`/links/${link.id}/suspend`');
   });
 
   it('does not roll back the URL decision when LINE is unavailable', () => {
