@@ -5,6 +5,7 @@ const http = readFileSync(new URL('../src/http/program-checkout.ts', import.meta
 const purchase = [
   'program-purchase.ts',
   'program-purchase-checkout.ts',
+  'program-purchase-completion.ts',
   'program-purchase-context.ts',
   'program-payment-webhook-events.ts',
 ]
