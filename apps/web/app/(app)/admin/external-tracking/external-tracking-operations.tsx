@@ -1,67 +1,11 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-
-type Configuration = {
-  systems: Array<{
-    id: string;
-    name: string;
-    status: string;
-    resultIngestTokenPrefix: string | null;
-    resultIngestTokenCreatedAt: string | null;
-    lastResultReceivedAt: string | null;
-    allowedDomains: Array<{ id: string; hostname: string; status: string }>;
-  }>;
-  links: Array<{
-    id: string;
-    name: string;
-    url: string;
-    scopeType: string;
-    effectiveStatus: string;
-    startsAt: string | null;
-    expiresAt: string | null;
-    system: { name: string };
-    productPack: { name: string } | null;
-    campaign: { name: string } | null;
-  }>;
-  members: Array<{
-    id: string;
-    role: string;
-    consentedAt: string | null;
-    identityConfigured: boolean;
-    activeLinkCount: number;
-    user: { displayName: string; email: string | null };
-  }>;
-  usages: Array<{
-    id: string;
-    createdAt: string;
-    insertedUrlSnapshot: string;
-    linkNameSnapshot: string;
-    expiresAtSnapshot: string | null;
-    groupMembership: { user: { displayName: string } };
-    productPack: { name: string };
-    campaign: { name: string } | null;
-    dailyMission: { missionDate: string; format: string };
-  }>;
-  audits: Array<{ id: string; action: string; performedAt: string }>;
-  resultTotals: Array<{
-    metricType: string;
-    currency: string | null;
-    count: number;
-    amountMinor: number;
-  }>;
-  results: Array<{
-    id: string;
-    metricType: string;
-    count: number;
-    amountMinor: number | null;
-    currency: string | null;
-    occurredAt: string;
-    system: { name: string };
-    externalTrackingLink: { name: string } | null;
-    memberIdentity: { groupMembership: { user: { displayName: string } } } | null;
-  }>;
-};
+import { ExternalTrackingResults } from './external-tracking-results';
+import type {
+  ExternalTrackingConfiguration,
+  ExternalTrackingResultConnection,
+} from './external-tracking-types';
 
 const statusLabel: Record<string, string> = {
   DRAFT: '下書き',
@@ -87,7 +31,7 @@ export function ExternalTrackingOperations({
 }: {
   workspaceId: string;
   groupId: string;
-  initialConfiguration: Configuration;
+  initialConfiguration: ExternalTrackingConfiguration;
   apiBase?: string;
 }) {
   const router = useRouter();
@@ -96,11 +40,9 @@ export function ExternalTrackingOperations({
     [],
   );
   const [busy, setBusy] = useState(false);
-  const [resultConnection, setResultConnection] = useState<{
-    token: string;
-    endpointPath: string;
-    endpointUrl: string;
-  } | null>(null);
+  const [resultConnection, setResultConnection] = useState<ExternalTrackingResultConnection | null>(
+    null,
+  );
   const base = apiBase ?? `/api/workspaces/${workspaceId}/external-tracking`;
   async function send(path: string, body: Record<string, unknown>) {
     setBusy(true);
@@ -233,155 +175,17 @@ export function ExternalTrackingOperations({
           使用履歴をCSVで保存
         </a>
       </section>
-      <section className="settings-card" id="tracking-results">
-        <p className="eyebrow">成果の自動取得</p>
-        <h2>外部サービスから成果を受け取る</h2>
-        <p>
-          外部サービス側に受取URLと秘密キーを登録すると、クリック・申込・購入などの成果が自動でここへ届きます。
-        </p>
-        {systems.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>外部サービス</th>
-                  <th>接続状態</th>
-                  <th>最終受信</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {systems.map((system) => (
-                  <tr key={system.id}>
-                    <td>{system.name}</td>
-                    <td>
-                      {system.resultIngestTokenPrefix
-                        ? `設定済み（${system.resultIngestTokenPrefix}…）`
-                        : '未設定'}
-                    </td>
-                    <td>
-                      {system.lastResultReceivedAt
-                        ? new Date(system.lastResultReceivedAt).toLocaleString('ja-JP')
-                        : 'まだ受信していません'}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void createResultConnection(system.id)}
-                      >
-                        {system.resultIngestTokenPrefix
-                          ? '秘密キーを作り直す'
-                          : '自動取得を設定する'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p>先に外部サービスを登録してください。</p>
-        )}
-        {resultConnection && (
-          <div className="notice" role="status">
-            <strong>外部サービス側へ登録する情報</strong>
-            <p>
-              受取URL：<code>{resultConnection.endpointUrl}</code>
-            </p>
-            <p>
-              秘密キー：<code>{resultConnection.token}</code>
-            </p>
-            <p>
-              認証方法：<code>Authorization: Bearer 秘密キー</code>
-            </p>
-            <button
-              type="button"
-              onClick={() => void copyText(resultConnection.token, '秘密キーをコピーしました。')}
-            >
-              秘密キーをコピー
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void copyText(resultConnection.endpointUrl, '受取URLをコピーしました。')
-              }
-            >
-              受取URLをコピー
-            </button>
-            <p>この秘密キーは画面を閉じると再表示できません。</p>
-          </div>
-        )}
-        <details>
-          <summary>外部サービスから送るデータ形式</summary>
-          <p>1回に最大500件をJSONで送信できます。同じ成果IDは二重登録されません。</p>
-          <pre>
-            <code>{`{
-  "records": [{
-    "externalEventId": "order-123",
-    "metricType": "PURCHASE",
-    "count": 1,
-    "amountMinor": 1200,
-    "currency": "JPY",
-    "occurredAt": "2026-09-13T10:00:00.000Z",
-    "externalLinkId": "紹介URL側のID",
-    "externalMemberId": "参加者側のID"
-  }]
-}`}</code>
-          </pre>
-          <p>
-            成果の種類には <code>CLICK</code>、<code>LEAD</code>、<code>SIGNUP</code>、
-            <code>PURCHASE</code>、<code>OTHER</code>を指定できます。
-          </p>
-        </details>
-        <h3>受け取った成果</h3>
-        <a
-          className="button button--secondary"
-          href={`${base}/export?groupId=${groupId}&kind=results`}
-        >
-          成果一覧をCSVで保存
-        </a>
-        {initialConfiguration.resultTotals.length ? (
-          <ul>
-            {initialConfiguration.resultTotals.map((total) => (
-              <li key={`${total.metricType}:${total.currency ?? ''}`}>
-                {total.metricType}：{total.count.toLocaleString('ja-JP')}件
-                {total.amountMinor > 0 && total.currency
-                  ? ` ／ ${(total.amountMinor / 100).toLocaleString('ja-JP')} ${total.currency}`
-                  : ''}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>成果はまだ届いていません。</p>
-        )}
-        {initialConfiguration.results.length > 0 && (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>日時</th>
-                  <th>成果</th>
-                  <th>参加者</th>
-                  <th>URL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {initialConfiguration.results.slice(0, 50).map((result) => (
-                  <tr key={result.id}>
-                    <td>{new Date(result.occurredAt).toLocaleString('ja-JP')}</td>
-                    <td>
-                      {result.metricType} × {result.count}
-                    </td>
-                    <td>{result.memberIdentity?.groupMembership.user.displayName ?? '未照合'}</td>
-                    <td>{result.externalTrackingLink?.name ?? '未照合'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <ExternalTrackingResults
+        base={base}
+        busy={busy}
+        groupId={groupId}
+        resultConnection={resultConnection}
+        results={initialConfiguration.results}
+        resultTotals={initialConfiguration.resultTotals}
+        systems={systems}
+        onCopyText={copyText}
+        onCreateResultConnection={createResultConnection}
+      />
       <section className="settings-card external-tracking-operations__guide">
         <p className="eyebrow">最初の設定は4ステップです</p>
         <h2>紹介URLを投稿案へ入れるまで</h2>

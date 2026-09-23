@@ -20,6 +20,15 @@ describe('service external tracking boundary', () => {
     expect(editor).toContain('apiBase ??');
   });
 
+  it('keeps result API state in the operation container while the result view stays presentational', () => {
+    const editor = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
+    const results = source('app/(app)/admin/external-tracking/external-tracking-results.tsx');
+    expect(editor).toContain('<ExternalTrackingResults');
+    expect(editor).toContain('createResultConnection');
+    expect(results).toContain('onCreateResultConnection');
+    expect(results).not.toContain('fetch(');
+  });
+
   it('rejects group IDs outside the resolved service for list, export, import, and create', () => {
     const http = source('src/http/external-tracking-links.ts');
     expect(http.match(/service boundary mismatch/g)).toHaveLength(4);
