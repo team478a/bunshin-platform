@@ -5,13 +5,19 @@ const page = readFileSync(
   new URL('../app/s/[serviceSlug]/programs/[programEnrollmentId]/page.tsx', import.meta.url),
   'utf8',
 );
-const card = readFileSync(
-  new URL(
-    '../app/s/[serviceSlug]/programs/[programEnrollmentId]/ai-training-card.tsx',
-    import.meta.url,
-  ),
-  'utf8',
-);
+const card = [
+  'ai-training-card.tsx',
+  'ai-training-setup-card.tsx',
+  'ai-training-evaluation-card.tsx',
+  'ai-training-mission-card.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/programs/[programEnrollmentId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const http = readFileSync(
   new URL('../src/http/ai-training-participant.ts', import.meta.url),
   'utf8',
