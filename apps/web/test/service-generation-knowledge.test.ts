@@ -21,6 +21,10 @@ const dailyPlanningSource = readFileSync(
   new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
+const dailyEnvironmentSource = readFileSync(
+  new URL('../src/services/daily-mission-generation-environment.ts', import.meta.url),
+  'utf8',
+);
 
 describe('service generation knowledge', () => {
   it('maps approved service chunks to instruction-safe prompt data', () => {
@@ -60,7 +64,8 @@ describe('service generation knowledge', () => {
     expect(dailyPlanningSource).toContain('actorUserId: input.scope.actorUserId');
     expect(strategySource).not.toContain('grantedKnowledge: []');
     expect(weeklySource).toContain('additionalKnowledge: serviceKnowledge.officialKnowledge');
-    expect(dailySource).toContain('serviceKnowledge.groupKnowledge');
+    expect(dailySource).toContain('serviceKnowledge?.groupKnowledge ?? []');
+    expect(dailyEnvironmentSource).toContain('input.fallbackGroupKnowledge');
     expect(dailySource).toContain('businessProfile: serviceKnowledge?.businessProfile ?? null');
   });
 });
