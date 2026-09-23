@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const personalPage = source('../app/(app)/bunshins/[bunshinId]/page.tsx');
-const personalMission = source('../app/(app)/bunshins/[bunshinId]/daily-mission-section.tsx');
+const personalMission = [
+  'daily-mission-section.tsx',
+  'personal-daily-mission-controller.ts',
+  'personal-daily-mission-list.tsx',
+  'personal-daily-mission-overview.tsx',
+]
+  .map((file) => source(`../app/(app)/bunshins/[bunshinId]/${file}`))
+  .join('\n');
 const servicePage = source('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
 const serviceMission = [
   'service-daily-mission-section.tsx',
