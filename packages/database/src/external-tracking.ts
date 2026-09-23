@@ -3,6 +3,11 @@ import type {
   ExternalTrackingMemberLinkRepository,
 } from '@bunshin/application';
 import { Prisma, type PrismaClient, prisma } from './client';
+import {
+  listExternalTrackingMemberSettings,
+  saveExternalTrackingMemberDraft,
+} from './external-tracking-member';
+import { listExternalTrackingResolutionCandidates } from './external-tracking-resolution';
 
 export class PrismaExternalTrackingLinkRepository
   implements ExternalTrackingLinkRepository, ExternalTrackingMemberLinkRepository
@@ -640,310 +645,30 @@ export class PrismaExternalTrackingLinkRepository
   async listMemberSettings(
     input: Parameters<ExternalTrackingMemberLinkRepository['listMemberSettings']>[0],
   ) {
-    if (!this.serviceMatches(input.groupId)) return null;
-    const membership = await this.client.groupMembership.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        groupId: input.groupId,
-        userId: input.actorUserId,
-        status: 'ACTIVE',
-        consentedAt: { not: null },
-        group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+    return listExternalTrackingMemberSettings(
+      {
+        client: this.client,
+        serviceMatches: (groupId) => this.serviceMatches(groupId),
       },
-      select: { id: true },
-    });
-    if (!membership) return null;
-    const [systems, links] = await this.client.$transaction([
-      this.client.externalTrackingSystem.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          status: 'ACTIVE',
-          allowedDomains: { some: { status: 'ACTIVE' } },
-        },
-        select: {
-          id: true,
-          name: true,
-          allowedDomains: {
-            where: { status: 'ACTIVE' },
-            select: {
-              id: true,
-              hostname: true,
-              allowSubdomains: true,
-              shortener: true,
-              status: true,
-            },
-            orderBy: { hostname: 'asc' },
-          },
-        },
-        orderBy: { name: 'asc' },
-      }),
-      this.client.externalTrackingLink.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          scopeType: 'MEMBER',
-          status: { not: 'DELETED' },
-          memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
-        },
-        select: {
-          id: true,
-          systemId: true,
-          allowedDomainId: true,
-          url: true,
-          status: true,
-          updatedAt: true,
-          system: { select: { name: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-      }),
-    ]);
-    return {
-      systems: systems.map((system) => ({
-        id: system.id,
-        name: system.name,
-        domains: system.allowedDomains,
-      })),
-      links: links.map((link) => ({
-        id: link.id,
-        systemId: link.systemId,
-        systemName: link.system.name,
-        allowedDomainId: link.allowedDomainId,
-        url: link.url,
-        status: link.status,
-        updatedAt: link.updatedAt,
-      })),
-    };
+      input,
+    );
   }
 
   async saveMemberDraft(
     input: Parameters<ExternalTrackingMemberLinkRepository['saveMemberDraft']>[0],
   ) {
-    if (!this.serviceMatches(input.groupId)) return null;
-    return this.client.$transaction(async (tx) => {
-      const membership = await tx.groupMembership.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          userId: input.actorUserId,
-          status: 'ACTIVE',
-          consentedAt: { not: null },
-          group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
-        },
-        select: { id: true },
-      });
-      if (!membership) return null;
-      const domain = await tx.externalTrackingAllowedDomain.findFirst({
-        where: {
-          id: input.allowedDomainId,
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          systemId: input.systemId,
-          status: 'ACTIVE',
-          system: { status: 'ACTIVE' },
-        },
-        select: { id: true },
-      });
-      if (!domain) return null;
-      const identity = await tx.externalTrackingMemberIdentity.upsert({
-        where: {
-          systemId_groupMembershipId: {
-            systemId: input.systemId,
-            groupMembershipId: membership.id,
-          },
-        },
-        create: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          systemId: input.systemId,
-          groupMembershipId: membership.id,
-          createdByUserId: input.actorUserId,
-          updatedByUserId: input.actorUserId,
-        },
-        update: { status: 'ACTIVE', updatedByUserId: input.actorUserId },
-      });
-      const active = await tx.externalTrackingLink.findFirst({
-        where: {
-          systemId: input.systemId,
-          memberIdentityId: identity.id,
-          scopeType: 'MEMBER',
-          status: 'ACTIVE',
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
-      if (active?.url === input.url) return active;
-      const before = await tx.externalTrackingLink.findFirst({
-        where: {
-          systemId: input.systemId,
-          memberIdentityId: identity.id,
-          scopeType: 'MEMBER',
-          status: 'DRAFT',
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
-      const name = '本人登録の専用URL';
-      const saved = before
-        ? await tx.externalTrackingLink.update({
-            where: { id: before.id },
-            data: {
-              allowedDomainId: domain.id,
-              url: input.url,
-              updatedByUserId: input.actorUserId,
-            },
-          })
-        : await tx.externalTrackingLink.create({
-            data: {
-              workspaceId: input.workspaceId,
-              groupId: input.groupId,
-              systemId: input.systemId,
-              allowedDomainId: domain.id,
-              memberIdentityId: identity.id,
-              scopeType: 'MEMBER',
-              scopeKey: `MEMBER:${identity.id}`,
-              name,
-              url: input.url,
-              status: 'DRAFT',
-              createdByUserId: input.actorUserId,
-              updatedByUserId: input.actorUserId,
-            },
-          });
-      await tx.externalTrackingAuditLog.create({
-        data: {
-          workspaceId: input.workspaceId,
-          groupId: input.groupId,
-          resourceType: 'LINK',
-          resourceId: saved.id,
-          action: before ? 'UPDATED' : 'CREATED',
-          beforeData: before
-            ? { allowedDomainId: before.allowedDomainId, status: before.status }
-            : Prisma.JsonNull,
-          afterData: {
-            allowedDomainId: saved.allowedDomainId,
-            scopeType: saved.scopeType,
-            status: saved.status,
-            submittedByMember: true,
-          },
-          performedByUserId: input.actorUserId,
-          performedAt: input.now,
-        },
-      });
-      return saved;
-    });
+    return saveExternalTrackingMemberDraft(
+      {
+        client: this.client,
+        serviceMatches: (groupId) => this.serviceMatches(groupId),
+      },
+      input,
+    );
   }
 
   async listResolutionCandidates(
     input: Parameters<ExternalTrackingLinkRepository['listResolutionCandidates']>[0],
   ) {
-    const bunshin = await this.client.bunshin.findFirst({
-      where: {
-        id: input.bunshinId,
-        workspaceId: input.workspaceId,
-        ownerUserId: input.actorUserId,
-        status: 'ACTIVE',
-      },
-      select: { id: true },
-    });
-    if (!bunshin) return null;
-    const membership = await this.client.groupMembership.findFirst({
-      where: {
-        groupId: input.groupId,
-        userId: input.actorUserId,
-        status: 'ACTIVE',
-        consentedAt: { not: null },
-      },
-    });
-    if (!membership) return null;
-    const assignment = await this.client.productPackAssignment.findFirst({
-      where: {
-        bunshinId: input.bunshinId,
-        productPackId: input.productPackId,
-        status: 'ACTIVE',
-        productPack: { groupId: input.groupId },
-      },
-      select: { id: true },
-    });
-    if (!assignment) return null;
-    if (input.campaignId) {
-      const participation = await this.client.campaignParticipation.findFirst({
-        where: {
-          campaignId: input.campaignId,
-          participantWorkspaceId: input.workspaceId,
-          userId: input.actorUserId,
-          bunshinId: input.bunshinId,
-          status: 'ACCEPTED',
-          campaign: {
-            groupId: input.groupId,
-            status: 'OPEN',
-            startsAt: { lte: input.at },
-            endsAt: { gt: input.at },
-            productPackVersion: { productPackId: input.productPackId },
-          },
-        },
-        select: { id: true },
-      });
-      if (!participation) return null;
-    }
-    const links = await this.client.externalTrackingLink.findMany({
-      where: {
-        workspaceId: membership.workspaceId,
-        groupId: input.groupId,
-        status: 'ACTIVE',
-        deletedAt: null,
-        system: { status: 'ACTIVE' },
-        allowedDomain: { status: 'ACTIVE' },
-        AND: [
-          { OR: [{ startsAt: null }, { startsAt: { lte: input.at } }] },
-          { OR: [{ expiresAt: null }, { expiresAt: { gt: input.at } }] },
-        ],
-        OR: [
-          { scopeType: 'GROUP' },
-          {
-            scopeType: 'MEMBER',
-            memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
-          },
-          { scopeType: 'PRODUCT', productPackId: input.productPackId },
-          {
-            scopeType: 'PRODUCT_MEMBER',
-            productPackId: input.productPackId,
-            memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' },
-          },
-          ...(input.campaignId
-            ? [
-                { scopeType: 'CAMPAIGN' as const, campaignId: input.campaignId },
-                {
-                  scopeType: 'CAMPAIGN_MEMBER' as const,
-                  campaignId: input.campaignId,
-                  memberIdentity: { groupMembershipId: membership.id, status: 'ACTIVE' as const },
-                },
-              ]
-            : []),
-        ],
-      },
-      include: { system: true, allowedDomain: true, memberIdentity: true },
-    });
-    return {
-      groupMembershipId: membership.id,
-      links: links.map((link) => ({
-        id: link.id,
-        name: link.name,
-        groupId: link.groupId,
-        scopeType: link.scopeType,
-        groupMembershipId: link.memberIdentity?.groupMembershipId ?? null,
-        productPackId: link.productPackId,
-        campaignId: link.campaignId,
-        url: link.url,
-        status: link.status,
-        startsAt: link.startsAt,
-        expiresAt: link.expiresAt,
-        systemStatus: link.system.status,
-        domain: {
-          id: link.allowedDomain.id,
-          hostname: link.allowedDomain.hostname,
-          allowSubdomains: link.allowedDomain.allowSubdomains,
-          shortener: link.allowedDomain.shortener,
-          status: link.allowedDomain.status,
-        },
-      })),
-    };
+    return listExternalTrackingResolutionCandidates({ client: this.client }, input);
   }
 }
