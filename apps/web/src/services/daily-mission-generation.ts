@@ -10,6 +10,7 @@ import {
   ListSocialProfiles,
   ListActiveTrendIdeas,
   ListWeeklyPlans,
+  type MissionContent,
 } from '@bunshin/capability-social';
 import {
   GetBunshin,
@@ -47,6 +48,7 @@ import {
   inspectDailyMissionContent,
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
+import { generateQualityCheckedMissionContent } from './daily-mission-quality-pipeline';
 
 interface Input {
   workspaceId: string;
@@ -472,21 +474,16 @@ export class DailyMissionGenerationService {
           serviceKnowledge?.contentTerminologyPolicy ?? null,
         ),
       });
-      stage = 'content:0';
-      let content = applyTerminology(
-        await generateWithQuota('content:0', () => generator.execute(contentInput)),
-      );
-      await usage('content:0', 'CONTENT_GENERATOR', content);
       const checker = new CheckMissionQuality(
         new OpenAIMissionQualityChecker({
           apiKey,
           model,
         }),
       );
-      const qualityInput = () => ({
+      const qualityInput = (generatedContent: MissionContent) => ({
         platform: profile.platform,
         brief: brief.output,
-        content: content.output,
+        content: generatedContent,
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
         businessProfile: serviceKnowledge?.businessProfile ?? null,
@@ -495,63 +492,20 @@ export class DailyMissionGenerationService {
         recentContent: recentMissionQualityContext(recentMissions),
         personalization,
       });
-      let repairCount = 0;
-      const qualityIssueCodes = new Set<string>();
-      let quality: Awaited<ReturnType<typeof checker.execute>> | null = null;
-      let noveltyIssue: ReturnType<typeof inspectDailyMissionContent> = null;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        stage = `quality:${attempt}`;
-        const currentQuality = await generateWithQuota(`quality:${attempt}`, () =>
-          checker.execute(qualityInput()),
-        );
-        quality = currentQuality;
-        for (const issue of currentQuality.output.issues) qualityIssueCodes.add(issue.code);
-        await usage(`quality:${attempt}`, 'QUALITY_CHECKER', currentQuality);
-        noveltyIssue =
-          currentQuality.output.verdict === 'PASS'
-            ? inspectDailyMissionContent({ content: content.output, recentMissions })
-            : null;
-        if (currentQuality.output.verdict === 'PASS' && !noveltyIssue) break;
-        if (currentQuality.output.verdict === 'REJECT' || attempt === 2)
-          throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check', {
-            issueCodes: [...qualityIssueCodes],
-            noveltyIssue,
-            attempts: attempt + 1,
-          });
-        repairCount += 1;
-        const semanticDuplicate =
-          noveltyIssue !== null ||
-          currentQuality.output.issues.some(({ code }) => code === 'RECENT_CONTENT_DUPLICATE');
-        stage = `content:${attempt + 1}`;
-        content = applyTerminology(
-          await generateWithQuota(`content:${attempt + 1}`, () =>
-            generator.execute(
-              semanticDuplicate
-                ? {
-                    ...contentInput,
-                    variantSourceContent: content.output,
-                    variantInstructions: [
-                      '過去原稿の言い換えではなく、答える疑問、具体的な情報、利用場面、読者が得る価値を別の企画にする。',
-                      '承認済み情報だけを使い、架空の体験、実績、イベント、サービス説明を追加しない。',
-                    ],
-                  }
-                : {
-                    ...contentInput,
-                    repairInstructions: currentQuality.output.issues.map(
-                      ({ repairInstruction }) => repairInstruction,
-                    ),
-                  },
-            ),
-          ),
-        );
-        await usage(
-          `content:${attempt + 1}`,
-          semanticDuplicate ? 'CONTENT_NOVELTY_RETRY' : 'CONTENT_REPAIR',
-          content,
-        );
-      }
-      if (!quality || quality.output.verdict !== 'PASS' || noveltyIssue)
-        throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
+      const { content, quality, repairCount, qualityIssueCodes } =
+        await generateQualityCheckedMissionContent({
+          generator,
+          checker,
+          contentInput,
+          qualityInput,
+          recentMissions,
+          generateWithQuota,
+          recordUsage: usage,
+          applyTerminology,
+          setStage: (value) => {
+            stage = value;
+          },
+        });
       let missionContent = content.output;
       let externalLinkUsage:
         | {
@@ -721,7 +675,7 @@ export class DailyMissionGenerationService {
             model: content.model,
             quality: {
               verdict: 'PASS',
-              issueCodes: [...qualityIssueCodes],
+              issueCodes: qualityIssueCodes,
               repairCount,
             },
             personalization: {
