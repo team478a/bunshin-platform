@@ -25,10 +25,9 @@ const experience = [
     ),
   )
   .join('\n');
-const imageWorkspace = readFileSync(
-  new URL('../app/ui/social-image-workspace.tsx', import.meta.url),
-  'utf8',
-);
+const imageWorkspace = ['social-image-workspace.tsx', 'social-image-workspace-view.tsx']
+  .map((file) => readFileSync(new URL(`../app/ui/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 
 describe('service daily mission boundary', () => {
   it('derives service authority on the server', () => {
