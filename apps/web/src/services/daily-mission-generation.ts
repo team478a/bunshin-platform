@@ -1,8 +1,6 @@
 import 'server-only';
 import {
-  CheckMissionQuality,
   GenerateDailyMissionBrief,
-  GenerateMissionContent,
   ListDailyMissions,
   type MissionContent,
 } from '@bunshin/capability-social';
@@ -14,9 +12,6 @@ import {
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
-import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
-import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
-import { applyServiceContentTerminology } from './service-content-terminology';
 import {
   buildDailyMissionPersonalizationBase,
   buildMissionPersonalizationContext,
@@ -27,7 +22,6 @@ import {
   inspectDailyMissionContent,
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
-import { generateQualityCheckedMissionContent } from './daily-mission-quality-pipeline';
 import { finalizeDailyMissionContent } from './daily-mission-content-finalization';
 import { persistGeneratedDailyMission } from './daily-mission-persistence';
 import { loadDailyMissionPlanningContext } from './daily-mission-planning-context';
@@ -36,6 +30,7 @@ import {
   dailyMissionErrorCategory,
   recordDailyMissionPipelineFailure,
 } from './daily-mission-ai-runtime';
+import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
 
 interface Input {
   workspaceId: string;
@@ -253,12 +248,6 @@ export class DailyMissionGenerationService {
         performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
         selectedMemories,
       });
-      const generator = new GenerateMissionContent(
-        new OpenAIMissionContentGenerator({
-          apiKey,
-          model,
-        }),
-      );
       const contentInput = {
         platform: profile.platform,
         brief: brief.output,
@@ -272,23 +261,6 @@ export class DailyMissionGenerationService {
         campaign,
         personalization,
       };
-      const applyTerminology = <
-        T extends { output: Parameters<typeof applyServiceContentTerminology>[0] },
-      >(
-        value: T,
-      ) => ({
-        ...value,
-        output: applyServiceContentTerminology(
-          value.output,
-          serviceKnowledge?.contentTerminologyPolicy ?? null,
-        ),
-      });
-      const checker = new CheckMissionQuality(
-        new OpenAIMissionQualityChecker({
-          apiKey,
-          model,
-        }),
-      );
       const qualityInput = (generatedContent: MissionContent) => ({
         platform: profile.platform,
         brief: brief.output,
@@ -302,15 +274,15 @@ export class DailyMissionGenerationService {
         personalization,
       });
       const { content, quality, repairCount, qualityIssueCodes } =
-        await generateQualityCheckedMissionContent({
-          generator,
-          checker,
+        await runDailyMissionContentGeneration({
+          apiKey,
+          model,
           contentInput,
           qualityInput,
           recentMissions,
           generateWithQuota,
           recordUsage,
-          applyTerminology,
+          terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
           setStage: (value) => {
             stage = value;
           },
