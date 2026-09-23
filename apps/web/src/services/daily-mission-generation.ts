@@ -13,9 +13,6 @@ import {
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { recordAiUsageSafely } from '../observability/ai-usage';
-import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
@@ -34,6 +31,11 @@ import { generateQualityCheckedMissionContent } from './daily-mission-quality-pi
 import { finalizeDailyMissionContent } from './daily-mission-content-finalization';
 import { persistGeneratedDailyMission } from './daily-mission-persistence';
 import { loadDailyMissionPlanningContext } from './daily-mission-planning-context';
+import {
+  createDailyMissionAiRuntime,
+  dailyMissionErrorCategory,
+  recordDailyMissionPipelineFailure,
+} from './daily-mission-ai-runtime';
 
 interface Input {
   workspaceId: string;
@@ -49,18 +51,6 @@ interface Input {
   serviceSafeMode?: boolean;
   allowServiceOwnerMemories?: boolean;
 }
-
-const errorCategory = (error: unknown) => {
-  if (error instanceof ApplicationError) {
-    const cause = error.cause;
-    if (cause && typeof cause === 'object' && 'category' in cause) {
-      const category = (cause as { category?: unknown }).category;
-      if (typeof category === 'string') return category;
-    }
-    return error.code;
-  }
-  return 'INTERNAL_ERROR';
-};
 
 const daysBefore = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00.000Z`);
@@ -157,7 +147,10 @@ export class DailyMissionGenerationService {
       if (!claim.acquired)
         throw new ApplicationError('CONFLICT', 'daily mission generation is in progress');
       generationId = claim.record.id;
-      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
+      const { apiKey, model, recordUsage, generateWithQuota } = await createDailyMissionAiRuntime({
+        scope,
+        usageIdempotencyPrefix: input.usageIdempotencyPrefix,
+      });
       runtimeModel = model;
       let timezone = input.timezone;
       if (!timezone) {
@@ -208,36 +201,6 @@ export class DailyMissionGenerationService {
         : serviceKnowledge
           ? serviceKnowledge.groupKnowledge
           : [];
-      const usage = async (
-        suffix: string,
-        taskType: string,
-        result: {
-          model: string;
-          promptVersion: string;
-          inputTokens: number | null;
-          outputTokens: number | null;
-          latencyMs: number;
-        },
-      ) =>
-        recordAiUsageSafely({
-          ...scope,
-          taskType,
-          provider: 'openai',
-          model: result.model,
-          promptVersion: result.promptVersion,
-          status: 'SUCCESS',
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          latencyMs: result.latencyMs,
-          idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-        });
-      const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
-        withOrganizationAiGenerationQuota({
-          workspaceId: input.workspaceId,
-          ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
-          operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-          generate,
-        });
       stage = 'daily-brief';
       const brief = await generateWithQuota('daily-brief', () =>
         new GenerateDailyMissionBrief(new OpenAIDailyMissionPlanner({ apiKey, model })).execute({
@@ -263,7 +226,7 @@ export class DailyMissionGenerationService {
           personalization: plannerPersonalization,
         }),
       );
-      await usage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
+      await recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
       )?.contentPillarId;
@@ -346,7 +309,7 @@ export class DailyMissionGenerationService {
           qualityInput,
           recentMissions,
           generateWithQuota,
-          recordUsage: usage,
+          recordUsage,
           applyTerminology,
           setStage: (value) => {
             stage = value;
@@ -449,25 +412,19 @@ export class DailyMissionGenerationService {
         errorMessage: error instanceof Error ? error.message : String(error),
       });
       if (generationId) {
-        await recordAiUsageSafely({
-          ...scope,
-          taskType: 'DAILY_MISSION_PIPELINE',
-          provider: 'openai',
+        await recordDailyMissionPipelineFailure({
+          scope,
+          usageIdempotencyPrefix: input.usageIdempotencyPrefix,
           model: runtimeModel,
-          promptVersion: 'daily-mission-pipeline-v1',
-          status: 'FAILED',
-          inputTokens: null,
-          outputTokens: null,
-          latencyMs: Date.now() - started,
-          errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-          idempotencyKey: `${input.usageIdempotencyPrefix}:daily-pipeline-failure`,
+          startedAt: started,
+          error,
         });
         try {
           const generations = new db.PrismaDailyMissionGenerationRepository();
           await generations.fail({
             ...scope,
             id: generationId,
-            errorCategory: errorCategory(error),
+            errorCategory: dailyMissionErrorCategory(error),
           });
         } catch {
           logger.error('daily mission generation failure state update failed', {
