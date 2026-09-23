@@ -6,7 +6,6 @@ import { ApplicationError } from '@bunshin/shared';
 import {
   buildDailyMissionPersonalizationBase,
   buildMissionPersonalizationContext,
-  personalizationSourceTypes,
   selectDailyMissionMemories,
 } from './daily-mission-personalization';
 import {
@@ -14,7 +13,6 @@ import {
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
 import { finalizeDailyMissionContent } from './daily-mission-content-finalization';
-import { persistGeneratedDailyMission } from './daily-mission-persistence';
 import { loadDailyMissionPlanningContext } from './daily-mission-planning-context';
 import {
   createDailyMissionAiRuntime,
@@ -24,6 +22,7 @@ import {
 import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
 import { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
 import { loadDailyMissionGenerationEnvironment } from './daily-mission-generation-environment';
+import { persistDailyMissionGenerationResult } from './daily-mission-result-persistence';
 
 interface Input {
   workspaceId: string;
@@ -102,8 +101,15 @@ export class DailyMissionGenerationService {
         throw new ApplicationError('CONFLICT', 'daily mission already exists');
       }
       const recentFormats = recentMissions.map(({ format }) => format);
+      const planningContext = await loadDailyMissionPlanningContext({
+        scope,
+        missionDate: input.missionDate,
+        ...(input.socialProfileId ? { socialProfileId: input.socialProfileId } : {}),
+        serviceSafeMode: input.serviceSafeMode ?? false,
+        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
+        generationIdempotencyKey: input.generationIdempotencyKey,
+      });
       const {
-        productPack,
         profile,
         strategy,
         trendIdeas,
@@ -118,14 +124,7 @@ export class DailyMissionGenerationService {
         memoryRepository,
         ownerMemories,
         personalMaterials,
-      } = await loadDailyMissionPlanningContext({
-        scope,
-        missionDate: input.missionDate,
-        ...(input.socialProfileId ? { socialProfileId: input.socialProfileId } : {}),
-        serviceSafeMode: input.serviceSafeMode ?? false,
-        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
-        generationIdempotencyKey: input.generationIdempotencyKey,
-      });
+      } = planningContext;
       const generations = new db.PrismaDailyMissionGenerationRepository();
       const claim = await generations.claim({
         ...scope,
@@ -261,11 +260,7 @@ export class DailyMissionGenerationService {
             stage = value;
           },
         });
-      const {
-        content: missionContent,
-        externalLinkUsage,
-        campaignSafetyReceipt,
-      } = await finalizeDailyMissionContent({
+      const finalizedContent = await finalizeDailyMissionContent({
         scope,
         missionDate: input.missionDate,
         generationIdempotencyKey: input.generationIdempotencyKey,
@@ -278,70 +273,21 @@ export class DailyMissionGenerationService {
         recentMissions,
       });
       stage = 'persist';
-      const created = await persistGeneratedDailyMission({
+      const created = await persistDailyMissionGenerationResult({
         missions,
         assignments,
-        mission: {
-          ...scope,
-          ...brief.output,
-          assistanceLevel:
-            serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel,
-          content: missionContent,
-          qualityScore: quality.output.score,
-          campaignId: weeklyItem.campaignId,
-          classification: weeklyItem.classification,
-          ...(externalLinkUsage ? { externalLinkUsage } : {}),
-        },
-        evidence: {
-          personality: currentPersonality
-            ? { id: currentPersonality.id, version: currentPersonality.version }
-            : null,
-          selectedMemories: selectedMemories.map(({ id, summary, selectionReason }) => ({
-            id,
-            summary,
-            selectionReason,
-          })),
-          knowledgeIds: granted.map(({ id }) => id),
+        scope,
+        planning: planningContext,
+        brief,
+        pillar,
+        selectedMemories,
+        personalization,
+        recentMissionIds: recentMissions.map(({ id }) => id),
+        contentResult: { content, quality, repairCount, qualityIssueCodes },
+        finalizedContent: {
+          ...finalizedContent,
           groupKnowledgeIds: groupKnowledge.map(({ chunkId }) => chunkId),
-          socialProfileId: profile.id,
-          strategy: { id: strategy.id, version: strategy.version },
-          weeklyPlanId: weeklyPlan.id,
-          contentPillarId: pillar.id,
-          productPack: campaign
-            ? { id: campaign.productPack.versionId, version: campaign.productPack.version }
-            : productPack
-              ? { id: productPack.versionId, version: productPack.version }
-              : null,
-          campaignId: campaign?.id ?? null,
-          classification: weeklyItem.classification,
-          ...(brief.output.trendCandidateId
-            ? { trendCandidateId: brief.output.trendCandidateId }
-            : {}),
-          promptVersion: content.promptVersion,
-          model: content.model,
-          qualityIssueCodes,
-          repairCount,
-          personalization: {
-            sourceTypes: brief.output.personalizationSourceTypes ?? [],
-            availableSourceTypes: personalizationSourceTypes(personalization),
-            onboardingResponseId:
-              serviceKnowledge?.personalization.references.onboardingResponseId ?? null,
-            businessProfileId:
-              serviceKnowledge?.personalization.references.businessProfileId ?? null,
-            weeklyPlanItemId: weeklyItem.id,
-            recentMissionIds: recentMissions.map(({ id }) => id),
-            recentActivityIds: serviceKnowledge?.personalization.references.recentActivityIds ?? [],
-            recentVariantSelectionIds:
-              serviceKnowledge?.personalization.references.recentVariantSelectionIds ?? [],
-            recentFeedbackIds: serviceKnowledge?.personalization.references.recentFeedbackIds ?? [],
-            recentDecisionIds: serviceKnowledge?.personalization.references.recentDecisionIds ?? [],
-            recentPostRecordIds:
-              serviceKnowledge?.personalization.references.recentPostRecordIds ?? [],
-            recentSocialInsightIds:
-              serviceKnowledge?.personalization.references.recentSocialInsightIds ?? [],
-          },
         },
-        campaignSafetyReceipt,
       });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });
