@@ -5,6 +5,26 @@ const databaseSource = (file: string) =>
   readFileSync(new URL(`../../../packages/database/src/${file}`, import.meta.url), 'utf8');
 
 describe('external tracking repository module boundary', () => {
+  it('delegates every audited administrator command', () => {
+    const repository = databaseSource('external-tracking.ts');
+    const commands = databaseSource('external-tracking-admin.ts');
+    for (const operation of [
+      'createSystem',
+      'addAllowedDomain',
+      'upsertMemberIdentity',
+      'createLink',
+      'activateLink',
+      'suspendLink',
+      'updateLink',
+    ]) {
+      expect(repository).toContain(`this.adminCommands.${operation}(input)`);
+    }
+    expect(
+      commands.match(/await this\.manage\(input\.workspaceId, input\.actorUserId\)/g),
+    ).toHaveLength(7);
+    expect(commands.match(/externalTrackingAuditLog\.create/g)).toHaveLength(7);
+  });
+
   it('delegates participant settings without changing the public repository', () => {
     const repository = databaseSource('external-tracking.ts');
     expect(repository).toContain('export class PrismaExternalTrackingLinkRepository');
