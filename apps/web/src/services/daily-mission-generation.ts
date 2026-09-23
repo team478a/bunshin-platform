@@ -8,7 +8,6 @@ import {
 } from '@bunshin/capability-social';
 import {
   RequireActiveBunshinCapability,
-  SelectBunshinMemories,
   GroupKnowledgeService,
   selectGroupKnowledgeChunksForPrompt,
 } from '@bunshin/application';
@@ -22,8 +21,10 @@ import { OpenAIMissionContentGenerator } from '../providers/openai-mission-conte
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import { applyServiceContentTerminology } from './service-content-terminology';
 import {
+  buildDailyMissionPersonalizationBase,
   buildMissionPersonalizationContext,
   personalizationSourceTypes,
+  selectDailyMissionMemories,
 } from './daily-mission-personalization';
 import {
   inspectDailyMissionContent,
@@ -167,50 +168,27 @@ export class DailyMissionGenerationService {
           throw new ApplicationError('NOT_FOUND', 'notification preference scope not found');
         timezone = preference.preference?.timezone ?? 'Asia/Tokyo';
       }
-      const bunshinContext = {
-        name: bunshin.name,
-        objectiveSummary: bunshin.objectiveSummary,
-        audienceSummary: bunshin.audienceSummary,
-        personalitySummary: bunshin.personalitySummary,
-        personality: currentPersonality
-          ? {
-              versionId: currentPersonality.id,
-              version: currentPersonality.version,
-              tone: currentPersonality.tone,
-              formality: currentPersonality.formality,
-              energyLevel: currentPersonality.energyLevel,
-              expertiseLevel: currentPersonality.expertiseLevel,
-              sentenceStyle: currentPersonality.sentenceStyle,
-              firstPerson: currentPersonality.firstPerson,
-              forbiddenExpressions: currentPersonality.forbiddenExpressions,
-              preferredExpressions: currentPersonality.preferredExpressions,
-              visualDirection: currentPersonality.visualDirection,
-              facePolicy: currentPersonality.facePolicy,
-            }
-          : null,
-      };
-      const strategyContext = {
-        concept: strategy.concept,
-        positioning: strategy.positioning,
-        targetSummary: strategy.targetSummary,
-        ctaStrategy: strategy.ctaStrategy,
-        postingPolicy: strategy.postingPolicy,
-      };
-      const plannerPersonalization = buildMissionPersonalizationContext({
-        bunshin: bunshinContext,
-        socialProfile: profile,
-        strategy,
-        businessProfile: serviceKnowledge?.businessProfile ?? null,
-        onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
-        behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
-        feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
-        performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
-      });
-      const knowledge = [
-        ...(serviceKnowledge?.officialKnowledge ??
-          granted.map(({ type, title, content }) => ({ type, title, content }))),
-        ...personalMaterials,
-      ];
+      const { bunshinContext, strategyContext, plannerPersonalization, knowledge } =
+        buildDailyMissionPersonalizationBase({
+          bunshin,
+          personality: currentPersonality,
+          socialProfile: profile,
+          strategy,
+          history: {
+            businessProfile: serviceKnowledge?.businessProfile ?? null,
+            onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
+            behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+            feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
+            performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
+          },
+          officialKnowledge: serviceKnowledge?.officialKnowledge ?? null,
+          grantedKnowledge: granted.map(({ type, title, content }) => ({
+            type,
+            title,
+            content,
+          })),
+          personalMaterials,
+        });
       const groupKnowledge = campaign
         ? selectGroupKnowledgeChunksForPrompt(
             await new GroupKnowledgeService(
@@ -291,41 +269,16 @@ export class DailyMissionGenerationService {
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
-      const relevantMemories =
-        input.serviceSafeMode && !input.allowServiceOwnerMemories
-          ? []
-          : await new SelectBunshinMemories(memoryRepository).execute({
-              ...scope,
-              query: [
-                brief.output.topic,
-                brief.output.angle,
-                brief.output.reason,
-                pillar.title,
-                pillar.description ?? '',
-                strategy.targetSummary,
-              ].join('\n'),
-              maxItems: 5,
-              maxCharacters: 3000,
-            });
-      const selectedMemories =
-        relevantMemories.length > 0
-          ? relevantMemories
-          : ownerMemories
-              .filter(
-                (memory) =>
-                  memory.active &&
-                  memory.deletedAt === null &&
-                  memory.sourceType === 'USER_INPUT' &&
-                  memory.sourceId?.startsWith('daily-action:'),
-              )
-              .slice(0, 1)
-              .map((memory) => ({
-                id: memory.id,
-                type: memory.type,
-                summary: memory.summary?.trim() || memory.content.slice(0, 200),
-                content: memory.content,
-                selectionReason: '本人がDaily Actionで残した最近の素材',
-              }));
+      const selectedMemories = await selectDailyMissionMemories({
+        scope,
+        serviceSafeMode: input.serviceSafeMode ?? false,
+        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
+        memoryRepository,
+        ownerMemories,
+        brief: brief.output,
+        pillar,
+        strategyTargetSummary: strategy.targetSummary,
+      });
       const personalization = buildMissionPersonalizationContext({
         bunshin: bunshinContext,
         socialProfile: profile,
