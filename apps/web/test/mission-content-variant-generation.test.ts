@@ -3,7 +3,8 @@ import {
   missionContentSimilarityBasisPoints,
   prepareMissionVariantContent,
   preserveAuthorizedMissionLink,
-} from '../src/services/mission-content-variant-generation';
+  validateMissionContentVariant,
+} from '../src/services/mission-content-variant-validation';
 
 describe('mission content variant generation safeguards', () => {
   it('detects an unchanged proposal as identical', () => {
@@ -72,5 +73,28 @@ describe('mission content variant generation safeguards', () => {
     });
     expect(result['body']).toBe('別案');
     expect(JSON.stringify(result)).not.toContain('https://');
+  });
+
+  it('rejects content already presented to the same user before campaign validation', async () => {
+    await expect(
+      validateMissionContentVariant({
+        scope: {
+          workspaceId: 'workspace-1',
+          bunshinId: 'bunshin-1',
+          actorUserId: 'user-1',
+        },
+        source: { body: '原案とは異なる内容です。' },
+        candidate: { body: '過去に提示した具体的な投稿内容です。' },
+        recentMissions: [
+          {
+            missionDate: '2026-09-22',
+            topic: '過去のテーマ',
+            angle: '過去の切り口',
+            content: { body: '過去に提示した具体的な投稿内容です。' },
+          },
+        ],
+        campaign: null,
+      }),
+    ).rejects.toMatchObject({ code: 'CONTENT_REJECTED' });
   });
 });

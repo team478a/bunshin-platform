@@ -1,7 +1,5 @@
 import 'server-only';
 import {
-  AdvertisingSafetyService,
-  CampaignSafetyValidationService,
   CampaignService,
   GetBunshin,
   GetGenerationContextSnapshot,
@@ -11,7 +9,6 @@ import {
   ListPersonalityVersions,
   RequireActiveBunshinCapability,
   selectGroupKnowledgeChunksForPrompt,
-  simhashSimilarityBasisPoints,
   type SelectedBunshinMemory,
 } from '@bunshin/application';
 import {
@@ -28,10 +25,7 @@ import {
   ListSocialAccountStrategies,
   ListSocialProfiles,
   ListWeeklyPlans,
-  normalizeMissionContent,
-  type MissionContent,
   type MissionContentGeneratorInput,
-  type SocialPreferredFormat,
 } from '@bunshin/capability-social';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -40,16 +34,16 @@ import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
-import { campaignContentSignature } from './campaign-content-signature';
-import {
-  inspectDailyMissionContent,
-  recentMissionQualityContext,
-} from './daily-mission-content-quality';
+import { recentMissionQualityContext } from './daily-mission-content-quality';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 import {
   applyServiceContentTerminology,
   type ServiceContentTerminologyPolicy,
 } from './service-content-terminology';
+import {
+  prepareMissionVariantContent,
+  validateMissionContentVariant,
+} from './mission-content-variant-validation';
 
 interface Input {
   workspaceId: string;
@@ -64,92 +58,11 @@ interface Input {
   variantInstructions?: string[];
 }
 
-const VARIANT_SIMILARITY_THRESHOLD_BASIS_POINTS = 8_500;
-const URL_PATTERN = /https?:\/\/[^\s]+/gu;
-
 const daysBefore = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() - days);
   return value.toISOString().slice(0, 10);
 };
-
-export function missionContentSimilarityBasisPoints(left: unknown, right: unknown) {
-  return simhashSimilarityBasisPoints(
-    campaignContentSignature(left).simhash,
-    campaignContentSignature(right).simhash,
-  );
-}
-
-function assertDifferentFromSource(source: MissionContent, candidate: MissionContent) {
-  const similarity = missionContentSimilarityBasisPoints(source, candidate);
-  if (similarity >= VARIANT_SIMILARITY_THRESHOLD_BASIS_POINTS) {
-    throw new ApplicationError('CONTENT_REJECTED', 'generated variant is too similar to source', {
-      similarityBasisPoints: similarity,
-      thresholdBasisPoints: VARIANT_SIMILARITY_THRESHOLD_BASIS_POINTS,
-    });
-  }
-}
-
-function stripUrls(value: unknown): unknown {
-  if (typeof value === 'string') return value.replace(URL_PATTERN, '').trim();
-  if (Array.isArray(value)) return value.map(stripUrls);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, stripUrls(item)]));
-  return value;
-}
-
-export function preserveAuthorizedMissionLink(input: {
-  source: MissionContent;
-  candidate: MissionContent;
-  insertedUrl: string;
-  platform: string;
-}) {
-  const target = ['body', 'caption', 'description'].find((key) => {
-    const value = input.source[key];
-    return typeof value === 'string' && value.includes(input.insertedUrl);
-  });
-  if (!target)
-    throw new ApplicationError('CONTENT_REJECTED', 'authorized link placement is unavailable');
-  const sanitized = stripUrls(input.candidate) as MissionContent;
-  const current = sanitized[target];
-  if (typeof current !== 'string' || !current.trim())
-    throw new ApplicationError('CONTENT_REJECTED', 'authorized link target is unavailable');
-  const value = `${current.trim()}\n\n${input.insertedUrl}`;
-  const maximum =
-    target === 'caption'
-      ? 2_200
-      : target === 'description'
-        ? 5_000
-        : input.platform === 'X'
-          ? 280
-          : input.platform === 'THREADS'
-            ? 500
-            : 10_000;
-  if (value.length > maximum)
-    throw new ApplicationError('CONTENT_REJECTED', 'tracking URL exceeds platform limit');
-  return { ...sanitized, [target]: value };
-}
-
-export function prepareMissionVariantContent(input: {
-  format: SocialPreferredFormat;
-  source: MissionContent;
-  candidate: MissionContent;
-  platform: string;
-  insertedUrl?: string | null;
-}) {
-  const candidateWithoutUrls = normalizeMissionContent(input.format, stripUrls(input.candidate));
-  return normalizeMissionContent(
-    input.format,
-    input.insertedUrl
-      ? preserveAuthorizedMissionLink({
-          source: input.source,
-          candidate: candidateWithoutUrls,
-          insertedUrl: input.insertedUrl,
-          platform: input.platform,
-        })
-      : candidateWithoutUrls,
-  );
-}
 
 function errorCategory(error: unknown) {
   if (error instanceof ApplicationError) {
@@ -564,39 +477,20 @@ export class MissionContentVariantGenerationService {
         platform: profile.platform,
         ...(mission.linkUsage ? { insertedUrl: mission.linkUsage.insertedUrl } : {}),
       });
-      assertDifferentFromSource(mission.content, candidate);
-      const noveltyIssue = inspectDailyMissionContent({ content: candidate, recentMissions });
-      if (noveltyIssue)
-        throw new ApplicationError(
-          'CONTENT_REJECTED',
-          'generated variant duplicates presented content',
-          noveltyIssue,
-        );
-      if (campaign) {
-        const signature = campaignContentSignature(candidate);
-        const similarity = await new CampaignSafetyValidationService(
-          new db.PrismaCampaignSafetyRepository(),
-        ).inspect({ ...scope, campaignId: campaign.id, ...signature });
-        if (similarity.verdict === 'POSSIBLE_DUPLICATE')
-          throw new ApplicationError('CONTENT_REJECTED', 'campaign variant is too similar', {
-            similarityBasisPoints: similarity.maxSimilarityBasisPoints,
-          });
-        const safety = await new AdvertisingSafetyService(
-          new db.PrismaAdvertisingSafetyRepository(),
-        ).inspect({
-          ...scope,
-          productPackVersionId: campaign.productPack.versionId,
-          classification: mission.classification,
-          evidenceRequirement: 'NONE',
-          evidenceIds: [],
-          officialClaims: campaign.productPack.facts,
-          content: JSON.stringify(candidate),
-        });
-        if (safety.inspected.verdict !== 'PASS')
-          throw new ApplicationError('CONTENT_REJECTED', 'campaign variant failed safety gate', {
-            issueCodes: safety.inspected.issueCodes,
-          });
-      }
+      await validateMissionContentVariant({
+        scope,
+        source: mission.content,
+        candidate,
+        recentMissions,
+        campaign: campaign
+          ? {
+              context: campaign,
+              classification: mission.classification,
+              campaignSafetyRepository: new db.PrismaCampaignSafetyRepository(),
+              advertisingSafetyRepository: new db.PrismaAdvertisingSafetyRepository(),
+            }
+          : null,
+      });
       const variant = await new CompleteMissionContentVariantGeneration(variants).execute({
         ...scope,
         dailyMissionId: mission.id,
