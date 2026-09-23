@@ -3,23 +3,12 @@ import {
   CheckMissionQuality,
   GenerateDailyMissionBrief,
   GenerateMissionContent,
-  ListContentPillars,
   ListDailyMissions,
-  ListSocialAccountStrategies,
-  ListSocialProfiles,
-  ListActiveTrendIdeas,
-  ListWeeklyPlans,
   type MissionContent,
 } from '@bunshin/capability-social';
 import {
-  GetBunshin,
-  ListGrantedKnowledgeForBunshin,
-  ListPersonalityVersions,
   RequireActiveBunshinCapability,
   SelectBunshinMemories,
-  ProductPackService,
-  CampaignService,
-  GroupFeatureEntitlementService,
   GroupKnowledgeService,
   selectGroupKnowledgeChunksForPrompt,
 } from '@bunshin/application';
@@ -31,7 +20,6 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
-import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 import { applyServiceContentTerminology } from './service-content-terminology';
 import {
   buildMissionPersonalizationContext,
@@ -44,6 +32,7 @@ import {
 import { generateQualityCheckedMissionContent } from './daily-mission-quality-pipeline';
 import { finalizeDailyMissionContent } from './daily-mission-content-finalization';
 import { persistGeneratedDailyMission } from './daily-mission-persistence';
+import { loadDailyMissionPlanningContext } from './daily-mission-planning-context';
 
 interface Input {
   workspaceId: string;
@@ -134,121 +123,30 @@ export class DailyMissionGenerationService {
         throw new ApplicationError('CONFLICT', 'daily mission already exists');
       }
       const recentFormats = recentMissions.map(({ format }) => format);
-      const productPack = input.serviceSafeMode
-        ? null
-        : await new ProductPackService(new db.PrismaProductPackRepository()).resolveForGeneration(
-            scope,
-          );
-      const profiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
+      const {
+        productPack,
+        profile,
+        strategy,
+        trendIdeas,
+        weeklyPlan,
+        weeklyItem,
+        campaign,
+        pillars,
+        bunshin,
+        currentPersonality,
+        serviceKnowledge,
+        granted,
+        memoryRepository,
+        ownerMemories,
+        personalMaterials,
+      } = await loadDailyMissionPlanningContext({
         scope,
-      );
-      const profile = input.socialProfileId
-        ? profiles.find(({ id, status }) => id === input.socialProfileId && status === 'ACTIVE')
-        : profiles.find(({ status }) => status === 'ACTIVE');
-      if (!profile) throw new ApplicationError('NOT_FOUND', 'active social profile not found');
-      const strategies = await new ListSocialAccountStrategies(
-        new db.PrismaSocialAccountStrategyRepository(),
-      ).execute({ ...scope, socialProfileId: profile.id });
-      const strategy = strategies.find(({ status }) => status === 'APPROVED');
-      if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
-      // Trend candidates are always scoped to the current workspace, Bunshin and social profile.
-      // They are public-source based, so service mode can use the participant's own candidates
-      // without exposing personal memories or another service's data.
-      const trendIdeas = await new ListActiveTrendIdeas(
-        new db.PrismaTrendResearchRepository(),
-      ).execute({
-        ...scope,
-        socialProfileId: profile.id,
-        at: new Date(),
+        missionDate: input.missionDate,
+        ...(input.socialProfileId ? { socialProfileId: input.socialProfileId } : {}),
+        serviceSafeMode: input.serviceSafeMode ?? false,
+        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
+        generationIdempotencyKey: input.generationIdempotencyKey,
       });
-      const weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(
-        scope,
-      );
-      const weeklyPlan = weeklyPlans.find(
-        ({ status, items }) =>
-          status === 'CONFIRMED' &&
-          items.some(({ scheduledDate }) => scheduledDate === input.missionDate),
-      );
-      if (!weeklyPlan)
-        throw new ApplicationError('NOT_FOUND', 'confirmed weekly plan item not found for date');
-      const weeklyItem = weeklyPlan.items.find(
-        ({ scheduledDate }) => scheduledDate === input.missionDate,
-      )!;
-      const campaign = weeklyItem.campaignId
-        ? await new CampaignService(new db.PrismaCampaignRepository()).resolvePlanningContext({
-            ...scope,
-            campaignId: weeklyItem.campaignId,
-            at: new Date(`${input.missionDate}T12:00:00.000Z`),
-          })
-        : null;
-      if (campaign && input.serviceSafeMode && campaign.productPack.groupId !== input.groupId)
-        throw new ApplicationError('NOT_FOUND', 'service campaign unavailable');
-      if (campaign) {
-        const entitlements = new GroupFeatureEntitlementService(
-          new db.PrismaGroupFeatureEntitlementRepository(),
-        );
-        for (const requiredFeature of ['SOCIAL', 'GROUP.CAMPAIGN', 'GROUP.PRODUCT_PACK']) {
-          const access = await entitlements.consumeAccess({
-            workspaceId: input.workspaceId,
-            groupId: campaign.productPack.groupId,
-            actorUserId: input.actorUserId,
-            featureKey: requiredFeature,
-            operationKey: `${input.generationIdempotencyKey}:${requiredFeature}`,
-            localDate: input.missionDate,
-          });
-          if (!access.allowed)
-            throw new ApplicationError('FORBIDDEN', 'group feature is not available', {
-              featureKey: requiredFeature,
-              reason: access.reason,
-            });
-        }
-      }
-      const pillars = await new ListContentPillars(new db.PrismaContentPillarRepository()).execute(
-        scope,
-      );
-      const bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
-      const personalityVersions = input.serviceSafeMode
-        ? []
-        : await new ListPersonalityVersions(new db.PrismaPersonalityVersionRepository()).execute(
-            scope,
-          );
-      const currentPersonality = personalityVersions[0] ?? null;
-      const serviceKnowledge =
-        input.serviceSafeMode && input.groupId
-          ? await loadServiceGenerationKnowledge({
-              workspaceId: input.workspaceId,
-              groupId: input.groupId,
-              actorUserId: input.actorUserId,
-              bunshinId: input.bunshinId,
-            })
-          : null;
-      const granted = input.serviceSafeMode
-        ? []
-        : await new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
-            scope,
-          );
-      const memoryRepository =
-        input.serviceSafeMode && input.allowServiceOwnerMemories
-          ? new db.PrismaOwnerBunshinMemoryRepository()
-          : new db.PrismaBunshinMemoryRepository();
-      const ownerMemories =
-        input.serviceSafeMode && !input.allowServiceOwnerMemories
-          ? []
-          : await memoryRepository.list(scope);
-      const personalMaterials = ownerMemories
-        .filter(
-          (memory) =>
-            memory.active &&
-            memory.deletedAt === null &&
-            memory.sourceType === 'USER_INPUT' &&
-            memory.sourceId?.startsWith('daily-action:'),
-        )
-        .slice(0, 3)
-        .map((memory) => ({
-          type: 'PERSONAL_MATERIAL',
-          title: memory.summary?.trim() || '本人が残した素材',
-          content: memory.content,
-        }));
       const generations = new db.PrismaDailyMissionGenerationRepository();
       const claim = await generations.claim({
         ...scope,

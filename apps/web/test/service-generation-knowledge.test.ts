@@ -17,6 +17,10 @@ const dailySource = readFileSync(
   new URL('../src/services/daily-mission-generation.ts', import.meta.url),
   'utf8',
 );
+const dailyPlanningSource = readFileSync(
+  new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
+  'utf8',
+);
 
 describe('service generation knowledge', () => {
   it('maps approved service chunks to instruction-safe prompt data', () => {
@@ -46,11 +50,14 @@ describe('service generation knowledge', () => {
   });
 
   it('loads official knowledge with server-resolved service scope for every generator', () => {
-    for (const source of [strategySource, weeklySource, dailySource]) {
+    for (const source of [strategySource, weeklySource]) {
       expect(source).toContain('loadServiceGenerationKnowledge');
       expect(source).toContain('groupId: input.groupId');
       expect(source).toContain('actorUserId: input.actorUserId');
     }
+    expect(dailyPlanningSource).toContain('loadServiceGenerationKnowledge');
+    expect(dailyPlanningSource).toContain('groupId: input.scope.groupId');
+    expect(dailyPlanningSource).toContain('actorUserId: input.scope.actorUserId');
     expect(strategySource).not.toContain('grantedKnowledge: []');
     expect(weeklySource).toContain('additionalKnowledge: serviceKnowledge.officialKnowledge');
     expect(dailySource).toContain('serviceKnowledge.groupKnowledge');
