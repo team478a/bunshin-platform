@@ -1,10 +1,6 @@
 import 'server-only';
 import { ListDailyMissions, type MissionContent } from '@bunshin/capability-social';
-import {
-  RequireActiveBunshinCapability,
-  GroupKnowledgeService,
-  selectGroupKnowledgeChunksForPrompt,
-} from '@bunshin/application';
+import { RequireActiveBunshinCapability } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
 import {
@@ -27,6 +23,7 @@ import {
 } from './daily-mission-ai-runtime';
 import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
 import { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
+import { loadDailyMissionGenerationEnvironment } from './daily-mission-generation-environment';
 
 interface Input {
   workspaceId: string;
@@ -143,15 +140,6 @@ export class DailyMissionGenerationService {
         usageIdempotencyPrefix: input.usageIdempotencyPrefix,
       });
       runtimeModel = model;
-      let timezone = input.timezone;
-      if (!timezone) {
-        const preference = await new db.PrismaLineNotificationPreferenceRepository().getScoped(
-          scope,
-        );
-        if (!preference.accessible)
-          throw new ApplicationError('NOT_FOUND', 'notification preference scope not found');
-        timezone = preference.preference?.timezone ?? 'Asia/Tokyo';
-      }
       const { bunshinContext, strategyContext, plannerPersonalization, knowledge } =
         buildDailyMissionPersonalizationBase({
           bunshin,
@@ -173,25 +161,12 @@ export class DailyMissionGenerationService {
           })),
           personalMaterials,
         });
-      const groupKnowledge = campaign
-        ? selectGroupKnowledgeChunksForPrompt(
-            await new GroupKnowledgeService(
-              new db.PrismaGroupKnowledgeRepository(),
-            ).listApprovedChunksForGeneration({
-              ...scope,
-              groupId: campaign.productPack.groupId,
-              productPackVersionId: campaign.productPack.versionId,
-            }),
-          ).map((chunk) => ({
-            chunkId: chunk.id,
-            sourceId: chunk.sourceId,
-            type: chunk.type,
-            sourceLabel: chunk.sourceLabel,
-            content: chunk.content.trim(),
-          }))
-        : serviceKnowledge
-          ? serviceKnowledge.groupKnowledge
-          : [];
+      const { timezone, groupKnowledge } = await loadDailyMissionGenerationEnvironment({
+        scope,
+        ...(input.timezone ? { timezone: input.timezone } : {}),
+        campaign,
+        fallbackGroupKnowledge: serviceKnowledge?.groupKnowledge ?? [],
+      });
       stage = 'daily-brief';
       const brief = await runDailyMissionBriefGeneration({
         apiKey,
