@@ -1,16 +1,5 @@
 import 'server-only';
-import {
-  CampaignService,
-  GetBunshin,
-  GetGenerationContextSnapshot,
-  GroupKnowledgeService,
-  ListBunshinMemories,
-  ListGrantedKnowledgeForBunshin,
-  ListPersonalityVersions,
-  RequireActiveBunshinCapability,
-  selectGroupKnowledgeChunksForPrompt,
-  type SelectedBunshinMemory,
-} from '@bunshin/application';
+import { GetGenerationContextSnapshot, RequireActiveBunshinCapability } from '@bunshin/application';
 import {
   AuthorizeDailyMissionCopy,
   CheckMissionQuality,
@@ -19,13 +8,8 @@ import {
   FailMissionContentVariantGeneration,
   GenerateMissionContent,
   GetDailyMission,
-  ListContentPillars,
   ListDailyMissions,
   ListMissionContentVariants,
-  ListSocialAccountStrategies,
-  ListSocialProfiles,
-  ListWeeklyPlans,
-  type MissionContentGeneratorInput,
 } from '@bunshin/capability-social';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -35,11 +19,8 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import { recentMissionQualityContext } from './daily-mission-content-quality';
-import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
-import {
-  applyServiceContentTerminology,
-  type ServiceContentTerminologyPolicy,
-} from './service-content-terminology';
+import { loadMissionContentVariantContext } from './mission-content-variant-context';
+import { applyServiceContentTerminology } from './service-content-terminology';
 import {
   prepareMissionVariantContent,
   validateMissionContentVariant,
@@ -75,11 +56,6 @@ function errorCategory(error: unknown) {
   }
   return 'INTERNAL_ERROR';
 }
-
-const requireSnapshotValue = <T>(value: T | undefined, message: string): T => {
-  if (value === undefined) throw new ApplicationError('CONFLICT', message);
-  return value;
-};
 
 export class MissionContentVariantGenerationService {
   async execute(input: Input) {
@@ -149,169 +125,36 @@ export class MissionContentVariantGenerationService {
             ...scope,
             dailyMissionId: mission.id,
           });
-          return requireSnapshotValue(
-            existing.find(({ id }) => id === claim.generation.variantId),
-            'completed mission variant is unavailable',
-          );
+          const completed = existing.find(({ id }) => id === claim.generation.variantId);
+          if (!completed)
+            throw new ApplicationError('CONFLICT', 'completed mission variant is unavailable');
+          return completed;
         }
         throw new ApplicationError('CONFLICT', 'mission content variant generation already used');
       }
       generationId = claim.generation.id;
 
-      const [bunshin, profiles, pillars, weeklyPlans, personalityVersions, granted, memories] =
-        await Promise.all([
-          new GetBunshin(new db.PrismaBunshinRepository()).execute(scope),
-          new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(scope),
-          new ListContentPillars(new db.PrismaContentPillarRepository()).execute(scope),
-          new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(scope),
-          input.serviceSafeMode
-            ? Promise.resolve([])
-            : new ListPersonalityVersions(new db.PrismaPersonalityVersionRepository()).execute(
-                scope,
-              ),
-          input.serviceSafeMode
-            ? Promise.resolve([])
-            : new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
-                scope,
-              ),
-          input.serviceSafeMode && !input.allowServiceOwnerMemories
-            ? Promise.resolve([])
-            : new ListBunshinMemories(
-                input.serviceSafeMode
-                  ? new db.PrismaOwnerBunshinMemoryRepository()
-                  : new db.PrismaBunshinMemoryRepository(),
-              ).execute(scope),
-        ]);
-      const profile = requireSnapshotValue(
-        profiles.find(
-          ({ id, status }) => id === snapshot.payload.socialProfile.id && status === 'ACTIVE',
-        ),
-        'original social profile is unavailable',
-      );
-      const strategies = await new ListSocialAccountStrategies(
-        new db.PrismaSocialAccountStrategyRepository(),
-      ).execute({ ...scope, socialProfileId: profile.id });
-      const strategy = requireSnapshotValue(
-        strategies.find(
-          ({ id, version, status }) =>
-            id === snapshot.payload.strategy.id &&
-            version === snapshot.payload.strategy.version &&
-            status === 'APPROVED',
-        ),
-        'original approved strategy is unavailable',
-      );
-      requireSnapshotValue(
-        weeklyPlans.find(
-          ({ id, status }) => id === snapshot.payload.weeklyPlan.id && status === 'CONFIRMED',
-        ),
-        'original weekly plan is unavailable',
-      );
-      const pillar = requireSnapshotValue(
-        pillars.find(
-          ({ id, active, deletedAt }) =>
-            id === snapshot.payload.contentPillar.id && active && deletedAt === null,
-        ),
-        'original content pillar is unavailable',
-      );
-      const personality = snapshot.payload.personality
-        ? requireSnapshotValue(
-            personalityVersions.find(
-              ({ id, version }) =>
-                id === snapshot.payload.personality?.id &&
-                version === snapshot.payload.personality.version,
-            ),
-            'original personality version is unavailable',
-          )
-        : null;
-      const snapshotKnowledgeIds = new Set(snapshot.payload.knowledge.map(({ id }) => id));
-      const exactKnowledge = granted.filter(({ id }) => snapshotKnowledgeIds.has(id));
-      if (exactKnowledge.length !== snapshotKnowledgeIds.size)
-        throw new ApplicationError('CONFLICT', 'original granted knowledge is unavailable');
-      const snapshotMemoryById = new Map(
-        snapshot.payload.selectedMemories.map((item) => [item.id, item]),
-      );
-      const selectedMemories: SelectedBunshinMemory[] = memories
-        .filter(
-          ({ id, active, deletedAt }) => snapshotMemoryById.has(id) && active && deletedAt === null,
-        )
-        .map((memory) => {
-          const reference = snapshotMemoryById.get(memory.id)!;
-          return {
-            id: memory.id,
-            type: memory.type,
-            summary: reference.summary,
-            content: memory.content,
-            selectionReason: reference.selectionReason,
-          };
-        });
-      if (selectedMemories.length !== snapshotMemoryById.size)
-        throw new ApplicationError('CONFLICT', 'original selected memory is unavailable');
-
-      const campaign = mission.campaignId
-        ? await new CampaignService(new db.PrismaCampaignRepository()).resolvePlanningContext({
-            ...scope,
-            campaignId: mission.campaignId,
-          })
-        : null;
-      if (
-        campaign &&
-        (snapshot.payload.productPack?.id !== campaign.productPack.versionId ||
-          snapshot.payload.productPack.version !== campaign.productPack.version)
-      )
-        throw new ApplicationError('CONFLICT', 'original product pack version is unavailable');
-      const snapshotGroupKnowledgeIds = new Set(
-        (snapshot.payload.groupKnowledge ?? []).map(({ id }) => id),
-      );
-      let groupKnowledge: NonNullable<MissionContentGeneratorInput['groupKnowledge']> = [];
-      let knowledge: MissionContentGeneratorInput['grantedKnowledge'] = exactKnowledge.map(
-        ({ type, title, content }) => ({ type, title, content }),
-      );
-      let businessProfile: MissionContentGeneratorInput['businessProfile'] = null;
-      const currentServiceKnowledge =
-        input.serviceSafeMode && input.groupId
-          ? await loadServiceGenerationKnowledge({
-              workspaceId: input.workspaceId,
-              groupId: input.groupId,
-              actorUserId: input.actorUserId,
-            })
-          : null;
-      const contentTerminologyPolicy: ServiceContentTerminologyPolicy | null =
-        currentServiceKnowledge?.contentTerminologyPolicy ?? null;
-      if (campaign) {
-        const chunks = await new GroupKnowledgeService(
-          new db.PrismaGroupKnowledgeRepository(),
-        ).listApprovedChunksForGeneration({
-          ...scope,
-          groupId: campaign.productPack.groupId,
-          productPackVersionId: campaign.productPack.versionId,
-        });
-        groupKnowledge = selectGroupKnowledgeChunksForPrompt(chunks)
-          .filter(({ id }) => snapshotGroupKnowledgeIds.has(id))
-          .map((chunk) => ({
-            chunkId: chunk.id,
-            sourceId: chunk.sourceId,
-            type: chunk.type,
-            sourceLabel: chunk.sourceLabel,
-            content: chunk.content.trim(),
-          }));
-      } else if (input.serviceSafeMode && input.groupId) {
-        const serviceKnowledge = currentServiceKnowledge!;
-        businessProfile = serviceKnowledge.businessProfile;
-        groupKnowledge = serviceKnowledge.groupKnowledge.filter(({ chunkId }) =>
-          snapshotGroupKnowledgeIds.has(chunkId),
-        );
-        const allowedLabels = new Set(groupKnowledge.map(({ sourceLabel }) => sourceLabel));
-        knowledge = serviceKnowledge.officialKnowledge.filter(
-          ({ type, title }) =>
-            type === 'SERVICE_BUSINESS_PROFILE' ||
-            type === 'SERVICE_INDUSTRY_SAFETY' ||
-            type === 'SERVICE_CONTENT_TERMINOLOGY' ||
-            allowedLabels.has(title),
-        );
-      }
-      if (groupKnowledge.length !== snapshotGroupKnowledgeIds.size)
-        throw new ApplicationError('CONFLICT', 'original group knowledge is unavailable');
-
+      const context = await loadMissionContentVariantContext({
+        scope,
+        mission,
+        snapshot,
+        ...(input.serviceSafeMode === undefined ? {} : { serviceSafeMode: input.serviceSafeMode }),
+        ...(input.allowServiceOwnerMemories === undefined
+          ? {}
+          : { allowServiceOwnerMemories: input.allowServiceOwnerMemories }),
+      });
+      const {
+        profile,
+        campaign,
+        selectedMemories,
+        groupKnowledge,
+        knowledge,
+        businessProfile,
+        contentTerminologyPolicy,
+        bunshinContext,
+        strategyContext,
+        contentPillar,
+      } = context;
       const runtime = await resolveOpenAiRuntimeConfiguration();
       runtimeModel = runtime.model;
       let requestCount = 0;
@@ -359,35 +202,6 @@ export class MissionContentVariantGenerationService {
           operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
           generate,
         });
-      const bunshinContext = {
-        name: bunshin.name,
-        objectiveSummary: bunshin.objectiveSummary,
-        audienceSummary: bunshin.audienceSummary,
-        personalitySummary: bunshin.personalitySummary,
-        personality: personality
-          ? {
-              versionId: personality.id,
-              version: personality.version,
-              tone: personality.tone,
-              formality: personality.formality,
-              energyLevel: personality.energyLevel,
-              expertiseLevel: personality.expertiseLevel,
-              sentenceStyle: personality.sentenceStyle,
-              firstPerson: personality.firstPerson,
-              forbiddenExpressions: personality.forbiddenExpressions,
-              preferredExpressions: personality.preferredExpressions,
-              visualDirection: personality.visualDirection,
-              facePolicy: personality.facePolicy,
-            }
-          : null,
-      };
-      const strategyContext = {
-        concept: strategy.concept,
-        positioning: strategy.positioning,
-        targetSummary: strategy.targetSummary,
-        ctaStrategy: strategy.ctaStrategy,
-        postingPolicy: strategy.postingPolicy,
-      };
       const brief = {
         missionDate: mission.missionDate,
         socialProfileId: profile.id,
@@ -405,7 +219,7 @@ export class MissionContentVariantGenerationService {
         brief,
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
-        contentPillar: { title: pillar.title, description: pillar.description },
+        contentPillar,
         grantedKnowledge: knowledge,
         businessProfile,
         groupKnowledge,
