@@ -12,6 +12,12 @@ const page = [
     'utf8',
   ),
   readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/point-manual-actions.ts', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
     fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/points-data.ts', import.meta.url)),
     'utf8',
   ),
@@ -50,6 +56,27 @@ const schema = readFileSync(
 );
 
 describe('service point settings boundaries', () => {
+  it('keeps manual point mutations in a dedicated server action module', () => {
+    const facade = readFileSync(
+      fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
+      'utf8',
+    );
+    const manual = readFileSync(
+      fileURLToPath(
+        new URL('../app/s/[serviceSlug]/manage/points/point-manual-actions.ts', import.meta.url),
+      ),
+      'utf8',
+    );
+    expect(facade).toContain(
+      "export { cancelRecovery, correctPoints, grantBonus } from './point-manual-actions';",
+    );
+    expect(manual).toContain('resolveManagedServiceContext');
+    expect(manual).toContain("{ isolationLevel: 'Serializable' }");
+    expect(manual).toContain("action: 'POINT_BONUS_GRANTED'");
+    expect(manual).toContain("action: 'POINT_RECOVERY_REGISTERED'");
+    expect(manual).toContain("action: 'POINT_RECOVERY_CANCELLED'");
+  });
+
   it('requires service management context and scopes every mutation', () => {
     expect(page).toContain('resolveManagedServiceContext');
     expect(page).toContain('workspaceId: service.workspaceId');
