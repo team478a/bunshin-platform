@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { Route } from 'next';
 import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
@@ -10,15 +9,12 @@ import {
   currentPaymentEnvironment,
   StripeAccountConnectionTestAdapter,
 } from '../../../../../src/payments/secure-configuration';
-import {
-  netPaidAmount,
-  paymentDate,
-  paymentOperationsMessage,
-  purchaseStatusLabel,
-  yen,
-} from '../../../../../src/payments/payment-operations';
+import { netPaidAmount } from '../../../../../src/payments/payment-operations';
 import { recoverFailedPaymentWebhook } from '../../../../../src/payments/payment-webhook-recovery';
 import { reconcilePendingProgramPurchase } from '../../../../../src/payments/payment-checkout-reconciliation';
+import { OrganizationPaymentDashboard } from './organization-payment-dashboard';
+import { OrganizationPaymentOperations } from './organization-payment-operations';
+import { OrganizationPaymentSettings } from './organization-payment-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -318,34 +314,6 @@ async function reconcilePurchase(formData: FormData) {
   redirect(paymentPath(parsed.data.workspaceId, result));
 }
 
-const results: Record<string, string> = {
-  saved: '設定を下書き保存しました。次に接続確認をしてください。',
-  verified: 'Stripeとの接続を確認しました。「決済接続を有効にする」を押すと使用できます。',
-  'verification-failed': 'Stripeへ接続できませんでした。秘密鍵を確認して保存し直してください。',
-  activated: 'この運営団体の決済設定を有効にしました。',
-  disabled: 'この運営団体の決済設定を停止しました。',
-  'credentials-required': '最初の登録ではStripeの秘密鍵が必要です。',
-  'invalid-secret-key': 'Stripeの秘密鍵（sk_test_ または sk_live_ で始まる値）を入力してください。',
-  'invalid-webhook-secret': 'Webhook署名シークレット（whsec_ で始まる値）を入力してください。',
-  'verification-required': '接続確認が完了した設定だけ有効にできます。',
-  'webhook-required': '決済を有効にする前にWebhook署名シークレットを登録してください。',
-  'webhook-recovered': 'Stripeから決済通知を再取得し、処理を完了しました。',
-  'webhook-recovery-failed':
-    '再処理できませんでした。Stripeの取引状態と接続設定を確認してください。',
-  'payment-reconciled-paid': 'Stripeで入金を確認し、購入者の利用を開始しました。',
-  'payment-reconciled-expired': 'Stripeで期限切れを確認し、支払い待ちを終了しました。',
-  'payment-reconciled-unchanged': 'Stripeではまだ支払い待ちです。時間を置いて確認してください。',
-  'payment-reconciliation-failed':
-    'Stripeと照合できませんでした。決済接続とCheckoutの状態を確認してください。',
-};
-const statusLabel = {
-  DRAFT: '下書き',
-  VERIFIED: '接続確認済み',
-  ACTIVE: '使用中',
-  DISABLED: '停止中',
-  ERROR: '接続エラー',
-} as const;
-
 export default async function OrganizationPaymentPage({
   params,
   searchParams,
@@ -457,352 +425,46 @@ export default async function OrganizationPaymentPage({
       ).toString()
     : null;
 
+  const purchases = recentPurchases.map(({ groupId, ...purchase }) => ({
+    ...purchase,
+    groupName: groupNames.get(groupId) ?? '削除済みのサービス',
+  }));
+
   return (
     <main className="app-page">
-      <header className="app-page__heading">
-        <p className="eyebrow">OEM決済設定</p>
-        <h1>{workspace.name}の決済先</h1>
-        <p>この団体が販売する有料サービスの売上を受け取るStripeを設定します。</p>
-        <Link href={`/organizations/${workspace.id}/manage`}>← 団体管理へ戻る</Link>
-      </header>
-
-      {result && results[result] ? (
-        <section className="settings-card" role="status">
-          <strong>{results[result]}</strong>
-        </section>
-      ) : null}
-
-      <section className="operations-overview" aria-label="決済設定の状態">
-        <div>
-          <span>決済サービス</span>
-          <strong>Stripe</strong>
-        </div>
-        <div>
-          <span>状態</span>
-          <strong>{configuration ? statusLabel[configuration.status] : '未設定'}</strong>
-        </div>
-        <div>
-          <span>Stripeアカウント</span>
-          <strong>{configuration?.accountReference ?? '未確認'}</strong>
-        </div>
-        <div>
-          <span>最終接続確認</span>
-          <strong>
-            {configuration?.lastVerifiedAt?.toLocaleString('ja-JP', {
-              timeZone: 'Asia/Tokyo',
-            }) ?? '未確認'}
-          </strong>
-        </div>
-      </section>
-
-      <section className="settings-card" aria-labelledby="payment-operations-title">
-        <h2 id="payment-operations-title">決済の運用状況</h2>
-        <p>
-          {paymentOperationsMessage({
-            failedWebhookCount,
-            waitingPurchaseCount,
-            disputedPurchaseCount,
-          })}
-        </p>
-        <div className="operations-overview" aria-label="売上と購入状況">
-          <div>
-            <span>差引売上</span>
-            <strong>{yen(netAmountYen)}</strong>
-          </div>
-          <div>
-            <span>決済完了総額</span>
-            <strong>{yen(grossAmountYen)}</strong>
-          </div>
-          <div>
-            <span>返金総額</span>
-            <strong>{yen(refundedAmountYen)}</strong>
-          </div>
-          <div>
-            <span>係争・チャージバック額</span>
-            <strong>{yen(disputedAmountYen)}</strong>
-          </div>
-          <div>
-            <span>入金済み</span>
-            <strong>{paidPurchaseCount.toLocaleString('ja-JP')}件</strong>
-          </div>
-          <div>
-            <span>支払い待ち</span>
-            <strong>{waitingPurchaseCount.toLocaleString('ja-JP')}件</strong>
-          </div>
-          <div>
-            <span>全額返金</span>
-            <strong>{refundedPurchaseCount.toLocaleString('ja-JP')}件</strong>
-          </div>
-          <div>
-            <span>カード会社の確認中</span>
-            <strong>{disputedPurchaseCount.toLocaleString('ja-JP')}件</strong>
-          </div>
-          <div>
-            <span>チャージバック確定</span>
-            <strong>{chargebackLostPurchaseCount.toLocaleString('ja-JP')}件</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-card" aria-labelledby="recent-purchases-title">
-        <h2 id="recent-purchases-title">最近の購入</h2>
-        <p>
-          <a
-            className="button button--secondary"
-            href={`/api/organizations/${workspace.id}/payments/export`}
-          >
-            決済台帳をCSVで保存する
-          </a>
-        </p>
-        {recentPurchases.length === 0 ? (
-          <p>購入記録はまだありません。</p>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>受付日時</th>
-                  <th>購入者</th>
-                  <th>サービス</th>
-                  <th>決済・返金</th>
-                  <th>状態</th>
-                  <th>状態更新日時</th>
-                  <th>支払い確認</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPurchases.map((purchase) => (
-                  <tr key={purchase.id}>
-                    <td>{paymentDate(purchase.createdAt)}</td>
-                    <td>
-                      {purchase.buyer.displayName}
-                      {purchase.buyer.email ? <small>{purchase.buyer.email}</small> : null}
-                    </td>
-                    <td>{groupNames.get(purchase.groupId) ?? '削除済みのサービス'}</td>
-                    <td>
-                      {yen(purchase.amountYen)}
-                      {purchase.refundedAmountYen > 0 ? (
-                        <small>返金 {yen(purchase.refundedAmountYen)}</small>
-                      ) : null}
-                      {purchase.disputedAmountYen > 0 ? (
-                        <small>係争中・チャージバック {yen(purchase.disputedAmountYen)}</small>
-                      ) : null}
-                    </td>
-                    <td>
-                      {purchaseStatusLabel[purchase.status]}
-                      {purchase.disputeStatus ? (
-                        <small>Stripe: {purchase.disputeStatus}</small>
-                      ) : null}
-                    </td>
-                    <td>
-                      {paymentDate(
-                        purchase.refundedAt ??
-                          purchase.disputeResolvedAt ??
-                          purchase.disputedAt ??
-                          purchase.paidAt ??
-                          purchase.expiredAt ??
-                          purchase.createdAt,
-                      )}
-                    </td>
-                    <td>
-                      {purchase.status === 'CHECKOUT_OPEN' ? (
-                        <form action={reconcilePurchase} className="stack stack--compact">
-                          <input type="hidden" name="workspaceId" value={workspace.id} />
-                          <input type="hidden" name="purchaseId" value={purchase.id} />
-                          <label>
-                            <span className="sr-only">支払い状態を確認する理由</span>
-                            <input
-                              name="reason"
-                              minLength={3}
-                              maxLength={500}
-                              required
-                              placeholder="例：入金後も待機中のため"
-                            />
-                          </label>
-                          <button className="button button--secondary" type="submit">
-                            Stripeの状態を確認
-                          </button>
-                        </form>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="settings-card" aria-labelledby="failed-webhooks-title">
-        <h2 id="failed-webhooks-title">要確認の決済通知</h2>
-        {failedWebhookEvents.length === 0 ? (
-          <p>処理に失敗した決済通知はありません。</p>
-        ) : (
-          <>
-            <p>
-              {failedWebhookCount.toLocaleString('ja-JP')}
-              件の失敗記録があります。Stripe側の問題や一時障害を解消した後、理由を入力して再処理できます。
-            </p>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>受信日時</th>
-                    <th>通知</th>
-                    <th>エラー分類</th>
-                    <th>再処理</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {failedWebhookEvents.map((event) => (
-                    <tr key={event.id}>
-                      <td>{paymentDate(event.receivedAt)}</td>
-                      <td>{event.eventType}</td>
-                      <td>{event.errorCategory ?? '詳細確認が必要'}</td>
-                      <td>
-                        <form action={recoverWebhook} className="stack stack--compact">
-                          <input type="hidden" name="workspaceId" value={workspace.id} />
-                          <input type="hidden" name="webhookEventId" value={event.id} />
-                          <label>
-                            <span className="sr-only">再処理する理由</span>
-                            <input
-                              name="reason"
-                              minLength={3}
-                              maxLength={500}
-                              required
-                              placeholder="例：Stripe接続を修正済み"
-                            />
-                          </label>
-                          <button className="button button--secondary" type="submit">
-                            Stripeから再取得して処理
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="settings-card">
-        <h2>設定手順</h2>
-        <ol>
-          <li>Stripe管理画面でAPIの秘密鍵を確認します。</li>
-          <li>下のフォームで保存し、「Stripeとの接続を確認する」を押します。</li>
-          <li>接続確認後に「決済接続を有効にする」を押します。</li>
-          <li>購入受付を始める前に、次の設定でWebhookを登録します。</li>
-        </ol>
-        {webhookUrl ? (
-          <div className="settings-card__notice">
-            <strong>Stripeに登録するWebhook URL</strong>
-            <p className="break-all">{webhookUrl}</p>
-            <p>
-              送信イベントは checkout.session.completed、checkout.session.expired、
-              charge.refunded、charge.dispute.created、charge.dispute.updated、
-              charge.dispute.closed を選んでください。
-            </p>
-          </div>
-        ) : null}
-        <p>カード番号など購入者の決済情報は、この画面には入力しません。</p>
-      </section>
-
-      <section className="settings-card">
-        <h2>{configuration ? '接続情報を変更する' : '接続情報を登録する'}</h2>
-        {configuration ? (
-          <p>
-            登録済み：秘密鍵 {configuration.secretKeyMask}／Webhook署名{' '}
-            {configuration.webhookSecretMask ?? '未登録'}。変更しない欄は空欄のままで構いません。
-          </p>
-        ) : null}
-        <form action={saveConfiguration}>
-          <input type="hidden" name="workspaceId" value={workspace.id} />
-          <label>
-            Stripe秘密鍵
-            <input
-              name="secretKey"
-              type="password"
-              autoComplete="new-password"
-              required={!configuration}
-              placeholder="sk_live_... または sk_test_..."
-            />
-          </label>
-          <label>
-            Webhook署名シークレット
-            <input
-              name="webhookSecret"
-              type="password"
-              autoComplete="new-password"
-              placeholder="whsec_..."
-            />
-            <small>StripeでWebhook URLを登録した後に表示される whsec_ から始まる値です。</small>
-          </label>
-          <label>
-            変更理由
-            <input
-              name="reason"
-              required
-              minLength={3}
-              maxLength={500}
-              placeholder="例：初回設定"
-            />
-          </label>
-          <button className="button button--primary button--full" type="submit">
-            接続情報を保存する
-          </button>
-        </form>
-      </section>
-
-      {configuration ? (
-        <section className="settings-card">
-          <h2>接続確認と使用状態</h2>
-          {configuration.lastErrorCategory ? (
-            <p>前回のエラー：{configuration.lastErrorCategory}</p>
-          ) : null}
-          <form action={testConnection}>
-            <input type="hidden" name="workspaceId" value={workspace.id} />
-            <input type="hidden" name="reason" value="運営団体管理画面から接続確認" />
-            <button className="button button--secondary button--full" type="submit">
-              Stripeとの接続を確認する
-            </button>
-          </form>
-          {configuration.status === 'VERIFIED' ? (
-            <form action={setActive}>
-              <input type="hidden" name="workspaceId" value={workspace.id} />
-              <input type="hidden" name="reason" value="接続確認後に決済を有効化" />
-              <button className="button button--primary button--full" type="submit">
-                決済接続を有効にする
-              </button>
-            </form>
-          ) : null}
-          {configuration.status === 'ACTIVE' ? (
-            <form action={pauseConfiguration}>
-              <input type="hidden" name="workspaceId" value={workspace.id} />
-              <input type="hidden" name="reason" value="運営団体管理画面から決済を停止" />
-              <button className="button button--danger button--full" type="submit">
-                決済を停止する
-              </button>
-            </form>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="settings-card">
-        <h2>安全な管理</h2>
-        <ul>
-          <li>秘密鍵とWebhook署名シークレットは暗号化して保存します。</li>
-          <li>保存後は値全体を画面へ再表示しません。</li>
-          <li>保存・接続確認・有効化・停止は変更者と理由を記録します。</li>
-          <li>この団体の所有者・管理者だけが設定できます。</li>
-        </ul>
-        <p>
-          有効化後の購入はStripeの画面で行われ、署名を確認できた入金だけが利用開始に反映されます。全額返金、Checkout期限切れ、カード会社への異議申立てと解決結果も自動で台帳と利用状態へ反映します。
-        </p>
-      </section>
+      <OrganizationPaymentDashboard
+        workspace={workspace}
+        configuration={configuration}
+        result={result}
+      />
+      <OrganizationPaymentOperations
+        workspaceId={workspace.id}
+        summary={{
+          failedWebhookCount,
+          waitingPurchaseCount,
+          disputedPurchaseCount,
+          paidPurchaseCount,
+          refundedPurchaseCount,
+          chargebackLostPurchaseCount,
+          grossAmountYen,
+          refundedAmountYen,
+          disputedAmountYen,
+          netAmountYen,
+        }}
+        recentPurchases={purchases}
+        failedWebhookEvents={failedWebhookEvents}
+        reconcilePurchase={reconcilePurchase}
+        recoverWebhook={recoverWebhook}
+      />
+      <OrganizationPaymentSettings
+        workspaceId={workspace.id}
+        configuration={configuration}
+        webhookUrl={webhookUrl}
+        saveConfiguration={saveConfiguration}
+        testConnection={testConnection}
+        setActive={setActive}
+        pauseConfiguration={pauseConfiguration}
+      />
     </main>
   );
 }
