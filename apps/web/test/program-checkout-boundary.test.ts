@@ -7,6 +7,7 @@ const purchase = [
   'program-purchase-checkout.ts',
   'program-purchase-completion.ts',
   'program-purchase-lifecycle.ts',
+  'program-payment-disputes.ts',
   'program-purchase-context.ts',
   'program-payment-webhook-events.ts',
 ]
