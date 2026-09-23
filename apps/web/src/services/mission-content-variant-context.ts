@@ -227,3 +227,7 @@ export async function loadMissionContentVariantContext(input: {
     contentPillar: { title: pillar.title, description: pillar.description },
   };
 }
+
+export type MissionContentVariantContext = Awaited<
+  ReturnType<typeof loadMissionContentVariantContext>
+>;

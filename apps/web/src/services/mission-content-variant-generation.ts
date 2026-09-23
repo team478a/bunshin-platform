@@ -2,25 +2,21 @@ import 'server-only';
 import { GetGenerationContextSnapshot, RequireActiveBunshinCapability } from '@bunshin/application';
 import {
   AuthorizeDailyMissionCopy,
-  CheckMissionQuality,
   ClaimMissionContentVariantGeneration,
   CompleteMissionContentVariantGeneration,
   FailMissionContentVariantGeneration,
-  GenerateMissionContent,
   GetDailyMission,
   ListDailyMissions,
   ListMissionContentVariants,
 } from '@bunshin/capability-social';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { recordAiUsageSafely } from '../observability/ai-usage';
-import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
-import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
-import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
-import { recentMissionQualityContext } from './daily-mission-content-quality';
+import {
+  createMissionContentVariantUsageState,
+  generateMissionContentVariantWithAi,
+} from './mission-content-variant-ai-runtime';
 import { loadMissionContentVariantContext } from './mission-content-variant-context';
-import { applyServiceContentTerminology } from './service-content-terminology';
 import {
   prepareMissionVariantContent,
   validateMissionContentVariant,
@@ -76,13 +72,7 @@ export class MissionContentVariantGenerationService {
     const missions = new db.PrismaDailyMissionRepository();
     const variants = new db.PrismaMissionContentVariantRepository();
     let generationId: string | null = null;
-    let runtimeModel = process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
-    let promptVersion: string | undefined;
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
-    let hasInputTokens = false;
-    let hasOutputTokens = false;
-    let estimatedCostMicros = 0;
+    const usageState = createMissionContentVariantUsageState();
     try {
       await new RequireActiveBunshinCapability(
         new db.PrismaBunshinCapabilityAssignmentRepository(),
@@ -143,152 +133,23 @@ export class MissionContentVariantGenerationService {
           ? {}
           : { allowServiceOwnerMemories: input.allowServiceOwnerMemories }),
       });
-      const {
-        profile,
-        campaign,
-        selectedMemories,
-        groupKnowledge,
-        knowledge,
-        businessProfile,
-        contentTerminologyPolicy,
-        bunshinContext,
-        strategyContext,
-        contentPillar,
-      } = context;
-      const runtime = await resolveOpenAiRuntimeConfiguration();
-      runtimeModel = runtime.model;
-      let requestCount = 0;
-      const usage = async (
-        suffix: string,
-        taskType: string,
-        result: {
-          model: string;
-          promptVersion: string;
-          inputTokens: number | null;
-          outputTokens: number | null;
-          latencyMs: number;
-        },
-      ) => {
-        promptVersion = result.promptVersion;
-        if (result.inputTokens !== null) {
-          hasInputTokens = true;
-          totalInputTokens += result.inputTokens;
-        }
-        if (result.outputTokens !== null) {
-          hasOutputTokens = true;
-          totalOutputTokens += result.outputTokens;
-        }
-        estimatedCostMicros += runtime.requestCostUsdMicros;
-        requestCount += 1;
-        await recordAiUsageSafely({
-          ...scope,
-          taskType,
-          provider: 'openai',
-          model: result.model,
-          promptVersion: result.promptVersion,
-          status: 'SUCCESS',
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          latencyMs: result.latencyMs,
-          estimatedCostUsdMicros: runtime.requestCostUsdMicros || null,
-          pricingVersion: runtime.requestCostUsdMicros ? 'admin-request-cost-v1' : null,
-          idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-        });
-      };
-      const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
-        withOrganizationAiGenerationQuota({
-          workspaceId: input.workspaceId,
-          ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
-          operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-          generate,
-        });
-      const brief = {
-        missionDate: mission.missionDate,
-        socialProfileId: profile.id,
-        weeklyPlanItemId: mission.weeklyPlanItemId!,
-        format: mission.format,
-        topic: mission.topic,
-        angle: mission.angle,
-        reason: mission.reason,
-        estimatedMinutes: mission.estimatedMinutes,
-        campaignId: mission.campaignId,
-        classification: mission.classification,
-      };
-      const contentInput = {
-        platform: profile.platform,
-        brief,
-        bunshin: bunshinContext,
-        approvedStrategy: strategyContext,
-        contentPillar,
-        grantedKnowledge: knowledge,
-        businessProfile,
-        groupKnowledge,
-        recentContent: recentMissionQualityContext(recentMissions),
-        selectedMemories,
-        campaign,
-        variantSourceContent: mission.content,
-        variantInstructions: [
-          '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
-          '導入のフック、文章構成、具体例、言葉選びを明確に変える',
-          '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
-          ...(input.variantInstructions ?? []),
-        ],
-      };
-      const generator = new GenerateMissionContent(
-        new OpenAIMissionContentGenerator({ apiKey: runtime.apiKey, model: runtime.model }),
-      );
-      let content = await generateWithQuota('variant-content:0', () =>
-        generator.execute(contentInput),
-      );
-      content = {
-        ...content,
-        output: applyServiceContentTerminology(content.output, contentTerminologyPolicy),
-      };
-      await usage('variant-content:0', 'MISSION_CONTENT_VARIANT', content);
-      const checker = new CheckMissionQuality(
-        new OpenAIMissionQualityChecker({ apiKey: runtime.apiKey, model: runtime.model }),
-      );
-      const qualityInput = () => ({
-        platform: profile.platform,
-        brief,
-        content: content.output,
-        bunshin: bunshinContext,
-        approvedStrategy: strategyContext,
-        businessProfile,
-        selectedMemories,
-        groupKnowledge,
+      const { content, quality } = await generateMissionContentVariantWithAi({
+        scope,
+        mission,
+        recentMissions,
+        context,
+        usageIdempotencyPrefix: input.usageIdempotencyPrefix,
+        ...(input.variantInstructions === undefined
+          ? {}
+          : { variantInstructions: input.variantInstructions }),
+        usageState,
       });
-      let quality = await generateWithQuota('variant-quality:0', () =>
-        checker.execute(qualityInput()),
-      );
-      await usage('variant-quality:0', 'QUALITY_CHECKER', quality);
-      if (quality.output.verdict === 'REVISE') {
-        content = await generateWithQuota('variant-content:1', () =>
-          generator.execute({
-            ...contentInput,
-            repairInstructions: quality.output.issues.map(
-              ({ repairInstruction }) => repairInstruction,
-            ),
-          }),
-        );
-        content = {
-          ...content,
-          output: applyServiceContentTerminology(content.output, contentTerminologyPolicy),
-        };
-        await usage('variant-content:1', 'MISSION_CONTENT_VARIANT_REPAIR', content);
-        quality = await generateWithQuota('variant-quality:1', () =>
-          checker.execute(qualityInput()),
-        );
-        await usage('variant-quality:1', 'QUALITY_CHECKER', quality);
-      }
-      if (quality.output.verdict !== 'PASS')
-        throw new ApplicationError('CONTENT_REJECTED', 'generated variant failed quality check');
 
       const candidate = prepareMissionVariantContent({
         format: mission.format,
         source: mission.content,
         candidate: content.output,
-        platform: profile.platform,
+        platform: context.profile.platform,
         ...(mission.linkUsage ? { insertedUrl: mission.linkUsage.insertedUrl } : {}),
       });
       await validateMissionContentVariant({
@@ -296,9 +157,9 @@ export class MissionContentVariantGenerationService {
         source: mission.content,
         candidate,
         recentMissions,
-        campaign: campaign
+        campaign: context.campaign
           ? {
-              context: campaign,
+              context: context.campaign,
               classification: mission.classification,
               campaignSafetyRepository: new db.PrismaCampaignSafetyRepository(),
               advertisingSafetyRepository: new db.PrismaAdvertisingSafetyRepository(),
@@ -314,10 +175,12 @@ export class MissionContentVariantGenerationService {
         qualityScore: quality.output.score,
         model: content.model,
         promptVersion: content.promptVersion,
-        inputTokens: hasInputTokens ? totalInputTokens : null,
-        outputTokens: hasOutputTokens ? totalOutputTokens : null,
+        inputTokens: usageState.hasInputTokens ? usageState.totalInputTokens : null,
+        outputTokens: usageState.hasOutputTokens ? usageState.totalOutputTokens : null,
         estimatedCostMicros:
-          requestCount && runtime.requestCostUsdMicros ? BigInt(estimatedCostMicros) : null,
+          usageState.requestCount && usageState.estimatedCostMicros
+            ? BigInt(usageState.estimatedCostMicros)
+            : null,
         latencyMs: Date.now() - started,
       });
       return variant;
@@ -327,14 +190,14 @@ export class MissionContentVariantGenerationService {
           ...scope,
           taskType: 'MISSION_CONTENT_VARIANT_PIPELINE',
           provider: 'openai',
-          model: runtimeModel,
-          promptVersion: promptVersion ?? 'mission-content-variant-pipeline-v1',
+          model: usageState.runtimeModel,
+          promptVersion: usageState.promptVersion ?? 'mission-content-variant-pipeline-v1',
           status: 'FAILED',
-          inputTokens: hasInputTokens ? totalInputTokens : null,
-          outputTokens: hasOutputTokens ? totalOutputTokens : null,
+          inputTokens: usageState.hasInputTokens ? usageState.totalInputTokens : null,
+          outputTokens: usageState.hasOutputTokens ? usageState.totalOutputTokens : null,
           latencyMs: Date.now() - started,
-          estimatedCostUsdMicros: estimatedCostMicros || null,
-          pricingVersion: estimatedCostMicros ? 'admin-request-cost-v1' : null,
+          estimatedCostUsdMicros: usageState.estimatedCostMicros || null,
+          pricingVersion: usageState.estimatedCostMicros ? 'admin-request-cost-v1' : null,
           errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
           idempotencyKey: `${input.usageIdempotencyPrefix}:variant-pipeline-failure`,
         });
@@ -344,11 +207,13 @@ export class MissionContentVariantGenerationService {
             dailyMissionId: input.dailyMissionId,
             generationId,
             errorCategory: errorCategory(error),
-            model: runtimeModel,
-            ...(promptVersion ? { promptVersion } : {}),
-            inputTokens: hasInputTokens ? totalInputTokens : null,
-            outputTokens: hasOutputTokens ? totalOutputTokens : null,
-            estimatedCostMicros: estimatedCostMicros ? BigInt(estimatedCostMicros) : null,
+            model: usageState.runtimeModel,
+            ...(usageState.promptVersion ? { promptVersion: usageState.promptVersion } : {}),
+            inputTokens: usageState.hasInputTokens ? usageState.totalInputTokens : null,
+            outputTokens: usageState.hasOutputTokens ? usageState.totalOutputTokens : null,
+            estimatedCostMicros: usageState.estimatedCostMicros
+              ? BigInt(usageState.estimatedCostMicros)
+              : null,
             latencyMs: Date.now() - started,
           });
         } catch (observationError) {
