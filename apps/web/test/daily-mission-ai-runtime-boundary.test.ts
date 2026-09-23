@@ -20,10 +20,11 @@ describe('daily mission AI runtime boundary', () => {
 
   it('keeps generation orchestration dependent on the runtime contract', () => {
     const generation = read('src/services/daily-mission-generation.ts');
+    const briefRuntime = read('src/services/daily-mission-brief-runtime.ts');
 
     expect(generation).toContain('await createDailyMissionAiRuntime({');
-    expect(generation).toContain(
-      "await recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief)",
+    expect(briefRuntime).toContain(
+      "await input.recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief)",
     );
     expect(generation).toContain('generateWithQuota,');
     expect(generation).toContain('recordUsage,');

@@ -1,9 +1,5 @@
 import 'server-only';
-import {
-  GenerateDailyMissionBrief,
-  ListDailyMissions,
-  type MissionContent,
-} from '@bunshin/capability-social';
+import { ListDailyMissions, type MissionContent } from '@bunshin/capability-social';
 import {
   RequireActiveBunshinCapability,
   GroupKnowledgeService,
@@ -11,7 +7,6 @@ import {
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
-import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import {
   buildDailyMissionPersonalizationBase,
   buildMissionPersonalizationContext,
@@ -31,6 +26,7 @@ import {
   recordDailyMissionPipelineFailure,
 } from './daily-mission-ai-runtime';
 import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
+import { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
 
 interface Input {
   workspaceId: string;
@@ -197,8 +193,12 @@ export class DailyMissionGenerationService {
           ? serviceKnowledge.groupKnowledge
           : [];
       stage = 'daily-brief';
-      const brief = await generateWithQuota('daily-brief', () =>
-        new GenerateDailyMissionBrief(new OpenAIDailyMissionPlanner({ apiKey, model })).execute({
+      const brief = await runDailyMissionBriefGeneration({
+        apiKey,
+        model,
+        generateWithQuota,
+        recordUsage,
+        plannerInput: {
           ...scope,
           missionDate: input.missionDate,
           timezone,
@@ -219,9 +219,8 @@ export class DailyMissionGenerationService {
           trendIdeas,
           campaign,
           personalization: plannerPersonalization,
-        }),
-      );
-      await recordUsage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
+        },
+      });
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
       )?.contentPillarId;
