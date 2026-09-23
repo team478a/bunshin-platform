@@ -29,6 +29,16 @@ describe('service external tracking boundary', () => {
     expect(results).not.toContain('fetch(');
   });
 
+  it('keeps setup API state in the operation container while the setup view stays presentational', () => {
+    const editor = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
+    const setup = source('app/(app)/admin/external-tracking/external-tracking-setup.tsx');
+    expect(editor).toContain('<ExternalTrackingSetup');
+    expect(editor).toContain('async function importCsv');
+    expect(setup).toContain('onImportCsv');
+    expect(setup).toContain('onSend');
+    expect(setup).not.toContain('fetch(');
+  });
+
   it('rejects group IDs outside the resolved service for list, export, import, and create', () => {
     const http = source('src/http/external-tracking-links.ts');
     expect(http.match(/service boundary mismatch/g)).toHaveLength(4);
