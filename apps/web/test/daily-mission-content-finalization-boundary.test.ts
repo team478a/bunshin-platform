@@ -31,7 +31,7 @@ describe('daily mission content finalization boundary', () => {
     expect(generation.indexOf('finalizeDailyMissionContent')).toBeLessThan(
       generation.indexOf("stage = 'persist'"),
     );
-    expect(generation).toContain('persistGeneratedDailyMission');
+    expect(generation).toContain('persistDailyMissionGenerationResult');
     expect(persistence.indexOf('new CreateDailyMission')).toBeLessThan(
       persistence.indexOf('await recordDailyMissionCampaignSafety'),
     );

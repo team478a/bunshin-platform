@@ -21,10 +21,9 @@ describe('daily mission planning context boundary', () => {
   });
 
   it('checks an existing mission before loading context and claims generation afterward', () => {
-    expect(generation.indexOf('if (existing)')).toBeLessThan(
-      generation.indexOf('} = await loadDailyMissionPlanningContext'),
-    );
-    expect(generation.indexOf('} = await loadDailyMissionPlanningContext')).toBeLessThan(
+    const loadContext = 'const planningContext = await loadDailyMissionPlanningContext';
+    expect(generation.indexOf('if (existing)')).toBeLessThan(generation.indexOf(loadContext));
+    expect(generation.indexOf(loadContext)).toBeLessThan(
       generation.indexOf('const claim = await generations.claim'),
     );
   });
