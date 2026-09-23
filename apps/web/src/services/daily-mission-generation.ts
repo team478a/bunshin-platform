@@ -20,14 +20,9 @@ import {
   SelectBunshinMemories,
   ProductPackService,
   CampaignService,
-  AdvertisingSafetyService,
-  CampaignSafetyValidationService,
-  ExternalTrackingLinkService,
-  ExternalLinkPlacementService,
   GroupFeatureEntitlementService,
   GroupKnowledgeService,
   selectGroupKnowledgeChunksForPrompt,
-  applyExternalLinkPlacement,
 } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -37,7 +32,6 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
-import { campaignContentSignature } from './campaign-content-signature';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 import { applyServiceContentTerminology } from './service-content-terminology';
 import {
@@ -49,6 +43,10 @@ import {
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
 import { generateQualityCheckedMissionContent } from './daily-mission-quality-pipeline';
+import {
+  finalizeDailyMissionContent,
+  recordDailyMissionCampaignSafety,
+} from './daily-mission-content-finalization';
 
 interface Input {
   workspaceId: string;
@@ -506,134 +504,22 @@ export class DailyMissionGenerationService {
             stage = value;
           },
         });
-      let missionContent = content.output;
-      let externalLinkUsage:
-        | {
-            groupId: string;
-            productPackId: string;
-            productPackVersionId: string;
-            campaignId: string;
-            externalTrackingLinkId: string;
-            insertedUrl: string;
-            placementTemplateId: string | null;
-            placementTemplateVersion: number | null;
-          }
-        | undefined;
-      if (campaign) {
-        const trackingLink = await new ExternalTrackingLinkService(
-          new db.PrismaExternalTrackingLinkRepository(),
-        ).resolve({
-          ...scope,
-          groupId: campaign.productPack.groupId,
-          productPackId: campaign.productPack.productPackId,
-          campaignId: campaign.id,
-          at: new Date(`${input.missionDate}T12:00:00.000Z`),
-        });
-        if (!trackingLink && !campaign.productPack.allowLinklessPosts)
-          throw new ApplicationError(
-            'CONFLICT',
-            'この商品に使用できる専用URLが設定されていません。管理者へお問い合わせください。',
-          );
-        if (trackingLink) {
-          const linkAccess = await new GroupFeatureEntitlementService(
-            new db.PrismaGroupFeatureEntitlementRepository(),
-          ).consumeAccess({
-            workspaceId: input.workspaceId,
-            groupId: campaign.productPack.groupId,
-            actorUserId: input.actorUserId,
-            featureKey: 'GROUP.EXTERNAL_TRACKING_LINK',
-            operationKey: `${input.generationIdempotencyKey}:GROUP.EXTERNAL_TRACKING_LINK`,
-            localDate: input.missionDate,
-          });
-          if (!linkAccess.allowed)
-            throw new ApplicationError('FORBIDDEN', 'group tracking link is not available', {
-              featureKey: 'GROUP.EXTERNAL_TRACKING_LINK',
-              reason: linkAccess.reason,
-            });
-          const placement = await new ExternalLinkPlacementService(
-            new db.PrismaExternalLinkPlacementRepository(),
-          ).resolveForGeneration({
-            ...scope,
-            productPackVersionId: campaign.productPack.versionId,
-            platform: profile.platform,
-            format: brief.output.format,
-          });
-          missionContent = applyExternalLinkPlacement({
-            content: missionContent,
-            url: trackingLink.url,
-            platform: profile.platform,
-            format: brief.output.format,
-            placement,
-          });
-          externalLinkUsage = {
-            groupId: campaign.productPack.groupId,
-            productPackId: campaign.productPack.productPackId,
-            productPackVersionId: campaign.productPack.versionId,
-            campaignId: campaign.id,
-            externalTrackingLinkId: trackingLink.id,
-            insertedUrl: trackingLink.url,
-            placementTemplateId: placement.id,
-            placementTemplateVersion: placement.version,
-          };
-        }
-      }
-      missionContent = applyServiceContentTerminology(
-        missionContent,
-        serviceKnowledge?.contentTerminologyPolicy ?? null,
-      );
-      const campaignSignature = campaign ? campaignContentSignature(missionContent) : null;
-      const similarity =
-        campaign && campaignSignature
-          ? await new CampaignSafetyValidationService(
-              new db.PrismaCampaignSafetyRepository(),
-            ).inspect({
-              ...scope,
-              campaignId: campaign.id,
-              ...campaignSignature,
-              at: new Date(`${input.missionDate}T12:00:00.000Z`),
-            })
-          : null;
-      if (campaign && campaignSignature && similarity?.verdict === 'POSSIBLE_DUPLICATE') {
-        await new CampaignSafetyValidationService(new db.PrismaCampaignSafetyRepository()).record({
-          ...scope,
-          campaignId: campaign.id,
-          dailyMissionId: null,
-          at: new Date(`${input.missionDate}T12:00:00.000Z`),
-          ...campaignSignature,
-          ...similarity,
-        });
-        throw new ApplicationError('CONTENT_REJECTED', 'campaign content is too similar');
-      }
-      const advertisingInput = campaign
-        ? {
-            ...scope,
-            productPackVersionId: campaign.productPack.versionId,
-            classification: weeklyItem.classification,
-            evidenceRequirement: 'NONE' as const,
-            evidenceIds: [],
-            officialClaims: campaign.productPack.facts,
-            content: JSON.stringify(missionContent),
-          }
-        : null;
-      if (advertisingInput) {
-        const safety = await new AdvertisingSafetyService(
-          new db.PrismaAdvertisingSafetyRepository(),
-        ).inspect(advertisingInput);
-        if (safety.inspected.verdict !== 'PASS')
-          throw new ApplicationError('CONTENT_REJECTED', 'campaign content failed safety gate', {
-            issueCodes: safety.inspected.issueCodes,
-          });
-      }
-      const finalNoveltyIssue = inspectDailyMissionContent({
+      const {
         content: missionContent,
+        externalLinkUsage,
+        campaignSafetyReceipt,
+      } = await finalizeDailyMissionContent({
+        scope,
+        missionDate: input.missionDate,
+        generationIdempotencyKey: input.generationIdempotencyKey,
+        campaign,
+        platform: profile.platform,
+        format: brief.output.format,
+        classification: weeklyItem.classification,
+        content: content.output,
+        terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
         recentMissions,
       });
-      if (finalNoveltyIssue)
-        throw new ApplicationError(
-          'CONTENT_REJECTED',
-          'generated mission is too similar to recent content',
-          finalNoveltyIssue,
-        );
       stage = 'persist';
       const created = await new CreateDailyMission(missions, assignments).execute({
         ...scope,
@@ -713,20 +599,11 @@ export class DailyMissionGenerationService {
         },
         ...(externalLinkUsage ? { externalLinkUsage } : {}),
       });
-      if (advertisingInput)
-        await new AdvertisingSafetyService(new db.PrismaAdvertisingSafetyRepository()).review({
-          ...advertisingInput,
-          dailyMissionId: created.id,
-        });
-      if (campaign && campaignSignature && similarity)
-        await new CampaignSafetyValidationService(new db.PrismaCampaignSafetyRepository()).record({
-          ...scope,
-          campaignId: campaign.id,
-          dailyMissionId: created.id,
-          at: new Date(`${input.missionDate}T12:00:00.000Z`),
-          ...campaignSignature,
-          ...similarity,
-        });
+      await recordDailyMissionCampaignSafety({
+        scope,
+        dailyMissionId: created.id,
+        receipt: campaignSafetyReceipt,
+      });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });
       } catch {
