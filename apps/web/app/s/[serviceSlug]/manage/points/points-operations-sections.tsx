@@ -1,17 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-  REWARDS,
-  RULES,
   cancelRecovery,
   changePointIssuance,
   correctPoints,
   grantBonus,
-  redemptionStatusLabels,
   saveCampaignRules,
   saveRewardSettings,
   saveRules,
 } from './actions';
+import { REWARDS, RULES, redemptionStatusLabels } from './point-definitions';
 import type { PointSettingsData } from './points-data';
 
 export function PointsOperationsSections({
