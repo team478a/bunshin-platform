@@ -1,7 +1,6 @@
 import 'server-only';
 import {
   CheckMissionQuality,
-  CreateDailyMission,
   GenerateDailyMissionBrief,
   GenerateMissionContent,
   ListContentPillars,
@@ -43,10 +42,8 @@ import {
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
 import { generateQualityCheckedMissionContent } from './daily-mission-quality-pipeline';
-import {
-  finalizeDailyMissionContent,
-  recordDailyMissionCampaignSafety,
-} from './daily-mission-content-finalization';
+import { finalizeDailyMissionContent } from './daily-mission-content-finalization';
+import { persistGeneratedDailyMission } from './daily-mission-persistence';
 
 interface Input {
   workspaceId: string;
@@ -521,88 +518,70 @@ export class DailyMissionGenerationService {
         recentMissions,
       });
       stage = 'persist';
-      const created = await new CreateDailyMission(missions, assignments).execute({
-        ...scope,
-        ...brief.output,
-        assistanceLevel: serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel,
-        content: missionContent,
-        qualityScore: quality.output.score,
-        campaignId: weeklyItem.campaignId,
-        classification: weeklyItem.classification,
-        generationContext: {
-          generatedAt: new Date(),
-          payload: {
-            personality: currentPersonality
-              ? { id: currentPersonality.id, version: currentPersonality.version }
+      const created = await persistGeneratedDailyMission({
+        missions,
+        assignments,
+        mission: {
+          ...scope,
+          ...brief.output,
+          assistanceLevel:
+            serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel,
+          content: missionContent,
+          qualityScore: quality.output.score,
+          campaignId: weeklyItem.campaignId,
+          classification: weeklyItem.classification,
+          ...(externalLinkUsage ? { externalLinkUsage } : {}),
+        },
+        evidence: {
+          personality: currentPersonality
+            ? { id: currentPersonality.id, version: currentPersonality.version }
+            : null,
+          selectedMemories: selectedMemories.map(({ id, summary, selectionReason }) => ({
+            id,
+            summary,
+            selectionReason,
+          })),
+          knowledgeIds: granted.map(({ id }) => id),
+          groupKnowledgeIds: groupKnowledge.map(({ chunkId }) => chunkId),
+          socialProfileId: profile.id,
+          strategy: { id: strategy.id, version: strategy.version },
+          weeklyPlanId: weeklyPlan.id,
+          contentPillarId: pillar.id,
+          productPack: campaign
+            ? { id: campaign.productPack.versionId, version: campaign.productPack.version }
+            : productPack
+              ? { id: productPack.versionId, version: productPack.version }
               : null,
-            selectedMemories: selectedMemories.map(({ id, summary, selectionReason }) => ({
-              id,
-              summary,
-              selectionReason,
-            })),
-            knowledge: granted.map(({ id }) => ({ id })),
-            groupKnowledge: groupKnowledge.map(({ chunkId }) => ({ id: chunkId })),
-            socialProfile: { id: profile.id },
-            strategy: { id: strategy.id, version: strategy.version },
-            weeklyPlan: { id: weeklyPlan.id },
-            contentPillar: { id: pillar.id },
-            productPack: campaign
-              ? { id: campaign.productPack.versionId, version: campaign.productPack.version }
-              : productPack
-                ? { id: productPack.versionId, version: productPack.version }
-                : null,
-            campaign: campaign ? { id: campaign.id } : null,
-            classification: weeklyItem.classification,
-            trendCandidates: brief.output.trendCandidateId
-              ? [{ id: brief.output.trendCandidateId }]
-              : [],
-            promptVersion: content.promptVersion,
-            provider: 'openai',
-            model: content.model,
-            quality: {
-              verdict: 'PASS',
-              issueCodes: qualityIssueCodes,
-              repairCount,
-            },
-            personalization: {
-              mode: 'AI',
-              sourceTypes: brief.output.personalizationSourceTypes ?? [],
-              availableSourceTypes: personalizationSourceTypes(personalization),
-              onboardingResponse: serviceKnowledge?.personalization.references.onboardingResponseId
-                ? { id: serviceKnowledge.personalization.references.onboardingResponseId }
-                : null,
-              businessProfile: serviceKnowledge?.personalization.references.businessProfileId
-                ? { id: serviceKnowledge.personalization.references.businessProfileId }
-                : null,
-              weeklyPlanItem: { id: weeklyItem.id },
-              recentMissions: recentMissions.map(({ id }) => ({ id })),
-              recentActivities: (
-                serviceKnowledge?.personalization.references.recentActivityIds ?? []
-              ).map((id) => ({ id })),
-              recentVariants: (
-                serviceKnowledge?.personalization.references.recentVariantSelectionIds ?? []
-              ).map((id) => ({ id })),
-              recentFeedback: (
-                serviceKnowledge?.personalization.references.recentFeedbackIds ?? []
-              ).map((id) => ({ id })),
-              recentDecisions: (
-                serviceKnowledge?.personalization.references.recentDecisionIds ?? []
-              ).map((id) => ({ id })),
-              postRecords: (
-                serviceKnowledge?.personalization.references.recentPostRecordIds ?? []
-              ).map((id) => ({ id })),
-              socialInsights: (
-                serviceKnowledge?.personalization.references.recentSocialInsightIds ?? []
-              ).map((id) => ({ id })),
-            },
+          campaignId: campaign?.id ?? null,
+          classification: weeklyItem.classification,
+          ...(brief.output.trendCandidateId
+            ? { trendCandidateId: brief.output.trendCandidateId }
+            : {}),
+          promptVersion: content.promptVersion,
+          model: content.model,
+          qualityIssueCodes,
+          repairCount,
+          personalization: {
+            sourceTypes: brief.output.personalizationSourceTypes ?? [],
+            availableSourceTypes: personalizationSourceTypes(personalization),
+            onboardingResponseId:
+              serviceKnowledge?.personalization.references.onboardingResponseId ?? null,
+            businessProfileId:
+              serviceKnowledge?.personalization.references.businessProfileId ?? null,
+            weeklyPlanItemId: weeklyItem.id,
+            recentMissionIds: recentMissions.map(({ id }) => id),
+            recentActivityIds: serviceKnowledge?.personalization.references.recentActivityIds ?? [],
+            recentVariantSelectionIds:
+              serviceKnowledge?.personalization.references.recentVariantSelectionIds ?? [],
+            recentFeedbackIds: serviceKnowledge?.personalization.references.recentFeedbackIds ?? [],
+            recentDecisionIds: serviceKnowledge?.personalization.references.recentDecisionIds ?? [],
+            recentPostRecordIds:
+              serviceKnowledge?.personalization.references.recentPostRecordIds ?? [],
+            recentSocialInsightIds:
+              serviceKnowledge?.personalization.references.recentSocialInsightIds ?? [],
           },
         },
-        ...(externalLinkUsage ? { externalLinkUsage } : {}),
-      });
-      await recordDailyMissionCampaignSafety({
-        scope,
-        dailyMissionId: created.id,
-        receipt: campaignSafetyReceipt,
+        campaignSafetyReceipt,
       });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });

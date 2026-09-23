@@ -9,6 +9,10 @@ const finalization = readFileSync(
   new URL('../src/services/daily-mission-content-finalization.ts', import.meta.url),
   'utf8',
 );
+const persistence = readFileSync(
+  new URL('../src/services/daily-mission-persistence.ts', import.meta.url),
+  'utf8',
+);
 
 describe('daily mission content finalization boundary', () => {
   it('keeps tracking links, terminology, campaign safety and final novelty in one gate', () => {
@@ -27,8 +31,19 @@ describe('daily mission content finalization boundary', () => {
     expect(generation.indexOf('finalizeDailyMissionContent')).toBeLessThan(
       generation.indexOf("stage = 'persist'"),
     );
-    expect(generation.indexOf('new CreateDailyMission')).toBeLessThan(
-      generation.indexOf('await recordDailyMissionCampaignSafety'),
+    expect(generation).toContain('persistGeneratedDailyMission');
+    expect(persistence.indexOf('new CreateDailyMission')).toBeLessThan(
+      persistence.indexOf('await recordDailyMissionCampaignSafety'),
     );
+  });
+
+  it('persists the sources needed to explain personalization and duplicate avoidance', () => {
+    expect(persistence).toContain('selectedMemories');
+    expect(persistence).toContain('availableSourceTypes');
+    expect(persistence).toContain('recentMissions');
+    expect(persistence).toContain('recentFeedback');
+    expect(persistence).toContain('recentDecisions');
+    expect(persistence).toContain('postRecords');
+    expect(persistence).toContain('socialInsights');
   });
 });
