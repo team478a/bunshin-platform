@@ -5,7 +5,7 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 const notification = source('src/services/member-tracking-link-notification.ts');
 const transition = source('src/http/external-tracking-links.ts');
 const operations = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
-const repository = source('../../packages/database/src/external-tracking.ts');
+const repository = source('../../packages/database/src/external-tracking-admin.ts');
 
 describe('member tracking link result notification', () => {
   it('targets only the linked consenting service member', () => {
