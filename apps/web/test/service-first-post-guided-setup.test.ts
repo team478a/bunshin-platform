@@ -6,7 +6,9 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 const onboardingForm = source('app/s/[serviceSlug]/onboarding/service-onboarding-form.tsx');
 const onboardingApi = source('src/http/service-onboarding.ts');
 const proposals = source('app/s/[serviceSlug]/bunshins/new/service-bunshin-proposals.tsx');
-const detailPage = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
+const detailPage = source(
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+);
 const setup = source('app/s/[serviceSlug]/bunshins/[bunshinId]/simple-first-post-setup.tsx');
 
 describe('service first-post guided setup', () => {
