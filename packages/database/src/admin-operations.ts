@@ -11,7 +11,7 @@ import {
 } from './admin-support-cases';
 import { setAdminMetricExclusion, setAdminUserStatus } from './admin-user-operations';
 import { createAdminOperationsSnapshot } from './admin-operations-snapshot';
-import { adminUserSelect, adminUserSummary } from './admin-user-summary';
+import { getAdminUserDetail } from './admin-user-detail';
 
 export class PrismaAdminOperationsRepository implements AdminOperationsRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -35,114 +35,8 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
     input: Parameters<AdminOperationsRepository['userDetail']>[0],
   ): Promise<AdminUserDetail | null> {
     if (!(await this.authorized(input.actorUserId))) return null;
-    const [row, operationAudits, metricExclusionAudits, supportCases] = await Promise.all([
-      this.client.user.findUnique({
-        where: { id: input.userId },
-        select: adminUserSelect,
-      }),
-      this.client.userOperationAudit.findMany({
-        where: { targetUserId: input.userId },
-        include: { actor: { select: { displayName: true } } },
-        orderBy: { occurredAt: 'desc' },
-        take: 50,
-      }),
-      this.client.activityMetricExclusion.findMany({
-        where: { targetUserId: input.userId },
-        include: { actor: { select: { displayName: true } } },
-        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-        take: 50,
-      }),
-      this.client.supportCase.findMany({
-        where: { targetUserId: input.userId },
-        include: {
-          assignee: { select: { displayName: true } },
-          notes: {
-            include: { author: { select: { displayName: true } } },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
-        orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
-        take: 50,
-      }),
-    ]);
-    if (!row) return null;
-    const timeline = [
-      ...row.missionActivities.map((item) => ({
-        type: item.type,
-        occurredAt: item.occurredAt,
-        label: `投稿案：${item.type}`,
-        outcome: 'INFO' as const,
-      })),
-      ...row.postRecords.map((item) => ({
-        type: 'POSTED',
-        occurredAt: item.postedAt,
-        label: '投稿完了',
-        outcome: 'SUCCESS' as const,
-      })),
-      ...row.aiUsageEvents.map((item) => ({
-        type: 'AI',
-        occurredAt: item.occurredAt,
-        label:
-          item.status === 'SUCCESS'
-            ? 'AI処理成功'
-            : `AI処理失敗（${item.errorCode ?? '原因不明'}）`,
-        outcome: item.status,
-      })),
-    ]
-      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
-      .slice(0, 50);
-    return {
-      user: adminUserSummary(row, input.environment),
-      workspaces: row.memberships.map((item) => ({
-        id: item.workspace.id,
-        name: item.workspace.name,
-        role: item.role,
-        status: item.status,
-      })),
-      bunshins: row.bunshins.map((item) => ({
-        id: item.id,
-        name: item.name,
-        status: item.status,
-        createdAt: item.createdAt,
-      })),
-      timeline,
-      operationAudits: operationAudits.map((audit) => ({
-        id: audit.id,
-        action: audit.action,
-        previousStatus: audit.previousStatus,
-        nextStatus: audit.nextStatus,
-        reason: audit.reason,
-        actorDisplayName: audit.actor.displayName,
-        occurredAt: audit.occurredAt,
-      })),
-      metricExclusionAudits: metricExclusionAudits.map((audit) => ({
-        id: audit.id,
-        action: audit.action,
-        environment: audit.environment,
-        reason: audit.reason,
-        actorDisplayName: audit.actor.displayName,
-        occurredAt: audit.occurredAt,
-      })),
-      supportCases: supportCases.map((supportCase) => ({
-        id: supportCase.id,
-        subject: supportCase.subject,
-        status: supportCase.status,
-        priority: supportCase.priority,
-        assigneeUserId: supportCase.assigneeUserId,
-        assigneeDisplayName: supportCase.assignee?.displayName ?? null,
-        createdAt: supportCase.createdAt,
-        updatedAt: supportCase.updatedAt,
-        resolvedAt: supportCase.resolvedAt,
-        notes: supportCase.notes.map((note) => ({
-          id: note.id,
-          content: note.content,
-          authorDisplayName: note.author.displayName,
-          createdAt: note.createdAt,
-        })),
-      })),
-    };
+    return getAdminUserDetail(this.client, input);
   }
-
   async setUserStatus(
     input: Parameters<AdminOperationsRepository['setUserStatus']>[0],
   ): Promise<boolean | null> {
