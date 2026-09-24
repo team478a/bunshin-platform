@@ -8,6 +8,12 @@ import {
   type AdminUserSummary,
 } from '@bunshin/application';
 import { Prisma, type PrismaClient, prisma } from './client';
+import {
+  createAdminSupportCase,
+  listAdminSupportCases,
+  updateAdminSupportCase,
+} from './admin-support-cases';
+
 const adminUserSelect = {
   id: true,
   displayName: true,
@@ -615,93 +621,16 @@ export class PrismaAdminOperationsRepository implements AdminOperationsRepositor
   async createSupportCase(
     input: Parameters<AdminOperationsRepository['createSupportCase']>[0],
   ): Promise<boolean | null> {
-    return this.client.$transaction(async (tx) => {
-      const admin = await tx.platformAdmin.findFirst({
-        where: {
-          userId: input.actorUserId,
-          status: 'ACTIVE',
-          role: { in: ['SUPER_ADMIN', 'OPERATOR', 'SUPPORT'] },
-        },
-        select: { id: true },
-      });
-      if (!admin) return false;
-      if (!(await tx.user.findUnique({ where: { id: input.userId }, select: { id: true } })))
-        return null;
-      await tx.supportCase.create({
-        data: {
-          targetUserId: input.userId,
-          createdByUserId: input.actorUserId,
-          assigneeUserId: input.actorUserId,
-          subject: input.subject,
-          priority: input.priority,
-          notes: { create: { authorUserId: input.actorUserId, content: input.note } },
-        },
-      });
-      return true;
-    });
+    return createAdminSupportCase(this.client, input);
   }
 
   async updateSupportCase(
     input: Parameters<AdminOperationsRepository['updateSupportCase']>[0],
   ): Promise<boolean | null> {
-    return this.client.$transaction(async (tx) => {
-      const admin = await tx.platformAdmin.findFirst({
-        where: {
-          userId: input.actorUserId,
-          status: 'ACTIVE',
-          role: { in: ['SUPER_ADMIN', 'OPERATOR', 'SUPPORT'] },
-        },
-        select: { id: true },
-      });
-      if (!admin) return false;
-      const supportCase = await tx.supportCase.findFirst({
-        where: { id: input.supportCaseId, targetUserId: input.userId },
-        select: { id: true },
-      });
-      if (!supportCase) return null;
-      if (input.assigneeUserId) {
-        const assignee = await tx.platformAdmin.findFirst({
-          where: { userId: input.assigneeUserId, status: 'ACTIVE' },
-          select: { id: true },
-        });
-        if (!assignee) return false;
-      }
-      await tx.supportCase.update({
-        where: { id: supportCase.id },
-        data: {
-          status: input.status,
-          priority: input.priority,
-          assigneeUserId: input.assigneeUserId,
-          resolvedAt: input.status === 'RESOLVED' ? new Date() : null,
-          notes: { create: { authorUserId: input.actorUserId, content: input.note } },
-        },
-      });
-      return true;
-    });
+    return updateAdminSupportCase(this.client, input);
   }
 
   async listSupportCases(input: Parameters<AdminOperationsRepository['listSupportCases']>[0]) {
-    if (!(await this.authorized(input.actorUserId))) return null;
-    return (
-      await this.client.supportCase.findMany({
-        where: input.status ? { status: input.status } : {},
-        include: {
-          target: { select: { displayName: true, email: true } },
-          assignee: { select: { displayName: true } },
-        },
-        orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
-        take: 200,
-      })
-    ).map((item) => ({
-      id: item.id,
-      targetUserId: item.targetUserId,
-      targetDisplayName: item.target.displayName,
-      targetEmail: item.target.email,
-      subject: item.subject,
-      status: item.status,
-      priority: item.priority,
-      assigneeDisplayName: item.assignee?.displayName ?? null,
-      updatedAt: item.updatedAt,
-    }));
+    return listAdminSupportCases(this.client, input);
   }
 }
