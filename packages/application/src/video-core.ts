@@ -5,53 +5,34 @@ import {
   DEFAULT_VIDEO_NARRATION_VOICE,
   VIDEO_NARRATION_SPEEDS,
   VIDEO_NARRATION_VOICES,
-  type VideoAiProcessingType,
   type VideoPlanGeneratorPort,
   type VideoPlanningContextRepository,
   type VideoProjectRepository,
   type VideoProjectReviewRepository,
-  type VideoRenderExecutionResult,
-  type VideoRenderOutputStoragePort,
-  type VideoRenderProviderPort,
-  type VideoRenderRepository,
-  type VideoRenderWebhookPort,
   type VideoReviewReason,
-  type VideoSceneRenderSourcePort,
 } from './video-core-contracts';
+import {
+  assertSupportedVideoComposition,
+  validateVideoAiTypes,
+  validateVideoId,
+  validateVideoText,
+} from './video-core-validation';
 
 export * from './video-core-contracts';
-
-const validAiTypes = new Set<VideoAiProcessingType>([
-  'SCRIPT_GENERATION',
-  'VOICE_SYNTHESIS',
-  'IMAGE_GENERATION',
-  'VIDEO_GENERATION',
-  'AUTOMATIC_ASSET_SELECTION',
-]);
-const id = (value: string, field: string) => {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
-    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
-  return value;
-};
-const text = (value: string, field: string, max: number) => {
-  const normalized = value.trim();
-  if (!normalized || normalized.length > max)
-    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
-  return normalized;
-};
-const aiTypes = (values: VideoAiProcessingType[]) => {
-  const unique = [...new Set(values)];
-  if (unique.length > validAiTypes.size || unique.some((value) => !validAiTypes.has(value)))
-    throw new ApplicationError('VALIDATION_ERROR', 'invalid aiProcessingTypes');
-  return unique;
-};
+export {
+  assertSupportedVideoComposition,
+  isSupportedVideoComposition,
+} from './video-core-validation';
+export { ExecuteVideoRenderStep, QueueVideoRender } from './video-render-execution';
 
 export class CreateVideoProject {
   constructor(private readonly repository: VideoProjectRepository) {}
   async execute(input: Parameters<VideoProjectRepository['create']>[0]) {
     if (![25, 30, 60].includes(input.durationSeconds))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid durationSeconds');
-    const photoAssetIds = (input.photoAssetIds ?? []).map((value) => id(value, 'photoAssetId'));
+    const photoAssetIds = (input.photoAssetIds ?? []).map((value) =>
+      validateVideoId(value, 'photoAssetId'),
+    );
     const narrationVoice = input.narrationVoice ?? DEFAULT_VIDEO_NARRATION_VOICE;
     if (!VIDEO_NARRATION_VOICES.includes(narrationVoice))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid narrationVoice');
@@ -76,21 +57,21 @@ export class CreateVideoProject {
       narrationVoice,
       narrationSpeed,
       socialImageGenerationRequestId: input.socialImageGenerationRequestId
-        ? id(input.socialImageGenerationRequestId, 'socialImageGenerationRequestId')
+        ? validateVideoId(input.socialImageGenerationRequestId, 'socialImageGenerationRequestId')
         : null,
-      ...(input.id ? { id: id(input.id, 'id') } : {}),
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      groupMembershipId: id(input.groupMembershipId, 'groupMembershipId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      bunshinId: id(input.bunshinId, 'bunshinId'),
-      campaignId: input.campaignId ? id(input.campaignId, 'campaignId') : null,
+      ...(input.id ? { id: validateVideoId(input.id, 'id') } : {}),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      groupMembershipId: validateVideoId(input.groupMembershipId, 'groupMembershipId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      bunshinId: validateVideoId(input.bunshinId, 'bunshinId'),
+      campaignId: input.campaignId ? validateVideoId(input.campaignId, 'campaignId') : null,
       characterProfileVersionId: input.characterProfileVersionId
-        ? id(input.characterProfileVersionId, 'characterProfileVersionId')
+        ? validateVideoId(input.characterProfileVersionId, 'characterProfileVersionId')
         : null,
-      title: text(input.title, 'title', 160),
+      title: validateVideoText(input.title, 'title', 160),
       standardComposition: input.standardComposition,
-      aiProcessingTypes: aiTypes(input.aiProcessingTypes),
+      aiProcessingTypes: validateVideoAiTypes(input.aiProcessingTypes),
     });
     if (!value) throw new ApplicationError('FORBIDDEN', 'video project unavailable');
     return value;
@@ -101,39 +82,14 @@ export class GetVideoProject {
   constructor(private readonly repository: VideoProjectRepository) {}
   async execute(input: Parameters<VideoProjectRepository['findOwned']>[0]) {
     const value = await this.repository.findOwned({
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
     });
     if (!value) throw new ApplicationError('NOT_FOUND', 'video project not found');
     return value;
   }
-}
-
-export function isSupportedVideoComposition(input: {
-  scenes: Array<{ visualType: string; aiProcessingTypes: string[] }>;
-  aiProcessingTypes: string[];
-}) {
-  const supported = new Set(['SCRIPT_GENERATION', 'VIDEO_GENERATION', 'VOICE_SYNTHESIS']);
-  return (
-    input.aiProcessingTypes.every((type) => supported.has(type)) &&
-    input.scenes.every(
-      (scene) =>
-        ['TEXT_MOTION', 'AI_VIDEO', 'USER_ASSET', 'GENERATED_IMAGE'].includes(scene.visualType) &&
-        scene.aiProcessingTypes.every((type) => supported.has(type)),
-    )
-  );
-}
-
-export function assertSupportedVideoComposition(
-  input: Parameters<typeof isSupportedVideoComposition>[0],
-) {
-  if (!isSupportedVideoComposition(input))
-    throw new ApplicationError(
-      'VALIDATION_ERROR',
-      '写真・音声を含む動画は準備中です。企画を作り直し、字幕動画をご利用ください。',
-    );
 }
 
 export class ReplaceVideoPlan {
@@ -165,7 +121,7 @@ export class ReplaceVideoPlan {
         scene.durationMs > 60_000
       )
         throw new ApplicationError('VALIDATION_ERROR', 'invalid scene duration');
-      const types = aiTypes(scene.aiProcessingTypes);
+      const types = validateVideoAiTypes(scene.aiProcessingTypes);
       if (
         input.standardComposition &&
         (scene.visualType === 'AI_VIDEO' || types.includes('VIDEO_GENERATION'))
@@ -181,7 +137,7 @@ export class ReplaceVideoPlan {
         (!visualPrompt || ![5_000, 10_000].includes(scene.durationMs))
       )
         throw new ApplicationError('VALIDATION_ERROR', 'invalid AI video scene');
-      const narration = text(scene.narration, 'narration', 2_000);
+      const narration = validateVideoText(scene.narration, 'narration', 2_000);
       if (
         input.projectAiProcessingTypes.includes('VOICE_SYNTHESIS') &&
         Array.from(narration).length > Math.floor((scene.durationMs / 1_000) * 3)
@@ -190,12 +146,11 @@ export class ReplaceVideoPlan {
       return {
         ...scene,
         narration,
-        caption: text(scene.caption, 'caption', 240),
+        caption: validateVideoText(scene.caption, 'caption', 240),
         visualPrompt,
-        keywords: [...new Set(scene.keywords.map((keyword) => text(keyword, 'keyword', 80)))].slice(
-          0,
-          20,
-        ),
+        keywords: [
+          ...new Set(scene.keywords.map((keyword) => validateVideoText(keyword, 'keyword', 80))),
+        ].slice(0, 20),
         aiProcessingTypes: types,
       };
     });
@@ -207,12 +162,12 @@ export class ReplaceVideoPlan {
     assertSupportedVideoComposition({ scenes, aiProcessingTypes: input.projectAiProcessingTypes });
     const value = await this.repository.replacePlan({
       ...input,
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
       scenes,
-      projectAiProcessingTypes: aiTypes(input.projectAiProcessingTypes),
+      projectAiProcessingTypes: validateVideoAiTypes(input.projectAiProcessingTypes),
       aiVideoSceneCount,
     });
     if (!value) throw new ApplicationError('CONFLICT', 'video project revision conflict');
@@ -236,12 +191,12 @@ export class UpdateVideoSceneDraft {
     if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
     const scope = {
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
     };
-    const sceneId = id(input.sceneId, 'sceneId');
+    const sceneId = validateVideoId(input.sceneId, 'sceneId');
     const project = await this.repository.findOwned(scope);
     if (
       !project ||
@@ -259,8 +214,11 @@ export class UpdateVideoSceneDraft {
         sceneNo: scene.sceneNo,
         durationMs: scene.durationMs,
         narration:
-          scene.id === sceneId ? text(input.narration, 'narration', 2_000) : scene.narration,
-        caption: scene.id === sceneId ? text(input.caption, 'caption', 240) : scene.caption,
+          scene.id === sceneId
+            ? validateVideoText(input.narration, 'narration', 2_000)
+            : scene.narration,
+        caption:
+          scene.id === sceneId ? validateVideoText(input.caption, 'caption', 240) : scene.caption,
         visualType: scene.visualType,
         visualPrompt: scene.visualPrompt,
         keywords: scene.keywords,
@@ -285,10 +243,10 @@ export class UpdateVideoNarrationSettings {
     if (!VIDEO_NARRATION_SPEEDS.includes(input.speed))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid narration speed');
     const value = await this.repository.updateNarrationSettings({
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
       expectedRevision: input.expectedRevision,
       voice: input.voice,
       speed: input.speed,
@@ -304,10 +262,10 @@ export class ApproveVideoPlan {
     if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
     const value = await this.repository.approvePlan({
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
       expectedRevision: input.expectedRevision,
     });
     if (!value) throw new ApplicationError('CONFLICT', 'video project approval conflict');
@@ -339,13 +297,13 @@ export class ReviewFinishedVideo {
     const reviewReason = input.action === 'REVISE' ? input.reviewReason : null;
     const reviewNote =
       input.action === 'REVISE' && input.reviewNote
-        ? text(input.reviewNote, 'reviewNote', 500)
+        ? validateVideoText(input.reviewNote, 'reviewNote', 500)
         : null;
     const value = await this.repository.review({
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
       expectedRevision: input.expectedRevision,
       action: input.action,
       reviewReason,
@@ -353,144 +311,6 @@ export class ReviewFinishedVideo {
     });
     if (!value) throw new ApplicationError('CONFLICT', 'video review conflict');
     return value;
-  }
-}
-
-export class QueueVideoRender {
-  constructor(private readonly repository: VideoRenderRepository) {}
-  async execute(input: Parameters<VideoRenderRepository['enqueueApproved']>[0]) {
-    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1)
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid expectedRevision');
-    const provider = text(input.provider, 'provider', 80);
-    const value = await this.repository.enqueueApproved({
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
-      expectedRevision: input.expectedRevision,
-      provider,
-    });
-    if (!value) throw new ApplicationError('CONFLICT', 'video render queue conflict');
-    return value;
-  }
-}
-
-export class ExecuteVideoRenderStep {
-  constructor(
-    private readonly repository: VideoRenderRepository,
-    private readonly provider: VideoRenderProviderPort,
-    private readonly storage: VideoRenderOutputStoragePort,
-    private readonly webhook: VideoRenderWebhookPort,
-    private readonly sceneSources: VideoSceneRenderSourcePort,
-    private readonly photoSources?: VideoSceneRenderSourcePort,
-    private readonly generatedImageSources?: VideoSceneRenderSourcePort,
-    private readonly backgroundAudioSources?: VideoSceneRenderSourcePort,
-  ) {}
-
-  async execute(input: {
-    workspaceId: string;
-    renderId: string;
-  }): Promise<VideoRenderExecutionResult> {
-    const scope = {
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      renderId: id(input.renderId, 'renderId'),
-    };
-    const value = await this.repository.findForExecution(scope);
-    if (!value) throw new ApplicationError('NOT_FOUND', 'video render not found');
-    if (value.render.provider !== 'CREATOMATE')
-      throw new ApplicationError('CONFIGURATION_ERROR', 'unsupported video render provider');
-    if (value.render.status === 'SUCCEEDED') return { status: 'SUCCEEDED', render: value.render };
-    if (value.render.status === 'FAILED' || value.render.status === 'CANCELLED')
-      return { status: 'FAILED', render: value.render };
-
-    let render = value.render;
-    if (render.status === 'QUEUED') {
-      assertSupportedVideoComposition(value.project);
-      const webhookUrl = await this.webhook.createUrl(scope);
-      const aiSceneSources = await Promise.all(
-        value.aiSceneSources.map(async (source) => ({
-          videoSceneId: source.videoSceneId,
-          url: await this.sceneSources.createUrl(source.storageKey),
-        })),
-      );
-      const photoSceneSources = await Promise.all(
-        (value.photoSceneSources ?? []).map(async (source) => {
-          if (!this.photoSources)
-            throw new ApplicationError('CONFIGURATION_ERROR', 'photo source unavailable');
-          return {
-            videoSceneId: source.videoSceneId,
-            url: await this.photoSources.createUrl(source.storageKey),
-          };
-        }),
-      );
-      const generatedImageSceneSources = await Promise.all(
-        (value.generatedImageSceneSources ?? []).map(async (source) => {
-          if (!this.generatedImageSources)
-            throw new ApplicationError('CONFIGURATION_ERROR', 'generated image source unavailable');
-          return {
-            videoSceneId: source.videoSceneId,
-            url: await this.generatedImageSources.createUrl(source.storageKey),
-          };
-        }),
-      );
-      const backgroundAudioUrl = value.backgroundAudioSource
-        ? await this.backgroundAudioSources?.createUrl(value.backgroundAudioSource.storageKey)
-        : undefined;
-      if (value.backgroundAudioSource && !backgroundAudioUrl)
-        throw new ApplicationError('CONFIGURATION_ERROR', 'background audio source unavailable');
-      const submitted = await this.provider.submit({
-        renderId: render.id,
-        project: value.project,
-        aiSceneSources,
-        photoSceneSources,
-        generatedImageSceneSources,
-        ...(backgroundAudioUrl
-          ? {
-              backgroundAudioUrl,
-              backgroundAudioVolumePercent: value.backgroundAudioSource!.volumePercent,
-            }
-          : {}),
-        webhookUrl,
-      });
-      const updated = await this.repository.markSubmitted({
-        ...scope,
-        externalJobId: text(submitted.externalJobId, 'externalJobId', 255),
-      });
-      if (!updated) throw new ApplicationError('CONFLICT', 'video render transition conflict');
-      return { status: 'PENDING', render: updated };
-    }
-    if (!render.externalJobId)
-      throw new ApplicationError('CONFLICT', 'video render external job is missing');
-    const inspected = await this.provider.inspect({ externalJobId: render.externalJobId });
-    if (inspected.status === 'SUBMITTED' || inspected.status === 'RENDERING') {
-      if (inspected.status === 'RENDERING') {
-        const updated = await this.repository.markRendering(scope);
-        if (updated) render = updated;
-      }
-      return { status: 'PENDING', render };
-    }
-    if (inspected.status === 'FAILED') {
-      const failed = await this.repository.markFailed({
-        ...scope,
-        errorCode: text(inspected.errorCode, 'errorCode', 80),
-      });
-      if (!failed) throw new ApplicationError('CONFLICT', 'video render transition conflict');
-      return { status: 'FAILED', render: failed };
-    }
-    if (inspected.status !== 'SUCCEEDED')
-      throw new ApplicationError('INTERNAL_ERROR', 'invalid video render status');
-    const stored = await this.storage.store({
-      ...scope,
-      groupId: value.render.groupId,
-      ownerUserId: value.render.ownerUserId,
-      sourceUrl: inspected.outputUrl,
-    });
-    const succeeded = await this.repository.markSucceeded({
-      ...scope,
-      outputStorageKey: text(stored.storageKey, 'outputStorageKey', 512),
-    });
-    if (!succeeded) throw new ApplicationError('CONFLICT', 'video render transition conflict');
-    return { status: 'SUCCEEDED', render: succeeded };
   }
 }
 
@@ -509,10 +329,10 @@ export class GenerateVideoPlan {
     expectedRevision: number;
   }) {
     const scope = {
-      workspaceId: id(input.workspaceId, 'workspaceId'),
-      groupId: id(input.groupId, 'groupId'),
-      actorUserId: id(input.actorUserId, 'actorUserId'),
-      videoProjectId: id(input.videoProjectId, 'videoProjectId'),
+      workspaceId: validateVideoId(input.workspaceId, 'workspaceId'),
+      groupId: validateVideoId(input.groupId, 'groupId'),
+      actorUserId: validateVideoId(input.actorUserId, 'actorUserId'),
+      videoProjectId: validateVideoId(input.videoProjectId, 'videoProjectId'),
     };
     const project = await this.projects.findOwned(scope);
     if (!project) throw new ApplicationError('NOT_FOUND', 'video project not found');
