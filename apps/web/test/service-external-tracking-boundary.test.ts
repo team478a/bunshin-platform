@@ -50,9 +50,14 @@ describe('service external tracking boundary', () => {
   });
 
   it('rejects group IDs outside the resolved service for list, export, import, and create', () => {
-    const http = source('src/http/external-tracking-links.ts');
+    const http = [
+      source('src/http/external-tracking-configuration.ts'),
+      source('src/http/external-tracking-csv.ts'),
+      source('src/http/external-tracking-mutations.ts'),
+    ].join('\n');
+    const core = source('src/http/external-tracking-http-core.ts');
     expect(http.match(/service boundary mismatch/g)).toHaveLength(4);
-    expect(http).toContain('new db.PrismaExternalTrackingLinkRepository(undefined, serviceId)');
+    expect(core).toContain('new db.PrismaExternalTrackingLinkRepository(undefined, serviceId)');
   });
 
   it('constrains resources again inside the repository', () => {
