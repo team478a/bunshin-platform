@@ -57,11 +57,9 @@ export {
   PrismaProductPackRepository,
 } from './product-catalog';
 export { PrismaGroupKnowledgeRepository } from './group-knowledge';
-export {
-  PrismaAdvertisingSafetyRepository,
-  PrismaCampaignRepository,
-  PrismaCampaignSafetyRepository,
-} from './campaign-advertising';
+export { PrismaAdvertisingSafetyRepository } from './advertising-safety';
+export { PrismaCampaignRepository } from './campaign';
+export { PrismaCampaignSafetyRepository } from './campaign-safety';
 export {
   PrismaMemberProductActivityRepository,
   PrismaMemberProductProfileRepository,

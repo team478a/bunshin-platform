@@ -10,7 +10,7 @@ const dailySource = readFileSync(
   'utf8',
 );
 const campaignRepositorySource = readFileSync(
-  new URL('../../../packages/database/src/campaign-advertising.ts', import.meta.url),
+  new URL('../../../packages/database/src/campaign.ts', import.meta.url),
   'utf8',
 );
 
