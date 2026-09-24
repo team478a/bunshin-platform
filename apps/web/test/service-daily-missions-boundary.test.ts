@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  new URL('../src/http/service-daily-missions.ts', import.meta.url),
-  'utf8',
-);
+const source = [
+  'service-daily-missions.ts',
+  'service-daily-mission-http-core.ts',
+  'service-daily-mission-generation.ts',
+  'service-daily-mission-variants.ts',
+  'service-daily-mission-engagement.ts',
+  'service-daily-mission-outcomes.ts',
+]
+  .map((file) => readFileSync(new URL(`../src/http/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 const planningContext = readFileSync(
   new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',

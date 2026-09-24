@@ -5,10 +5,14 @@ const personalHttp = readFileSync(
   new URL('../src/http/daily-missions.ts', import.meta.url),
   'utf8',
 );
-const serviceHttp = readFileSync(
-  new URL('../src/http/service-daily-missions.ts', import.meta.url),
-  'utf8',
-);
+const serviceHttp = [
+  'service-daily-missions.ts',
+  'service-daily-mission-http-core.ts',
+  'service-daily-mission-generation.ts',
+  'service-daily-mission-variants.ts',
+]
+  .map((file) => readFileSync(new URL(`../src/http/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 const personalPage = readFileSync(
   new URL('../app/(app)/bunshins/[bunshinId]/page.tsx', import.meta.url),
   'utf8',
