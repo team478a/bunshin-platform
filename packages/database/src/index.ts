@@ -169,9 +169,9 @@ export {
   PrismaAccountDeletionAdminOperationsRepository,
   PrismaAccountDeletionExecutionRepository,
   PrismaAccountDeletionOrchestrationRepository,
-  PrismaAccountDeletionPurgeRepository,
   PrismaAccountDeletionRequestRepository,
 } from './account-deletion';
+export { PrismaAccountDeletionPurgeRepository } from './account-deletion-purge';
 export { PrismaContentPillarRepository, PrismaWeeklyPlanRepository } from './mission-planning';
 export { PrismaDailyMissionRepository } from './daily-missions';
 export {
