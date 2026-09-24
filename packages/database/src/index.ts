@@ -31,10 +31,8 @@ export { PrismaPointLedgerRepository } from './point-ledger';
 export { PrismaPointRedemptionRepository } from './point-redemption';
 export { PrismaPointActivityProcessorRepository } from './point-activity';
 export { PrismaGroupFeatureEntitlementRepository } from './group-feature-entitlement';
-export {
-  PrismaVideoDeliveryRepository,
-  PrismaVideoProjectRepository,
-} from './video-project-delivery';
+export { PrismaVideoProjectRepository } from './video-project-delivery';
+export { PrismaVideoDeliveryRepository } from './video-deliveries';
 export {
   PrismaVideoMediaQuotaRepository,
   PrismaVideoRenderRepository,
