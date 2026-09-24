@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const notification = source('src/services/member-tracking-link-notification.ts');
-const transition = source('src/http/external-tracking-links.ts');
+const transition = source('src/http/external-tracking-mutations.ts');
 const linkList = source('app/(app)/admin/external-tracking/external-tracking-link-list.tsx');
 const repository = source('../../packages/database/src/external-tracking-admin.ts');
 
