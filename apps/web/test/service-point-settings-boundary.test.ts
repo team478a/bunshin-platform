@@ -18,6 +18,27 @@ const page = [
     'utf8',
   ),
   readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/point-rule-actions.ts', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../app/s/[serviceSlug]/manage/points/point-configuration-actions.ts',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/point-definitions.ts', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
     fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/points-data.ts', import.meta.url)),
     'utf8',
   ),
@@ -75,6 +96,35 @@ describe('service point settings boundaries', () => {
     expect(manual).toContain("action: 'POINT_BONUS_GRANTED'");
     expect(manual).toContain("action: 'POINT_RECOVERY_REGISTERED'");
     expect(manual).toContain("action: 'POINT_RECOVERY_CANCELLED'");
+  });
+
+  it('keeps point rule and service configuration mutations in dedicated modules', () => {
+    const facade = readFileSync(
+      fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
+      'utf8',
+    );
+    const rules = readFileSync(
+      fileURLToPath(
+        new URL('../app/s/[serviceSlug]/manage/points/point-rule-actions.ts', import.meta.url),
+      ),
+      'utf8',
+    );
+    const configuration = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../app/s/[serviceSlug]/manage/points/point-configuration-actions.ts',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    expect(facade).toContain("from './point-rule-actions';");
+    expect(facade).toContain("from './point-configuration-actions';");
+    expect(rules).toContain("action: 'POINT_RULES_UPDATED'");
+    expect(rules).toContain("action: 'CAMPAIGN_POINT_RULES_UPDATED'");
+    expect(configuration).toContain("action: 'POINT_REWARDS_UPDATED'");
+    expect(configuration).toContain("'POINT_ISSUANCE_STOPPED'");
+    expect(configuration).toContain('startFourWeekRewardsPilot');
   });
 
   it('requires service management context and scopes every mutation', () => {

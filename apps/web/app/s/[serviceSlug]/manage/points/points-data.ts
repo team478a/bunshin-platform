@@ -6,7 +6,7 @@ import {
   resolveRewardsPilotMeasurementPeriod,
 } from '../../../../../src/rewards/rewards-pilot-metrics';
 import { getRewardsPilotExpiryNotice } from '../../../../../src/rewards/rewards-pilot-expiry';
-import { RULES } from './actions';
+import { RULES } from './point-definitions';
 
 export async function loadPointSettingsData({
   workspaceId,

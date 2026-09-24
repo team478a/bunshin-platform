@@ -9,6 +9,7 @@ const membersPage = readFileSync('app/(app)/groups/[groupId]/members/page.tsx', 
 const servicePointsPage = [
   readFileSync('app/s/[serviceSlug]/manage/points/page.tsx', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/actions.ts', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/point-configuration-actions.ts', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/points-data.ts', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/points-operations-sections.tsx', 'utf8'),
