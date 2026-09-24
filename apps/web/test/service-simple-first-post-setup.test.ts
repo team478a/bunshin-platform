@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const setup = source('app/s/[serviceSlug]/bunshins/[bunshinId]/simple-first-post-setup.tsx');
-const page = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
+const page = [
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+]
+  .map(source)
+  .join('\n');
 
 describe('simple service first-post setup', () => {
   it('asks members only for the posting destination, pace when unlocked, and delivery time', () => {

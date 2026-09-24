@@ -35,7 +35,7 @@ describe('private service rich menu destinations', () => {
     'app/s/[serviceSlug]/videos/page.tsx',
     'app/s/[serviceSlug]/video-assets/page.tsx',
     'app/s/[serviceSlug]/videos/[videoProjectId]/page.tsx',
-    'app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx',
+    'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
   ])('uses the shared private member boundary in %s', (relativePath) => {
     const page = source(relativePath);
     expect(page).toContain('resolveAuthenticatedMemberServicePage');

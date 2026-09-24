@@ -15,10 +15,14 @@ const planningContext = readFileSync(
   new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
-const detailPage = readFileSync(
-  new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
-  'utf8',
-);
+const detailPage = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const experience = [
   'service-daily-mission-section.tsx',
   'service-daily-mission-controller.ts',

@@ -11,7 +11,12 @@ const personalMission = [
 ]
   .map((file) => source(`../app/(app)/bunshins/[bunshinId]/${file}`))
   .join('\n');
-const servicePage = source('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
+const servicePage = [
+  '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
+  '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+]
+  .map(source)
+  .join('\n');
 const serviceMission = [
   'service-daily-mission-section.tsx',
   'service-daily-mission-controller.ts',

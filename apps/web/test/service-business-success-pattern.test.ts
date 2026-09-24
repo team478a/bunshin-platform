@@ -1,10 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const page = readFileSync(
-  new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
-  'utf8',
-);
+const page = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const dailyAction = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/daily-action-section.tsx', import.meta.url),
   'utf8',

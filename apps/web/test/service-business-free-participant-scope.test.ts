@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest';
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 const home = source('app/s/[serviceSlug]/home/page.tsx');
-const detail = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
+const detail = [
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+]
+  .map(source)
+  .join('\n');
 const missionSection = [
   'service-daily-mission-section.tsx',
   'service-daily-mission-controller.ts',
