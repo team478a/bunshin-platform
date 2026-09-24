@@ -200,7 +200,8 @@ export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';
 export { PrismaTrendOperationsRepository } from './trend-operations';
-export { PrismaProgramCoreRepository, PrismaProgramRuntimeRepository } from './program-runtime';
+export { PrismaProgramCoreRepository } from './program-runtime';
+export { PrismaProgramRuntimeRepository } from './program-runtime-execution';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,
