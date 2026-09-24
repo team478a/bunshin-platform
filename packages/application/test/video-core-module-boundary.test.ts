@@ -7,7 +7,11 @@ import {
   type VideoProjectRepository,
   type VideoRenderProviderPort,
 } from '../src/video-core-contracts';
-import { CreateVideoProject, ExecuteVideoRenderStep } from '../src/video-core';
+import {
+  CreateVideoProject,
+  ExecuteVideoRenderStep as VideoCoreExecuteVideoRenderStep,
+} from '../src/video-core';
+import { ExecuteVideoRenderStep, QueueVideoRender } from '../src/video-render-execution';
 
 describe('video core module boundary', () => {
   it('exposes contracts independently from application use cases', () => {
@@ -19,5 +23,7 @@ describe('video core module boundary', () => {
     expect(VIDEO_NARRATION_VOICES).toContain(DEFAULT_VIDEO_NARRATION_VOICE);
     expect(CreateVideoProject).toBeTypeOf('function');
     expect(ExecuteVideoRenderStep).toBeTypeOf('function');
+    expect(QueueVideoRender).toBeTypeOf('function');
+    expect(VideoCoreExecuteVideoRenderStep).toBe(ExecuteVideoRenderStep);
   });
 });
