@@ -6,8 +6,22 @@ const importer = readFileSync(
   fileURLToPath(new URL('../src/http/group-badge-import.ts', import.meta.url)),
   'utf8',
 );
-const groupPage = readFileSync(
-  fileURLToPath(new URL('../app/(app)/groups/[groupId]/badges/page.tsx', import.meta.url)),
+const groupData = readFileSync(
+  fileURLToPath(
+    new URL('../app/(app)/groups/[groupId]/badges/group-badges-data.ts', import.meta.url),
+  ),
+  'utf8',
+);
+const groupActions = readFileSync(
+  fileURLToPath(
+    new URL('../app/(app)/groups/[groupId]/badges/group-badge-actions.ts', import.meta.url),
+  ),
+  'utf8',
+);
+const groupView = readFileSync(
+  fileURLToPath(
+    new URL('../app/(app)/groups/[groupId]/badges/group-badges-view.tsx', import.meta.url),
+  ),
   'utf8',
 );
 const adminPage = readFileSync(
@@ -25,30 +39,30 @@ describe('group badge admin boundaries', () => {
   });
 
   it('requires an active group manager to open the group page', () => {
-    expect(groupPage).toContain("role: 'MANAGER'");
-    expect(groupPage).toContain("status: 'ACTIVE'");
-    expect(groupPage).not.toContain('ownerKnowledge');
-    expect(groupPage).not.toContain('bunshinMemory');
+    expect(groupData).toContain("role: 'MANAGER'");
+    expect(groupData).toContain("status: 'ACTIVE'");
+    expect(groupData).not.toContain('ownerKnowledge');
+    expect(groupData).not.toContain('bunshinMemory');
   });
 
   it('lets a service operator create and award within the service route', () => {
-    expect(groupPage).toContain('ReviewGroupBadge(repository).execute');
-    expect(groupPage).toContain('ReviewGroupBadgeCandidate(repository).execute');
-    expect(groupPage).toContain('サービス運営者による直接付与');
-    expect(groupPage).toContain('RevokeGroupBadgeAward');
-    expect(groupPage).toContain('誤って付与したバッジを取り消す');
-    expect(groupPage).toContain("serviceOperator ? '作成したバッジ' : '申請したバッジ'");
-    expect(groupPage).toContain('作成後すぐに参加者へ付与できます。');
-    expect(groupPage).toContain('SetGroupBadgeAvailability');
-    expect(groupPage).toContain('新しい付与を停止する');
-    expect(groupPage).toContain('付与を再開する');
-    expect(groupPage).toContain('ReviseGroupBadge');
-    expect(groupPage).toContain('名前や説明を変更する');
-    expect(groupPage).toContain('これからの付与には新しい表示を使います。');
-    expect(groupPage).toContain('badgeAppearanceImageKey(parsed.data.badgeStyle)');
-    expect(groupPage).toContain('name="badgeStyle"');
-    expect(groupPage).toContain('membership.userId !== actor.userId');
-    expect(groupPage).toContain('運営者自身への付与はできません。');
+    expect(groupActions).toContain('ReviewGroupBadge(repository).execute');
+    expect(groupActions).toContain('ReviewGroupBadgeCandidate(repository).execute');
+    expect(groupActions).toContain('サービス運営者による直接付与');
+    expect(groupActions).toContain('RevokeGroupBadgeAward');
+    expect(groupView).toContain('誤って付与したバッジを取り消す');
+    expect(groupView).toContain("serviceOperator ? '作成したバッジ' : '申請したバッジ'");
+    expect(groupView).toContain('作成後すぐに参加者へ付与できます。');
+    expect(groupActions).toContain('SetGroupBadgeAvailability');
+    expect(groupView).toContain('新しい付与を停止する');
+    expect(groupView).toContain('付与を再開する');
+    expect(groupActions).toContain('ReviseGroupBadge');
+    expect(groupView).toContain('名前や説明を変更する');
+    expect(groupView).toContain('これからの付与には新しい表示を使います。');
+    expect(groupActions).toContain('badgeAppearanceImageKey(parsed.data.badgeStyle)');
+    expect(groupView).toContain('name="badgeStyle"');
+    expect(groupData).toContain('membership.userId !== actor.userId');
+    expect(groupView).toContain('運営者自身への付与はできません。');
   });
 
   it('limits badge publication review to super admins', () => {
