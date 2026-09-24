@@ -1,6 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import type { LineConfigurationEnvironment } from './index';
-import type { LineRecipientResolverPort } from './line-messaging-core';
+import type { LineRecipientResolverPort } from './line-message-delivery';
 
 export type LineFriendshipStatus = 'UNKNOWN' | 'FOLLOWING' | 'UNFOLLOWED';
 export type LineWebhookEventType = 'FOLLOW' | 'UNFOLLOW' | 'OTHER';
