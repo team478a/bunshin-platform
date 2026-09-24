@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync('app/s/[serviceSlug]/help/page.tsx', 'utf8');
 const entry = readFileSync('app/s/[serviceSlug]/page.tsx', 'utf8');
 const home = readFileSync('app/s/[serviceSlug]/home/page.tsx', 'utf8');
-const management = readFileSync('app/s/[serviceSlug]/manage/page.tsx', 'utf8');
+const management = readFileSync(
+  'app/s/[serviceSlug]/manage/service-management-home-view.tsx',
+  'utf8',
+);
 
 describe('service help page', () => {
   it('shows the configured delivery mode and explains both delivery types', () => {
