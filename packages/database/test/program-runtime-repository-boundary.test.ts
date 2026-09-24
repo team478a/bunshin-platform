@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(join(process.cwd(), 'src', 'program-runtime.ts'), 'utf8');
-const runtime = source.slice(source.indexOf('export class PrismaProgramRuntimeRepository'));
+const core = readFileSync(join(process.cwd(), 'src', 'program-runtime.ts'), 'utf8');
+const runtime = readFileSync(join(process.cwd(), 'src', 'program-runtime-execution.ts'), 'utf8');
+const publicModule = readFileSync(join(process.cwd(), 'src', 'index.ts'), 'utf8');
 
 describe('program runtime repository boundary', () => {
   it('checks workspace, group and enrollment together', () => {
@@ -27,5 +28,16 @@ describe('program runtime repository boundary', () => {
     expect(runtime).toContain('workspaceId_groupId_idempotencyKey');
     expect(runtime).toContain("error.code !== 'P2002'");
     expect(runtime).toContain('created: false');
+  });
+
+  it('keeps runtime persistence separate while preserving the legacy export', () => {
+    expect(runtime).toContain('export class PrismaProgramRuntimeRepository');
+    expect(core).not.toContain('class PrismaProgramRuntimeRepository');
+    expect(core).toContain(
+      "export { PrismaProgramRuntimeRepository } from './program-runtime-execution';",
+    );
+    expect(publicModule).toContain(
+      "export { PrismaProgramRuntimeRepository } from './program-runtime-execution';",
+    );
   });
 });
