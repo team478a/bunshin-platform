@@ -5,7 +5,12 @@ function source(path: string) {
   return readFileSync(new URL(path, import.meta.url), 'utf8');
 }
 
-const home = source('../app/s/[serviceSlug]/home/page.tsx');
+const home = [
+  '../app/s/[serviceSlug]/home/page.tsx',
+  '../app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+]
+  .map(source)
+  .join('\n');
 const images = source('../app/s/[serviceSlug]/images/page.tsx');
 const videos = source('../app/s/[serviceSlug]/videos/page.tsx');
 const videoAssets = source('../app/s/[serviceSlug]/video-assets/page.tsx');
@@ -13,8 +18,8 @@ const videoDetail = source('../app/s/[serviceSlug]/videos/[videoProjectId]/page.
 
 describe('service media entry boundary', () => {
   it('keeps image and video entry links inside the service URL', () => {
-    expect(home).toContain('/s/${service.configuration.slug}/images');
-    expect(home).toContain('/s/${service.configuration.slug}/videos');
+    expect(home).toContain('/s/${serviceSlug}/images');
+    expect(home).toContain('/s/${serviceSlug}/videos');
     expect(home).not.toContain('href={`/groups/${groupId}/images`');
     expect(home).not.toContain('href={`/groups/${groupId}/videos`');
   });
