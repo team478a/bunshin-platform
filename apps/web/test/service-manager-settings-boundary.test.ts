@@ -22,7 +22,7 @@ describe('service manager settings boundary', () => {
   });
 
   it('rejects manager attempts to replace platform-owned fields at repository level', () => {
-    const repository = source('../../packages/database/src/service-foundation.ts');
+    const repository = source('../../packages/database/src/service-foundation-save.ts');
     expect(repository).toContain('value.slug !== existing.slug');
     expect(repository).toContain('value.visibility !== existing.visibility');
     expect(repository).toContain('value.poweredByEnabled !== existing.poweredByEnabled');
