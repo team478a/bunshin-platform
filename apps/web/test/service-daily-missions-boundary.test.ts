@@ -15,7 +15,11 @@ const planningContext = readFileSync(
   new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
-const detailPage = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+const detailPage = [
+  'service-bunshin-detail-data.ts',
+  'service-bunshin-detail-image-access.ts',
+  'service-bunshin-detail-view.tsx',
+]
   .map((file) =>
     readFileSync(
       new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),

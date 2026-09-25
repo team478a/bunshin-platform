@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const page = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+const page = [
+  'service-bunshin-detail-data.ts',
+  'service-bunshin-detail-business.ts',
+  'service-bunshin-detail-view.tsx',
+]
   .map((file) =>
     readFileSync(
       new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
@@ -16,7 +20,7 @@ const dailyAction = readFileSync(
 
 describe('business success pattern reuse', () => {
   it('passes the strongest business topic to the daily action flow', () => {
-    expect(page).toContain('buildBusinessResponseInsight(dailyMissions).bestTopic');
+    expect(page).toContain('buildBusinessResponseInsight(input.dailyMissions).bestTopic');
     expect(page).toContain('suggestedReuseTopic={successfulBusinessTopic}');
   });
 
