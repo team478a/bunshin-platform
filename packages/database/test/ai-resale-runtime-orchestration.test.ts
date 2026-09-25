@@ -14,14 +14,14 @@ const runtime = [
   .map((file) => readFileSync(join(process.cwd(), 'src', file), 'utf8'))
   .join('\n');
 const serviceParticipation = readFileSync(
-  join(process.cwd(), 'src', 'service-participation.ts'),
+  join(process.cwd(), 'src', 'service-participation-registration-repository.ts'),
   'utf8',
 );
 
 describe('AI resale runtime orchestration boundary', () => {
   it('anchors automatic enrollment to public registration in the same transaction', () => {
     const registration = serviceParticipation.slice(
-      serviceParticipation.indexOf('export class PrismaServiceParticipationRepository'),
+      serviceParticipation.indexOf('export class PrismaServiceParticipationRegistrationRepository'),
     );
     expect(registration).toContain('autoEnrollAiResaleForRegistration(tx, { membership');
     expect(runtime).toContain("source: 'PUBLIC_REGISTRATION'");
