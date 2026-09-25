@@ -9,7 +9,7 @@ const source = (path: string) => readFileSync(join(repositoryRoot, path), 'utf8'
 describe('organization project hierarchy', () => {
   it('keeps every project and public configuration under the same organization', () => {
     const schema = source('packages/database/prisma/schema.prisma');
-    const repository = source('packages/database/src/service-foundation.ts');
+    const repository = source('packages/database/src/service-foundation-create.ts');
 
     expect(schema).toContain(
       'workspace                       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)',
