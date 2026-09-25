@@ -27,6 +27,10 @@ const experience = [
   'service-daily-mission-section.tsx',
   'service-daily-mission-controller.ts',
   'service-daily-mission-list.tsx',
+  'service-daily-mission-card.tsx',
+  'service-daily-mission-detail.tsx',
+  'service-daily-mission-image-guide.tsx',
+  'service-daily-mission-accepted.tsx',
 ]
   .map((file) =>
     readFileSync(
