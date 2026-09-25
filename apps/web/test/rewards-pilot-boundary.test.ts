@@ -5,7 +5,10 @@ const pointsPage = readFileSync('app/(app)/points/page.tsx', 'utf8');
 const badgesPage = readFileSync('app/(app)/badges/page.tsx', 'utf8');
 const pointsApi = readFileSync('app/api/workspaces/[workspaceId]/points/route.ts', 'utf8');
 const badgesApi = readFileSync('src/http/badge-user-experience.ts', 'utf8');
-const membersPage = readFileSync('app/(app)/groups/[groupId]/members/page.tsx', 'utf8');
+const membersPage = [
+  readFileSync('app/(app)/groups/[groupId]/members/group-members-view.tsx', 'utf8'),
+  readFileSync('app/(app)/groups/[groupId]/members/group-member-feature-settings.tsx', 'utf8'),
+].join('\n');
 const servicePointsPage = [
   readFileSync('app/s/[serviceSlug]/manage/points/page.tsx', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/actions.ts', 'utf8'),

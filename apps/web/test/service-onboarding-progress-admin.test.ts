@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  new URL('../app/(app)/groups/[groupId]/members/page.tsx', import.meta.url),
-  'utf8',
-);
+const source = ['group-members-data.ts', 'group-members-view.tsx']
+  .map((name) =>
+    readFileSync(new URL(`../app/(app)/groups/[groupId]/members/${name}`, import.meta.url), 'utf8'),
+  )
+  .join('\n');
 
 describe('service onboarding progress for administrators', () => {
   it('shows completion state without selecting answer contents', () => {

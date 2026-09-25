@@ -16,7 +16,7 @@ describe('service staff role management boundary', () => {
   });
 
   it('shows the four plain-language duties only for a service', () => {
-    const page = source('app/(app)/groups/[groupId]/members/page.tsx');
+    const page = source('app/(app)/groups/[groupId]/members/group-members-view.tsx');
     expect(page).toContain('サービスで担当する役割');
     expect(page).toContain('サービス所有者');
     expect(page).toContain('運営管理者');
@@ -26,9 +26,10 @@ describe('service staff role management boundary', () => {
   });
 
   it('allows only an owner or super administrator to operate the role form', () => {
-    const page = source('app/(app)/groups/[groupId]/members/page.tsx');
-    expect(page).toContain("manager?.serviceRole === 'SERVICE_OWNER'");
-    expect(page).toContain("platformAdmin?.role === 'SUPER_ADMIN'");
-    expect(page).toContain('disabled={!canManageStaff}');
+    const data = source('app/(app)/groups/[groupId]/members/group-members-data.ts');
+    const view = source('app/(app)/groups/[groupId]/members/group-members-view.tsx');
+    expect(data).toContain("manager?.serviceRole === 'SERVICE_OWNER'");
+    expect(data).toContain("platformAdmin?.role === 'SUPER_ADMIN'");
+    expect(view).toContain('disabled={!canManageStaff}');
   });
 });
