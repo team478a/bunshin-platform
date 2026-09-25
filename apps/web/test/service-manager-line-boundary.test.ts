@@ -28,7 +28,13 @@ describe('service manager dedicated LINE boundary', () => {
   });
 
   it('adds a service manager entry and service-scoped endpoint', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     const page = source('app/s/[serviceSlug]/manage/line/page.tsx');
     expect(home).toContain('/manage/line');
     expect(page).toContain('scopeLabel="サービス"');

@@ -5,10 +5,13 @@ const httpSource = readFileSync(
   new URL('../src/http/service-bunshins.ts', import.meta.url),
   'utf8',
 );
-const homeSource = readFileSync(
-  new URL('../app/s/[serviceSlug]/home/page.tsx', import.meta.url),
-  'utf8',
-);
+const homeSource = [
+  '../app/s/[serviceSlug]/home/page.tsx',
+  '../app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+  '../app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 const listSource = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/page.tsx', import.meta.url),
   'utf8',

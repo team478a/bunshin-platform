@@ -19,8 +19,14 @@ describe('business SNS diagnosis boundary', () => {
   });
 
   it('provides a direct diagnosis link on the business service home', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     expect(home).toContain('SNS集客の準備を確認する');
-    expect(home).toContain('href={`/s/${service.configuration.slug}/diagnosis` as Route}');
+    expect(home).toContain('href={`/s/${serviceSlug}/diagnosis` as Route}');
   });
 });

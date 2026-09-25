@@ -33,9 +33,12 @@ describe('service management role authorization', () => {
 
   it('keeps administration navigation limited while exposing only content links to editors', () => {
     const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const navigation = source('app/s/[serviceSlug]/home/service-home-navigation-sections.tsx');
     expect(home).toContain("['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(membership.serviceRole)");
     expect(home).toContain("membership.serviceRole === 'CONTENT_EDITOR'");
-    const editorSection = home.slice(home.indexOf("membership.serviceRole === 'CONTENT_EDITOR'"));
+    const editorSection = navigation.slice(
+      navigation.indexOf('export function ContentEditorLinks'),
+    );
     expect(editorSection).toContain('/manage/knowledge');
     expect(editorSection).toContain('/manage/product-packs');
     expect(editorSection).toContain('/manage/campaigns');

@@ -29,7 +29,13 @@ describe('service manager settings boundary', () => {
   });
 
   it('shows a manager-only settings entry from the service home', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     const page = source('app/s/[serviceSlug]/manage/settings/page.tsx');
     expect(home).toContain('/manage/settings');
     expect(page).toContain('resolveManagedServiceContext(serviceSlug, actor.userId)');

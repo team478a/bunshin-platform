@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-const home = source('app/s/[serviceSlug]/home/page.tsx');
+const home = [
+  'app/s/[serviceSlug]/home/page.tsx',
+  'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+  'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+]
+  .map(source)
+  .join('\n');
 const detail = [
   'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
   'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',

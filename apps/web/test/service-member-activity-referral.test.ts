@@ -5,7 +5,13 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 const page = source('app/s/[serviceSlug]/activity/page.tsx');
 const share = source('app/s/[serviceSlug]/activity/service-referral-share.tsx');
 const endpoint = source('src/http/service-referral-code.ts');
-const home = source('app/s/[serviceSlug]/home/page.tsx');
+const home = [
+  'app/s/[serviceSlug]/home/page.tsx',
+  'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+  'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+]
+  .map(source)
+  .join('\n');
 
 describe('service member activity and referral', () => {
   it('keeps referral code issuance inside the active service membership', () => {

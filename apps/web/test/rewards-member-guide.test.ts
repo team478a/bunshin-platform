@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-const home = source('app/s/[serviceSlug]/home/page.tsx');
+const home = [
+  'app/s/[serviceSlug]/home/page.tsx',
+  'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+  'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+]
+  .map(source)
+  .join('\n');
 const activity = source('app/s/[serviceSlug]/activity/page.tsx');
 const help = source('app/s/[serviceSlug]/help/page.tsx');
 const points = source('app/(app)/points/page.tsx');
@@ -25,10 +31,11 @@ describe('rewards member guide', () => {
   });
 
   it('links selected members from the service home to their rewards summary', () => {
-    expect(home).toContain('rewardsPilotAccess &&');
+    expect(home).toContain('rewardsAvailable={Boolean(rewardsPilotAccess)}');
+    expect(home).toContain('rewardsAvailable &&');
     expect(home).toContain('/activity#rewards');
     expect(home).toContain('ポイント・バッジを見る');
-    expect(home).toContain('!rewardsPilotAccess &&');
+    expect(home).toContain('!rewardsAvailable &&');
   });
 
   it('keeps rewards data and guidance hidden outside the selected pilot', () => {

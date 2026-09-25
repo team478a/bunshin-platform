@@ -5,10 +5,16 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 
 describe('business growth roadmap boundary', () => {
   it('shows the current 90-day phase on the business service home', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     expect(home).toContain('businessGrowthProgramStatus');
     expect(home).toContain('90日計画と現在地を見る');
-    expect(home).toContain('href={`/s/${service.configuration.slug}/roadmap` as Route}');
+    expect(home).toContain('href={`/s/${serviceSlug}/roadmap` as Route}');
     expect(home).toContain("isBusinessDailyService ? '今日やることを見る'");
   });
 
