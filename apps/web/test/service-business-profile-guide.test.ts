@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const page = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+const page = [
+  'service-bunshin-detail-data.ts',
+  'service-bunshin-detail-business.ts',
+  'service-bunshin-detail-view.tsx',
+]
   .map((file) =>
     readFileSync(
       new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
@@ -19,7 +23,7 @@ const guide = readFileSync(
 
 describe('business SNS profile guide', () => {
   it('shows the latest approved strategy only for business daily services', () => {
-    expect(page).toContain('const approvedBusinessStrategy = isBusinessDailyService');
+    expect(page).toContain('const approvedBusinessStrategy = input.enabled');
     expect(page).toContain(".filter(({ status }) => status === 'APPROVED')");
     expect(page).toContain('right.version - left.version');
     expect(page).toContain('<BusinessProfileGuide');

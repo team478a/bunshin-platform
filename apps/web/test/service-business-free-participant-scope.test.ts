@@ -12,6 +12,7 @@ const home = [
   .join('\n');
 const detail = [
   'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-image-access.ts',
   'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
 ]
   .map(source)
@@ -46,7 +47,7 @@ describe('business free participant scope', () => {
     expect(detail).toContain('variantPointCost = isBusinessDailyService');
     expect(detail).toContain('!isBusinessDailyService && mission.linkUsage');
     expect(detail).toContain('variants: isBusinessDailyService');
-    expect(detail).toContain('isBusinessDailyService || promptOnlyImages');
+    expect(detail).toContain('input.isBusinessDailyService || promptOnlyImages');
     expect(detail).toContain('bunshin.ownerUserId === actor.userId ? (');
     expect(detail).not.toContain('!isBusinessDailyService && bunshin.ownerUserId === actor.userId');
     expect(missionSection).toContain('active && variantPointCost !== null');

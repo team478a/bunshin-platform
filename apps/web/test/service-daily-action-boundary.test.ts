@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const http = readFileSync(new URL('../src/http/service-daily-actions.ts', import.meta.url), 'utf8');
-const page = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+const page = [
+  'service-bunshin-detail-data.ts',
+  'service-bunshin-detail-daily-actions.ts',
+  'service-bunshin-detail-view.tsx',
+]
   .map((file) =>
     readFileSync(
       new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
@@ -33,7 +37,7 @@ describe('service Daily Action boundary', () => {
     expect(http).toContain('ownerUserId: actor.userId');
     expect(http).toContain('groupId: service.serviceId');
     expect(http).toContain("sourceId: { startsWith: 'daily-action:' }");
-    expect(page).toContain('bunshin: { ownerUserId: actor.userId, groupId: service.serviceId }');
+    expect(page).toContain('bunshin: { ownerUserId: input.actorUserId, groupId: input.groupId }');
     expect(page).toContain('bunshin.ownerUserId === actor.userId');
   });
 
