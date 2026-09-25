@@ -2,10 +2,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  fileURLToPath(new URL('../src/badge-common-processor.ts', import.meta.url)),
-  'utf8',
-);
+const source = [
+  'badge-common-catalog-repository',
+  'badge-common-activity',
+  'badge-common-award-processor',
+  'badge-common-legacy-migrator',
+]
+  .map((name) => readFileSync(fileURLToPath(new URL(`../src/${name}.ts`, import.meta.url)), 'utf8'))
+  .join('\n');
 
 describe('common badge processor boundaries', () => {
   it('reads only approved objective activity sources', () => {
@@ -22,7 +26,7 @@ describe('common badge processor boundaries', () => {
   });
 
   it('requires workspace and user ownership when accepting source events', () => {
-    expect(source).toContain('sourceMatches');
+    expect(source).toContain('badgeSourceMatches');
     expect(source).toContain('workspaceId: input.workspaceId');
     expect(source).toContain('actorUserId: input.userId');
     expect(source).toContain('ownerUserId: input.userId');
