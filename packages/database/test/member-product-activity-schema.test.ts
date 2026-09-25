@@ -9,7 +9,10 @@ const migration = readFileSync(
   ),
   'utf8',
 );
-const repository = readFileSync(new URL('../src/member-product.ts', import.meta.url), 'utf8');
+const repository = readFileSync(
+  new URL('../src/member-product-activity.ts', import.meta.url),
+  'utf8',
+);
 
 describe('member product activity persistence boundary', () => {
   it('binds generated content to the original member-owned product profile', () => {
