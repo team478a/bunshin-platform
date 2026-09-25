@@ -6,7 +6,7 @@ const schema = readFileSync(
   'utf8',
 );
 const repository = readFileSync(
-  new URL('../../../packages/database/src/video-project-delivery.ts', import.meta.url),
+  new URL('../../../packages/database/src/video-project-creation-repository.ts', import.meta.url),
   'utf8',
 );
 const videoPage = readFileSync(
