@@ -22,6 +22,9 @@ const personalExperience = [
   'daily-mission-section.tsx',
   'personal-daily-mission-controller.ts',
   'personal-daily-mission-list.tsx',
+  'personal-daily-mission-card.tsx',
+  'personal-daily-mission-detail.tsx',
+  'personal-daily-mission-accepted.tsx',
   'personal-daily-mission-overview.tsx',
 ]
   .map((file) =>
