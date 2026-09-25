@@ -20,10 +20,13 @@ const serviceOperatorMigration = readFileSync(
   ),
   'utf8',
 );
-const source = readFileSync(
-  fileURLToPath(new URL('../src/badge-group-workflow.ts', import.meta.url)),
-  'utf8',
-);
+const source = [
+  'badge-group-workflow-base',
+  'badge-group-definition-workflow',
+  'badge-group-award-workflow',
+]
+  .map((name) => readFileSync(fileURLToPath(new URL(`../src/${name}.ts`, import.meta.url)), 'utf8'))
+  .join('\n');
 const badgeCoreSource = readFileSync(
   fileURLToPath(new URL('../src/badge-core.ts', import.meta.url)),
   'utf8',
