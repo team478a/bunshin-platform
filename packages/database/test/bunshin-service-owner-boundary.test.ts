@@ -9,12 +9,23 @@ const source = [
 ]
   .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
   .join('\n');
-const planningSource = readFileSync(new URL('../src/mission-planning.ts', import.meta.url), 'utf8');
-const dailyMissionSource = readFileSync(
-  new URL('../src/daily-missions.ts', import.meta.url),
-  'utf8',
-);
-const progressSource = readFileSync(new URL('../src/mission-progress.ts', import.meta.url), 'utf8');
+const planningSource = ['../src/content-pillar-repository.ts', '../src/weekly-plan-repository.ts']
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+const dailyMissionSource = [
+  '../src/daily-mission-repository-base.ts',
+  '../src/daily-mission-creation-repository.ts',
+  '../src/daily-mission-access-repository.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+const progressSource = [
+  '../src/mission-engagement-repository.ts',
+  '../src/achievement-badge-repository.ts',
+  '../src/mission-outcome-repository.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
 
 describe('service Bunshin owner boundary', () => {
   it('limits normal service lists to the actor-owned Bunshins', () => {
@@ -73,15 +84,14 @@ describe('service Bunshin owner boundary', () => {
   });
 
   it('keeps daily missions inside the requested service and owner boundary', () => {
-    const start = dailyMissionSource.indexOf('export class PrismaDailyMissionRepository');
-    const repository = dailyMissionSource.slice(start);
+    const repository = dailyMissionSource;
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
 
   it('keeps mission decisions and activities inside the service owner boundary', () => {
     const start = progressSource.indexOf('export class PrismaMissionEngagementRepository');
-    const end = progressSource.indexOf('function achievementBadge', start);
+    const end = progressSource.indexOf('export class PrismaAchievementBadgeRepository', start);
     const repository = progressSource.slice(start, end);
     expect(repository).toContain('groupId: input.groupId ?? null');
     expect(repository).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
