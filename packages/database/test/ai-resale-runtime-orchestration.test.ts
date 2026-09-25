@@ -6,6 +6,9 @@ const runtime = [
   'resale-runtime-calendar.ts',
   'resale-runtime-enrollment.ts',
   'resale-runtime-state.ts',
+  'resale-runtime-lifecycle-repository.ts',
+  'resale-runtime-candidate-repository.ts',
+  'resale-runtime-decision-repository.ts',
   'resale-runtime-repository.ts',
 ]
   .map((file) => readFileSync(join(process.cwd(), 'src', file), 'utf8'))
@@ -62,5 +65,16 @@ describe('AI resale runtime orchestration boundary', () => {
     expect(expiration).toContain("stateKey: 'COMPLETED'");
     expect(expiration).toContain('currentAssignmentId: null');
     expect(expiration).toContain("action: 'EXPIRED'");
+  });
+});
+
+describe('AI resale runtime repository modules', () => {
+  it('keeps the public repository as a compatibility facade', () => {
+    const facade = readFileSync(join(process.cwd(), 'src', 'resale-runtime-repository.ts'), 'utf8');
+    expect(facade).toContain('PrismaAiResaleRuntimeLifecycleRepository');
+    expect(facade).toContain('PrismaAiResaleRuntimeCandidateRepository');
+    expect(facade).toContain('PrismaAiResaleRuntimeDecisionRepository');
+    expect(facade).not.toContain('$transaction');
+    expect(facade).not.toContain('$queryRaw');
   });
 });
