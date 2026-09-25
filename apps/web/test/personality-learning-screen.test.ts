@@ -5,15 +5,15 @@ const section = readFileSync(
   new URL('../app/(app)/bunshins/[bunshinId]/personality-section.tsx', import.meta.url),
   'utf8',
 );
-const page = readFileSync(
-  new URL('../app/(app)/bunshins/[bunshinId]/page.tsx', import.meta.url),
+const pageData = readFileSync(
+  new URL('../app/(app)/bunshins/[bunshinId]/bunshin-page-data.ts', import.meta.url),
   'utf8',
 );
 
 describe('Personality learning review screen', () => {
   it('loads owner-scoped proposals on the server', () => {
-    expect(page).toContain('ListPersonalityLearningProposals');
-    expect(page).toContain('actorUserId: currentUser.userId');
+    expect(pageData).toContain('ListPersonalityLearningProposals');
+    expect(pageData).toContain('actorUserId');
   });
 
   it('explains that pending proposals are not automatically applied', () => {

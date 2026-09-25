@@ -26,6 +26,27 @@ import {
   type LineNotificationPreferenceView,
 } from './line-notification-preference-section';
 
+export type BunshinEditorProps = {
+  workspaceId: string;
+  bunshin: BunshinAggregate;
+  personalityVersions: PersonalityVersionView[];
+  personalityLearningProposals: PersonalityLearningProposalView[];
+  knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
+  memories: MemoryView[];
+  socialCapabilityStatus: SocialCapabilityStatus;
+  socialProfiles: SocialProfileView[];
+  socialStrategies: StrategyView[];
+  contentPillars: ContentPillarView[];
+  weeklyPlans: WeeklyPlanView[];
+  dailyMissions: DailyMissionView[];
+  variantPointCost: number | null;
+  rewardsPilotActive: boolean;
+  progress: MissionProgressView;
+  motivation: ActivityMotivationView;
+  localDate: string;
+  lineNotificationPreference: LineNotificationPreferenceView;
+};
+
 export function BunshinEditor({
   workspaceId,
   bunshin,
@@ -45,26 +66,7 @@ export function BunshinEditor({
   motivation,
   localDate,
   lineNotificationPreference,
-}: {
-  workspaceId: string;
-  bunshin: BunshinAggregate;
-  personalityVersions: PersonalityVersionView[];
-  personalityLearningProposals: PersonalityLearningProposalView[];
-  knowledge: Array<{ id: string; title: string; type: string; granted: boolean }>;
-  memories: MemoryView[];
-  socialCapabilityStatus: SocialCapabilityStatus;
-  socialProfiles: SocialProfileView[];
-  socialStrategies: StrategyView[];
-  contentPillars: ContentPillarView[];
-  weeklyPlans: WeeklyPlanView[];
-  dailyMissions: DailyMissionView[];
-  variantPointCost: number | null;
-  rewardsPilotActive: boolean;
-  progress: MissionProgressView;
-  motivation: ActivityMotivationView;
-  localDate: string;
-  lineNotificationPreference: LineNotificationPreferenceView;
-}) {
+}: BunshinEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState({
     name: bunshin.name,

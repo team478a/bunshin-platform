@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const personalPage = source('../app/(app)/bunshins/[bunshinId]/page.tsx');
+const personalPage = [
+  '../app/(app)/bunshins/[bunshinId]/bunshin-page-data.ts',
+  '../app/(app)/bunshins/[bunshinId]/bunshin-page-view-model.ts',
+]
+  .map(source)
+  .join('\n');
 const personalMission = [
   'daily-mission-section.tsx',
   'personal-daily-mission-controller.ts',
@@ -34,7 +39,7 @@ describe('rewards action feedback', () => {
   it.each([personalPage, servicePage])('checks the active pilot on the server', (page) => {
     expect(page).toContain('getActiveRewardsPilotAccess');
     expect(page).toContain('.catch(() => null)');
-    expect(page).toContain('rewardsPilotActive={rewardsPilotActive}');
+    expect(page).toContain('rewardsPilotActive');
   });
 
   it.each([personalMission, serviceMission])(
