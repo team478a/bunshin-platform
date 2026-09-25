@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(
-  fileURLToPath(new URL('../src/badge-line-notification.ts', import.meta.url)),
+  fileURLToPath(new URL('../src/badge-line-reconciliation-repository.ts', import.meta.url)),
   'utf8',
 );
 
