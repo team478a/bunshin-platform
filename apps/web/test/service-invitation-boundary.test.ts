@@ -23,7 +23,7 @@ describe('service invitation boundary', () => {
   });
 
   it('keeps the service slug through the invitation editor', () => {
-    const members = source('app/(app)/groups/[groupId]/members/page.tsx');
+    const members = source('app/(app)/groups/[groupId]/members/group-members-view.tsx');
     const editor = source('app/ui/group-invitation-editor.tsx');
     expect(members).toContain('serviceSlug={query.service}');
     expect(editor).toContain('...(serviceSlug ? { serviceSlug } : {})');

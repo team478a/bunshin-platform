@@ -44,7 +44,9 @@ describe('service manager entry boundary', () => {
   });
 
   it('preserves manager authorization in every reused management screen', () => {
-    expect(source('(app)/groups/[groupId]/members/page.tsx')).toContain("role: 'MANAGER'");
+    expect(source('(app)/groups/[groupId]/members/group-members-data.ts')).toContain(
+      "role: 'MANAGER'",
+    );
     expect(source('(app)/groups/[groupId]/knowledge/page.tsx')).toContain("role: 'MANAGER'");
     expect(source('(app)/groups/[groupId]/badges/group-badges-data.ts')).toContain(
       "role: 'MANAGER'",
