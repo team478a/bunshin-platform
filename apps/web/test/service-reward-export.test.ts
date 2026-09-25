@@ -17,6 +17,9 @@ const page = [
   '../app/s/[serviceSlug]/manage/points/page.tsx',
   '../app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx',
   '../app/s/[serviceSlug]/manage/points/points-operations-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-overview-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-rule-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-adjustment-sections.tsx',
 ]
   .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8'))
   .join('\n');

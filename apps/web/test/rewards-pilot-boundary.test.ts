@@ -16,6 +16,9 @@ const servicePointsPage = [
   readFileSync('app/s/[serviceSlug]/manage/points/points-data.ts', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/points-operations-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-overview-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-rule-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-adjustment-sections.tsx', 'utf8'),
 ].join('\n');
 
 describe('rewards pilot web boundary', () => {

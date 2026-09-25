@@ -57,6 +57,27 @@ const page = [
     ),
     'utf8',
   ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/points-overview-sections.tsx', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/points-rule-sections.tsx', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../app/s/[serviceSlug]/manage/points/points-adjustment-sections.tsx',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
 ].join('\n');
 const processor = [
   'point-account.ts',
