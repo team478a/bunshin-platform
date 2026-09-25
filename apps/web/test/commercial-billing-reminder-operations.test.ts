@@ -19,7 +19,7 @@ const scheduler = readFileSync(
   'utf8',
 );
 const databaseService = readFileSync(
-  new URL('../../../packages/database/src/commercial-billing.ts', import.meta.url),
+  new URL('../../../packages/database/src/commercial-billing-service.ts', import.meta.url),
   'utf8',
 );
 
