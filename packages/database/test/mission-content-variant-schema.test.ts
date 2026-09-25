@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const schema = readFileSync(new URL('../prisma/schema.prisma', import.meta.url), 'utf8');
-const repository = readFileSync(new URL('../src/mission-generation.ts', import.meta.url), 'utf8');
+const repository = readFileSync(
+  new URL('../src/mission-content-variant-repository.ts', import.meta.url),
+  'utf8',
+);
 const migration = readFileSync(
   new URL(
     '../prisma/migrations/20260907210000_add_mission_content_variants/migration.sql',
