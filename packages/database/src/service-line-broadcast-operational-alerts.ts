@@ -16,6 +16,7 @@ export async function listServiceLineBroadcastOperationalEvents(
   client: PrismaClient,
   environment: LineConfigurationEnvironment,
   checkedAt: Date,
+  options: { excludeNotified?: boolean } = {},
 ): Promise<LineOperationalServiceBroadcastEvent[]> {
   const stalledBefore = new Date(checkedAt.getTime() - 15 * 60 * 1_000);
   const recentSince = new Date(checkedAt.getTime() - 24 * 60 * 60 * 1_000);
@@ -88,13 +89,23 @@ export async function listServiceLineBroadcastOperationalEvents(
     take: 500,
   });
   const broadcastIds = broadcasts.map(({ id }) => id);
-  const recipientRows = broadcastIds.length
-    ? await client.serviceLineBroadcastRecipient.groupBy({
-        by: ['broadcastId', 'status'],
-        where: { broadcastId: { in: broadcastIds } },
-        _count: { _all: true },
-      })
-    : [];
+  const groupIds = [...new Set(broadcasts.map(({ groupId }) => groupId))];
+  const [recipientRows, serviceConfigurations] = await Promise.all([
+    broadcastIds.length
+      ? client.serviceLineBroadcastRecipient.groupBy({
+          by: ['broadcastId', 'status'],
+          where: { broadcastId: { in: broadcastIds } },
+          _count: { _all: true },
+        })
+      : [],
+    groupIds.length
+      ? client.serviceConfiguration.findMany({
+          where: { groupId: { in: groupIds } },
+          select: { groupId: true, slug: true, displayName: true },
+        })
+      : [],
+  ]);
+  const serviceByGroup = new Map(serviceConfigurations.map((item) => [item.groupId, item]));
   const counts = new Map<string, { pending: number; sent: number; failed: number }>();
   for (const row of recipientRows) {
     const current = counts.get(row.broadcastId) ?? { pending: 0, sent: 0, failed: 0 };
@@ -135,7 +146,8 @@ export async function listServiceLineBroadcastOperationalEvents(
     );
     const add = (code: LineOperationalServiceBroadcastEvent['code'], discriminator: string) => {
       const eventKey = `${code}:${broadcast.id}:${discriminator}`;
-      if (alreadyNotified.has(eventKey)) return;
+      if (options.excludeNotified !== false && alreadyNotified.has(eventKey)) return;
+      const service = serviceByGroup.get(broadcast.groupId);
       events.push({
         code,
         eventKey,
@@ -143,6 +155,12 @@ export async function listServiceLineBroadcastOperationalEvents(
         groupId: broadcast.groupId,
         broadcastId: broadcast.id,
         performedByUserId: broadcast.updatedByUserId,
+        ...(service
+          ? {
+              serviceSlug: service.slug,
+              serviceDisplayName: service.displayName,
+            }
+          : {}),
       });
     };
     const recipientCounts = counts.get(broadcast.id) ?? { pending: 0, sent: 0, failed: 0 };

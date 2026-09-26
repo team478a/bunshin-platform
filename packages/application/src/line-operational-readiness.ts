@@ -30,6 +30,8 @@ export interface LineOperationalServiceBroadcastEvent {
   groupId: string;
   broadcastId: string;
   performedByUserId: string;
+  serviceSlug?: string;
+  serviceDisplayName?: string;
 }
 
 export type LineOperationalAlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL';

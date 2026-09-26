@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaLineOperationalSnapshotRepository } from '../src';
+import { listServiceLineBroadcastOperationalEvents } from '../src/service-line-broadcast-operational-alerts';
 
 const now = new Date('2026-09-26T03:30:00.000Z');
 
@@ -38,6 +39,9 @@ describe('LINE operational snapshot repository', () => {
         scheduledAt: new Date('2026-09-26T03:00:00.000Z'),
         completedAt: null,
         updatedByUserId: 'manager-a',
+        group: {
+          serviceConfiguration: { slug: 'service-a', displayName: 'サービスA' },
+        },
         audits: [],
       },
       {
@@ -48,6 +52,9 @@ describe('LINE operational snapshot repository', () => {
         scheduledAt: new Date('2026-09-26T02:00:00.000Z'),
         completedAt: new Date('2026-09-26T02:05:00.000Z'),
         updatedByUserId: 'manager-a',
+        group: {
+          serviceConfiguration: { slug: 'service-a', displayName: 'サービスA' },
+        },
         audits: [],
       },
       {
@@ -58,6 +65,9 @@ describe('LINE operational snapshot repository', () => {
         scheduledAt: new Date('2026-09-26T02:00:00.000Z'),
         completedAt: new Date('2026-09-26T02:10:00.000Z'),
         updatedByUserId: 'manager-b',
+        group: {
+          serviceConfiguration: { slug: 'service-b', displayName: 'サービスB' },
+        },
         audits: [],
       },
     ]);
@@ -78,6 +88,12 @@ describe('LINE operational snapshot repository', () => {
         }),
       },
       serviceLineBroadcast: { findMany: broadcastFindMany },
+      serviceConfiguration: {
+        findMany: vi.fn().mockResolvedValue([
+          { groupId: 'group-a', slug: 'service-a', displayName: 'サービスA' },
+          { groupId: 'group-b', slug: 'service-b', displayName: 'サービスB' },
+        ]),
+      },
       serviceLineBroadcastRecipient: {
         groupBy: vi.fn().mockResolvedValue([
           { broadcastId: 'broadcast-stalled', status: 'PENDING', _count: { _all: 10 } },
@@ -108,6 +124,10 @@ describe('LINE operational snapshot repository', () => {
       'SERVICE_BROADCAST_RECOVERY_EXHAUSTED',
       'SERVICE_BROADCAST_RECOVERED',
     ]);
+    expect(result.serviceBroadcastEvents?.[0]).toMatchObject({
+      serviceSlug: 'service-a',
+      serviceDisplayName: 'サービスA',
+    });
   });
 
   it('records aggregate notification delivery against each affected broadcast', async () => {
@@ -144,5 +164,61 @@ describe('LINE operational snapshot repository', () => {
         }),
       ],
     });
+  });
+
+  it('keeps a notified but unresolved incident visible to the admin alert center', async () => {
+    const scheduledAt = new Date('2026-09-26T03:00:00.000Z');
+    const eventKey = `SERVICE_BROADCAST_STALLED:broadcast-a:${scheduledAt.toISOString()}`;
+    const client = {
+      job: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'job-a',
+            payloadReference: 'service-line-broadcast:broadcast-a',
+            idempotencyKey: 'service-line-broadcast:broadcast-a',
+            status: 'RETRY_SCHEDULED',
+            updatedAt: now,
+          },
+        ]),
+      },
+      serviceLineBroadcast: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'broadcast-a',
+            workspaceId: 'workspace-a',
+            groupId: 'group-a',
+            status: 'SCHEDULED',
+            scheduledAt,
+            completedAt: null,
+            updatedByUserId: 'manager-a',
+            group: {
+              serviceConfiguration: { slug: 'service-a', displayName: 'サービスA' },
+            },
+            audits: [{ afterData: { eventKey } }],
+          },
+        ]),
+      },
+      serviceLineBroadcastRecipient: {
+        groupBy: vi
+          .fn()
+          .mockResolvedValue([
+            { broadcastId: 'broadcast-a', status: 'PENDING', _count: { _all: 1 } },
+          ]),
+      },
+      serviceConfiguration: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ groupId: 'group-a', slug: 'service-a', displayName: 'サービスA' }]),
+      },
+    } as unknown as PrismaClient;
+
+    await expect(
+      listServiceLineBroadcastOperationalEvents(client, 'PRODUCTION', now),
+    ).resolves.toEqual([]);
+    await expect(
+      listServiceLineBroadcastOperationalEvents(client, 'PRODUCTION', now, {
+        excludeNotified: false,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ eventKey, serviceSlug: 'service-a' })]);
   });
 });
