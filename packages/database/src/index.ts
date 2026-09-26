@@ -202,6 +202,10 @@ export {
   PrismaSocialActivityBarrierObservationRepository,
 } from './social-activity-barrier-repository';
 export { PrismaSocialActivityBarrierConfirmationRepository } from './social-activity-barrier-confirmation-repository';
+export {
+  getSocialActivityBarrierServiceSummary,
+  type SocialActivityBarrierServiceSummary,
+} from './social-activity-barrier-summary';
 export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';

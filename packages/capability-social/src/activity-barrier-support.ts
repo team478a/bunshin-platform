@@ -82,6 +82,10 @@ const labels: Record<SocialActivityBarrierCategory, string> = {
   UNKNOWN: '結果や数字の確認方法が分からない',
 };
 
+export function socialActivityBarrierLabel(category: SocialActivityBarrierCategory) {
+  return labels[category];
+}
+
 const supportByCategory: Record<SocialActivityBarrierCategory, SocialActivitySupport> = {
   SETUP: {
     key: 'PROFILE_REVIEW',

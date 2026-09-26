@@ -37,7 +37,7 @@ export default async function PersonalizationAuditPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [missions, failures] = await Promise.all([
+  const [missions, failures, barrierSummary] = await Promise.all([
     db.prisma.dailyMission.findMany({
       where: {
         workspaceId: service.workspaceId,
@@ -73,6 +73,10 @@ export default async function PersonalizationAuditPage({
       orderBy: { updatedAt: 'desc' },
       take: 10,
     }),
+    db.getSocialActivityBarrierServiceSummary(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+    }),
   ]);
 
   return (
@@ -100,6 +104,46 @@ export default async function PersonalizationAuditPage({
             </ul>
           </section>
         ) : null}
+
+        <section className="settings-card">
+          <h2>続けにくさとサポート状況</h2>
+          <p>
+            本人が回答して確定した項目だけを集計しています。個人の回答内容や投稿本文は表示しません。
+          </p>
+          <div className="admin-metric-grid">
+            <article>
+              <strong>{barrierSummary.cases.confirmed}</strong>
+              <span>確認済み</span>
+            </article>
+            <article>
+              <strong>{barrierSummary.support.offered + barrierSummary.support.accepted}</strong>
+              <span>サポート中</span>
+            </article>
+            <article>
+              <strong>{barrierSummary.support.completed}</strong>
+              <span>できた記録</span>
+            </article>
+            <article>
+              <strong>{barrierSummary.cases.suspected}</strong>
+              <span>本人確認待ち</span>
+            </article>
+          </div>
+          {barrierSummary.confirmedCategories.length === 0 ? (
+            <p>本人が確認した項目はまだありません。</p>
+          ) : (
+            <ul className="settings-status-list">
+              {barrierSummary.confirmedCategories.map((item) => (
+                <li className="settings-status-item" key={item.category}>
+                  <strong>{item.label}</strong>
+                  <span>{item.count}件</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p>
+            見送り {barrierSummary.support.skipped}件／解決済み {barrierSummary.cases.resolved}件
+          </p>
+        </section>
 
         <section className="settings-card">
           <h2>最近の投稿案と生成根拠</h2>
