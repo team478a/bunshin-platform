@@ -2710,3 +2710,11 @@
 - Idempotency: Caseは現在状態を保持し、EvidenceはRule、Code、Category、観測期間から作るKeyで追記を冪等化する。同一観測の再実行で再発回数を増やさない。
 - Recurrence: RESOLVEDまたはDISMISSEDは`nextEligibleAt`まで再推定を抑止し、期間後の新EvidenceだけでSUSPECTEDへ戻す。
 - Privacy: Evidenceには集計値と閾値だけを保存し、投稿、回答、Prompt、Memoryの本文を保存しない。
+
+# 2026-09-26: SNS行動停止要因は本人への1問確認でのみ確定する
+
+- Question: 同じEvidenceから推定した複数候補は一つの質問へまとめ、内部のCategory名や推定値を本人へ表示しない。
+- Confirmation: 本人が選んだ候補だけを`CONFIRMED`へ変更し、同時に提示した他候補は`DISMISSED`として30日間再質問を抑止する。「どれにも当てはまらない」では全候補を抑止する。
+- Support: 確定したCategoryにはAI生成や有料提案を使わず、Version管理した無償の小さな支援を一件だけ提示する。
+- Audit: 回答と支援内容はSnapshotおよびRule Versionとともに保存する。回答本文や投稿本文は複製しない。
+- Isolation: 冪等な再送でもWorkspace、Service、Membership、User、Bunshinがすべて一致する場合だけ既存結果を返す。
