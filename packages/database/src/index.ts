@@ -110,6 +110,7 @@ export {
 export { PrismaLineNotificationPreferenceRepository } from './line-notification-preferences';
 export { PrismaServiceLineBroadcastAudienceRepository } from './service-line-broadcast-audience-repository';
 export { PrismaServiceLineBroadcastOperationsRepository } from './service-line-broadcast-operations-repository';
+export { PrismaServiceLineBroadcastRecoveryRepository } from './service-line-broadcast-recovery-repository';
 export {
   PrismaLineAdminFunnelRepository,
   PrismaLineAdminMetricsRepository,

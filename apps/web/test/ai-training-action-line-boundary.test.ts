@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const scheduler = source('src/services/ai-training-action-line-scheduler.ts');
-const handler = source('src/jobs/service-line-broadcast-job-handler.ts');
+const eligibility = source('src/jobs/service-line-broadcast-eligibility.ts');
 const missionScheduler = source('src/http/mission-scheduler.ts');
 const page = source('app/s/[serviceSlug]/programs/[programEnrollmentId]/page.tsx');
 
@@ -27,12 +27,12 @@ describe('AI training current Action LINE boundary', () => {
   });
 
   it('rechecks the exact current assignment immediately before delivery', () => {
-    expect(handler).toContain("criteria.kind === 'AI_TRAINING_ACTION'");
-    expect(handler).toContain('programEnrollmentId: criteria.programEnrollmentId');
-    expect(handler).toContain('currentAssignmentId: criteria.assignmentId');
-    expect(handler).toContain("status: 'PRESENTED'");
-    expect(handler).toContain("equals: 'AI_TRAINING_V1'");
-    expect(handler).toContain('settings: expectedModuleFilter');
+    expect(eligibility).toContain("criteria.kind === 'AI_TRAINING_ACTION'");
+    expect(eligibility).toContain('programEnrollmentId: criteria.programEnrollmentId');
+    expect(eligibility).toContain('currentAssignmentId: criteria.assignmentId');
+    expect(eligibility).toContain("status: 'PRESENTED'");
+    expect(eligibility).toContain("equals: 'AI_TRAINING_V1'");
+    expect(eligibility).toContain('settings: expectedModuleFilter');
   });
 
   it('materializes the current personalized assignment before scheduling', () => {

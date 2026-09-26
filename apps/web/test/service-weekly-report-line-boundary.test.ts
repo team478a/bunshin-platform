@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const scheduler = readFileSync('src/services/weekly-report-line-scheduler.ts', 'utf8');
-const handler = readFileSync('src/jobs/service-line-broadcast-job-handler.ts', 'utf8');
+const delivery = readFileSync('src/jobs/service-line-broadcast-recipient-delivery.ts', 'utf8');
 const route = readFileSync(
   'app/api/services/[serviceSlug]/weekly-report-delivery/route.ts',
   'utf8',
@@ -17,7 +17,7 @@ describe('service weekly report LINE boundary', () => {
   });
 
   it('keeps personalized messages on the recipient and exposes only an authenticated update route', () => {
-    expect(handler).toContain('recipient.message ?? broadcast.message');
+    expect(delivery).toContain('recipient.message ?? batch.broadcast.message');
     expect(route).toContain('updateServiceWeeklyReportDeliveryResponse');
     expect(route).not.toContain('GET(');
   });
