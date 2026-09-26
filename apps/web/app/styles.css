@@ -3611,6 +3611,59 @@ a {
   text-align: center;
 }
 
+.activity-barrier-card {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.25rem, 5vw, 2rem);
+  border: 1px solid color-mix(in srgb, var(--service-primary, #3559c7) 22%, #dfe3ec);
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 0.75rem 2rem rgb(18 32 65 / 8%);
+}
+
+.activity-barrier-card h2,
+.activity-barrier-card p {
+  margin: 0;
+}
+
+.activity-barrier-card fieldset {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.activity-barrier-card label {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  min-height: 3.5rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid #d8dde8;
+  border-radius: 1rem;
+  background: #f9fafc;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.activity-barrier-card label:has(input:checked) {
+  border-color: var(--service-primary, #3559c7);
+  background: color-mix(in srgb, var(--service-primary, #3559c7) 8%, white);
+}
+
+.activity-barrier-card input[type='radio'] {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+}
+
+.activity-barrier-support ol {
+  display: grid;
+  gap: 0.75rem;
+  padding-left: 1.5rem;
+}
+
 .service-entry__card h2,
 .service-entry__card p {
   margin: 0;
