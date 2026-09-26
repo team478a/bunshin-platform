@@ -43,6 +43,7 @@ const officialSettingsPayload = {
     notificationConsent: true,
   },
   businessProfileEnabled: true,
+  businessProfileInputMode: 'MINIMAL',
   dailyIdeaDelivery: {
     enabled: true,
     cadence: 'DAILY',

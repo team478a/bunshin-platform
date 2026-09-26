@@ -131,6 +131,7 @@ export default async function ServiceOnboardingPage({
             focusQuestionIndex={editing ? (refinement?.index ?? null) : null}
             editMode={editing}
             businessProfileEnabled={settings.businessProfileEnabled}
+            businessProfileInputMode={settings.businessProfileInputMode}
             industries={industries}
             initialBusinessProfile={membership.serviceMemberBusinessProfile}
           />

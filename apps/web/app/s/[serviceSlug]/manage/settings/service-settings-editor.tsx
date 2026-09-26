@@ -42,6 +42,9 @@ export function ServiceSettingsEditor({
   const [businessProfileEnabled, setBusinessProfileEnabled] = useState(
     onboarding.businessProfileEnabled,
   );
+  const [businessProfileInputMode, setBusinessProfileInputMode] = useState(
+    onboarding.businessProfileInputMode,
+  );
   const [dailyIdeaDelivery, setDailyIdeaDelivery] = useState(
     enforceBusinessDailyServiceSettings({
       businessProfileEnabled: businessFreeSettingsLocked,
@@ -104,6 +107,7 @@ export function ServiceSettingsEditor({
             .filter(Boolean),
           profileQuestions,
           businessProfileEnabled,
+          businessProfileInputMode,
           dailyIdeaDelivery,
           reason: text('reason'),
         }),
@@ -144,6 +148,8 @@ export function ServiceSettingsEditor({
         businessFreeSettingsLocked={businessFreeSettingsLocked}
         businessProfileEnabled={businessProfileEnabled}
         setBusinessProfileEnabled={setBusinessProfileEnabled}
+        businessProfileInputMode={businessProfileInputMode}
+        setBusinessProfileInputMode={setBusinessProfileInputMode}
         dailyIdeaDelivery={dailyIdeaDelivery}
         setDailyIdeaDelivery={setDailyIdeaDelivery}
         organizationType={organizationType}

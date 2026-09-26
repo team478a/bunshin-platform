@@ -93,6 +93,7 @@ export const serviceSettingsUpdateSchema = z
       .strict()
       .optional(),
     businessProfileEnabled: z.boolean().default(false),
+    businessProfileInputMode: z.enum(['FULL', 'MINIMAL']).default('FULL'),
     dailyIdeaDelivery: z
       .object({
         enabled: z.boolean(),
@@ -214,6 +215,7 @@ function normalizeServiceSettingsUpdatePayload(input: unknown): unknown {
   const onboarding = readServiceOnboardingSettings(
     {
       businessProfileEnabled: value.businessProfileEnabled === true,
+      businessProfileInputMode: value.businessProfileInputMode,
       profileQuestions: value.profileQuestions,
       dailyIdeaDelivery: value.dailyIdeaDelivery,
     },
@@ -314,6 +316,7 @@ export async function updateServiceSettingsResponse(request: Request, serviceSlu
             welcomeMessage: value.welcomeMessage.trim(),
             ...(value.profileQuestions ? { profileQuestions: value.profileQuestions } : {}),
             businessProfileEnabled: value.businessProfileEnabled,
+            businessProfileInputMode: value.businessProfileInputMode,
             dailyIdeaDelivery: value.dailyIdeaDelivery,
             announcementEnabled: value.announcementEnabled,
             announcementTitle: value.announcementTitle.trim(),
