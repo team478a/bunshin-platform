@@ -5,10 +5,14 @@ import {
   type AiTrainingAdminParticipantInput,
 } from '../src/services/ai-training-admin-dashboard';
 
-const page = readFileSync(
-  new URL('../app/s/[serviceSlug]/manage/training/page.tsx', import.meta.url),
-  'utf8',
-);
+const page = ['page.tsx', 'training-admin-dashboard.tsx']
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/manage/training/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 
 const now = new Date('2026-09-21T00:00:00.000Z');
 

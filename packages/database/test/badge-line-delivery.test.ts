@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 describe('badge LINE delivery persistence', () => {
   it('keeps delivery claims environment scoped and rechecks all consent gates', () => {
     const source = readFileSync(
-      new URL('../src/badge-line-notification.ts', import.meta.url),
+      new URL('../src/badge-line-delivery-repository.ts', import.meta.url),
       'utf8',
     );
     expect(source).toContain("status: 'PROCESSING'");

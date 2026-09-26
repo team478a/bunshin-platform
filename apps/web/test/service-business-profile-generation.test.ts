@@ -6,8 +6,8 @@ import {
 } from '../src/services/service-generation-knowledge';
 import { readFileSync } from 'node:fs';
 
-const generationSource = readFileSync(
-  new URL('../src/services/daily-mission-generation.ts', import.meta.url),
+const resultPersistenceSource = readFileSync(
+  new URL('../src/services/daily-mission-result-persistence.ts', import.meta.url),
   'utf8',
 );
 
@@ -66,7 +66,7 @@ describe('service business profile generation context', () => {
   });
 
   it('uses the service or enrolled program delivery level when saving a mission', () => {
-    expect(generationSource).toContain(
+    expect(resultPersistenceSource).toContain(
       'serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel',
     );
   });

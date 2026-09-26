@@ -1,10 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  new URL('../app/(app)/organizations/[workspaceId]/payment/page.tsx', import.meta.url),
-  'utf8',
-);
+const source = [
+  'page.tsx',
+  'organization-payment-dashboard.tsx',
+  'organization-payment-operations.tsx',
+  'organization-payment-settings.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/(app)/organizations/[workspaceId]/payment/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 
 describe('organization payment settings page', () => {
   it('limits access and every mutation to the selected organization', () => {

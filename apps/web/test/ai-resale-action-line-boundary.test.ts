@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const scheduler = source('src/services/ai-resale-action-line-scheduler.ts');
-const handler = source('src/jobs/service-line-broadcast-job-handler.ts');
+const eligibility = source('src/jobs/service-line-broadcast-eligibility.ts');
 const page = source('app/s/[serviceSlug]/programs/[programEnrollmentId]/page.tsx');
 
 describe('AI resale current Action LINE boundary', () => {
@@ -26,11 +26,11 @@ describe('AI resale current Action LINE boundary', () => {
   });
 
   it('rechecks the exact current assignment immediately before delivery', () => {
-    expect(handler).toContain("criteria.kind === 'AI_RESALE_ACTION'");
-    expect(handler).toContain('programEnrollmentId: criteria.programEnrollmentId');
-    expect(handler).toContain('currentAssignmentId: criteria.assignmentId');
-    expect(handler).toContain("status: 'PRESENTED'");
-    expect(handler).toContain("equals: 'AI_RESALE_V1'");
+    expect(eligibility).toContain("criteria.kind === 'AI_RESALE_ACTION'");
+    expect(eligibility).toContain('programEnrollmentId: criteria.programEnrollmentId');
+    expect(eligibility).toContain('currentAssignmentId: criteria.assignmentId');
+    expect(eligibility).toContain("status: 'PRESENTED'");
+    expect(eligibility).toContain("equals: 'AI_RESALE_V1'");
   });
 
   it('links to the authenticated participant page, which preserves the return path through login', () => {

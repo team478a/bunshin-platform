@@ -4,6 +4,7 @@ import { selectServiceManagementSections } from '../src/services/service-managem
 const sections = [
   { href: 'members' },
   { href: 'knowledge' },
+  { href: 'personalization' },
   { href: 'points' },
   { href: 'referral-rewards' },
   { href: 'credits' },
@@ -36,7 +37,7 @@ describe('service management navigation', () => {
       selectServiceManagementSections(sections, { businessDaily: true, fortune: true }).map(
         (section) => section.href,
       ),
-    ).toEqual(['members', 'knowledge', 'line', 'settings', 'legal']);
+    ).toEqual(['members', 'knowledge', 'personalization', 'line', 'settings', 'legal']);
   });
 
   it('hides image generation operations for a prompt-only service', () => {
@@ -46,6 +47,6 @@ describe('service management navigation', () => {
         fortune: false,
         promptOnlyImages: true,
       }).map((section) => section.href),
-    ).toEqual(['members', 'knowledge', 'points', 'line', 'settings', 'legal']);
+    ).toEqual(['members', 'knowledge', 'personalization', 'points', 'line', 'settings', 'legal']);
   });
 });

@@ -2654,3 +2654,34 @@
 - Domain rule: 理解度と対象能力がすべて60以上の場合だけPASSとし、未達の場合は対象能力のうち最低スコアを復習対象にする。
 - Projection: 評価全文は既存`TrainingMissionAnswer`、監査は`ProgramActionEvent`に維持し、Enrollment単位の現在値だけを`TrainingParticipantProfile.skillScores`へJSONで投影する。
 - Scope: 既存値のうち今回評価した能力だけを更新する。動的難易度、復習Mission、進級への接続は次のAdaptive Policy PRで扱う。
+
+# 2026-09-23: 個別化精度を段階的な回答・複数回傾向・生成根拠で強化する
+
+- Choice: 参加者の情報不足は新テーブルを作らず、ServiceOnboardingResponseの回答を1問ずつ補完し、既存の生成コンテキストへ翌日以降反映する。
+- Learning: 単発の評価や不採用理由は参考情報に留め、同じ傾向が直近履歴で2回以上確認された場合だけfallback方針を変更する。良かった投稿も原稿を再利用せず、読者価値を別の疑問・場面へ展開する。
+- Audit: 運営者にはGenerationContextSnapshotの情報種別・参照件数・生成経路・品質結果だけを表示し、本人の回答本文やMemory本文は表示しない。
+- Boundary: 集計と表示はWorkspace・Service配下のBunshinに限定し、User/Bunshin間の履歴を混在させない。
+
+# 2026-09-26: 現行の依存境界をAST検査で固定する
+
+- Authorization: 2026-09-26のユーザー指示により、旧Phase指示の整理と設計境界の自動検査追加を許可された。不変の安全原則は弱めない。
+- Scope: `platform-domain`、`shared`、`capability-contract`から実装層への逆流、`application`からDB/UI/個別Providerへの直接依存、未公開package subpathと相対パスによるpackage越境を検査する。
+- Allowed direction: `database`がapplication/capabilityのPortを実装する依存と、`apps/web` composition rootでの公開packageの組み立ては許可する。
+- Enforcement: TypeScript ASTによる実source検査を`pnpm lint`へ、禁止・許可fixtureによる検査自体のテストを`pnpm test`へ接続する。
+- Limits: 非Literalの動的import、runtimeのtenant条件、未確定のCapability間依存はこの検査だけで保証しない。個別例外や自動更新allowlistは追加しない。
+
+# 2026-09-26: OEM向けLINE一斉配信を既存の運用監視へ統合する
+
+- Detection: 予定時刻から15分以上経過した未完了配信、失敗5件以上または失敗率50%以上の完了配信、停止したRecovery Jobを通知対象とする。
+- Recovery: Recovery Jobが成功し、対象配信の失敗受信者が0件になった場合は復旧通知を送る。
+- Isolation: 監視対象は指定環境の`SERVICE_LINE_BROADCAST_DELIVER` Jobから逆引きし、別環境の配信を混在させない。通知本文は集計件数だけを含める。
+- Idempotency: 通知成功後に対象配信の既存監査ログへイベントキーを保存し、同じ障害・復旧を再通知しない。通知失敗時は記録せず、次回監視で再試行する。
+- Failure boundary: 通知は既存の時間監視で実行し、一斉配信ワーカーから分離する。管理者メールやWebhookの障害で配信処理を停止しない。
+
+# 2026-09-26: LINE一斉配信の障害を全体運用アラートへ表示する
+
+- Source of truth: メール通知と管理画面で別々の障害判定を持たず、既存の一斉配信運用イベント検出を共用する。
+- Visibility: 通知済みの監査記録はメールの重複送信だけを抑止し、未解消の障害を管理画面から消さない。
+- Navigation: サービス設定が特定できる場合は対象サービスのLINE配信管理へ直接案内し、不明な場合はサービス一覧へ案内する。
+- Isolation: 指定環境のJobから対象配信を逆引きする境界を維持し、表示内容はサービス名、障害種別、件数に限定する。
+- Duplication: 一斉配信Jobは汎用停止Job件数から除外し、同じ障害を専用アラートと汎用アラートへ二重表示しない。

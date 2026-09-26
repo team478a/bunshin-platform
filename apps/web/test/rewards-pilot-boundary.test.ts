@@ -5,10 +5,20 @@ const pointsPage = readFileSync('app/(app)/points/page.tsx', 'utf8');
 const badgesPage = readFileSync('app/(app)/badges/page.tsx', 'utf8');
 const pointsApi = readFileSync('app/api/workspaces/[workspaceId]/points/route.ts', 'utf8');
 const badgesApi = readFileSync('src/http/badge-user-experience.ts', 'utf8');
-const membersPage = readFileSync('app/(app)/groups/[groupId]/members/page.tsx', 'utf8');
+const membersPage = [
+  readFileSync('app/(app)/groups/[groupId]/members/group-members-view.tsx', 'utf8'),
+  readFileSync('app/(app)/groups/[groupId]/members/group-member-feature-settings.tsx', 'utf8'),
+].join('\n');
 const servicePointsPage = [
   readFileSync('app/s/[serviceSlug]/manage/points/page.tsx', 'utf8'),
   readFileSync('app/s/[serviceSlug]/manage/points/actions.ts', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/point-configuration-actions.ts', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-data.ts', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-operations-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-overview-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-rule-sections.tsx', 'utf8'),
+  readFileSync('app/s/[serviceSlug]/manage/points/points-adjustment-sections.tsx', 'utf8'),
 ].join('\n');
 
 describe('rewards pilot web boundary', () => {
@@ -49,7 +59,7 @@ describe('rewards pilot web boundary', () => {
     expect(servicePointsPage).toContain('<strong>{rewardsPilotActiveCount}人全員</strong>');
     expect(servicePointsPage).toContain('新しく登録した一般参加者も自動で追加されます。');
     expect(servicePointsPage).not.toContain('試験利用者を選ぶ');
-    expect(servicePointsPage).toContain('/admin/groups/${service.serviceId}/features');
+    expect(servicePointsPage).toContain('/admin/groups/${serviceId}/features');
   });
 
   it('lets a phone operator set four weeks without selecting members', () => {

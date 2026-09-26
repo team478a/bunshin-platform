@@ -1,5 +1,6 @@
 import type { AdminAlertRepository, AdminAlertSnapshot } from '@bunshin/application';
 import { type PrismaClient, prisma } from './client';
+import { listServiceLineBroadcastOperationalEvents } from './service-line-broadcast-operational-alerts';
 export class PrismaAdminAlertRepository implements AdminAlertRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -17,6 +18,7 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
       lineNotificationTargets,
       failedDeliveries,
       lineJobs,
+      serviceLineBroadcasts,
       otherDeadJobs,
       failedPointProcessing,
       stalePointProcessing,
@@ -56,10 +58,15 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         },
         _count: { _all: true },
       }),
+      listServiceLineBroadcastOperationalEvents(this.client, input.environment, input.now, {
+        excludeNotified: false,
+      }),
       this.client.job.count({
         where: {
           environment: input.environment,
-          jobType: { notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+          jobType: {
+            notIn: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER', 'SERVICE_LINE_BROADCAST_DELIVER'],
+          },
           status: 'DEAD',
         },
       }),
@@ -175,6 +182,11 @@ export class PrismaAdminAlertRepository implements AdminAlertRepository {
         retryScheduledJobs: lineJobCount('RETRY_SCHEDULED'),
         deadJobs: lineJobCount('DEAD'),
       },
+      serviceLineBroadcasts: serviceLineBroadcasts.map((event) => ({
+        code: event.code,
+        serviceSlug: event.serviceSlug ?? null,
+        serviceDisplayName: event.serviceDisplayName ?? null,
+      })),
       otherDeadJobs,
       rewards: {
         failedPointProcessing,

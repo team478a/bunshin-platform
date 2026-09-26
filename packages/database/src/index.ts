@@ -31,10 +31,8 @@ export { PrismaPointLedgerRepository } from './point-ledger';
 export { PrismaPointRedemptionRepository } from './point-redemption';
 export { PrismaPointActivityProcessorRepository } from './point-activity';
 export { PrismaGroupFeatureEntitlementRepository } from './group-feature-entitlement';
-export {
-  PrismaVideoDeliveryRepository,
-  PrismaVideoProjectRepository,
-} from './video-project-delivery';
+export { PrismaVideoProjectRepository } from './video-project-delivery';
+export { PrismaVideoDeliveryRepository } from './video-deliveries';
 export {
   PrismaVideoMediaQuotaRepository,
   PrismaVideoRenderRepository,
@@ -59,11 +57,9 @@ export {
   PrismaProductPackRepository,
 } from './product-catalog';
 export { PrismaGroupKnowledgeRepository } from './group-knowledge';
-export {
-  PrismaAdvertisingSafetyRepository,
-  PrismaCampaignRepository,
-  PrismaCampaignSafetyRepository,
-} from './campaign-advertising';
+export { PrismaAdvertisingSafetyRepository } from './advertising-safety';
+export { PrismaCampaignRepository } from './campaign';
+export { PrismaCampaignSafetyRepository } from './campaign-safety';
 export {
   PrismaMemberProductActivityRepository,
   PrismaMemberProductProfileRepository,
@@ -112,6 +108,9 @@ export {
   PrismaMissionDeepLinkStateRepository,
 } from './line-delivery';
 export { PrismaLineNotificationPreferenceRepository } from './line-notification-preferences';
+export { PrismaServiceLineBroadcastAudienceRepository } from './service-line-broadcast-audience-repository';
+export { PrismaServiceLineBroadcastOperationsRepository } from './service-line-broadcast-operations-repository';
+export { PrismaServiceLineBroadcastRecoveryRepository } from './service-line-broadcast-recovery-repository';
 export {
   PrismaLineAdminFunnelRepository,
   PrismaLineAdminMetricsRepository,
@@ -171,9 +170,9 @@ export {
   PrismaAccountDeletionAdminOperationsRepository,
   PrismaAccountDeletionExecutionRepository,
   PrismaAccountDeletionOrchestrationRepository,
-  PrismaAccountDeletionPurgeRepository,
   PrismaAccountDeletionRequestRepository,
 } from './account-deletion';
+export { PrismaAccountDeletionPurgeRepository } from './account-deletion-purge';
 export { PrismaContentPillarRepository, PrismaWeeklyPlanRepository } from './mission-planning';
 export { PrismaDailyMissionRepository } from './daily-missions';
 export {
@@ -202,7 +201,8 @@ export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';
 export { PrismaTrendOperationsRepository } from './trend-operations';
-export { PrismaProgramCoreRepository, PrismaProgramRuntimeRepository } from './program-runtime';
+export { PrismaProgramCoreRepository } from './program-runtime';
+export { PrismaProgramRuntimeRepository } from './program-runtime-execution';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,

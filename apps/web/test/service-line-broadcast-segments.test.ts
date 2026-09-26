@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const state = vi.hoisted(() => ({ recipients: vi.fn() }));
+const state = vi.hoisted(() => ({ preview: vi.fn() }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('../src/auth/request-security', () => ({ requireSameOrigin: vi.fn() }));
@@ -13,7 +13,9 @@ vi.mock('../src/services/public-service', () => ({
     Promise.resolve({ workspaceId: '11111111-1111-4111-8111-111111111111', serviceId: 'group-1' }),
 }));
 vi.mock('@bunshin/database', () => ({
-  prisma: { groupLineConnection: { findMany: state.recipients } },
+  PrismaServiceLineBroadcastAudienceRepository: class {
+    preview = state.preview;
+  },
 }));
 
 import { previewServiceLineBroadcastResponse } from '../src/http/service-line-broadcasts';
@@ -21,7 +23,7 @@ import { previewServiceLineBroadcastResponse } from '../src/http/service-line-br
 describe('service LINE broadcast segments', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.recipients.mockResolvedValue([{ groupMembershipId: 'member-1', userId: 'user-1' }]);
+    state.preview.mockResolvedValue({ recipientCount: 1, capped: false });
   });
 
   it('previews only completed registrations matching both industry and purpose', async () => {
@@ -39,22 +41,11 @@ describe('service LINE broadcast segments', () => {
     await expect(response.json()).resolves.toMatchObject({
       data: { eligibleRecipientCount: 1, capped: false },
     });
-    expect(state.recipients).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          notificationConsentAt: { not: null },
-          friendshipStatus: 'FOLLOWING',
-          user: expect.objectContaining({
-            registrationProfile: {
-              is: {
-                status: 'COMPLETED',
-                primaryIndustryId: { in: [industryId] },
-                primaryPurpose: { in: ['SALES'] },
-              },
-            },
-          }),
-        }),
-      }),
-    );
+    expect(state.preview).toHaveBeenCalledWith({
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      groupId: 'group-1',
+      actorUserId: 'manager-1',
+      segment: { industryIds: [industryId], purposes: ['SALES'] },
+    });
   });
 });

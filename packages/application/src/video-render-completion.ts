@@ -6,7 +6,7 @@ import {
   type LineDeliveryPreferencePort,
   type LineProviderFailure,
   type LineRecipientResolverPort,
-} from './line-messaging-core';
+} from './line-message-delivery';
 
 export type VideoCompletionNotificationStatus = 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED';
 

@@ -5,6 +5,11 @@ import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { resolveMemberServiceContext } from '../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
+import {
+  answersForCurrentQuestions,
+  nextOnboardingRefinement,
+  readServiceOnboardingAnswers,
+} from '../../../../src/services/service-onboarding-response';
 import { PublicShell } from '../../../ui/public-shell';
 import { ServiceOnboardingForm } from './service-onboarding-form';
 
@@ -21,8 +26,10 @@ async function context(slug: string, actorUserId: string) {
 
 export default async function ServiceOnboardingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ serviceSlug: string }>;
+  searchParams: Promise<{ refine?: string; edit?: string }>;
 }) {
   const { serviceSlug } = await params;
   const actor = await (await currentUserProvider()).getCurrentUser();
@@ -40,7 +47,9 @@ export default async function ServiceOnboardingPage({
     },
     select: {
       id: true,
-      serviceOnboardingResponse: { select: { id: true } },
+      serviceOnboardingResponse: {
+        select: { id: true, answers: true },
+      },
       serviceMemberBusinessProfile: {
         select: {
           primaryIndustryId: true,
@@ -72,9 +81,17 @@ export default async function ServiceOnboardingPage({
         membership.serviceMemberBusinessProfile?.businessFeatures &&
         membership.serviceMemberBusinessProfile.preferredTone,
       ));
-  if (onboardingComplete) {
+  const editing =
+    ['1', 'true'].includes((await searchParams).refine ?? '') ||
+    ['1', 'true'].includes((await searchParams).edit ?? '');
+  if (onboardingComplete && !editing) {
     redirect(`/s/${serviceSlug}/home` as Route);
   }
+  const storedAnswers = readServiceOnboardingAnswers(membership.serviceOnboardingResponse?.answers);
+  const initialAnswers = answersForCurrentQuestions(settings.questions, storedAnswers).map(
+    (answer) => (editing && !answer ? 'まだ回答していません' : answer),
+  );
+  const refinement = editing ? nextOnboardingRefinement(settings.questions, storedAnswers) : null;
   const industries = settings.businessProfileEnabled
     ? await db.prisma.industry.findMany({
         where: { status: 'ACTIVE' },
@@ -92,14 +109,27 @@ export default async function ServiceOnboardingPage({
     <PublicShell showPlatformBrand={false}>
       <article className="service-entry" style={style}>
         <header className="service-entry__header">
-          <p className="eyebrow">最初のかんたん設定</p>
-          <h1>{settings.welcomeTitle || 'あなたのことを少し教えてください'}</h1>
-          <p>{settings.welcomeMessage || 'あなたに合った内容を届けるための質問です。'}</p>
+          <p className="eyebrow">
+            {editing ? 'あなた向けの内容をもっと正確に' : '最初のかんたん設定'}
+          </p>
+          <h1>
+            {editing
+              ? '今日は1つだけ教えてください'
+              : settings.welcomeTitle || 'あなたのことを少し教えてください'}
+          </h1>
+          <p>
+            {editing
+              ? '回答は、次回以降の投稿案づくりに反映します。'
+              : settings.welcomeMessage || 'あなたに合った内容を届けるための質問です。'}
+          </p>
         </header>
         <section className="service-entry__card">
           <ServiceOnboardingForm
             serviceSlug={serviceSlug}
             questions={settings.questions}
+            initialAnswers={initialAnswers}
+            focusQuestionIndex={editing ? (refinement?.index ?? null) : null}
+            editMode={editing}
             businessProfileEnabled={settings.businessProfileEnabled}
             industries={industries}
             initialBusinessProfile={membership.serviceMemberBusinessProfile}

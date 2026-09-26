@@ -31,7 +31,13 @@ describe('service content operations boundary', () => {
   });
 
   it('keeps service manager navigation under the service slug', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     expect(home).toContain('/manage/product-packs');
     expect(home).toContain('/manage/campaigns');
   });

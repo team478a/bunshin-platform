@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { SocialAccountStrategy, SocialProfile } from '@bunshin/capability-social';
-import { buildMissionPersonalizationContext } from '../src/services/daily-mission-personalization';
+import type { BunshinMemoryRepository } from '@bunshin/application';
+import type { BunshinMemory } from '@bunshin/platform-domain';
+import {
+  buildDailyMissionPersonalizationBase,
+  buildMissionPersonalizationContext,
+  selectDailyMissionMemories,
+} from '../src/services/daily-mission-personalization';
 
 const date = new Date('2026-09-22T00:00:00.000Z');
 const profile = (platform: SocialProfile['platform'], purpose: string): SocialProfile => ({
@@ -79,4 +85,85 @@ describe('daily mission personalization context', () => {
       expect(context.instruction).toContain('低評価・不採用理由を避け');
     },
   );
+
+  it('builds prompt contexts from user evidence while keeping official knowledge authoritative', () => {
+    const socialProfile = profile('INSTAGRAM', '歴史を初めて学ぶ人へ写真で伝える');
+    const approvedStrategy = strategy(socialProfile, '歴史好きの初心者');
+    const result = buildDailyMissionPersonalizationBase({
+      bunshin: {
+        name: '歴史案内人',
+        objectiveSummary: '地域の歴史を伝える',
+        audienceSummary: '歴史好きの初心者',
+        personalitySummary: '分かりやすく丁寧に伝える',
+      },
+      personality: null,
+      socialProfile,
+      strategy: approvedStrategy,
+      history: {
+        businessProfile: null,
+        onboardingContext: '城跡に興味がある',
+        behaviorSummary: '直近は写真投稿を採用',
+        feedbackSummary: '専門用語が多い投稿は不採用',
+        performanceSummary: '地域の小話への反応が良い',
+      },
+      officialKnowledge: [{ type: 'SERVICE_FACT', title: '正式情報', content: 'ORIが正式名称' }],
+      grantedKnowledge: [
+        { type: 'OTHER', title: '個人知識', content: '公式情報がある場合は使わない' },
+      ],
+      personalMaterials: [
+        { type: 'PERSONAL_MATERIAL', title: '本人素材', content: '昨日撮影した城跡' },
+      ],
+    });
+
+    expect(result.bunshinContext.name).toBe('歴史案内人');
+    expect(result.strategyContext.targetSummary).toBe('歴史好きの初心者');
+    expect(result.knowledge).toEqual([
+      { type: 'SERVICE_FACT', title: '正式情報', content: 'ORIが正式名称' },
+      { type: 'PERSONAL_MATERIAL', title: '本人素材', content: '昨日撮影した城跡' },
+    ]);
+    expect(result.plannerPersonalization.signals.map(({ type }) => type)).toContain(
+      'POST_PERFORMANCE',
+    );
+  });
+
+  it('selects memories through the scoped repository and records the selection reason', async () => {
+    const memory: BunshinMemory = {
+      id: 'memory-1',
+      workspaceId: 'workspace-1',
+      bunshinId: 'bunshin-1',
+      type: 'EXPERIENCE',
+      content: '城跡を訪ねた経験',
+      summary: '城跡巡り',
+      sourceType: 'USER_INPUT',
+      sourceId: 'daily-action:1',
+      confidence: 1,
+      importance: 5,
+      active: true,
+      deletedAt: null,
+      createdAt: date,
+      updatedAt: date,
+    };
+    const list = vi.fn().mockResolvedValue([memory]);
+    const selected = await selectDailyMissionMemories({
+      scope: { workspaceId: 'workspace-1', actorUserId: 'user-1', bunshinId: 'bunshin-1' },
+      serviceSafeMode: false,
+      allowServiceOwnerMemories: false,
+      memoryRepository: { list } as unknown as BunshinMemoryRepository,
+      ownerMemories: [memory],
+      brief: { topic: '城跡', angle: '初心者向け', reason: '本人の興味と一致' },
+      pillar: { title: '地域の歴史', description: '身近な史跡' },
+      strategyTargetSummary: '歴史好きの初心者',
+    });
+
+    expect(list).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      actorUserId: 'user-1',
+      bunshinId: 'bunshin-1',
+    });
+    expect(selected[0]).toMatchObject({
+      id: 'memory-1',
+      summary: '城跡巡り',
+      selectionReason: expect.stringContaining('関連語'),
+    });
+  });
 });

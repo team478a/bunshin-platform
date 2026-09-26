@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 describe('badge LINE job candidates', () => {
   it('lists only due pending deliveries in the requested environment', () => {
     const source = readFileSync(
-      new URL('../src/badge-line-notification.ts', import.meta.url),
+      new URL('../src/badge-line-job-candidate-repository.ts', import.meta.url),
       'utf8',
     );
     expect(source).toContain("status: 'PENDING'");

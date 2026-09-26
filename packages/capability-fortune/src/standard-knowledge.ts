@@ -1,4 +1,6 @@
-import type { FortuneKnowledgePack, FortuneOrientation, FortuneTheme, TarotCard } from './index';
+import type { FortuneTheme } from './fortune-definition';
+import type { FortuneKnowledgePack } from './fortune-knowledge';
+import type { FortuneOrientation, TarotCard } from './tarot';
 
 type Guidance = { focus: string; caution: string };
 

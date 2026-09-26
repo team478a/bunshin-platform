@@ -20,10 +20,44 @@ describe('service external tracking boundary', () => {
     expect(editor).toContain('apiBase ??');
   });
 
+  it('keeps result API state in the operation container while the result view stays presentational', () => {
+    const editor = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
+    const results = source('app/(app)/admin/external-tracking/external-tracking-results.tsx');
+    expect(editor).toContain('<ExternalTrackingResults');
+    expect(editor).toContain('createResultConnection');
+    expect(results).toContain('onCreateResultConnection');
+    expect(results).not.toContain('fetch(');
+  });
+
+  it('keeps setup API state in the operation container while the setup view stays presentational', () => {
+    const editor = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
+    const setup = source('app/(app)/admin/external-tracking/external-tracking-setup.tsx');
+    expect(editor).toContain('<ExternalTrackingSetup');
+    expect(editor).toContain('async function importCsv');
+    expect(setup).toContain('onImportCsv');
+    expect(setup).toContain('onSend');
+    expect(setup).not.toContain('fetch(');
+  });
+
+  it('keeps link mutations in the operation container while the link list stays presentational', () => {
+    const editor = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
+    const links = source('app/(app)/admin/external-tracking/external-tracking-link-list.tsx');
+    expect(editor).toContain('<ExternalTrackingLinkList');
+    expect(links).toContain('onSend');
+    expect(links).toContain('/activate');
+    expect(links).toContain('/suspend');
+    expect(links).not.toContain('fetch(');
+  });
+
   it('rejects group IDs outside the resolved service for list, export, import, and create', () => {
-    const http = source('src/http/external-tracking-links.ts');
+    const http = [
+      source('src/http/external-tracking-configuration.ts'),
+      source('src/http/external-tracking-csv.ts'),
+      source('src/http/external-tracking-mutations.ts'),
+    ].join('\n');
+    const core = source('src/http/external-tracking-http-core.ts');
     expect(http.match(/service boundary mismatch/g)).toHaveLength(4);
-    expect(http).toContain('new db.PrismaExternalTrackingLinkRepository(undefined, serviceId)');
+    expect(core).toContain('new db.PrismaExternalTrackingLinkRepository(undefined, serviceId)');
   });
 
   it('constrains resources again inside the repository', () => {

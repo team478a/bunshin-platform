@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 const http = readFileSync(new URL('../src/http/program-checkout.ts', import.meta.url), 'utf8');
 const purchase = [
   'program-purchase.ts',
+  'program-purchase-checkout.ts',
+  'program-purchase-completion.ts',
+  'program-purchase-lifecycle.ts',
+  'program-payment-disputes.ts',
   'program-purchase-context.ts',
   'program-payment-webhook-events.ts',
 ]

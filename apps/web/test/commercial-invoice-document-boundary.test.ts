@@ -5,10 +5,19 @@ const handler = readFileSync(
   new URL('../src/http/commercial-invoice-document.ts', import.meta.url),
   'utf8',
 );
-const adminPage = readFileSync(
-  new URL('../app/(app)/admin/organizations/[workspaceId]/commercial/page.tsx', import.meta.url),
-  'utf8',
-);
+const adminPage = [
+  'page.tsx',
+  'commercial-admin-dashboard.tsx',
+  'commercial-contract-section.tsx',
+  'commercial-invoice-sections.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/(app)/admin/organizations/[workspaceId]/commercial/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const organizationPage = readFileSync(
   new URL('../app/(app)/organizations/[workspaceId]/usage/page.tsx', import.meta.url),
   'utf8',

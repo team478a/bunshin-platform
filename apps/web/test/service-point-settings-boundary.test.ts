@@ -11,6 +11,73 @@ const page = [
     fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
     'utf8',
   ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/point-manual-actions.ts', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/point-rule-actions.ts', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../app/s/[serviceSlug]/manage/points/point-configuration-actions.ts',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/point-definitions.ts', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/points-data.ts', import.meta.url)),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../app/s/[serviceSlug]/manage/points/points-operations-sections.tsx',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/points-overview-sections.tsx', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL('../app/s/[serviceSlug]/manage/points/points-rule-sections.tsx', import.meta.url),
+    ),
+    'utf8',
+  ),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../app/s/[serviceSlug]/manage/points/points-adjustment-sections.tsx',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
 ].join('\n');
 const processor = [
   'point-account.ts',
@@ -31,6 +98,56 @@ const schema = readFileSync(
 );
 
 describe('service point settings boundaries', () => {
+  it('keeps manual point mutations in a dedicated server action module', () => {
+    const facade = readFileSync(
+      fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
+      'utf8',
+    );
+    const manual = readFileSync(
+      fileURLToPath(
+        new URL('../app/s/[serviceSlug]/manage/points/point-manual-actions.ts', import.meta.url),
+      ),
+      'utf8',
+    );
+    expect(facade).toContain(
+      "export { cancelRecovery, correctPoints, grantBonus } from './point-manual-actions';",
+    );
+    expect(manual).toContain('resolveManagedServiceContext');
+    expect(manual).toContain("{ isolationLevel: 'Serializable' }");
+    expect(manual).toContain("action: 'POINT_BONUS_GRANTED'");
+    expect(manual).toContain("action: 'POINT_RECOVERY_REGISTERED'");
+    expect(manual).toContain("action: 'POINT_RECOVERY_CANCELLED'");
+  });
+
+  it('keeps point rule and service configuration mutations in dedicated modules', () => {
+    const facade = readFileSync(
+      fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/actions.ts', import.meta.url)),
+      'utf8',
+    );
+    const rules = readFileSync(
+      fileURLToPath(
+        new URL('../app/s/[serviceSlug]/manage/points/point-rule-actions.ts', import.meta.url),
+      ),
+      'utf8',
+    );
+    const configuration = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../app/s/[serviceSlug]/manage/points/point-configuration-actions.ts',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    expect(facade).toContain("from './point-rule-actions';");
+    expect(facade).toContain("from './point-configuration-actions';");
+    expect(rules).toContain("action: 'POINT_RULES_UPDATED'");
+    expect(rules).toContain("action: 'CAMPAIGN_POINT_RULES_UPDATED'");
+    expect(configuration).toContain("action: 'POINT_REWARDS_UPDATED'");
+    expect(configuration).toContain("'POINT_ISSUANCE_STOPPED'");
+    expect(configuration).toContain('startFourWeekRewardsPilot');
+  });
+
   it('requires service management context and scopes every mutation', () => {
     expect(page).toContain('resolveManagedServiceContext');
     expect(page).toContain('workspaceId: service.workspaceId');
@@ -48,7 +165,7 @@ describe('service point settings boundaries', () => {
     expect(page).toContain('db.registerPointRecovery');
     expect(page).toContain('db.cancelPointRecovery');
     expect(page).toContain('parsed.data.userId === actor.userId');
-    expect(page).toContain('memberships.filter(({ userId }) => userId !== actor.userId)');
+    expect(page).toContain('memberships.filter(({ userId }) => userId !== actorUserId)');
     expect(page).toContain('運営者自身への付与はできません。');
   });
 

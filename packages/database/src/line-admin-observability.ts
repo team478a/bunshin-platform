@@ -3,9 +3,14 @@ import {
   type LineAdminFunnelRepository,
   type LineAdminMetricsRepository,
   type LineConfigurationEnvironment,
+  type LineOperationalServiceBroadcastEvent,
   type LineOperationalSnapshotRepository,
 } from '@bunshin/application';
 import { type PrismaClient, prisma } from './client';
+import {
+  listServiceLineBroadcastOperationalEvents,
+  recordServiceLineBroadcastOperationalAlerts,
+} from './service-line-broadcast-operational-alerts';
 
 export class PrismaLineAdminMetricsRepository implements LineAdminMetricsRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -166,33 +171,35 @@ export class PrismaLineAdminMetricsRepository implements LineAdminMetricsReposit
 export class PrismaLineOperationalSnapshotRepository implements LineOperationalSnapshotRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
-  async get(environment: LineConfigurationEnvironment) {
-    const [failed, retryScheduled, dead, failureRows, configuration] = await Promise.all([
-      this.client.lineMessageDelivery.count({ where: { environment, status: 'FAILED' } }),
-      this.client.job.count({
-        where: {
-          environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
-          status: 'RETRY_SCHEDULED',
-        },
-      }),
-      this.client.job.count({
-        where: {
-          environment,
-          jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
-          status: 'DEAD',
-        },
-      }),
-      this.client.lineMessageDelivery.findMany({
-        where: { environment, status: 'FAILED', lastErrorCategory: { not: null } },
-        select: { lastErrorCategory: true },
-        orderBy: { updatedAt: 'desc' },
-        take: 500,
-      }),
-      this.client.lineChannelConfiguration.findFirst({
-        where: { environment, status: 'ACTIVE' },
-      }),
-    ]);
+  async get(environment: LineConfigurationEnvironment, checkedAt = new Date()) {
+    const [failed, retryScheduled, dead, failureRows, configuration, serviceBroadcastEvents] =
+      await Promise.all([
+        this.client.lineMessageDelivery.count({ where: { environment, status: 'FAILED' } }),
+        this.client.job.count({
+          where: {
+            environment,
+            jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+            status: 'RETRY_SCHEDULED',
+          },
+        }),
+        this.client.job.count({
+          where: {
+            environment,
+            jobType: { in: ['LINE_MISSION_DELIVER', 'BADGE_LINE_DELIVER'] },
+            status: 'DEAD',
+          },
+        }),
+        this.client.lineMessageDelivery.findMany({
+          where: { environment, status: 'FAILED', lastErrorCategory: { not: null } },
+          select: { lastErrorCategory: true },
+          orderBy: { updatedAt: 'desc' },
+          take: 500,
+        }),
+        this.client.lineChannelConfiguration.findFirst({
+          where: { environment, status: 'ACTIVE' },
+        }),
+        listServiceLineBroadcastOperationalEvents(this.client, environment, checkedAt),
+      ]);
     const failureCounts = new Map<string, number>();
     for (const row of failureRows) {
       if (row.lastErrorCategory)
@@ -212,7 +219,21 @@ export class PrismaLineOperationalSnapshotRepository implements LineOperationalS
       deliveries: { failed },
       jobs: { retryScheduled, dead },
       failures: [...failureCounts.entries()].map(([category, count]) => ({ category, count })),
+      serviceBroadcastEvents,
     };
+  }
+
+  async recordServiceBroadcastAlerts(
+    events: LineOperationalServiceBroadcastEvent[],
+    fingerprint: string,
+    notifiedAt: Date,
+  ) {
+    return recordServiceLineBroadcastOperationalAlerts(
+      this.client,
+      events,
+      fingerprint,
+      notifiedAt,
+    );
   }
 }
 

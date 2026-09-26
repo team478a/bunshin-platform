@@ -1,29 +1,51 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  new URL('../src/http/service-daily-missions.ts', import.meta.url),
+const source = [
+  'service-daily-missions.ts',
+  'service-daily-mission-http-core.ts',
+  'service-daily-mission-generation.ts',
+  'service-daily-mission-variants.ts',
+  'service-daily-mission-engagement.ts',
+  'service-daily-mission-outcomes.ts',
+]
+  .map((file) => readFileSync(new URL(`../src/http/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
+const planningContext = readFileSync(
+  new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
-const generation = readFileSync(
-  new URL('../src/services/daily-mission-generation.ts', import.meta.url),
-  'utf8',
-);
-const detailPage = readFileSync(
-  new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
-  'utf8',
-);
-const experience = readFileSync(
-  new URL(
-    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-    import.meta.url,
-  ),
-  'utf8',
-);
-const imageWorkspace = readFileSync(
-  new URL('../app/ui/social-image-workspace.tsx', import.meta.url),
-  'utf8',
-);
+const detailPage = [
+  'service-bunshin-detail-data.ts',
+  'service-bunshin-detail-image-access.ts',
+  'service-bunshin-detail-view.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
+const experience = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+  'service-daily-mission-card.tsx',
+  'service-daily-mission-detail.tsx',
+  'service-daily-mission-image-guide.tsx',
+  'service-daily-mission-accepted.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
+const imageWorkspace = ['social-image-workspace.tsx', 'social-image-workspace-view.tsx']
+  .map((file) => readFileSync(new URL(`../app/ui/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 
 describe('service daily mission boundary', () => {
   it('derives service authority on the server', () => {
@@ -35,12 +57,12 @@ describe('service daily mission boundary', () => {
 
   it('uses safe service generation without personal context, while retaining own trend candidates', () => {
     expect(source).toContain('serviceSafeMode: true');
-    expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*null/);
-    expect(generation).toMatch(/input\.serviceSafeMode\s*\?\s*\[\]/);
-    expect(generation).toContain('new ListActiveTrendIdeas(');
-    expect(generation).not.toMatch(/const trendIdeas = input\.serviceSafeMode\s*\?\s*\[\]/);
-    expect(generation).toContain('campaign.productPack.groupId !== input.groupId');
-    expect(generation).toContain("'service campaign unavailable'");
+    expect(planningContext).toMatch(/input\.serviceSafeMode\s*\?\s*null/);
+    expect(planningContext).toMatch(/input\.serviceSafeMode\s*\?\s*\[\]/);
+    expect(planningContext).toContain('new ListActiveTrendIdeas(');
+    expect(planningContext).not.toMatch(/const trendIdeas = input\.serviceSafeMode\s*\?\s*\[\]/);
+    expect(planningContext).toContain('campaign.productPack.groupId !== input.scope.groupId');
+    expect(planningContext).toContain("'service campaign unavailable'");
   });
 
   it('connects the service mission view and endpoint', () => {
@@ -48,6 +70,8 @@ describe('service daily mission boundary', () => {
     expect(detailPage).toContain('/daily-missions`}');
     expect(detailPage).toContain('trendContext: mission.trendContext');
     expect(detailPage).toContain('copyAuthorization: missionStates[index]!.copyAuthorization');
+    expect(experience).toContain('useServiceDailyMissionController');
+    expect(experience).toContain('<ServiceDailyMissionList');
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 

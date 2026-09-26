@@ -168,15 +168,26 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
     }
   }
 
-  async pushText(input: { accessToken: string; recipientId: string; text: string }) {
+  async pushText(input: {
+    accessToken: string;
+    recipientId: string;
+    text: string;
+    retryKey?: string;
+  }) {
     if (!input.accessToken.trim()) return httpFailure(401);
     if (!input.recipientId.trim() || !input.text.trim()) return httpFailure(400);
+    if (
+      input.retryKey &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.retryKey)
+    )
+      return httpFailure(400);
     try {
       const response = await this.request(`${endpoint}/v2/bot/message/push`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${input.accessToken}`,
           'content-type': 'application/json',
+          ...(input.retryKey ? { 'X-Line-Retry-Key': input.retryKey } : {}),
         },
         body: JSON.stringify({
           to: input.recipientId,
@@ -184,6 +195,8 @@ export class LineMessagingApiAdapter implements LineMessagingProviderPort {
         }),
         signal: AbortSignal.timeout(10_000),
       });
+      if (response.status === 409 && response.headers.get('x-line-accepted-request-id'))
+        return { ok: true } as const;
       if (!response.ok) return httpFailure(response.status);
       return { ok: true } as const;
     } catch (error) {

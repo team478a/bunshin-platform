@@ -7,13 +7,34 @@ export interface LineOperationalSnapshot {
   deliveries: { failed: number };
   jobs: { retryScheduled: number; dead: number };
   failures: Array<{ category: string; count: number }>;
+  serviceBroadcastEvents?: LineOperationalServiceBroadcastEvent[];
 }
 
 export interface LineOperationalSnapshotRepository {
-  get(environment: LineConfigurationEnvironment): Promise<LineOperationalSnapshot>;
+  get(
+    environment: LineConfigurationEnvironment,
+    checkedAt?: Date,
+  ): Promise<LineOperationalSnapshot>;
 }
 
-export type LineOperationalAlertSeverity = 'WARNING' | 'CRITICAL';
+export type LineOperationalServiceBroadcastEventCode =
+  | 'SERVICE_BROADCAST_STALLED'
+  | 'SERVICE_BROADCAST_HIGH_FAILURE'
+  | 'SERVICE_BROADCAST_RECOVERY_EXHAUSTED'
+  | 'SERVICE_BROADCAST_RECOVERED';
+
+export interface LineOperationalServiceBroadcastEvent {
+  code: LineOperationalServiceBroadcastEventCode;
+  eventKey: string;
+  workspaceId: string;
+  groupId: string;
+  broadcastId: string;
+  performedByUserId: string;
+  serviceSlug?: string;
+  serviceDisplayName?: string;
+}
+
+export type LineOperationalAlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 
 export interface LineOperationalAlert {
   code: string;
@@ -27,6 +48,8 @@ export interface LineOperationalAssessment {
   alerts: LineOperationalAlert[];
   fingerprint: string;
   checkedAt: Date;
+  /** Internal references used to persist notification audit records. Never expose publicly. */
+  serviceBroadcastEvents?: LineOperationalServiceBroadcastEvent[];
 }
 
 const criticalFailureCategories = new Set([
@@ -79,8 +102,23 @@ export function assessLineOperationalReadiness(
       severity: 'WARNING',
       count: snapshot.deliveries.failed,
     });
+  const serviceBroadcastEvents = snapshot.serviceBroadcastEvents ?? [];
+  const serviceBroadcastAlerts: Array<{
+    code: LineOperationalServiceBroadcastEventCode;
+    severity: LineOperationalAlertSeverity;
+  }> = [
+    { code: 'SERVICE_BROADCAST_STALLED', severity: 'WARNING' },
+    { code: 'SERVICE_BROADCAST_HIGH_FAILURE', severity: 'CRITICAL' },
+    { code: 'SERVICE_BROADCAST_RECOVERY_EXHAUSTED', severity: 'CRITICAL' },
+    { code: 'SERVICE_BROADCAST_RECOVERED', severity: 'INFO' },
+  ];
+  for (const definition of serviceBroadcastAlerts) {
+    const count = serviceBroadcastEvents.filter(({ code }) => code === definition.code).length;
+    if (count > 0) alerts.push({ ...definition, count });
+  }
   const canonical = alerts
     .map(({ code, severity, count }) => `${severity}:${code}:${count ?? '-'}`)
+    .concat(serviceBroadcastEvents.map(({ eventKey }) => `EVENT:${eventKey}`).sort())
     .join('|');
   return {
     environment: snapshot.environment,
@@ -88,6 +126,7 @@ export function assessLineOperationalReadiness(
     alerts,
     fingerprint: stableFingerprint(`${snapshot.environment}|${canonical}`),
     checkedAt,
+    serviceBroadcastEvents,
   };
 }
 
@@ -102,10 +141,11 @@ export class CheckLineOperationalReadiness {
   ) {}
 
   async execute(environment: LineConfigurationEnvironment) {
-    const snapshot = await this.repository.get(environment);
+    const checkedAt = this.now();
+    const snapshot = await this.repository.get(environment, checkedAt);
     if (snapshot.environment !== environment)
       throw new ApplicationError('INTERNAL_ERROR', 'LINE environment mismatch');
-    return assessLineOperationalReadiness(snapshot, this.now());
+    return assessLineOperationalReadiness(snapshot, checkedAt);
   }
 }
 

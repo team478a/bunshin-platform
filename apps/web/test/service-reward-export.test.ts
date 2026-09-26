@@ -2,14 +2,27 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  fileURLToPath(new URL('../src/http/service-reward-export.ts', import.meta.url)),
-  'utf8',
-);
-const page = readFileSync(
-  fileURLToPath(new URL('../app/s/[serviceSlug]/manage/points/page.tsx', import.meta.url)),
-  'utf8',
-);
+const source = [
+  'service-reward-export.ts',
+  'service-reward-export-format.ts',
+  'service-reward-export-ledger.ts',
+  'service-reward-export-audit.ts',
+  'service-reward-export-pilot.ts',
+]
+  .map((file) =>
+    readFileSync(fileURLToPath(new URL(`../src/http/${file}`, import.meta.url)), 'utf8'),
+  )
+  .join('\n');
+const page = [
+  '../app/s/[serviceSlug]/manage/points/page.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-pilot-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-operations-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-overview-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-rule-sections.tsx',
+  '../app/s/[serviceSlug]/manage/points/points-adjustment-sections.tsx',
+]
+  .map((path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8'))
+  .join('\n');
 
 describe('service reward export boundaries', () => {
   it('requires a managed service context and scopes every export to the service', () => {

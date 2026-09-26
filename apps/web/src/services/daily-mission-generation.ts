@@ -1,52 +1,28 @@
 import 'server-only';
-import {
-  CheckMissionQuality,
-  CreateDailyMission,
-  GenerateDailyMissionBrief,
-  GenerateMissionContent,
-  ListContentPillars,
-  ListDailyMissions,
-  ListSocialAccountStrategies,
-  ListSocialProfiles,
-  ListActiveTrendIdeas,
-  ListWeeklyPlans,
-} from '@bunshin/capability-social';
-import {
-  GetBunshin,
-  ListGrantedKnowledgeForBunshin,
-  ListPersonalityVersions,
-  RequireActiveBunshinCapability,
-  SelectBunshinMemories,
-  ProductPackService,
-  CampaignService,
-  AdvertisingSafetyService,
-  CampaignSafetyValidationService,
-  ExternalTrackingLinkService,
-  ExternalLinkPlacementService,
-  GroupFeatureEntitlementService,
-  GroupKnowledgeService,
-  selectGroupKnowledgeChunksForPrompt,
-  applyExternalLinkPlacement,
-} from '@bunshin/application';
+import { ListDailyMissions, type MissionContent } from '@bunshin/capability-social';
+import { RequireActiveBunshinCapability } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
-import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
-import { recordAiUsageSafely } from '../observability/ai-usage';
-import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
-import { OpenAIDailyMissionPlanner } from '../providers/openai-daily-mission-planner';
-import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
-import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
-import { campaignContentSignature } from './campaign-content-signature';
-import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
-import { applyServiceContentTerminology } from './service-content-terminology';
 import {
+  buildDailyMissionPersonalizationBase,
   buildMissionPersonalizationContext,
-  personalizationSourceTypes,
+  selectDailyMissionMemories,
 } from './daily-mission-personalization';
 import {
   inspectDailyMissionContent,
   recentMissionQualityContext,
 } from './daily-mission-content-quality';
+import { finalizeDailyMissionContent } from './daily-mission-content-finalization';
+import { loadDailyMissionPlanningContext } from './daily-mission-planning-context';
+import {
+  createDailyMissionAiRuntime,
+  dailyMissionErrorCategory,
+  recordDailyMissionPipelineFailure,
+} from './daily-mission-ai-runtime';
+import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
+import { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
+import { loadDailyMissionGenerationEnvironment } from './daily-mission-generation-environment';
+import { persistDailyMissionGenerationResult } from './daily-mission-result-persistence';
 
 interface Input {
   workspaceId: string;
@@ -62,18 +38,6 @@ interface Input {
   serviceSafeMode?: boolean;
   allowServiceOwnerMemories?: boolean;
 }
-
-const errorCategory = (error: unknown) => {
-  if (error instanceof ApplicationError) {
-    const cause = error.cause;
-    if (cause && typeof cause === 'object' && 'category' in cause) {
-      const category = (cause as { category?: unknown }).category;
-      if (typeof category === 'string') return category;
-    }
-    return error.code;
-  }
-  return 'INTERNAL_ERROR';
-};
 
 const daysBefore = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00.000Z`);
@@ -137,121 +101,30 @@ export class DailyMissionGenerationService {
         throw new ApplicationError('CONFLICT', 'daily mission already exists');
       }
       const recentFormats = recentMissions.map(({ format }) => format);
-      const productPack = input.serviceSafeMode
-        ? null
-        : await new ProductPackService(new db.PrismaProductPackRepository()).resolveForGeneration(
-            scope,
-          );
-      const profiles = await new ListSocialProfiles(new db.PrismaSocialProfileRepository()).execute(
+      const planningContext = await loadDailyMissionPlanningContext({
         scope,
-      );
-      const profile = input.socialProfileId
-        ? profiles.find(({ id, status }) => id === input.socialProfileId && status === 'ACTIVE')
-        : profiles.find(({ status }) => status === 'ACTIVE');
-      if (!profile) throw new ApplicationError('NOT_FOUND', 'active social profile not found');
-      const strategies = await new ListSocialAccountStrategies(
-        new db.PrismaSocialAccountStrategyRepository(),
-      ).execute({ ...scope, socialProfileId: profile.id });
-      const strategy = strategies.find(({ status }) => status === 'APPROVED');
-      if (!strategy) throw new ApplicationError('CONFLICT', 'approved strategy is required');
-      // Trend candidates are always scoped to the current workspace, Bunshin and social profile.
-      // They are public-source based, so service mode can use the participant's own candidates
-      // without exposing personal memories or another service's data.
-      const trendIdeas = await new ListActiveTrendIdeas(
-        new db.PrismaTrendResearchRepository(),
-      ).execute({
-        ...scope,
-        socialProfileId: profile.id,
-        at: new Date(),
+        missionDate: input.missionDate,
+        ...(input.socialProfileId ? { socialProfileId: input.socialProfileId } : {}),
+        serviceSafeMode: input.serviceSafeMode ?? false,
+        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
+        generationIdempotencyKey: input.generationIdempotencyKey,
       });
-      const weeklyPlans = await new ListWeeklyPlans(new db.PrismaWeeklyPlanRepository()).execute(
-        scope,
-      );
-      const weeklyPlan = weeklyPlans.find(
-        ({ status, items }) =>
-          status === 'CONFIRMED' &&
-          items.some(({ scheduledDate }) => scheduledDate === input.missionDate),
-      );
-      if (!weeklyPlan)
-        throw new ApplicationError('NOT_FOUND', 'confirmed weekly plan item not found for date');
-      const weeklyItem = weeklyPlan.items.find(
-        ({ scheduledDate }) => scheduledDate === input.missionDate,
-      )!;
-      const campaign = weeklyItem.campaignId
-        ? await new CampaignService(new db.PrismaCampaignRepository()).resolvePlanningContext({
-            ...scope,
-            campaignId: weeklyItem.campaignId,
-            at: new Date(`${input.missionDate}T12:00:00.000Z`),
-          })
-        : null;
-      if (campaign && input.serviceSafeMode && campaign.productPack.groupId !== input.groupId)
-        throw new ApplicationError('NOT_FOUND', 'service campaign unavailable');
-      if (campaign) {
-        const entitlements = new GroupFeatureEntitlementService(
-          new db.PrismaGroupFeatureEntitlementRepository(),
-        );
-        for (const requiredFeature of ['SOCIAL', 'GROUP.CAMPAIGN', 'GROUP.PRODUCT_PACK']) {
-          const access = await entitlements.consumeAccess({
-            workspaceId: input.workspaceId,
-            groupId: campaign.productPack.groupId,
-            actorUserId: input.actorUserId,
-            featureKey: requiredFeature,
-            operationKey: `${input.generationIdempotencyKey}:${requiredFeature}`,
-            localDate: input.missionDate,
-          });
-          if (!access.allowed)
-            throw new ApplicationError('FORBIDDEN', 'group feature is not available', {
-              featureKey: requiredFeature,
-              reason: access.reason,
-            });
-        }
-      }
-      const pillars = await new ListContentPillars(new db.PrismaContentPillarRepository()).execute(
-        scope,
-      );
-      const bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
-      const personalityVersions = input.serviceSafeMode
-        ? []
-        : await new ListPersonalityVersions(new db.PrismaPersonalityVersionRepository()).execute(
-            scope,
-          );
-      const currentPersonality = personalityVersions[0] ?? null;
-      const serviceKnowledge =
-        input.serviceSafeMode && input.groupId
-          ? await loadServiceGenerationKnowledge({
-              workspaceId: input.workspaceId,
-              groupId: input.groupId,
-              actorUserId: input.actorUserId,
-              bunshinId: input.bunshinId,
-            })
-          : null;
-      const granted = input.serviceSafeMode
-        ? []
-        : await new ListGrantedKnowledgeForBunshin(new db.PrismaKnowledgeGrantRepository()).execute(
-            scope,
-          );
-      const memoryRepository =
-        input.serviceSafeMode && input.allowServiceOwnerMemories
-          ? new db.PrismaOwnerBunshinMemoryRepository()
-          : new db.PrismaBunshinMemoryRepository();
-      const ownerMemories =
-        input.serviceSafeMode && !input.allowServiceOwnerMemories
-          ? []
-          : await memoryRepository.list(scope);
-      const personalMaterials = ownerMemories
-        .filter(
-          (memory) =>
-            memory.active &&
-            memory.deletedAt === null &&
-            memory.sourceType === 'USER_INPUT' &&
-            memory.sourceId?.startsWith('daily-action:'),
-        )
-        .slice(0, 3)
-        .map((memory) => ({
-          type: 'PERSONAL_MATERIAL',
-          title: memory.summary?.trim() || '本人が残した素材',
-          content: memory.content,
-        }));
+      const {
+        profile,
+        strategy,
+        trendIdeas,
+        weeklyPlan,
+        weeklyItem,
+        campaign,
+        pillars,
+        bunshin,
+        currentPersonality,
+        serviceKnowledge,
+        granted,
+        memoryRepository,
+        ownerMemories,
+        personalMaterials,
+      } = planningContext;
       const generations = new db.PrismaDailyMissionGenerationRepository();
       const claim = await generations.claim({
         ...scope,
@@ -261,113 +134,45 @@ export class DailyMissionGenerationService {
       if (!claim.acquired)
         throw new ApplicationError('CONFLICT', 'daily mission generation is in progress');
       generationId = claim.record.id;
-      const { apiKey, model } = await resolveOpenAiRuntimeConfiguration();
-      runtimeModel = model;
-      let timezone = input.timezone;
-      if (!timezone) {
-        const preference = await new db.PrismaLineNotificationPreferenceRepository().getScoped(
-          scope,
-        );
-        if (!preference.accessible)
-          throw new ApplicationError('NOT_FOUND', 'notification preference scope not found');
-        timezone = preference.preference?.timezone ?? 'Asia/Tokyo';
-      }
-      const bunshinContext = {
-        name: bunshin.name,
-        objectiveSummary: bunshin.objectiveSummary,
-        audienceSummary: bunshin.audienceSummary,
-        personalitySummary: bunshin.personalitySummary,
-        personality: currentPersonality
-          ? {
-              versionId: currentPersonality.id,
-              version: currentPersonality.version,
-              tone: currentPersonality.tone,
-              formality: currentPersonality.formality,
-              energyLevel: currentPersonality.energyLevel,
-              expertiseLevel: currentPersonality.expertiseLevel,
-              sentenceStyle: currentPersonality.sentenceStyle,
-              firstPerson: currentPersonality.firstPerson,
-              forbiddenExpressions: currentPersonality.forbiddenExpressions,
-              preferredExpressions: currentPersonality.preferredExpressions,
-              visualDirection: currentPersonality.visualDirection,
-              facePolicy: currentPersonality.facePolicy,
-            }
-          : null,
-      };
-      const strategyContext = {
-        concept: strategy.concept,
-        positioning: strategy.positioning,
-        targetSummary: strategy.targetSummary,
-        ctaStrategy: strategy.ctaStrategy,
-        postingPolicy: strategy.postingPolicy,
-      };
-      const plannerPersonalization = buildMissionPersonalizationContext({
-        bunshin: bunshinContext,
-        socialProfile: profile,
-        strategy,
-        businessProfile: serviceKnowledge?.businessProfile ?? null,
-        onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
-        behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
-        feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
-        performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
+      const { apiKey, model, recordUsage, generateWithQuota } = await createDailyMissionAiRuntime({
+        scope,
+        usageIdempotencyPrefix: input.usageIdempotencyPrefix,
       });
-      const knowledge = [
-        ...(serviceKnowledge?.officialKnowledge ??
-          granted.map(({ type, title, content }) => ({ type, title, content }))),
-        ...personalMaterials,
-      ];
-      const groupKnowledge = campaign
-        ? selectGroupKnowledgeChunksForPrompt(
-            await new GroupKnowledgeService(
-              new db.PrismaGroupKnowledgeRepository(),
-            ).listApprovedChunksForGeneration({
-              ...scope,
-              groupId: campaign.productPack.groupId,
-              productPackVersionId: campaign.productPack.versionId,
-            }),
-          ).map((chunk) => ({
-            chunkId: chunk.id,
-            sourceId: chunk.sourceId,
-            type: chunk.type,
-            sourceLabel: chunk.sourceLabel,
-            content: chunk.content.trim(),
-          }))
-        : serviceKnowledge
-          ? serviceKnowledge.groupKnowledge
-          : [];
-      const usage = async (
-        suffix: string,
-        taskType: string,
-        result: {
-          model: string;
-          promptVersion: string;
-          inputTokens: number | null;
-          outputTokens: number | null;
-          latencyMs: number;
-        },
-      ) =>
-        recordAiUsageSafely({
-          ...scope,
-          taskType,
-          provider: 'openai',
-          model: result.model,
-          promptVersion: result.promptVersion,
-          status: 'SUCCESS',
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          latencyMs: result.latencyMs,
-          idempotencyKey: `${input.usageIdempotencyPrefix}:${suffix}`,
+      runtimeModel = model;
+      const { bunshinContext, strategyContext, plannerPersonalization, knowledge } =
+        buildDailyMissionPersonalizationBase({
+          bunshin,
+          personality: currentPersonality,
+          socialProfile: profile,
+          strategy,
+          history: {
+            businessProfile: serviceKnowledge?.businessProfile ?? null,
+            onboardingContext: serviceKnowledge?.personalization.onboardingContext ?? null,
+            behaviorSummary: serviceKnowledge?.personalization.behaviorSummary ?? null,
+            feedbackSummary: serviceKnowledge?.personalization.feedbackSummary ?? null,
+            performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
+          },
+          officialKnowledge: serviceKnowledge?.officialKnowledge ?? null,
+          grantedKnowledge: granted.map(({ type, title, content }) => ({
+            type,
+            title,
+            content,
+          })),
+          personalMaterials,
         });
-      const generateWithQuota = <T>(suffix: string, generate: () => Promise<T>) =>
-        withOrganizationAiGenerationQuota({
-          workspaceId: input.workspaceId,
-          ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
-          operationKey: `${input.usageIdempotencyPrefix}:${suffix}`,
-          generate,
-        });
+      const { timezone, groupKnowledge } = await loadDailyMissionGenerationEnvironment({
+        scope,
+        ...(input.timezone ? { timezone: input.timezone } : {}),
+        campaign,
+        fallbackGroupKnowledge: serviceKnowledge?.groupKnowledge ?? [],
+      });
       stage = 'daily-brief';
-      const brief = await generateWithQuota('daily-brief', () =>
-        new GenerateDailyMissionBrief(new OpenAIDailyMissionPlanner({ apiKey, model })).execute({
+      const brief = await runDailyMissionBriefGeneration({
+        apiKey,
+        model,
+        generateWithQuota,
+        recordUsage,
+        plannerInput: {
           ...scope,
           missionDate: input.missionDate,
           timezone,
@@ -388,49 +193,23 @@ export class DailyMissionGenerationService {
           trendIdeas,
           campaign,
           personalization: plannerPersonalization,
-        }),
-      );
-      await usage('daily-brief', 'DAILY_MISSION_PLANNER', brief);
+        },
+      });
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
       )?.contentPillarId;
       const pillar = pillars.find(({ id }) => id === pillarId);
       if (!pillar) throw new ApplicationError('NOT_FOUND', 'active content pillar not found');
-      const relevantMemories =
-        input.serviceSafeMode && !input.allowServiceOwnerMemories
-          ? []
-          : await new SelectBunshinMemories(memoryRepository).execute({
-              ...scope,
-              query: [
-                brief.output.topic,
-                brief.output.angle,
-                brief.output.reason,
-                pillar.title,
-                pillar.description ?? '',
-                strategy.targetSummary,
-              ].join('\n'),
-              maxItems: 5,
-              maxCharacters: 3000,
-            });
-      const selectedMemories =
-        relevantMemories.length > 0
-          ? relevantMemories
-          : ownerMemories
-              .filter(
-                (memory) =>
-                  memory.active &&
-                  memory.deletedAt === null &&
-                  memory.sourceType === 'USER_INPUT' &&
-                  memory.sourceId?.startsWith('daily-action:'),
-              )
-              .slice(0, 1)
-              .map((memory) => ({
-                id: memory.id,
-                type: memory.type,
-                summary: memory.summary?.trim() || memory.content.slice(0, 200),
-                content: memory.content,
-                selectionReason: '本人がDaily Actionで残した最近の素材',
-              }));
+      const selectedMemories = await selectDailyMissionMemories({
+        scope,
+        serviceSafeMode: input.serviceSafeMode ?? false,
+        allowServiceOwnerMemories: input.allowServiceOwnerMemories ?? false,
+        memoryRepository,
+        ownerMemories,
+        brief: brief.output,
+        pillar,
+        strategyTargetSummary: strategy.targetSummary,
+      });
       const personalization = buildMissionPersonalizationContext({
         bunshin: bunshinContext,
         socialProfile: profile,
@@ -442,12 +221,6 @@ export class DailyMissionGenerationService {
         performanceSummary: serviceKnowledge?.personalization.performanceSummary ?? null,
         selectedMemories,
       });
-      const generator = new GenerateMissionContent(
-        new OpenAIMissionContentGenerator({
-          apiKey,
-          model,
-        }),
-      );
       const contentInput = {
         platform: profile.platform,
         brief: brief.output,
@@ -461,32 +234,10 @@ export class DailyMissionGenerationService {
         campaign,
         personalization,
       };
-      const applyTerminology = <
-        T extends { output: Parameters<typeof applyServiceContentTerminology>[0] },
-      >(
-        value: T,
-      ) => ({
-        ...value,
-        output: applyServiceContentTerminology(
-          value.output,
-          serviceKnowledge?.contentTerminologyPolicy ?? null,
-        ),
-      });
-      stage = 'content:0';
-      let content = applyTerminology(
-        await generateWithQuota('content:0', () => generator.execute(contentInput)),
-      );
-      await usage('content:0', 'CONTENT_GENERATOR', content);
-      const checker = new CheckMissionQuality(
-        new OpenAIMissionQualityChecker({
-          apiKey,
-          model,
-        }),
-      );
-      const qualityInput = () => ({
+      const qualityInput = (generatedContent: MissionContent) => ({
         platform: profile.platform,
         brief: brief.output,
-        content: content.output,
+        content: generatedContent,
         bunshin: bunshinContext,
         approvedStrategy: strategyContext,
         businessProfile: serviceKnowledge?.businessProfile ?? null,
@@ -495,284 +246,49 @@ export class DailyMissionGenerationService {
         recentContent: recentMissionQualityContext(recentMissions),
         personalization,
       });
-      let repairCount = 0;
-      const qualityIssueCodes = new Set<string>();
-      let quality: Awaited<ReturnType<typeof checker.execute>> | null = null;
-      let noveltyIssue: ReturnType<typeof inspectDailyMissionContent> = null;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        stage = `quality:${attempt}`;
-        const currentQuality = await generateWithQuota(`quality:${attempt}`, () =>
-          checker.execute(qualityInput()),
-        );
-        quality = currentQuality;
-        for (const issue of currentQuality.output.issues) qualityIssueCodes.add(issue.code);
-        await usage(`quality:${attempt}`, 'QUALITY_CHECKER', currentQuality);
-        noveltyIssue =
-          currentQuality.output.verdict === 'PASS'
-            ? inspectDailyMissionContent({ content: content.output, recentMissions })
-            : null;
-        if (currentQuality.output.verdict === 'PASS' && !noveltyIssue) break;
-        if (currentQuality.output.verdict === 'REJECT' || attempt === 2)
-          throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check', {
-            issueCodes: [...qualityIssueCodes],
-            noveltyIssue,
-            attempts: attempt + 1,
-          });
-        repairCount += 1;
-        const semanticDuplicate =
-          noveltyIssue !== null ||
-          currentQuality.output.issues.some(({ code }) => code === 'RECENT_CONTENT_DUPLICATE');
-        stage = `content:${attempt + 1}`;
-        content = applyTerminology(
-          await generateWithQuota(`content:${attempt + 1}`, () =>
-            generator.execute(
-              semanticDuplicate
-                ? {
-                    ...contentInput,
-                    variantSourceContent: content.output,
-                    variantInstructions: [
-                      '過去原稿の言い換えではなく、答える疑問、具体的な情報、利用場面、読者が得る価値を別の企画にする。',
-                      '承認済み情報だけを使い、架空の体験、実績、イベント、サービス説明を追加しない。',
-                    ],
-                  }
-                : {
-                    ...contentInput,
-                    repairInstructions: currentQuality.output.issues.map(
-                      ({ repairInstruction }) => repairInstruction,
-                    ),
-                  },
-            ),
-          ),
-        );
-        await usage(
-          `content:${attempt + 1}`,
-          semanticDuplicate ? 'CONTENT_NOVELTY_RETRY' : 'CONTENT_REPAIR',
-          content,
-        );
-      }
-      if (!quality || quality.output.verdict !== 'PASS' || noveltyIssue)
-        throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
-      let missionContent = content.output;
-      let externalLinkUsage:
-        | {
-            groupId: string;
-            productPackId: string;
-            productPackVersionId: string;
-            campaignId: string;
-            externalTrackingLinkId: string;
-            insertedUrl: string;
-            placementTemplateId: string | null;
-            placementTemplateVersion: number | null;
-          }
-        | undefined;
-      if (campaign) {
-        const trackingLink = await new ExternalTrackingLinkService(
-          new db.PrismaExternalTrackingLinkRepository(),
-        ).resolve({
-          ...scope,
-          groupId: campaign.productPack.groupId,
-          productPackId: campaign.productPack.productPackId,
-          campaignId: campaign.id,
-          at: new Date(`${input.missionDate}T12:00:00.000Z`),
+      const { content, quality, repairCount, qualityIssueCodes } =
+        await runDailyMissionContentGeneration({
+          apiKey,
+          model,
+          contentInput,
+          qualityInput,
+          recentMissions,
+          generateWithQuota,
+          recordUsage,
+          terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
+          setStage: (value) => {
+            stage = value;
+          },
         });
-        if (!trackingLink && !campaign.productPack.allowLinklessPosts)
-          throw new ApplicationError(
-            'CONFLICT',
-            'この商品に使用できる専用URLが設定されていません。管理者へお問い合わせください。',
-          );
-        if (trackingLink) {
-          const linkAccess = await new GroupFeatureEntitlementService(
-            new db.PrismaGroupFeatureEntitlementRepository(),
-          ).consumeAccess({
-            workspaceId: input.workspaceId,
-            groupId: campaign.productPack.groupId,
-            actorUserId: input.actorUserId,
-            featureKey: 'GROUP.EXTERNAL_TRACKING_LINK',
-            operationKey: `${input.generationIdempotencyKey}:GROUP.EXTERNAL_TRACKING_LINK`,
-            localDate: input.missionDate,
-          });
-          if (!linkAccess.allowed)
-            throw new ApplicationError('FORBIDDEN', 'group tracking link is not available', {
-              featureKey: 'GROUP.EXTERNAL_TRACKING_LINK',
-              reason: linkAccess.reason,
-            });
-          const placement = await new ExternalLinkPlacementService(
-            new db.PrismaExternalLinkPlacementRepository(),
-          ).resolveForGeneration({
-            ...scope,
-            productPackVersionId: campaign.productPack.versionId,
-            platform: profile.platform,
-            format: brief.output.format,
-          });
-          missionContent = applyExternalLinkPlacement({
-            content: missionContent,
-            url: trackingLink.url,
-            platform: profile.platform,
-            format: brief.output.format,
-            placement,
-          });
-          externalLinkUsage = {
-            groupId: campaign.productPack.groupId,
-            productPackId: campaign.productPack.productPackId,
-            productPackVersionId: campaign.productPack.versionId,
-            campaignId: campaign.id,
-            externalTrackingLinkId: trackingLink.id,
-            insertedUrl: trackingLink.url,
-            placementTemplateId: placement.id,
-            placementTemplateVersion: placement.version,
-          };
-        }
-      }
-      missionContent = applyServiceContentTerminology(
-        missionContent,
-        serviceKnowledge?.contentTerminologyPolicy ?? null,
-      );
-      const campaignSignature = campaign ? campaignContentSignature(missionContent) : null;
-      const similarity =
-        campaign && campaignSignature
-          ? await new CampaignSafetyValidationService(
-              new db.PrismaCampaignSafetyRepository(),
-            ).inspect({
-              ...scope,
-              campaignId: campaign.id,
-              ...campaignSignature,
-              at: new Date(`${input.missionDate}T12:00:00.000Z`),
-            })
-          : null;
-      if (campaign && campaignSignature && similarity?.verdict === 'POSSIBLE_DUPLICATE') {
-        await new CampaignSafetyValidationService(new db.PrismaCampaignSafetyRepository()).record({
-          ...scope,
-          campaignId: campaign.id,
-          dailyMissionId: null,
-          at: new Date(`${input.missionDate}T12:00:00.000Z`),
-          ...campaignSignature,
-          ...similarity,
-        });
-        throw new ApplicationError('CONTENT_REJECTED', 'campaign content is too similar');
-      }
-      const advertisingInput = campaign
-        ? {
-            ...scope,
-            productPackVersionId: campaign.productPack.versionId,
-            classification: weeklyItem.classification,
-            evidenceRequirement: 'NONE' as const,
-            evidenceIds: [],
-            officialClaims: campaign.productPack.facts,
-            content: JSON.stringify(missionContent),
-          }
-        : null;
-      if (advertisingInput) {
-        const safety = await new AdvertisingSafetyService(
-          new db.PrismaAdvertisingSafetyRepository(),
-        ).inspect(advertisingInput);
-        if (safety.inspected.verdict !== 'PASS')
-          throw new ApplicationError('CONTENT_REJECTED', 'campaign content failed safety gate', {
-            issueCodes: safety.inspected.issueCodes,
-          });
-      }
-      const finalNoveltyIssue = inspectDailyMissionContent({
-        content: missionContent,
+      const finalizedContent = await finalizeDailyMissionContent({
+        scope,
+        missionDate: input.missionDate,
+        generationIdempotencyKey: input.generationIdempotencyKey,
+        campaign,
+        platform: profile.platform,
+        format: brief.output.format,
+        classification: weeklyItem.classification,
+        content: content.output,
+        terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
         recentMissions,
       });
-      if (finalNoveltyIssue)
-        throw new ApplicationError(
-          'CONTENT_REJECTED',
-          'generated mission is too similar to recent content',
-          finalNoveltyIssue,
-        );
       stage = 'persist';
-      const created = await new CreateDailyMission(missions, assignments).execute({
-        ...scope,
-        ...brief.output,
-        assistanceLevel: serviceKnowledge?.contentAssistanceLevel ?? profile.defaultAssistanceLevel,
-        content: missionContent,
-        qualityScore: quality.output.score,
-        campaignId: weeklyItem.campaignId,
-        classification: weeklyItem.classification,
-        generationContext: {
-          generatedAt: new Date(),
-          payload: {
-            personality: currentPersonality
-              ? { id: currentPersonality.id, version: currentPersonality.version }
-              : null,
-            selectedMemories: selectedMemories.map(({ id, summary, selectionReason }) => ({
-              id,
-              summary,
-              selectionReason,
-            })),
-            knowledge: granted.map(({ id }) => ({ id })),
-            groupKnowledge: groupKnowledge.map(({ chunkId }) => ({ id: chunkId })),
-            socialProfile: { id: profile.id },
-            strategy: { id: strategy.id, version: strategy.version },
-            weeklyPlan: { id: weeklyPlan.id },
-            contentPillar: { id: pillar.id },
-            productPack: campaign
-              ? { id: campaign.productPack.versionId, version: campaign.productPack.version }
-              : productPack
-                ? { id: productPack.versionId, version: productPack.version }
-                : null,
-            campaign: campaign ? { id: campaign.id } : null,
-            classification: weeklyItem.classification,
-            trendCandidates: brief.output.trendCandidateId
-              ? [{ id: brief.output.trendCandidateId }]
-              : [],
-            promptVersion: content.promptVersion,
-            provider: 'openai',
-            model: content.model,
-            quality: {
-              verdict: 'PASS',
-              issueCodes: [...qualityIssueCodes],
-              repairCount,
-            },
-            personalization: {
-              mode: 'AI',
-              sourceTypes: brief.output.personalizationSourceTypes ?? [],
-              availableSourceTypes: personalizationSourceTypes(personalization),
-              onboardingResponse: serviceKnowledge?.personalization.references.onboardingResponseId
-                ? { id: serviceKnowledge.personalization.references.onboardingResponseId }
-                : null,
-              businessProfile: serviceKnowledge?.personalization.references.businessProfileId
-                ? { id: serviceKnowledge.personalization.references.businessProfileId }
-                : null,
-              weeklyPlanItem: { id: weeklyItem.id },
-              recentMissions: recentMissions.map(({ id }) => ({ id })),
-              recentActivities: (
-                serviceKnowledge?.personalization.references.recentActivityIds ?? []
-              ).map((id) => ({ id })),
-              recentVariants: (
-                serviceKnowledge?.personalization.references.recentVariantSelectionIds ?? []
-              ).map((id) => ({ id })),
-              recentFeedback: (
-                serviceKnowledge?.personalization.references.recentFeedbackIds ?? []
-              ).map((id) => ({ id })),
-              recentDecisions: (
-                serviceKnowledge?.personalization.references.recentDecisionIds ?? []
-              ).map((id) => ({ id })),
-              postRecords: (
-                serviceKnowledge?.personalization.references.recentPostRecordIds ?? []
-              ).map((id) => ({ id })),
-              socialInsights: (
-                serviceKnowledge?.personalization.references.recentSocialInsightIds ?? []
-              ).map((id) => ({ id })),
-            },
-          },
+      const created = await persistDailyMissionGenerationResult({
+        missions,
+        assignments,
+        scope,
+        planning: planningContext,
+        brief,
+        pillar,
+        selectedMemories,
+        personalization,
+        recentMissionIds: recentMissions.map(({ id }) => id),
+        contentResult: { content, quality, repairCount, qualityIssueCodes },
+        finalizedContent: {
+          ...finalizedContent,
+          groupKnowledgeIds: groupKnowledge.map(({ chunkId }) => chunkId),
         },
-        ...(externalLinkUsage ? { externalLinkUsage } : {}),
       });
-      if (advertisingInput)
-        await new AdvertisingSafetyService(new db.PrismaAdvertisingSafetyRepository()).review({
-          ...advertisingInput,
-          dailyMissionId: created.id,
-        });
-      if (campaign && campaignSignature && similarity)
-        await new CampaignSafetyValidationService(new db.PrismaCampaignSafetyRepository()).record({
-          ...scope,
-          campaignId: campaign.id,
-          dailyMissionId: created.id,
-          at: new Date(`${input.missionDate}T12:00:00.000Z`),
-          ...campaignSignature,
-          ...similarity,
-        });
       try {
         await generations.complete({ ...scope, id: claim.record.id, dailyMissionId: created.id });
       } catch {
@@ -788,25 +304,19 @@ export class DailyMissionGenerationService {
         errorMessage: error instanceof Error ? error.message : String(error),
       });
       if (generationId) {
-        await recordAiUsageSafely({
-          ...scope,
-          taskType: 'DAILY_MISSION_PIPELINE',
-          provider: 'openai',
+        await recordDailyMissionPipelineFailure({
+          scope,
+          usageIdempotencyPrefix: input.usageIdempotencyPrefix,
           model: runtimeModel,
-          promptVersion: 'daily-mission-pipeline-v1',
-          status: 'FAILED',
-          inputTokens: null,
-          outputTokens: null,
-          latencyMs: Date.now() - started,
-          errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
-          idempotencyKey: `${input.usageIdempotencyPrefix}:daily-pipeline-failure`,
+          startedAt: started,
+          error,
         });
         try {
           const generations = new db.PrismaDailyMissionGenerationRepository();
           await generations.fail({
             ...scope,
             id: generationId,
-            errorCategory: errorCategory(error),
+            errorCategory: dailyMissionErrorCategory(error),
           });
         } catch {
           logger.error('daily mission generation failure state update failed', {

@@ -2,16 +2,28 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const http = readFileSync(new URL('../src/http/service-daily-actions.ts', import.meta.url), 'utf8');
-const page = readFileSync(
-  new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
-  'utf8',
-);
+const page = [
+  'service-bunshin-detail-data.ts',
+  'service-bunshin-detail-daily-actions.ts',
+  'service-bunshin-detail-view.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const ui = readFileSync(
   new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/daily-action-section.tsx', import.meta.url),
   'utf8',
 );
 const generation = readFileSync(
   new URL('../src/services/daily-mission-generation.ts', import.meta.url),
+  'utf8',
+);
+const planningContext = readFileSync(
+  new URL('../src/services/daily-mission-planning-context.ts', import.meta.url),
   'utf8',
 );
 const automaticImage = readFileSync(
@@ -25,7 +37,7 @@ describe('service Daily Action boundary', () => {
     expect(http).toContain('ownerUserId: actor.userId');
     expect(http).toContain('groupId: service.serviceId');
     expect(http).toContain("sourceId: { startsWith: 'daily-action:' }");
-    expect(page).toContain('bunshin: { ownerUserId: actor.userId, groupId: service.serviceId }');
+    expect(page).toContain('bunshin: { ownerUserId: input.actorUserId, groupId: input.groupId }');
     expect(page).toContain('bunshin.ownerUserId === actor.userId');
   });
 
@@ -49,9 +61,9 @@ describe('service Daily Action boundary', () => {
 
   it('feeds only the current owner Bunshin materials into service generation', () => {
     expect(generation).toContain('allowServiceOwnerMemories');
-    expect(generation).toContain('PrismaOwnerBunshinMemoryRepository');
-    expect(generation).toContain("memory.sourceId?.startsWith('daily-action:')");
-    expect(generation).toContain("type: 'PERSONAL_MATERIAL'");
+    expect(planningContext).toContain('PrismaOwnerBunshinMemoryRepository');
+    expect(planningContext).toContain("memory.sourceId?.startsWith('daily-action:')");
+    expect(planningContext).toContain("type: 'PERSONAL_MATERIAL'");
   });
 
   it('applies only the selected owned photo to automatic image generation', () => {

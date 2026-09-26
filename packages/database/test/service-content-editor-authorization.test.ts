@@ -6,7 +6,7 @@ const repository = [
   'external-tracking.ts',
   'product-catalog.ts',
   'group-knowledge.ts',
-  'campaign-advertising.ts',
+  'campaign.ts',
 ]
   .map((file) => readFileSync(join(process.cwd(), 'src', file), 'utf8'))
   .join('\n');

@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const page = readFileSync(
-  new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
+  new URL(
+    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+    import.meta.url,
+  ),
   'utf8',
 );
 const overview = readFileSync(

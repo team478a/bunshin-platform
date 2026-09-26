@@ -1,11 +1,20 @@
 import type {
+  DailyMissionBrief,
+  DailyMissionPlannerInput,
+  ContentPillar,
   MissionBusinessProfileContext,
   MissionPersonalizationContext,
   MissionPersonalizationSignal,
   SocialAccountStrategy,
   SocialProfile,
 } from '@bunshin/capability-social';
-import type { SelectedBunshinMemory } from '@bunshin/application';
+import {
+  SelectBunshinMemories,
+  type BunshinMemoryRepository,
+  type BunshinPersonalityVersion,
+  type SelectedBunshinMemory,
+} from '@bunshin/application';
+import type { BunshinAggregate, BunshinMemory } from '@bunshin/platform-domain';
 import { ApplicationError } from '@bunshin/shared';
 
 const signal = (
@@ -88,4 +97,135 @@ export function buildMissionPersonalizationContext(input: {
 
 export function personalizationSourceTypes(context: MissionPersonalizationContext): string[] {
   return [...new Set(context.signals.map(({ type }) => type))];
+}
+
+interface PersonalizationHistory {
+  businessProfile: MissionBusinessProfileContext | null;
+  onboardingContext: string | null;
+  behaviorSummary: string | null;
+  feedbackSummary: string | null;
+  performanceSummary: string | null;
+}
+
+interface PromptKnowledge {
+  type: string;
+  title: string;
+  content: string;
+}
+
+export function buildDailyMissionPersonalizationBase(input: {
+  bunshin: Pick<
+    BunshinAggregate,
+    'name' | 'objectiveSummary' | 'audienceSummary' | 'personalitySummary'
+  >;
+  personality: BunshinPersonalityVersion | null;
+  socialProfile: SocialProfile;
+  strategy: SocialAccountStrategy;
+  history: PersonalizationHistory;
+  officialKnowledge: PromptKnowledge[] | null;
+  grantedKnowledge: PromptKnowledge[];
+  personalMaterials: PromptKnowledge[];
+}): {
+  bunshinContext: DailyMissionPlannerInput['bunshin'];
+  strategyContext: Pick<
+    SocialAccountStrategy,
+    'concept' | 'positioning' | 'targetSummary' | 'ctaStrategy' | 'postingPolicy'
+  >;
+  plannerPersonalization: MissionPersonalizationContext;
+  knowledge: PromptKnowledge[];
+} {
+  const bunshinContext: DailyMissionPlannerInput['bunshin'] = {
+    name: input.bunshin.name,
+    objectiveSummary: input.bunshin.objectiveSummary,
+    audienceSummary: input.bunshin.audienceSummary,
+    personalitySummary: input.bunshin.personalitySummary,
+    personality: input.personality
+      ? {
+          versionId: input.personality.id,
+          version: input.personality.version,
+          tone: input.personality.tone,
+          formality: input.personality.formality,
+          energyLevel: input.personality.energyLevel,
+          expertiseLevel: input.personality.expertiseLevel,
+          sentenceStyle: input.personality.sentenceStyle,
+          firstPerson: input.personality.firstPerson,
+          forbiddenExpressions: input.personality.forbiddenExpressions,
+          preferredExpressions: input.personality.preferredExpressions,
+          visualDirection: input.personality.visualDirection,
+          facePolicy: input.personality.facePolicy,
+        }
+      : null,
+  };
+  const strategyContext = {
+    concept: input.strategy.concept,
+    positioning: input.strategy.positioning,
+    targetSummary: input.strategy.targetSummary,
+    ctaStrategy: input.strategy.ctaStrategy,
+    postingPolicy: input.strategy.postingPolicy,
+  };
+  return {
+    bunshinContext,
+    strategyContext,
+    plannerPersonalization: buildMissionPersonalizationContext({
+      bunshin: bunshinContext,
+      socialProfile: input.socialProfile,
+      strategy: input.strategy,
+      businessProfile: input.history.businessProfile,
+      onboardingContext: input.history.onboardingContext,
+      behaviorSummary: input.history.behaviorSummary,
+      feedbackSummary: input.history.feedbackSummary,
+      performanceSummary: input.history.performanceSummary,
+    }),
+    knowledge: [...(input.officialKnowledge ?? input.grantedKnowledge), ...input.personalMaterials],
+  };
+}
+
+export async function selectDailyMissionMemories(input: {
+  scope: {
+    workspaceId: string;
+    actorUserId: string;
+    bunshinId: string;
+  };
+  serviceSafeMode: boolean;
+  allowServiceOwnerMemories: boolean;
+  memoryRepository: BunshinMemoryRepository;
+  ownerMemories: BunshinMemory[];
+  brief: Pick<DailyMissionBrief, 'topic' | 'angle' | 'reason'>;
+  pillar: Pick<ContentPillar, 'title' | 'description'>;
+  strategyTargetSummary: string;
+}): Promise<SelectedBunshinMemory[]> {
+  const relevantMemories =
+    input.serviceSafeMode && !input.allowServiceOwnerMemories
+      ? []
+      : await new SelectBunshinMemories(input.memoryRepository).execute({
+          ...input.scope,
+          query: [
+            input.brief.topic,
+            input.brief.angle,
+            input.brief.reason,
+            input.pillar.title,
+            input.pillar.description ?? '',
+            input.strategyTargetSummary,
+          ].join('\n'),
+          maxItems: 5,
+          maxCharacters: 3000,
+        });
+  return relevantMemories.length > 0
+    ? relevantMemories
+    : input.ownerMemories
+        .filter(
+          (memory) =>
+            memory.active &&
+            memory.deletedAt === null &&
+            memory.sourceType === 'USER_INPUT' &&
+            memory.sourceId?.startsWith('daily-action:'),
+        )
+        .slice(0, 1)
+        .map((memory) => ({
+          id: memory.id,
+          type: memory.type,
+          summary: memory.summary?.trim() || memory.content.slice(0, 200),
+          content: memory.content,
+          selectionReason: '本人がDaily Actionで残した最近の素材',
+        }));
 }

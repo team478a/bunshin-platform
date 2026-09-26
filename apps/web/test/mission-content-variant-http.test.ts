@@ -5,29 +5,56 @@ const personalHttp = readFileSync(
   new URL('../src/http/daily-missions.ts', import.meta.url),
   'utf8',
 );
-const serviceHttp = readFileSync(
-  new URL('../src/http/service-daily-missions.ts', import.meta.url),
-  'utf8',
-);
-const personalPage = readFileSync(
-  new URL('../app/(app)/bunshins/[bunshinId]/page.tsx', import.meta.url),
-  'utf8',
-);
-const personalExperience = readFileSync(
-  new URL('../app/(app)/bunshins/[bunshinId]/daily-mission-section.tsx', import.meta.url),
-  'utf8',
-);
-const servicePage = readFileSync(
-  new URL('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx', import.meta.url),
-  'utf8',
-);
-const serviceExperience = readFileSync(
-  new URL(
-    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-    import.meta.url,
-  ),
-  'utf8',
-);
+const serviceHttp = [
+  'service-daily-missions.ts',
+  'service-daily-mission-http-core.ts',
+  'service-daily-mission-generation.ts',
+  'service-daily-mission-variants.ts',
+]
+  .map((file) => readFileSync(new URL(`../src/http/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
+const personalPage = ['bunshin-page-data.ts', 'bunshin-page-view-model.ts']
+  .map((file) =>
+    readFileSync(new URL(`../app/(app)/bunshins/[bunshinId]/${file}`, import.meta.url), 'utf8'),
+  )
+  .join('\n');
+const personalExperience = [
+  'daily-mission-section.tsx',
+  'personal-daily-mission-controller.ts',
+  'personal-daily-mission-list.tsx',
+  'personal-daily-mission-card.tsx',
+  'personal-daily-mission-detail.tsx',
+  'personal-daily-mission-accepted.tsx',
+  'personal-daily-mission-overview.tsx',
+]
+  .map((file) =>
+    readFileSync(new URL(`../app/(app)/bunshins/[bunshinId]/${file}`, import.meta.url), 'utf8'),
+  )
+  .join('\n');
+const servicePage = ['service-bunshin-detail-data.ts', 'service-bunshin-detail-view.tsx']
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
+const serviceExperience = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+  'service-daily-mission-card.tsx',
+  'service-daily-mission-detail.tsx',
+  'service-daily-mission-image-guide.tsx',
+  'service-daily-mission-accepted.tsx',
+]
+  .map((file) =>
+    readFileSync(
+      new URL(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`, import.meta.url),
+      'utf8',
+    ),
+  )
+  .join('\n');
 const pointsPage = readFileSync(new URL('../app/(app)/points/page.tsx', import.meta.url), 'utf8');
 
 describe('mission content variant HTTP and UI boundary', () => {

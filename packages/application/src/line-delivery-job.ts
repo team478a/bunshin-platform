@@ -1,6 +1,6 @@
 import { ApplicationError } from '@bunshin/shared';
 import type { CompleteJob, FailJob, Job } from './index';
-import type { LineDeliveryExecutionResult } from './line-messaging-core';
+import type { LineDeliveryExecutionResult } from './line-message-delivery';
 
 export const LINE_DELIVERY_JOB_TYPE = 'LINE_MISSION_DELIVER';
 

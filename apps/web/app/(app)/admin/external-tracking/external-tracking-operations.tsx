@@ -1,83 +1,13 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-
-type Configuration = {
-  systems: Array<{
-    id: string;
-    name: string;
-    status: string;
-    resultIngestTokenPrefix: string | null;
-    resultIngestTokenCreatedAt: string | null;
-    lastResultReceivedAt: string | null;
-    allowedDomains: Array<{ id: string; hostname: string; status: string }>;
-  }>;
-  links: Array<{
-    id: string;
-    name: string;
-    url: string;
-    scopeType: string;
-    effectiveStatus: string;
-    startsAt: string | null;
-    expiresAt: string | null;
-    system: { name: string };
-    productPack: { name: string } | null;
-    campaign: { name: string } | null;
-  }>;
-  members: Array<{
-    id: string;
-    role: string;
-    consentedAt: string | null;
-    identityConfigured: boolean;
-    activeLinkCount: number;
-    user: { displayName: string; email: string | null };
-  }>;
-  usages: Array<{
-    id: string;
-    createdAt: string;
-    insertedUrlSnapshot: string;
-    linkNameSnapshot: string;
-    expiresAtSnapshot: string | null;
-    groupMembership: { user: { displayName: string } };
-    productPack: { name: string };
-    campaign: { name: string } | null;
-    dailyMission: { missionDate: string; format: string };
-  }>;
-  audits: Array<{ id: string; action: string; performedAt: string }>;
-  resultTotals: Array<{
-    metricType: string;
-    currency: string | null;
-    count: number;
-    amountMinor: number;
-  }>;
-  results: Array<{
-    id: string;
-    metricType: string;
-    count: number;
-    amountMinor: number | null;
-    currency: string | null;
-    occurredAt: string;
-    system: { name: string };
-    externalTrackingLink: { name: string } | null;
-    memberIdentity: { groupMembership: { user: { displayName: string } } } | null;
-  }>;
-};
-
-const statusLabel: Record<string, string> = {
-  DRAFT: '下書き',
-  ACTIVE: '使用中',
-  SUSPENDED: '停止中',
-  EXPIRED: '期限切れ',
-  DELETED: '削除済み',
-};
-const scopeLabel: Record<string, string> = {
-  GROUP: 'サービス共通',
-  MEMBER: '参加者共通',
-  PRODUCT: '商品共通',
-  CAMPAIGN: '企画共通',
-  PRODUCT_MEMBER: '商品＋参加者',
-  CAMPAIGN_MEMBER: '企画＋参加者',
-};
+import { ExternalTrackingLinkList } from './external-tracking-link-list';
+import { ExternalTrackingResults } from './external-tracking-results';
+import { ExternalTrackingSetup } from './external-tracking-setup';
+import type {
+  ExternalTrackingConfiguration,
+  ExternalTrackingResultConnection,
+} from './external-tracking-types';
 
 export function ExternalTrackingOperations({
   workspaceId,
@@ -87,7 +17,7 @@ export function ExternalTrackingOperations({
 }: {
   workspaceId: string;
   groupId: string;
-  initialConfiguration: Configuration;
+  initialConfiguration: ExternalTrackingConfiguration;
   apiBase?: string;
 }) {
   const router = useRouter();
@@ -96,11 +26,9 @@ export function ExternalTrackingOperations({
     [],
   );
   const [busy, setBusy] = useState(false);
-  const [resultConnection, setResultConnection] = useState<{
-    token: string;
-    endpointPath: string;
-    endpointUrl: string;
-  } | null>(null);
+  const [resultConnection, setResultConnection] = useState<ExternalTrackingResultConnection | null>(
+    null,
+  );
   const base = apiBase ?? `/api/workspaces/${workspaceId}/external-tracking`;
   async function send(path: string, body: Record<string, unknown>) {
     setBusy(true);
@@ -233,455 +161,27 @@ export function ExternalTrackingOperations({
           使用履歴をCSVで保存
         </a>
       </section>
-      <section className="settings-card" id="tracking-results">
-        <p className="eyebrow">成果の自動取得</p>
-        <h2>外部サービスから成果を受け取る</h2>
-        <p>
-          外部サービス側に受取URLと秘密キーを登録すると、クリック・申込・購入などの成果が自動でここへ届きます。
-        </p>
-        {systems.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>外部サービス</th>
-                  <th>接続状態</th>
-                  <th>最終受信</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {systems.map((system) => (
-                  <tr key={system.id}>
-                    <td>{system.name}</td>
-                    <td>
-                      {system.resultIngestTokenPrefix
-                        ? `設定済み（${system.resultIngestTokenPrefix}…）`
-                        : '未設定'}
-                    </td>
-                    <td>
-                      {system.lastResultReceivedAt
-                        ? new Date(system.lastResultReceivedAt).toLocaleString('ja-JP')
-                        : 'まだ受信していません'}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void createResultConnection(system.id)}
-                      >
-                        {system.resultIngestTokenPrefix
-                          ? '秘密キーを作り直す'
-                          : '自動取得を設定する'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p>先に外部サービスを登録してください。</p>
-        )}
-        {resultConnection && (
-          <div className="notice" role="status">
-            <strong>外部サービス側へ登録する情報</strong>
-            <p>
-              受取URL：<code>{resultConnection.endpointUrl}</code>
-            </p>
-            <p>
-              秘密キー：<code>{resultConnection.token}</code>
-            </p>
-            <p>
-              認証方法：<code>Authorization: Bearer 秘密キー</code>
-            </p>
-            <button
-              type="button"
-              onClick={() => void copyText(resultConnection.token, '秘密キーをコピーしました。')}
-            >
-              秘密キーをコピー
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void copyText(resultConnection.endpointUrl, '受取URLをコピーしました。')
-              }
-            >
-              受取URLをコピー
-            </button>
-            <p>この秘密キーは画面を閉じると再表示できません。</p>
-          </div>
-        )}
-        <details>
-          <summary>外部サービスから送るデータ形式</summary>
-          <p>1回に最大500件をJSONで送信できます。同じ成果IDは二重登録されません。</p>
-          <pre>
-            <code>{`{
-  "records": [{
-    "externalEventId": "order-123",
-    "metricType": "PURCHASE",
-    "count": 1,
-    "amountMinor": 1200,
-    "currency": "JPY",
-    "occurredAt": "2026-09-13T10:00:00.000Z",
-    "externalLinkId": "紹介URL側のID",
-    "externalMemberId": "参加者側のID"
-  }]
-}`}</code>
-          </pre>
-          <p>
-            成果の種類には <code>CLICK</code>、<code>LEAD</code>、<code>SIGNUP</code>、
-            <code>PURCHASE</code>、<code>OTHER</code>を指定できます。
-          </p>
-        </details>
-        <h3>受け取った成果</h3>
-        <a
-          className="button button--secondary"
-          href={`${base}/export?groupId=${groupId}&kind=results`}
-        >
-          成果一覧をCSVで保存
-        </a>
-        {initialConfiguration.resultTotals.length ? (
-          <ul>
-            {initialConfiguration.resultTotals.map((total) => (
-              <li key={`${total.metricType}:${total.currency ?? ''}`}>
-                {total.metricType}：{total.count.toLocaleString('ja-JP')}件
-                {total.amountMinor > 0 && total.currency
-                  ? ` ／ ${(total.amountMinor / 100).toLocaleString('ja-JP')} ${total.currency}`
-                  : ''}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>成果はまだ届いていません。</p>
-        )}
-        {initialConfiguration.results.length > 0 && (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>日時</th>
-                  <th>成果</th>
-                  <th>参加者</th>
-                  <th>URL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {initialConfiguration.results.slice(0, 50).map((result) => (
-                  <tr key={result.id}>
-                    <td>{new Date(result.occurredAt).toLocaleString('ja-JP')}</td>
-                    <td>
-                      {result.metricType} × {result.count}
-                    </td>
-                    <td>{result.memberIdentity?.groupMembership.user.displayName ?? '未照合'}</td>
-                    <td>{result.externalTrackingLink?.name ?? '未照合'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-      <section className="settings-card external-tracking-operations__guide">
-        <p className="eyebrow">最初の設定は4ステップです</p>
-        <h2>紹介URLを投稿案へ入れるまで</h2>
-        <ol>
-          <li>利用する外部サービスを登録します。</li>
-          <li>登録を許可するURLのドメインを指定します。</li>
-          <li>参加者・商品・企画に合う紹介URLを登録します。</li>
-          <li>下書きを確認して「使用を始める」を押します。</li>
-        </ol>
-        <nav aria-label="専用URL設定の項目" className="settings-anchor-nav">
-          <a href="#tracking-system">1. 外部サービス</a>
-          <a href="#tracking-domain">2. 許可ドメイン</a>
-          <a href="#tracking-link">3. 専用URL</a>
-          <a href="#tracking-list">4. 設定一覧</a>
-        </nav>
-      </section>
-      <section className="settings-card" id="tracking-system">
-        <h2>外部サービスを登録</h2>
-        <form
-          className="admin-form-grid"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void send('/systems', {
-              groupId,
-              name: data.get('name'),
-              systemType: data.get('systemType'),
-              externalSystemId: data.get('externalSystemId') || null,
-            });
-          }}
-        >
-          <label>
-            サービス名
-            <input name="name" required maxLength={160} />
-          </label>
-          <label>
-            サービスの種類
-            <input name="systemType" required maxLength={80} placeholder="代理店システム" />
-          </label>
-          <label>
-            外部システムID（任意）
-            <input name="externalSystemId" maxLength={255} />
-          </label>
-          <button disabled={busy}>登録する</button>
-        </form>
-      </section>
-      <section className="settings-card" id="tracking-domain">
-        <h2>使ってよいドメインを登録</h2>
-        {systems.length ? (
-          <form
-            className="admin-form-grid"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              void send('/domains', {
-                systemId: data.get('systemId'),
-                hostname: data.get('hostname'),
-                allowSubdomains: data.get('allowSubdomains') === 'on',
-                shortener: false,
-              });
-            }}
-          >
-            <label>
-              外部サービス
-              <select name="systemId">
-                {systems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              ドメイン
-              <input name="hostname" required placeholder="example.jp" />
-            </label>
-            <label>
-              <input type="checkbox" name="allowSubdomains" /> 下の階層のドメインも許可する
-            </label>
-            <button disabled={busy}>登録する</button>
-          </form>
-        ) : (
-          <p>先に外部サービスを登録してください。</p>
-        )}
-      </section>
-      <section className="settings-card" id="tracking-link">
-        <h2>専用URLを登録</h2>
-        {domains.length ? (
-          <form
-            className="admin-form-grid"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              const domain = domains.find((item) => item.id === data.get('allowedDomainId'));
-              const startsAt = data.get('startsAt');
-              const expiresAt = data.get('expiresAt');
-              void send('/links', {
-                systemId: domain?.systemId,
-                allowedDomainId: data.get('allowedDomainId'),
-                memberIdentityId: null,
-                productPackId: null,
-                campaignId: null,
-                scopeType: 'GROUP',
-                name: data.get('name'),
-                externalLinkId: null,
-                referralToken: null,
-                url: data.get('url'),
-                startsAt:
-                  typeof startsAt === 'string' && startsAt
-                    ? new Date(startsAt).toISOString()
-                    : null,
-                expiresAt:
-                  typeof expiresAt === 'string' && expiresAt
-                    ? new Date(expiresAt).toISOString()
-                    : null,
-                notes: data.get('notes') || null,
-              });
-            }}
-          >
-            <p>
-              この簡単登録ではサービス共通URLを作ります。参加者・商品・企画別はCSV取込で追加できます。
-            </p>
-            <label>
-              URL名
-              <input name="name" required maxLength={160} />
-            </label>
-            <label>
-              許可ドメイン
-              <select name="allowedDomainId">
-                {domains.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.hostname}（{item.systemName}）
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              専用URL
-              <input
-                name="url"
-                type="url"
-                required
-                placeholder="https://example.jp/product?ref=..."
-              />
-            </label>
-            <label>
-              開始日時
-              <input name="startsAt" type="datetime-local" />
-            </label>
-            <label>
-              終了日時
-              <input name="expiresAt" type="datetime-local" />
-            </label>
-            <label>
-              メモ
-              <textarea name="notes" maxLength={1000} />
-            </label>
-            <button disabled={busy}>下書きで登録する</button>
-          </form>
-        ) : (
-          <p>先に使ってよいドメインを登録してください。</p>
-        )}
-      </section>
-      <section className="settings-card">
-        <h2>CSVでまとめて登録</h2>
-        <p>正常な行だけを下書きで登録します。失敗した行は、行番号と理由を表示します。</p>
-        <p>
-          見出し：
-          <code>
-            participant_id,email,external_member_id,agency_id,product_code,campaign_code,url_name,external_link_id,url,starts_at,expires_at
-          </code>
-        </p>
-        {domains.length ? (
-          <form
-            className="admin-form-grid"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void importCsv(event.currentTarget);
-            }}
-          >
-            <input type="hidden" name="groupId" value={groupId} />
-            <label>
-              外部サービス
-              <select
-                name="systemId"
-                onChange={(event) => {
-                  const form = event.currentTarget.form;
-                  const first = domains.find((item) => item.systemId === event.currentTarget.value);
-                  const domainSelect = form?.elements.namedItem('allowedDomainId');
-                  if (first && domainSelect instanceof HTMLSelectElement)
-                    domainSelect.value = first.id;
-                }}
-              >
-                {systems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              許可ドメイン
-              <select name="allowedDomainId">
-                {domains.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.hostname}（{item.systemName}）
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              CSVファイル（最大5MB・1,000行）
-              <input name="file" type="file" accept=".csv,text/csv" required />
-            </label>
-            <button disabled={busy}>取り込む</button>
-          </form>
-        ) : (
-          <p>先に外部サービスと使ってよいドメインを登録してください。</p>
-        )}
-        {importErrors.length > 0 && (
-          <div className="notice" role="alert">
-            <strong>登録できなかった行</strong>
-            <ul>
-              {importErrors.map((item) => (
-                <li key={item.rowNumber}>
-                  {item.rowNumber}行目：{item.message}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-      <section className="settings-card" id="tracking-list">
-        <h2>専用URL一覧</h2>
-        {initialConfiguration.links.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>名前</th>
-                  <th>対象</th>
-                  <th>状態</th>
-                  <th>期限</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {initialConfiguration.links.map((link) => (
-                  <tr key={link.id}>
-                    <td>
-                      {link.name}
-                      <br />
-                      <small>{link.system.name}</small>
-                    </td>
-                    <td>
-                      {scopeLabel[link.scopeType] ?? link.scopeType}
-                      <br />
-                      <small>{link.productPack?.name ?? link.campaign?.name ?? ''}</small>
-                    </td>
-                    <td>{statusLabel[link.effectiveStatus] ?? link.effectiveStatus}</td>
-                    <td>
-                      {link.expiresAt
-                        ? new Date(link.expiresAt).toLocaleString('ja-JP')
-                        : '期限なし'}
-                    </td>
-                    <td>
-                      {link.effectiveStatus === 'DRAFT' && (
-                        <div className="table-actions">
-                          <button
-                            disabled={busy}
-                            onClick={() => void send(`/links/${link.id}/activate`, {})}
-                          >
-                            使用を始める
-                          </button>
-                          <button
-                            disabled={busy}
-                            onClick={() => void send(`/links/${link.id}/suspend`, {})}
-                          >
-                            修正をお願いする
-                          </button>
-                        </div>
-                      )}
-                      {link.effectiveStatus === 'ACTIVE' && (
-                        <button
-                          disabled={busy}
-                          onClick={() => void send(`/links/${link.id}/suspend`, {})}
-                        >
-                          停止する
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p>専用URLはまだありません。</p>
-        )}
-      </section>
+      <ExternalTrackingResults
+        base={base}
+        busy={busy}
+        groupId={groupId}
+        resultConnection={resultConnection}
+        results={initialConfiguration.results}
+        resultTotals={initialConfiguration.resultTotals}
+        systems={systems}
+        onCopyText={copyText}
+        onCreateResultConnection={createResultConnection}
+      />
+      <ExternalTrackingSetup
+        busy={busy}
+        domains={domains}
+        groupId={groupId}
+        importErrors={importErrors}
+        systems={systems}
+        onImportCsv={importCsv}
+        onSend={send}
+      />
+      <ExternalTrackingLinkList busy={busy} links={initialConfiguration.links} onSend={send} />
       <section className="settings-card">
         <h2>参加者別の設定漏れ</h2>
         <div className="table-scroll">

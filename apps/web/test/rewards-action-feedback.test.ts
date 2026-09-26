@@ -2,19 +2,47 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const personalPage = source('../app/(app)/bunshins/[bunshinId]/page.tsx');
-const personalMission = source('../app/(app)/bunshins/[bunshinId]/daily-mission-section.tsx');
-const servicePage = source('../app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
-const serviceMission = source(
-  '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-);
+const personalPage = [
+  '../app/(app)/bunshins/[bunshinId]/bunshin-page-data.ts',
+  '../app/(app)/bunshins/[bunshinId]/bunshin-page-view-model.ts',
+]
+  .map(source)
+  .join('\n');
+const personalMission = [
+  'daily-mission-section.tsx',
+  'personal-daily-mission-controller.ts',
+  'personal-daily-mission-list.tsx',
+  'personal-daily-mission-card.tsx',
+  'personal-daily-mission-detail.tsx',
+  'personal-daily-mission-accepted.tsx',
+  'personal-daily-mission-overview.tsx',
+]
+  .map((file) => source(`../app/(app)/bunshins/[bunshinId]/${file}`))
+  .join('\n');
+const servicePage = [
+  '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
+  '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+]
+  .map(source)
+  .join('\n');
+const serviceMission = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+  'service-daily-mission-card.tsx',
+  'service-daily-mission-detail.tsx',
+  'service-daily-mission-image-guide.tsx',
+  'service-daily-mission-accepted.tsx',
+]
+  .map((file) => source(`../app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`))
+  .join('\n');
 const feedback = source('../app/ui/rewards-action-feedback.tsx');
 
 describe('rewards action feedback', () => {
   it.each([personalPage, servicePage])('checks the active pilot on the server', (page) => {
     expect(page).toContain('getActiveRewardsPilotAccess');
     expect(page).toContain('.catch(() => null)');
-    expect(page).toContain('rewardsPilotActive={rewardsPilotActive}');
+    expect(page).toContain('rewardsPilotActive');
   });
 
   it.each([personalMission, serviceMission])(

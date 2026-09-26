@@ -5,7 +5,7 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 
 describe('platform service lifecycle boundary', () => {
   it('requires a platform super administrator and resolves the service on the server', () => {
-    const handler = source('src/http/services.ts');
+    const handler = source('src/http/service-lifecycle.ts');
     const lifecycleHandler = handler.slice(
       handler.indexOf('export async function updateServiceLifecycle'),
     );
@@ -16,7 +16,7 @@ describe('platform service lifecycle boundary', () => {
   });
 
   it('updates status and public settings with a mandatory audit reason', () => {
-    const handler = source('src/http/services.ts');
+    const handler = source('src/http/service-lifecycle.ts');
     expect(handler).toContain("status: z.enum(['ACTIVE', 'SUSPENDED'])");
     expect(handler).toContain('serviceConfigurationAudit.create');
     expect(handler).toContain('reason: value.reason.trim()');

@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { ServiceLineBroadcastHistory } from './service-line-broadcast-history';
+import type {
+  ServiceLineBroadcastHealth,
+  ServiceLineBroadcastView,
+} from './service-line-broadcast-types';
 
-type Broadcast = {
-  id: string;
-  title: string;
-  status: string;
-  scheduledAt: string | null;
-  recipients: Record<string, number>;
-};
 type Industry = { id: string; name: string };
 type LineTemplate = { id: string; name: string; purpose: string; body: string };
 const purposeOptions = [
@@ -19,6 +17,15 @@ const purposeOptions = [
   ['AWARENESS', '認知'],
   ['RETENTION', '継続'],
 ] as const;
+const emptyHealth: ServiceLineBroadcastHealth = {
+  totalBroadcasts: 0,
+  stalledBroadcasts: 0,
+  broadcastsWithFailures: 0,
+  deliveredRecipients: 0,
+  failedRecipients: 0,
+  recoveryAttempts: 0,
+  failureRate: 0,
+};
 
 export function ServiceLineBroadcastEditor({
   serviceSlug,
@@ -35,28 +42,26 @@ export function ServiceLineBroadcastEditor({
 }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [broadcasts, setBroadcasts] = useState<ServiceLineBroadcastView[]>([]);
+  const [health, setHealth] = useState<ServiceLineBroadcastHealth>(emptyHealth);
   const [industries, setIndustries] = useState<Industry[]>([]);
   const [industryId, setIndustryId] = useState('');
   const [purpose, setPurpose] = useState('');
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialMessage);
-  const scheduledCount = broadcasts.filter((broadcast) => broadcast.status === 'SCHEDULED').length;
-  const failedCount = broadcasts.reduce(
-    (total, broadcast) => total + (broadcast.recipients.FAILED ?? 0),
-    0,
-  );
   const load = async () => {
     const response = await fetch(
       `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts`,
     );
     if (response.ok) {
       const result = (await response.json()) as {
-        data: Broadcast[];
+        data: ServiceLineBroadcastView[];
+        health?: ServiceLineBroadcastHealth;
         options?: { industries?: Industry[] };
       };
       setBroadcasts(result.data);
+      setHealth(result.health ?? emptyHealth);
       setIndustries(result.options?.industries ?? []);
     }
   };
@@ -143,17 +148,6 @@ export function ServiceLineBroadcastEditor({
       <p className="eyebrow">参加者へのお知らせ</p>
       <h2>任意のお知らせを一斉配信</h2>
       <p>LINE連携・通知同意・友だち追加が確認できた、このサービスの参加者だけに送ります。</p>
-      <div className="line-broadcast-summary" aria-label="配信の状況">
-        <span>
-          予約中 <strong>{scheduledCount}件</strong>
-        </span>
-        <span>
-          再送確認 <strong>{failedCount}件</strong>
-        </span>
-        <span>
-          履歴 <strong>{broadcasts.length}件</strong>
-        </span>
-      </div>
       <form className="line-broadcast-form" onSubmit={(event) => void submit(event)}>
         {templates.length ? (
           <label className="field line-broadcast-form__wide">
@@ -286,68 +280,13 @@ export function ServiceLineBroadcastEditor({
       <p className="line-broadcast-status" aria-live="polite" role="status">
         {message}
       </p>
-      <h3>最近の配信</h3>
-      <p>
-        <a href={`/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/export`}>
-          配信結果をCSVでダウンロード
-        </a>
-      </p>
-      <ul className="line-broadcast-list">
-        {broadcasts.map((broadcast) => (
-          <li key={broadcast.id}>
-            {broadcast.title}（{broadcast.status}／送信 {broadcast.recipients.SENT ?? 0}件／失敗{' '}
-            {broadcast.recipients.FAILED ?? 0}件）
-            {(broadcast.recipients.FAILED ?? 0) > 0 ? (
-              <button
-                className="button button--secondary"
-                type="button"
-                onClick={() => {
-                  const reason = window.prompt('再送する理由を入力してください');
-                  if (!reason) return;
-                  void fetch(
-                    `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/${broadcast.id}/retry`,
-                    {
-                      method: 'POST',
-                      headers: { 'content-type': 'application/json' },
-                      body: JSON.stringify({ reason }),
-                    },
-                  ).then(() => load());
-                }}
-              >
-                失敗分を再送する
-              </button>
-            ) : null}
-            {broadcast.status === 'SCHEDULED' ? (
-              <button
-                className="button button--secondary"
-                type="button"
-                onClick={() => {
-                  const reason = window.prompt('取り消す理由を入力してください');
-                  if (!reason || !window.confirm('まだ送っていない相手への配信を取り消します。'))
-                    return;
-                  void fetch(
-                    `/api/services/${encodeURIComponent(serviceSlug)}/line-broadcasts/${broadcast.id}/cancel`,
-                    {
-                      method: 'POST',
-                      headers: { 'content-type': 'application/json' },
-                      body: JSON.stringify({ reason }),
-                    },
-                  ).then(async (response) => {
-                    setMessage(
-                      response.ok
-                        ? '予約した配信を取り消しました。'
-                        : '配信を取り消せませんでした。',
-                    );
-                    await load();
-                  });
-                }}
-              >
-                配信を取り消す
-              </button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      <ServiceLineBroadcastHistory
+        serviceSlug={serviceSlug}
+        broadcasts={broadcasts}
+        health={health}
+        reload={load}
+        announce={setMessage}
+      />
     </section>
   );
 }

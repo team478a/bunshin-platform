@@ -28,6 +28,7 @@ const healthy = (): AdminAlertSnapshot => ({
     retryScheduledJobs: 0,
     deadJobs: 0,
   },
+  serviceLineBroadcasts: [],
   otherDeadJobs: 0,
   rewards: {
     failedPointProcessing: 0,
@@ -96,6 +97,44 @@ describe('admin alert center', () => {
           severity: 'INFO',
           count: 2,
           href: '/admin/rewards',
+        }),
+      ]),
+    );
+  });
+
+  it('groups service broadcast incidents by service and links to its LINE operations page', () => {
+    const snapshot = healthy();
+    snapshot.serviceLineBroadcasts = [
+      {
+        code: 'SERVICE_BROADCAST_HIGH_FAILURE',
+        serviceSlug: 'service-a',
+        serviceDisplayName: 'サービスA',
+      },
+      {
+        code: 'SERVICE_BROADCAST_HIGH_FAILURE',
+        serviceSlug: 'service-a',
+        serviceDisplayName: 'サービスA',
+      },
+      {
+        code: 'SERVICE_BROADCAST_RECOVERED',
+        serviceSlug: 'service-b',
+        serviceDisplayName: 'サービスB',
+      },
+    ];
+
+    expect(buildAdminAlerts(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'CRITICAL',
+          title: expect.stringContaining('サービスA'),
+          count: 2,
+          href: '/s/service-a/manage/line',
+        }),
+        expect.objectContaining({
+          severity: 'INFO',
+          title: expect.stringContaining('サービスB'),
+          count: 1,
+          href: '/s/service-b/manage/line',
         }),
       ]),
     );

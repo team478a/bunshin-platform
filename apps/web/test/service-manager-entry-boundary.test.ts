@@ -20,9 +20,14 @@ describe('service manager entry boundary', () => {
   });
 
   it('keeps management links under the public service slug', () => {
-    const home = source('s/[serviceSlug]/home/page.tsx');
+    const home = [
+      's/[serviceSlug]/home/page.tsx',
+      's/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     for (const section of ['members', 'knowledge', 'legal', 'badges']) {
-      expect(home).toContain(`/s/\${service.configuration.slug}/manage/${section}`);
+      expect(home).toContain(`/s/\${serviceSlug}/manage/${section}`);
       expect(home).not.toContain(`/groups/\${groupId}/${section}`);
     }
   });
@@ -44,9 +49,13 @@ describe('service manager entry boundary', () => {
   });
 
   it('preserves manager authorization in every reused management screen', () => {
-    expect(source('(app)/groups/[groupId]/members/page.tsx')).toContain("role: 'MANAGER'");
+    expect(source('(app)/groups/[groupId]/members/group-members-data.ts')).toContain(
+      "role: 'MANAGER'",
+    );
     expect(source('(app)/groups/[groupId]/knowledge/page.tsx')).toContain("role: 'MANAGER'");
-    expect(source('(app)/groups/[groupId]/badges/page.tsx')).toContain("role: 'MANAGER'");
+    expect(source('(app)/groups/[groupId]/badges/group-badges-data.ts')).toContain(
+      "role: 'MANAGER'",
+    );
     expect(source('(app)/groups/[groupId]/legal/page.tsx')).toContain(
       'await canManage(service.group.workspaceId, service.groupId, userId)',
     );

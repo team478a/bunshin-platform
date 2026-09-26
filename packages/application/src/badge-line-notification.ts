@@ -4,8 +4,8 @@ import type {
   LineMessagingProviderPort,
   LineRecipientResolverPort,
   LineProviderFailure,
-} from './line-messaging-core';
-import { evaluateLineQuota } from './line-messaging-core';
+} from './line-message-delivery';
+import { evaluateLineQuota } from './line-message-delivery';
 export type BadgeLineNotificationEnvironment = 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
 
 export const BADGE_LINE_NOTIFICATION_FEATURE_KEY = 'BADGE.LINE_NOTIFICATION' as const;

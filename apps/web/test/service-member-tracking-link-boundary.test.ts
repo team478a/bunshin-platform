@@ -21,7 +21,13 @@ describe('service member tracking link boundary', () => {
   });
 
   it('links the participant service home to their own URL settings', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     expect(home).toContain('/tracking-link');
     expect(home).toContain('自分の代理店URLを登録する');
   });

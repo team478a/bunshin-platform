@@ -12,7 +12,7 @@ describe('service manager dedicated LINE boundary', () => {
   });
 
   it('allows the scoped service operator, group manager, or platform operations staff', () => {
-    const repository = source('../../packages/database/src/oem-line-configuration.ts');
+    const repository = source('../../packages/database/src/group-line-configuration-repository.ts');
     expect(repository).toContain("role: 'MANAGER'");
     expect(repository).toContain("serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] }");
     expect(repository).toContain("group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } }");
@@ -28,7 +28,13 @@ describe('service manager dedicated LINE boundary', () => {
   });
 
   it('adds a service manager entry and service-scoped endpoint', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     const page = source('app/s/[serviceSlug]/manage/line/page.tsx');
     expect(home).toContain('/manage/line');
     expect(page).toContain('scopeLabel="サービス"');

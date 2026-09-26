@@ -22,14 +22,20 @@ describe('service manager settings boundary', () => {
   });
 
   it('rejects manager attempts to replace platform-owned fields at repository level', () => {
-    const repository = source('../../packages/database/src/service-foundation.ts');
+    const repository = source('../../packages/database/src/service-foundation-save.ts');
     expect(repository).toContain('value.slug !== existing.slug');
     expect(repository).toContain('value.visibility !== existing.visibility');
     expect(repository).toContain('value.poweredByEnabled !== existing.poweredByEnabled');
   });
 
   it('shows a manager-only settings entry from the service home', () => {
-    const home = source('app/s/[serviceSlug]/home/page.tsx');
+    const home = [
+      'app/s/[serviceSlug]/home/page.tsx',
+      'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+      'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+    ]
+      .map(source)
+      .join('\n');
     const page = source('app/s/[serviceSlug]/manage/settings/page.tsx');
     expect(home).toContain('/manage/settings');
     expect(page).toContain('resolveManagedServiceContext(serviceSlug, actor.userId)');

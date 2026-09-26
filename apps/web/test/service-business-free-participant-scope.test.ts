@@ -3,11 +3,31 @@ import { describe, expect, it } from 'vitest';
 
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-const home = source('app/s/[serviceSlug]/home/page.tsx');
-const detail = source('app/s/[serviceSlug]/bunshins/[bunshinId]/page.tsx');
-const missionSection = source(
-  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-daily-mission-section.tsx',
-);
+const home = [
+  'app/s/[serviceSlug]/home/page.tsx',
+  'app/s/[serviceSlug]/home/service-home-overview-sections.tsx',
+  'app/s/[serviceSlug]/home/service-home-navigation-sections.tsx',
+]
+  .map(source)
+  .join('\n');
+const detail = [
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-data.ts',
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-image-access.ts',
+  'app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+]
+  .map(source)
+  .join('\n');
+const missionSection = [
+  'service-daily-mission-section.tsx',
+  'service-daily-mission-controller.ts',
+  'service-daily-mission-list.tsx',
+  'service-daily-mission-card.tsx',
+  'service-daily-mission-detail.tsx',
+  'service-daily-mission-image-guide.tsx',
+  'service-daily-mission-accepted.tsx',
+]
+  .map((file) => source(`app/s/[serviceSlug]/bunshins/[bunshinId]/${file}`))
+  .join('\n');
 const activity = source('app/s/[serviceSlug]/activity/page.tsx');
 const help = source('app/s/[serviceSlug]/help/page.tsx');
 
@@ -27,7 +47,7 @@ describe('business free participant scope', () => {
     expect(detail).toContain('variantPointCost = isBusinessDailyService');
     expect(detail).toContain('!isBusinessDailyService && mission.linkUsage');
     expect(detail).toContain('variants: isBusinessDailyService');
-    expect(detail).toContain('isBusinessDailyService || promptOnlyImages');
+    expect(detail).toContain('input.isBusinessDailyService || promptOnlyImages');
     expect(detail).toContain('bunshin.ownerUserId === actor.userId ? (');
     expect(detail).not.toContain('!isBusinessDailyService && bunshin.ownerUserId === actor.userId');
     expect(missionSection).toContain('active && variantPointCost !== null');

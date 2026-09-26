@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 
 const products = readFileSync(new URL('../src/http/program-products.ts', import.meta.url), 'utf8');
 const checkout = readFileSync(new URL('../src/http/program-checkout.ts', import.meta.url), 'utf8');
-const purchase = ['program-purchase.ts', 'program-purchase-context.ts']
+const purchase = [
+  'program-purchase.ts',
+  'program-purchase-checkout.ts',
+  'program-purchase-context.ts',
+]
   .map((file) => readFileSync(new URL(`../src/payments/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 

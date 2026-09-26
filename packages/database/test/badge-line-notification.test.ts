@@ -12,7 +12,9 @@ const migration = readFileSync(
   'utf8',
 );
 const repository = readFileSync(
-  fileURLToPath(new URL('../src/badge-line-notification.ts', import.meta.url)),
+  fileURLToPath(
+    new URL('../src/badge-line-notification-preparation-repository.ts', import.meta.url),
+  ),
   'utf8',
 );
 
