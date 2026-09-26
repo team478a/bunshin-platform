@@ -2718,3 +2718,10 @@
 - Support: 確定したCategoryにはAI生成や有料提案を使わず、Version管理した無償の小さな支援を一件だけ提示する。
 - Audit: 回答と支援内容はSnapshotおよびRule Versionとともに保存する。回答本文や投稿本文は複製しない。
 - Isolation: 冪等な再送でもWorkspace、Service、Membership、User、Bunshinがすべて一致する場合だけ既存結果を返す。
+
+# 2026-09-27: SNS継続支援は本人の開始・完了・見送りを状態として保持する
+
+- Lifecycle: 支援は`OFFERED`から本人の操作で`ACCEPTED`、`COMPLETED`、`SKIPPED`へ遷移する。完了・見送り後の別状態への変更は許可しない。
+- Resume: `OFFERED`と`ACCEPTED`は再訪時にも表示し、回答直後だけの一時表示にしない。
+- Idempotency: 同じ遷移の再送は現在状態を返し、競合する終端遷移は`CONFLICT`として扱う。新しいEventテーブルは追加しない。
+- Isolation: 支援IDだけでは更新せず、Workspace、Service、Membership、User、Bunshinが一致するCase Relationを必須条件にする。

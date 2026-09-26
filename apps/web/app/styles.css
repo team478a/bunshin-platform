@@ -3664,6 +3664,12 @@ a {
   padding-left: 1.5rem;
 }
 
+.activity-barrier-support__actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
 .service-entry__card h2,
 .service-entry__card p {
   margin: 0;

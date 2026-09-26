@@ -1,6 +1,7 @@
 import 'server-only';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { requestIdFromHeader } from '@bunshin/observability';
+import { SOCIAL_ACTIVITY_SUPPORT_ACTIONS } from '@bunshin/capability-social';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
@@ -11,6 +12,12 @@ const answerSchema = z
     caseIds: z.array(z.string().uuid()).min(1).max(5),
     selectedCaseId: z.string().uuid().nullable(),
     idempotencyKey: z.string().trim().min(8).max(200),
+  })
+  .strict();
+const supportSchema = z
+  .object({
+    supportId: z.string().uuid(),
+    action: z.enum(SOCIAL_ACTIVITY_SUPPORT_ACTIONS),
   })
   .strict();
 
@@ -86,7 +93,11 @@ export function getServiceSocialActivityBarrierResponse(
 ) {
   return respond(request, async () => {
     const { repository, scope } = await resolveScope(serviceSlug, bunshinId);
-    return repository.getPendingQuestion({ scope });
+    const [question, support] = await Promise.all([
+      repository.getPendingQuestion({ scope }),
+      repository.getActiveSupport({ scope }),
+    ]);
+    return { question, support };
   });
 }
 
@@ -108,6 +119,27 @@ export function answerServiceSocialActivityBarrierResponse(
       answeredAt: new Date(),
     });
     if (!result) throw new ApplicationError('NOT_FOUND', 'barrier question not found');
+    return { ...result, supportProgress: await repository.getActiveSupport({ scope }) };
+  });
+}
+
+export function transitionServiceSocialActivitySupportResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = supportSchema.safeParse(await json(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const { repository, scope } = await resolveScope(serviceSlug, bunshinId);
+    const result = await repository.transitionSupport({
+      scope,
+      supportId: parsed.data.supportId,
+      action: parsed.data.action,
+      occurredAt: new Date(),
+    });
+    if (!result) throw new ApplicationError('CONFLICT', 'support status changed');
     return result;
   });
 }
