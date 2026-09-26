@@ -14,7 +14,9 @@ export interface AdminAlert {
     | '/admin/rewards'
     | '/admin/support'
     | '/admin/deletions'
-    | '/admin/guide';
+    | '/admin/guide'
+    | '/admin/services'
+    | `/s/${string}/manage/line`;
 }
 
 export interface AdminAlertSnapshot {
@@ -37,6 +39,15 @@ export interface AdminAlertSnapshot {
     retryScheduledJobs: number;
     deadJobs: number;
   };
+  serviceLineBroadcasts: Array<{
+    code:
+      | 'SERVICE_BROADCAST_STALLED'
+      | 'SERVICE_BROADCAST_HIGH_FAILURE'
+      | 'SERVICE_BROADCAST_RECOVERY_EXHAUSTED'
+      | 'SERVICE_BROADCAST_RECOVERED';
+    serviceSlug: string | null;
+    serviceDisplayName: string | null;
+  }>;
   otherDeadJobs: number;
   rewards: {
     failedPointProcessing: number;
@@ -147,6 +158,57 @@ export function buildAdminAlerts(snapshot: AdminAlertSnapshot): AdminAlert[] {
       count: snapshot.line.retryScheduledJobs,
       href: '/admin/line',
     });
+  const serviceBroadcastGroups = new Map<
+    string,
+    {
+      code: AdminAlertSnapshot['serviceLineBroadcasts'][number]['code'];
+      serviceSlug: string | null;
+      serviceDisplayName: string | null;
+      count: number;
+    }
+  >();
+  for (const event of snapshot.serviceLineBroadcasts) {
+    const key = `${event.code}:${event.serviceSlug ?? '-'}`;
+    const current = serviceBroadcastGroups.get(key);
+    if (current) current.count += 1;
+    else serviceBroadcastGroups.set(key, { ...event, count: 1 });
+  }
+  const serviceBroadcastLabels = {
+    SERVICE_BROADCAST_STALLED: {
+      severity: 'WARNING',
+      title: 'LINE一斉配信が予定時刻を過ぎても完了していません',
+      guidance: '保留中の宛先と自動再試行の状態を確認してください。',
+    },
+    SERVICE_BROADCAST_HIGH_FAILURE: {
+      severity: 'CRITICAL',
+      title: 'LINE一斉配信の失敗が多く発生しています',
+      guidance: '失敗理由と対象件数を確認し、安全を確認してから再実行してください。',
+    },
+    SERVICE_BROADCAST_RECOVERY_EXHAUSTED: {
+      severity: 'CRITICAL',
+      title: 'LINE一斉配信を自動復旧できませんでした',
+      guidance: '接続設定と失敗理由を確認し、手動で再実行してください。',
+    },
+    SERVICE_BROADCAST_RECOVERED: {
+      severity: 'INFO',
+      title: 'LINE一斉配信が自動復旧しました',
+      guidance: '配信履歴を開き、失敗した宛先が残っていないことを確認してください。',
+    },
+  } as const;
+  for (const [key, event] of serviceBroadcastGroups) {
+    const definition = serviceBroadcastLabels[event.code];
+    const serviceLabel = event.serviceDisplayName ?? '対象サービス';
+    alerts.push({
+      code: key,
+      severity: definition.severity,
+      title: `${serviceLabel}：${definition.title}`,
+      guidance: definition.guidance,
+      count: event.count,
+      href: event.serviceSlug
+        ? `/s/${encodeURIComponent(event.serviceSlug)}/manage/line`
+        : '/admin/services',
+    });
+  }
   if (snapshot.otherDeadJobs > 0)
     alerts.push({
       code: 'DEAD_BACKGROUND_JOBS',
