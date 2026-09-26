@@ -35,6 +35,14 @@ export type SocialActivitySupport = {
   steps: readonly string[];
 };
 
+export const SOCIAL_ACTIVITY_SUPPORT_ACTIONS = ['ACCEPT', 'COMPLETE', 'SKIP'] as const;
+export type SocialActivitySupportAction = (typeof SOCIAL_ACTIVITY_SUPPORT_ACTIONS)[number];
+export type SocialActivitySupportProgress = {
+  id: string;
+  status: 'OFFERED' | 'ACCEPTED' | 'COMPLETED' | 'SKIPPED';
+  support: SocialActivitySupport;
+};
+
 export interface SocialActivityBarrierConfirmationRepository {
   getPendingQuestion(input: {
     scope: SocialActivityBarrierScope;
@@ -49,6 +57,15 @@ export interface SocialActivityBarrierConfirmationRepository {
     response: 'CONFIRMED' | 'NONE_OF_THESE';
     support: SocialActivitySupport | null;
   } | null>;
+  getActiveSupport(input: {
+    scope: SocialActivityBarrierScope;
+  }): Promise<SocialActivitySupportProgress | null>;
+  transitionSupport(input: {
+    scope: SocialActivityBarrierScope;
+    supportId: string;
+    action: SocialActivitySupportAction;
+    occurredAt: Date;
+  }): Promise<SocialActivitySupportProgress | null>;
 }
 
 const labels: Record<SocialActivityBarrierCategory, string> = {

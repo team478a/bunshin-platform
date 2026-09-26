@@ -15,6 +15,7 @@ import {
   ListSocialProfiles,
   ListWeeklyPlans,
   type SocialActivityBarrierQuestion,
+  type SocialActivitySupportProgress,
   type SocialProfile,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
@@ -74,6 +75,7 @@ export async function loadServiceBunshinDetail({
   let businessProgramStartedAt: Date | null = null;
   let postPerformances: PostPerformanceView[] = [];
   let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
+  let activityBarrierSupport: SocialActivitySupportProgress | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -104,19 +106,20 @@ export async function loadServiceBunshinDetail({
       },
       select: { id: true },
     });
-    activityBarrierQuestion = membership
-      ? await new db.PrismaSocialActivityBarrierConfirmationRepository(
-          db.prisma,
-        ).getPendingQuestion({
-          scope: {
-            workspaceId: service.workspaceId,
-            serviceId: service.serviceId,
-            groupMembershipId: membership.id,
-            userId: actor.userId,
-            bunshinId,
-          },
-        })
-      : null;
+    if (membership) {
+      const barrierRepository = new db.PrismaSocialActivityBarrierConfirmationRepository(db.prisma);
+      const barrierScope = {
+        workspaceId: service.workspaceId,
+        serviceId: service.serviceId,
+        groupMembershipId: membership.id,
+        userId: actor.userId,
+        bunshinId,
+      };
+      [activityBarrierQuestion, activityBarrierSupport] = await Promise.all([
+        barrierRepository.getPendingQuestion({ scope: barrierScope }),
+        barrierRepository.getActiveSupport({ scope: barrierScope }),
+      ]);
+    }
     capabilities = await new ListBunshinCapabilityAssignments(
       new db.PrismaBunshinCapabilityAssignmentRepository(),
     ).execute(scope);
@@ -418,6 +421,7 @@ export async function loadServiceBunshinDetail({
     isBusinessDailyService,
     approvedBusinessStrategy,
     activityBarrierQuestion,
+    activityBarrierSupport,
   };
 }
 

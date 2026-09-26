@@ -81,6 +81,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
     isBusinessDailyService,
     approvedBusinessStrategy,
     activityBarrierQuestion,
+    activityBarrierSupport,
   } = model;
 
   return (
@@ -103,10 +104,11 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
               : 'LINEの接続と動画の完成通知を確認する'}
           </a>
         ) : null}
-        {activityBarrierQuestion ? (
+        {activityBarrierQuestion || activityBarrierSupport ? (
           <ActivityBarrierCard
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/activity-barrier`}
             initialQuestion={activityBarrierQuestion}
+            initialSupport={activityBarrierSupport}
           />
         ) : null}
         <SimpleFirstPostSetup
