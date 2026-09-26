@@ -43,6 +43,20 @@ describe('LINE Mission notification summary repository', () => {
             status: 'ACTIVE',
             memberships: { some: { userId: 'user-a', status: 'ACTIVE' } },
           },
+          OR: [
+            { ownerUserId: 'user-a' },
+            {
+              workspace: {
+                memberships: {
+                  some: {
+                    userId: 'user-a',
+                    status: 'ACTIVE',
+                    role: { in: ['OWNER', 'ADMIN'] },
+                  },
+                },
+              },
+            },
+          ],
         },
         socialProfile: { is: { status: 'ACTIVE' } },
         OR: [

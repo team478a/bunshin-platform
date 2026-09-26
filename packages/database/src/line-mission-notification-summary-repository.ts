@@ -17,6 +17,20 @@ export class PrismaLineMissionNotificationSummaryRepository implements LineMissi
             status: 'ACTIVE',
             memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
           },
+          OR: [
+            { ownerUserId: input.actorUserId },
+            {
+              workspace: {
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    role: { in: ['OWNER', 'ADMIN'] },
+                  },
+                },
+              },
+            },
+          ],
         },
         socialProfile: { is: { status: 'ACTIVE' } },
         OR: [

@@ -56,7 +56,23 @@ export class PrismaLineMessageDeliveryRepository implements LineMessageDeliveryR
           status: 'ACTIVE',
           memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } },
         },
-        bunshin: { status: { not: 'ARCHIVED' } },
+        bunshin: {
+          status: { not: 'ARCHIVED' },
+          OR: [
+            { ownerUserId: input.actorUserId },
+            {
+              workspace: {
+                memberships: {
+                  some: {
+                    userId: input.actorUserId,
+                    status: 'ACTIVE',
+                    role: { in: ['OWNER', 'ADMIN'] },
+                  },
+                },
+              },
+            },
+          ],
+        },
         user: { status: 'ACTIVE' },
       },
     });
