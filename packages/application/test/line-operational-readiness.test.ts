@@ -66,4 +66,57 @@ describe('LINE operational readiness', () => {
     const second = assessLineOperationalReadiness(snapshot, new Date('2026-08-22T09:00:00Z'));
     expect(first.fingerprint).toBe(second.fingerprint);
   });
+
+  it('classifies service broadcast incidents and recovery without exposing target ids in alerts', () => {
+    const result = assessLineOperationalReadiness({
+      ...healthy(),
+      serviceBroadcastEvents: [
+        {
+          code: 'SERVICE_BROADCAST_STALLED',
+          eventKey: 'stalled-event',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          broadcastId: 'broadcast-a',
+          performedByUserId: 'user-a',
+        },
+        {
+          code: 'SERVICE_BROADCAST_RECOVERED',
+          eventKey: 'recovered-event',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          broadcastId: 'broadcast-b',
+          performedByUserId: 'user-a',
+        },
+      ],
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.alerts).toEqual([
+      { code: 'SERVICE_BROADCAST_STALLED', severity: 'WARNING', count: 1 },
+      { code: 'SERVICE_BROADCAST_RECOVERED', severity: 'INFO', count: 1 },
+    ]);
+    expect(JSON.stringify(result.alerts)).not.toContain('broadcast-a');
+  });
+
+  it('changes the fingerprint when the affected service broadcast changes', () => {
+    const event = {
+      code: 'SERVICE_BROADCAST_HIGH_FAILURE' as const,
+      eventKey: 'failure:broadcast-a',
+      workspaceId: 'workspace-a',
+      groupId: 'group-a',
+      broadcastId: 'broadcast-a',
+      performedByUserId: 'user-a',
+    };
+    const first = assessLineOperationalReadiness({
+      ...healthy(),
+      serviceBroadcastEvents: [event],
+    });
+    const second = assessLineOperationalReadiness({
+      ...healthy(),
+      serviceBroadcastEvents: [{ ...event, eventKey: 'failure:broadcast-b' }],
+    });
+
+    expect(first.ready).toBe(false);
+    expect(first.fingerprint).not.toBe(second.fingerprint);
+  });
 });

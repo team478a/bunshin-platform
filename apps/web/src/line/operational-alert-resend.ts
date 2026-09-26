@@ -16,6 +16,10 @@ const alertLabels: Readonly<Record<string, string>> = {
   DELIVERY_GLOBALLY_PAUSED: 'LINE配信が全体停止中です',
   DEAD_DELIVERY_JOBS: '送信できず停止した通知があります',
   RETRY_SCHEDULED_DELIVERY_JOBS: '再送待ちの通知があります',
+  SERVICE_BROADCAST_STALLED: '予定時刻を過ぎても完了していない一斉配信があります',
+  SERVICE_BROADCAST_HIGH_FAILURE: '失敗率が高い一斉配信があります',
+  SERVICE_BROADCAST_RECOVERY_EXHAUSTED: '自動復旧できず停止した一斉配信があります',
+  SERVICE_BROADCAST_RECOVERED: '一斉配信の自動復旧が完了しました',
 };
 
 export class LineOperationalAlertResend implements LineOperationalAlertPort {
@@ -32,6 +36,7 @@ export class LineOperationalAlertResend implements LineOperationalAlertPort {
   }
 
   async notify(assessment: LineOperationalAssessment): Promise<void> {
+    const recoveryOnly = assessment.alerts.every(({ severity }) => severity === 'INFO');
     const lines = assessment.alerts.map((alert) => {
       const label = alertLabels[alert.code] ?? `障害分類: ${alert.code}`;
       return `・${label}${alert.count === null ? '' : `（${alert.count}件）`}`;
@@ -49,9 +54,13 @@ export class LineOperationalAlertResend implements LineOperationalAlertPort {
       body: JSON.stringify({
         from: this.options.from,
         to: this.options.to,
-        subject: `【ワタシワークス】LINE運用の確認が必要です（${assessment.environment}）`,
+        subject: recoveryOnly
+          ? `【ワタシワークス】LINE一斉配信が復旧しました（${assessment.environment}）`
+          : `【ワタシワークス】LINE運用の確認が必要です（${assessment.environment}）`,
         text: [
-          'ワタシワークスのLINE運用で確認が必要な状態を検知しました。',
+          recoveryOnly
+            ? 'ワタシワークスのLINE一斉配信が自動復旧しました。'
+            : 'ワタシワークスのLINE運用で確認が必要な状態を検知しました。',
           '',
           ...lines,
           '',
