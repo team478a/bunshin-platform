@@ -1818,6 +1818,27 @@ enum MissionActivityType {
   FEEDBACK_BAD
 }
 
+enum SocialActivityBarrierCategory {
+  SETUP
+  HOW_TO
+  TIME
+  EFFORT
+  CONTENT
+  MEDIA
+  CONFIDENCE
+  EFFECT
+  RESPONSE
+  LEAD
+  UNKNOWN
+}
+
+enum SocialActivityBarrierStatus {
+  SUSPECTED
+  CONFIRMED
+  RESOLVED
+  DISMISSED
+}
+
 enum PostSource {
   MANUAL
 }
@@ -3132,6 +3153,7 @@ model GroupMembership {
   serviceNotificationPreferences ServiceNotificationPreference[]
   serviceMembershipEvents         ServiceMembershipEvent[]
   serviceUsageEvents              ServiceUsageEvent[]
+  socialActivityBarrierCases      SocialActivityBarrierCase[]
 
   @@unique([groupId, userId])
   @@unique([workspaceId, groupId, id])
@@ -6087,6 +6109,7 @@ model Bunshin {
   videoProjects                   VideoProject[]
   memberProductContentRuns        MemberProductContentRun[]
   socialInsightSnapshots          SocialInsightSnapshot[]
+  socialActivityBarrierCases      SocialActivityBarrierCase[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -6881,6 +6904,59 @@ model MissionFeedback {
   @@index([workspaceId, bunshinId, rating, updatedAt])
   @@index([actorUserId, updatedAt])
   @@map("mission_feedback")
+}
+
+/// Service参加者のSNS活動停止要因。行動ログだけではSUSPECTEDまでとする。
+model SocialActivityBarrierCase {
+  id                String                        @id @default(uuid()) @db.Uuid
+  workspaceId       String                        @map("workspace_id") @db.Uuid
+  groupId           String                        @map("group_id") @db.Uuid
+  groupMembershipId String                        @map("group_membership_id") @db.Uuid
+  userId            String                        @map("user_id") @db.Uuid
+  bunshinId         String                        @map("bunshin_id") @db.Uuid
+  category          SocialActivityBarrierCategory
+  status            SocialActivityBarrierStatus   @default(SUSPECTED)
+  ruleVersion       String                        @map("rule_version") @db.VarChar(80)
+  recurrenceCount   Int                           @default(1) @map("recurrence_count")
+  firstDetectedAt   DateTime                      @map("first_detected_at") @db.Timestamptz(6)
+  lastDetectedAt    DateTime                      @map("last_detected_at") @db.Timestamptz(6)
+  nextEligibleAt    DateTime?                     @map("next_eligible_at") @db.Timestamptz(6)
+  confirmedAt       DateTime?                     @map("confirmed_at") @db.Timestamptz(6)
+  resolvedAt        DateTime?                     @map("resolved_at") @db.Timestamptz(6)
+  dismissedAt       DateTime?                     @map("dismissed_at") @db.Timestamptz(6)
+  createdAt         DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  groupMembership   GroupMembership               @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "social_activity_barrier_cases_membership_fkey")
+  bunshin            Bunshin                       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade, map: "social_activity_barrier_cases_bunshin_fkey")
+  evidenceSnapshots SocialActivityBarrierEvidence[]
+
+  @@unique([workspaceId, groupId, groupMembershipId, userId, bunshinId, category], map: "social_activity_barrier_cases_scope_category_key")
+  @@unique([workspaceId, groupId, id], map: "social_activity_barrier_cases_scope_id_key")
+  @@index([workspaceId, groupId, status, lastDetectedAt], map: "social_activity_barrier_cases_service_status_idx")
+  @@index([workspaceId, bunshinId, status], map: "social_activity_barrier_cases_bunshin_status_idx")
+  @@map("social_activity_barrier_cases")
+}
+
+/// 判定に使った集計値と閾値。投稿本文・回答本文・Memory本文は保存しない。
+model SocialActivityBarrierEvidence {
+  id                         String                    @id @default(uuid()) @db.Uuid
+  caseId                     String                    @map("case_id") @db.Uuid
+  evidenceKey                String                    @map("evidence_key") @db.VarChar(300)
+  evidenceCode               String                    @map("evidence_code") @db.VarChar(80)
+  observationFrom            DateTime                  @map("observation_from") @db.Timestamptz(6)
+  observationTo              DateTime                  @map("observation_to") @db.Timestamptz(6)
+  eligibleDays               Int                       @map("eligible_days")
+  excludedSystemIncidentDays Int                       @map("excluded_system_incident_days")
+  metrics                    Json
+  thresholds                 Json
+  ruleVersion                String                    @map("rule_version") @db.VarChar(80)
+  detectedAt                 DateTime                  @map("detected_at") @db.Timestamptz(6)
+  createdAt                  DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  barrierCase                SocialActivityBarrierCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, evidenceKey], map: "social_activity_barrier_evidence_idempotency_key")
+  @@index([caseId, detectedAt], map: "social_activity_barrier_evidence_case_detected_idx")
+  @@map("social_activity_barrier_evidence")
 }
 
 model BunshinObjective {
