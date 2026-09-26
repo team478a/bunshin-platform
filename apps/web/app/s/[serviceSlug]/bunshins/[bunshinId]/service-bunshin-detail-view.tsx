@@ -17,6 +17,7 @@ import { ServiceDeliverySettings } from './service-delivery-settings';
 import { DailyActionSection } from './daily-action-section';
 import { SocialInsightRecorder } from './social-insight-recorder';
 import type { ServiceBunshinDetailModel } from './service-bunshin-detail-data';
+import { ActivityBarrierCard } from './activity-barrier-card';
 
 function MemberHomeDrawer({
   title,
@@ -79,6 +80,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
     businessProgram,
     isBusinessDailyService,
     approvedBusinessStrategy,
+    activityBarrierQuestion,
   } = model;
 
   return (
@@ -100,6 +102,12 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
               ? 'LINEの接続を確認する'
               : 'LINEの接続と動画の完成通知を確認する'}
           </a>
+        ) : null}
+        {activityBarrierQuestion ? (
+          <ActivityBarrierCard
+            endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/activity-barrier`}
+            initialQuestion={activityBarrierQuestion}
+          />
         ) : null}
         <SimpleFirstPostSetup
           serviceSlug={service.configuration.slug}
