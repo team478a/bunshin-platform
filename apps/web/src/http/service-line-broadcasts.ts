@@ -97,6 +97,7 @@ export async function listServiceLineBroadcastsResponse(request: Request, servic
     const result = await new ServiceLineBroadcastOperationsService(
       new db.PrismaServiceLineBroadcastOperationsRepository(),
     ).list({
+      environment: currentLineEnvironment(),
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
@@ -112,7 +113,12 @@ export async function listServiceLineBroadcastsResponse(request: Request, servic
         completedAt: row.completedAt?.toISOString() ?? null,
         segment: row.segment,
         recipients: row.recipientCounts,
+        operationalStatus: row.operationalStatus,
+        failureRate: row.failureRate,
+        totalRecipients: row.totalRecipients,
+        recoveryAttempts: row.recoveryAttempts,
       })),
+      health: result.health,
       options: { industries: result.industries },
       requestId,
     });
@@ -251,6 +257,7 @@ export async function exportServiceLineBroadcastsResponse(request: Request, serv
     const csv = await new ServiceLineBroadcastOperationsService(
       new db.PrismaServiceLineBroadcastOperationsRepository(),
     ).exportCsv({
+      environment: currentLineEnvironment(),
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,

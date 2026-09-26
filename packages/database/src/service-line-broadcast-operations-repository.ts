@@ -40,6 +40,24 @@ export class PrismaServiceLineBroadcastOperationsRepository implements ServiceLi
           })
         : Promise.resolve([]),
     ]);
+    const recoveryJobs = rows.length
+      ? await this.client.job.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            environment: input.environment,
+            jobType: 'SERVICE_LINE_BROADCAST_DELIVER',
+            payloadReference: {
+              in: rows.map((row) => `service-line-broadcast:${row.id}`),
+            },
+            idempotencyKey: { startsWith: 'service-line-broadcast-recovery:' },
+          },
+          select: { payloadReference: true },
+        })
+      : [];
+    const recoveryAttempts = recoveryJobs.reduce<Record<string, number>>((counts, job) => {
+      counts[job.payloadReference] = (counts[job.payloadReference] ?? 0) + 1;
+      return counts;
+    }, {});
     return {
       broadcasts: rows.map((row) => ({
         id: row.id,
@@ -51,6 +69,7 @@ export class PrismaServiceLineBroadcastOperationsRepository implements ServiceLi
         completedAt: row.completedAt,
         segment: row.segmentCriteria,
         recipientCounts: recipientCounts(row.recipients),
+        recoveryAttempts: recoveryAttempts[`service-line-broadcast:${row.id}`] ?? 0,
       })),
       industries,
     };

@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ServiceLineBroadcastOperationsRepository } from '../src/service-line-broadcast-operations';
 import { ServiceLineBroadcastOperationsService } from '../src/service-line-broadcast-operations';
 
-const scope = { workspaceId: 'workspace-1', groupId: 'group-1', actorUserId: 'user-1' };
+const scope = {
+  workspaceId: 'workspace-1',
+  groupId: 'group-1',
+  actorUserId: 'user-1',
+  environment: 'PRODUCTION' as const,
+};
 const now = new Date('2026-09-26T03:30:00.000Z');
 
 function repository(
@@ -40,6 +45,7 @@ describe('ServiceLineBroadcastOperationsService', () => {
           completedAt: now,
           segment: {},
           recipientCounts: { SENT: 2, FAILED: 1 },
+          recoveryAttempts: 1,
         },
       ],
     });
@@ -52,6 +58,45 @@ describe('ServiceLineBroadcastOperationsService', () => {
     expect(list).toHaveBeenNthCalledWith(2, { ...scope, limit: 5_000, includeIndustries: false });
     expect(csv).toContain('"\'=danger,""quoted"""');
     expect(csv).toContain(',"2","1","0","0"');
+    expect(csv).toContain('"NEEDS_ATTENTION","33.3","1"');
+  });
+
+  it('identifies stalled broadcasts and aggregates operational health', async () => {
+    const scheduledAt = new Date(now.getTime() - 16 * 60 * 1_000);
+    const service = new ServiceLineBroadcastOperationsService(
+      repository({
+        list: vi.fn().mockResolvedValue({
+          industries: [],
+          broadcasts: [
+            {
+              id: 'broadcast-1',
+              title: '停滞中',
+              message: '本文',
+              status: 'SCHEDULED',
+              scheduledAt,
+              createdAt: scheduledAt,
+              completedAt: null,
+              segment: {},
+              recipientCounts: { PENDING: 2, SENT: 3, FAILED: 1 },
+              recoveryAttempts: 1,
+            },
+          ],
+        }),
+      }),
+      () => now,
+    );
+
+    await expect(service.list(scope)).resolves.toMatchObject({
+      broadcasts: [{ operationalStatus: 'STALLED', failureRate: 25, totalRecipients: 6 }],
+      health: {
+        stalledBroadcasts: 1,
+        broadcastsWithFailures: 1,
+        deliveredRecipients: 3,
+        failedRecipients: 1,
+        recoveryAttempts: 1,
+        failureRate: 25,
+      },
+    });
   });
 
   it('fails closed when list access is denied', async () => {
