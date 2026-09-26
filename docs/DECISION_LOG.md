@@ -2732,3 +2732,14 @@
 - Privacy: User ID、氏名、回答内容、投稿本文、支援Snapshotは集計結果へ含めない。
 - Scope: Managed Service Contextで認可し、WorkspaceとService Groupに属するActive Membershipだけを集計する。
 - Reuse: 既存の個別化確認画面へ追加し、同じ目的の管理画面や集計テーブルは新設しない。
+
+## D-109: SNS継続支援の定期判定は明示的なService Featureで限定する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- `SOCIAL.ACTIVITY_SUPPORT`が有効なServiceのACTIVE参加者だけを対象とする。サービス名やslugはハードコードしない。
+- 既存Mission・投稿完了・結果・LINE配信を28日単位で集計し、システム障害日は除外する。
+- 毎日03:10 JSTに確定済み日付までを評価し、行動だけでは`SUSPECTED`までとする。本人回答なしに障壁を確定しない。
+- Userごとの先頭Bunshinへ暗黙集約せず、対象Service内のACTIVEなSocial Bunshinを個別に評価する。
+- Scheduler再実行時は既存Evidence KeyとCase一意制約で二重保存を防ぎ、参加者ごとの失敗は他参加者の判定を止めない。

@@ -200,6 +200,7 @@ export { PrismaActivityContinuityRuleRepository } from './activity-continuity-ru
 export {
   PrismaSocialActivityBarrierCaseRepository,
   PrismaSocialActivityBarrierObservationRepository,
+  PrismaSocialActivityBarrierProjectionCandidateRepository,
 } from './social-activity-barrier-repository';
 export { PrismaSocialActivityBarrierConfirmationRepository } from './social-activity-barrier-confirmation-repository';
 export {

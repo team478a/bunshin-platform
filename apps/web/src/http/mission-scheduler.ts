@@ -25,6 +25,10 @@ import {
   RunAiResaleRuntimeBatch,
   type AiResaleRuntimeBatchSummary,
 } from '@bunshin/capability-resale';
+import {
+  RunSocialActivityBarrierProjectionBatch,
+  type SocialActivityBarrierProjectionSummary,
+} from '@bunshin/capability-social';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
@@ -77,6 +81,7 @@ export interface MissionSchedulerPort {
       aiResaleOfferLine?: AiResaleOfferLineScheduleSummary;
       aiTrainingLine?: AiTrainingActionLineScheduleSummary;
       serviceLineBroadcastRecovery?: ServiceLineBroadcastRecoverySummary;
+      socialActivityBarriers?: SocialActivityBarrierProjectionSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -133,6 +138,11 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
   const aiResale = new RunAiResaleRuntimeBatch(
     new db.PrismaAiResaleRuntimeRepository(db.prisma),
     new AiResaleV1Policy(),
+  );
+  const socialActivityBarriers = new RunSocialActivityBarrierProjectionBatch(
+    new db.PrismaSocialActivityBarrierProjectionCandidateRepository(db.prisma),
+    new db.PrismaSocialActivityBarrierObservationRepository(db.prisma),
+    new db.PrismaSocialActivityBarrierCaseRepository(db.prisma),
   );
   const { resolveOpenAiRuntimeConfiguration } =
     await import('../ai/runtime-provider-configuration');
@@ -224,6 +234,19 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           truncated: false,
         } satisfies AiResaleRuntimeBatchSummary;
       });
+      const socialActivityBarrierProcessing = socialActivityBarriers.execute().catch(
+        () =>
+          ({
+            due: true,
+            scanned: 0,
+            evaluated: 0,
+            suspected: 0,
+            noSignals: 0,
+            skipped: 0,
+            failures: 1,
+            truncated: false,
+          }) satisfies SocialActivityBarrierProjectionSummary,
+      );
       const [
         missionResult,
         trendResult,
@@ -231,6 +254,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         pointResult,
         badgeResult,
         aiResaleResult,
+        socialActivityBarrierResult,
       ] = await Promise.all([
         mission.execute(environment),
         trend.execute(environment),
@@ -238,6 +262,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         pointProcessing,
         badgeProcessing,
         aiResaleProcessing,
+        socialActivityBarrierProcessing,
       ]);
       const badgePrepared = await badgePreparation.execute({ environment });
       const badgeJobResult = await badgeJobs.execute(environment);
@@ -294,6 +319,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         aiResaleOfferLine,
         aiTrainingLine,
         serviceLineBroadcastRecovery: recoveredServiceLineBroadcasts,
+        socialActivityBarriers: socialActivityBarrierResult,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };
