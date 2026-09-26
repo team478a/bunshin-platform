@@ -232,4 +232,26 @@ describe('LINE Messaging API adapter', () => {
       retryable: true,
     });
   });
+
+  it('uses a stable retry key for broadcast text and accepts LINE duplicate acknowledgement', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, {
+        status: 409,
+        headers: { 'x-line-accepted-request-id': 'accepted-request' },
+      }),
+    );
+    const retryKey = '11111111-1111-4111-8111-111111111111';
+
+    await expect(
+      new LineMessagingApiAdapter(request).pushText({
+        accessToken: 'access-token',
+        recipientId: 'provider-user-a',
+        text: '本文',
+        retryKey,
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(request.mock.calls[0]?.[1]?.headers).toEqual(
+      expect.objectContaining({ 'X-Line-Retry-Key': retryKey }),
+    );
+  });
 });

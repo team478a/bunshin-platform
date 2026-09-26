@@ -17,6 +17,8 @@ import {
   RunPersonalityLearningProposalJob,
   RunWeeklyPersonalityLearningScheduler,
   type PersonalityLearningScheduleSummary,
+  RecoverServiceLineBroadcastJobs,
+  type ServiceLineBroadcastRecoverySummary,
 } from '@bunshin/application';
 import {
   AiResaleV1Policy,
@@ -74,6 +76,7 @@ export interface MissionSchedulerPort {
       aiResaleLine?: AiResaleActionLineScheduleSummary;
       aiResaleOfferLine?: AiResaleOfferLineScheduleSummary;
       aiTrainingLine?: AiTrainingActionLineScheduleSummary;
+      serviceLineBroadcastRecovery?: ServiceLineBroadcastRecoverySummary;
       incentives?: {
         points: {
           scanned: number;
@@ -121,6 +124,10 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
   );
   const badgeJobs = new ScheduleBadgeLineDeliveryJobs(
     new db.PrismaBadgeLineJobCandidateRepository(db.prisma),
+    new EnqueueJob(jobs),
+  );
+  const serviceLineBroadcastRecovery = new RecoverServiceLineBroadcastJobs(
+    new db.PrismaServiceLineBroadcastRecoveryRepository(db.prisma),
     new EnqueueJob(jobs),
   );
   const aiResale = new RunAiResaleRuntimeBatch(
@@ -234,6 +241,9 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
       ]);
       const badgePrepared = await badgePreparation.execute({ environment });
       const badgeJobResult = await badgeJobs.execute(environment);
+      const recoveredServiceLineBroadcasts = await serviceLineBroadcastRecovery
+        .execute(environment)
+        .catch(() => ({ candidates: 0, enqueued: 0, failures: 1, truncated: false }));
       const weeklyReportLine = await scheduleWeeklyReportLineDeliveries({ environment }).catch(
         () => ({ services: 0, due: 0, broadcasts: 0, recipients: 0, skipped: 0, failures: 1 }),
       );
@@ -283,6 +293,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         aiResaleLine,
         aiResaleOfferLine,
         aiTrainingLine,
+        serviceLineBroadcastRecovery: recoveredServiceLineBroadcasts,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };
