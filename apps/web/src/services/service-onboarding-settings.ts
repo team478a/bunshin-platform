@@ -6,8 +6,16 @@ export interface ServiceOnboardingSettings {
   questions: string[];
   profileQuestions: ServiceProfileQuestionSettings;
   businessProfileEnabled: boolean;
+  businessProfileInputMode: ServiceBusinessProfileInputMode;
   dailyIdeaDelivery: ServiceDailyIdeaDeliverySettings;
 }
+
+export type ServiceBusinessProfileInputMode = 'FULL' | 'MINIMAL';
+
+export const MINIMAL_BUSINESS_PROFILE_DEFAULTS = {
+  businessFeatures: '詳しい特徴は、利用開始後の質問で少しずつ追加します',
+  preferredTone: 'やさしく親しみやすい',
+} as const;
 
 export interface ServiceDailyIdeaDeliverySettings {
   enabled: boolean;
@@ -252,6 +260,8 @@ export function readServiceOnboardingSettings(
     ]),
   ) as unknown as ServiceProfileQuestionSettings;
   const businessProfileEnabled = onboarding.businessProfileEnabled === true;
+  const businessProfileInputMode: ServiceBusinessProfileInputMode =
+    onboarding.businessProfileInputMode === 'MINIMAL' ? 'MINIMAL' : 'FULL';
   const dailyIdeaDelivery: ServiceDailyIdeaDeliverySettings = {
     enabled: configuredDailyIdeaDelivery.enabled === true,
     cadence: configuredDailyIdeaDelivery.cadence === 'WEEKDAYS' ? 'WEEKDAYS' : 'DAILY',
@@ -321,6 +331,7 @@ export function readServiceOnboardingSettings(
       : [],
     profileQuestions,
     businessProfileEnabled,
+    businessProfileInputMode,
     dailyIdeaDelivery: enforceBusinessDailyDeliverySettings(
       businessProfileEnabled,
       dailyIdeaDelivery,

@@ -11,7 +11,10 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePublicServiceContext } from '../services/public-service';
 import { buildServiceOnboardingAnswers } from '../services/service-onboarding-response';
-import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
+import {
+  MINIMAL_BUSINESS_PROFILE_DEFAULTS,
+  readServiceOnboardingSettings,
+} from '../services/service-onboarding-settings';
 import { defaultBusinessPartner } from '../services/default-business-partner';
 
 const purposes = [
@@ -32,9 +35,9 @@ const businessProfileSchema = z
     primaryPurpose: z.enum(purposes),
     targetAudience: z.string().trim().min(1).max(500),
     websiteUrl: z.string().trim().url().max(2048).nullable(),
-    businessFeatures: z.string().trim().min(1).max(1000),
+    businessFeatures: z.string().trim().max(1000).default(''),
     priceInformation: z.string().trim().max(500).nullable(),
-    preferredTone: z.string().trim().min(1).max(80),
+    preferredTone: z.string().trim().max(80).default(''),
     requiredContent: z.string().trim().max(1000).nullable(),
     forbiddenContent: z.string().trim().max(1000).nullable(),
   })
@@ -69,6 +72,23 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
     if (settings.businessProfileEnabled !== Boolean(value.businessProfile)) {
       throw new ApplicationError('VALIDATION_ERROR', 'service business profile is required');
     }
+    if (
+      value.businessProfile &&
+      settings.businessProfileInputMode === 'FULL' &&
+      (!value.businessProfile.businessFeatures || !value.businessProfile.preferredTone)
+    ) {
+      throw new ApplicationError('VALIDATION_ERROR', 'complete business profile is required');
+    }
+    const businessProfile = value.businessProfile
+      ? {
+          ...value.businessProfile,
+          businessFeatures:
+            value.businessProfile.businessFeatures ||
+            MINIMAL_BUSINESS_PROFILE_DEFAULTS.businessFeatures,
+          preferredTone:
+            value.businessProfile.preferredTone || MINIMAL_BUSINESS_PROFILE_DEFAULTS.preferredTone,
+        }
+      : null;
     const entries = buildServiceOnboardingAnswers(settings.questions, value.answers);
     const db = await import('@bunshin/database');
     const membership = await db.prisma.groupMembership.findFirst({
@@ -82,13 +102,13 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
       select: { id: true },
     });
     if (!membership) throw new ApplicationError('FORBIDDEN', 'active service membership required');
-    if (value.businessProfile) {
+    if (businessProfile) {
       const industry = await db.prisma.industry.findFirst({
-        where: { id: value.businessProfile.primaryIndustryId, status: 'ACTIVE' },
+        where: { id: businessProfile.primaryIndustryId, status: 'ACTIVE' },
         select: { key: true },
       });
       if (!industry) throw new ApplicationError('VALIDATION_ERROR', 'industry is unavailable');
-      if (industry.key === 'OTHER' && !value.businessProfile.otherIndustryText) {
+      if (industry.key === 'OTHER' && !businessProfile.otherIndustryText) {
         throw new ApplicationError('VALIDATION_ERROR', 'other industry is required');
       }
     }
@@ -110,7 +130,7 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
         },
         select: { id: true, completedAt: true },
       });
-      if (value.businessProfile) {
+      if (businessProfile) {
         await tx.serviceMemberBusinessProfile.upsert({
           where: { groupMembershipId: membership.id },
           create: {
@@ -118,9 +138,9 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
             groupId: service.serviceId,
             groupMembershipId: membership.id,
             userId: actor.userId,
-            ...value.businessProfile,
+            ...businessProfile,
           },
-          update: value.businessProfile,
+          update: businessProfile,
         });
       }
       return response;
@@ -134,7 +154,7 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
       milestone: 'ONBOARDING_COMPLETED',
     });
     let bunshinId: string | null = null;
-    if (value.businessProfile) {
+    if (businessProfile) {
       const repository = new db.PrismaBunshinRepository();
       const existing = await new ListServiceBunshins(repository).execute({
         workspaceId: service.workspaceId,
@@ -149,7 +169,7 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
           actorUserId: actor.userId,
           slug: `service-${crypto.randomUUID()}`,
           type: 'EXPERT',
-          ...defaultBusinessPartner(value.businessProfile),
+          ...defaultBusinessPartner(businessProfile),
         }));
       bunshinId = bunshin.id;
     }

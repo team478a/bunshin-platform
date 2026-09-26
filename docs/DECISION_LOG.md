@@ -2685,3 +2685,11 @@
 - Navigation: サービス設定が特定できる場合は対象サービスのLINE配信管理へ直接案内し、不明な場合はサービス一覧へ案内する。
 - Isolation: 指定環境のJobから対象配信を逆引きする境界を維持し、表示内容はサービス名、障害種別、件数に限定する。
 - Duplication: 一斉配信Jobは汎用停止Job件数から除外し、同じ障害を専用アラートと汎用アラートへ二重表示しない。
+
+# 2026-09-26: 事業者向け初期設定の簡略化はService設定で明示的に有効化する
+
+- Boundary: サービス名やslugをコードへ固定せず、`businessProfileInputMode`をServiceのVersioned onboarding設定として保持する。
+- Compatibility: 既存Serviceと保存値がないServiceは`FULL`を維持し、運営者が`MINIMAL`を選択したServiceだけ5項目入力へ切り替える。
+- Minimum input: 初回は業種、店舗・会社名、商品・サービス、届けたい顧客、SNS目的を取得する。
+- Deferred profile: 事業の特徴、Tone、地域、Webサイト、価格、必須・禁止事項は利用開始後の既存1問補完へ回す。設定済みの値は変更しない。
+- Generation safety: Bunshin生成に必要な特徴とToneには明示した安全な初期値を保存し、空値のまま生成経路へ渡さない。

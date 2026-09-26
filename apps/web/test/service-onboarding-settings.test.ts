@@ -22,6 +22,7 @@ describe('service onboarding settings', () => {
       questions: ['使うSNSは？', '目標は？'],
       profileQuestions: DEFAULT_SERVICE_PROFILE_QUESTIONS,
       businessProfileEnabled: false,
+      businessProfileInputMode: 'FULL',
       dailyIdeaDelivery: DEFAULT_SERVICE_DAILY_IDEA_DELIVERY,
     });
   });
@@ -33,6 +34,7 @@ describe('service onboarding settings', () => {
       questions: ['有効'],
       profileQuestions: DEFAULT_SERVICE_PROFILE_QUESTIONS,
       businessProfileEnabled: false,
+      businessProfileInputMode: 'FULL',
       dailyIdeaDelivery: DEFAULT_SERVICE_DAILY_IDEA_DELIVERY,
     });
   });
@@ -109,6 +111,21 @@ describe('service onboarding settings', () => {
       readServiceOnboardingSettings({ dailyIdeaDelivery: { contentMode: 'PROMPT' } }, null)
         .dailyIdeaDelivery.contentMode,
     ).toBe('PROMPT');
+  });
+
+  it('keeps simplified business input explicitly opt-in per service', () => {
+    expect(
+      readServiceOnboardingSettings(
+        { businessProfileEnabled: true, businessProfileInputMode: 'MINIMAL' },
+        null,
+      ).businessProfileInputMode,
+    ).toBe('MINIMAL');
+    expect(
+      readServiceOnboardingSettings(
+        { businessProfileEnabled: true, businessProfileInputMode: 'unsupported' },
+        null,
+      ).businessProfileInputMode,
+    ).toBe('FULL');
   });
 
   it('keeps automatic image delivery opt-in for existing services', () => {

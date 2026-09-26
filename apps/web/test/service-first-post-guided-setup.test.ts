@@ -13,7 +13,7 @@ const setup = source('app/s/[serviceSlug]/bunshins/[bunshinId]/simple-first-post
 
 describe('service first-post guided setup', () => {
   it('creates one standard business partner and shows the diagnosis before setup', () => {
-    expect(onboardingApi).toContain('defaultBusinessPartner(value.businessProfile)');
+    expect(onboardingApi).toContain('defaultBusinessPartner(businessProfile)');
     expect(onboardingApi).toContain('existing[0] ??');
     expect(onboardingForm).toContain('result.data?.bunshinId');
     expect(onboardingForm).toContain('/diagnosis`');
