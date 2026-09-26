@@ -130,6 +130,19 @@ describe('OpenAIDailyMissionPlanner', () => {
       );
     await expect(
       new OpenAIDailyMissionPlanner({ apiKey: 'secret', fetch: fetcher }).generate(input),
-    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    ).rejects.toMatchObject({
+      code: 'AI_PROVIDER_UNAVAILABLE',
+      cause: { provider: 'openai', httpStatus: 429, providerErrorCode: 'rate_limit' },
+    });
+  });
+
+  it('maps network failures to a retryable provider error', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new TypeError('socket closed'));
+    await expect(
+      new OpenAIDailyMissionPlanner({ apiKey: 'secret', fetch: fetcher }).generate(input),
+    ).rejects.toMatchObject({
+      code: 'AI_PROVIDER_UNAVAILABLE',
+      cause: { provider: 'openai', reason: 'NETWORK_ERROR' },
+    });
   });
 });
