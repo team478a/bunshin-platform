@@ -13,6 +13,16 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const confirmationMigration = readFileSync(
+  join(
+    process.cwd(),
+    'prisma',
+    'migrations',
+    '20260926230000_add_social_activity_barrier_confirmation',
+    'migration.sql',
+  ),
+  'utf8',
+);
 
 describe('social activity barrier persistence', () => {
   it('binds every case to service membership, user, workspace, and bunshin scope', () => {
@@ -38,6 +48,23 @@ describe('social activity barrier persistence', () => {
     expect(schema).toContain('@default(SUSPECTED)');
     expect(migration).toContain(
       '"status" "SocialActivityBarrierStatus" NOT NULL DEFAULT \'SUSPECTED\'',
+    );
+  });
+
+  it('stores explicit confirmation and deterministic support idempotently', () => {
+    expect(schema).toContain('model SocialActivityBarrierConfirmation');
+    expect(schema).toContain('model SocialActivitySupportIntervention');
+    expect(confirmationMigration).toContain(
+      'social_activity_barrier_confirmations_idempotency_key',
+    );
+    expect(confirmationMigration).toContain(
+      'social_activity_support_interventions_idempotency_key',
+    );
+    expect(confirmationMigration).toContain(
+      'ALTER TABLE "social_activity_barrier_confirmations" ENABLE ROW LEVEL SECURITY',
+    );
+    expect(confirmationMigration).toContain(
+      'ALTER TABLE "social_activity_support_interventions" ENABLE ROW LEVEL SECURITY',
     );
   });
 });

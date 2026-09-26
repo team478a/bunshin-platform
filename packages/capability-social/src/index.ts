@@ -8,6 +8,7 @@ export * from './mission-engagement';
 export * from './mission-outcomes';
 export * from './activity-barrier';
 export * from './activity-barrier-persistence';
+export * from './activity-barrier-support';
 export {
   assertPlatformFormat,
   normalizeMissionContent,
