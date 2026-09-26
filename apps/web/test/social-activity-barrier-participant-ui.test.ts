@@ -23,6 +23,9 @@ describe('social activity barrier participant UI', () => {
     expect(card).toContain('当てはまる項目を一つ選択');
     expect(card).toContain('回答してサポートを見る');
     expect(card).toContain('今日のサポート');
+    expect(card).toContain('このサポートを始める');
+    expect(card).toContain('できました');
+    expect(card).toContain('今回は見送る');
     expect(card).not.toContain('ruleVersion');
     expect(card).not.toContain('evidenceCode');
   });
@@ -31,12 +34,14 @@ describe('social activity barrier participant UI', () => {
     expect(card).toContain('idempotencyKey.current ??= crypto.randomUUID()');
     expect(card).toContain('idempotencyKey: idempotencyKey.current');
     expect(http).toContain('requireSameOrigin(request)');
+    expect(http).toContain('transitionSupport');
     expect(http).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
   });
 
   it('scopes both page and API reads to membership, user, and bunshin ownership', () => {
     expect(detail).toContain('PrismaSocialActivityBarrierConfirmationRepository');
     expect(detail).toContain('groupMembershipId: membership.id');
+    expect(detail).toContain('getActiveSupport');
     expect(http).toContain('ownerUserId: actor.userId');
     expect(http).toContain('groupMembershipId: membership.id');
   });

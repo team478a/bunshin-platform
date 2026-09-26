@@ -7,6 +7,8 @@ import {
   type SocialActivityBarrierConfirmationRepository,
   type SocialActivityBarrierEvidence,
   type SocialActivityBarrierScope,
+  type SocialActivitySupport,
+  type SocialActivitySupportProgress,
 } from '@bunshin/capability-social';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
@@ -80,6 +82,28 @@ function scopeWhere(scope: SocialActivityBarrierScope) {
     userId: scope.userId,
     bunshinId: scope.bunshinId,
   } as const;
+}
+
+function supportProgress(row: {
+  id: string;
+  status: SocialActivitySupportProgress['status'];
+  definitionSnapshot: Prisma.JsonValue;
+}): SocialActivitySupportProgress | null {
+  if (!row.definitionSnapshot || typeof row.definitionSnapshot !== 'object') return null;
+  const snapshot = row.definitionSnapshot as Record<string, unknown>;
+  if (
+    typeof snapshot['key'] !== 'string' ||
+    typeof snapshot['title'] !== 'string' ||
+    typeof snapshot['reason'] !== 'string' ||
+    !Array.isArray(snapshot['steps']) ||
+    !snapshot['steps'].every((step) => typeof step === 'string')
+  )
+    return null;
+  return {
+    id: row.id,
+    status: row.status,
+    support: snapshot as SocialActivitySupport,
+  };
 }
 
 export class PrismaSocialActivityBarrierConfirmationRepository implements SocialActivityBarrierConfirmationRepository {
@@ -240,5 +264,60 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
 
       return { response, support };
     });
+  }
+
+  async getActiveSupport(
+    input: Parameters<SocialActivityBarrierConfirmationRepository['getActiveSupport']>[0],
+  ) {
+    const row = await this.client.socialActivitySupportIntervention.findFirst({
+      where: {
+        status: { in: ['OFFERED', 'ACCEPTED'] },
+        barrierCase: scopeWhere(input.scope),
+      },
+      orderBy: { offeredAt: 'desc' },
+      select: { id: true, status: true, definitionSnapshot: true },
+    });
+    return row ? supportProgress(row) : null;
+  }
+
+  async transitionSupport(
+    input: Parameters<SocialActivityBarrierConfirmationRepository['transitionSupport']>[0],
+  ) {
+    const row = await this.client.socialActivitySupportIntervention.findFirst({
+      where: { id: input.supportId, barrierCase: scopeWhere(input.scope) },
+      select: { id: true, status: true, definitionSnapshot: true },
+    });
+    if (!row) return null;
+    const desired =
+      input.action === 'ACCEPT'
+        ? 'ACCEPTED'
+        : input.action === 'COMPLETE'
+          ? 'COMPLETED'
+          : 'SKIPPED';
+    if (row.status === desired) return supportProgress(row);
+    if (row.status === 'COMPLETED' || row.status === 'SKIPPED') return null;
+
+    const data: Prisma.SocialActivitySupportInterventionUpdateManyMutationInput =
+      desired === 'ACCEPTED'
+        ? { status: 'ACCEPTED', acceptedAt: input.occurredAt }
+        : desired === 'COMPLETED'
+          ? { status: 'COMPLETED', completedAt: input.occurredAt }
+          : { status: 'SKIPPED', skippedAt: input.occurredAt };
+    const updated = await this.client.socialActivitySupportIntervention.updateMany({
+      where: {
+        id: input.supportId,
+        status: row.status,
+        barrierCase: scopeWhere(input.scope),
+      },
+      data,
+    });
+    if (updated.count !== 1) {
+      const concurrent = await this.client.socialActivitySupportIntervention.findFirst({
+        where: { id: input.supportId, status: desired, barrierCase: scopeWhere(input.scope) },
+        select: { id: true, status: true, definitionSnapshot: true },
+      });
+      return concurrent ? supportProgress(concurrent) : null;
+    }
+    return supportProgress({ ...row, status: desired });
   }
 }

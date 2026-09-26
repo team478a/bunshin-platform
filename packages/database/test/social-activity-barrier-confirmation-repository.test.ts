@@ -113,4 +113,75 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
       }),
     ).resolves.toBeNull();
   });
+
+  it('restores an active support action only through its complete scope', async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: '60000000-0000-0000-0000-000000000001',
+      status: 'OFFERED',
+      definitionSnapshot: {
+        key: 'FIVE_MINUTE_ACTION',
+        title: '5分で終わる内容にする',
+        reason: '作業量を小さくします。',
+        steps: ['投稿を開く', '一文選ぶ', '保存する'],
+      },
+    });
+    const client = {
+      socialActivitySupportIntervention: { findFirst },
+    } as unknown as PrismaClient;
+    const repository = new PrismaSocialActivityBarrierConfirmationRepository(client);
+
+    await expect(repository.getActiveSupport({ scope })).resolves.toMatchObject({
+      status: 'OFFERED',
+      support: { key: 'FIVE_MINUTE_ACTION' },
+    });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          barrierCase: expect.objectContaining({
+            workspaceId: scope.workspaceId,
+            groupId: scope.serviceId,
+            groupMembershipId: scope.groupMembershipId,
+            userId: scope.userId,
+            bunshinId: scope.bunshinId,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('transitions support once and treats the same completed action as idempotent', async () => {
+    const snapshot = {
+      key: 'FIVE_MINUTE_ACTION',
+      title: '5分で終わる内容にする',
+      reason: '作業量を小さくします。',
+      steps: ['投稿を開く', '一文選ぶ', '保存する'],
+    };
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'support_1', status: 'ACCEPTED', definitionSnapshot: snapshot })
+      .mockResolvedValueOnce({
+        id: 'support_1',
+        status: 'COMPLETED',
+        definitionSnapshot: snapshot,
+      });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const client = {
+      socialActivitySupportIntervention: { findFirst, updateMany },
+    } as unknown as PrismaClient;
+    const repository = new PrismaSocialActivityBarrierConfirmationRepository(client);
+    const input = {
+      scope,
+      supportId: 'support_1',
+      action: 'COMPLETE' as const,
+      occurredAt: new Date('2026-09-10T00:00:00.000Z'),
+    };
+
+    await expect(repository.transitionSupport(input)).resolves.toMatchObject({
+      status: 'COMPLETED',
+    });
+    await expect(repository.transitionSupport(input)).resolves.toMatchObject({
+      status: 'COMPLETED',
+    });
+    expect(updateMany).toHaveBeenCalledOnce();
+  });
 });
