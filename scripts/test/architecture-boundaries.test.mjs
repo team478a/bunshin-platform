@@ -41,6 +41,19 @@ test('rejects a forbidden static application import', () => {
   assert.ok(violations.some((item) => item.code === 'APPLICATION_DEPENDENCY_DIRECTION'));
 });
 
+test('rejects direct Prisma Client imports from the application layer', () => {
+  const violations = analyze(
+    'packages/application/src/prisma-fixture.ts',
+    "import { PrismaClient } from '@prisma/client';",
+  );
+  assert.ok(
+    violations.some(
+      (item) =>
+        item.code === 'APPLICATION_FRAMEWORK_OR_PROVIDER' && item.specifier === '@prisma/client',
+    ),
+  );
+});
+
 test('rejects a forbidden re-export from a core package', () => {
   const violations = analyze(
     'packages/platform-domain/src/index.ts',
