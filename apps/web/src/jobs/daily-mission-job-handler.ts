@@ -16,6 +16,7 @@ import {
 import { queueAutomaticDailyImage } from '../services/automatic-daily-image';
 import { queueAutomaticDailyVideo } from '../services/automatic-daily-video';
 import { createLogger } from '@bunshin/observability';
+import { ApplicationError } from '@bunshin/shared';
 
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
@@ -75,12 +76,25 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
           groupId: scope.groupId,
           actorUserId: scope.actorUserId,
         });
-        mission = await createServiceDailyIdeaFallback({
-          ...scope,
-          groupId: scope.groupId,
-          missionDate: localDate,
-          ...(assistanceLevel ? { assistanceLevel } : {}),
-        });
+        try {
+          mission = await createServiceDailyIdeaFallback({
+            ...scope,
+            groupId: scope.groupId,
+            missionDate: localDate,
+            ...(assistanceLevel ? { assistanceLevel } : {}),
+          });
+        } catch (fallbackError) {
+          createLogger().error('daily mission fallback rejected; delivery withheld', {
+            jobId: job.id,
+            correlationId: job.correlationId,
+            environment: job.environment,
+            localDate,
+            primaryErrorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
+            fallbackErrorCode:
+              fallbackError instanceof ApplicationError ? fallbackError.code : 'INTERNAL_ERROR',
+          });
+          throw fallbackError;
+        }
       }
       const automaticImage =
         scope.groupId && dailyIdeas?.enabled
