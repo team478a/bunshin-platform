@@ -122,19 +122,51 @@ describe('OpenAIDailyMissionPlanner', () => {
     expect(request.input[0]?.content).toContain('一般的な生活・自己啓発テーマへ逸らしません');
   });
 
-  it('maps provider errors without exposing credentials', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: 'rate_limit' } }), { status: 429 }),
+  it.each([
+    [429, 'application/json', JSON.stringify({ error: { code: 'rate_limit' } }), 'rate_limit'],
+    [500, 'application/json', JSON.stringify({ error: { code: 'server_error' } }), 'server_error'],
+    [503, 'text/html', '<html><body>temporarily unavailable</body></html>', null],
+    [503, 'text/plain', '', null],
+    [503, 'application/json', '{invalid', null],
+  ] as const)(
+    'maps provider HTTP %s responses to a retryable error without exposing the body',
+    async (status, contentType, body, providerErrorCode) => {
+      const fetcher = vi.fn().mockResolvedValue(
+        new Response(body, {
+          status,
+          headers: { 'content-type': contentType },
+        }),
       );
-    await expect(
-      new OpenAIDailyMissionPlanner({ apiKey: 'secret', fetch: fetcher }).generate(input),
-    ).rejects.toMatchObject({
-      code: 'AI_PROVIDER_UNAVAILABLE',
-      cause: { provider: 'openai', httpStatus: 429, providerErrorCode: 'rate_limit' },
-    });
-  });
+      const error = await new OpenAIDailyMissionPlanner({
+        apiKey: 'secret',
+        fetch: fetcher,
+      })
+        .generate(input)
+        .catch((value: unknown) => value);
+      expect(error).toMatchObject({
+        code: 'AI_PROVIDER_UNAVAILABLE',
+        cause: { provider: 'openai', httpStatus: status, providerErrorCode },
+      });
+      if (body) expect(JSON.stringify(error)).not.toContain(body);
+      expect(JSON.stringify(error)).not.toContain('secret');
+    },
+  );
+
+  it.each([
+    ['', 'EMPTY_RESPONSE'],
+    ['{invalid', 'INVALID_JSON'],
+  ])(
+    'maps an invalid successful provider envelope to an unavailable error',
+    async (body, reason) => {
+      const fetcher = vi.fn().mockResolvedValue(new Response(body, { status: 200 }));
+      await expect(
+        new OpenAIDailyMissionPlanner({ apiKey: 'secret', fetch: fetcher }).generate(input),
+      ).rejects.toMatchObject({
+        code: 'AI_PROVIDER_UNAVAILABLE',
+        cause: { provider: 'openai', reason },
+      });
+    },
+  );
 
   it('maps network failures to a retryable provider error', async () => {
     const fetcher = vi.fn().mockRejectedValue(new TypeError('socket closed'));
@@ -143,6 +175,18 @@ describe('OpenAIDailyMissionPlanner', () => {
     ).rejects.toMatchObject({
       code: 'AI_PROVIDER_UNAVAILABLE',
       cause: { provider: 'openai', reason: 'NETWORK_ERROR' },
+    });
+  });
+
+  it('maps timeouts to a retryable provider error', async () => {
+    const timeout = new Error('timed out');
+    timeout.name = 'TimeoutError';
+    const fetcher = vi.fn().mockRejectedValue(timeout);
+    await expect(
+      new OpenAIDailyMissionPlanner({ apiKey: 'secret', fetch: fetcher }).generate(input),
+    ).rejects.toMatchObject({
+      code: 'AI_PROVIDER_UNAVAILABLE',
+      cause: { provider: 'openai', reason: 'TIMEOUT' },
     });
   });
 });
