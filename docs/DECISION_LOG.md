@@ -2725,3 +2725,10 @@
 - Resume: `OFFERED`と`ACCEPTED`は再訪時にも表示し、回答直後だけの一時表示にしない。
 - Idempotency: 同じ遷移の再送は現在状態を返し、競合する終端遷移は`CONFLICT`として扱う。新しいEventテーブルは追加しない。
 - Isolation: 支援IDだけでは更新せず、Workspace、Service、Membership、User、Bunshinが一致するCase Relationを必須条件にする。
+
+# 2026-09-27: SNS継続支援の事業者表示はService集計に限定する
+
+- Visibility: 事業者には本人が確定したCategory件数、本人確認待ち件数、支援状態件数だけを表示する。
+- Privacy: User ID、氏名、回答内容、投稿本文、支援Snapshotは集計結果へ含めない。
+- Scope: Managed Service Contextで認可し、WorkspaceとService Groupに属するActive Membershipだけを集計する。
+- Reuse: 既存の個別化確認画面へ追加し、同じ目的の管理画面や集計テーブルは新設しない。
