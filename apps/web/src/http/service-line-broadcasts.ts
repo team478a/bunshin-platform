@@ -1,6 +1,6 @@
 import 'server-only';
 import { requestIdFromHeader } from '@bunshin/observability';
-import { EnqueueJob } from '@bunshin/application';
+import { EnqueueJob, ServiceLineBroadcastAudienceService } from '@bunshin/application';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
@@ -31,45 +31,6 @@ const createSchema = z.object({
 const retrySchema = z.object({ reason: z.string().trim().min(1).max(1000) });
 const cancelSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
 
-async function eligibleRecipients(input: {
-  workspaceId: string;
-  groupId: string;
-  segment: z.infer<typeof segmentSchema>;
-}) {
-  const db = await import('@bunshin/database');
-  const segmented = input.segment.industryIds.length > 0 || input.segment.purposes.length > 0;
-  return db.prisma.groupLineConnection.findMany({
-    where: {
-      workspaceId: input.workspaceId,
-      groupId: input.groupId,
-      status: 'ACTIVE',
-      notificationConsentAt: { not: null },
-      friendshipStatus: 'FOLLOWING',
-      groupMembership: { status: 'ACTIVE', consentedAt: { not: null } },
-      user: {
-        status: 'ACTIVE',
-        ...(segmented
-          ? {
-              registrationProfile: {
-                is: {
-                  status: 'COMPLETED',
-                  ...(input.segment.industryIds.length
-                    ? { primaryIndustryId: { in: input.segment.industryIds } }
-                    : {}),
-                  ...(input.segment.purposes.length
-                    ? { primaryPurpose: { in: input.segment.purposes } }
-                    : {}),
-                },
-              },
-            }
-          : {}),
-      },
-    },
-    select: { groupMembershipId: true, userId: true },
-    take: 500,
-  });
-}
-
 export async function previewServiceLineBroadcastResponse(request: Request, serviceSlug: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
@@ -78,14 +39,18 @@ export async function previewServiceLineBroadcastResponse(request: Request, serv
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const segment = segmentSchema.parse(await request.json());
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
-    const recipients = await eligibleRecipients({
+    const db = await import('@bunshin/database');
+    const preview = await new ServiceLineBroadcastAudienceService(
+      new db.PrismaServiceLineBroadcastAudienceRepository(),
+    ).preview({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
+      actorUserId: actor.userId,
       segment,
     });
     return Response.json(
       {
-        data: { eligibleRecipientCount: recipients.length, capped: recipients.length === 500 },
+        data: { eligibleRecipientCount: preview.recipientCount, capped: preview.capped },
         requestId,
       },
       { headers: { 'cache-control': 'private, no-store' } },
@@ -170,87 +135,32 @@ export async function sendServiceLineBroadcastResponse(request: Request, service
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const environment = currentLineEnvironment();
-    const configuration = await db.prisma.groupLineChannelConfiguration.findFirst({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        environment,
-        status: 'ACTIVE',
-        lastVerifiedAt: { not: null },
-        lastErrorCategory: null,
-        globallyPaused: false,
-      },
-      select: { encryptedAccessToken: true },
-    });
-    if (!configuration)
-      throw new ApplicationError('CONFLICT', 'active service LINE configuration required');
-    const recipients = await eligibleRecipients({
+    const scheduledAt = value.scheduledAt ? new Date(value.scheduledAt) : new Date();
+    const broadcast = await new ServiceLineBroadcastAudienceService(
+      new db.PrismaServiceLineBroadcastAudienceRepository(),
+    ).schedule({
+      environment,
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
+      actorUserId: actor.userId,
+      title: value.title,
+      message: value.message,
+      reason: value.reason,
+      scheduledAt,
+      expectedRecipientCount: value.expectedRecipientCount,
       segment: value.segment,
-    });
-    if (!recipients.length) throw new ApplicationError('CONFLICT', 'no eligible LINE recipients');
-    if (recipients.length !== value.expectedRecipientCount)
-      throw new ApplicationError(
-        'CONFLICT',
-        'recipient count changed; preview and confirm the audience again',
-      );
-    const scheduledAt = value.scheduledAt ? new Date(value.scheduledAt) : new Date();
-    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now() - 5_000)
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid scheduledAt');
-    const broadcast = await db.prisma.$transaction(async (tx) => {
-      const row = await tx.serviceLineBroadcast.create({
-        data: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          title: value.title,
-          message: value.message,
-          segmentCriteria: value.segment,
-          status: 'SCHEDULED',
-          scheduledAt,
-          createdByUserId: actor.userId,
-          updatedByUserId: actor.userId,
-        },
-      });
-      await tx.serviceLineBroadcastRecipient.createMany({
-        data: recipients.map((recipient) => ({
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          broadcastId: row.id,
-          groupMembershipId: recipient.groupMembershipId,
-          userId: recipient.userId,
-        })),
-      });
-      await tx.serviceLineBroadcastAuditLog.create({
-        data: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          broadcastId: row.id,
-          action: 'SCHEDULED',
-          beforeData: {},
-          afterData: {
-            recipients: recipients.length,
-            segment: value.segment,
-            environment,
-            scheduledAt: scheduledAt.toISOString(),
-          },
-          reason: value.reason,
-          performedByUserId: actor.userId,
-        },
-      });
-      return row;
     });
     await enqueueBroadcastJob({
       workspaceId: service.workspaceId,
-      broadcastId: broadcast.id,
+      broadcastId: broadcast.broadcastId,
       actorUserId: actor.userId,
       scheduledAt,
       attempt: 1,
     });
     return Response.json({
       data: {
-        broadcastId: broadcast.id,
-        requested: recipients.length,
+        broadcastId: broadcast.broadcastId,
+        requested: broadcast.recipientCount,
         scheduledAt: scheduledAt.toISOString(),
       },
       requestId,

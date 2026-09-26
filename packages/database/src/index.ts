@@ -108,6 +108,7 @@ export {
   PrismaMissionDeepLinkStateRepository,
 } from './line-delivery';
 export { PrismaLineNotificationPreferenceRepository } from './line-notification-preferences';
+export { PrismaServiceLineBroadcastAudienceRepository } from './service-line-broadcast-audience-repository';
 export {
   PrismaLineAdminFunnelRepository,
   PrismaLineAdminMetricsRepository,
