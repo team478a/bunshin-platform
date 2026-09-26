@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 const get = vi.fn();
+const recordServiceBroadcastAlerts = vi.fn();
 const active = vi.fn();
 const hasConfiguration = vi.fn();
 vi.mock('@bunshin/database', () => ({
   PrismaLineOperationalSnapshotRepository: class {
     get = get;
+    recordServiceBroadcastAlerts = recordServiceBroadcastAlerts;
   },
   PrismaAdminEmailConfigurationRepository: class {
     active = active;
@@ -14,7 +16,10 @@ vi.mock('@bunshin/database', () => ({
   },
 }));
 
-import { lineOperationalReadinessResponse } from '../src/http/line-operational-readiness';
+import {
+  lineOperationalMonitorResponse,
+  lineOperationalReadinessResponse,
+} from '../src/http/line-operational-readiness';
 
 const secret = 'cron-secret-at-least-thirty-two-bytes';
 
@@ -63,7 +68,7 @@ describe('LINE operational readiness HTTP boundary', () => {
         alerts: [],
       },
     });
-    expect(get).toHaveBeenCalledWith('DEVELOPMENT');
+    expect(get).toHaveBeenCalledWith('DEVELOPMENT', expect.any(Date));
   });
 
   it('returns service unavailable when a critical condition exists', async () => {
@@ -109,5 +114,42 @@ describe('LINE operational readiness HTTP boundary', () => {
     await expect(response.json()).resolves.toMatchObject({
       data: { alertingConfigured: false },
     });
+  });
+
+  it('records service broadcast events only after the operator notification succeeds', async () => {
+    vi.stubEnv('RESEND_ADMIN_ALERT_API_KEY', 'resend-api-key-for-test');
+    vi.stubEnv('RESEND_ADMIN_ALERT_FROM', 'alerts@example.com');
+    vi.stubEnv('RESEND_ADMIN_ALERT_TO', 'admin@example.com');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 202 })));
+    get.mockResolvedValue({
+      environment: 'DEVELOPMENT',
+      configuration: { active: true, verified: true, globallyPaused: false },
+      deliveries: { failed: 0 },
+      jobs: { retryScheduled: 0, dead: 0 },
+      failures: [],
+      serviceBroadcastEvents: [
+        {
+          code: 'SERVICE_BROADCAST_STALLED',
+          eventKey: 'stalled-event-a',
+          workspaceId: 'workspace-a',
+          groupId: 'group-a',
+          broadcastId: 'broadcast-a',
+          performedByUserId: 'manager-a',
+        },
+      ],
+    });
+
+    const response = await lineOperationalMonitorResponse(
+      new Request('http://localhost/api/internal/line/monitor', {
+        headers: { authorization: `Bearer ${secret}` },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(recordServiceBroadcastAlerts).toHaveBeenCalledWith(
+      [expect.objectContaining({ eventKey: 'stalled-event-a' })],
+      expect.any(String),
+      expect.any(Date),
+    );
   });
 });

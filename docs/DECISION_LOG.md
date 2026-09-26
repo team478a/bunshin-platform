@@ -2669,3 +2669,11 @@
 - Allowed direction: `database`がapplication/capabilityのPortを実装する依存と、`apps/web` composition rootでの公開packageの組み立ては許可する。
 - Enforcement: TypeScript ASTによる実source検査を`pnpm lint`へ、禁止・許可fixtureによる検査自体のテストを`pnpm test`へ接続する。
 - Limits: 非Literalの動的import、runtimeのtenant条件、未確定のCapability間依存はこの検査だけで保証しない。個別例外や自動更新allowlistは追加しない。
+
+# 2026-09-26: OEM向けLINE一斉配信を既存の運用監視へ統合する
+
+- Detection: 予定時刻から15分以上経過した未完了配信、失敗5件以上または失敗率50%以上の完了配信、停止したRecovery Jobを通知対象とする。
+- Recovery: Recovery Jobが成功し、対象配信の失敗受信者が0件になった場合は復旧通知を送る。
+- Isolation: 監視対象は指定環境の`SERVICE_LINE_BROADCAST_DELIVER` Jobから逆引きし、別環境の配信を混在させない。通知本文は集計件数だけを含める。
+- Idempotency: 通知成功後に対象配信の既存監査ログへイベントキーを保存し、同じ障害・復旧を再通知しない。通知失敗時は記録せず、次回監視で再試行する。
+- Failure boundary: 通知は既存の時間監視で実行し、一斉配信ワーカーから分離する。管理者メールやWebhookの障害で配信処理を停止しない。

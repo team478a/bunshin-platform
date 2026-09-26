@@ -40,4 +40,27 @@ describe('Resend LINE operational alert', () => {
     });
     await expect(notifier.notify(assessment)).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
   });
+
+  it('uses a recovery subject when all events are informational', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 202 }));
+    const notifier = new LineOperationalAlertResend({
+      apiKey: 're_secret_api_key',
+      from: 'alerts@example.com',
+      to: ['admin@example.com'],
+      fetch: request,
+    });
+
+    await notifier.notify({
+      ...assessment,
+      ready: true,
+      alerts: [{ code: 'SERVICE_BROADCAST_RECOVERED', severity: 'INFO', count: 1 }],
+    });
+
+    const body = JSON.parse(request.mock.calls[0]?.[1]?.body as string) as {
+      subject: string;
+      text: string;
+    };
+    expect(body.subject).toContain('復旧しました');
+    expect(body.text).toContain('自動復旧しました');
+  });
 });

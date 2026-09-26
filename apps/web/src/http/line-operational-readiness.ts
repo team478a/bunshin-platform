@@ -26,7 +26,8 @@ function publicAssessment(value: LineOperationalAssessment) {
 
 async function checker() {
   const db = await import('@bunshin/database');
-  return new CheckLineOperationalReadiness(new db.PrismaLineOperationalSnapshotRepository());
+  const repository = new db.PrismaLineOperationalSnapshotRepository();
+  return { useCase: new CheckLineOperationalReadiness(repository), repository };
 }
 
 async function notifier(configuration: ReturnType<typeof getServerEnvironment>) {
@@ -75,11 +76,18 @@ async function respond(request: Request, sendAlerts: boolean): Promise<Response>
   try {
     const configuration = getServerEnvironment();
     authorizeCronRequest(request, configuration.CRON_SECRET);
-    const useCase = await checker();
+    const { useCase, repository } = await checker();
     const result = await useCase.execute(currentLineEnvironment());
     const alertPort =
       sendAlerts || configuration.APP_ENV === 'production' ? await notifier(configuration) : null;
-    if (sendAlerts && result.alerts.length > 0 && alertPort) await alertPort.notify(result);
+    if (sendAlerts && result.alerts.length > 0 && alertPort) {
+      await alertPort.notify(result);
+      await repository.recordServiceBroadcastAlerts(
+        result.serviceBroadcastEvents ?? [],
+        result.fingerprint,
+        result.checkedAt,
+      );
+    }
     const alertingConfigured = alertPort !== null;
     const operational =
       result.ready && (configuration.APP_ENV !== 'production' || alertingConfigured);
