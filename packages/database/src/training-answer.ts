@@ -1,3 +1,4 @@
+import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 
@@ -35,14 +36,16 @@ export class PrismaTrainingAnswerRepository {
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           status: 'ACTIVE',
+          startsAt: { not: null },
         },
-        select: { id: true, groupMembershipId: true },
+        select: { id: true, groupMembershipId: true, serviceProgramId: true },
       }),
       this.client.groupMembership.findFirst({
         where: {
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           userId: input.actorUserId,
+          serviceRole: 'PARTICIPANT',
           status: 'ACTIVE',
         },
         select: { id: true },
@@ -50,6 +53,17 @@ export class PrismaTrainingAnswerRepository {
     ]);
     if (!enrollment || !membership || enrollment.groupMembershipId !== membership.id)
       return { outcome: 'NOT_FOUND' };
+    const program = await this.client.serviceProgram.findFirst({
+      where: {
+        id: enrollment.serviceProgramId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+        settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
+      },
+      select: { id: true },
+    });
+    if (!program) return { outcome: 'NOT_FOUND' };
 
     const eventWhere = {
       workspaceId_groupId_idempotencyKey: {
