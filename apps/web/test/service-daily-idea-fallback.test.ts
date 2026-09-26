@@ -47,9 +47,27 @@ describe('service daily idea fallback', () => {
     expect(first.body).not.toContain('紹介しましょう');
     expect(first.hashtags).toEqual(['#テスト食堂', '#飲食', '#日替わり定食']);
     expect(first.photoInstruction).toContain('日替わり定食');
-    expect(first.reason).toContain('business-daily-personalized-fallback-v5-feedback-loop');
+    expect(first.reason).toContain('business-daily-personalized-fallback-v6-grounded-knowledge');
     expect(first.body).toContain(personalized.strategyTarget);
     expect(first.body).toContain(personalized.socialPurpose);
+  });
+
+  it('uses an approved knowledge fact and records its source in the fallback reason', () => {
+    const result = buildServiceDailyIdeaFallback({
+      missionDate: '2026-09-26',
+      industry: '情報発信',
+      businessName: '千ノ国メディア',
+      productService: 'ORI会員向け情報',
+      targetAudience: '歴史に興味がある人',
+      approvedFact: 'ORIでは承認済みの地域史資料を会員向けに紹介しています。',
+      approvedFactLabel: 'ORI公式資料',
+      category: 'HELPFUL_EXPERTISE',
+      ...personalized,
+    });
+
+    expect(result.body).toContain('承認済みの地域史資料');
+    expect(result.reason).toContain('ORI公式資料');
+    expect(result.topic).toContain(personalized.weeklyAngle);
   });
 
   it('softens the fallback CTA after the user rejects sales-heavy content', () => {

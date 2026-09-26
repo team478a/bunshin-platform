@@ -13,7 +13,8 @@ import { inspectDailyMissionContent } from './daily-mission-content-quality';
 import type { FallbackFeedbackPreference } from './daily-mission-learning-history';
 import { loadServiceGenerationKnowledge } from './service-generation-knowledge';
 
-const FALLBACK_VERSION = 'business-daily-personalized-fallback-v5-feedback-loop';
+const FALLBACK_VERSION = 'business-daily-personalized-fallback-v6-grounded-knowledge';
+const MAX_FALLBACK_CANDIDATES = 5;
 
 const categoryAngles: Record<BusinessContentCategory, string> = {
   HELPFUL_EXPERTISE: 'お客様が今日から使える、商品・サービス選びの小さなコツ',
@@ -76,13 +77,20 @@ export function buildServiceDailyIdeaFallback(input: {
   bunshinObjective: string;
   bunshinAudience: string;
   feedbackPreference?: FallbackFeedbackPreference;
+  approvedFact?: string;
+  approvedFactLabel?: string;
 }) {
   const category = input.category ?? 'PRODUCT_SERVICE';
   const angle = `${categoryAngles[category]}。${input.weeklyAngle}`;
-  const topic = `${input.bunshinAudience}へ伝える「${input.productService}」の話`;
-  const approvedFact = input.businessFeatures?.trim()
-    ? input.businessFeatures.trim().replace(/[。.!！]+$/u, '。')
-    : `${input.businessName}では、分かりやすいご案内を大切にしています。`;
+  const topic = `${input.bunshinAudience}へ伝える「${input.weeklyAngle}」と${input.productService}`;
+  const approvedFact = input.approvedFact?.trim()
+    ? input.approvedFact
+        .trim()
+        .slice(0, 600)
+        .replace(/[。.!！]+$/u, '。')
+    : input.businessFeatures?.trim()
+      ? input.businessFeatures.trim().replace(/[。.!！]+$/u, '。')
+      : `${input.businessName}では、分かりやすいご案内を大切にしています。`;
   const hashtags = [
     hashtag(input.businessName),
     hashtag(input.industry),
@@ -114,7 +122,7 @@ ${input.platform}での「${input.socialPurpose}」に合わせて、${closing}`
       version: FALLBACK_VERSION,
       topic,
       angle,
-      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。本人の直近フィードバック調整=${feedbackPreference}。`,
+      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。本人の週間計画と直近フィードバックを使用し、承認済み情報=${input.approvedFactLabel ?? '事業者プロフィール'}、調整=${feedbackPreference}。`,
       body,
       cta: closing,
       hashtags,
@@ -229,26 +237,6 @@ export async function createServiceDailyIdeaFallback(input: {
     actorUserId: input.actorUserId,
     bunshinId: input.bunshinId,
   });
-  const idea = buildServiceDailyIdeaFallback({
-    missionDate: input.missionDate,
-    industry: profile.otherIndustryText || profile.primaryIndustry.name,
-    businessName: profile.businessName,
-    productService: profile.productService,
-    targetAudience: profile.targetAudience,
-    businessFeatures: profile.businessFeatures,
-    preferredTone: profile.preferredTone,
-    category: weeklyItem?.businessContentCategory ?? null,
-    platform: socialProfile.platform,
-    socialPurpose: socialProfile.purpose,
-    strategyTarget: strategy.targetSummary,
-    strategyPositioning: strategy.positioning,
-    weeklyGoal: weeklyItem.goal,
-    weeklyAngle: weeklyItem.angle,
-    bunshinObjective: bunshin.objectiveSummary,
-    bunshinAudience: bunshin.audienceSummary,
-    feedbackPreference: serviceKnowledge.personalization.fallbackPreference,
-    ...(serviceConfiguration ? { serviceSlug: serviceConfiguration.slug } : {}),
-  });
   const missionRepository = new db.PrismaDailyMissionRepository();
   const from = new Date(`${input.missionDate}T00:00:00.000Z`);
   from.setUTCDate(from.getUTCDate() - 28);
@@ -262,21 +250,85 @@ export async function createServiceDailyIdeaFallback(input: {
       .toISOString()
       .slice(0, 10),
   });
-  const content = {
-    body: idea.body,
-    threadParts: [],
-    cta: idea.cta,
-    caption: idea.body,
-    hashtags: idea.hashtags,
-    photoInstruction: idea.photoInstruction,
-  } as const;
-  const issue = inspectDailyMissionContent({ content, recentMissions });
-  if (issue)
+  const approvedFacts = [
+    ...(profile.businessFeatures?.trim()
+      ? [{ id: null, label: '事業者プロフィール', content: profile.businessFeatures.trim() }]
+      : []),
+    ...serviceKnowledge.groupKnowledge
+      .filter(({ type, content }) => type !== 'RULE' && content.trim())
+      .map(({ chunkId, sourceLabel, content }) => ({
+        id: chunkId,
+        label: sourceLabel,
+        content: content.trim(),
+      })),
+  ].slice(0, MAX_FALLBACK_CANDIDATES);
+  if (approvedFacts.length === 0)
     throw new ApplicationError(
       'CONTENT_REJECTED',
-      'fallback mission failed the same novelty gate as normal generation',
-      issue,
+      'personalized fallback has no approved fact; do not deliver a generic template',
     );
+  const candidateInput = {
+    missionDate: input.missionDate,
+    industry: profile.otherIndustryText || profile.primaryIndustry.name,
+    businessName: profile.businessName,
+    productService: profile.productService,
+    targetAudience: profile.targetAudience,
+    businessFeatures: profile.businessFeatures,
+    preferredTone: profile.preferredTone,
+    category: weeklyItem.businessContentCategory ?? null,
+    platform: socialProfile.platform,
+    socialPurpose: socialProfile.purpose,
+    strategyTarget: strategy.targetSummary,
+    strategyPositioning: strategy.positioning,
+    weeklyGoal: weeklyItem.goal,
+    weeklyAngle: weeklyItem.angle,
+    bunshinObjective: bunshin.objectiveSummary,
+    bunshinAudience: bunshin.audienceSummary,
+    feedbackPreference: serviceKnowledge.personalization.fallbackPreference,
+    ...(serviceConfiguration ? { serviceSlug: serviceConfiguration.slug } : {}),
+  };
+  let selected:
+    | {
+        idea: ReturnType<typeof buildServiceDailyIdeaFallback>;
+        content: {
+          body: string;
+          threadParts: readonly string[];
+          cta: string;
+          caption: string;
+          hashtags: string[];
+          photoInstruction: string;
+        };
+        knowledgeChunkId: string | null;
+      }
+    | undefined;
+  let lastIssue: ReturnType<typeof inspectDailyMissionContent> = null;
+  for (const fact of approvedFacts) {
+    const idea = buildServiceDailyIdeaFallback({
+      ...candidateInput,
+      approvedFact: fact.content,
+      approvedFactLabel: fact.label,
+    });
+    const content = {
+      body: idea.body,
+      threadParts: [] as const,
+      cta: idea.cta,
+      caption: idea.body,
+      hashtags: idea.hashtags,
+      photoInstruction: idea.photoInstruction,
+    };
+    lastIssue = inspectDailyMissionContent({ content, recentMissions });
+    if (!lastIssue) {
+      selected = { idea, content, knowledgeChunkId: fact.id };
+      break;
+    }
+  }
+  if (!selected)
+    throw new ApplicationError(
+      'CONTENT_REJECTED',
+      'all approved fallback candidates failed the same novelty gate as normal generation',
+      { candidateCount: approvedFacts.length, lastIssue },
+    );
+  const { idea, content, knowledgeChunkId } = selected;
   const fallbackSourceTypes = [
     'BUNSHIN_PROFILE',
     'BUSINESS_PROFILE',
@@ -306,7 +358,7 @@ export async function createServiceDailyIdeaFallback(input: {
         personality: null,
         selectedMemories: [],
         knowledge: [],
-        groupKnowledge: serviceKnowledge.groupKnowledge.map(({ chunkId }) => ({ id: chunkId })),
+        groupKnowledge: knowledgeChunkId ? [{ id: knowledgeChunkId }] : [],
         socialProfile: { id: socialProfile.id },
         strategy: { id: strategy.id, version: strategy.version },
         weeklyPlan: { id: weeklyItem.weeklyPlan.id },
