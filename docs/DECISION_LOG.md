@@ -2693,3 +2693,11 @@
 - Minimum input: 初回は業種、店舗・会社名、商品・サービス、届けたい顧客、SNS目的を取得する。
 - Deferred profile: 事業の特徴、Tone、地域、Webサイト、価格、必須・禁止事項は利用開始後の既存1問補完へ回す。設定済みの値は変更しない。
 - Generation safety: Bunshin生成に必要な特徴とToneには明示した安全な初期値を保存し、空値のまま生成経路へ渡さない。
+
+# 2026-09-26: SNS行動停止要因は行動証拠から推定し、本人回答でのみ確定する
+
+- Status: 配信、閲覧、採用、コピー、投稿、反応の集計だけで分かるのは候補までとし、推定結果は必ず`SUSPECTED`で返す。`CONFIRMED`への変更は後続の本人回答フローに限定する。
+- Evidence: Workspace、Service、User、Bunshin、観測期間、集計値、閾値、Rule Versionを追跡し、回答本文や投稿本文などの個人情報は証跡へ複製しない。
+- Availability: システム障害期間を除外した集計だけを入力し、有効観測日が0日の場合は推定しない。除外日数は監査用に保持する。
+- Measurement gap: 投稿実績があってもInsightが未記録なら効果不足と断定せず`UNKNOWN`とし、測定できる状態かを先に確認する。
+- Boundary: 推定関数は`capability-social`内の決定的なDomain Ruleとし、DB保存、本人への質問、支援内容の決定は後続PRへ分離する。
