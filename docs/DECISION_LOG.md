@@ -2661,3 +2661,11 @@
 - Learning: 単発の評価や不採用理由は参考情報に留め、同じ傾向が直近履歴で2回以上確認された場合だけfallback方針を変更する。良かった投稿も原稿を再利用せず、読者価値を別の疑問・場面へ展開する。
 - Audit: 運営者にはGenerationContextSnapshotの情報種別・参照件数・生成経路・品質結果だけを表示し、本人の回答本文やMemory本文は表示しない。
 - Boundary: 集計と表示はWorkspace・Service配下のBunshinに限定し、User/Bunshin間の履歴を混在させない。
+
+# 2026-09-26: 現行の依存境界をAST検査で固定する
+
+- Authorization: 2026-09-26のユーザー指示により、旧Phase指示の整理と設計境界の自動検査追加を許可された。不変の安全原則は弱めない。
+- Scope: `platform-domain`、`shared`、`capability-contract`から実装層への逆流、`application`からDB/UI/個別Providerへの直接依存、未公開package subpathと相対パスによるpackage越境を検査する。
+- Allowed direction: `database`がapplication/capabilityのPortを実装する依存と、`apps/web` composition rootでの公開packageの組み立ては許可する。
+- Enforcement: TypeScript ASTによる実source検査を`pnpm lint`へ、禁止・許可fixtureによる検査自体のテストを`pnpm test`へ接続する。
+- Limits: 非Literalの動的import、runtimeのtenant条件、未確定のCapability間依存はこの検査だけで保証しない。個別例外や自動更新allowlistは追加しない。
