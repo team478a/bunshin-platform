@@ -32,27 +32,6 @@ const photoDirections: Record<BusinessContentCategory, string> = {
   PRODUCT_SERVICE: '商品やサービスの全体が分かる物を、明るい場所で正面から撮ります',
 };
 
-const fallbackIntroductions: Record<
-  BusinessContentCategory,
-  (input: {
-    businessName: string;
-    productService: string;
-    targetAudience: string;
-    approvedFact: string;
-  }) => string
-> = {
-  HELPFUL_EXPERTISE: ({ productService, targetAudience, approvedFact }) =>
-    `${targetAudience}の皆さまが${productService}を選ぶときに、知っておいていただきたいことがあります。\n\n${approvedFact}`,
-  COMPANY_STAFF: ({ businessName, productService, approvedFact }) =>
-    `${businessName}が${productService}をご案内するときに、大切にしていることがあります。\n\n${approvedFact}`,
-  FAQ_PROBLEM: ({ productService, targetAudience, approvedFact }) =>
-    `${targetAudience}の皆さまから、${productService}についてご相談をいただくことがあります。\n\nご案内の基本は次のとおりです。${approvedFact}`,
-  CASE_STUDY: ({ productService, targetAudience, approvedFact }) =>
-    `${targetAudience}の皆さまが${productService}を検討する場面で、先に確認していただきたいことがあります。\n\n${approvedFact}`,
-  PRODUCT_SERVICE: ({ productService, targetAudience, approvedFact }) =>
-    `${targetAudience}の皆さまへ、${productService}についてお伝えします。\n\n${approvedFact}`,
-};
-
 function hashtag(value: string) {
   const normalized = value.replace(/[\s#・、。,.!！?？()（）/\\]+/g, '');
   return normalized ? `#${normalized.slice(0, 40)}` : null;
@@ -103,26 +82,21 @@ export function buildServiceDailyIdeaFallback(input: {
       : feedbackPreference === 'SIMPLE'
         ? 'まずは一つだけ確認してみてください。'
         : `気になる点は${input.businessName}へお気軽にお尋ねください。`;
-  const body = `${input.strategyTarget}へ。
+  // Keep the approved daily fact and Weekly Plan angle as the substantive majority of the post.
+  // A long fixed shell would cause otherwise distinct daily facts to become near-duplicates.
+  const body = `${input.weeklyAngle}
 
-${input.bunshinAudience}に「${input.bunshinObjective}」を届けるため、${input.weeklyGoal}につながる今日の視点は「${input.weeklyAngle}」です。
+${approvedFact}
 
-${fallbackIntroductions[category]({
-  businessName: input.businessName,
-  productService: input.productService,
-  targetAudience: input.targetAudience,
-  approvedFact,
-})}
+${input.strategyTarget}へ。${input.weeklyGoal}という目的に沿って、${input.strategyPositioning}
 
-${input.strategyPositioning}
-
-${input.platform}での「${input.socialPurpose}」に合わせて、${closing}`;
+${closing}`;
   return applyServiceContentTerminology(
     {
       version: FALLBACK_VERSION,
       topic,
       angle,
-      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。本人の週間計画と直近フィードバックを使用し、承認済み情報=${input.approvedFactLabel ?? '事業者プロフィール'}、調整=${feedbackPreference}。`,
+      reason: `${FALLBACK_VERSION}: AIを利用できない場合の審査済み予備案です。本人の週間計画と直近フィードバックを使用し、承認済み情報=${input.approvedFactLabel ?? '事業者プロフィール'}、個別化=${input.bunshinObjective}/${input.socialPurpose}、調整=${feedbackPreference}。`,
       body,
       cta: closing,
       hashtags,

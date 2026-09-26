@@ -49,7 +49,7 @@ describe('service daily idea fallback', () => {
     expect(first.photoInstruction).toContain('日替わり定食');
     expect(first.reason).toContain('business-daily-personalized-fallback-v6-grounded-knowledge');
     expect(first.body).toContain(personalized.strategyTarget);
-    expect(first.body).toContain(personalized.socialPurpose);
+    expect(first.reason).toContain(personalized.socialPurpose);
   });
 
   it('uses an approved knowledge fact and records its source in the fallback reason', () => {
@@ -135,6 +135,54 @@ describe('service daily idea fallback', () => {
         ],
       })?.code,
     ).toMatch(/EXACT_RECENT_CONTENT|SUBSTANTIAL_RECENT_OVERLAP/);
+  });
+
+  it('accepts a different approved fact and weekly-plan question for the same participant', () => {
+    const shared = {
+      missionDate: '2026-09-18',
+      industry: '情報発信',
+      businessName: '千ノ国メディア',
+      productService: 'ORI会員向け地域史資料',
+      targetAudience: '歴史を学び始めた人',
+      category: 'HELPFUL_EXPERTISE' as const,
+      ...personalized,
+    };
+    const first = buildServiceDailyIdeaFallback({
+      ...shared,
+      weeklyGoal: '城跡を見る最初の手がかりを届ける',
+      weeklyAngle: '石垣の角から積み直しの時期を考える',
+      approvedFact: '石垣の角には、異なる時期の積み方が残ることがあります。',
+      approvedFactLabel: '承認済み城跡資料',
+    });
+    const second = buildServiceDailyIdeaFallback({
+      ...shared,
+      weeklyGoal: '古文書を読む順番を届ける',
+      weeklyAngle: '書状の日付と季節の記述を照らし合わせる',
+      approvedFact: '書状の日付と季節の記述は、出来事の時期を考える手がかりになります。',
+      approvedFactLabel: '承認済み古文書資料',
+    });
+    const content = (idea: typeof first) => ({
+      body: idea.body,
+      threadParts: [],
+      cta: idea.cta,
+      caption: idea.body,
+      hashtags: idea.hashtags,
+      photoInstruction: idea.photoInstruction,
+    });
+
+    expect(
+      inspectDailyMissionContent({
+        content: content(second),
+        recentMissions: [
+          {
+            missionDate: '2026-09-17',
+            topic: first.topic,
+            angle: first.angle,
+            content: content(first),
+          },
+        ],
+      }),
+    ).toBeNull();
   });
 
   it('applies service terminology to the fallback path', () => {
