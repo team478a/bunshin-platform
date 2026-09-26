@@ -3061,12 +3061,37 @@ integration('database ownership boundaries', () => {
         strategySummary: '変更',
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const contentPillars = new PrismaContentPillarRepository(client);
+    await expect(
+      new DeactivateContentPillar(contentPillars, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        pillarId: pillar.id,
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'content pillar is referenced by a confirmed weekly plan',
+    });
+    await expect(
+      new DeleteContentPillar(contentPillars, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        pillarId: pillar.id,
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'content pillar is referenced by a confirmed weekly plan',
+    });
     await expect(
       new ExpireWeeklyPlan(repository, assignments).execute({
         ...ownerScope(owner, bunshin.id),
         weeklyPlanId: plan.id,
       }),
     ).resolves.toMatchObject({ status: 'EXPIRED' });
+    await expect(
+      new DeactivateContentPillar(contentPillars, assignments).execute({
+        ...ownerScope(owner, bunshin.id),
+        pillarId: pillar.id,
+      }),
+    ).resolves.toMatchObject({ active: false });
   });
 
   it('persists Daily Mission and content atomically with date uniqueness and transitions', async () => {
