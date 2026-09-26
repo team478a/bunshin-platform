@@ -3,33 +3,9 @@ import type {
   ServiceLineBroadcastSegment,
 } from '@bunshin/application';
 import { type Prisma, type PrismaClient, prisma } from './client';
+import { canManageServiceLineBroadcast } from './service-line-broadcast-scope';
 
 type Client = PrismaClient | Prisma.TransactionClient;
-
-async function canManage(
-  client: Client,
-  input: {
-    workspaceId: string;
-    groupId: string;
-    actorUserId: string;
-  },
-) {
-  return client.groupMembership.findFirst({
-    where: {
-      workspaceId: input.workspaceId,
-      groupId: input.groupId,
-      userId: input.actorUserId,
-      status: 'ACTIVE',
-      serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
-      group: {
-        status: 'ACTIVE',
-        workspace: { status: 'ACTIVE' },
-        serviceConfiguration: { isNot: null },
-      },
-    },
-    select: { id: true },
-  });
-}
 
 async function eligibleRecipients(
   client: Client,
@@ -73,14 +49,15 @@ export class PrismaServiceLineBroadcastAudienceRepository implements ServiceLine
   constructor(private readonly client: PrismaClient = prisma) {}
 
   async preview(input: Parameters<ServiceLineBroadcastAudienceRepository['preview']>[0]) {
-    if (!(await canManage(this.client, input))) return null;
+    if (!(await canManageServiceLineBroadcast(this.client, input))) return null;
     const recipients = await eligibleRecipients(this.client, input);
     return { recipientCount: Math.min(recipients.length, 500), capped: recipients.length > 500 };
   }
 
   async schedule(input: Parameters<ServiceLineBroadcastAudienceRepository['schedule']>[0]) {
     return this.client.$transaction(async (tx) => {
-      if (!(await canManage(tx, input))) return { kind: 'ACCESS_DENIED' as const };
+      if (!(await canManageServiceLineBroadcast(tx, input)))
+        return { kind: 'ACCESS_DENIED' as const };
       const configuration = await tx.groupLineChannelConfiguration.findFirst({
         where: {
           workspaceId: input.workspaceId,

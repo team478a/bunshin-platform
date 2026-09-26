@@ -1,6 +1,10 @@
 import 'server-only';
 import { requestIdFromHeader } from '@bunshin/observability';
-import { EnqueueJob, ServiceLineBroadcastAudienceService } from '@bunshin/application';
+import {
+  EnqueueJob,
+  ServiceLineBroadcastAudienceService,
+  ServiceLineBroadcastOperationsService,
+} from '@bunshin/application';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
@@ -90,19 +94,15 @@ export async function listServiceLineBroadcastsResponse(request: Request, servic
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
-    const rows = await db.prisma.serviceLineBroadcast.findMany({
-      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-      include: { recipients: { select: { status: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 30,
-    });
-    const industries = await db.prisma.industry.findMany({
-      where: { status: 'ACTIVE' },
-      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-      select: { id: true, name: true },
+    const result = await new ServiceLineBroadcastOperationsService(
+      new db.PrismaServiceLineBroadcastOperationsRepository(),
+    ).list({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
     });
     return Response.json({
-      data: rows.map((row) => ({
+      data: result.broadcasts.map((row) => ({
         id: row.id,
         title: row.title,
         message: row.message,
@@ -110,13 +110,10 @@ export async function listServiceLineBroadcastsResponse(request: Request, servic
         scheduledAt: row.scheduledAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
         completedAt: row.completedAt?.toISOString() ?? null,
-        segment: row.segmentCriteria,
-        recipients: row.recipients.reduce<Record<string, number>>((result, item) => {
-          result[item.status] = (result[item.status] ?? 0) + 1;
-          return result;
-        }, {}),
+        segment: row.segment,
+        recipients: row.recipientCounts,
       })),
-      options: { industries },
+      options: { industries: result.industries },
       requestId,
     });
   } catch (error) {
@@ -184,54 +181,27 @@ export async function retryServiceLineBroadcastResponse(
     const value = retrySchema.parse(await request.json());
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
-    const broadcast = await db.prisma.serviceLineBroadcast.findFirst({
-      where: { id: broadcastId, workspaceId: service.workspaceId, groupId: service.serviceId },
-      select: { id: true, status: true, updatedByUserId: true },
+    const retried = await new ServiceLineBroadcastOperationsService(
+      new db.PrismaServiceLineBroadcastOperationsRepository(),
+    ).retry({
+      environment: currentLineEnvironment(),
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      broadcastId,
+      actorUserId: actor.userId,
+      reason: value.reason,
     });
-    if (!broadcast || broadcast.status !== 'COMPLETED')
-      throw new ApplicationError('CONFLICT', 'broadcast cannot be retried');
-    const reset = await db.prisma.serviceLineBroadcastRecipient.updateMany({
-      where: {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        broadcastId,
-        status: 'FAILED',
-      },
-      data: { status: 'PENDING', errorCategory: null },
-    });
-    if (!reset.count) throw new ApplicationError('CONFLICT', 'no failed recipients to retry');
-    const now = new Date();
-    await db.prisma.$transaction([
-      db.prisma.serviceLineBroadcast.update({
-        where: { id: broadcastId },
-        data: {
-          status: 'SCHEDULED',
-          scheduledAt: now,
-          completedAt: null,
-          updatedByUserId: actor.userId,
-        },
-      }),
-      db.prisma.serviceLineBroadcastAuditLog.create({
-        data: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          broadcastId,
-          action: 'RETRY_REQUESTED',
-          beforeData: { failedRecipients: reset.count },
-          afterData: { scheduledAt: now.toISOString() },
-          reason: value.reason,
-          performedByUserId: actor.userId,
-        },
-      }),
-    ]);
     await enqueueBroadcastJob({
       workspaceId: service.workspaceId,
       broadcastId,
       actorUserId: actor.userId,
-      scheduledAt: now,
-      attempt: Date.now(),
+      scheduledAt: retried.scheduledAt,
+      attempt: retried.scheduledAt.getTime(),
     });
-    return Response.json({ data: { broadcastId, retried: reset.count }, requestId });
+    return Response.json(
+      { data: { broadcastId, retried: retried.recipientCount }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
   } catch (error) {
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, { status: mapped.status });
@@ -251,50 +221,20 @@ export async function cancelServiceLineBroadcastResponse(
     const value = cancelSchema.parse(await request.json());
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
-    const broadcast = await db.prisma.serviceLineBroadcast.findFirst({
-      where: {
-        id: broadcastId,
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-        status: 'SCHEDULED',
-      },
-      select: { id: true },
+    const cancelled = await new ServiceLineBroadcastOperationsService(
+      new db.PrismaServiceLineBroadcastOperationsRepository(),
+    ).cancel({
+      environment: currentLineEnvironment(),
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      broadcastId,
+      actorUserId: actor.userId,
+      reason: value.reason,
     });
-    if (!broadcast) throw new ApplicationError('CONFLICT', 'broadcast cannot be cancelled');
-    const now = new Date();
-    await db.prisma.$transaction([
-      db.prisma.serviceLineBroadcast.update({
-        where: { id: broadcastId },
-        data: { status: 'CANCELLED', cancelledAt: now, updatedByUserId: actor.userId },
-      }),
-      db.prisma.serviceLineBroadcastRecipient.updateMany({
-        where: { broadcastId, status: 'PENDING' },
-        data: { status: 'CANCELLED' },
-      }),
-      db.prisma.job.updateMany({
-        where: {
-          workspaceId: service.workspaceId,
-          environment: currentLineEnvironment(),
-          jobType: 'SERVICE_LINE_BROADCAST_DELIVER',
-          payloadReference: `service-line-broadcast:${broadcastId}`,
-          status: { in: ['PENDING', 'RETRY_SCHEDULED'] },
-        },
-        data: { status: 'CANCELLED', cancelledAt: now },
-      }),
-      db.prisma.serviceLineBroadcastAuditLog.create({
-        data: {
-          workspaceId: service.workspaceId,
-          groupId: service.serviceId,
-          broadcastId,
-          action: 'CANCELLED',
-          beforeData: { status: 'SCHEDULED' },
-          afterData: { cancelledAt: now.toISOString() },
-          reason: value.reason,
-          performedByUserId: actor.userId,
-        },
-      }),
-    ]);
-    return Response.json({ data: { broadcastId, cancelledAt: now.toISOString() }, requestId });
+    return Response.json(
+      { data: { broadcastId, cancelledAt: cancelled.cancelledAt.toISOString() }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
   } catch (error) {
     const mapped = toApiError(error, requestId);
     return Response.json(mapped.body, { status: mapped.status });
@@ -308,45 +248,14 @@ export async function exportServiceLineBroadcastsResponse(request: Request, serv
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const service = await resolveManagedServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
-    const broadcasts = await db.prisma.serviceLineBroadcast.findMany({
-      where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-      include: { recipients: { select: { status: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 5_000,
+    const csv = await new ServiceLineBroadcastOperationsService(
+      new db.PrismaServiceLineBroadcastOperationsRepository(),
+    ).exportCsv({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
     });
-    const cell = (value: string | number | null) =>
-      `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const rows = [
-      [
-        '件名',
-        '状態',
-        '予約日時',
-        '作成日時',
-        '完了日時',
-        '送信成功',
-        '送信失敗',
-        '対象外',
-        '取消',
-      ],
-      ...broadcasts.map((broadcast) => {
-        const count = broadcast.recipients.reduce<Record<string, number>>((result, recipient) => {
-          result[recipient.status] = (result[recipient.status] ?? 0) + 1;
-          return result;
-        }, {});
-        return [
-          broadcast.title,
-          broadcast.status,
-          broadcast.scheduledAt?.toISOString() ?? null,
-          broadcast.createdAt.toISOString(),
-          broadcast.completedAt?.toISOString() ?? null,
-          count.SENT ?? 0,
-          count.FAILED ?? 0,
-          count.SKIPPED ?? 0,
-          count.CANCELLED ?? 0,
-        ];
-      }),
-    ];
-    return new Response(`\uFEFF${rows.map((row) => row.map(cell).join(',')).join('\r\n')}`, {
+    return new Response(csv, {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
         'content-disposition': 'attachment; filename="line-broadcasts.csv"',
