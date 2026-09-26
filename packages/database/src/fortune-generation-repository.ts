@@ -188,7 +188,7 @@ export class PrismaFortuneGenerationRepository {
   }): Promise<FortuneReadingView | null> {
     const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
-    await this.db.fortuneReading.updateMany({
+    const updated = await this.db.fortuneReading.updateMany({
       where: {
         id: input.readingId,
         serviceSettingId: scope.id,
@@ -197,6 +197,7 @@ export class PrismaFortuneGenerationRepository {
       },
       data: { status: 'READY_BASIC', failureCode: input.failureCode, modelName: null },
     });
+    if (updated.count !== 1) return null;
     const row = await this.db.fortuneReading.findFirst({
       where: {
         id: input.readingId,
