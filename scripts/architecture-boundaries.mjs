@@ -13,6 +13,7 @@ const CORE_PACKAGES = new Set([
 ]);
 
 const APPLICATION_FORBIDDEN_EXTERNALS = [
+  '@prisma/client',
   'next',
   'react',
   'react-dom',
