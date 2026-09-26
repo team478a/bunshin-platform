@@ -56,12 +56,32 @@ type ResponseValue = {
   error?: unknown;
 };
 
+const PROVIDER_TIMEOUT_MS = 55_000;
+
 function providerErrorDetails(status: number, error: unknown) {
   const code =
     error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
       ? error.code.slice(0, 100)
       : null;
   return { provider: 'openai', httpStatus: status, providerErrorCode: code };
+}
+
+function unavailable(reason: string, cause?: Record<string, unknown>) {
+  return new ApplicationError(
+    'AI_PROVIDER_UNAVAILABLE',
+    'daily mission planner provider unavailable',
+    { provider: 'openai', reason, ...cause },
+  );
+}
+
+function parseResponseValue(body: string): ResponseValue | null {
+  if (!body.trim()) return null;
+  try {
+    const value: unknown = JSON.parse(body);
+    return value && typeof value === 'object' ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
@@ -98,36 +118,39 @@ export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
             },
           },
         }),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
-    } catch {
-      throw new ApplicationError(
-        'AI_PROVIDER_UNAVAILABLE',
-        'daily mission planner provider unavailable',
-        { provider: 'openai', reason: 'NETWORK_ERROR' },
+    } catch (error) {
+      const name = error instanceof Error ? error.name : '';
+      throw unavailable(
+        ['AbortError', 'TimeoutError'].includes(name) ? 'TIMEOUT' : 'NETWORK_ERROR',
       );
     }
-    const value = (await response.json()) as ResponseValue;
-    if (!response.ok)
+    let body: string;
+    try {
+      body = await response.text();
+    } catch {
+      throw unavailable('RESPONSE_READ_ERROR', { httpStatus: response.status });
+    }
+    const value = parseResponseValue(body);
+    if (!response.ok) {
       throw new ApplicationError(
         'AI_PROVIDER_UNAVAILABLE',
         'daily mission planner provider failed',
-        providerErrorDetails(response.status, value.error),
+        providerErrorDetails(response.status, value?.error),
       );
+    }
+    if (!value) throw unavailable(body.trim() ? 'INVALID_JSON' : 'EMPTY_RESPONSE');
     const text = value.output
       ?.flatMap((item) => item.content ?? [])
       .find((item) => item.type === 'output_text')?.text;
-    if (!text)
-      throw new ApplicationError('INTERNAL_ERROR', 'daily mission planner returned no output');
+    if (!text) throw unavailable('MALFORMED_RESPONSE');
 
     let output: DailyMissionPlannerOutput;
     try {
       output = JSON.parse(text) as DailyMissionPlannerOutput;
-    } catch (error) {
-      throw new ApplicationError(
-        'INTERNAL_ERROR',
-        'daily mission planner returned invalid output',
-        error,
-      );
+    } catch {
+      throw unavailable('MALFORMED_OUTPUT');
     }
     return {
       output,
