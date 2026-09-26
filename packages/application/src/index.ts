@@ -93,6 +93,7 @@ export * from './program-goals-core';
 export * from './ai-character-profile';
 export * from './service-line-broadcast';
 export * from './service-line-broadcast-audience';
+export * from './service-line-broadcast-operations';
 export * from './service-line-broadcast-job';
 export * from './service-referral-credit';
 export * from './service-credit-consumption';
