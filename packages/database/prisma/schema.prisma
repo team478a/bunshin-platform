@@ -1839,6 +1839,18 @@ enum SocialActivityBarrierStatus {
   DISMISSED
 }
 
+enum SocialActivityBarrierConfirmationResponse {
+  CONFIRMED
+  NONE_OF_THESE
+}
+
+enum SocialActivitySupportStatus {
+  OFFERED
+  ACCEPTED
+  COMPLETED
+  SKIPPED
+}
+
 enum PostSource {
   MANUAL
 }
@@ -6929,6 +6941,8 @@ model SocialActivityBarrierCase {
   groupMembership   GroupMembership               @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Cascade, map: "social_activity_barrier_cases_membership_fkey")
   bunshin            Bunshin                       @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade, map: "social_activity_barrier_cases_bunshin_fkey")
   evidenceSnapshots SocialActivityBarrierEvidence[]
+  confirmations     SocialActivityBarrierConfirmation[]
+  supportActions    SocialActivitySupportIntervention[]
 
   @@unique([workspaceId, groupId, groupMembershipId, userId, bunshinId, category], map: "social_activity_barrier_cases_scope_category_key")
   @@unique([workspaceId, groupId, id], map: "social_activity_barrier_cases_scope_id_key")
@@ -6957,6 +6971,44 @@ model SocialActivityBarrierEvidence {
   @@unique([caseId, evidenceKey], map: "social_activity_barrier_evidence_idempotency_key")
   @@index([caseId, detectedAt], map: "social_activity_barrier_evidence_case_detected_idx")
   @@map("social_activity_barrier_evidence")
+}
+
+/// 本人が1問確認へ回答した監査履歴。回答本文は保持しない。
+model SocialActivityBarrierConfirmation {
+  id               String                                    @id @default(uuid()) @db.Uuid
+  caseId           String                                    @map("case_id") @db.Uuid
+  response         SocialActivityBarrierConfirmationResponse
+  selectedCategory SocialActivityBarrierCategory?             @map("selected_category")
+  actorUserId      String                                    @map("actor_user_id") @db.Uuid
+  idempotencyKey   String                                    @unique @map("idempotency_key") @db.VarChar(200)
+  occurredAt       DateTime                                  @map("occurred_at") @db.Timestamptz(6)
+  createdAt        DateTime                                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  barrierCase      SocialActivityBarrierCase                 @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, occurredAt], map: "social_activity_barrier_confirmations_case_idx")
+  @@index([actorUserId, occurredAt], map: "social_activity_barrier_confirmations_actor_idx")
+  @@map("social_activity_barrier_confirmations")
+}
+
+/// 確定した障壁に対して無償で提示する小さな支援。
+model SocialActivitySupportIntervention {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  caseId             String                      @map("case_id") @db.Uuid
+  supportKey         String                      @map("support_key") @db.VarChar(80)
+  status             SocialActivitySupportStatus @default(OFFERED)
+  definitionSnapshot Json                        @map("definition_snapshot")
+  ruleVersion        String                      @map("rule_version") @db.VarChar(80)
+  idempotencyKey     String                      @unique @map("idempotency_key") @db.VarChar(220)
+  offeredAt          DateTime                    @map("offered_at") @db.Timestamptz(6)
+  acceptedAt         DateTime?                   @map("accepted_at") @db.Timestamptz(6)
+  completedAt        DateTime?                   @map("completed_at") @db.Timestamptz(6)
+  skippedAt          DateTime?                   @map("skipped_at") @db.Timestamptz(6)
+  createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  barrierCase        SocialActivityBarrierCase   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, status, offeredAt], map: "social_activity_support_case_status_idx")
+  @@map("social_activity_support_interventions")
 }
 
 model BunshinObjective {
