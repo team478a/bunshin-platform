@@ -197,6 +197,10 @@ export {
   PrismaOrganizationAiGenerationReservationRepository,
 } from './ai-usage';
 export { PrismaActivityContinuityRuleRepository } from './activity-continuity-rules';
+export {
+  PrismaSocialActivityBarrierCaseRepository,
+  PrismaSocialActivityBarrierObservationRepository,
+} from './social-activity-barrier-repository';
 export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';

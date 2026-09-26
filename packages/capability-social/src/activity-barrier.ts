@@ -21,6 +21,7 @@ export type SocialActivityBarrierCategory = (typeof SOCIAL_ACTIVITY_BARRIER_CATE
 export type SocialActivityBarrierScope = {
   workspaceId: string;
   serviceId: string;
+  groupMembershipId: string;
   userId: string;
   bunshinId: string;
 };

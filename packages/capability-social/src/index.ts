@@ -7,6 +7,7 @@ export * from './daily-mission-runtime';
 export * from './mission-engagement';
 export * from './mission-outcomes';
 export * from './activity-barrier';
+export * from './activity-barrier-persistence';
 export {
   assertPlatformFormat,
   normalizeMissionContent,

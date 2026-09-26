@@ -2701,3 +2701,12 @@
 - Availability: システム障害期間を除外した集計だけを入力し、有効観測日が0日の場合は推定しない。除外日数は監査用に保持する。
 - Measurement gap: 投稿実績があってもInsightが未記録なら効果不足と断定せず`UNKNOWN`とし、測定できる状態かを先に確認する。
 - Boundary: 推定関数は`capability-social`内の決定的なDomain Ruleとし、DB保存、本人への質問、支援内容の決定は後続PRへ分離する。
+
+# 2026-09-26: SNS行動停止要因はService MembershipとBunshinの複合境界で保存する
+
+- Scope: Barrier CaseはWorkspace、Service Group、Group Membership、User、Bunshin、Categoryの組で一意にし、RepositoryでActive MembershipとBunshin所有者を再検証する。
+- Projection: 既存`DailyMission`、`MissionActivity`、`MissionDecision`、`PostRecord`、`SocialInsightSnapshot`、`LineMessageDelivery`を読み、同じ役割のActivityテーブルは追加しない。
+- Availability: 生成失敗日とLINE配信失敗日は既存ログから除外する。統一Incident台帳は現段階で新設しない。
+- Idempotency: Caseは現在状態を保持し、EvidenceはRule、Code、Category、観測期間から作るKeyで追記を冪等化する。同一観測の再実行で再発回数を増やさない。
+- Recurrence: RESOLVEDまたはDISMISSEDは`nextEligibleAt`まで再推定を抑止し、期間後の新EvidenceだけでSUSPECTEDへ戻す。
+- Privacy: Evidenceには集計値と閾値だけを保存し、投稿、回答、Prompt、Memoryの本文を保存しない。

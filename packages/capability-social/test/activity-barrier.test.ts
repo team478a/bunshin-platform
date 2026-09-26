@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { socialActivityBarrierEvidenceKey } from '../src/activity-barrier-persistence';
 import {
   inferSocialActivityBarriers,
   type InferSocialActivityBarriersInput,
@@ -11,6 +12,7 @@ function input(
     scope: {
       workspaceId: 'workspace_1',
       serviceId: 'service_1',
+      groupMembershipId: 'membership_1',
       userId: 'user_1',
       bunshinId: 'bunshin_1',
     },
@@ -86,6 +88,7 @@ describe('inferSocialActivityBarriers', () => {
     second.scope = {
       workspaceId: 'workspace_2',
       serviceId: 'service_2',
+      groupMembershipId: 'membership_2',
       userId: 'user_2',
       bunshinId: 'bunshin_2',
     };
@@ -93,6 +96,14 @@ describe('inferSocialActivityBarriers', () => {
     expect(inferSocialActivityBarriers(first)).toEqual(inferSocialActivityBarriers(first));
     expect(inferSocialActivityBarriers(second)[0]?.scope).toEqual(second.scope);
     expect(inferSocialActivityBarriers(first)[0]?.scope).toEqual(first.scope);
+  });
+
+  it('creates a stable evidence idempotency key without copying user content', () => {
+    const candidate = inferSocialActivityBarriers(input({ missionViewed: 4 }))[0]!;
+
+    expect(socialActivityBarrierEvidenceKey(candidate)).toBe(
+      'social-activity-barrier-v1:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
+    );
   });
 
   it('rejects invalid metrics and observation windows', () => {
