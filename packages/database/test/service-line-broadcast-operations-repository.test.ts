@@ -45,6 +45,7 @@ describe('service LINE broadcast operations repository', () => {
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         actorUserId: scope.actorUserId,
+        environment: scope.environment,
         limit: 30,
         includeIndustries: true,
       }),
@@ -70,12 +71,18 @@ describe('service LINE broadcast operations repository', () => {
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'manager-membership' }) },
       serviceLineBroadcast: { findMany },
       industry: { findMany: vi.fn().mockResolvedValue([]) },
+      job: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ payloadReference: `service-line-broadcast:${scope.broadcastId}` }]),
+      },
     } as unknown as PrismaClient;
 
     const result = await new PrismaServiceLineBroadcastOperationsRepository(client).list({
       workspaceId: scope.workspaceId,
       groupId: scope.groupId,
       actorUserId: scope.actorUserId,
+      environment: scope.environment,
       limit: 30,
       includeIndustries: true,
     });
@@ -86,7 +93,10 @@ describe('service LINE broadcast operations repository', () => {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 30,
     });
-    expect(result?.broadcasts[0]?.recipientCounts).toEqual({ SENT: 2, FAILED: 1 });
+    expect(result?.broadcasts[0]).toMatchObject({
+      recipientCounts: { SENT: 2, FAILED: 1 },
+      recoveryAttempts: 1,
+    });
   });
 
   it('atomically claims a completed broadcast, resets failed recipients and audits retry', async () => {

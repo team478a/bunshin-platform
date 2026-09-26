@@ -70,6 +70,7 @@ describe('service LINE broadcast operation HTTP boundaries', () => {
           completedAt: null,
           segment: {},
           recipientCounts: { SENT: 1 },
+          recoveryAttempts: 1,
         },
       ],
       industries: [],
@@ -92,7 +93,15 @@ describe('service LINE broadcast operation HTTP boundaries', () => {
     const listResponse = await listServiceLineBroadcastsResponse(request('GET'), 'service');
     expect(listResponse.status).toBe(200);
     await expect(listResponse.json()).resolves.toMatchObject({
-      data: [{ id: 'broadcast-1', recipients: { SENT: 1 } }],
+      data: [
+        {
+          id: 'broadcast-1',
+          recipients: { SENT: 1 },
+          operationalStatus: 'RECOVERED',
+          recoveryAttempts: 1,
+        },
+      ],
+      health: { deliveredRecipients: 1, recoveryAttempts: 1 },
     });
 
     const exportResponse = await exportServiceLineBroadcastsResponse(request('GET'), 'service');
@@ -102,6 +111,7 @@ describe('service LINE broadcast operation HTTP boundaries', () => {
       workspaceId: 'workspace-1',
       groupId: 'group-1',
       actorUserId: 'manager-1',
+      environment: 'PRODUCTION',
       limit: 30,
       includeIndustries: true,
     });
@@ -109,6 +119,7 @@ describe('service LINE broadcast operation HTTP boundaries', () => {
       workspaceId: 'workspace-1',
       groupId: 'group-1',
       actorUserId: 'manager-1',
+      environment: 'PRODUCTION',
       limit: 5_000,
       includeIndustries: false,
     });
