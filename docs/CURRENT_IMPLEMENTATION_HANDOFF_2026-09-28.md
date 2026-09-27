@@ -63,7 +63,7 @@
 1. 最新 `origin/main`を現行実装の基準とする。
 2. 旧 `bunshin-blog`系の211commitをplatformへ載せようとした停止中rebaseは、継続しない。現行platformの658commitを上書きする巨大な競合解消になり、既存のBLOG再利用方針としても粒度が大きすぎる。
 3. 停止中rebaseは元checkoutにそのまま保存し、最新mainから独立worktree / branchを作って引き継ぐ。
-4. `AGENTS.md`やv1.0仕様の制約を暗黙に弱めない。一方で現行実装との差分は、文書の改訂承認が必要なGovernance課題として扱う。
+4. 最新mainの `AGENTS.md` にある不変の制約を暗黙に弱めない。v1.0仕様と現行実装の差分は、Decision Logと最新機能文書を併用する現行ルールに従い、Governance課題として扱う。
 5. Production実運用の完了と、コード実装の完了を分けて判定する。
 
 ## 5. 実行した検証
@@ -94,9 +94,10 @@ Node.js `v24.19.0`、pnpm `10.10.0`を使用した。
 
 ### Documentation governance
 
-- `AGENTS.md` のCurrent Priorityは「Phase 2開始前」のままで、現行mainと大きく異なる。
+- 最新mainの `AGENTS.md` は、古いPhase文書を履歴とし、Roadmap、Decision Log、最新機能文書を現行状態の判断材料にする内容へ更新済み。
+- `README.md` は現在もPhase 0〜5完了時点の説明で、LINE、画像・動画、Job、課金が未実装と記載されており、現行mainと矛盾する。
 - 正本はv1.0の初期MVP仕様のままだが、実装は後続の判断ログと個別報告書を根拠に大幅に拡張されている。
-- 次回改訂で、不変のアーキテクチャ原則と、古いPhase / MVP制約を分離する必要がある。
+- 次回の文書作業では、READMEを現行状態へ同期し、v1.0仕様と後続の承認済み決定の関係を読者に明示する必要がある。
 
 ### Production / operation
 
@@ -115,7 +116,7 @@ Node.js `v24.19.0`、pnpm `10.10.0`を使用した。
 
 ## 7. 次へ進める条件
 
-1. 文書の正本および `AGENTS.md` Current Priorityの改訂方針を確定する。
+1. READMEの現行状態への同期と、v1.0仕様から後続のDecision Logへの参照関係を明示する。
 2. コード追加より先に、R0 Production Gateの実施状況と本番証跡を確認する。
 3. AI研修の次実装を行う場合は、上記のBarrier / SHORT variantに関する事業判断を先に決定する。
 4. DB変更を含む作業では、migration、既存データ後方互換、Workspace / Service / Enrollment / User分離testを必須とする。
@@ -124,7 +125,7 @@ Node.js `v24.19.0`、pnpm `10.10.0`を使用した。
 ## 8. 推奨する次の作業順
 
 1. Production Gate / R0の現地証跡回収
-2. `AGENTS.md`と仕様正本の改訂PR
+2. READMEと仕様・現行状態の参照関係を整理する文書PR
 3. AI研修Phase 1の非本番Pilotと品質・利用率計測
 4. 判断済み仕様に基づくBarrier reason / SHORT variantの小さな縦切り
 5. Pilot結果後に、Provider個別化、評価Job化、Practice / Work modeを別々に再判定
