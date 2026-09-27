@@ -1,3 +1,4 @@
+import { SelectBunshinMemories } from '@bunshin/application';
 import type {
   CreateFortuneReadingResult,
   FortuneFeedbackIssue,
@@ -160,6 +161,11 @@ export class PrismaFortuneGenerationRepository {
                 audienceSummary: true,
                 personalitySummary: true,
                 updatedAt: true,
+                memories: {
+                  where: { active: true, deletedAt: null },
+                  orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
+                  take: 10,
+                },
               },
             },
           },
@@ -181,6 +187,34 @@ export class PrismaFortuneGenerationRepository {
         }),
       ]);
       const bunshinProfile = participantProfile?.personalizationBunshin ?? null;
+      const selectedMemories = bunshinProfile
+        ? await new SelectBunshinMemories({
+            list: () =>
+              Promise.resolve(
+                (bunshinProfile.memories ?? []).map((memory) => ({
+                  ...memory,
+                  confidence: memory.confidence.toNumber(),
+                })),
+              ),
+          }).execute({
+            workspaceId: scope.workspaceId,
+            actorUserId: input.actorUserId,
+            bunshinId: bunshinProfile.id,
+            query: [
+              reading.theme,
+              reading.cardCode,
+              reading.readingText,
+              reading.actionStep,
+              bunshinProfile.objectiveSummary,
+              bunshinProfile.audienceSummary,
+              bunshinProfile.personalitySummary,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            maxItems: 3,
+            maxCharacters: 1600,
+          })
+        : [];
       const feedbackIds = recentReadings.flatMap((item) =>
         item.feedback ? [item.feedback.id] : [],
       );
@@ -188,9 +222,10 @@ export class PrismaFortuneGenerationRepository {
         where: { id: reading.id },
         data: {
           personalizationContext: {
-            version: 'fortune-personalization-v1',
+            version: 'fortune-personalization-v2',
             sources: [
               ...(bunshinProfile ? ['PARTICIPANT_BUNSHIN_PROFILE'] : []),
+              ...(selectedMemories.length > 0 ? ['PARTICIPANT_BUNSHIN_MEMORY'] : []),
               ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
               ...(feedbackIds.length > 0 ? ['READING_FEEDBACK'] : []),
             ],
@@ -204,6 +239,7 @@ export class PrismaFortuneGenerationRepository {
               : {}),
             recentReadingIds: recentReadings.map((item) => item.id),
             feedbackIds,
+            memoryIds: selectedMemories.map((memory) => memory.id),
           },
         },
       });
@@ -221,6 +257,16 @@ export class PrismaFortuneGenerationRepository {
                   audienceSummary: bunshinProfile.audienceSummary,
                   personalitySummary: bunshinProfile.personalitySummary,
                 },
+              }
+            : {}),
+          ...(selectedMemories.length > 0
+            ? {
+                memories: selectedMemories.map(({ id, type, summary, content }) => ({
+                  id,
+                  type,
+                  summary,
+                  content,
+                })),
               }
             : {}),
           recentReadings: recentReadings.map((item) => ({

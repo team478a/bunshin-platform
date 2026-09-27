@@ -31,6 +31,14 @@ const claim: FortuneAiGenerationClaim = {
       audienceSummary: '占いを生活のヒントにしたい人',
       personalitySummary: '穏やかで具体的',
     },
+    memories: [
+      {
+        id: 'memory-1',
+        type: 'PREFERENCE',
+        summary: '朝に優先順位を整理する習慣',
+        content: '仕事では朝に今日の優先順位を整理している',
+      },
+    ],
     recentReadings: [
       {
         id: 'reading-previous',
@@ -52,6 +60,7 @@ describe('fortune reading personalization', () => {
     expect(fortuneReadingPromptInput(claim)).toMatchObject({
       personalization: {
         bunshinProfile: { name: '細矢めぐみ', personalitySummary: '穏やかで具体的' },
+        memories: [{ id: 'memory-1', summary: '朝に優先順位を整理する習慣' }],
         recentReadings: [
           {
             id: 'reading-previous',
@@ -61,7 +70,7 @@ describe('fortune reading personalization', () => {
         ],
       },
     });
-    expect(FORTUNE_AI_PROMPT_VERSION).toBe('fortune-daily-reading-v2-personalized');
+    expect(FORTUNE_AI_PROMPT_VERSION).toBe('fortune-daily-reading-v3-participant-memory');
   });
 
   it('keeps generation available when no history exists', () => {

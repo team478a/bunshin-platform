@@ -171,10 +171,35 @@ describe('fortune repository isolation', () => {
       personalizationBunshin: {
         id: '00000000-0000-4000-8000-000000000397',
         name: '本人のBunshin',
-        objectiveSummary: '毎日を整える',
+        objectiveSummary: '朝に仕事の優先順位を整える',
         audienceSummary: '占いを生活のヒントにしたい人',
         personalitySummary: '穏やかで具体的',
         updatedAt: new Date('2026-09-25T00:00:00.000Z'),
+        memories: [
+          {
+            id: '00000000-0000-4000-8000-000000000396',
+            workspaceId: scope.workspaceId,
+            bunshinId: '00000000-0000-4000-8000-000000000397',
+            type: 'PREFERENCE',
+            content: '仕事では、朝に今日の優先順位を整理している',
+            summary: '朝に仕事の優先順位を整理する習慣',
+            sourceType: 'USER_INPUT',
+            sourceId: null,
+            attachmentStatus: null,
+            attachmentStorageKey: null,
+            attachmentMimeType: null,
+            attachmentSizeBytes: null,
+            attachmentWidth: null,
+            attachmentHeight: null,
+            automaticImageReference: false,
+            confidence: { toNumber: () => 0.9 },
+            importance: 5,
+            active: true,
+            deletedAt: null,
+            createdAt: new Date('2026-09-24T00:00:00.000Z'),
+            updatedAt: new Date('2026-09-25T00:00:00.000Z'),
+          },
+        ],
       },
     });
     tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
@@ -210,6 +235,12 @@ describe('fortune repository isolation', () => {
       reading: { id: readingId },
       personalization: {
         bunshinProfile: { name: '本人のBunshin' },
+        memories: [
+          {
+            id: '00000000-0000-4000-8000-000000000396',
+            summary: '朝に仕事の優先順位を整理する習慣',
+          },
+        ],
         recentReadings: [
           {
             id: '00000000-0000-4000-8000-000000000399',
@@ -237,18 +268,41 @@ describe('fortune repository isolation', () => {
         }),
       }),
     );
+    expect(tx.fortuneParticipant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: reading.participantId,
+          serviceSettingId: scope.id,
+          userId: actorUserId,
+          workspaceId: scope.workspaceId,
+          personalizationBunshin: {
+            is: {
+              groupId: scope.groupId,
+              ownerUserId: actorUserId,
+              status: 'ACTIVE',
+            },
+          },
+        }),
+      }),
+    );
     expect(tx.fortuneReading.update).toHaveBeenCalledWith({
       where: { id: readingId },
       data: {
         personalizationContext: {
-          version: 'fortune-personalization-v1',
-          sources: ['PARTICIPANT_BUNSHIN_PROFILE', 'RECENT_READING', 'READING_FEEDBACK'],
+          version: 'fortune-personalization-v2',
+          sources: [
+            'PARTICIPANT_BUNSHIN_PROFILE',
+            'PARTICIPANT_BUNSHIN_MEMORY',
+            'RECENT_READING',
+            'READING_FEEDBACK',
+          ],
           bunshin: {
             id: '00000000-0000-4000-8000-000000000397',
             updatedAt: '2026-09-25T00:00:00.000Z',
           },
           recentReadingIds: ['00000000-0000-4000-8000-000000000399'],
           feedbackIds: ['00000000-0000-4000-8000-000000000398'],
+          memoryIds: ['00000000-0000-4000-8000-000000000396'],
         },
       },
     });
