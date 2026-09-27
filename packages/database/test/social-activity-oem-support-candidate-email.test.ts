@@ -16,6 +16,7 @@ function database(
   const mode = input.mode ?? 'INCLUDED_SUPPORT';
   return {
     client: {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'candidate-1' }]),
       socialActivityOemSupportCandidate: {
         findMany: vi.fn().mockResolvedValue([
           {

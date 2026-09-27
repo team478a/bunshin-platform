@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient, ServiceSupportAlertMode } from '@prisma/client';
+import { Prisma, type PrismaClient, type ServiceSupportAlertMode } from '@prisma/client';
 
 const supportLabel: Record<ServiceSupportAlertMode, string> = {
   OPTIONAL_UPSELL: '有料オプション候補',
@@ -33,8 +33,78 @@ export async function enqueueSocialActivityOemSupportCandidateEmails(
 ) {
   const now = input.now ?? new Date();
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const candidateIds = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT candidate."id"
+    FROM "social_activity_oem_support_candidates" candidate
+    JOIN "social_activity_barrier_cases" barrier_case
+      ON barrier_case."id" = candidate."case_id"
+    JOIN "service_configurations" configuration
+      ON configuration."workspace_id" = barrier_case."workspace_id"
+     AND configuration."group_id" = barrier_case."group_id"
+    JOIN "service_registration_email_configurations" email_configuration
+      ON email_configuration."workspace_id" = barrier_case."workspace_id"
+     AND email_configuration."group_id" = barrier_case."group_id"
+     AND email_configuration."configuration_id" = configuration."id"
+     AND email_configuration."enabled" = true
+     AND email_configuration."last_verified_at" IS NOT NULL
+    LEFT JOIN "service_support_alert_policies" policy
+      ON policy."workspace_id" = barrier_case."workspace_id"
+     AND policy."group_id" = barrier_case."group_id"
+    WHERE candidate."status" = 'OPEN'::"SocialActivityOemSupportCandidateStatus"
+      AND COALESCE(candidate."recommendation_snapshot"->>'handlingMode', 'INTERNAL_ESCALATION') <> 'DISABLED'
+      AND COALESCE(policy."notify_by_email", true) = true
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "social_activity_oem_support_candidate_email_deliveries" delivery
+        WHERE delivery."candidate_id" = candidate."id"
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM "group_memberships" manager
+        JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+        WHERE manager."workspace_id" = barrier_case."workspace_id"
+          AND manager."group_id" = barrier_case."group_id"
+          AND manager."status" = 'ACTIVE'
+          AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+          AND manager_user."status" = 'ACTIVE'
+          AND manager_user."email" IS NOT NULL
+      )
+      AND (
+        NOT EXISTS (
+          SELECT 1
+          FROM "service_notification_preferences" preference
+          JOIN "group_memberships" manager ON manager."id" = preference."group_membership_id"
+          JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+          WHERE manager."workspace_id" = barrier_case."workspace_id"
+            AND manager."group_id" = barrier_case."group_id"
+            AND manager."status" = 'ACTIVE'
+            AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+            AND manager_user."status" = 'ACTIVE'
+            AND manager_user."email" IS NOT NULL
+            AND preference."topic" = 'OEM_SUPPORT_CANDIDATE'
+            AND preference."channel" = 'EMAIL'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM "service_notification_preferences" preference
+          JOIN "group_memberships" manager ON manager."id" = preference."group_membership_id"
+          JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+          WHERE manager."workspace_id" = barrier_case."workspace_id"
+            AND manager."group_id" = barrier_case."group_id"
+            AND manager."status" = 'ACTIVE'
+            AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+            AND manager_user."status" = 'ACTIVE'
+            AND manager_user."email" IS NOT NULL
+            AND preference."topic" = 'OEM_SUPPORT_CANDIDATE'
+            AND preference."channel" = 'EMAIL'
+            AND preference."enabled" = true
+        )
+      )
+    ORDER BY candidate."detected_at" ASC, candidate."id" ASC
+    LIMIT ${limit}
+  `);
   const candidates = await client.socialActivityOemSupportCandidate.findMany({
-    where: { status: 'OPEN', emailDeliveries: { none: {} } },
+    where: { id: { in: candidateIds.map(({ id }) => id) }, status: 'OPEN' },
     orderBy: [{ detectedAt: 'asc' }, { id: 'asc' }],
     take: limit,
     select: {

@@ -47,6 +47,56 @@ export async function scheduleSocialActivityOemSupportCandidateLines(
     SELECT candidate."id"
     FROM "social_activity_oem_support_candidates" candidate
     WHERE candidate."status" = 'OPEN'::"SocialActivityOemSupportCandidateStatus"
+      AND COALESCE(candidate."recommendation_snapshot"->>'handlingMode', 'INTERNAL_ESCALATION') <> 'DISABLED'
+      AND EXISTS (
+        SELECT 1
+        FROM "social_activity_barrier_cases" barrier_case
+        JOIN "service_support_alert_policies" policy
+          ON policy."workspace_id" = barrier_case."workspace_id"
+         AND policy."group_id" = barrier_case."group_id"
+         AND policy."notify_by_line" = true
+        WHERE barrier_case."id" = candidate."case_id"
+          AND EXISTS (
+            SELECT 1
+            FROM "group_memberships" manager
+            JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+            WHERE manager."workspace_id" = barrier_case."workspace_id"
+              AND manager."group_id" = barrier_case."group_id"
+              AND manager."status" = 'ACTIVE'
+              AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+              AND manager_user."status" = 'ACTIVE'
+          )
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM "service_notification_preferences" preference
+              JOIN "group_memberships" manager ON manager."id" = preference."group_membership_id"
+              JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+              WHERE manager."workspace_id" = barrier_case."workspace_id"
+                AND manager."group_id" = barrier_case."group_id"
+                AND manager."status" = 'ACTIVE'
+                AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+                AND manager_user."status" = 'ACTIVE'
+                AND preference."topic" = 'OEM_SUPPORT_CANDIDATE'
+                AND preference."channel" = 'LINE'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM "service_notification_preferences" preference
+              JOIN "group_memberships" manager ON manager."id" = preference."group_membership_id"
+              JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+              WHERE manager."workspace_id" = barrier_case."workspace_id"
+                AND manager."group_id" = barrier_case."group_id"
+                AND manager."status" = 'ACTIVE'
+                AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+                AND manager_user."status" = 'ACTIVE'
+                AND preference."topic" = 'OEM_SUPPORT_CANDIDATE'
+                AND preference."channel" = 'LINE'
+                AND preference."enabled" = true
+                AND preference."consented_at" IS NOT NULL
+            )
+          )
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM "service_line_broadcasts" broadcast
