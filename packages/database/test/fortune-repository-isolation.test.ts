@@ -38,7 +38,7 @@ const reading = {
 function targetClient(target: unknown = scope) {
   return {
     fortuneServiceSetting: { findFirst: vi.fn().mockResolvedValue(target) },
-    fortuneParticipant: { findFirst: vi.fn(), upsert: vi.fn() },
+    fortuneParticipant: { findFirst: vi.fn(), upsert: vi.fn(), update: vi.fn() },
     bunshin: {
       findFirst: vi.fn().mockResolvedValue({
         name: '細矢めぐみ',
@@ -165,8 +165,18 @@ describe('fortune repository isolation', () => {
     expect(tx.fortuneReading.upsert).not.toHaveBeenCalled();
   });
 
-  it('returns only the Bunshin resolved from the actor service when claiming AI generation', async () => {
+  it('uses only the participant-selected owned Bunshin when claiming AI generation', async () => {
     const tx = targetClient();
+    tx.fortuneParticipant.findFirst.mockResolvedValue({
+      personalizationBunshin: {
+        id: '00000000-0000-4000-8000-000000000397',
+        name: '本人のBunshin',
+        objectiveSummary: '毎日を整える',
+        audienceSummary: '占いを生活のヒントにしたい人',
+        personalitySummary: '穏やかで具体的',
+        updatedAt: new Date('2026-09-25T00:00:00.000Z'),
+      },
+    });
     tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
     tx.fortuneReading.findFirst.mockResolvedValue(reading);
     tx.fortuneReading.findMany.mockResolvedValue([
@@ -199,7 +209,7 @@ describe('fortune repository isolation', () => {
       bunshinId: scope.bunshinId,
       reading: { id: readingId },
       personalization: {
-        bunshinProfile: { name: '細矢めぐみ' },
+        bunshinProfile: { name: '本人のBunshin' },
         recentReadings: [
           {
             id: '00000000-0000-4000-8000-000000000399',
@@ -232,15 +242,78 @@ describe('fortune repository isolation', () => {
       data: {
         personalizationContext: {
           version: 'fortune-personalization-v1',
-          sources: ['BUNSHIN_PROFILE', 'RECENT_READING', 'READING_FEEDBACK'],
+          sources: ['PARTICIPANT_BUNSHIN_PROFILE', 'RECENT_READING', 'READING_FEEDBACK'],
           bunshin: {
-            id: scope.bunshinId,
+            id: '00000000-0000-4000-8000-000000000397',
             updatedAt: '2026-09-25T00:00:00.000Z',
           },
           recentReadingIds: ['00000000-0000-4000-8000-000000000399'],
           feedbackIds: ['00000000-0000-4000-8000-000000000398'],
         },
       },
+    });
+  });
+
+  it('rejects a personalization Bunshin that is not active and owned in the service scope', async () => {
+    const tx = targetClient();
+    tx.fortuneParticipant.findFirst.mockResolvedValue({ id: reading.participantId });
+    tx.bunshin.findFirst.mockResolvedValue(null);
+    const client = {
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    await expect(
+      repository(client).updateParticipantPersonalization({
+        serviceSlug,
+        actorUserId,
+        bunshinId: '00000000-0000-4000-8000-000000000390',
+      }),
+    ).resolves.toBeNull();
+    expect(tx.bunshin.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: '00000000-0000-4000-8000-000000000390',
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        ownerUserId: actorUserId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+  });
+
+  it('saves an explicitly selected owned Bunshin for the authenticated participant', async () => {
+    const tx = targetClient();
+    tx.fortuneParticipant.findFirst.mockResolvedValue({ id: reading.participantId });
+    tx.bunshin.findFirst.mockResolvedValue({ id: '00000000-0000-4000-8000-000000000390' });
+    tx.fortuneParticipant.update.mockResolvedValue({
+      id: reading.participantId,
+      ageConfirmedAt: new Date('2026-09-26T00:00:00.000Z'),
+      personalizationBunshin: {
+        id: '00000000-0000-4000-8000-000000000390',
+        name: '本人のBunshin',
+      },
+    });
+    const client = {
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    await expect(
+      repository(client).updateParticipantPersonalization({
+        serviceSlug,
+        actorUserId,
+        bunshinId: '00000000-0000-4000-8000-000000000390',
+      }),
+    ).resolves.toMatchObject({
+      personalizationBunshin: { id: '00000000-0000-4000-8000-000000000390' },
+    });
+    expect(tx.fortuneParticipant.update).toHaveBeenCalledWith({
+      where: { id: reading.participantId },
+      data: { personalizationBunshinId: '00000000-0000-4000-8000-000000000390' },
+      include: { personalizationBunshin: { select: { id: true, name: true } } },
     });
   });
 

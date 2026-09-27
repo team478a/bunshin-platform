@@ -25,6 +25,12 @@ export class PrismaFortuneRepository implements FortuneRepository {
     return this.participants.findParticipant(input);
   }
 
+  updateParticipantPersonalization(
+    input: Parameters<FortuneRepository['updateParticipantPersonalization']>[0],
+  ) {
+    return this.participants.updateParticipantPersonalization(input);
+  }
+
   findReadingForDate(input: Parameters<FortuneRepository['findReadingForDate']>[0]) {
     return this.generation.findReadingForDate(input);
   }

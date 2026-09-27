@@ -34,6 +34,7 @@ export interface FortuneReadingView {
 export interface FortuneParticipantView {
   id: string;
   ageConfirmedAt: Date;
+  personalizationBunshin: { id: string; name: string } | null;
 }
 
 export type CreateFortuneReadingResult =
@@ -48,7 +49,7 @@ export interface FortuneAiGenerationClaim {
   bunshinId: string;
   reading: FortuneReadingView;
   personalization?: {
-    bunshinProfile: {
+    bunshinProfile?: {
       name: string;
       objectiveSummary: string;
       audienceSummary: string;
@@ -93,6 +94,11 @@ export interface FortuneRepository {
   findParticipant(input: {
     serviceSlug: string;
     actorUserId: string;
+  }): Promise<FortuneParticipantView | null>;
+  updateParticipantPersonalization(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    bunshinId: string | null;
   }): Promise<FortuneParticipantView | null>;
   findReadingForDate(input: {
     serviceSlug: string;
@@ -177,6 +183,17 @@ export class FortuneDailyReadingService {
       ageConfirmedAt: input.now ?? new Date(),
     });
     if (!participant) throw new FortunePolicyError('NOT_AVAILABLE', '占いサービスを利用できません');
+    return participant;
+  }
+
+  async updatePersonalization(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    bunshinId: string | null;
+  }) {
+    const participant = await this.repository.updateParticipantPersonalization(input);
+    if (!participant)
+      throw new FortunePolicyError('NOT_PARTICIPANT', '占いサービスへ参加してください');
     return participant;
   }
 
