@@ -55,9 +55,60 @@ export function dailyMissionErrorCategory(error: unknown) {
       const category = (cause as { category?: unknown }).category;
       if (typeof category === 'string') return category;
     }
+    const providerFailure = dailyMissionProviderFailureDetails(error);
+    if (providerFailure?.providerFailureReason)
+      return `AI_PROVIDER_${providerFailure.providerFailureReason}`.slice(0, 80);
+    if (providerFailure?.providerHttpStatus)
+      return `AI_PROVIDER_HTTP_${providerFailure.providerHttpStatus}`;
     return error.code;
   }
   return 'INTERNAL_ERROR';
+}
+
+const providerFailureReasons = new Set([
+  'TIMEOUT',
+  'NETWORK_ERROR',
+  'RESPONSE_READ_ERROR',
+  'INVALID_JSON',
+  'EMPTY_RESPONSE',
+  'MALFORMED_RESPONSE',
+  'MALFORMED_OUTPUT',
+]);
+
+/**
+ * Returns only bounded provider diagnostics that are safe to persist or log.
+ * Response bodies, request payloads and credentials are intentionally ignored.
+ */
+export function dailyMissionProviderFailureDetails(error: unknown) {
+  if (!(error instanceof ApplicationError) || error.code !== 'AI_PROVIDER_UNAVAILABLE') return null;
+  const cause = error.cause;
+  if (!cause || typeof cause !== 'object') return {};
+  const value = cause as {
+    reason?: unknown;
+    httpStatus?: unknown;
+    providerErrorCode?: unknown;
+  };
+  const providerFailureReason =
+    typeof value.reason === 'string' && providerFailureReasons.has(value.reason)
+      ? value.reason
+      : undefined;
+  const providerHttpStatus =
+    typeof value.httpStatus === 'number' &&
+    Number.isInteger(value.httpStatus) &&
+    value.httpStatus >= 100 &&
+    value.httpStatus <= 599
+      ? value.httpStatus
+      : undefined;
+  const providerErrorCode =
+    typeof value.providerErrorCode === 'string' &&
+    /^[A-Za-z0-9_-]{1,100}$/.test(value.providerErrorCode)
+      ? value.providerErrorCode
+      : undefined;
+  return {
+    ...(providerFailureReason ? { providerFailureReason } : {}),
+    ...(providerHttpStatus ? { providerHttpStatus } : {}),
+    ...(providerErrorCode ? { providerErrorCode } : {}),
+  };
 }
 
 export function recordDailyMissionPipelineFailure(input: {
