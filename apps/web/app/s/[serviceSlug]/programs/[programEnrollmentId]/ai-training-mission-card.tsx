@@ -66,6 +66,11 @@ export function AiTrainingMissionCard({
         </p>
       ) : null}
       <p className="training-reason">{action.display.reason}</p>
+      {action.display.personalizationStatus === 'PERSONALIZED' ? (
+        <p className="training-field-help">
+          あなたの初期設定をもとに、仕事の場面を調整しています。
+        </p>
+      ) : null}
       {action.display.difficultyGuidance ? (
         <p className="training-field-help">{action.display.difficultyGuidance}</p>
       ) : null}
@@ -129,10 +134,8 @@ export function AiTrainingMissionCard({
         <div className="training-hint" role="status">
           <strong>ヒント</strong>
           <p>
-            まず「{action.display.successCriteria?.[0] ?? '課題の目的'}」を確認し、
-            {action.display.constraints?.[0]
-              ? `「${action.display.constraints[0]}」から書き始めてみましょう。`
-              : '伝えたい内容を一つに絞って書き始めてみましょう。'}
+            {action.display.hint ??
+              `まず「${action.display.successCriteria?.[0] ?? '課題の目的'}」を確認し、伝えたい内容を一つに絞って書き始めてみましょう。`}
           </p>
         </div>
       ) : null}

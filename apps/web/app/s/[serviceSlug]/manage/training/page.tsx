@@ -147,9 +147,9 @@ export default async function AiTrainingAdminPage({
         });
   const enrollmentIds = enrollments.map(({ id }) => id);
   const membershipIds = enrollments.map(({ groupMembershipId }) => groupMembershipId);
-  const [memberships, profiles, snapshots, assignments, answers, toolkitItems] =
+  const [memberships, profiles, snapshots, assignments, answers, toolkitItems, workResultEvents] =
     enrollmentIds.length === 0
-      ? [[], [], [], [], [], []]
+      ? [[], [], [], [], [], [], []]
       : await Promise.all([
           db.prisma.groupMembership.findMany({
             where: {
@@ -232,6 +232,15 @@ export default async function AiTrainingAdminPage({
             },
             select: { programEnrollmentId: true },
           }),
+          db.prisma.programActionEvent.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              programEnrollmentId: { in: enrollmentIds },
+              eventType: 'TRAINING_WORK_RESULT_RECORDED',
+            },
+            select: { programEnrollmentId: true, metadata: true },
+          }),
         ]);
   const programById = new Map(programs.map((item) => [item.id, item]));
   const membershipById = new Map(memberships.map((item) => [item.id, item]));
@@ -246,6 +255,26 @@ export default async function AiTrainingAdminPage({
   for (const answer of answers) {
     if (!answerByEnrollment.has(answer.programEnrollmentId))
       answerByEnrollment.set(answer.programEnrollmentId, answer);
+  }
+  const workResultsByEnrollment = new Map<
+    string,
+    Array<'USED_AS_IS' | 'USED_WITH_EDITS' | 'NOT_USED_YET' | 'NOT_APPLICABLE'>
+  >();
+  for (const event of workResultEvents) {
+    const metadata =
+      typeof event.metadata === 'object' &&
+      event.metadata !== null &&
+      !Array.isArray(event.metadata)
+        ? (event.metadata as Record<string, unknown>)
+        : null;
+    const result = metadata?.['result'];
+    if (
+      !['USED_AS_IS', 'USED_WITH_EDITS', 'NOT_USED_YET', 'NOT_APPLICABLE'].includes(String(result))
+    )
+      continue;
+    const values = workResultsByEnrollment.get(event.programEnrollmentId) ?? [];
+    values.push(result as (typeof values)[number]);
+    workResultsByEnrollment.set(event.programEnrollmentId, values);
   }
   const dashboard = buildAiTrainingAdminDashboard(
     enrollments.flatMap((enrollment) => {
@@ -267,6 +296,7 @@ export default async function AiTrainingAdminPage({
           latestEvaluation: answer?.evaluation ?? null,
           evaluationUpdatedAt: answer?.updatedAt ?? null,
           profileUpdatedAt: profile?.updatedAt ?? null,
+          workResults: workResultsByEnrollment.get(enrollment.id) ?? [],
         },
       ];
     }),

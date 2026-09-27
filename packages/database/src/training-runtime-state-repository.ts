@@ -3,6 +3,7 @@ import {
   TRAINING_GOAL_KEYS,
   TRAINING_TOPIC_KEYS,
   TRAINING_USE_CASE_KEYS,
+  resolveTrainingWorkContext,
   type AiTrainingParticipantState,
   type AiTrainingRuntimeRepository,
 } from '@bunshin/capability-training';
@@ -87,6 +88,13 @@ export class PrismaAiTrainingRuntimeStateRepository {
                 ? (profile.dailyMinutes as 5 | 10 | 15)
                 : 10,
               learningGoalKey: profile.learningGoalKey as (typeof TRAINING_GOAL_KEYS)[number],
+              workContext: resolveTrainingWorkContext(profile.workContext, profile.role),
+              workContextComplete: Boolean(
+                typeof profile.workContext === 'object' &&
+                profile.workContext !== null &&
+                !Array.isArray(profile.workContext) &&
+                (profile.workContext as Record<string, unknown>)['schemaVersion'] === 1,
+              ),
             }
           : null,
       goal,

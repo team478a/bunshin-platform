@@ -9,6 +9,8 @@ import {
   TRAINING_ROLES,
   TRAINING_TOPIC_KEYS,
   TRAINING_USE_CASE_KEYS,
+  TRAINING_DEVICE_TYPES,
+  TRAINING_WORK_RESULTS,
   TrainingRuntimeError,
 } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -35,6 +37,15 @@ const profileSchema = z
     preferredTopics: z.array(z.enum(TRAINING_TOPIC_KEYS)).min(1).max(6),
     dailyMinutes: z.union([z.literal(5), z.literal(10), z.literal(15)]),
     learningGoalKey: z.enum(TRAINING_GOAL_KEYS),
+    workContext: z
+      .object({
+        schemaVersion: z.literal(1),
+        workDescription: z.string().trim().min(5).max(240),
+        timeConsumingTask: z.string().trim().min(2).max(160),
+        aiImprovementTarget: z.string().trim().min(2).max(160),
+        deviceType: z.enum(TRAINING_DEVICE_TYPES),
+      })
+      .strict(),
     idempotencyKey: uuid,
   })
   .superRefine((value, context) => {
@@ -55,6 +66,13 @@ const interactionSchema = z
   })
   .strict();
 const toolkitSaveSchema = z.object({ answerId: uuid, idempotencyKey: uuid }).strict();
+const workResultSchema = z
+  .object({
+    missionAssignmentId: uuid,
+    result: z.enum(TRAINING_WORK_RESULTS),
+    idempotencyKey: uuid,
+  })
+  .strict();
 
 const response = (data: unknown, requestId: string) =>
   Response.json({ data, requestId }, { headers: { 'cache-control': 'private, no-store' } });
@@ -217,6 +235,44 @@ export async function recordAiTrainingInteractionResponse(
     }
     if (result.outcome === 'CONFLICT') {
       throw new ApplicationError('CONFLICT', 'training interaction could not be recorded');
+    }
+    return response(result, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function recordAiTrainingWorkResultResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, value] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      workResultSchema.parseAsync(request.json()),
+    ]);
+    const db = await import('@bunshin/database');
+    const result = await new db.PrismaTrainingWorkResultRepository(db.prisma).record({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId: uuid.parse(rawEnrollmentId),
+      ...value,
+      occurredAt: new Date(),
+    });
+    if (result.outcome === 'NOT_FOUND') {
+      throw new ApplicationError('NOT_FOUND', 'completed training mission not found');
+    }
+    if (result.outcome === 'CONFLICT') {
+      throw new ApplicationError('CONFLICT', 'training work result could not be recorded');
     }
     return response(result, requestId);
   } catch (error) {

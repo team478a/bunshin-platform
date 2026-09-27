@@ -33,6 +33,13 @@ const baseState = (): AiTrainingParticipantState => ({
     preferredTopics: ['SALES_EMAIL'],
     dailyMinutes: 10,
     learningGoalKey: 'CREATE_SALES_EMAIL',
+    workContext: {
+      schemaVersion: 1,
+      workDescription: '法人向けサービスの営業をしています',
+      timeConsumingTask: '商談後のメール作成',
+      aiImprovementTarget: '商談後のメール作成',
+      deviceType: 'PC',
+    },
   },
   goal: { title: '営業メールをAIで作れる' },
   action: null,
@@ -54,6 +61,13 @@ const candidate = (): AiTrainingRuntimeCandidate => ({
     recentFailures: 0,
     streak: 0,
     skillScores: {},
+    workContext: {
+      schemaVersion: 1,
+      workDescription: '法人向けサービスの営業をしています',
+      timeConsumingTask: '商談後のメール作成',
+      aiImprovementTarget: '商談後のメール作成',
+      deviceType: 'PC',
+    },
   },
   currentPhase: 'FOUNDATION',
   completedMissionKeys: [],
@@ -64,6 +78,7 @@ const candidate = (): AiTrainingRuntimeCandidate => ({
   lastActionAt: now,
   activeWaitUntil: null,
   progressRevision: null,
+  workUseCount: 0,
   missions: [
     {
       key: 'AI_BASIC',
@@ -135,9 +150,10 @@ describe('AiTrainingParticipantService', () => {
     expect(state.action?.display.reasonCode).toBe('AI_FOUNDATION_NOT_COMPLETED');
     expect(state.action?.display.task).toContain('AIに任せたい作業');
     expect(state.action?.display.learningObjective).toContain('AIに任せる作業');
-    expect(state.action?.display.businessScenario).toContain('今日の仕事');
+    expect(state.action?.display.businessScenario).toContain('商談後のメール作成');
     expect(state.action?.display.successCriteria).toContain('作業内容が具体的');
-    expect(state.action?.display.schemaVersion).toBe(3);
+    expect(state.action?.display.schemaVersion).toBe(4);
+    expect(state.action?.display.personalizationStatus).toBe('PERSONALIZED');
     expect(state.action?.display.difficulty).toBe('EASY');
     expect(state.action?.display.difficultyReasonCode).toBe('FOUNDATION_EASY');
     expect(repository.writes).toBe(1);
