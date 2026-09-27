@@ -55,6 +55,12 @@ export interface FortuneAiGenerationClaim {
       audienceSummary: string;
       personalitySummary: string;
     };
+    memories?: Array<{
+      id: string;
+      type: string;
+      summary: string;
+      content: string;
+    }>;
     recentReadings: Array<{
       id: string;
       localDate: string;
