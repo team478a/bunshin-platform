@@ -5,6 +5,7 @@ import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { personalizationAuditSummary } from '../../../../../src/services/personalization-audit-view-model';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
+import { transitionOemSupportCandidateAction } from './oem-support-candidate-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,7 @@ export default async function PersonalizationAuditPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [missions, failures, barrierSummary] = await Promise.all([
+  const [missions, failures, barrierSummary, supportCandidates] = await Promise.all([
     db.prisma.dailyMission.findMany({
       where: {
         workspaceId: service.workspaceId,
@@ -74,6 +75,10 @@ export default async function PersonalizationAuditPage({
       take: 10,
     }),
     db.getSocialActivityBarrierServiceSummary(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+    }),
+    db.listSocialActivityOemSupportCandidates(db.prisma, {
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
     }),
@@ -143,6 +148,88 @@ export default async function PersonalizationAuditPage({
           <p>
             見送り {barrierSummary.support.skipped}件／解決済み {barrierSummary.cases.resolved}件
           </p>
+        </section>
+
+        <section className="settings-card">
+          <h2>支援候補</h2>
+          <p>
+            本人への無料支援後も改善しなかった場合だけ表示します。営業や契約は自動実行されません。
+          </p>
+          {supportCandidates.length === 0 ? (
+            <p>現在、確認が必要な支援候補はありません。</p>
+          ) : (
+            <div className="settings-status-list">
+              {supportCandidates.map((candidate) => {
+                const snapshot = candidate.recommendationSnapshot as {
+                  title?: string;
+                  description?: string;
+                };
+                return (
+                  <article className="settings-status-item" key={candidate.id}>
+                    <div>
+                      <small>
+                        {candidate.barrierCase.groupMembership.serviceMemberBusinessProfile
+                          ?.businessName ?? '事業名未設定'}
+                      </small>
+                      <h3>{snapshot.title ?? '支援内容を確認'}</h3>
+                      <p>{snapshot.description ?? ''}</p>
+                      <p>
+                        状態：{candidate.status}／検知日：{dateLabel(candidate.detectedAt)}
+                      </p>
+                    </div>
+                    {candidate.status === 'OPEN' || candidate.status === 'ACCEPTED' ? (
+                      <div className="button-row">
+                        {candidate.status === 'OPEN' ? (
+                          <form action={transitionOemSupportCandidateAction}>
+                            <input
+                              type="hidden"
+                              name="serviceSlug"
+                              value={service.configuration.slug}
+                            />
+                            <input type="hidden" name="candidateId" value={candidate.id} />
+                            <input type="hidden" name="action" value="ACCEPT" />
+                            <input type="hidden" name="reason" value="運営者が対応を開始" />
+                            <button type="submit">対応する</button>
+                          </form>
+                        ) : (
+                          <form action={transitionOemSupportCandidateAction}>
+                            <input
+                              type="hidden"
+                              name="serviceSlug"
+                              value={service.configuration.slug}
+                            />
+                            <input type="hidden" name="candidateId" value={candidate.id} />
+                            <input type="hidden" name="action" value="COMPLETE" />
+                            <input type="hidden" name="reason" value="運営者が対応完了を確認" />
+                            <button type="submit">対応完了</button>
+                          </form>
+                        )}
+                        {candidate.status === 'OPEN' ? (
+                          <form action={transitionOemSupportCandidateAction}>
+                            <input
+                              type="hidden"
+                              name="serviceSlug"
+                              value={service.configuration.slug}
+                            />
+                            <input type="hidden" name="candidateId" value={candidate.id} />
+                            <input type="hidden" name="action" value="DISMISS" />
+                            <input
+                              type="hidden"
+                              name="reason"
+                              value="運営者が今回は対応しないと判断"
+                            />
+                            <button className="button-secondary" type="submit">
+                              今回は対応しない
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="settings-card">

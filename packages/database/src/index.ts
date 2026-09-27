@@ -211,6 +211,12 @@ export {
   projectSocialActivityOemSupportCandidates,
   type SocialActivityOemSupportCandidateProjectionSummary,
 } from './social-activity-oem-support-candidates';
+export {
+  listSocialActivityOemSupportCandidates,
+  transitionSocialActivityOemSupportCandidate,
+  SOCIAL_ACTIVITY_OEM_CANDIDATE_ACTIONS,
+  type SocialActivityOemCandidateAction,
+} from './social-activity-oem-support-admin';
 export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';
