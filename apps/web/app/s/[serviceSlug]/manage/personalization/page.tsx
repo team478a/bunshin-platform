@@ -96,7 +96,7 @@ export default async function PersonalizationAuditPage({
     }),
     db.prisma.serviceSupportAlertPolicy.findUnique({
       where: { groupId: service.serviceId },
-      select: { mode: true },
+      select: { mode: true, notifyByEmail: true, notifyByLine: true },
     }),
     db.prisma.socialActivityOemSupportCandidateEmailDelivery.findMany({
       where: {
@@ -265,6 +265,26 @@ export default async function PersonalizationAuditPage({
                 <option value="INCLUDED_SUPPORT">契約内サポートとして対応</option>
                 <option value="INTERNAL_ESCALATION">担当者への内部アラート</option>
                 <option value="DISABLED">支援候補アラートを使用しない</option>
+              </select>
+            </label>
+            <label>
+              運営者への通知方法
+              <select
+                name="channelMode"
+                defaultValue={
+                  supportAlertPolicy?.notifyByEmail && supportAlertPolicy.notifyByLine
+                    ? 'BOTH'
+                    : supportAlertPolicy?.notifyByLine
+                      ? 'LINE'
+                      : supportAlertPolicy?.notifyByEmail === false
+                        ? 'DASHBOARD'
+                        : 'EMAIL'
+                }
+              >
+                <option value="EMAIL">メールのみ</option>
+                <option value="LINE">LINEのみ</option>
+                <option value="BOTH">メールとLINE</option>
+                <option value="DASHBOARD">管理画面のみ</option>
               </select>
             </label>
             <button type="submit">設定を保存</button>

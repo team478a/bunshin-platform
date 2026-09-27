@@ -4,7 +4,13 @@ import { enqueueSocialActivityOemSupportCandidateEmails } from '../src/social-ac
 const now = new Date('2026-09-27T12:00:00.000Z');
 
 function database(
-  input: { mode?: string; enabled?: boolean; verified?: boolean; recipientEnabled?: boolean } = {},
+  input: {
+    mode?: string;
+    enabled?: boolean;
+    verified?: boolean;
+    recipientEnabled?: boolean;
+    notifyByEmail?: boolean;
+  } = {},
 ) {
   const createMany = vi.fn().mockResolvedValue({ count: 1 });
   const mode = input.mode ?? 'INCLUDED_SUPPORT';
@@ -42,6 +48,10 @@ function database(
                       fromEmail: 'support@example.com',
                       replyToEmail: null,
                     },
+                    supportAlertPolicy:
+                      input.notifyByEmail === undefined
+                        ? null
+                        : { notifyByEmail: input.notifyByEmail },
                     messageTemplates: [],
                   },
                 },
@@ -83,6 +93,7 @@ describe('enqueueSocialActivityOemSupportCandidateEmails', () => {
     ['メール停止', { enabled: false }],
     ['未検証メール', { verified: false }],
     ['通知担当者の受信停止', { recipientEnabled: false }],
+    ['メールチャネル停止', { notifyByEmail: false }],
   ])('%sではキューしない', async (_label, input) => {
     const db = database(input);
     await expect(
