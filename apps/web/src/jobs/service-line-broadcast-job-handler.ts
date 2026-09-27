@@ -8,6 +8,7 @@ import {
 } from './service-line-broadcast-completion';
 import { deliverServiceLineBroadcastRecipients } from './service-line-broadcast-recipient-delivery';
 import { resolveServiceLineBroadcastRecipientIds } from './service-line-broadcast-eligibility';
+import { revalidateOemSupportLineRecipients } from './oem-support-line-delivery-eligibility';
 
 export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobHandler {
   return {
@@ -31,6 +32,34 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
       const mode = policy?.mode ?? 'SHARED';
       if (mode === 'DISABLED' || (mode === 'DEDICATED' && !policy?.pilotEnabled)) {
         await completeDisabledServiceLineBroadcast({ db, broadcast, completedAt: new Date() });
+        return { retryable: false };
+      }
+
+      const pendingRecipients = await db.prisma.serviceLineBroadcastRecipient.findMany({
+        where: {
+          workspaceId: broadcast.workspaceId,
+          groupId: broadcast.groupId,
+          broadcastId: broadcast.id,
+          status: 'PENDING',
+        },
+        select: { id: true, groupMembershipId: true, userId: true, message: true },
+        take: 500,
+      });
+      const revalidated = await revalidateOemSupportLineRecipients({
+        db,
+        broadcast,
+        recipients: pendingRecipients,
+      });
+      const recipients = revalidated.recipients;
+      if (revalidated.applies && recipients.length === 0) {
+        await completeServiceLineBroadcast({
+          db,
+          broadcast,
+          processed: revalidated.skipped,
+          failed: 0,
+          completedAt: new Date(),
+          reason: 'OEM支援候補の最新状態によりLINE通知対象なし',
+        });
         return { retryable: false };
       }
 
@@ -69,17 +98,6 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         });
         return { retryable: false };
       }
-
-      const recipients = await db.prisma.serviceLineBroadcastRecipient.findMany({
-        where: {
-          workspaceId: broadcast.workspaceId,
-          groupId: broadcast.groupId,
-          broadcastId: broadcast.id,
-          status: 'PENDING',
-        },
-        select: { id: true, groupMembershipId: true, userId: true, message: true },
-        take: 500,
-      });
       const recipientIds = await resolveServiceLineBroadcastRecipientIds({
         db,
         broadcast,
@@ -96,6 +114,7 @@ export function createServiceLineBroadcastJobHandler(): ServiceLineBroadcastJobH
         recipients,
         recipientIds,
       });
+      summary.processed += revalidated.skipped;
       const pending = await db.prisma.serviceLineBroadcastRecipient.count({
         where: {
           workspaceId: broadcast.workspaceId,

@@ -2855,3 +2855,12 @@
 - 予約後に候補対応済み、チャネル停止、担当解除、権限失効、アドレス変更が起きた場合はProviderへ送らず`SKIPPED`として記録する。
 - Workspace、Service、Configuration、Candidate、Recipientを同時に照合し、別Scopeへの送信を許可しない。
 - 配送予約時の検証だけに依存せず、外部副作用の直前に最新状態を確認する。
+
+## D-122: OEM支援LINEはProvider送信直前に候補と受信資格を再検証する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- OEM支援候補由来のBroadcastだけを識別し、CandidateがOPEN、LINE通知が有効、受信者がACTIVEなService Owner / Admin、個別同意が有効であることを再確認する。
+- 資格を失った宛先はProviderへ渡さず`SKIPPED / NOTIFICATION_NO_LONGER_ELIGIBLE`とし、対象がゼロならBroadcastを正常終了させる。
+- 一般のService Broadcastにはこの追加判定を適用せず、既存配信仕様を維持する。
