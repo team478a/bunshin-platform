@@ -1,5 +1,6 @@
 import type {
   CreateFortuneReadingResult,
+  FortuneFeedbackIssue,
   FortuneOrientation,
   FortuneAiGenerationClaim,
   FortuneAiReadingResult,
@@ -135,11 +136,57 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
+      const [bunshinProfile, recentReadings] = await Promise.all([
+        tx.bunshin.findFirst({
+          where: {
+            id: scope.bunshinId,
+            workspaceId: scope.workspaceId,
+            groupId: scope.groupId,
+            status: 'ACTIVE',
+          },
+          select: {
+            name: true,
+            objectiveSummary: true,
+            audienceSummary: true,
+            personalitySummary: true,
+          },
+        }),
+        tx.fortuneReading.findMany({
+          where: {
+            id: { not: reading.id },
+            serviceSettingId: scope.id,
+            participantId: reading.participantId,
+            memberUserId: input.actorUserId,
+            status: { in: ['READY_AI', 'READY_BASIC'] },
+            deletedAt: null,
+          },
+          orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
+          take: 7,
+          include: {
+            feedback: { select: { rating: true, issueCode: true } },
+          },
+        }),
+      ]);
+      if (!bunshinProfile) return null;
       return {
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
+        personalization: {
+          bunshinProfile,
+          recentReadings: recentReadings.map((item) => ({
+            id: item.id,
+            localDate: item.localDate.toISOString().slice(0, 10),
+            theme: item.theme,
+            cardCode: item.cardCode,
+            orientation: item.orientation,
+            body: item.readingText,
+            actionStep: item.actionStep,
+            feedbackRating: item.feedback?.rating ?? null,
+            feedbackIssue: (item.feedback?.issueCode as FortuneFeedbackIssue | null) ?? null,
+          })),
+        },
       };
     });
   }

@@ -22,6 +22,8 @@ const scope = {
 
 const reading = {
   id: readingId,
+  participantId: '00000000-0000-4000-8000-000000000308',
+  memberUserId: actorUserId,
   localDate: new Date('2026-09-26T00:00:00.000Z'),
   theme: 'WORK',
   cardCode: 'THE_FOOL',
@@ -37,6 +39,14 @@ function targetClient(target: unknown = scope) {
   return {
     fortuneServiceSetting: { findFirst: vi.fn().mockResolvedValue(target) },
     fortuneParticipant: { findFirst: vi.fn(), upsert: vi.fn() },
+    bunshin: {
+      findFirst: vi.fn().mockResolvedValue({
+        name: '細矢めぐみ',
+        objectiveSummary: '毎日を整える',
+        audienceSummary: '占いを生活のヒントにしたい人',
+        personalitySummary: '穏やかで具体的',
+      }),
+    },
     fortuneReading: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -157,6 +167,14 @@ describe('fortune repository isolation', () => {
     const tx = targetClient();
     tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
     tx.fortuneReading.findFirst.mockResolvedValue(reading);
+    tx.fortuneReading.findMany.mockResolvedValue([
+      {
+        ...reading,
+        id: '00000000-0000-4000-8000-000000000399',
+        status: 'READY_AI',
+        feedback: { rating: 'NOT_HELPFUL', issueCode: 'TOO_VAGUE' },
+      },
+    ]);
     const client = {
       $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
         Promise.resolve(callback(tx)),
@@ -174,6 +192,16 @@ describe('fortune repository isolation', () => {
       groupId: scope.groupId,
       bunshinId: scope.bunshinId,
       reading: { id: readingId },
+      personalization: {
+        bunshinProfile: { name: '細矢めぐみ' },
+        recentReadings: [
+          {
+            id: '00000000-0000-4000-8000-000000000399',
+            feedbackRating: 'NOT_HELPFUL',
+            feedbackIssue: 'TOO_VAGUE',
+          },
+        ],
+      },
     });
     expect(tx.fortuneReading.updateMany).toHaveBeenCalledWith({
       where: {
@@ -184,6 +212,15 @@ describe('fortune repository isolation', () => {
       },
       data: { status: 'GENERATING', failureCode: null },
     });
+    expect(tx.fortuneReading.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          serviceSettingId: scope.id,
+          participantId: reading.participantId,
+          memberUserId: actorUserId,
+        }),
+      }),
+    );
   });
 
   it('does not save feedback for another user or service reading', async () => {
