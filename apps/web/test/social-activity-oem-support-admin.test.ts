@@ -42,4 +42,20 @@ describe('OEM SNS support candidate admin', () => {
     expect(page).not.toContain('candidate.memory');
     expect(page).not.toContain('candidate.postBody');
   });
+
+  it('scopes failed email retry to the managed service and records an audit', () => {
+    const action = readFileSync(
+      join(
+        process.cwd(),
+        'app/s/[serviceSlug]/manage/personalization/oem-support-email-actions.ts',
+      ),
+      'utf8',
+    );
+    expect(action).toContain('resolveManagedServiceContext');
+    expect(action).toContain("status: 'FAILED'");
+    expect(action).toContain('workspaceId: service.workspaceId');
+    expect(action).toContain('groupId: service.serviceId');
+    expect(action).toContain('serviceConfigurationAudit.create');
+    expect(action).toContain('OEM_SUPPORT_EMAIL_RETRY_REQUESTED');
+  });
 });
