@@ -2828,3 +2828,12 @@
 - 候補ID由来の`automationKey`を持つBroadcastだけをWorkspace / Service内で抽出し、失敗件数と分類を個別化管理画面に表示する。
 - 再送処理を複製せず、既存の公式LINE管理画面にある失敗宛先だけの再送、監査、冪等Jobを再利用する。
 - 受信者の個人情報や通知本文は失敗一覧に表示しない。
+
+## D-119: OEM支援LINE Schedulerは未通知候補だけを先に選ぶ
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- `automationKey`が存在しないOPEN候補をDBで抽出してから処理上限を適用し、古い通知済み候補による新規候補の枯渇を防ぐ。
+- Candidate IDとBroadcast `automationKey`の対応を決定的に保ち、同時実行時の一意制約とJob冪等性を維持する。
+- Broadcast作成後にJob投入が中断した場合は、既存のService Line Broadcast Recoveryを正本として回復する。

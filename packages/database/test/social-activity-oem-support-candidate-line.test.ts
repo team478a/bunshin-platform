@@ -15,6 +15,46 @@ function database(
   const createBroadcast = vi.fn().mockResolvedValue({ id: 'broadcast-1' });
   const createRecipients = vi.fn().mockResolvedValue({ count: 1 });
   const createAudit = vi.fn().mockResolvedValue({ id: 'audit-1' });
+  const findCandidates = vi.fn().mockResolvedValue([
+    {
+      id: 'candidate-1',
+      recommendationSnapshot: { handlingMode: input.mode ?? 'INCLUDED_SUPPORT' },
+      barrierCase: {
+        groupMembership: {
+          workspaceId: 'workspace-1',
+          groupId: 'group-1',
+          group: {
+            memberships: [
+              {
+                id: 'membership-1',
+                userId: 'manager-1',
+                user: { displayName: '運営者' },
+                serviceNotificationPreferences:
+                  input.recipientEnabled === undefined
+                    ? []
+                    : [
+                        {
+                          enabled: input.recipientEnabled,
+                          consentedAt: input.recipientConsented === false ? null : now,
+                        },
+                      ],
+              },
+            ],
+            serviceConfiguration: {
+              slug: 'sample',
+              displayName: 'サンプル',
+              supportAlertPolicy: { notifyByLine: input.notifyByLine ?? true },
+              messageTemplates: [
+                {
+                  body: '{{name}}さん、{{serviceName}}の{{supportType}}を確認してください。{{manageUrl}}',
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+  ]);
   const tx = {
     serviceLineBroadcast: {
       findUnique: vi.fn().mockResolvedValue(
@@ -32,56 +72,18 @@ function database(
     serviceLineBroadcastRecipient: { createMany: createRecipients },
     serviceLineBroadcastAuditLog: { create: createAudit },
   };
-  const mode = input.mode ?? 'INCLUDED_SUPPORT';
   return {
     client: {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'candidate-1' }]),
       socialActivityOemSupportCandidate: {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            id: 'candidate-1',
-            recommendationSnapshot: { handlingMode: mode },
-            barrierCase: {
-              groupMembership: {
-                workspaceId: 'workspace-1',
-                groupId: 'group-1',
-                group: {
-                  memberships: [
-                    {
-                      id: 'membership-1',
-                      userId: 'manager-1',
-                      user: { displayName: '運営者' },
-                      serviceNotificationPreferences:
-                        input.recipientEnabled === undefined
-                          ? []
-                          : [
-                              {
-                                enabled: input.recipientEnabled,
-                                consentedAt: input.recipientConsented === false ? null : now,
-                              },
-                            ],
-                    },
-                  ],
-                  serviceConfiguration: {
-                    slug: 'sample',
-                    displayName: 'サンプル',
-                    supportAlertPolicy: { notifyByLine: input.notifyByLine ?? true },
-                    messageTemplates: [
-                      {
-                        body: '{{name}}さん、{{serviceName}}の{{supportType}}を確認してください。{{manageUrl}}',
-                      },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-        ]),
+        findMany: findCandidates,
       },
       $transaction: vi.fn((callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
     },
     createBroadcast,
     createRecipients,
     createAudit,
+    findCandidates,
   };
 }
 
@@ -94,6 +96,9 @@ describe('scheduleSocialActivityOemSupportCandidateLines', () => {
       now,
     });
     expect(result).toMatchObject({ selected: 1, scheduled: 1, existing: 0, skipped: 0 });
+    expect(db.findCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['candidate-1'] }, status: 'OPEN' } }),
+    );
     expect(db.createBroadcast).toHaveBeenCalledWith({
       data: expect.objectContaining({
         workspaceId: 'workspace-1',

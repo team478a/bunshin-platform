@@ -1,8 +1,8 @@
-import type {
-  LineConfigurationEnvironment,
+import {
   Prisma,
-  PrismaClient,
-  ServiceSupportAlertMode,
+  type LineConfigurationEnvironment,
+  type PrismaClient,
+  type ServiceSupportAlertMode,
 } from '@prisma/client';
 
 const supportLabel: Record<ServiceSupportAlertMode, string> = {
@@ -43,8 +43,20 @@ export async function scheduleSocialActivityOemSupportCandidateLines(
 ) {
   const now = input.now ?? new Date();
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const candidateIds = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT candidate."id"
+    FROM "social_activity_oem_support_candidates" candidate
+    WHERE candidate."status" = 'OPEN'::"SocialActivityOemSupportCandidateStatus"
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "service_line_broadcasts" broadcast
+        WHERE broadcast."automation_key" = ('oem-support-candidate:' || candidate."id"::text)
+      )
+    ORDER BY candidate."detected_at" ASC, candidate."id" ASC
+    LIMIT ${limit}
+  `);
   const candidates = await client.socialActivityOemSupportCandidate.findMany({
-    where: { status: 'OPEN' },
+    where: { id: { in: candidateIds.map(({ id }) => id) }, status: 'OPEN' },
     orderBy: [{ detectedAt: 'asc' }, { id: 'asc' }],
     take: limit,
     select: {
