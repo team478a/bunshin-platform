@@ -57,6 +57,10 @@ export async function enqueueSocialActivityOemSupportCandidateEmails(
                     select: {
                       userId: true,
                       user: { select: { email: true, displayName: true } },
+                      serviceNotificationPreferences: {
+                        where: { topic: 'OEM_SUPPORT_CANDIDATE', channel: 'EMAIL' },
+                        select: { enabled: true },
+                      },
                     },
                   },
                   serviceConfiguration: {
@@ -98,41 +102,47 @@ export async function enqueueSocialActivityOemSupportCandidateEmails(
     }
     const manageUrl = `${input.baseUrl.replace(/\/$/, '')}/s/${encodeURIComponent(service.slug)}/manage/personalization`;
     const template = service.messageTemplates[0];
-    const data = membership.group.memberships.flatMap(({ userId, user }) => {
-      if (!user.email) return [];
-      const variables = {
-        name: user.displayName || '運営担当者',
-        serviceName: service.displayName,
-        supportType: supportLabel[mode],
-        manageUrl,
-      };
-      return [
-        {
-          workspaceId: membership.workspaceId,
-          groupId: membership.groupId,
-          configurationId: service.id,
-          candidateId: candidate.id,
-          emailConfigurationId: email.id,
-          recipientUserId: userId,
-          recipientEmail: user.email,
-          recipientName: user.displayName,
-          fromName: email.fromName,
-          fromEmail: email.fromEmail,
-          replyToEmail: email.replyToEmail,
-          subject: replace(
-            template?.subject ?? `【{{serviceName}}】新しい支援候補があります`,
-            variables,
-          ),
-          body: replace(
-            template?.body ??
-              '{{name}}さん\n\n{{serviceName}}で「{{supportType}}」の確認が必要です。\n利用者への案内や課金は自動実行されません。\n\n{{manageUrl}}',
-            variables,
-          ),
-          handlingMode: mode,
-          nextAttemptAt: now,
-        },
-      ];
-    });
+    const hasRecipientSettings = membership.group.memberships.some(
+      ({ serviceNotificationPreferences }) => serviceNotificationPreferences.length > 0,
+    );
+    const data = membership.group.memberships.flatMap(
+      ({ userId, user, serviceNotificationPreferences }) => {
+        if (hasRecipientSettings && serviceNotificationPreferences[0]?.enabled !== true) return [];
+        if (!user.email) return [];
+        const variables = {
+          name: user.displayName || '運営担当者',
+          serviceName: service.displayName,
+          supportType: supportLabel[mode],
+          manageUrl,
+        };
+        return [
+          {
+            workspaceId: membership.workspaceId,
+            groupId: membership.groupId,
+            configurationId: service.id,
+            candidateId: candidate.id,
+            emailConfigurationId: email.id,
+            recipientUserId: userId,
+            recipientEmail: user.email,
+            recipientName: user.displayName,
+            fromName: email.fromName,
+            fromEmail: email.fromEmail,
+            replyToEmail: email.replyToEmail,
+            subject: replace(
+              template?.subject ?? `【{{serviceName}}】新しい支援候補があります`,
+              variables,
+            ),
+            body: replace(
+              template?.body ??
+                '{{name}}さん\n\n{{serviceName}}で「{{supportType}}」の確認が必要です。\n利用者への案内や課金は自動実行されません。\n\n{{manageUrl}}',
+              variables,
+            ),
+            handlingMode: mode,
+            nextAttemptAt: now,
+          },
+        ];
+      },
+    );
     if (data.length === 0) {
       skipped += 1;
       continue;
