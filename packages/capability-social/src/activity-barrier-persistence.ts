@@ -44,6 +44,12 @@ export interface SocialActivityBarrierCaseRepository {
   }): Promise<SocialActivityBarrierCase[] | null>;
 }
 
+export const SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY = 'SOCIAL.ACTIVITY_SUPPORT' as const;
+
+export interface SocialActivityBarrierProjectionCandidateRepository {
+  list(input: { limit: number; at: Date }): Promise<SocialActivityBarrierScope[]>;
+}
+
 export function socialActivityBarrierEvidenceKey(candidate: SocialActivityBarrierCandidate) {
   const evidence = candidate.evidence;
   return [

@@ -68,6 +68,66 @@ export function FortuneJoinButton({
   );
 }
 
+export function FortunePersonalizationSetting({
+  serviceSlug,
+  candidates,
+  selectedBunshinId,
+}: {
+  serviceSlug: string;
+  candidates: Array<{ id: string; name: string }>;
+  selectedBunshinId: string | null;
+}) {
+  const router = useRouter();
+  const [value, setValue] = useState(selectedBunshinId ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return (
+    <div className="fortune-action">
+      <label className="form-field">
+        <span>占いに使うあなたのBunshin</span>
+        <select value={value} disabled={busy} onChange={(event) => setValue(event.target.value)}>
+          <option value="">使用しない</option>
+          {candidates.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p>選択した場合だけ、そのBunshinの目的や人格を今日の占いに反映します。</p>
+      <button
+        className="button button--secondary"
+        type="button"
+        disabled={busy || value === (selectedBunshinId ?? '')}
+        onClick={() =>
+          void (async () => {
+            setBusy(true);
+            setError('');
+            try {
+              await request(`/api/services/${serviceSlug}/fortune/participation`, {
+                method: 'PUT',
+                body: JSON.stringify({ bunshinId: value || null }),
+              });
+              router.refresh();
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : '設定を保存できませんでした。');
+            } finally {
+              setBusy(false);
+            }
+          })()
+        }
+      >
+        {busy ? '保存しています…' : '個別化設定を保存する'}
+      </button>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const choices = [
   { value: 'LOVE', label: '恋愛', note: '恋愛や気持ちについて' },
   { value: 'WORK', label: '仕事', note: '仕事や今後の動きについて' },

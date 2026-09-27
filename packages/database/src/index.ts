@@ -200,12 +200,32 @@ export { PrismaActivityContinuityRuleRepository } from './activity-continuity-ru
 export {
   PrismaSocialActivityBarrierCaseRepository,
   PrismaSocialActivityBarrierObservationRepository,
+  PrismaSocialActivityBarrierProjectionCandidateRepository,
 } from './social-activity-barrier-repository';
 export { PrismaSocialActivityBarrierConfirmationRepository } from './social-activity-barrier-confirmation-repository';
 export {
   getSocialActivityBarrierServiceSummary,
   type SocialActivityBarrierServiceSummary,
 } from './social-activity-barrier-summary';
+export {
+  projectSocialActivityOemSupportCandidates,
+  type SocialActivityOemSupportCandidateProjectionSummary,
+} from './social-activity-oem-support-candidates';
+export {
+  enqueueSocialActivityOemSupportCandidateEmails,
+  isSocialActivityOemSupportCandidateEmailDeliveryEligible,
+} from './social-activity-oem-support-candidate-email';
+export { scheduleSocialActivityOemSupportCandidateLines } from './social-activity-oem-support-candidate-line';
+export {
+  listSocialActivityOemSupportCandidates,
+  transitionSocialActivityOemSupportCandidate,
+  SOCIAL_ACTIVITY_OEM_CANDIDATE_ACTIONS,
+  type SocialActivityOemCandidateAction,
+} from './social-activity-oem-support-admin';
+export {
+  resolveImprovedSocialActivityBarriers,
+  type SocialActivityBarrierResolutionSummary,
+} from './social-activity-barrier-resolution';
 export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';

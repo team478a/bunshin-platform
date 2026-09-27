@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260926230000_add_social_activity_barrier_confirmation';
+export const LATEST_DATABASE_MIGRATION = '20260928003000_add_support_alert_notification_channels';

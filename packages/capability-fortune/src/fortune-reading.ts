@@ -34,6 +34,7 @@ export interface FortuneReadingView {
 export interface FortuneParticipantView {
   id: string;
   ageConfirmedAt: Date;
+  personalizationBunshin: { id: string; name: string } | null;
 }
 
 export type CreateFortuneReadingResult =
@@ -47,6 +48,31 @@ export interface FortuneAiGenerationClaim {
   groupId: string;
   bunshinId: string;
   reading: FortuneReadingView;
+  personalization?: {
+    bunshinProfile?: {
+      name: string;
+      objectiveSummary: string;
+      audienceSummary: string;
+      personalitySummary: string;
+    };
+    memories?: Array<{
+      id: string;
+      type: string;
+      summary: string;
+      content: string;
+    }>;
+    recentReadings: Array<{
+      id: string;
+      localDate: string;
+      theme: FortuneTheme;
+      cardCode: string;
+      orientation: FortuneOrientation;
+      body: string | null;
+      actionStep: string | null;
+      feedbackRating: FortuneFeedbackRating | null;
+      feedbackIssue: FortuneFeedbackIssue | null;
+    }>;
+  };
 }
 
 export interface FortuneAiReadingResult extends FortuneReadingOutput {
@@ -74,6 +100,11 @@ export interface FortuneRepository {
   findParticipant(input: {
     serviceSlug: string;
     actorUserId: string;
+  }): Promise<FortuneParticipantView | null>;
+  updateParticipantPersonalization(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    bunshinId: string | null;
   }): Promise<FortuneParticipantView | null>;
   findReadingForDate(input: {
     serviceSlug: string;
@@ -158,6 +189,17 @@ export class FortuneDailyReadingService {
       ageConfirmedAt: input.now ?? new Date(),
     });
     if (!participant) throw new FortunePolicyError('NOT_AVAILABLE', '占いサービスを利用できません');
+    return participant;
+  }
+
+  async updatePersonalization(input: {
+    serviceSlug: string;
+    actorUserId: string;
+    bunshinId: string | null;
+  }) {
+    const participant = await this.repository.updateParticipantPersonalization(input);
+    if (!participant)
+      throw new FortunePolicyError('NOT_PARTICIPANT', '占いサービスへ参加してください');
     return participant;
   }
 

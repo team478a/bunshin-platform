@@ -1,5 +1,7 @@
+import { SelectBunshinMemories } from '@bunshin/application';
 import type {
   CreateFortuneReadingResult,
+  FortuneFeedbackIssue,
   FortuneOrientation,
   FortuneAiGenerationClaim,
   FortuneAiReadingResult,
@@ -135,11 +137,150 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
+      const [participantProfile, recentReadings] = await Promise.all([
+        tx.fortuneParticipant.findFirst({
+          where: {
+            id: reading.participantId,
+            serviceSettingId: scope.id,
+            userId: input.actorUserId,
+            workspaceId: scope.workspaceId,
+            personalizationBunshin: {
+              is: {
+                groupId: scope.groupId,
+                ownerUserId: input.actorUserId,
+                status: 'ACTIVE',
+              },
+            },
+          },
+          select: {
+            personalizationBunshin: {
+              select: {
+                id: true,
+                name: true,
+                objectiveSummary: true,
+                audienceSummary: true,
+                personalitySummary: true,
+                updatedAt: true,
+                memories: {
+                  where: { active: true, deletedAt: null },
+                  orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
+                  take: 10,
+                },
+              },
+            },
+          },
+        }),
+        tx.fortuneReading.findMany({
+          where: {
+            id: { not: reading.id },
+            serviceSettingId: scope.id,
+            participantId: reading.participantId,
+            memberUserId: input.actorUserId,
+            status: { in: ['READY_AI', 'READY_BASIC'] },
+            deletedAt: null,
+          },
+          orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
+          take: 7,
+          include: {
+            feedback: { select: { id: true, rating: true, issueCode: true } },
+          },
+        }),
+      ]);
+      const bunshinProfile = participantProfile?.personalizationBunshin ?? null;
+      const selectedMemories = bunshinProfile
+        ? await new SelectBunshinMemories({
+            list: () =>
+              Promise.resolve(
+                (bunshinProfile.memories ?? []).map((memory) => ({
+                  ...memory,
+                  confidence: memory.confidence.toNumber(),
+                })),
+              ),
+          }).execute({
+            workspaceId: scope.workspaceId,
+            actorUserId: input.actorUserId,
+            bunshinId: bunshinProfile.id,
+            query: [
+              reading.theme,
+              reading.cardCode,
+              reading.readingText,
+              reading.actionStep,
+              bunshinProfile.objectiveSummary,
+              bunshinProfile.audienceSummary,
+              bunshinProfile.personalitySummary,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            maxItems: 3,
+            maxCharacters: 1600,
+          })
+        : [];
+      const feedbackIds = recentReadings.flatMap((item) =>
+        item.feedback ? [item.feedback.id] : [],
+      );
+      await tx.fortuneReading.update({
+        where: { id: reading.id },
+        data: {
+          personalizationContext: {
+            version: 'fortune-personalization-v2',
+            sources: [
+              ...(bunshinProfile ? ['PARTICIPANT_BUNSHIN_PROFILE'] : []),
+              ...(selectedMemories.length > 0 ? ['PARTICIPANT_BUNSHIN_MEMORY'] : []),
+              ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
+              ...(feedbackIds.length > 0 ? ['READING_FEEDBACK'] : []),
+            ],
+            ...(bunshinProfile
+              ? {
+                  bunshin: {
+                    id: bunshinProfile.id,
+                    updatedAt: bunshinProfile.updatedAt.toISOString(),
+                  },
+                }
+              : {}),
+            recentReadingIds: recentReadings.map((item) => item.id),
+            feedbackIds,
+            memoryIds: selectedMemories.map((memory) => memory.id),
+          },
+        },
+      });
       return {
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
+        personalization: {
+          ...(bunshinProfile
+            ? {
+                bunshinProfile: {
+                  name: bunshinProfile.name,
+                  objectiveSummary: bunshinProfile.objectiveSummary,
+                  audienceSummary: bunshinProfile.audienceSummary,
+                  personalitySummary: bunshinProfile.personalitySummary,
+                },
+              }
+            : {}),
+          ...(selectedMemories.length > 0
+            ? {
+                memories: selectedMemories.map(({ id, type, summary, content }) => ({
+                  id,
+                  type,
+                  summary,
+                  content,
+                })),
+              }
+            : {}),
+          recentReadings: recentReadings.map((item) => ({
+            id: item.id,
+            localDate: item.localDate.toISOString().slice(0, 10),
+            theme: item.theme,
+            cardCode: item.cardCode,
+            orientation: item.orientation,
+            body: item.readingText,
+            actionStep: item.actionStep,
+            feedbackRating: item.feedback?.rating ?? null,
+            feedbackIssue: (item.feedback?.issueCode as FortuneFeedbackIssue | null) ?? null,
+          })),
+        },
       };
     });
   }

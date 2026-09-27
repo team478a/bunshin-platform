@@ -1,0 +1,317 @@
+import {
+  Prisma,
+  type LineConfigurationEnvironment,
+  type PrismaClient,
+  type ServiceSupportAlertMode,
+} from '@prisma/client';
+
+const supportLabel: Record<ServiceSupportAlertMode, string> = {
+  OPTIONAL_UPSELL: '有料オプション候補',
+  INCLUDED_SUPPORT: '契約内サポート',
+  INTERNAL_ESCALATION: '内部対応',
+  DISABLED: 'アラート停止',
+};
+
+function handlingMode(value: Prisma.JsonValue): ServiceSupportAlertMode {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const mode = value['handlingMode'];
+    if (
+      mode === 'OPTIONAL_UPSELL' ||
+      mode === 'INCLUDED_SUPPORT' ||
+      mode === 'INTERNAL_ESCALATION' ||
+      mode === 'DISABLED'
+    )
+      return mode;
+  }
+  return 'INTERNAL_ESCALATION';
+}
+
+const replace = (value: string, variables: Record<string, string>) =>
+  Object.entries(variables).reduce(
+    (result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement),
+    value,
+  );
+
+export async function scheduleSocialActivityOemSupportCandidateLines(
+  client: PrismaClient,
+  input: {
+    baseUrl: string;
+    environment: LineConfigurationEnvironment;
+    now?: Date;
+    limit?: number;
+  },
+) {
+  const now = input.now ?? new Date();
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const candidateIds = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT candidate."id"
+    FROM "social_activity_oem_support_candidates" candidate
+    WHERE candidate."status" = 'OPEN'::"SocialActivityOemSupportCandidateStatus"
+      AND COALESCE(candidate."recommendation_snapshot"->>'handlingMode', 'INTERNAL_ESCALATION') <> 'DISABLED'
+      AND EXISTS (
+        SELECT 1
+        FROM "social_activity_barrier_cases" barrier_case
+        JOIN "service_support_alert_policies" policy
+          ON policy."workspace_id" = barrier_case."workspace_id"
+         AND policy."group_id" = barrier_case."group_id"
+         AND policy."notify_by_line" = true
+        WHERE barrier_case."id" = candidate."case_id"
+          AND EXISTS (
+            SELECT 1
+            FROM "group_memberships" manager
+            JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+            WHERE manager."workspace_id" = barrier_case."workspace_id"
+              AND manager."group_id" = barrier_case."group_id"
+              AND manager."status" = 'ACTIVE'
+              AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+              AND manager_user."status" = 'ACTIVE'
+          )
+          AND (
+            NOT EXISTS (
+              SELECT 1
+              FROM "service_notification_preferences" preference
+              JOIN "group_memberships" manager ON manager."id" = preference."group_membership_id"
+              JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+              WHERE manager."workspace_id" = barrier_case."workspace_id"
+                AND manager."group_id" = barrier_case."group_id"
+                AND manager."status" = 'ACTIVE'
+                AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+                AND manager_user."status" = 'ACTIVE'
+                AND preference."topic" = 'OEM_SUPPORT_CANDIDATE'
+                AND preference."channel" = 'LINE'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM "service_notification_preferences" preference
+              JOIN "group_memberships" manager ON manager."id" = preference."group_membership_id"
+              JOIN "users" manager_user ON manager_user."id" = manager."user_id"
+              WHERE manager."workspace_id" = barrier_case."workspace_id"
+                AND manager."group_id" = barrier_case."group_id"
+                AND manager."status" = 'ACTIVE'
+                AND manager."service_role" IN ('SERVICE_OWNER', 'SERVICE_ADMIN')
+                AND manager_user."status" = 'ACTIVE'
+                AND preference."topic" = 'OEM_SUPPORT_CANDIDATE'
+                AND preference."channel" = 'LINE'
+                AND preference."enabled" = true
+                AND preference."consented_at" IS NOT NULL
+            )
+          )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "service_line_broadcasts" broadcast
+        WHERE broadcast."automation_key" = ('oem-support-candidate:' || candidate."id"::text)
+      )
+    ORDER BY candidate."detected_at" ASC, candidate."id" ASC
+    LIMIT ${limit}
+  `);
+  const candidates = await client.socialActivityOemSupportCandidate.findMany({
+    where: { id: { in: candidateIds.map(({ id }) => id) }, status: 'OPEN' },
+    orderBy: [{ detectedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+    select: {
+      id: true,
+      recommendationSnapshot: true,
+      barrierCase: {
+        select: {
+          groupMembership: {
+            select: {
+              workspaceId: true,
+              groupId: true,
+              group: {
+                select: {
+                  memberships: {
+                    where: {
+                      status: 'ACTIVE',
+                      serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+                      user: { status: 'ACTIVE' },
+                    },
+                    select: {
+                      id: true,
+                      userId: true,
+                      user: { select: { displayName: true } },
+                      serviceNotificationPreferences: {
+                        where: { topic: 'OEM_SUPPORT_CANDIDATE', channel: 'LINE' },
+                        select: { enabled: true, consentedAt: true },
+                      },
+                    },
+                  },
+                  serviceConfiguration: {
+                    select: {
+                      slug: true,
+                      displayName: true,
+                      supportAlertPolicy: { select: { notifyByLine: true } },
+                      messageTemplates: {
+                        where: {
+                          channel: 'LINE',
+                          purpose: 'OEM_SUPPORT_CANDIDATE',
+                          isActive: true,
+                        },
+                        orderBy: { updatedAt: 'desc' },
+                        take: 1,
+                        select: { body: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  let scheduled = 0;
+  let existing = 0;
+  let skipped = 0;
+  const broadcasts: Array<{
+    workspaceId: string;
+    broadcastId: string;
+    requestedBy: string;
+    scheduledAt: Date;
+  }> = [];
+
+  for (const candidate of candidates) {
+    const membership = candidate.barrierCase.groupMembership;
+    const service = membership.group.serviceConfiguration;
+    const mode = handlingMode(candidate.recommendationSnapshot);
+    if (!service || service.supportAlertPolicy?.notifyByLine !== true || mode === 'DISABLED') {
+      skipped += 1;
+      continue;
+    }
+    const preferencesExist = membership.group.memberships.some(
+      ({ serviceNotificationPreferences }) => serviceNotificationPreferences.length > 0,
+    );
+    const recipients = membership.group.memberships.filter(({ serviceNotificationPreferences }) => {
+      if (!preferencesExist) return true;
+      const preference = serviceNotificationPreferences[0];
+      return preference?.enabled === true && preference.consentedAt !== null;
+    });
+    const actor = recipients[0];
+    if (!actor) {
+      skipped += 1;
+      continue;
+    }
+    const automationKey = `oem-support-candidate:${candidate.id}`;
+    const manageUrl = `${input.baseUrl.replace(/\/$/, '')}/s/${encodeURIComponent(service.slug)}/manage/personalization`;
+    const template =
+      service.messageTemplates[0]?.body ??
+      '{{serviceName}}で「{{supportType}}」の確認が必要です。\n利用者への案内や課金は自動実行されません。\n\n確認する：{{manageUrl}}';
+    const variables = {
+      serviceName: service.displayName,
+      supportType: supportLabel[mode],
+      manageUrl,
+    };
+    const message = replace(template, { ...variables, name: '運営担当者' });
+    type ScheduledResult = {
+      created: boolean;
+      workspaceId: string;
+      broadcastId: string;
+      requestedBy: string;
+      scheduledAt: Date;
+    };
+    let result: ScheduledResult;
+    try {
+      result = await client.$transaction(async (tx) => {
+        const found = await tx.serviceLineBroadcast.findUnique({
+          where: { automationKey },
+          select: {
+            id: true,
+            workspaceId: true,
+            updatedByUserId: true,
+            scheduledAt: true,
+          },
+        });
+        if (found)
+          return {
+            created: false,
+            workspaceId: found.workspaceId,
+            broadcastId: found.id,
+            requestedBy: found.updatedByUserId,
+            scheduledAt: found.scheduledAt ?? now,
+          };
+        const broadcast = await tx.serviceLineBroadcast.create({
+          data: {
+            workspaceId: membership.workspaceId,
+            groupId: membership.groupId,
+            title: '新しい支援候補があります',
+            message,
+            automationKey,
+            audience: 'ACTIVE_PARTICIPANTS',
+            segmentCriteria: {
+              kind: 'OEM_SUPPORT_CANDIDATE',
+              candidateId: candidate.id,
+              handlingMode: mode,
+            },
+            status: 'SCHEDULED',
+            scheduledAt: now,
+            createdByUserId: actor.userId,
+            updatedByUserId: actor.userId,
+          },
+          select: { id: true },
+        });
+        await tx.serviceLineBroadcastRecipient.createMany({
+          data: recipients.map((recipient) => ({
+            workspaceId: membership.workspaceId,
+            groupId: membership.groupId,
+            broadcastId: broadcast.id,
+            groupMembershipId: recipient.id,
+            userId: recipient.userId,
+            message: replace(template, {
+              ...variables,
+              name: recipient.user.displayName || '運営担当者',
+            }),
+          })),
+        });
+        await tx.serviceLineBroadcastAuditLog.create({
+          data: {
+            workspaceId: membership.workspaceId,
+            groupId: membership.groupId,
+            broadcastId: broadcast.id,
+            action: 'SCHEDULED',
+            beforeData: {},
+            afterData: {
+              recipients: recipients.length,
+              candidateId: candidate.id,
+              handlingMode: mode,
+              environment: input.environment,
+            },
+            reason: 'OEM支援候補をサービス運営管理者へ通知',
+            performedByUserId: actor.userId,
+          },
+        });
+        return {
+          created: true,
+          workspaceId: membership.workspaceId,
+          broadcastId: broadcast.id,
+          requestedBy: actor.userId,
+          scheduledAt: now,
+        };
+      });
+    } catch (error) {
+      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'P2002')
+        throw error;
+      const found = await client.serviceLineBroadcast.findUnique({
+        where: { automationKey },
+        select: {
+          id: true,
+          workspaceId: true,
+          updatedByUserId: true,
+          scheduledAt: true,
+        },
+      });
+      if (!found) throw error;
+      result = {
+        created: false,
+        workspaceId: found.workspaceId,
+        broadcastId: found.id,
+        requestedBy: found.updatedByUserId,
+        scheduledAt: found.scheduledAt ?? now,
+      };
+    }
+    if (result.created) scheduled += 1;
+    else existing += 1;
+    broadcasts.push(result);
+  }
+  return { selected: candidates.length, scheduled, existing, skipped, broadcasts };
+}

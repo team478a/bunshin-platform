@@ -25,7 +25,15 @@ import {
   RunAiResaleRuntimeBatch,
   type AiResaleRuntimeBatchSummary,
 } from '@bunshin/capability-resale';
+import {
+  RunSocialActivityBarrierProjectionBatch,
+  type SocialActivityBarrierProjectionSummary,
+} from '@bunshin/capability-social';
 import { getServerEnvironment } from '@bunshin/config';
+import type {
+  SocialActivityBarrierResolutionSummary,
+  SocialActivityOemSupportCandidateProjectionSummary,
+} from '@bunshin/database';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
 import { authorizeCronRequest } from './cron-security';
@@ -49,6 +57,10 @@ import {
   scheduleAiTrainingActionLineDeliveries,
   type AiTrainingActionLineScheduleSummary,
 } from '../services/ai-training-action-line-scheduler';
+import {
+  scheduleSocialActivityBarrierLineNotifications,
+  type SocialActivityBarrierLineScheduleSummary,
+} from '../services/social-activity-barrier-line-scheduler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -77,6 +89,10 @@ export interface MissionSchedulerPort {
       aiResaleOfferLine?: AiResaleOfferLineScheduleSummary;
       aiTrainingLine?: AiTrainingActionLineScheduleSummary;
       serviceLineBroadcastRecovery?: ServiceLineBroadcastRecoverySummary;
+      socialActivityBarriers?: SocialActivityBarrierProjectionSummary;
+      socialActivityBarrierLine?: SocialActivityBarrierLineScheduleSummary;
+      socialActivityOemSupportCandidates?: SocialActivityOemSupportCandidateProjectionSummary;
+      socialActivityBarrierResolution?: SocialActivityBarrierResolutionSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -133,6 +149,11 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
   const aiResale = new RunAiResaleRuntimeBatch(
     new db.PrismaAiResaleRuntimeRepository(db.prisma),
     new AiResaleV1Policy(),
+  );
+  const socialActivityBarriers = new RunSocialActivityBarrierProjectionBatch(
+    new db.PrismaSocialActivityBarrierProjectionCandidateRepository(db.prisma),
+    new db.PrismaSocialActivityBarrierObservationRepository(db.prisma),
+    new db.PrismaSocialActivityBarrierCaseRepository(db.prisma),
   );
   const { resolveOpenAiRuntimeConfiguration } =
     await import('../ai/runtime-provider-configuration');
@@ -224,6 +245,19 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           truncated: false,
         } satisfies AiResaleRuntimeBatchSummary;
       });
+      const socialActivityBarrierProcessing = socialActivityBarriers.execute().catch(
+        () =>
+          ({
+            due: true,
+            scanned: 0,
+            evaluated: 0,
+            suspected: 0,
+            noSignals: 0,
+            skipped: 0,
+            failures: 1,
+            truncated: false,
+          }) satisfies SocialActivityBarrierProjectionSummary,
+      );
       const [
         missionResult,
         trendResult,
@@ -231,6 +265,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         pointResult,
         badgeResult,
         aiResaleResult,
+        socialActivityBarrierResult,
       ] = await Promise.all([
         mission.execute(environment),
         trend.execute(environment),
@@ -238,6 +273,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         pointProcessing,
         badgeProcessing,
         aiResaleProcessing,
+        socialActivityBarrierProcessing,
       ]);
       const badgePrepared = await badgePreparation.execute({ environment });
       const badgeJobResult = await badgeJobs.execute(environment);
@@ -283,6 +319,41 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           truncated: false,
         }),
       );
+      const socialActivityBarrierLine = await scheduleSocialActivityBarrierLineNotifications({
+        environment,
+      }).catch(() => ({
+        candidates: 0,
+        broadcasts: 0,
+        recipients: 0,
+        skipped: 0,
+        failures: 1,
+        truncated: false,
+      }));
+      const socialActivityBarrierResolution = await db
+        .resolveImprovedSocialActivityBarriers(db.prisma)
+        .catch(
+          () =>
+            ({
+              scanned: 0,
+              resolved: 0,
+              persistent: 0,
+              skipped: 0,
+              failures: 1,
+              truncated: false,
+            }) satisfies SocialActivityBarrierResolutionSummary,
+        );
+      const socialActivityOemSupportCandidates = await db
+        .projectSocialActivityOemSupportCandidates(db.prisma)
+        .catch(
+          () =>
+            ({
+              scanned: 0,
+              created: 0,
+              skipped: 0,
+              failures: 1,
+              truncated: false,
+            }) satisfies SocialActivityOemSupportCandidateProjectionSummary,
+        );
       return {
         ...missionResult,
         trend: trendResult,
@@ -294,6 +365,10 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         aiResaleOfferLine,
         aiTrainingLine,
         serviceLineBroadcastRecovery: recoveredServiceLineBroadcasts,
+        socialActivityBarriers: socialActivityBarrierResult,
+        socialActivityBarrierLine,
+        socialActivityOemSupportCandidates,
+        socialActivityBarrierResolution,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };

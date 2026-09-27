@@ -3,7 +3,7 @@ import { fortuneDailyReadingService } from '../../../../src/fortune/runtime';
 import { resolveFortunePage } from '../../../../src/fortune/page-context';
 import { FortuneNav } from '../fortune-ui';
 import { FortuneNotificationSetting } from '../fortune-notification-setting';
-import { FortuneWithdrawButton } from '../fortune-actions';
+import { FortunePersonalizationSetting, FortuneWithdrawButton } from '../fortune-actions';
 
 export const dynamic = 'force-dynamic';
 export default async function FortuneSettingsPage({
@@ -12,10 +12,26 @@ export default async function FortuneSettingsPage({
   params: Promise<{ serviceSlug: string }>;
 }) {
   const { serviceSlug } = await params;
-  const { actor, setting } = await resolveFortunePage(serviceSlug, `/s/${serviceSlug}/settings`);
+  const { actor, service, setting } = await resolveFortunePage(
+    serviceSlug,
+    `/s/${serviceSlug}/settings`,
+  );
   const today = await (
     await fortuneDailyReadingService()
   ).today({ serviceSlug, actorUserId: actor.userId });
+  const db = await import('@bunshin/database');
+  const personalizationCandidates = today.participant
+    ? await db.prisma.bunshin.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          ownerUserId: actor.userId,
+          status: 'ACTIVE',
+        },
+        select: { id: true, name: true },
+        orderBy: { updatedAt: 'desc' },
+      })
+    : [];
   return (
     <PublicShell showPlatformBrand={false}>
       <main className="app-page fortune-page">
@@ -31,6 +47,20 @@ export default async function FortuneSettingsPage({
               : 'まだ年齢確認が終わっていません。'}
           </p>
         </section>
+        {today.participant && (
+          <section className="settings-card">
+            <h2>あなたに合わせた占い</h2>
+            {personalizationCandidates.length === 0 ? (
+              <p>このサービスで利用できる本人所有のBunshinはありません。</p>
+            ) : (
+              <FortunePersonalizationSetting
+                serviceSlug={serviceSlug}
+                candidates={personalizationCandidates}
+                selectedBunshinId={today.participant.personalizationBunshin?.id ?? null}
+              />
+            )}
+          </section>
+        )}
         <section className="settings-card">
           <h2>お知らせ</h2>
           {!setting.weeklyNotificationEnabled ? (

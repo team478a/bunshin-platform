@@ -37,7 +37,7 @@ const relevance = (memory: BunshinMemory, queryTokens: Set<string>) => {
 };
 
 export class SelectBunshinMemories {
-  constructor(private readonly repository: BunshinMemoryRepository) {}
+  constructor(private readonly repository: Pick<BunshinMemoryRepository, 'list'>) {}
 
   async execute(input: {
     workspaceId: string;

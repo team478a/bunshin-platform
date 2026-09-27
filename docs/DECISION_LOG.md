@@ -2732,3 +2732,135 @@
 - Privacy: User ID、氏名、回答内容、投稿本文、支援Snapshotは集計結果へ含めない。
 - Scope: Managed Service Contextで認可し、WorkspaceとService Groupに属するActive Membershipだけを集計する。
 - Reuse: 既存の個別化確認画面へ追加し、同じ目的の管理画面や集計テーブルは新設しない。
+
+## D-109: SNS継続支援の定期判定は明示的なService Featureで限定する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- `SOCIAL.ACTIVITY_SUPPORT`が有効なServiceのACTIVE参加者だけを対象とする。サービス名やslugはハードコードしない。
+- 既存Mission・投稿完了・結果・LINE配信を28日単位で集計し、システム障害日は除外する。
+- 毎日03:10 JSTに確定済み日付までを評価し、行動だけでは`SUSPECTED`までとする。本人回答なしに障壁を確定しない。
+- Userごとの先頭Bunshinへ暗黙集約せず、対象Service内のACTIVEなSocial Bunshinを個別に評価する。
+- Scheduler再実行時は既存Evidence KeyとCase一意制約で二重保存を防ぎ、参加者ごとの失敗は他参加者の判定を止めない。
+
+## D-110: SNS継続支援の本人確認はLINEからWebへ導く
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- LINEは本人確認があることだけを知らせ、回答は既存Web画面で行う。本人が回答する前の推定Categoryは通知文に出さない。
+- 通知予約前と実配信時に、Workspace、Service、Membership、User、Bunshin、LINE連携、通知同意、Case状態を再検証する。
+- Case IDと再発回数から決定的な通知キーを作り、同じ確認回の二重配信を防ぐ。
+- 配信時に本人回答済みであれば送信しない。
+
+## D-111: OEM支援候補は無償支援後の再観測でのみ作る
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- 本人確認済み障壁への無償支援が完了し、その後の14有効日以上のEvidenceで未改善が確認できた場合だけ候補化する。
+- システム障害日を含むEvidenceは候補化しない。
+- `CONTENT` はワタシワークス側の個別化品質問題を先に調べるため、自動のOEM支援候補から除外する。
+- 商品・価格はCoreへ固定せず、支援種別のSnapshotまでを保存する。
+
+## D-112: OEM支援候補の対応はService管理者が明示的に決める
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- 候補生成から自動営業・契約・課金へ進まず、Service Owner / Adminが「対応する」「今回は対応しない」を選ぶ。
+- 状態遷移は `OPEN -> ACCEPTED / DISMISSED`、`ACCEPTED -> COMPLETED` に限定する。
+- 操作ごとに実行者、前後状態、理由、日時を監査履歴として保存する。
+
+## D-113: OEM支援アラートの扱いはServiceごとに決める
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- 月額課金と支援アラートの扱いを分離し、追加提案、契約内支援、内部対応、無効をService単位で選択する。
+- 既存Serviceの既定値は自動営業を起こさない `INTERNAL_ESCALATION` とする。
+- 候補生成時の方針をSnapshotに残し、後の設定変更から監査可能性を守る。
+
+## D-114: OEM支援候補通知は運営管理者限定の専用配送履歴で管理する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- 有効な`SERVICE_OWNER / SERVICE_ADMIN`だけへ送信し、支援対象の利用者本人には送信しない。
+- Service別のメールProvider、暗号化された資格情報、共通Resend Adapterを再利用する。
+- 候補と受信管理者の組を一意にし、Providerへは配送ID由来の冪等キーを渡す。
+- `DISABLED`、未検証Provider、停止中メールは配送しない。通知から自動営業、契約変更、課金は実行しない。
+
+## D-115: OEM支援候補のLINE通知は既存Service Broadcastを再利用する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- LINE通知を有効にしたServiceだけを対象にし、有効な`SERVICE_OWNER / SERVICE_ADMIN`へ送る。支援対象の利用者本人には送らない。
+- 候補ID由来の`automationKey`でBroadcastを一意にし、既存の配送Job、同意・友だち状態検証、再試行、監査、未投入Job回復を再利用する。
+- 個別のLINE受信設定が存在するServiceでは、有効かつ同意済みの管理者だけを受信者にする。
+- 通知は管理画面への入口に限定し、自動営業、契約変更、課金を実行しない。
+
+## D-116: OEM支援候補のLINE本文は用途別Service Templateから取得する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- `LINE / OEM_SUPPORT_CANDIDATE`の最新有効テンプレートをService単位で取得し、固定文を各所へ増やさない。
+- `name`、`serviceName`、`supportType`、`manageUrl`だけを置換対象とし、受信者別本文はBroadcast Recipientへ保存する。
+- テンプレートがないServiceには安全な既定文を使い、既存Serviceの通知を停止させない。
+
+## D-117: OEM支援候補の通知担当者はチャネルごとに選択する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- `OEM_SUPPORT_CANDIDATE`の受信設定は、Service Owner / Adminを対象にEMAILとLINEを別々に保存する。
+- EMAILはメールアドレス登録済み管理者だけを選択可能にし、LINEは実配信時にもLINE連携、通知同意、友だち状態を再検証する。
+- Service管理権限とWorkspace / Service境界を既存の管理Contextで検証し、設定変更をService監査へ記録する。
+
+## D-118: OEM支援LINEの失敗は個別化画面から既存LINE運用画面へ導く
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 候補ID由来の`automationKey`を持つBroadcastだけをWorkspace / Service内で抽出し、失敗件数と分類を個別化管理画面に表示する。
+- 再送処理を複製せず、既存の公式LINE管理画面にある失敗宛先だけの再送、監査、冪等Jobを再利用する。
+- 受信者の個人情報や通知本文は失敗一覧に表示しない。
+
+## D-119: OEM支援LINE Schedulerは未通知候補だけを先に選ぶ
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- `automationKey`が存在しないOPEN候補をDBで抽出してから処理上限を適用し、古い通知済み候補による新規候補の枯渇を防ぐ。
+- Candidate IDとBroadcast `automationKey`の対応を決定的に保ち、同時実行時の一意制約とJob冪等性を維持する。
+- Broadcast作成後にJob投入が中断した場合は、既存のService Line Broadcast Recoveryを正本として回復する。
+
+## D-120: OEM支援通知Schedulerは配信可能な候補へ上限を適用する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- EMAIL / LINEとも、チャネル有効、アラート有効、ACTIVEな管理者、受信設定を満たす未通知候補をDBで抽出してから処理上限を適用する。
+- 無効設定や受信者不在の古い候補が新しい配信可能候補を永続的に遮らないようにする。
+- 候補状態や設定は詳細取得後にも再検証し、抽出から作成までの設定変更に対して安全側で停止する。
+
+## D-121: OEM支援メールはProvider送信直前に受信資格を再検証する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 予約後に候補対応済み、チャネル停止、担当解除、権限失効、アドレス変更が起きた場合はProviderへ送らず`SKIPPED`として記録する。
+- Workspace、Service、Configuration、Candidate、Recipientを同時に照合し、別Scopeへの送信を許可しない。
+- 配送予約時の検証だけに依存せず、外部副作用の直前に最新状態を確認する。
+
+## D-122: OEM支援LINEはProvider送信直前に候補と受信資格を再検証する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- OEM支援候補由来のBroadcastだけを識別し、CandidateがOPEN、LINE通知が有効、受信者がACTIVEなService Owner / Admin、個別同意が有効であることを再確認する。
+- 資格を失った宛先はProviderへ渡さず`SKIPPED / NOTIFICATION_NO_LONGER_ELIGIBLE`とし、対象がゼロならBroadcastを正常終了させる。
+- 一般のService Broadcastにはこの追加判定を適用せず、既存配信仕様を維持する。

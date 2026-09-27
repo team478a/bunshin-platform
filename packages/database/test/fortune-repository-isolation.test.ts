@@ -22,6 +22,8 @@ const scope = {
 
 const reading = {
   id: readingId,
+  participantId: '00000000-0000-4000-8000-000000000308',
+  memberUserId: actorUserId,
   localDate: new Date('2026-09-26T00:00:00.000Z'),
   theme: 'WORK',
   cardCode: 'THE_FOOL',
@@ -36,11 +38,21 @@ const reading = {
 function targetClient(target: unknown = scope) {
   return {
     fortuneServiceSetting: { findFirst: vi.fn().mockResolvedValue(target) },
-    fortuneParticipant: { findFirst: vi.fn(), upsert: vi.fn() },
+    fortuneParticipant: { findFirst: vi.fn(), upsert: vi.fn(), update: vi.fn() },
+    bunshin: {
+      findFirst: vi.fn().mockResolvedValue({
+        name: '細矢めぐみ',
+        objectiveSummary: '毎日を整える',
+        audienceSummary: '占いを生活のヒントにしたい人',
+        personalitySummary: '穏やかで具体的',
+        updatedAt: new Date('2026-09-25T00:00:00.000Z'),
+      }),
+    },
     fortuneReading: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn(),
       upsert: vi.fn(),
     },
@@ -153,10 +165,57 @@ describe('fortune repository isolation', () => {
     expect(tx.fortuneReading.upsert).not.toHaveBeenCalled();
   });
 
-  it('returns only the Bunshin resolved from the actor service when claiming AI generation', async () => {
+  it('uses only the participant-selected owned Bunshin when claiming AI generation', async () => {
     const tx = targetClient();
+    tx.fortuneParticipant.findFirst.mockResolvedValue({
+      personalizationBunshin: {
+        id: '00000000-0000-4000-8000-000000000397',
+        name: '本人のBunshin',
+        objectiveSummary: '朝に仕事の優先順位を整える',
+        audienceSummary: '占いを生活のヒントにしたい人',
+        personalitySummary: '穏やかで具体的',
+        updatedAt: new Date('2026-09-25T00:00:00.000Z'),
+        memories: [
+          {
+            id: '00000000-0000-4000-8000-000000000396',
+            workspaceId: scope.workspaceId,
+            bunshinId: '00000000-0000-4000-8000-000000000397',
+            type: 'PREFERENCE',
+            content: '仕事では、朝に今日の優先順位を整理している',
+            summary: '朝に仕事の優先順位を整理する習慣',
+            sourceType: 'USER_INPUT',
+            sourceId: null,
+            attachmentStatus: null,
+            attachmentStorageKey: null,
+            attachmentMimeType: null,
+            attachmentSizeBytes: null,
+            attachmentWidth: null,
+            attachmentHeight: null,
+            automaticImageReference: false,
+            confidence: { toNumber: () => 0.9 },
+            importance: 5,
+            active: true,
+            deletedAt: null,
+            createdAt: new Date('2026-09-24T00:00:00.000Z'),
+            updatedAt: new Date('2026-09-25T00:00:00.000Z'),
+          },
+        ],
+      },
+    });
     tx.fortuneReading.updateMany.mockResolvedValue({ count: 1 });
     tx.fortuneReading.findFirst.mockResolvedValue(reading);
+    tx.fortuneReading.findMany.mockResolvedValue([
+      {
+        ...reading,
+        id: '00000000-0000-4000-8000-000000000399',
+        status: 'READY_AI',
+        feedback: {
+          id: '00000000-0000-4000-8000-000000000398',
+          rating: 'NOT_HELPFUL',
+          issueCode: 'TOO_VAGUE',
+        },
+      },
+    ]);
     const client = {
       $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
         Promise.resolve(callback(tx)),
@@ -174,6 +233,22 @@ describe('fortune repository isolation', () => {
       groupId: scope.groupId,
       bunshinId: scope.bunshinId,
       reading: { id: readingId },
+      personalization: {
+        bunshinProfile: { name: '本人のBunshin' },
+        memories: [
+          {
+            id: '00000000-0000-4000-8000-000000000396',
+            summary: '朝に仕事の優先順位を整理する習慣',
+          },
+        ],
+        recentReadings: [
+          {
+            id: '00000000-0000-4000-8000-000000000399',
+            feedbackRating: 'NOT_HELPFUL',
+            feedbackIssue: 'TOO_VAGUE',
+          },
+        ],
+      },
     });
     expect(tx.fortuneReading.updateMany).toHaveBeenCalledWith({
       where: {
@@ -183,6 +258,116 @@ describe('fortune repository isolation', () => {
         status: 'READY_BASIC',
       },
       data: { status: 'GENERATING', failureCode: null },
+    });
+    expect(tx.fortuneReading.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          serviceSettingId: scope.id,
+          participantId: reading.participantId,
+          memberUserId: actorUserId,
+        }),
+      }),
+    );
+    expect(tx.fortuneParticipant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: reading.participantId,
+          serviceSettingId: scope.id,
+          userId: actorUserId,
+          workspaceId: scope.workspaceId,
+          personalizationBunshin: {
+            is: {
+              groupId: scope.groupId,
+              ownerUserId: actorUserId,
+              status: 'ACTIVE',
+            },
+          },
+        }),
+      }),
+    );
+    expect(tx.fortuneReading.update).toHaveBeenCalledWith({
+      where: { id: readingId },
+      data: {
+        personalizationContext: {
+          version: 'fortune-personalization-v2',
+          sources: [
+            'PARTICIPANT_BUNSHIN_PROFILE',
+            'PARTICIPANT_BUNSHIN_MEMORY',
+            'RECENT_READING',
+            'READING_FEEDBACK',
+          ],
+          bunshin: {
+            id: '00000000-0000-4000-8000-000000000397',
+            updatedAt: '2026-09-25T00:00:00.000Z',
+          },
+          recentReadingIds: ['00000000-0000-4000-8000-000000000399'],
+          feedbackIds: ['00000000-0000-4000-8000-000000000398'],
+          memoryIds: ['00000000-0000-4000-8000-000000000396'],
+        },
+      },
+    });
+  });
+
+  it('rejects a personalization Bunshin that is not active and owned in the service scope', async () => {
+    const tx = targetClient();
+    tx.fortuneParticipant.findFirst.mockResolvedValue({ id: reading.participantId });
+    tx.bunshin.findFirst.mockResolvedValue(null);
+    const client = {
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    await expect(
+      repository(client).updateParticipantPersonalization({
+        serviceSlug,
+        actorUserId,
+        bunshinId: '00000000-0000-4000-8000-000000000390',
+      }),
+    ).resolves.toBeNull();
+    expect(tx.bunshin.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: '00000000-0000-4000-8000-000000000390',
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        ownerUserId: actorUserId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+  });
+
+  it('saves an explicitly selected owned Bunshin for the authenticated participant', async () => {
+    const tx = targetClient();
+    tx.fortuneParticipant.findFirst.mockResolvedValue({ id: reading.participantId });
+    tx.bunshin.findFirst.mockResolvedValue({ id: '00000000-0000-4000-8000-000000000390' });
+    tx.fortuneParticipant.update.mockResolvedValue({
+      id: reading.participantId,
+      ageConfirmedAt: new Date('2026-09-26T00:00:00.000Z'),
+      personalizationBunshin: {
+        id: '00000000-0000-4000-8000-000000000390',
+        name: '本人のBunshin',
+      },
+    });
+    const client = {
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    await expect(
+      repository(client).updateParticipantPersonalization({
+        serviceSlug,
+        actorUserId,
+        bunshinId: '00000000-0000-4000-8000-000000000390',
+      }),
+    ).resolves.toMatchObject({
+      personalizationBunshin: { id: '00000000-0000-4000-8000-000000000390' },
+    });
+    expect(tx.fortuneParticipant.update).toHaveBeenCalledWith({
+      where: { id: reading.participantId },
+      data: { personalizationBunshinId: '00000000-0000-4000-8000-000000000390' },
+      include: { personalizationBunshin: { select: { id: true, name: true } } },
     });
   });
 

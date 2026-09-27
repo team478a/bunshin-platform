@@ -34,7 +34,39 @@ export async function resolveServiceLineBroadcastRecipientIds(input: {
     programEnrollmentId?: unknown;
     assignmentId?: unknown;
     offeringId?: unknown;
+    bunshinId?: unknown;
+    caseIds?: unknown;
   };
+
+  if (criteria.kind === 'SOCIAL_ACTIVITY_BARRIER') {
+    const caseIds = Array.isArray(criteria.caseIds)
+      ? criteria.caseIds.filter((value): value is string => typeof value === 'string')
+      : [];
+    if (typeof criteria.bunshinId !== 'string' || caseIds.length === 0) {
+      eligibleMembershipIds.clear();
+    } else {
+      const cases = await input.db.prisma.socialActivityBarrierCase.findMany({
+        where: {
+          id: { in: caseIds },
+          workspaceId: input.broadcast.workspaceId,
+          groupId: input.broadcast.groupId,
+          bunshinId: criteria.bunshinId,
+          status: 'SUSPECTED',
+        },
+        select: { id: true, groupMembershipId: true, userId: true },
+      });
+      for (const membershipId of [...eligibleMembershipIds]) {
+        const recipient = input.recipients.find((item) => item.groupMembershipId === membershipId);
+        if (
+          !recipient ||
+          !cases.some(
+            (item) => item.groupMembershipId === membershipId && item.userId === recipient.userId,
+          )
+        )
+          eligibleMembershipIds.delete(membershipId);
+      }
+    }
+  }
 
   if (criteria.kind === 'FORTUNE_WEEKLY') {
     const preferences = await input.db.prisma.serviceNotificationPreference.findMany({

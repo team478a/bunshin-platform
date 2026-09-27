@@ -187,6 +187,7 @@ enum ServiceMessageTemplatePurpose {
   REMINDER
   WEEKLY_REPORT
   GENERAL_ANNOUNCEMENT
+  OEM_SUPPORT_CANDIDATE
 }
 
 enum ServiceMembershipEventType {
@@ -242,6 +243,13 @@ enum ServiceCommercialStatus {
   ACTIVE
   SUSPENDED
   ENDED
+}
+
+enum ServiceSupportAlertMode {
+  OPTIONAL_UPSELL
+  INCLUDED_SUPPORT
+  INTERNAL_ESCALATION
+  DISABLED
 }
 
 /// 独自ドメインは、DNS・ホスティングの確認が完了するまで有効化しない。
@@ -1851,6 +1859,13 @@ enum SocialActivitySupportStatus {
   SKIPPED
 }
 
+enum SocialActivityOemSupportCandidateStatus {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  COMPLETED
+}
+
 enum PostSource {
   MANUAL
 }
@@ -2592,6 +2607,7 @@ model Group {
   serviceConfiguration            ServiceConfiguration?
   serviceCustomDomain             ServiceCustomDomain?
   serviceCommercialSetting        ServiceCommercialSetting?
+  serviceSupportAlertPolicy       ServiceSupportAlertPolicy?
   serviceBrand                    ServiceBrand?
   serviceRegistrationPolicy       ServiceRegistrationPolicy?
   serviceConfigurationAudits      ServiceConfigurationAudit[]
@@ -2649,6 +2665,7 @@ model ServiceConfiguration {
   audits               ServiceConfigurationAudit[]
   legalDocuments       ServiceLegalDocument[]
   commercialSetting    ServiceCommercialSetting?
+  supportAlertPolicy   ServiceSupportAlertPolicy?
   customDomain         ServiceCustomDomain?
   fortuneSetting       FortuneServiceSetting?
 
@@ -2687,6 +2704,25 @@ model ServiceCommercialSetting {
   @@unique([workspaceId, groupId, configurationId])
   @@index([status, startsAt, endsAt])
   @@map("service_commercial_settings")
+}
+
+model ServiceSupportAlertPolicy {
+  id              String                  @id @default(uuid()) @db.Uuid
+  workspaceId     String                  @map("workspace_id") @db.Uuid
+  groupId         String                  @unique @map("group_id") @db.Uuid
+  configurationId String                  @unique @map("configuration_id") @db.Uuid
+  mode            ServiceSupportAlertMode @default(INTERNAL_ESCALATION)
+  notifyByEmail   Boolean                 @default(true) @map("notify_by_email")
+  notifyByLine    Boolean                 @default(false) @map("notify_by_line")
+  updatedByUserId String                  @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  group           Group                   @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Cascade)
+  configuration   ServiceConfiguration    @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, groupId])
+  @@unique([workspaceId, groupId, configurationId])
+  @@map("service_support_alert_policies")
 }
 
 /// サービス固有ドメインと、Vercel／DNSの接続確認状態。
@@ -2781,6 +2817,7 @@ model ServiceRegistrationEmailConfiguration {
   updatedAt           DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
   configuration       ServiceConfiguration                 @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
   deliveries          ServiceRegistrationEmailDelivery[]
+  supportCandidateDeliveries SocialActivityOemSupportCandidateEmailDelivery[]
 
   @@unique([workspaceId, groupId], map: "service_registration_email_configurations_workspace_group_key")
   @@unique([workspaceId, groupId, configurationId], map: "service_registration_email_configurations_scope_key")
@@ -2881,25 +2918,28 @@ model FortuneServiceSetting {
 }
 
 model FortuneParticipant {
-  id                  String                @id @default(uuid()) @db.Uuid
-  workspaceId         String                @map("workspace_id") @db.Uuid
-  groupId             String                @map("group_id") @db.Uuid
-  serviceSettingId    String                @map("service_setting_id") @db.Uuid
-  groupMembershipId   String                @unique @map("group_membership_id") @db.Uuid
-  userId              String                @map("user_id") @db.Uuid
-  ageConfirmedAt      DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
-  joinedAt            DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
-  serviceSetting      FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
-  groupMembership     GroupMembership       @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
-  user                User                  @relation("FortuneParticipantUser", fields: [userId], references: [id], onDelete: Restrict)
-  readings            FortuneReading[]
-  feedback            FortuneFeedback[]
+  id                         String                @id @default(uuid()) @db.Uuid
+  workspaceId                String                @map("workspace_id") @db.Uuid
+  groupId                    String                @map("group_id") @db.Uuid
+  serviceSettingId           String                @map("service_setting_id") @db.Uuid
+  groupMembershipId          String                @unique @map("group_membership_id") @db.Uuid
+  userId                     String                @map("user_id") @db.Uuid
+  personalizationBunshinId   String?               @map("personalization_bunshin_id") @db.Uuid
+  ageConfirmedAt             DateTime              @map("age_confirmed_at") @db.Timestamptz(6)
+  joinedAt                   DateTime              @default(now()) @map("joined_at") @db.Timestamptz(6)
+  createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  serviceSetting             FortuneServiceSetting @relation(fields: [workspaceId, groupId, serviceSettingId], references: [workspaceId, groupId, id], onDelete: Cascade)
+  groupMembership            GroupMembership       @relation(fields: [workspaceId, groupId, groupMembershipId, userId], references: [workspaceId, groupId, id, userId], onDelete: Restrict)
+  user                       User                  @relation("FortuneParticipantUser", fields: [userId], references: [id], onDelete: Restrict)
+  personalizationBunshin     Bunshin?              @relation("FortuneParticipantPersonalizationBunshin", fields: [workspaceId, personalizationBunshinId], references: [workspaceId, id], onDelete: Restrict)
+  readings                   FortuneReading[]
+  feedback                   FortuneFeedback[]
 
   @@unique([serviceSettingId, userId])
   @@unique([workspaceId, groupId, groupMembershipId, userId])
   @@unique([workspaceId, groupId, id, userId])
+  @@index([workspaceId, personalizationBunshinId])
   @@map("fortune_participants")
 }
 
@@ -2960,6 +3000,7 @@ model FortuneReading {
   actionStep         String?                  @map("action_step") @db.VarChar(500)
   modelName          String?                  @map("model_name") @db.VarChar(120)
   promptVersion      String?                  @map("prompt_version") @db.VarChar(80)
+  personalizationContext Json?                @map("personalization_context")
   failureCode        String?                  @map("failure_code") @db.VarChar(80)
   generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
   firstViewedAt      DateTime?                @map("first_viewed_at") @db.Timestamptz(6)
@@ -6122,6 +6163,7 @@ model Bunshin {
   memberProductContentRuns        MemberProductContentRun[]
   socialInsightSnapshots          SocialInsightSnapshot[]
   socialActivityBarrierCases      SocialActivityBarrierCase[]
+  fortunePersonalizationParticipants FortuneParticipant[]              @relation("FortuneParticipantPersonalizationBunshin")
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, id])
@@ -6943,6 +6985,7 @@ model SocialActivityBarrierCase {
   evidenceSnapshots SocialActivityBarrierEvidence[]
   confirmations     SocialActivityBarrierConfirmation[]
   supportActions    SocialActivitySupportIntervention[]
+  oemSupportCandidates SocialActivityOemSupportCandidate[]
 
   @@unique([workspaceId, groupId, groupMembershipId, userId, bunshinId, category], map: "social_activity_barrier_cases_scope_category_key")
   @@unique([workspaceId, groupId, id], map: "social_activity_barrier_cases_scope_id_key")
@@ -6967,6 +7010,7 @@ model SocialActivityBarrierEvidence {
   detectedAt                 DateTime                  @map("detected_at") @db.Timestamptz(6)
   createdAt                  DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   barrierCase                SocialActivityBarrierCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  oemSupportCandidates       SocialActivityOemSupportCandidate[]
 
   @@unique([caseId, evidenceKey], map: "social_activity_barrier_evidence_idempotency_key")
   @@index([caseId, detectedAt], map: "social_activity_barrier_evidence_case_detected_idx")
@@ -7006,9 +7050,87 @@ model SocialActivitySupportIntervention {
   createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
   barrierCase        SocialActivityBarrierCase   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  oemSupportCandidate SocialActivityOemSupportCandidate?
 
   @@index([caseId, status, offeredAt], map: "social_activity_support_case_status_idx")
   @@map("social_activity_support_interventions")
+}
+
+/// 無償支援完了後も同じ障壁が改善しない場合に、OEM事業者へ示す支援候補。
+model SocialActivityOemSupportCandidate {
+  id                     String                                  @id @default(uuid()) @db.Uuid
+  caseId                 String                                  @map("case_id") @db.Uuid
+  supportInterventionId  String                                  @unique @map("support_intervention_id") @db.Uuid
+  evidenceId             String                                  @map("evidence_id") @db.Uuid
+  status                 SocialActivityOemSupportCandidateStatus @default(OPEN)
+  recommendationKey      String                                  @map("recommendation_key") @db.VarChar(80)
+  recommendationSnapshot Json                                    @map("recommendation_snapshot")
+  reasonCode             String                                  @map("reason_code") @db.VarChar(100)
+  ruleVersion            String                                  @map("rule_version") @db.VarChar(80)
+  detectedAt             DateTime                                @map("detected_at") @db.Timestamptz(6)
+  acceptedAt             DateTime?                               @map("accepted_at") @db.Timestamptz(6)
+  dismissedAt            DateTime?                               @map("dismissed_at") @db.Timestamptz(6)
+  completedAt            DateTime?                               @map("completed_at") @db.Timestamptz(6)
+  createdAt              DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  barrierCase            SocialActivityBarrierCase               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  supportIntervention    SocialActivitySupportIntervention       @relation(fields: [supportInterventionId], references: [id], onDelete: Cascade)
+  evidence               SocialActivityBarrierEvidence           @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  audits                 SocialActivityOemSupportCandidateAudit[]
+  emailDeliveries        SocialActivityOemSupportCandidateEmailDelivery[]
+
+  @@index([status, detectedAt], map: "social_activity_oem_candidates_status_idx")
+  @@index([caseId, detectedAt], map: "social_activity_oem_candidates_case_idx")
+  @@map("social_activity_oem_support_candidates")
+}
+
+/// OEM支援候補をService Owner/Adminへ知らせた配送履歴。利用者本人へは送らない。
+model SocialActivityOemSupportCandidateEmailDelivery {
+  id                   String                                  @id @default(uuid()) @db.Uuid
+  workspaceId          String                                  @map("workspace_id") @db.Uuid
+  groupId              String                                  @map("group_id") @db.Uuid
+  configurationId      String                                  @map("configuration_id") @db.Uuid
+  candidateId          String                                  @map("candidate_id") @db.Uuid
+  emailConfigurationId String                                  @map("email_configuration_id") @db.Uuid
+  recipientUserId      String                                  @map("recipient_user_id") @db.Uuid
+  recipientEmail       String                                  @map("recipient_email") @db.VarChar(320)
+  recipientName        String?                                 @map("recipient_name") @db.VarChar(120)
+  fromName             String                                  @map("from_name") @db.VarChar(120)
+  fromEmail            String                                  @map("from_email") @db.VarChar(320)
+  replyToEmail         String?                                 @map("reply_to_email") @db.VarChar(320)
+  subject              String                                  @db.VarChar(200)
+  body                 String                                  @db.Text
+  handlingMode         ServiceSupportAlertMode                 @map("handling_mode")
+  status               ServiceRegistrationEmailDeliveryStatus @default(PENDING)
+  attemptCount         Int                                     @default(0) @map("attempt_count")
+  nextAttemptAt        DateTime                                @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  providerMessageId    String?                                 @map("provider_message_id") @db.VarChar(200)
+  lastErrorCategory    String?                                 @map("last_error_category") @db.VarChar(80)
+  sentAt               DateTime?                               @map("sent_at") @db.Timestamptz(6)
+  createdAt            DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  candidate            SocialActivityOemSupportCandidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  emailConfiguration   ServiceRegistrationEmailConfiguration   @relation(fields: [emailConfigurationId], references: [id], onDelete: Restrict)
+
+  @@unique([candidateId, recipientUserId], map: "social_activity_oem_candidate_email_recipient_key")
+  @@index([status, nextAttemptAt], map: "social_activity_oem_candidate_email_status_idx")
+  @@index([workspaceId, groupId, createdAt], map: "social_activity_oem_candidate_email_scope_idx")
+  @@map("social_activity_oem_support_candidate_email_deliveries")
+}
+
+model SocialActivityOemSupportCandidateAudit {
+  id                String                            @id @default(uuid()) @db.Uuid
+  candidateId       String                            @map("candidate_id") @db.Uuid
+  action            String                            @db.VarChar(40)
+  beforeStatus      SocialActivityOemSupportCandidateStatus @map("before_status")
+  afterStatus       SocialActivityOemSupportCandidateStatus @map("after_status")
+  reason            String                            @db.VarChar(500)
+  actorUserId       String                            @map("actor_user_id") @db.Uuid
+  occurredAt        DateTime                          @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  candidate         SocialActivityOemSupportCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId, occurredAt], map: "social_activity_oem_candidate_audits_idx")
+  @@map("social_activity_oem_support_candidate_audits")
 }
 
 model BunshinObjective {

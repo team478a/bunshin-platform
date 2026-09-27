@@ -1,8 +1,10 @@
 import {
+  SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
   socialActivityBarrierEvidenceKey,
   type SocialActivityBarrierCase,
   type SocialActivityBarrierCaseRepository,
   type SocialActivityBarrierObservationRepository,
+  type SocialActivityBarrierProjectionCandidateRepository,
   type SocialActivityBarrierScope,
 } from '@bunshin/capability-social';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -51,6 +53,70 @@ function hasConversionAction(value: Prisma.JsonValue | null) {
   return ['linkClicks', 'leads', 'conversions', 'reservations', 'purchases'].some(
     (key) => numericMetric(metrics[key]) > 0,
   );
+}
+
+export class PrismaSocialActivityBarrierProjectionCandidateRepository implements SocialActivityBarrierProjectionCandidateRepository {
+  constructor(private readonly client: PrismaClient) {}
+
+  async list(input: Parameters<SocialActivityBarrierProjectionCandidateRepository['list']>[0]) {
+    const activeWindow = {
+      status: 'ENABLED' as const,
+      OR: [{ startsAt: null }, { startsAt: { lte: input.at } }],
+      AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: input.at } }] }],
+    };
+    const memberships = await this.client.groupMembership.findMany({
+      where: {
+        status: 'ACTIVE',
+        serviceRole: 'PARTICIPANT',
+        consentedAt: { not: null },
+        group: {
+          status: 'ACTIVE',
+          workspace: { status: 'ACTIVE' },
+          serviceConfiguration: { isNot: null },
+          featurePolicies: {
+            some: { featureKey: SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY, ...activeWindow },
+          },
+        },
+      },
+      select: { id: true, workspaceId: true, groupId: true, userId: true },
+      orderBy: { id: 'asc' },
+      take: input.limit,
+    });
+    if (memberships.length === 0) return [];
+
+    const bunshins = await this.client.bunshin.findMany({
+      where: {
+        status: 'ACTIVE',
+        socialProfiles: { some: { status: 'ACTIVE' } },
+        OR: memberships.map((membership) => ({
+          workspaceId: membership.workspaceId,
+          groupId: membership.groupId,
+          ownerUserId: membership.userId,
+        })),
+      },
+      select: { id: true, workspaceId: true, groupId: true, ownerUserId: true },
+      orderBy: { id: 'asc' },
+    });
+    return bunshins.flatMap((bunshin) => {
+      const membership = memberships.find(
+        (value) =>
+          value.workspaceId === bunshin.workspaceId &&
+          value.groupId === bunshin.groupId &&
+          value.userId === bunshin.ownerUserId,
+      );
+      return membership
+        ? [
+            {
+              workspaceId: membership.workspaceId,
+              serviceId: membership.groupId,
+              groupMembershipId: membership.id,
+              userId: membership.userId,
+              bunshinId: bunshin.id,
+            },
+          ]
+        : [];
+    });
+  }
 }
 
 export class PrismaSocialActivityBarrierObservationRepository implements SocialActivityBarrierObservationRepository {

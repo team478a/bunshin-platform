@@ -4,7 +4,12 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { personalizationAuditSummary } from '../../../../../src/services/personalization-audit-view-model';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { supportAlertModeViewModel } from '../../../../../src/services/support-alert-mode-view-model';
 import { PublicShell } from '../../../../ui/public-shell';
+import { transitionOemSupportCandidateAction } from './oem-support-candidate-actions';
+import { retryOemSupportCandidateEmailAction } from './oem-support-email-actions';
+import { updateOemSupportRecipientsAction } from './oem-support-email-recipient-actions';
+import { updateSupportAlertPolicyAction } from './support-alert-policy-action';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +42,18 @@ export default async function PersonalizationAuditPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [missions, failures, barrierSummary] = await Promise.all([
+  const [
+    missions,
+    failures,
+    barrierSummary,
+    supportCandidates,
+    supportAlertPolicy,
+    failedSupportEmails,
+    failedSupportLines,
+    skippedSupportEmails,
+    skippedSupportLines,
+    supportManagers,
+  ] = await Promise.all([
     db.prisma.dailyMission.findMany({
       where: {
         workspaceId: service.workspaceId,
@@ -77,7 +93,108 @@ export default async function PersonalizationAuditPage({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
     }),
+    db.listSocialActivityOemSupportCandidates(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+    }),
+    db.prisma.serviceSupportAlertPolicy.findUnique({
+      where: { groupId: service.serviceId },
+      select: { mode: true, notifyByEmail: true, notifyByLine: true },
+    }),
+    db.prisma.socialActivityOemSupportCandidateEmailDelivery.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: service.configuration.id,
+        status: 'FAILED',
+      },
+      select: {
+        id: true,
+        recipientName: true,
+        attemptCount: true,
+        lastErrorCategory: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.serviceLineBroadcast.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        automationKey: { startsWith: 'oem-support-candidate:' },
+        recipients: { some: { status: 'FAILED' } },
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        recipients: {
+          where: { status: 'FAILED' },
+          select: { id: true, errorCategory: true },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.socialActivityOemSupportCandidateEmailDelivery.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: service.configuration.id,
+        status: 'SKIPPED',
+      },
+      select: {
+        id: true,
+        recipientName: true,
+        lastErrorCategory: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.serviceLineBroadcast.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        automationKey: { startsWith: 'oem-support-candidate:' },
+        recipients: { some: { status: 'SKIPPED' } },
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        recipients: {
+          where: { status: 'SKIPPED' },
+          select: { id: true, errorCategory: true },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.groupMembership.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        user: { status: 'ACTIVE' },
+      },
+      select: {
+        userId: true,
+        user: { select: { displayName: true, email: true } },
+        serviceNotificationPreferences: {
+          where: { topic: 'OEM_SUPPORT_CANDIDATE', channel: { in: ['EMAIL', 'LINE'] } },
+          select: { channel: true, enabled: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
+  const hasRecipientSettings = (channel: 'EMAIL' | 'LINE') =>
+    supportManagers.some(({ serviceNotificationPreferences }) =>
+      serviceNotificationPreferences.some((preference) => preference.channel === channel),
+    );
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -143,6 +260,268 @@ export default async function PersonalizationAuditPage({
           <p>
             見送り {barrierSummary.support.skipped}件／解決済み {barrierSummary.cases.resolved}件
           </p>
+        </section>
+
+        {failedSupportEmails.length > 0 ? (
+          <section className="settings-card">
+            <h2>送信できなかった支援候補メール</h2>
+            <p>設定や送信先を確認した後に、失敗したメールだけを再送予約できます。</p>
+            <div className="settings-status-list">
+              {failedSupportEmails.map((delivery) => (
+                <article className="settings-status-item" key={delivery.id}>
+                  <div>
+                    <strong>{delivery.recipientName || '運営管理者'}</strong>
+                    <p>
+                      失敗分類：{delivery.lastErrorCategory ?? '原因不明'}／試行：
+                      {delivery.attemptCount}回／最終更新：{dateLabel(delivery.updatedAt)}
+                    </p>
+                  </div>
+                  <form action={retryOemSupportCandidateEmailAction}>
+                    <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+                    <input type="hidden" name="deliveryId" value={delivery.id} />
+                    <button type="submit">再送を予約</button>
+                  </form>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {failedSupportLines.length > 0 ? (
+          <section className="settings-card">
+            <h2>送信できなかった支援候補LINE</h2>
+            <p>
+              失敗した宛先があります。公式LINE管理で原因を確認し、失敗した宛先だけを再送できます。
+            </p>
+            <ul className="settings-status-list">
+              {failedSupportLines.map((broadcast) => (
+                <li className="settings-status-item" key={broadcast.id}>
+                  <strong>{broadcast.title}</strong>
+                  <span>
+                    失敗 {broadcast.recipients.length}件／最終更新：{dateLabel(broadcast.updatedAt)}
+                    {broadcast.recipients[0]?.errorCategory
+                      ? `／分類：${broadcast.recipients[0].errorCategory}`
+                      : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link href={`/s/${service.configuration.slug}/manage/line` as Route}>
+              公式LINE管理で配信状況を確認
+            </Link>
+          </section>
+        ) : null}
+
+        {skippedSupportEmails.length > 0 || skippedSupportLines.length > 0 ? (
+          <section className="settings-card">
+            <h2>安全確認により送信しなかった通知</h2>
+            <p>
+              予約後に候補が対応済みになった、通知設定が変更された、または担当者の受信資格が変わったため送信を止めた記録です。再送は不要です。
+            </p>
+            <ul className="settings-status-list">
+              {skippedSupportEmails.map((delivery) => (
+                <li className="settings-status-item" key={delivery.id}>
+                  <strong>メール：{delivery.recipientName || '運営管理者'}</strong>
+                  <span>
+                    {delivery.lastErrorCategory ?? '最新状態により対象外'}／
+                    {dateLabel(delivery.updatedAt)}
+                  </span>
+                </li>
+              ))}
+              {skippedSupportLines.map((broadcast) => (
+                <li className="settings-status-item" key={broadcast.id}>
+                  <strong>LINE：{broadcast.title}</strong>
+                  <span>
+                    送信停止 {broadcast.recipients.length}件／
+                    {broadcast.recipients[0]?.errorCategory ?? '最新状態により対象外'}／
+                    {dateLabel(broadcast.updatedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <section className="settings-card">
+          <h2>支援候補メールの通知担当者</h2>
+          <p>
+            未設定時は全てのService Owner / Adminに届きます。保存後は選択した担当者だけに届きます。
+          </p>
+          <form action={updateOemSupportRecipientsAction}>
+            <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+            <input type="hidden" name="channel" value="EMAIL" />
+            {supportManagers.map((manager) => (
+              <label className="field field--checkbox" key={manager.userId}>
+                <input
+                  type="checkbox"
+                  name="recipientUserId"
+                  value={manager.userId}
+                  disabled={!manager.user.email}
+                  defaultChecked={
+                    Boolean(manager.user.email) &&
+                    (!hasRecipientSettings('EMAIL') ||
+                      manager.serviceNotificationPreferences.some(
+                        (preference) => preference.channel === 'EMAIL' && preference.enabled,
+                      ))
+                  }
+                />
+                <span>
+                  {manager.user.displayName || '運営管理者'}
+                  {!manager.user.email ? '（メール未登録）' : ''}
+                </span>
+              </label>
+            ))}
+            <button type="submit">メール担当者を保存</button>
+          </form>
+        </section>
+
+        <section className="settings-card">
+          <h2>支援候補LINEの通知担当者</h2>
+          <p>
+            未設定時は全てのService Owner /
+            Adminを対象にします。実配信時にLINE連携・通知同意・友だち状態を確認します。
+          </p>
+          <form action={updateOemSupportRecipientsAction}>
+            <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+            <input type="hidden" name="channel" value="LINE" />
+            {supportManagers.map((manager) => (
+              <label className="field field--checkbox" key={manager.userId}>
+                <input
+                  type="checkbox"
+                  name="recipientUserId"
+                  value={manager.userId}
+                  defaultChecked={
+                    !hasRecipientSettings('LINE') ||
+                    manager.serviceNotificationPreferences.some(
+                      (preference) => preference.channel === 'LINE' && preference.enabled,
+                    )
+                  }
+                />
+                <span>{manager.user.displayName || '運営管理者'}</span>
+              </label>
+            ))}
+            <button type="submit">LINE担当者を保存</button>
+          </form>
+        </section>
+
+        <section className="settings-card">
+          <h2>支援候補</h2>
+          <form action={updateSupportAlertPolicyAction}>
+            <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+            <label>
+              支援アラートの扱い
+              <select name="mode" defaultValue={supportAlertPolicy?.mode ?? 'INTERNAL_ESCALATION'}>
+                <option value="OPTIONAL_UPSELL">有料オプションの追加提案</option>
+                <option value="INCLUDED_SUPPORT">契約内サポートとして対応</option>
+                <option value="INTERNAL_ESCALATION">担当者への内部アラート</option>
+                <option value="DISABLED">支援候補アラートを使用しない</option>
+              </select>
+            </label>
+            <label>
+              運営者への通知方法
+              <select
+                name="channelMode"
+                defaultValue={
+                  supportAlertPolicy?.notifyByEmail && supportAlertPolicy.notifyByLine
+                    ? 'BOTH'
+                    : supportAlertPolicy?.notifyByLine
+                      ? 'LINE'
+                      : supportAlertPolicy?.notifyByEmail === false
+                        ? 'DASHBOARD'
+                        : 'EMAIL'
+                }
+              >
+                <option value="EMAIL">メールのみ</option>
+                <option value="LINE">LINEのみ</option>
+                <option value="BOTH">メールとLINE</option>
+                <option value="DASHBOARD">管理画面のみ</option>
+              </select>
+            </label>
+            <button type="submit">設定を保存</button>
+          </form>
+          <p>
+            本人への無料支援後も改善しなかった場合だけ表示します。営業や契約は自動実行されません。
+          </p>
+          {supportCandidates.length === 0 ? (
+            <p>現在、確認が必要な支援候補はありません。</p>
+          ) : (
+            <div className="settings-status-list">
+              {supportCandidates.map((candidate) => {
+                const snapshot = candidate.recommendationSnapshot as {
+                  title?: string;
+                  description?: string;
+                  handlingMode?: string;
+                };
+                const handling = supportAlertModeViewModel(snapshot.handlingMode);
+                return (
+                  <article className="settings-status-item" key={candidate.id}>
+                    <div>
+                      <small>
+                        {candidate.barrierCase.groupMembership.serviceMemberBusinessProfile
+                          ?.businessName ?? '事業名未設定'}
+                      </small>
+                      <h3>{snapshot.title ?? '支援内容を確認'}</h3>
+                      <p>{snapshot.description ?? ''}</p>
+                      <p>
+                        <strong>{handling.label}</strong>：{handling.description}
+                      </p>
+                      <p>
+                        状態：{candidate.status}／検知日：{dateLabel(candidate.detectedAt)}
+                      </p>
+                    </div>
+                    {candidate.status === 'OPEN' || candidate.status === 'ACCEPTED' ? (
+                      <div className="button-row">
+                        {candidate.status === 'OPEN' ? (
+                          <form action={transitionOemSupportCandidateAction}>
+                            <input
+                              type="hidden"
+                              name="serviceSlug"
+                              value={service.configuration.slug}
+                            />
+                            <input type="hidden" name="candidateId" value={candidate.id} />
+                            <input type="hidden" name="action" value="ACCEPT" />
+                            <input type="hidden" name="reason" value={handling.acceptReason} />
+                            <button type="submit">{handling.acceptLabel}</button>
+                          </form>
+                        ) : (
+                          <form action={transitionOemSupportCandidateAction}>
+                            <input
+                              type="hidden"
+                              name="serviceSlug"
+                              value={service.configuration.slug}
+                            />
+                            <input type="hidden" name="candidateId" value={candidate.id} />
+                            <input type="hidden" name="action" value="COMPLETE" />
+                            <input type="hidden" name="reason" value="運営者が対応完了を確認" />
+                            <button type="submit">対応完了</button>
+                          </form>
+                        )}
+                        {candidate.status === 'OPEN' ? (
+                          <form action={transitionOemSupportCandidateAction}>
+                            <input
+                              type="hidden"
+                              name="serviceSlug"
+                              value={service.configuration.slug}
+                            />
+                            <input type="hidden" name="candidateId" value={candidate.id} />
+                            <input type="hidden" name="action" value="DISMISS" />
+                            <input
+                              type="hidden"
+                              name="reason"
+                              value="運営者が今回は対応しないと判断"
+                            />
+                            <button className="button-secondary" type="submit">
+                              今回は対応しない
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="settings-card">
