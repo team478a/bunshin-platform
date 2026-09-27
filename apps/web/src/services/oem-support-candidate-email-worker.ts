@@ -38,6 +38,25 @@ export async function runOemSupportCandidateEmailWorker(
     });
     if (claimed.count !== 1) continue;
     try {
+      const eligible = await db.isSocialActivityOemSupportCandidateEmailDeliveryEligible(
+        db.prisma,
+        {
+          workspaceId: delivery.workspaceId,
+          groupId: delivery.groupId,
+          configurationId: delivery.configurationId,
+          candidateId: delivery.candidateId,
+          recipientUserId: delivery.recipientUserId,
+          recipientEmail: delivery.recipientEmail,
+        },
+      );
+      if (!eligible) {
+        await db.prisma.socialActivityOemSupportCandidateEmailDelivery.update({
+          where: { id: delivery.id },
+          data: { status: 'SKIPPED', lastErrorCategory: 'NOTIFICATION_NO_LONGER_ELIGIBLE' },
+        });
+        skipped += 1;
+        continue;
+      }
       if (!delivery.emailConfiguration.enabled || !delivery.emailConfiguration.lastVerifiedAt) {
         await db.prisma.socialActivityOemSupportCandidateEmailDelivery.update({
           where: { id: delivery.id },

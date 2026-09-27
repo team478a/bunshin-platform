@@ -27,6 +27,79 @@ const replace = (value: string, variables: Record<string, string>) =>
     value,
   );
 
+export async function isSocialActivityOemSupportCandidateEmailDeliveryEligible(
+  client: PrismaClient,
+  input: {
+    workspaceId: string;
+    groupId: string;
+    configurationId: string;
+    candidateId: string;
+    recipientUserId: string;
+    recipientEmail: string;
+  },
+) {
+  const candidate = await client.socialActivityOemSupportCandidate.findFirst({
+    where: { id: input.candidateId, status: 'OPEN' },
+    select: {
+      recommendationSnapshot: true,
+      barrierCase: {
+        select: {
+          workspaceId: true,
+          groupId: true,
+          groupMembership: {
+            select: {
+              group: {
+                select: {
+                  memberships: {
+                    where: {
+                      status: 'ACTIVE',
+                      serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+                      user: { status: 'ACTIVE', email: { not: null } },
+                    },
+                    select: {
+                      userId: true,
+                      user: { select: { email: true } },
+                      serviceNotificationPreferences: {
+                        where: { topic: 'OEM_SUPPORT_CANDIDATE', channel: 'EMAIL' },
+                        select: { enabled: true },
+                      },
+                    },
+                  },
+                  serviceConfiguration: {
+                    select: {
+                      id: true,
+                      supportAlertPolicy: { select: { notifyByEmail: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!candidate || handlingMode(candidate.recommendationSnapshot) === 'DISABLED') return false;
+  const barrierCase = candidate.barrierCase;
+  const service = barrierCase.groupMembership.group.serviceConfiguration;
+  if (
+    barrierCase.workspaceId !== input.workspaceId ||
+    barrierCase.groupId !== input.groupId ||
+    service?.id !== input.configurationId ||
+    service.supportAlertPolicy?.notifyByEmail === false
+  )
+    return false;
+  const managers = barrierCase.groupMembership.group.memberships;
+  const recipient = managers.find(
+    ({ userId, user }) => userId === input.recipientUserId && user.email === input.recipientEmail,
+  );
+  if (!recipient) return false;
+  const preferencesExist = managers.some(
+    ({ serviceNotificationPreferences }) => serviceNotificationPreferences.length > 0,
+  );
+  return !preferencesExist || recipient.serviceNotificationPreferences[0]?.enabled === true;
+}
+
 export async function enqueueSocialActivityOemSupportCandidateEmails(
   client: PrismaClient,
   input: { baseUrl: string; now?: Date; limit?: number },

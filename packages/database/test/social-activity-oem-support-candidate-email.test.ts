@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { enqueueSocialActivityOemSupportCandidateEmails } from '../src/social-activity-oem-support-candidate-email';
+import {
+  enqueueSocialActivityOemSupportCandidateEmails,
+  isSocialActivityOemSupportCandidateEmailDeliveryEligible,
+} from '../src/social-activity-oem-support-candidate-email';
 
 const now = new Date('2026-09-27T12:00:00.000Z');
 
@@ -104,5 +107,84 @@ describe('enqueueSocialActivityOemSupportCandidateEmails', () => {
       }),
     ).resolves.toEqual({ selected: 1, queued: 0, skipped: 1 });
     expect(db.createMany).not.toHaveBeenCalled();
+  });
+});
+
+function deliveryDatabase(
+  input: {
+    status?: 'OPEN' | 'ACCEPTED';
+    mode?: string;
+    notifyByEmail?: boolean;
+    recipientEnabled?: boolean;
+    recipientEmail?: string;
+  } = {},
+) {
+  return {
+    socialActivityOemSupportCandidate: {
+      findFirst: vi.fn().mockResolvedValue(
+        input.status === 'ACCEPTED'
+          ? null
+          : {
+              recommendationSnapshot: { handlingMode: input.mode ?? 'INCLUDED_SUPPORT' },
+              barrierCase: {
+                workspaceId: 'workspace-1',
+                groupId: 'group-1',
+                groupMembership: {
+                  group: {
+                    memberships: [
+                      {
+                        userId: 'manager-1',
+                        user: { email: input.recipientEmail ?? 'owner@example.com' },
+                        serviceNotificationPreferences:
+                          input.recipientEnabled === undefined
+                            ? []
+                            : [{ enabled: input.recipientEnabled }],
+                      },
+                    ],
+                    serviceConfiguration: {
+                      id: 'configuration-1',
+                      supportAlertPolicy: { notifyByEmail: input.notifyByEmail ?? true },
+                    },
+                  },
+                },
+              },
+            },
+      ),
+    },
+  };
+}
+
+const delivery = {
+  workspaceId: 'workspace-1',
+  groupId: 'group-1',
+  configurationId: 'configuration-1',
+  candidateId: 'candidate-1',
+  recipientUserId: 'manager-1',
+  recipientEmail: 'owner@example.com',
+};
+
+describe('isSocialActivityOemSupportCandidateEmailDeliveryEligible', () => {
+  it('最新状態でも有効な管理者配送だけを許可する', async () => {
+    await expect(
+      isSocialActivityOemSupportCandidateEmailDeliveryEligible(
+        deliveryDatabase() as never,
+        delivery,
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it.each([
+    ['候補対応済み', { status: 'ACCEPTED' as const }],
+    ['アラート停止', { mode: 'DISABLED' }],
+    ['メール停止', { notifyByEmail: false }],
+    ['担当解除', { recipientEnabled: false }],
+    ['メール変更', { recipientEmail: 'changed@example.com' }],
+  ])('%sでは送信を許可しない', async (_label, input) => {
+    await expect(
+      isSocialActivityOemSupportCandidateEmailDeliveryEligible(
+        deliveryDatabase(input) as never,
+        delivery,
+      ),
+    ).resolves.toBe(false);
   });
 });
