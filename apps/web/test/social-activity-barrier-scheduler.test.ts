@@ -23,6 +23,8 @@ describe('social activity barrier scheduler boundary', () => {
   it('schedules one consented LINE entry notification and revalidates pending cases', () => {
     expect(source).toContain('scheduleSocialActivityBarrierLineNotifications');
     expect(source).toContain('socialActivityBarrierLine');
+    expect(source).toContain('projectSocialActivityOemSupportCandidates');
+    expect(source).toContain('socialActivityOemSupportCandidates');
     expect(notificationSource).toContain("status: 'SUSPECTED'");
     expect(notificationSource).toContain("kind: 'SOCIAL_ACTIVITY_BARRIER'");
     expect(notificationSource).toContain('resolveServiceLineBroadcastRecipientIds');

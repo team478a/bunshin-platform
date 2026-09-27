@@ -30,6 +30,7 @@ import {
   type SocialActivityBarrierProjectionSummary,
 } from '@bunshin/capability-social';
 import { getServerEnvironment } from '@bunshin/config';
+import type { SocialActivityOemSupportCandidateProjectionSummary } from '@bunshin/database';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
 import { authorizeCronRequest } from './cron-security';
@@ -87,6 +88,7 @@ export interface MissionSchedulerPort {
       serviceLineBroadcastRecovery?: ServiceLineBroadcastRecoverySummary;
       socialActivityBarriers?: SocialActivityBarrierProjectionSummary;
       socialActivityBarrierLine?: SocialActivityBarrierLineScheduleSummary;
+      socialActivityOemSupportCandidates?: SocialActivityOemSupportCandidateProjectionSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -323,6 +325,18 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         failures: 1,
         truncated: false,
       }));
+      const socialActivityOemSupportCandidates = await db
+        .projectSocialActivityOemSupportCandidates(db.prisma)
+        .catch(
+          () =>
+            ({
+              scanned: 0,
+              created: 0,
+              skipped: 0,
+              failures: 1,
+              truncated: false,
+            }) satisfies SocialActivityOemSupportCandidateProjectionSummary,
+        );
       return {
         ...missionResult,
         trend: trendResult,
@@ -336,6 +350,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         serviceLineBroadcastRecovery: recoveredServiceLineBroadcasts,
         socialActivityBarriers: socialActivityBarrierResult,
         socialActivityBarrierLine,
+        socialActivityOemSupportCandidates,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };
