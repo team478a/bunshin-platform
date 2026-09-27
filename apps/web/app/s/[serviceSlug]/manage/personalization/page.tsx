@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { personalizationAuditSummary } from '../../../../../src/services/personalization-audit-view-model';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
+import { supportAlertModeViewModel } from '../../../../../src/services/support-alert-mode-view-model';
 import { PublicShell } from '../../../../ui/public-shell';
 import { transitionOemSupportCandidateAction } from './oem-support-candidate-actions';
 import { updateSupportAlertPolicyAction } from './support-alert-policy-action';
@@ -182,7 +183,9 @@ export default async function PersonalizationAuditPage({
                 const snapshot = candidate.recommendationSnapshot as {
                   title?: string;
                   description?: string;
+                  handlingMode?: string;
                 };
+                const handling = supportAlertModeViewModel(snapshot.handlingMode);
                 return (
                   <article className="settings-status-item" key={candidate.id}>
                     <div>
@@ -192,6 +195,9 @@ export default async function PersonalizationAuditPage({
                       </small>
                       <h3>{snapshot.title ?? '支援内容を確認'}</h3>
                       <p>{snapshot.description ?? ''}</p>
+                      <p>
+                        <strong>{handling.label}</strong>：{handling.description}
+                      </p>
                       <p>
                         状態：{candidate.status}／検知日：{dateLabel(candidate.detectedAt)}
                       </p>
@@ -207,8 +213,8 @@ export default async function PersonalizationAuditPage({
                             />
                             <input type="hidden" name="candidateId" value={candidate.id} />
                             <input type="hidden" name="action" value="ACCEPT" />
-                            <input type="hidden" name="reason" value="運営者が対応を開始" />
-                            <button type="submit">対応する</button>
+                            <input type="hidden" name="reason" value={handling.acceptReason} />
+                            <button type="submit">{handling.acceptLabel}</button>
                           </form>
                         ) : (
                           <form action={transitionOemSupportCandidateAction}>
