@@ -53,6 +53,10 @@ import {
   scheduleAiTrainingActionLineDeliveries,
   type AiTrainingActionLineScheduleSummary,
 } from '../services/ai-training-action-line-scheduler';
+import {
+  scheduleSocialActivityBarrierLineNotifications,
+  type SocialActivityBarrierLineScheduleSummary,
+} from '../services/social-activity-barrier-line-scheduler';
 
 const logger = createLogger();
 const runtimeEnvironment = {
@@ -82,6 +86,7 @@ export interface MissionSchedulerPort {
       aiTrainingLine?: AiTrainingActionLineScheduleSummary;
       serviceLineBroadcastRecovery?: ServiceLineBroadcastRecoverySummary;
       socialActivityBarriers?: SocialActivityBarrierProjectionSummary;
+      socialActivityBarrierLine?: SocialActivityBarrierLineScheduleSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -308,6 +313,16 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
           truncated: false,
         }),
       );
+      const socialActivityBarrierLine = await scheduleSocialActivityBarrierLineNotifications({
+        environment,
+      }).catch(() => ({
+        candidates: 0,
+        broadcasts: 0,
+        recipients: 0,
+        skipped: 0,
+        failures: 1,
+        truncated: false,
+      }));
       return {
         ...missionResult,
         trend: trendResult,
@@ -320,6 +335,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         aiTrainingLine,
         serviceLineBroadcastRecovery: recoveredServiceLineBroadcasts,
         socialActivityBarriers: socialActivityBarrierResult,
+        socialActivityBarrierLine,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };
