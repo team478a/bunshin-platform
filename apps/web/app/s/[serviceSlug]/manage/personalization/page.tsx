@@ -7,6 +7,7 @@ import { resolveManagedServiceContext } from '../../../../../src/services/public
 import { supportAlertModeViewModel } from '../../../../../src/services/support-alert-mode-view-model';
 import { PublicShell } from '../../../../ui/public-shell';
 import { transitionOemSupportCandidateAction } from './oem-support-candidate-actions';
+import { retryOemSupportCandidateEmailAction } from './oem-support-email-actions';
 import { updateSupportAlertPolicyAction } from './support-alert-policy-action';
 
 export const dynamic = 'force-dynamic';
@@ -40,56 +41,79 @@ export default async function PersonalizationAuditPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [missions, failures, barrierSummary, supportCandidates, supportAlertPolicy] =
-    await Promise.all([
-      db.prisma.dailyMission.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          bunshin: { is: { groupId: service.serviceId } },
+  const [
+    missions,
+    failures,
+    barrierSummary,
+    supportCandidates,
+    supportAlertPolicy,
+    failedSupportEmails,
+  ] = await Promise.all([
+    db.prisma.dailyMission.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        bunshin: { is: { groupId: service.serviceId } },
+      },
+      select: {
+        id: true,
+        missionDate: true,
+        topic: true,
+        qualityScore: true,
+        bunshin: { select: { ownerUser: { select: { displayName: true } } } },
+        generationContext: { select: { payload: true } },
+        feedback: { select: { rating: true } },
+        decision: { select: { decision: true, rejectionReason: true } },
+      },
+      orderBy: [{ missionDate: 'desc' }, { createdAt: 'desc' }],
+      take: 40,
+    }),
+    db.prisma.dailyMissionGeneration.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        status: 'FAILED',
+        bunshinId: {
+          in: await db.prisma.bunshin
+            .findMany({
+              where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+              select: { id: true },
+            })
+            .then((items) => items.map(({ id }) => id)),
         },
-        select: {
-          id: true,
-          missionDate: true,
-          topic: true,
-          qualityScore: true,
-          bunshin: { select: { ownerUser: { select: { displayName: true } } } },
-          generationContext: { select: { payload: true } },
-          feedback: { select: { rating: true } },
-          decision: { select: { decision: true, rejectionReason: true } },
-        },
-        orderBy: [{ missionDate: 'desc' }, { createdAt: 'desc' }],
-        take: 40,
-      }),
-      db.prisma.dailyMissionGeneration.findMany({
-        where: {
-          workspaceId: service.workspaceId,
-          status: 'FAILED',
-          bunshinId: {
-            in: await db.prisma.bunshin
-              .findMany({
-                where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-                select: { id: true },
-              })
-              .then((items) => items.map(({ id }) => id)),
-          },
-        },
-        select: { id: true, missionDate: true, errorCategory: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
-        take: 10,
-      }),
-      db.getSocialActivityBarrierServiceSummary(db.prisma, {
+      },
+      select: { id: true, missionDate: true, errorCategory: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 10,
+    }),
+    db.getSocialActivityBarrierServiceSummary(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+    }),
+    db.listSocialActivityOemSupportCandidates(db.prisma, {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+    }),
+    db.prisma.serviceSupportAlertPolicy.findUnique({
+      where: { groupId: service.serviceId },
+      select: { mode: true },
+    }),
+    db.prisma.socialActivityOemSupportCandidateEmailDelivery.findMany({
+      where: {
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
-      }),
-      db.listSocialActivityOemSupportCandidates(db.prisma, {
-        workspaceId: service.workspaceId,
-        groupId: service.serviceId,
-      }),
-      db.prisma.serviceSupportAlertPolicy.findUnique({
-        where: { groupId: service.serviceId },
-        select: { mode: true },
-      }),
-    ]);
+        configurationId: service.configuration.id,
+        status: 'FAILED',
+      },
+      select: {
+        id: true,
+        recipientName: true,
+        attemptCount: true,
+        lastErrorCategory: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+  ]);
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -156,6 +180,31 @@ export default async function PersonalizationAuditPage({
             見送り {barrierSummary.support.skipped}件／解決済み {barrierSummary.cases.resolved}件
           </p>
         </section>
+
+        {failedSupportEmails.length > 0 ? (
+          <section className="settings-card">
+            <h2>送信できなかった支援候補メール</h2>
+            <p>設定や送信先を確認した後に、失敗したメールだけを再送予約できます。</p>
+            <div className="settings-status-list">
+              {failedSupportEmails.map((delivery) => (
+                <article className="settings-status-item" key={delivery.id}>
+                  <div>
+                    <strong>{delivery.recipientName || '運営管理者'}</strong>
+                    <p>
+                      失敗分類：{delivery.lastErrorCategory ?? '原因不明'}／試行：
+                      {delivery.attemptCount}回／最終更新：{dateLabel(delivery.updatedAt)}
+                    </p>
+                  </div>
+                  <form action={retryOemSupportCandidateEmailAction}>
+                    <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+                    <input type="hidden" name="deliveryId" value={delivery.id} />
+                    <button type="submit">再送を予約</button>
+                  </form>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="settings-card">
           <h2>支援候補</h2>
