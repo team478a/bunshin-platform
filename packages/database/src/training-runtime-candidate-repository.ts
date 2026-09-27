@@ -1,6 +1,7 @@
 import {
   TRAINING_GOAL_KEYS,
   parseTrainingSkillScores,
+  resolveTrainingWorkContext,
   type AiTrainingRuntimeCandidate,
   type AiTrainingRuntimeRepository,
 } from '@bunshin/capability-training';
@@ -13,7 +14,7 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
   async findCandidate(input: Parameters<AiTrainingRuntimeRepository['findCandidate']>[0]) {
     const scope = await resolveScope(this.client, input, ['ACTIVE']);
     if (!scope) return null;
-    const [profile, progress, assignments, lastUserEvent] = await Promise.all([
+    const [profile, progress, assignments, lastUserEvent, workUseCount] = await Promise.all([
       this.client.trainingParticipantProfile.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -52,8 +53,22 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
         },
         orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       }),
+      this.client.programActionEvent.count({
+        where: {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          programEnrollmentId: scope.enrollment.id,
+          actorUserId: input.actorUserId,
+          eventType: 'TRAINING_WORK_RESULT_RECORDED',
+          OR: [
+            { metadata: { path: ['result'], equals: 'USED_AS_IS' } },
+            { metadata: { path: ['result'], equals: 'USED_WITH_EDITS' } },
+          ],
+        },
+      }),
     ]);
     if (!profile) return null;
+    const workContext = resolveTrainingWorkContext(profile.workContext, profile.role);
     const current = progress?.currentAssignmentId
       ? assignments.find(({ id }) => id === progress.currentAssignmentId)
       : null;
@@ -90,6 +105,7 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
         recentFailures: profile.recentFailures,
         streak: profile.streak,
         skillScores: parseTrainingSkillScores(profile.skillScores),
+        workContext,
       },
       currentPhase: phase,
       completedMissionKeys: completed.map(({ missionDefinitionKey }) => missionDefinitionKey),
@@ -103,6 +119,7 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
           ? current.reevaluateAt
           : null,
       progressRevision: progress?.revision ?? null,
+      workUseCount,
       missions: scope.missions,
     };
   }

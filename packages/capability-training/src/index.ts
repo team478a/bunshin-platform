@@ -16,6 +16,12 @@ export const TRAINING_INTERACTION_TYPES = [
   'HELP_REQUESTED',
   'TRAINING_POSTPONED',
 ] as const;
+export const TRAINING_WORK_RESULTS = [
+  'USED_AS_IS',
+  'USED_WITH_EDITS',
+  'NOT_USED_YET',
+  'NOT_APPLICABLE',
+] as const;
 export const TRAINING_ACTION_KEYS = [
   'AI_BASIC',
   'CHATGPT_BASIC',
@@ -46,6 +52,7 @@ export const TRAINING_ACTION_KEYS = [
 export type TrainingRole = (typeof TRAINING_ROLES)[number];
 export type TrainingAiLevel = (typeof TRAINING_AI_LEVELS)[number];
 export type TrainingInteractionType = (typeof TRAINING_INTERACTION_TYPES)[number];
+export type TrainingWorkResult = (typeof TRAINING_WORK_RESULTS)[number];
 export type TrainingActionKey = (typeof TRAINING_ACTION_KEYS)[number];
 
 export interface AiTrainingV1DecisionContext {
@@ -67,6 +74,7 @@ export interface AiTrainingV1DecisionContext {
   lastActionAt: Date | null;
   pauseAfterDays: number;
   activeWaitUntil: Date | null;
+  workUseCount?: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -141,7 +149,12 @@ export class AiTrainingV1Policy implements NextActionPolicy<AiTrainingV1Decision
       return work('PROMPT_FORMAT', 'PROMPT_FORMAT_REQUIRED');
     const selectedForGoal = goalMission(context);
     if (selectedForGoal && !completed(context, selectedForGoal))
-      return work(selectedForGoal, 'LEARNING_GOAL_PRIORITY');
+      return work(
+        selectedForGoal,
+        (context.workUseCount ?? 0) > 0
+          ? 'WORK_USAGE_CONFIRMED_NEXT_PRACTICE'
+          : 'LEARNING_GOAL_PRIORITY',
+      );
     const roleMissions =
       context.role === 'SALES'
         ? (['SALES_EMAIL', 'SALES_HEARING', 'SALES_PROPOSAL', 'SALES_FOLLOW_UP'] as const)
@@ -237,3 +250,4 @@ export * from './mission-quality';
 export * from './skill-evaluation';
 export * from './growth';
 export * from './operations';
+export * from './personalization';

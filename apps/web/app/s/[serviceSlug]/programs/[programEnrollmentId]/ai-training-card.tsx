@@ -16,6 +16,8 @@ import type {
   TrainingInteractionType,
   TrainingParticipantState,
   TrainingRole,
+  TrainingDeviceType,
+  TrainingWorkResult,
 } from './ai-training-types';
 
 export type { TrainingParticipantState } from './ai-training-types';
@@ -47,6 +49,18 @@ export function AiTrainingCard({
   const [learningGoalKey, setLearningGoalKey] = useState<TrainingGoalKey>(
     initialState.profile?.learningGoalKey ?? 'USE_AI_IN_DAILY_WORK',
   );
+  const [workDescription, setWorkDescription] = useState(
+    initialState.profile?.workContext?.workDescription ?? '',
+  );
+  const [timeConsumingTask, setTimeConsumingTask] = useState(
+    initialState.profile?.workContext?.timeConsumingTask ?? '',
+  );
+  const [aiImprovementTarget, setAiImprovementTarget] = useState(
+    initialState.profile?.workContext?.aiImprovementTarget ?? '',
+  );
+  const [deviceType, setDeviceType] = useState<TrainingDeviceType>(
+    initialState.profile?.workContext?.deviceType ?? 'BOTH',
+  );
   const [setupStep, setSetupStep] = useState(1);
   const [answer, setAnswer] = useState('');
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
@@ -57,6 +71,8 @@ export function AiTrainingCard({
   const [saving, setSaving] = useState(false);
   const [toolkitSaving, setToolkitSaving] = useState(false);
   const [toolkitSaved, setToolkitSaved] = useState(false);
+  const [workResult, setWorkResult] = useState<TrainingWorkResult | null>(null);
+  const [workResultSaving, setWorkResultSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const profileKey = useRef<string | null>(null);
@@ -64,6 +80,7 @@ export function AiTrainingCard({
   const evaluationKey = useRef<string | null>(null);
   const interactionKeys = useRef<Partial<Record<TrainingInteractionType, string>>>({});
   const toolkitKey = useRef<string | null>(null);
+  const workResultKey = useRef<string | null>(null);
   const action = state.action;
 
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${state.enrollmentId}`;
@@ -99,6 +116,13 @@ export function AiTrainingCard({
             preferredTopics,
             dailyMinutes,
             learningGoalKey,
+            workContext: {
+              schemaVersion: 1,
+              workDescription: workDescription.trim(),
+              timeConsumingTask: timeConsumingTask.trim(),
+              aiImprovementTarget: aiImprovementTarget.trim(),
+              deviceType,
+            },
             idempotencyKey: profileKey.current,
           }),
         }),
@@ -220,6 +244,33 @@ export function AiTrainingCard({
     }
   }
 
+  async function saveWorkResult(result: TrainingWorkResult) {
+    if (!action || evaluation?.result !== 'PASS') return;
+    setWorkResultSaving(true);
+    setError('');
+    workResultKey.current ??= crypto.randomUUID();
+    try {
+      await readPayload(
+        await fetch(`${endpoint}/work-results`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            missionAssignmentId: action.id,
+            result,
+            idempotencyKey: workResultKey.current,
+          }),
+        }),
+      );
+      workResultKey.current = null;
+      setWorkResult(result);
+      setMessage('実際の仕事での利用状況を記録しました。次の課題選びに活かします。');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '実務利用の結果を保存できませんでした。');
+    } finally {
+      setWorkResultSaving(false);
+    }
+  }
+
   async function loadNextMission() {
     setSaving(true);
     setError('');
@@ -233,6 +284,8 @@ export function AiTrainingCard({
       setHintVisible(false);
       setHelpVisible(false);
       setPostponed(false);
+      setWorkResult(null);
+      workResultKey.current = null;
       interactionKeys.current = {};
       setMessage('次の課題を表示しました。');
     } catch (cause) {
@@ -252,7 +305,7 @@ export function AiTrainingCard({
     );
   }
 
-  if (!state.profile) {
+  if (!state.profile || state.profile.workContextComplete === false) {
     return (
       <AiTrainingSetupCard
         setupStep={setupStep}
@@ -271,6 +324,14 @@ export function AiTrainingCard({
         setDailyMinutes={setDailyMinutes}
         learningGoalKey={learningGoalKey}
         setLearningGoalKey={setLearningGoalKey}
+        workDescription={workDescription}
+        setWorkDescription={setWorkDescription}
+        timeConsumingTask={timeConsumingTask}
+        setTimeConsumingTask={setTimeConsumingTask}
+        aiImprovementTarget={aiImprovementTarget}
+        setAiImprovementTarget={setAiImprovementTarget}
+        deviceType={deviceType}
+        setDeviceType={setDeviceType}
         saving={saving}
         error={error}
         setError={setError}
@@ -299,7 +360,10 @@ export function AiTrainingCard({
         toolkitSaving={toolkitSaving}
         toolkitSaved={toolkitSaved}
         saving={saving}
+        workResult={workResult}
+        workResultSaving={workResultSaving}
         saveToToolkit={saveToToolkit}
+        saveWorkResult={saveWorkResult}
         loadNextMission={loadNextMission}
       />
     );

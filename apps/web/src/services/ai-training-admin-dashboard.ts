@@ -34,6 +34,7 @@ export type AiTrainingAdminParticipantInput = {
   latestEvaluation: unknown;
   evaluationUpdatedAt: Date | null;
   profileUpdatedAt: Date | null;
+  workResults: Array<'USED_AS_IS' | 'USED_WITH_EDITS' | 'NOT_USED_YET' | 'NOT_APPLICABLE'>;
 };
 
 export type AiTrainingAdminParticipant = {
@@ -60,6 +61,12 @@ export type AiTrainingAdminDashboard = {
     continuationPercent: number;
     needsSupport: number;
     completedMissions: number;
+    workResultParticipants: number;
+    workResultCount: number;
+    usedAsIs: number;
+    usedWithEdits: number;
+    notUsedYet: number;
+    notApplicable: number;
   };
 };
 
@@ -183,6 +190,24 @@ export function buildAiTrainingAdminDashboard(
         ['NEEDS_SUPPORT', 'INACTIVE'].includes(item.engagement),
       ).length,
       completedMissions: participants.reduce((sum, item) => sum + item.completedMissionCount, 0),
+      workResultParticipants: input.filter((item) => item.workResults.length > 0).length,
+      workResultCount: input.reduce((sum, item) => sum + item.workResults.length, 0),
+      usedAsIs: input.reduce(
+        (sum, item) => sum + item.workResults.filter((value) => value === 'USED_AS_IS').length,
+        0,
+      ),
+      usedWithEdits: input.reduce(
+        (sum, item) => sum + item.workResults.filter((value) => value === 'USED_WITH_EDITS').length,
+        0,
+      ),
+      notUsedYet: input.reduce(
+        (sum, item) => sum + item.workResults.filter((value) => value === 'NOT_USED_YET').length,
+        0,
+      ),
+      notApplicable: input.reduce(
+        (sum, item) => sum + item.workResults.filter((value) => value === 'NOT_APPLICABLE').length,
+        0,
+      ),
     },
   };
 }

@@ -48,6 +48,7 @@ function participant(
     },
     evaluationUpdatedAt: new Date('2026-09-20T00:00:00.000Z'),
     profileUpdatedAt: new Date('2026-09-19T00:00:00.000Z'),
+    workResults: [],
     ...overrides,
   };
 }
@@ -63,6 +64,12 @@ describe('AI training admin dashboard', () => {
       continuationPercent: 100,
       needsSupport: 0,
       completedMissions: 3,
+      workResultParticipants: 0,
+      workResultCount: 0,
+      usedAsIs: 0,
+      usedWithEdits: 0,
+      notUsedYet: 0,
+      notApplicable: 0,
     });
     expect(dashboard.participants[0]).toMatchObject({
       participantName: '山田さん',
@@ -70,6 +77,23 @@ describe('AI training admin dashboard', () => {
       currentMission: '営業メールを作る',
       weakArea: '出力条件を追加しましょう',
       engagement: 'ACTIVE',
+    });
+    expect(JSON.stringify(dashboard)).not.toContain('answer');
+  });
+
+  it('aggregates work usage without exposing answer content', () => {
+    const dashboard = buildAiTrainingAdminDashboard(
+      [participant({ workResults: ['USED_AS_IS', 'USED_WITH_EDITS', 'NOT_USED_YET'] })],
+      now,
+    );
+
+    expect(dashboard.totals).toMatchObject({
+      workResultParticipants: 1,
+      workResultCount: 3,
+      usedAsIs: 1,
+      usedWithEdits: 1,
+      notUsedYet: 1,
+      notApplicable: 0,
     });
     expect(JSON.stringify(dashboard)).not.toContain('answer');
   });
