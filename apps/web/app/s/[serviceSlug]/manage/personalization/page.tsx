@@ -8,6 +8,7 @@ import { supportAlertModeViewModel } from '../../../../../src/services/support-a
 import { PublicShell } from '../../../../ui/public-shell';
 import { transitionOemSupportCandidateAction } from './oem-support-candidate-actions';
 import { retryOemSupportCandidateEmailAction } from './oem-support-email-actions';
+import { updateOemSupportEmailRecipientsAction } from './oem-support-email-recipient-actions';
 import { updateSupportAlertPolicyAction } from './support-alert-policy-action';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,7 @@ export default async function PersonalizationAuditPage({
     supportCandidates,
     supportAlertPolicy,
     failedSupportEmails,
+    supportEmailManagers,
   ] = await Promise.all([
     db.prisma.dailyMission.findMany({
       where: {
@@ -113,7 +115,28 @@ export default async function PersonalizationAuditPage({
       orderBy: { updatedAt: 'desc' },
       take: 20,
     }),
+    db.prisma.groupMembership.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        status: 'ACTIVE',
+        serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        user: { status: 'ACTIVE', email: { not: null } },
+      },
+      select: {
+        userId: true,
+        user: { select: { displayName: true } },
+        serviceNotificationPreferences: {
+          where: { topic: 'OEM_SUPPORT_CANDIDATE', channel: 'EMAIL' },
+          select: { enabled: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
+  const hasSupportEmailRecipientSettings = supportEmailManagers.some(
+    ({ serviceNotificationPreferences }) => serviceNotificationPreferences.length > 0,
+  );
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -205,6 +228,31 @@ export default async function PersonalizationAuditPage({
             </div>
           </section>
         ) : null}
+
+        <section className="settings-card">
+          <h2>支援候補メールの通知担当者</h2>
+          <p>
+            未設定時は全てのService Owner / Adminに届きます。保存後は選択した担当者だけに届きます。
+          </p>
+          <form action={updateOemSupportEmailRecipientsAction}>
+            <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+            {supportEmailManagers.map((manager) => (
+              <label className="field field--checkbox" key={manager.userId}>
+                <input
+                  type="checkbox"
+                  name="recipientUserId"
+                  value={manager.userId}
+                  defaultChecked={
+                    !hasSupportEmailRecipientSettings ||
+                    manager.serviceNotificationPreferences[0]?.enabled === true
+                  }
+                />
+                <span>{manager.user.displayName || '運営管理者'}</span>
+              </label>
+            ))}
+            <button type="submit">通知担当者を保存</button>
+          </form>
+        </section>
 
         <section className="settings-card">
           <h2>支援候補</h2>
