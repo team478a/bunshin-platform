@@ -5,10 +5,16 @@ import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 
-const schema = z.object({ serviceSlug: z.string().min(1).max(80) });
+const schema = z.object({
+  serviceSlug: z.string().min(1).max(80),
+  channel: z.enum(['EMAIL', 'LINE']),
+});
 
-export async function updateOemSupportEmailRecipientsAction(form: FormData) {
-  const parsed = schema.safeParse({ serviceSlug: form.get('serviceSlug') });
+export async function updateOemSupportRecipientsAction(form: FormData) {
+  const parsed = schema.safeParse({
+    serviceSlug: form.get('serviceSlug'),
+    channel: form.get('channel'),
+  });
   if (!parsed.success) return;
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) return;
@@ -42,7 +48,7 @@ export async function updateOemSupportEmailRecipientsAction(form: FormData) {
             groupId: service.serviceId,
             groupMembershipId: manager.id,
             topic: 'OEM_SUPPORT_CANDIDATE',
-            channel: 'EMAIL',
+            channel: parsed.data.channel,
           },
         },
         create: {
@@ -51,7 +57,7 @@ export async function updateOemSupportEmailRecipientsAction(form: FormData) {
           groupMembershipId: manager.id,
           userId: manager.userId,
           topic: 'OEM_SUPPORT_CANDIDATE',
-          channel: 'EMAIL',
+          channel: parsed.data.channel,
           enabled,
           consentedAt: enabled ? new Date() : null,
           optedOutAt: enabled ? null : new Date(),
@@ -68,14 +74,15 @@ export async function updateOemSupportEmailRecipientsAction(form: FormData) {
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
         configurationId: service.configuration.id,
-        action: 'OEM_SUPPORT_EMAIL_RECIPIENTS_UPDATED',
+        action: `OEM_SUPPORT_${parsed.data.channel}_RECIPIENTS_UPDATED`,
         beforeData: {},
         afterData: {
+          channel: parsed.data.channel,
           recipientUserIds: managers
             .filter((item) => selected.has(item.userId))
             .map((item) => item.userId),
         },
-        reason: 'OEM支援候補メールの通知担当者を更新',
+        reason: `OEM支援候補${parsed.data.channel === 'EMAIL' ? 'メール' : 'LINE'}の通知担当者を更新`,
         performedByUserId: actor.userId,
       },
     });

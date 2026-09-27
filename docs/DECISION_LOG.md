@@ -2810,3 +2810,12 @@
 - `LINE / OEM_SUPPORT_CANDIDATE`の最新有効テンプレートをService単位で取得し、固定文を各所へ増やさない。
 - `name`、`serviceName`、`supportType`、`manageUrl`だけを置換対象とし、受信者別本文はBroadcast Recipientへ保存する。
 - テンプレートがないServiceには安全な既定文を使い、既存Serviceの通知を停止させない。
+
+## D-117: OEM支援候補の通知担当者はチャネルごとに選択する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- `OEM_SUPPORT_CANDIDATE`の受信設定は、Service Owner / Adminを対象にEMAILとLINEを別々に保存する。
+- EMAILはメールアドレス登録済み管理者だけを選択可能にし、LINEは実配信時にもLINE連携、通知同意、友だち状態を再検証する。
+- Service管理権限とWorkspace / Service境界を既存の管理Contextで検証し、設定変更をService監査へ記録する。
