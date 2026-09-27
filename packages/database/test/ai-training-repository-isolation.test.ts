@@ -3,6 +3,7 @@ import {
   PrismaAiTrainingRuntimeRepository,
   PrismaTrainingAnswerRepository,
   PrismaTrainingParticipantProfileRepository,
+  PrismaTrainingWorkResultRepository,
 } from '../src';
 
 const scope = {
@@ -140,5 +141,122 @@ describe('AI training repository isolation', () => {
     });
     expect(client.programActionEvent.findUnique).not.toHaveBeenCalled();
     expect(client.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not record a work result for another user enrollment', async () => {
+    const tx = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue(null) },
+      programEnrollment: { findFirst: vi.fn() },
+      serviceProgram: { findFirst: vi.fn() },
+      programMissionAssignment: { findFirst: vi.fn() },
+      programActionEvent: { create: vi.fn() },
+      programProgressSnapshot: { updateMany: vi.fn() },
+    };
+    const client = {
+      programActionEvent: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    await expect(
+      new PrismaTrainingWorkResultRepository(client as never).record({
+        ...scope,
+        missionAssignmentId: '00000000-0000-4000-8000-000000000107',
+        result: 'USED_AS_IS',
+        idempotencyKey: 'training-work-result-key',
+        occurredAt: new Date('2026-09-28T01:00:00.000Z'),
+      }),
+    ).resolves.toEqual({ outcome: 'NOT_FOUND' });
+    expect(tx.programEnrollment.findFirst).not.toHaveBeenCalled();
+    expect(tx.programActionEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('returns the same work result for a repeated idempotency key', async () => {
+    const client = {
+      programActionEvent: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'event-1',
+          actorUserId: scope.actorUserId,
+          programEnrollmentId: scope.programEnrollmentId,
+          missionAssignmentId: '00000000-0000-4000-8000-000000000107',
+          eventType: 'TRAINING_WORK_RESULT_RECORDED',
+          metadata: { schemaVersion: 1, result: 'USED_WITH_EDITS' },
+        }),
+      },
+      $transaction: vi.fn(),
+    };
+
+    await expect(
+      new PrismaTrainingWorkResultRepository(client as never).record({
+        ...scope,
+        missionAssignmentId: '00000000-0000-4000-8000-000000000107',
+        result: 'USED_WITH_EDITS',
+        idempotencyKey: 'training-work-result-key',
+        occurredAt: new Date('2026-09-28T01:00:00.000Z'),
+      }),
+    ).resolves.toEqual({ outcome: 'ALREADY_RECORDED', eventId: 'event-1' });
+    expect(client.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('records only the scoped work result metadata and advances the progress revision', async () => {
+    const assignmentId = '00000000-0000-4000-8000-000000000107';
+    const occurredAt = new Date('2026-09-28T01:00:00.000Z');
+    const tx = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-1' }) },
+      programEnrollment: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: scope.programEnrollmentId,
+          serviceProgramId: 'program-1',
+        }),
+      },
+      serviceProgram: { findFirst: vi.fn().mockResolvedValue({ id: 'program-1' }) },
+      programMissionAssignment: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: assignmentId,
+          missionDefinitionKey: 'SALES_EMAIL_BASIC',
+        }),
+      },
+      programActionEvent: { create: vi.fn().mockResolvedValue({ id: 'event-1' }) },
+      programProgressSnapshot: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const client = {
+      programActionEvent: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    await expect(
+      new PrismaTrainingWorkResultRepository(client as never).record({
+        ...scope,
+        missionAssignmentId: assignmentId,
+        result: 'USED_WITH_EDITS',
+        idempotencyKey: 'training-work-result-key',
+        occurredAt,
+      }),
+    ).resolves.toEqual({ outcome: 'RECORDED', eventId: 'event-1' });
+    expect(tx.programActionEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        programEnrollmentId: scope.programEnrollmentId,
+        missionAssignmentId: assignmentId,
+        actorUserId: scope.actorUserId,
+        eventType: 'TRAINING_WORK_RESULT_RECORDED',
+        metadata: {
+          schemaVersion: 1,
+          assignmentId,
+          missionKey: 'SALES_EMAIL_BASIC',
+          result: 'USED_WITH_EDITS',
+        },
+      }),
+      select: { id: true },
+    });
+    expect(tx.programProgressSnapshot.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ revision: { increment: 1 } }),
+      }),
+    );
   });
 });

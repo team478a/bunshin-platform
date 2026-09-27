@@ -6,6 +6,8 @@ import {
   type TrainingGoalKey,
   type TrainingTopicKey,
   type TrainingUseCaseKey,
+  type TrainingWorkContext,
+  resolveTrainingWorkContext,
 } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
@@ -38,9 +40,11 @@ export class PrismaTrainingParticipantProfileRepository {
     preferredTopics: TrainingTopicKey[];
     dailyMinutes: 5 | 10 | 15;
     learningGoalKey: TrainingGoalKey;
+    workContext?: TrainingWorkContext;
     idempotencyKey: string;
     occurredAt: Date;
   }): Promise<TrainingProfileWriteResult> {
+    const workContext = resolveTrainingWorkContext(input.workContext, input.role);
     const existing = await this.findIdempotentResult(input);
     if (existing) return existing;
     try {
@@ -93,6 +97,7 @@ export class PrismaTrainingParticipantProfileRepository {
               aiUseCases: input.aiUseCases,
               workChallenges: input.workChallenges,
               preferredTopics: input.preferredTopics,
+              workContext,
               dailyMinutes: input.dailyMinutes,
               learningGoalKey: input.learningGoalKey,
               assessmentVersion: AI_TRAINING_LEARNING_CATALOG_VERSION,
@@ -104,6 +109,7 @@ export class PrismaTrainingParticipantProfileRepository {
               aiUseCases: input.aiUseCases,
               workChallenges: input.workChallenges,
               preferredTopics: input.preferredTopics,
+              workContext,
               dailyMinutes: input.dailyMinutes,
               learningGoalKey: input.learningGoalKey,
               assessmentVersion: AI_TRAINING_LEARNING_CATALOG_VERSION,
@@ -159,6 +165,7 @@ export class PrismaTrainingParticipantProfileRepository {
                 aiUseCases: input.aiUseCases,
                 workChallenges: input.workChallenges,
                 preferredTopics: input.preferredTopics,
+                workContextVersion: workContext.schemaVersion,
                 dailyMinutes: input.dailyMinutes,
                 learningGoalKey: input.learningGoalKey,
                 assessmentVersion: AI_TRAINING_LEARNING_CATALOG_VERSION,

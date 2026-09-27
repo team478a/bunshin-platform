@@ -232,6 +232,7 @@ export { PrismaProductionGateEvidenceRepository } from './production-gate-eviden
 export { PrismaTrendOperationsRepository } from './trend-operations';
 export { PrismaProgramCoreRepository } from './program-runtime';
 export { PrismaProgramRuntimeRepository } from './program-runtime-execution';
+export { PrismaTrainingWorkResultRepository } from './training-work-result';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,

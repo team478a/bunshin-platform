@@ -4,11 +4,14 @@ import type {
   TrainingSkillKey,
   TrainingTopicKey,
   TrainingUseCaseKey,
+  TrainingDeviceType,
+  TrainingWorkResult,
 } from '@bunshin/capability-training';
 
 export type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
 export type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
 export type TrainingInteractionType = 'HINT_VIEWED' | 'HELP_REQUESTED' | 'TRAINING_POSTPONED';
+export type { TrainingDeviceType, TrainingWorkResult };
 
 export type TrainingParticipantState = {
   enrollmentId: string;
@@ -24,6 +27,14 @@ export type TrainingParticipantState = {
     preferredTopics: TrainingTopicKey[];
     dailyMinutes: 5 | 10 | 15;
     learningGoalKey: TrainingGoalKey;
+    workContext?: {
+      schemaVersion: 1;
+      workDescription: string;
+      timeConsumingTask: string;
+      aiImprovementTarget: string;
+      deviceType: TrainingDeviceType;
+    };
+    workContextComplete?: boolean;
   } | null;
   goal: { title: string } | null;
   action: {
@@ -46,6 +57,11 @@ export type TrainingParticipantState = {
       evaluationCriteria?: readonly string[] | undefined;
       difficulty?: 'EASY' | 'STANDARD' | 'CHALLENGE' | undefined;
       difficultyGuidance?: string | undefined;
+      hint?: string | undefined;
+      personalizationReason?: string | undefined;
+      personalizationVersion?: string | undefined;
+      personalizationStatus?: 'PERSONALIZED' | 'FIXED_FALLBACK' | undefined;
+      practiceMode?: 'PRACTICE' | 'WORK' | undefined;
     };
     reevaluateAt: string | null;
     submission: {

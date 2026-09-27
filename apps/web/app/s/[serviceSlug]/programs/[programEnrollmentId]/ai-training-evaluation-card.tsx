@@ -1,5 +1,9 @@
 import { TRAINING_SKILL_LABELS } from '@bunshin/capability-training';
-import type { TrainingEvaluation, TrainingParticipantState } from './ai-training-types';
+import type {
+  TrainingEvaluation,
+  TrainingParticipantState,
+  TrainingWorkResult,
+} from './ai-training-types';
 
 const skillStateLabel = (score: number) =>
   score >= 80 ? 'よくできています' : score >= 60 ? 'できています' : '練習中です';
@@ -13,7 +17,10 @@ export function AiTrainingEvaluationCard({
   toolkitSaving,
   toolkitSaved,
   saving,
+  workResult,
+  workResultSaving,
   saveToToolkit,
+  saveWorkResult,
   loadNextMission,
 }: {
   serviceSlug: string;
@@ -24,7 +31,10 @@ export function AiTrainingEvaluationCard({
   toolkitSaving: boolean;
   toolkitSaved: boolean;
   saving: boolean;
+  workResult: TrainingWorkResult | null;
+  workResultSaving: boolean;
   saveToToolkit: () => Promise<void>;
+  saveWorkResult: (result: TrainingWorkResult) => Promise<void>;
   loadNextMission: () => Promise<void>;
 }) {
   return (
@@ -86,6 +96,33 @@ export function AiTrainingEvaluationCard({
       {error ? <p className="notice notice--error">{error}</p> : null}
       {evaluation.result === 'PASS' ? (
         <div className="training-toolkit-save">
+          <h3>この方法を実際の仕事で使いましたか？</h3>
+          <div className="training-support-actions">
+            {(
+              [
+                ['USED_AS_IS', 'そのまま使った'],
+                ['USED_WITH_EDITS', '修正して使った'],
+                ['NOT_USED_YET', 'まだ使っていない'],
+                ['NOT_APPLICABLE', '今回の仕事では使わない'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                className={
+                  workResult === value ? 'button button--primary' : 'button button--secondary'
+                }
+                type="button"
+                key={value}
+                disabled={workResultSaving || workResult !== null}
+                onClick={() => void saveWorkResult(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {evaluation.result === 'PASS' ? (
+        <div className="training-toolkit-save">
           <h3>仕事でまた使う回答ですか？</h3>
           <p>必要なものだけを、自分専用のMy AI Toolkitへ保存できます。</p>
           <button
@@ -116,13 +153,15 @@ export function AiTrainingEvaluationCard({
         onClick={() => {
           void loadNextMission();
         }}
-        disabled={saving}
+        disabled={saving || (evaluation.result === 'PASS' && workResult === null)}
       >
         {saving
           ? '更新しています…'
           : evaluation.result === 'REVIEW'
             ? '復習してもう一度回答する'
-            : '次の課題を見る'}
+            : workResult === null
+              ? '仕事で使ったかを選んでください'
+              : '次の課題を見る'}
       </button>
     </section>
   );

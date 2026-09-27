@@ -17,6 +17,13 @@ import {
   type TrainingMissionDifficulty,
   type TrainingMissionQualityDefinition,
 } from './mission-quality';
+import {
+  AI_TRAINING_PERSONALIZATION_VERSION,
+  RuleBasedTrainingMissionPersonalizer,
+  resolveTrainingWorkContext,
+  type TrainingMissionPersonalizer,
+  type TrainingWorkContext,
+} from './personalization';
 
 export interface AiTrainingRuntimeSettings {
   moduleKey: 'AI_TRAINING_V1';
@@ -34,7 +41,7 @@ export interface TrainingMissionDefinition {
 }
 
 export interface AiTrainingActionDisplaySnapshot {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   actionKey: TrainingActionKey;
   mode: 'WORK' | 'WAIT';
   reasonCode: string;
@@ -43,7 +50,11 @@ export interface AiTrainingActionDisplaySnapshot {
   task: string;
   instructions: string[];
   estimatedMinutes: number | null;
-  renderer: 'TRAINING_FIXED_V1' | 'TRAINING_PRACTICE_V2' | 'TRAINING_ADAPTIVE_V3';
+  renderer:
+    | 'TRAINING_FIXED_V1'
+    | 'TRAINING_PRACTICE_V2'
+    | 'TRAINING_ADAPTIVE_V3'
+    | 'TRAINING_PERSONALIZED_V4';
   learningObjective?: string;
   businessScenario?: string;
   constraints?: readonly string[];
@@ -54,6 +65,12 @@ export interface AiTrainingActionDisplaySnapshot {
   difficultyReasonCode?: TrainingDifficultyReasonCode;
   difficultyGuidance?: string;
   qualityVersion?: typeof AI_TRAINING_MISSION_QUALITY_VERSION;
+  catalogVersion?: typeof AI_TRAINING_MISSION_QUALITY_VERSION;
+  personalizationVersion?: typeof AI_TRAINING_PERSONALIZATION_VERSION;
+  personalizationStatus?: 'PERSONALIZED' | 'FIXED_FALLBACK';
+  personalizationReason?: string;
+  hint?: string;
+  practiceMode?: 'PRACTICE' | 'WORK';
 }
 
 export interface AiTrainingParticipantAction {
@@ -85,6 +102,8 @@ export interface AiTrainingParticipantState {
     preferredTopics: TrainingTopicKey[];
     dailyMinutes: 5 | 10 | 15;
     learningGoalKey: TrainingGoalKey;
+    workContext?: TrainingWorkContext;
+    workContextComplete?: boolean;
   } | null;
   goal: { title: string } | null;
   action: AiTrainingParticipantAction | null;
@@ -106,6 +125,7 @@ export interface AiTrainingRuntimeCandidate {
     recentFailures: number;
     streak: number;
     skillScores: Readonly<Record<string, number>>;
+    workContext?: TrainingWorkContext;
   };
   currentPhase: 'FOUNDATION' | 'PRACTICE' | 'APPLICATION';
   completedMissionKeys: readonly string[];
@@ -116,6 +136,7 @@ export interface AiTrainingRuntimeCandidate {
   lastActionAt: Date | null;
   activeWaitUntil: Date | null;
   progressRevision: number | null;
+  workUseCount?: number;
   missions: readonly TrainingMissionDefinition[];
 }
 
@@ -161,6 +182,8 @@ const reasonText: Record<string, string> = {
   PROMPT_CONDITIONS_REQUIRED: '希望する結果を得るために、条件の伝え方を身につける段階です。',
   PROMPT_FORMAT_REQUIRED: '仕事で使いやすい形に整える指定を練習する段階です。',
   LEARNING_GOAL_PRIORITY: '最初に選んだ「できるようになりたいこと」へ近づく実務課題です。',
+  WORK_USAGE_CONFIRMED_NEXT_PRACTICE:
+    'これまでにAIを実務で使った経験を踏まえ、次の実践課題へ進みます。',
   ROLE_SALES_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の営業実務課題へ進みます。',
   ROLE_OFFICE_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の事務実務課題へ進みます。',
   ROLE_MANAGER_NEXT_PRACTICE: '基礎とこれまでの進捗をもとに、次の管理職向け課題へ進みます。',
@@ -266,6 +289,52 @@ export function renderAiTrainingAction(
   };
 }
 
+export async function renderPersonalizedAiTrainingAction(input: {
+  decision: NextActionDecision;
+  mission: TrainingMissionDefinition;
+  difficultyDecision: TrainingDifficultyDecision;
+  candidate: AiTrainingRuntimeCandidate;
+  personalizer: TrainingMissionPersonalizer;
+}): Promise<AiTrainingActionDisplaySnapshot> {
+  const fixed = renderAiTrainingAction(input.decision, input.mission, input.difficultyDecision);
+  const base: AiTrainingActionDisplaySnapshot = {
+    ...fixed,
+    schemaVersion: 4 as const,
+    renderer: 'TRAINING_PERSONALIZED_V4' as const,
+    catalogVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
+    personalizationVersion: AI_TRAINING_PERSONALIZATION_VERSION,
+    practiceMode: 'PRACTICE' as const,
+  };
+  if (input.decision.mode === 'WAIT') {
+    return { ...base, personalizationStatus: 'FIXED_FALLBACK' };
+  }
+  try {
+    const personalized = await input.personalizer.personalize({
+      mission: input.mission,
+      role: input.candidate.profile.role,
+      aiLevel: input.candidate.profile.aiLevel,
+      learningGoalKey: input.candidate.profile.learningGoalKey,
+      workContext: resolveTrainingWorkContext(
+        input.candidate.profile.workContext,
+        input.candidate.profile.role,
+      ),
+      workUseCount: input.candidate.workUseCount ?? 0,
+    });
+    return {
+      ...base,
+      businessScenario: personalized.scenario,
+      task: personalized.task,
+      hint: personalized.hint,
+      reason: personalized.reason,
+      personalizationReason: personalized.reason,
+      personalizationVersion: personalized.version,
+      personalizationStatus: 'PERSONALIZED',
+    };
+  } catch {
+    return { ...base, personalizationStatus: 'FIXED_FALLBACK' };
+  }
+}
+
 export function parseAiTrainingActionDisplay(
   value: unknown,
 ): AiTrainingActionDisplaySnapshot | null {
@@ -275,7 +344,7 @@ export function parseAiTrainingActionDisplay(
   const quality = typeof actionKey === 'string' ? getAiTrainingMissionQuality(actionKey) : null;
   if (
     !quality ||
-    ![1, 2, 3].includes(Number(display['schemaVersion'])) ||
+    ![1, 2, 3, 4].includes(Number(display['schemaVersion'])) ||
     typeof actionKey !== 'string' ||
     !['WORK', 'WAIT'].includes(String(display['mode'])) ||
     typeof display['reasonCode'] !== 'string' ||
@@ -288,9 +357,12 @@ export function parseAiTrainingActionDisplay(
       display['estimatedMinutes'] === null ||
       (typeof display['estimatedMinutes'] === 'number' && display['estimatedMinutes'] >= 0)
     ) ||
-    !['TRAINING_FIXED_V1', 'TRAINING_PRACTICE_V2', 'TRAINING_ADAPTIVE_V3'].includes(
-      String(display['renderer']),
-    )
+    ![
+      'TRAINING_FIXED_V1',
+      'TRAINING_PRACTICE_V2',
+      'TRAINING_ADAPTIVE_V3',
+      'TRAINING_PERSONALIZED_V4',
+    ].includes(String(display['renderer']))
   ) {
     return null;
   }
@@ -360,12 +432,14 @@ const contextFor = (
   lastActionAt: candidate.lastActionAt,
   pauseAfterDays: candidate.settings.pauseAfterDays,
   activeWaitUntil: candidate.activeWaitUntil,
+  workUseCount: candidate.workUseCount ?? 0,
 });
 
 export class AiTrainingParticipantService {
   constructor(
     private readonly repository: AiTrainingRuntimeRepository,
     private readonly policy: NextActionPolicy<AiTrainingV1DecisionContext>,
+    private readonly personalizer: TrainingMissionPersonalizer = new RuleBasedTrainingMissionPersonalizer(),
   ) {}
 
   async current(input: {
@@ -377,7 +451,7 @@ export class AiTrainingParticipantService {
   }) {
     let state = await this.repository.findState(input);
     if (!state) throw new TrainingRuntimeError('NOT_FOUND', 'AI training enrollment not found');
-    if (state.profile === null) return state;
+    if (state.profile === null || state.profile.workContextComplete === false) return state;
     const waiting = state.action?.mode === 'WAIT' && state.action.reevaluateAt;
     if (state.action && (!waiting || waiting > input.now)) return state;
     const candidate = await this.repository.findCandidate(input);
@@ -395,11 +469,13 @@ export class AiTrainingParticipantService {
       candidate,
       decision,
       mission,
-      displaySnapshot: renderAiTrainingAction(
+      displaySnapshot: await renderPersonalizedAiTrainingAction({
         decision,
         mission,
-        resolveTrainingMissionDifficulty(context, decision, mission),
-      ),
+        difficultyDecision: resolveTrainingMissionDifficulty(context, decision, mission),
+        candidate,
+        personalizer: this.personalizer,
+      }),
       evaluatedAt: input.now,
     });
     if (result === 'NOT_FOUND')

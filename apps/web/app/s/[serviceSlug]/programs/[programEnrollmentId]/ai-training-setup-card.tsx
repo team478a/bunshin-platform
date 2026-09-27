@@ -11,6 +11,7 @@ import {
 } from '@bunshin/capability-training';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { TrainingAiLevel, TrainingRole } from './ai-training-types';
+import type { TrainingDeviceType } from './ai-training-types';
 
 const roleLabels: Record<TrainingRole, string> = {
   SALES: '営業・接客',
@@ -40,6 +41,14 @@ export function AiTrainingSetupCard({
   setDailyMinutes,
   learningGoalKey,
   setLearningGoalKey,
+  workDescription,
+  setWorkDescription,
+  timeConsumingTask,
+  setTimeConsumingTask,
+  aiImprovementTarget,
+  setAiImprovementTarget,
+  deviceType,
+  setDeviceType,
   saving,
   error,
   setError,
@@ -61,6 +70,14 @@ export function AiTrainingSetupCard({
   setDailyMinutes: Dispatch<SetStateAction<5 | 10 | 15>>;
   learningGoalKey: TrainingGoalKey;
   setLearningGoalKey: Dispatch<SetStateAction<TrainingGoalKey>>;
+  workDescription: string;
+  setWorkDescription: Dispatch<SetStateAction<string>>;
+  timeConsumingTask: string;
+  setTimeConsumingTask: Dispatch<SetStateAction<string>>;
+  aiImprovementTarget: string;
+  setAiImprovementTarget: Dispatch<SetStateAction<string>>;
+  deviceType: TrainingDeviceType;
+  setDeviceType: Dispatch<SetStateAction<TrainingDeviceType>>;
   saving: boolean;
   error: string;
   setError: Dispatch<SetStateAction<string>>;
@@ -69,18 +86,20 @@ export function AiTrainingSetupCard({
   const recommendedGoals = recommendedTrainingGoalKeys(role);
   return (
     <section className="service-entry__card training-card" aria-labelledby="training-setup-title">
-      <p className="eyebrow">最初のかんたん診断 {setupStep} / 4</p>
-      <div className="training-setup-progress" aria-label={`診断 ${setupStep} / 4`}>
-        <span style={{ width: `${setupStep * 25}%` }} />
+      <p className="eyebrow">最初のかんたん診断 {setupStep} / 5</p>
+      <div className="training-setup-progress" aria-label={`診断 ${setupStep} / 5`}>
+        <span style={{ width: `${setupStep * 20}%` }} />
       </div>
       <h2 id="training-setup-title">
         {setupStep === 1
           ? 'あなたの仕事とAI経験'
           : setupStep === 2
-            ? '今の使い方と困りごと'
+            ? '普段の仕事を教えてください'
             : setupStep === 3
-              ? '学べる内容を選ぶ'
-              : '30日後の目標を決める'}
+              ? '今の使い方と困りごと'
+              : setupStep === 4
+                ? '学べる内容を選ぶ'
+                : '30日後の目標を決める'}
       </h2>
       <p>今の仕事、経験、困りごとに合わせて、毎日の課題を変えます。</p>
       <form
@@ -122,6 +141,70 @@ export function AiTrainingSetupCard({
           </>
         ) : null}
         {setupStep === 2 ? (
+          <>
+            <label className="field">
+              <span className="field__label">普段どんな仕事をしていますか？</span>
+              <textarea
+                className="field__control"
+                value={workDescription}
+                onChange={(event) => setWorkDescription(event.target.value)}
+                minLength={5}
+                maxLength={240}
+                rows={3}
+                placeholder="例：法人向けサービスの営業をしています"
+                required
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">時間がかかる・面倒だと感じる作業</span>
+              <input
+                className="field__control"
+                value={timeConsumingTask}
+                onChange={(event) => setTimeConsumingTask(event.target.value)}
+                minLength={2}
+                maxLength={160}
+                placeholder="例：商談後のメール作成"
+                required
+              />
+            </label>
+            <label className="field">
+              <span className="field__label">AIで楽にしたい、上手くなりたい仕事</span>
+              <input
+                className="field__control"
+                value={aiImprovementTarget}
+                onChange={(event) => setAiImprovementTarget(event.target.value)}
+                minLength={2}
+                maxLength={160}
+                placeholder="例：相手に合わせたフォローメール作成"
+                required
+              />
+            </label>
+            <fieldset className="training-choice-group">
+              <legend>主に使う端末</legend>
+              {(
+                [
+                  ['SMARTPHONE', 'スマートフォン中心'],
+                  ['PC', 'PC中心'],
+                  ['BOTH', 'スマートフォン＋PC'],
+                ] as const
+              ).map(([value, label]) => (
+                <label key={value} className="training-choice">
+                  <input
+                    type="radio"
+                    name="deviceType"
+                    checked={deviceType === value}
+                    onChange={() => setDeviceType(value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
+            <p className="training-privacy-note">
+              顧客名、個人情報、パスワード、機密情報などは入力しないでください。
+            </p>
+          </>
+        ) : null}
+        {setupStep === 3 ? (
           <>
             <fieldset className="training-choice-group">
               <legend>今、AIを使っている業務（複数選択可）</legend>
@@ -165,7 +248,7 @@ export function AiTrainingSetupCard({
             </fieldset>
           </>
         ) : null}
-        {setupStep === 3 ? (
+        {setupStep === 4 ? (
           <fieldset className="training-choice-group training-catalog">
             <legend>学びたいテーマ（6つまで）</legend>
             <p className="training-field-help">
@@ -190,7 +273,7 @@ export function AiTrainingSetupCard({
             ))}
           </fieldset>
         ) : null}
-        {setupStep === 4 ? (
+        {setupStep === 5 ? (
           <>
             <fieldset className="training-choice-group training-goal-options">
               <legend>30日後にできるようになりたいこと</legend>
@@ -225,7 +308,7 @@ export function AiTrainingSetupCard({
               ))}
             </fieldset>
             <p className="training-privacy-note">
-              顧客名、個人情報、社外秘の内容は入力しないでください。この診断では選択肢だけを保存します。
+              顧客名、個人情報、パスワード、機密情報などは入力しないでください。
             </p>
           </>
         ) : null}
@@ -243,16 +326,25 @@ export function AiTrainingSetupCard({
               戻る
             </button>
           ) : null}
-          {setupStep < 4 ? (
+          {setupStep < 5 ? (
             <button
               className="button button--primary"
               type="button"
               onClick={() => {
-                if (setupStep === 2 && !workChallenges.length) {
+                if (
+                  setupStep === 2 &&
+                  (!workDescription.trim() ||
+                    !timeConsumingTask.trim() ||
+                    !aiImprovementTarget.trim())
+                ) {
+                  setError('普段の仕事と、改善したい仕事を入力してください。');
+                  return;
+                }
+                if (setupStep === 3 && !workChallenges.length) {
                   setError('困っていることを1つ以上選んでください。');
                   return;
                 }
-                if (setupStep === 3 && !preferredTopics.length) {
+                if (setupStep === 4 && !preferredTopics.length) {
                   setError('学びたいテーマを1つ以上選んでください。');
                   return;
                 }

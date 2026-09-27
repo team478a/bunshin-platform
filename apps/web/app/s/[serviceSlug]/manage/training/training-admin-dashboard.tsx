@@ -84,11 +84,24 @@ export function TrainingAdminDashboard({
                   <strong>{dashboard.totals.needsSupport}</strong>
                   <span>声かけが必要</span>
                 </article>
+                <article>
+                  <strong>{dashboard.totals.workResultParticipants}</strong>
+                  <span>実務で確認済み</span>
+                </article>
+                <article>
+                  <strong>{dashboard.totals.usedAsIs + dashboard.totals.usedWithEdits}</strong>
+                  <span>実務で利用</span>
+                </article>
               </div>
               <p>
                 登録者 {dashboard.totals.participants}人のうち、受講中は
                 {dashboard.totals.active}
                 人です。継続率は、受講中で直近7日以内に研修を進めた人の割合です。
+              </p>
+              <p>
+                実務利用の回答 {dashboard.totals.workResultCount}件（そのまま利用{' '}
+                {dashboard.totals.usedAsIs}、修正して利用 {dashboard.totals.usedWithEdits}、未利用{' '}
+                {dashboard.totals.notUsedYet}、対象外 {dashboard.totals.notApplicable}）
               </p>
             </section>
 
