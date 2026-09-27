@@ -285,6 +285,30 @@ describe('GenerateDailyMissionBrief', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
+  it('rejects duplicate personalization source types in provider output', async () => {
+    await expect(
+      new GenerateDailyMissionBrief(
+        provider({
+          ...output,
+          personalizationSourceTypes: ['BUNSHIN_PROFILE', 'BUNSHIN_PROFILE'],
+          personalizationReason: '本人のBunshin設定を使った',
+        }),
+      ).execute({
+        ...input,
+        personalization: {
+          signals: [
+            {
+              type: 'BUNSHIN_PROFILE',
+              label: '本人のBunshin設定',
+              value: '歴史好きの初心者へ写真で伝える',
+            },
+          ],
+          instruction: '本人固有情報を企画へ反映する',
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
   it('replaces the weekly suggestion with a safe format from the scoped profile', async () => {
     const planner = provider();
     const result = await new GenerateDailyMissionBrief(planner).execute({

@@ -17,6 +17,7 @@ import { loadDailyMissionPlanningContext } from './daily-mission-planning-contex
 import {
   createDailyMissionAiRuntime,
   dailyMissionErrorCategory,
+  dailyMissionProviderFailureDetails,
   recordDailyMissionPipelineFailure,
 } from './daily-mission-ai-runtime';
 import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
@@ -302,6 +303,7 @@ export class DailyMissionGenerationService {
         stage,
         errorCode: error instanceof ApplicationError ? error.code : 'INTERNAL_ERROR',
         errorMessage: error instanceof Error ? error.message : String(error),
+        ...dailyMissionProviderFailureDetails(error),
       });
       if (generationId) {
         await recordDailyMissionPipelineFailure({
