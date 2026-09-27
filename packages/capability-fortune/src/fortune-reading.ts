@@ -47,6 +47,25 @@ export interface FortuneAiGenerationClaim {
   groupId: string;
   bunshinId: string;
   reading: FortuneReadingView;
+  personalization?: {
+    bunshinProfile: {
+      name: string;
+      objectiveSummary: string;
+      audienceSummary: string;
+      personalitySummary: string;
+    };
+    recentReadings: Array<{
+      id: string;
+      localDate: string;
+      theme: FortuneTheme;
+      cardCode: string;
+      orientation: FortuneOrientation;
+      body: string | null;
+      actionStep: string | null;
+      feedbackRating: FortuneFeedbackRating | null;
+      feedbackIssue: FortuneFeedbackIssue | null;
+    }>;
+  };
 }
 
 export interface FortuneAiReadingResult extends FortuneReadingOutput {
