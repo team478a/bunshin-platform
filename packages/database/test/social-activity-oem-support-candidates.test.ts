@@ -3,7 +3,7 @@ import { projectSocialActivityOemSupportCandidates } from '../src/social-activit
 
 const detectedAt = new Date('2026-09-27T00:00:00.000Z');
 
-function database(category = 'MEDIA', incidentDays = 0) {
+function database(category = 'MEDIA', incidentDays = 0, mode = 'INTERNAL_ESCALATION') {
   const upsert = vi.fn().mockResolvedValue({ id: 'candidate-1' });
   return {
     client: {
@@ -15,6 +15,9 @@ function database(category = 'MEDIA', incidentDays = 0) {
             barrierCase: {
               id: 'case-1',
               category,
+              groupMembership: {
+                group: { serviceConfiguration: { supportAlertPolicy: { mode } } },
+              },
               evidenceSnapshots: [
                 {
                   id: 'evidence-1',
@@ -47,9 +50,20 @@ describe('projectSocialActivityOemSupportCandidates', () => {
           caseId: 'case-1',
           evidenceId: 'evidence-1',
           recommendationKey: 'MEDIA_PRODUCTION_SUPPORT',
+          recommendationSnapshot: expect.objectContaining({
+            handlingMode: 'INTERNAL_ESCALATION',
+          }),
         }),
       }),
     );
+  });
+
+  it('does not create a candidate when the service disables support alerts', async () => {
+    const db = database('MEDIA', 0, 'DISABLED');
+    await expect(
+      projectSocialActivityOemSupportCandidates(db.client as never, { detectedAt }),
+    ).resolves.toMatchObject({ created: 0, skipped: 1 });
+    expect(db.upsert).not.toHaveBeenCalled();
   });
 
   it.each([

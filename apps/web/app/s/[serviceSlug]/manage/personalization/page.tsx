@@ -6,6 +6,7 @@ import { personalizationAuditSummary } from '../../../../../src/services/persona
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { transitionOemSupportCandidateAction } from './oem-support-candidate-actions';
+import { updateSupportAlertPolicyAction } from './support-alert-policy-action';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,51 +39,56 @@ export default async function PersonalizationAuditPage({
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');
-  const [missions, failures, barrierSummary, supportCandidates] = await Promise.all([
-    db.prisma.dailyMission.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        bunshin: { is: { groupId: service.serviceId } },
-      },
-      select: {
-        id: true,
-        missionDate: true,
-        topic: true,
-        qualityScore: true,
-        bunshin: { select: { ownerUser: { select: { displayName: true } } } },
-        generationContext: { select: { payload: true } },
-        feedback: { select: { rating: true } },
-        decision: { select: { decision: true, rejectionReason: true } },
-      },
-      orderBy: [{ missionDate: 'desc' }, { createdAt: 'desc' }],
-      take: 40,
-    }),
-    db.prisma.dailyMissionGeneration.findMany({
-      where: {
-        workspaceId: service.workspaceId,
-        status: 'FAILED',
-        bunshinId: {
-          in: await db.prisma.bunshin
-            .findMany({
-              where: { workspaceId: service.workspaceId, groupId: service.serviceId },
-              select: { id: true },
-            })
-            .then((items) => items.map(({ id }) => id)),
+  const [missions, failures, barrierSummary, supportCandidates, supportAlertPolicy] =
+    await Promise.all([
+      db.prisma.dailyMission.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          bunshin: { is: { groupId: service.serviceId } },
         },
-      },
-      select: { id: true, missionDate: true, errorCategory: true, updatedAt: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 10,
-    }),
-    db.getSocialActivityBarrierServiceSummary(db.prisma, {
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-    }),
-    db.listSocialActivityOemSupportCandidates(db.prisma, {
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-    }),
-  ]);
+        select: {
+          id: true,
+          missionDate: true,
+          topic: true,
+          qualityScore: true,
+          bunshin: { select: { ownerUser: { select: { displayName: true } } } },
+          generationContext: { select: { payload: true } },
+          feedback: { select: { rating: true } },
+          decision: { select: { decision: true, rejectionReason: true } },
+        },
+        orderBy: [{ missionDate: 'desc' }, { createdAt: 'desc' }],
+        take: 40,
+      }),
+      db.prisma.dailyMissionGeneration.findMany({
+        where: {
+          workspaceId: service.workspaceId,
+          status: 'FAILED',
+          bunshinId: {
+            in: await db.prisma.bunshin
+              .findMany({
+                where: { workspaceId: service.workspaceId, groupId: service.serviceId },
+                select: { id: true },
+              })
+              .then((items) => items.map(({ id }) => id)),
+          },
+        },
+        select: { id: true, missionDate: true, errorCategory: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      }),
+      db.getSocialActivityBarrierServiceSummary(db.prisma, {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+      }),
+      db.listSocialActivityOemSupportCandidates(db.prisma, {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+      }),
+      db.prisma.serviceSupportAlertPolicy.findUnique({
+        where: { groupId: service.serviceId },
+        select: { mode: true },
+      }),
+    ]);
 
   return (
     <PublicShell showPlatformBrand={false}>
@@ -152,6 +158,19 @@ export default async function PersonalizationAuditPage({
 
         <section className="settings-card">
           <h2>支援候補</h2>
+          <form action={updateSupportAlertPolicyAction}>
+            <input type="hidden" name="serviceSlug" value={service.configuration.slug} />
+            <label>
+              支援アラートの扱い
+              <select name="mode" defaultValue={supportAlertPolicy?.mode ?? 'INTERNAL_ESCALATION'}>
+                <option value="OPTIONAL_UPSELL">有料オプションの追加提案</option>
+                <option value="INCLUDED_SUPPORT">契約内サポートとして対応</option>
+                <option value="INTERNAL_ESCALATION">担当者への内部アラート</option>
+                <option value="DISABLED">支援候補アラートを使用しない</option>
+              </select>
+            </label>
+            <button type="submit">設定を保存</button>
+          </form>
           <p>
             本人への無料支援後も改善しなかった場合だけ表示します。営業や契約は自動実行されません。
           </p>

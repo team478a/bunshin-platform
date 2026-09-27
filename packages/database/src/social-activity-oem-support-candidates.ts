@@ -33,6 +33,17 @@ export async function projectSocialActivityOemSupportCandidates(
         select: {
           id: true,
           category: true,
+          groupMembership: {
+            select: {
+              group: {
+                select: {
+                  serviceConfiguration: {
+                    select: { supportAlertPolicy: { select: { mode: true } } },
+                  },
+                },
+              },
+            },
+          },
           evidenceSnapshots: {
             where: { detectedAt: { lt: detectedAt } },
             orderBy: { detectedAt: 'desc' },
@@ -60,7 +71,10 @@ export async function projectSocialActivityOemSupportCandidates(
 
   for (const row of rows.slice(0, limit)) {
     const completedAt = row.completedAt;
-    if (!completedAt) {
+    const handlingMode =
+      row.barrierCase.groupMembership.group.serviceConfiguration?.supportAlertPolicy?.mode ??
+      'INTERNAL_ESCALATION';
+    if (!completedAt || handlingMode === 'DISABLED') {
       summary.skipped += 1;
       continue;
     }
@@ -93,6 +107,7 @@ export async function projectSocialActivityOemSupportCandidates(
           recommendationSnapshot: {
             title: selected.recommendation.title,
             description: selected.recommendation.description,
+            handlingMode,
           },
           reasonCode: selected.recommendation.reasonCode,
           ruleVersion: selected.recommendation.ruleVersion,
