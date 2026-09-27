@@ -69,6 +69,7 @@ export async function enqueueSocialActivityOemSupportCandidateEmails(
                       slug: true,
                       displayName: true,
                       registrationEmailConfiguration: true,
+                      supportAlertPolicy: { select: { notifyByEmail: true } },
                       messageTemplates: {
                         where: {
                           channel: 'EMAIL',
@@ -96,7 +97,13 @@ export async function enqueueSocialActivityOemSupportCandidateEmails(
     const service = membership.group.serviceConfiguration;
     const email = service?.registrationEmailConfiguration;
     const mode = handlingMode(candidate.recommendationSnapshot);
-    if (!service || !email?.enabled || !email.lastVerifiedAt || mode === 'DISABLED') {
+    if (
+      !service ||
+      service.supportAlertPolicy?.notifyByEmail === false ||
+      !email?.enabled ||
+      !email.lastVerifiedAt ||
+      mode === 'DISABLED'
+    ) {
       skipped += 1;
       continue;
     }

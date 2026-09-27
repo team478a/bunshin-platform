@@ -28,6 +28,9 @@ describe('OEM SNS support candidate admin', () => {
     expect(action).toContain('INCLUDED_SUPPORT');
     expect(action).toContain('INTERNAL_ESCALATION');
     expect(action).toContain('DISABLED');
+    expect(action).toContain("channelMode: z.enum(['EMAIL', 'LINE', 'BOTH', 'DASHBOARD'])");
+    expect(action).toContain('notifyByEmail');
+    expect(action).toContain('notifyByLine');
     expect(action).toContain('resolveManagedServiceContext');
     expect(action).toContain('serviceConfigurationAudit.create');
   });

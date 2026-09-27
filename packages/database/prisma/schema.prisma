@@ -2712,6 +2712,8 @@ model ServiceSupportAlertPolicy {
   groupId         String                  @unique @map("group_id") @db.Uuid
   configurationId String                  @unique @map("configuration_id") @db.Uuid
   mode            ServiceSupportAlertMode @default(INTERNAL_ESCALATION)
+  notifyByEmail   Boolean                 @default(true) @map("notify_by_email")
+  notifyByLine    Boolean                 @default(false) @map("notify_by_line")
   updatedByUserId String                  @map("updated_by_user_id") @db.Uuid
   createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
