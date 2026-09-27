@@ -47,6 +47,10 @@ describe('OEM SNS support candidate admin', () => {
     expect(page).toContain("automationKey: { startsWith: 'oem-support-candidate:' }");
     expect(page).toContain('送信できなかった支援候補LINE');
     expect(page).toContain('/manage/line');
+    expect(page).toContain('安全確認により送信しなかった通知');
+    expect(page).toContain("status: 'SKIPPED'");
+    expect(page).toContain('skippedSupportEmails');
+    expect(page).toContain('skippedSupportLines');
   });
 
   it('scopes failed email retry to the managed service and records an audit', () => {

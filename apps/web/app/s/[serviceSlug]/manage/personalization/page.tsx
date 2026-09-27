@@ -50,6 +50,8 @@ export default async function PersonalizationAuditPage({
     supportAlertPolicy,
     failedSupportEmails,
     failedSupportLines,
+    skippedSupportEmails,
+    skippedSupportLines,
     supportManagers,
   ] = await Promise.all([
     db.prisma.dailyMission.findMany({
@@ -129,6 +131,41 @@ export default async function PersonalizationAuditPage({
         updatedAt: true,
         recipients: {
           where: { status: 'FAILED' },
+          select: { id: true, errorCategory: true },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.socialActivityOemSupportCandidateEmailDelivery.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        configurationId: service.configuration.id,
+        status: 'SKIPPED',
+      },
+      select: {
+        id: true,
+        recipientName: true,
+        lastErrorCategory: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.serviceLineBroadcast.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        automationKey: { startsWith: 'oem-support-candidate:' },
+        recipients: { some: { status: 'SKIPPED' } },
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        recipients: {
+          where: { status: 'SKIPPED' },
           select: { id: true, errorCategory: true },
         },
       },
@@ -272,6 +309,36 @@ export default async function PersonalizationAuditPage({
             <Link href={`/s/${service.configuration.slug}/manage/line` as Route}>
               公式LINE管理で配信状況を確認
             </Link>
+          </section>
+        ) : null}
+
+        {skippedSupportEmails.length > 0 || skippedSupportLines.length > 0 ? (
+          <section className="settings-card">
+            <h2>安全確認により送信しなかった通知</h2>
+            <p>
+              予約後に候補が対応済みになった、通知設定が変更された、または担当者の受信資格が変わったため送信を止めた記録です。再送は不要です。
+            </p>
+            <ul className="settings-status-list">
+              {skippedSupportEmails.map((delivery) => (
+                <li className="settings-status-item" key={delivery.id}>
+                  <strong>メール：{delivery.recipientName || '運営管理者'}</strong>
+                  <span>
+                    {delivery.lastErrorCategory ?? '最新状態により対象外'}／
+                    {dateLabel(delivery.updatedAt)}
+                  </span>
+                </li>
+              ))}
+              {skippedSupportLines.map((broadcast) => (
+                <li className="settings-status-item" key={broadcast.id}>
+                  <strong>LINE：{broadcast.title}</strong>
+                  <span>
+                    送信停止 {broadcast.recipients.length}件／
+                    {broadcast.recipients[0]?.errorCategory ?? '最新状態により対象外'}／
+                    {dateLabel(broadcast.updatedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </section>
         ) : null}
 
