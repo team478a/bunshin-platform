@@ -207,6 +207,10 @@ export {
   getSocialActivityBarrierServiceSummary,
   type SocialActivityBarrierServiceSummary,
 } from './social-activity-barrier-summary';
+export {
+  projectSocialActivityOemSupportCandidates,
+  type SocialActivityOemSupportCandidateProjectionSummary,
+} from './social-activity-oem-support-candidates';
 export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';

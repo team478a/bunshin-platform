@@ -1851,6 +1851,13 @@ enum SocialActivitySupportStatus {
   SKIPPED
 }
 
+enum SocialActivityOemSupportCandidateStatus {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  COMPLETED
+}
+
 enum PostSource {
   MANUAL
 }
@@ -6948,6 +6955,7 @@ model SocialActivityBarrierCase {
   evidenceSnapshots SocialActivityBarrierEvidence[]
   confirmations     SocialActivityBarrierConfirmation[]
   supportActions    SocialActivitySupportIntervention[]
+  oemSupportCandidates SocialActivityOemSupportCandidate[]
 
   @@unique([workspaceId, groupId, groupMembershipId, userId, bunshinId, category], map: "social_activity_barrier_cases_scope_category_key")
   @@unique([workspaceId, groupId, id], map: "social_activity_barrier_cases_scope_id_key")
@@ -6972,6 +6980,7 @@ model SocialActivityBarrierEvidence {
   detectedAt                 DateTime                  @map("detected_at") @db.Timestamptz(6)
   createdAt                  DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   barrierCase                SocialActivityBarrierCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  oemSupportCandidates       SocialActivityOemSupportCandidate[]
 
   @@unique([caseId, evidenceKey], map: "social_activity_barrier_evidence_idempotency_key")
   @@index([caseId, detectedAt], map: "social_activity_barrier_evidence_case_detected_idx")
@@ -7011,9 +7020,36 @@ model SocialActivitySupportIntervention {
   createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
   barrierCase        SocialActivityBarrierCase   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  oemSupportCandidate SocialActivityOemSupportCandidate?
 
   @@index([caseId, status, offeredAt], map: "social_activity_support_case_status_idx")
   @@map("social_activity_support_interventions")
+}
+
+/// 無償支援完了後も同じ障壁が改善しない場合に、OEM事業者へ示す支援候補。
+model SocialActivityOemSupportCandidate {
+  id                     String                                  @id @default(uuid()) @db.Uuid
+  caseId                 String                                  @map("case_id") @db.Uuid
+  supportInterventionId  String                                  @unique @map("support_intervention_id") @db.Uuid
+  evidenceId             String                                  @map("evidence_id") @db.Uuid
+  status                 SocialActivityOemSupportCandidateStatus @default(OPEN)
+  recommendationKey      String                                  @map("recommendation_key") @db.VarChar(80)
+  recommendationSnapshot Json                                    @map("recommendation_snapshot")
+  reasonCode             String                                  @map("reason_code") @db.VarChar(100)
+  ruleVersion            String                                  @map("rule_version") @db.VarChar(80)
+  detectedAt             DateTime                                @map("detected_at") @db.Timestamptz(6)
+  acceptedAt             DateTime?                               @map("accepted_at") @db.Timestamptz(6)
+  dismissedAt            DateTime?                               @map("dismissed_at") @db.Timestamptz(6)
+  completedAt            DateTime?                               @map("completed_at") @db.Timestamptz(6)
+  createdAt              DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  barrierCase            SocialActivityBarrierCase               @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  supportIntervention    SocialActivitySupportIntervention       @relation(fields: [supportInterventionId], references: [id], onDelete: Cascade)
+  evidence               SocialActivityBarrierEvidence           @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+
+  @@index([status, detectedAt], map: "social_activity_oem_candidates_status_idx")
+  @@index([caseId, detectedAt], map: "social_activity_oem_candidates_case_idx")
+  @@map("social_activity_oem_support_candidates")
 }
 
 model BunshinObjective {
