@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { ServiceProfileQuestionSettings } from '../../../../../src/services/service-onboarding-settings';
+import type { ServiceBusinessProfileInputMode } from '../../../../../src/services/service-onboarding-settings';
 import { DailyIdeaDeliveryFields } from './daily-idea-delivery-fields';
 import {
   suggestedOnboardingCopy,
@@ -29,6 +30,8 @@ export function ServiceOnboardingFields({
   businessFreeSettingsLocked,
   businessProfileEnabled,
   setBusinessProfileEnabled,
+  businessProfileInputMode,
+  setBusinessProfileInputMode,
   dailyIdeaDelivery,
   setDailyIdeaDelivery,
   organizationType,
@@ -50,6 +53,8 @@ export function ServiceOnboardingFields({
   businessFreeSettingsLocked: boolean;
   businessProfileEnabled: boolean;
   setBusinessProfileEnabled: Dispatch<SetStateAction<boolean>>;
+  businessProfileInputMode: ServiceBusinessProfileInputMode;
+  setBusinessProfileInputMode: Dispatch<SetStateAction<ServiceBusinessProfileInputMode>>;
   dailyIdeaDelivery: DailyIdeaDeliverySettings;
   setDailyIdeaDelivery: Dispatch<SetStateAction<DailyIdeaDeliverySettings>>;
   organizationType: string;
@@ -153,6 +158,21 @@ export function ServiceOnboardingFields({
         visualCharacters={visualCharacters}
         audioTracks={audioTracks}
       />
+      {businessProfileEnabled ? (
+        <label>
+          事業プロフィールの初回入力
+          <select
+            value={businessProfileInputMode}
+            onChange={(event) =>
+              setBusinessProfileInputMode(event.target.value as ServiceBusinessProfileInputMode)
+            }
+          >
+            <option value="FULL">通常入力（最初に詳しく聞く）</option>
+            <option value="MINIMAL">かんたん5項目（続きは利用後に1問ずつ聞く）</option>
+          </select>
+          <small>かんたん設定では、業種・店舗名・商品・お客様・目的だけで開始できます。</small>
+        </label>
+      ) : null}
       <label>
         最初に表示する説明
         <textarea

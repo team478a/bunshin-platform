@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { serviceOnboardingChoicePreset } from '../../../../src/services/service-onboarding-settings';
+import {
+  MINIMAL_BUSINESS_PROFILE_DEFAULTS,
+  serviceOnboardingChoicePreset,
+  type ServiceBusinessProfileInputMode,
+} from '../../../../src/services/service-onboarding-settings';
 import { isLowInformationOnboardingAnswer } from '../../../../src/services/service-onboarding-response';
 
 const OTHER = '__OTHER__';
@@ -14,6 +18,7 @@ export function ServiceOnboardingForm({
   focusQuestionIndex,
   editMode,
   businessProfileEnabled,
+  businessProfileInputMode,
   industries,
   initialBusinessProfile,
 }: {
@@ -23,6 +28,7 @@ export function ServiceOnboardingForm({
   focusQuestionIndex: number | null;
   editMode: boolean;
   businessProfileEnabled: boolean;
+  businessProfileInputMode: ServiceBusinessProfileInputMode;
   industries: Array<{ id: string; key: string; name: string }>;
   initialBusinessProfile: {
     primaryIndustryId: string | null;
@@ -61,9 +67,14 @@ export function ServiceOnboardingForm({
     primaryPurpose: initialBusinessProfile?.primaryPurpose ?? 'AWARENESS',
     targetAudience: initialBusinessProfile?.targetAudience ?? '',
     websiteUrl: initialBusinessProfile?.websiteUrl ?? '',
-    businessFeatures: initialBusinessProfile?.businessFeatures ?? '',
+    businessFeatures:
+      initialBusinessProfile?.businessFeatures ??
+      (businessProfileInputMode === 'MINIMAL'
+        ? MINIMAL_BUSINESS_PROFILE_DEFAULTS.businessFeatures
+        : ''),
     priceInformation: initialBusinessProfile?.priceInformation ?? '',
-    preferredTone: initialBusinessProfile?.preferredTone ?? 'やさしく親しみやすい',
+    preferredTone:
+      initialBusinessProfile?.preferredTone ?? MINIMAL_BUSINESS_PROFILE_DEFAULTS.preferredTone,
     requiredContent: initialBusinessProfile?.requiredContent ?? '',
     forbiddenContent: initialBusinessProfile?.forbiddenContent ?? '',
   }));
@@ -86,7 +97,7 @@ export function ServiceOnboardingForm({
       Boolean(businessProfile.preferredTone.trim()));
   const focusedAnswer = focusQuestionIndex === null ? null : (answers[focusQuestionIndex] ?? '');
   const complete =
-    answers.every(Boolean) &&
+    (businessProfileInputMode === 'MINIMAL' && !editMode ? true : answers.every(Boolean)) &&
     businessComplete &&
     (!editMode || focusedAnswer === null || !isLowInformationOnboardingAnswer(focusedAnswer));
   const updateBusiness = (key: keyof typeof businessProfile, value: string) =>
@@ -103,7 +114,10 @@ export function ServiceOnboardingForm({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        answers,
+        answers:
+          businessProfileInputMode === 'MINIMAL' && !editMode
+            ? questions.map(() => 'まだ回答していません')
+            : answers,
         businessProfile: businessProfileEnabled
           ? {
               ...businessProfile,
@@ -175,14 +189,16 @@ export function ServiceOnboardingForm({
               maxLength={200}
             />
           </label>
-          <label>
-            活動地域（任意）
-            <input
-              value={businessProfile.region}
-              onChange={(event) => updateBusiness('region', event.target.value)}
-              maxLength={160}
-            />
-          </label>
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              活動地域（任意）
+              <input
+                value={businessProfile.region}
+                onChange={(event) => updateBusiness('region', event.target.value)}
+                maxLength={160}
+              />
+            </label>
+          ) : null}
           <label>
             主な商品・サービス
             <textarea
@@ -193,38 +209,44 @@ export function ServiceOnboardingForm({
               rows={3}
             />
           </label>
-          <label>
-            商品・サービスの特徴
-            <textarea
-              value={businessProfile.businessFeatures}
-              onChange={(event) => updateBusiness('businessFeatures', event.target.value)}
-              required
-              maxLength={1000}
-              rows={3}
-              placeholder="例：予約なしでも利用でき、初めての方へ使い方を丁寧に説明します"
-            />
-          </label>
-          <label>
-            Webサイト（任意）
-            <input
-              type="url"
-              inputMode="url"
-              value={businessProfile.websiteUrl}
-              onChange={(event) => updateBusiness('websiteUrl', event.target.value)}
-              maxLength={2048}
-              placeholder="https://example.jp"
-            />
-          </label>
-          <label>
-            価格・料金（任意）
-            <textarea
-              value={businessProfile.priceInformation}
-              onChange={(event) => updateBusiness('priceInformation', event.target.value)}
-              maxLength={500}
-              rows={2}
-              placeholder="例：初回相談は無料、通常プランは月額5,000円"
-            />
-          </label>
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              商品・サービスの特徴
+              <textarea
+                value={businessProfile.businessFeatures}
+                onChange={(event) => updateBusiness('businessFeatures', event.target.value)}
+                required
+                maxLength={1000}
+                rows={3}
+                placeholder="例：予約なしでも利用でき、初めての方へ使い方を丁寧に説明します"
+              />
+            </label>
+          ) : null}
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              Webサイト（任意）
+              <input
+                type="url"
+                inputMode="url"
+                value={businessProfile.websiteUrl}
+                onChange={(event) => updateBusiness('websiteUrl', event.target.value)}
+                maxLength={2048}
+                placeholder="https://example.jp"
+              />
+            </label>
+          ) : null}
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              価格・料金（任意）
+              <textarea
+                value={businessProfile.priceInformation}
+                onChange={(event) => updateBusiness('priceInformation', event.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder="例：初回相談は無料、通常プランは月額5,000円"
+              />
+            </label>
+          ) : null}
           <label>
             発信の目的
             <select
@@ -250,108 +272,63 @@ export function ServiceOnboardingForm({
               rows={3}
             />
           </label>
-          <label>
-            投稿文の雰囲気
-            <select
-              value={businessProfile.preferredTone}
-              onChange={(event) => updateBusiness('preferredTone', event.target.value)}
-              required
-            >
-              <option value="やさしく親しみやすい">やさしく親しみやすい</option>
-              <option value="信頼感のある丁寧な文章">信頼感のある丁寧な文章</option>
-              <option value="明るく元気な文章">明るく元気な文章</option>
-              <option value="落ち着いた専門的な文章">落ち着いた専門的な文章</option>
-              <option value="短く簡潔で分かりやすい文章">短く簡潔で分かりやすい文章</option>
-            </select>
-          </label>
-          <label>
-            毎回必ず入れたい内容（任意）
-            <textarea
-              value={businessProfile.requiredContent}
-              onChange={(event) => updateBusiness('requiredContent', event.target.value)}
-              maxLength={1000}
-              rows={2}
-              placeholder="例：予約はプロフィールのリンクから、と案内する"
-            />
-          </label>
-          <label>
-            投稿に入れたくない内容（任意）
-            <textarea
-              value={businessProfile.forbiddenContent}
-              onChange={(event) => updateBusiness('forbiddenContent', event.target.value)}
-              maxLength={1000}
-              rows={2}
-              placeholder="例：必ず効果が出る、地域最安などの断定表現"
-            />
-          </label>
-        </fieldset>
-      ) : null}
-      {questions.map((question, index) => {
-        if (focusQuestionIndex !== null && focusQuestionIndex !== index) return null;
-        const preset = serviceOnboardingChoicePreset(question);
-        if (!preset) {
-          return (
-            <label key={`${index}-${question}`}>
-              <span>
-                {index + 1}. {question}
-              </span>
-              <textarea
-                value={customAnswers[index] ?? ''}
-                onChange={(event) =>
-                  setCustomAnswers((current) =>
-                    current.map((value, itemIndex) =>
-                      itemIndex === index ? event.target.value : value,
-                    ),
-                  )
-                }
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              投稿文の雰囲気
+              <select
+                value={businessProfile.preferredTone}
+                onChange={(event) => updateBusiness('preferredTone', event.target.value)}
                 required
+              >
+                <option value="やさしく親しみやすい">やさしく親しみやすい</option>
+                <option value="信頼感のある丁寧な文章">信頼感のある丁寧な文章</option>
+                <option value="明るく元気な文章">明るく元気な文章</option>
+                <option value="落ち着いた専門的な文章">落ち着いた専門的な文章</option>
+                <option value="短く簡潔で分かりやすい文章">短く簡潔で分かりやすい文章</option>
+              </select>
+            </label>
+          ) : null}
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              毎回必ず入れたい内容（任意）
+              <textarea
+                value={businessProfile.requiredContent}
+                onChange={(event) => updateBusiness('requiredContent', event.target.value)}
                 maxLength={1000}
-                rows={3}
+                rows={2}
+                placeholder="例：予約はプロフィールのリンクから、と案内する"
               />
             </label>
-          );
-        }
-        return (
-          <fieldset className="service-onboarding-question" key={`${index}-${question}`}>
-            <legend>
-              {index + 1}. {question}
-            </legend>
-            <div className="onboarding-options service-onboarding-options">
-              {preset.options.map((option) => (
-                <button
-                  aria-pressed={selections[index] === option}
-                  className={selections[index] === option ? 'is-selected' : ''}
-                  key={option}
-                  onClick={() =>
-                    setSelections((current) =>
-                      current.map((value, itemIndex) => (itemIndex === index ? option : value)),
-                    )
-                  }
-                  type="button"
-                >
-                  <span>{option}</span>
-                  <small>{selections[index] === option ? '選択中' : '選ぶ'}</small>
-                </button>
-              ))}
-              <button
-                aria-pressed={selections[index] === OTHER}
-                className={selections[index] === OTHER ? 'is-selected' : ''}
-                onClick={() =>
-                  setSelections((current) =>
-                    current.map((value, itemIndex) => (itemIndex === index ? OTHER : value)),
-                  )
-                }
-                type="button"
-              >
-                <span>{preset.otherLabel}</span>
-                <small>{selections[index] === OTHER ? '入力中' : '選ぶ'}</small>
-              </button>
-            </div>
-            {selections[index] === OTHER ? (
-              <label className="service-onboarding-other">
-                回答を入力してください
+          ) : null}
+          {businessProfileInputMode === 'FULL' ? (
+            <label>
+              投稿に入れたくない内容（任意）
+              <textarea
+                value={businessProfile.forbiddenContent}
+                onChange={(event) => updateBusiness('forbiddenContent', event.target.value)}
+                maxLength={1000}
+                rows={2}
+                placeholder="例：必ず効果が出る、地域最安などの断定表現"
+              />
+            </label>
+          ) : null}
+        </fieldset>
+      ) : null}
+      {businessProfileInputMode === 'MINIMAL' && !editMode ? (
+        questions.length ? (
+          <p className="notice">詳しい内容は、利用開始後に1問ずつ確認します。</p>
+        ) : null
+      ) : (
+        questions.map((question, index) => {
+          if (focusQuestionIndex !== null && focusQuestionIndex !== index) return null;
+          const preset = serviceOnboardingChoicePreset(question);
+          if (!preset) {
+            return (
+              <label key={`${index}-${question}`}>
+                <span>
+                  {index + 1}. {question}
+                </span>
                 <textarea
-                  autoFocus
                   value={customAnswers[index] ?? ''}
                   onChange={(event) =>
                     setCustomAnswers((current) =>
@@ -365,10 +342,67 @@ export function ServiceOnboardingForm({
                   rows={3}
                 />
               </label>
-            ) : null}
-          </fieldset>
-        );
-      })}
+            );
+          }
+          return (
+            <fieldset className="service-onboarding-question" key={`${index}-${question}`}>
+              <legend>
+                {index + 1}. {question}
+              </legend>
+              <div className="onboarding-options service-onboarding-options">
+                {preset.options.map((option) => (
+                  <button
+                    aria-pressed={selections[index] === option}
+                    className={selections[index] === option ? 'is-selected' : ''}
+                    key={option}
+                    onClick={() =>
+                      setSelections((current) =>
+                        current.map((value, itemIndex) => (itemIndex === index ? option : value)),
+                      )
+                    }
+                    type="button"
+                  >
+                    <span>{option}</span>
+                    <small>{selections[index] === option ? '選択中' : '選ぶ'}</small>
+                  </button>
+                ))}
+                <button
+                  aria-pressed={selections[index] === OTHER}
+                  className={selections[index] === OTHER ? 'is-selected' : ''}
+                  onClick={() =>
+                    setSelections((current) =>
+                      current.map((value, itemIndex) => (itemIndex === index ? OTHER : value)),
+                    )
+                  }
+                  type="button"
+                >
+                  <span>{preset.otherLabel}</span>
+                  <small>{selections[index] === OTHER ? '入力中' : '選ぶ'}</small>
+                </button>
+              </div>
+              {selections[index] === OTHER ? (
+                <label className="service-onboarding-other">
+                  回答を入力してください
+                  <textarea
+                    autoFocus
+                    value={customAnswers[index] ?? ''}
+                    onChange={(event) =>
+                      setCustomAnswers((current) =>
+                        current.map((value, itemIndex) =>
+                          itemIndex === index ? event.target.value : value,
+                        ),
+                      )
+                    }
+                    required
+                    maxLength={1000}
+                    rows={3}
+                  />
+                </label>
+              ) : null}
+            </fieldset>
+          );
+        })
+      )}
       <button
         className="button button--primary button--full"
         type="submit"

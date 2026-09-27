@@ -2685,3 +2685,50 @@
 - Navigation: サービス設定が特定できる場合は対象サービスのLINE配信管理へ直接案内し、不明な場合はサービス一覧へ案内する。
 - Isolation: 指定環境のJobから対象配信を逆引きする境界を維持し、表示内容はサービス名、障害種別、件数に限定する。
 - Duplication: 一斉配信Jobは汎用停止Job件数から除外し、同じ障害を専用アラートと汎用アラートへ二重表示しない。
+
+# 2026-09-26: 事業者向け初期設定の簡略化はService設定で明示的に有効化する
+
+- Boundary: サービス名やslugをコードへ固定せず、`businessProfileInputMode`をServiceのVersioned onboarding設定として保持する。
+- Compatibility: 既存Serviceと保存値がないServiceは`FULL`を維持し、運営者が`MINIMAL`を選択したServiceだけ5項目入力へ切り替える。
+- Minimum input: 初回は業種、店舗・会社名、商品・サービス、届けたい顧客、SNS目的を取得する。
+- Deferred profile: 事業の特徴、Tone、地域、Webサイト、価格、必須・禁止事項は利用開始後の既存1問補完へ回す。設定済みの値は変更しない。
+- Generation safety: Bunshin生成に必要な特徴とToneには明示した安全な初期値を保存し、空値のまま生成経路へ渡さない。
+
+# 2026-09-26: SNS行動停止要因は行動証拠から推定し、本人回答でのみ確定する
+
+- Status: 配信、閲覧、採用、コピー、投稿、反応の集計だけで分かるのは候補までとし、推定結果は必ず`SUSPECTED`で返す。`CONFIRMED`への変更は後続の本人回答フローに限定する。
+- Evidence: Workspace、Service、User、Bunshin、観測期間、集計値、閾値、Rule Versionを追跡し、回答本文や投稿本文などの個人情報は証跡へ複製しない。
+- Availability: システム障害期間を除外した集計だけを入力し、有効観測日が0日の場合は推定しない。除外日数は監査用に保持する。
+- Measurement gap: 投稿実績があってもInsightが未記録なら効果不足と断定せず`UNKNOWN`とし、測定できる状態かを先に確認する。
+- Boundary: 推定関数は`capability-social`内の決定的なDomain Ruleとし、DB保存、本人への質問、支援内容の決定は後続PRへ分離する。
+
+# 2026-09-26: SNS行動停止要因はService MembershipとBunshinの複合境界で保存する
+
+- Scope: Barrier CaseはWorkspace、Service Group、Group Membership、User、Bunshin、Categoryの組で一意にし、RepositoryでActive MembershipとBunshin所有者を再検証する。
+- Projection: 既存`DailyMission`、`MissionActivity`、`MissionDecision`、`PostRecord`、`SocialInsightSnapshot`、`LineMessageDelivery`を読み、同じ役割のActivityテーブルは追加しない。
+- Availability: 生成失敗日とLINE配信失敗日は既存ログから除外する。統一Incident台帳は現段階で新設しない。
+- Idempotency: Caseは現在状態を保持し、EvidenceはRule、Code、Category、観測期間から作るKeyで追記を冪等化する。同一観測の再実行で再発回数を増やさない。
+- Recurrence: RESOLVEDまたはDISMISSEDは`nextEligibleAt`まで再推定を抑止し、期間後の新EvidenceだけでSUSPECTEDへ戻す。
+- Privacy: Evidenceには集計値と閾値だけを保存し、投稿、回答、Prompt、Memoryの本文を保存しない。
+
+# 2026-09-26: SNS行動停止要因は本人への1問確認でのみ確定する
+
+- Question: 同じEvidenceから推定した複数候補は一つの質問へまとめ、内部のCategory名や推定値を本人へ表示しない。
+- Confirmation: 本人が選んだ候補だけを`CONFIRMED`へ変更し、同時に提示した他候補は`DISMISSED`として30日間再質問を抑止する。「どれにも当てはまらない」では全候補を抑止する。
+- Support: 確定したCategoryにはAI生成や有料提案を使わず、Version管理した無償の小さな支援を一件だけ提示する。
+- Audit: 回答と支援内容はSnapshotおよびRule Versionとともに保存する。回答本文や投稿本文は複製しない。
+- Isolation: 冪等な再送でもWorkspace、Service、Membership、User、Bunshinがすべて一致する場合だけ既存結果を返す。
+
+# 2026-09-27: SNS継続支援は本人の開始・完了・見送りを状態として保持する
+
+- Lifecycle: 支援は`OFFERED`から本人の操作で`ACCEPTED`、`COMPLETED`、`SKIPPED`へ遷移する。完了・見送り後の別状態への変更は許可しない。
+- Resume: `OFFERED`と`ACCEPTED`は再訪時にも表示し、回答直後だけの一時表示にしない。
+- Idempotency: 同じ遷移の再送は現在状態を返し、競合する終端遷移は`CONFLICT`として扱う。新しいEventテーブルは追加しない。
+- Isolation: 支援IDだけでは更新せず、Workspace、Service、Membership、User、Bunshinが一致するCase Relationを必須条件にする。
+
+# 2026-09-27: SNS継続支援の事業者表示はService集計に限定する
+
+- Visibility: 事業者には本人が確定したCategory件数、本人確認待ち件数、支援状態件数だけを表示する。
+- Privacy: User ID、氏名、回答内容、投稿本文、支援Snapshotは集計結果へ含めない。
+- Scope: Managed Service Contextで認可し、WorkspaceとService Groupに属するActive Membershipだけを集計する。
+- Reuse: 既存の個別化確認画面へ追加し、同じ目的の管理画面や集計テーブルは新設しない。

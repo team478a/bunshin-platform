@@ -14,6 +14,8 @@ import {
   ListSocialAccountStrategies,
   ListSocialProfiles,
   ListWeeklyPlans,
+  type SocialActivityBarrierQuestion,
+  type SocialActivitySupportProgress,
   type SocialProfile,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
@@ -72,6 +74,8 @@ export async function loadServiceBunshinDetail({
   let rewardsPilotActive = false;
   let businessProgramStartedAt: Date | null = null;
   let postPerformances: PostPerformanceView[] = [];
+  let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
+  let activityBarrierSupport: SocialActivitySupportProgress | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -93,6 +97,29 @@ export async function loadServiceBunshinDetail({
       : null;
     businessProgramStartedAt = businessProgramProfile?.createdAt ?? null;
     bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
+    const membership = await db.prisma.groupMembership.findFirst({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        userId: actor.userId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    if (membership) {
+      const barrierRepository = new db.PrismaSocialActivityBarrierConfirmationRepository(db.prisma);
+      const barrierScope = {
+        workspaceId: service.workspaceId,
+        serviceId: service.serviceId,
+        groupMembershipId: membership.id,
+        userId: actor.userId,
+        bunshinId,
+      };
+      [activityBarrierQuestion, activityBarrierSupport] = await Promise.all([
+        barrierRepository.getPendingQuestion({ scope: barrierScope }),
+        barrierRepository.getActiveSupport({ scope: barrierScope }),
+      ]);
+    }
     capabilities = await new ListBunshinCapabilityAssignments(
       new db.PrismaBunshinCapabilityAssignmentRepository(),
     ).execute(scope);
@@ -393,6 +420,8 @@ export async function loadServiceBunshinDetail({
     businessProgram,
     isBusinessDailyService,
     approvedBusinessStrategy,
+    activityBarrierQuestion,
+    activityBarrierSupport,
   };
 }
 
