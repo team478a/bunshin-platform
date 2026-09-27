@@ -65,6 +65,11 @@ function database(
                     slug: 'sample',
                     displayName: 'サンプル',
                     supportAlertPolicy: { notifyByLine: input.notifyByLine ?? true },
+                    messageTemplates: [
+                      {
+                        body: '{{name}}さん、{{serviceName}}の{{supportType}}を確認してください。{{manageUrl}}',
+                      },
+                    ],
                   },
                 },
               },
@@ -99,7 +104,12 @@ describe('scheduleSocialActivityOemSupportCandidateLines', () => {
       select: { id: true },
     });
     expect(db.createRecipients).toHaveBeenCalledWith({
-      data: [expect.objectContaining({ userId: 'manager-1' })],
+      data: [
+        expect.objectContaining({
+          userId: 'manager-1',
+          message: expect.stringContaining('運営者さん、サンプルの契約内サポート'),
+        }),
+      ],
     });
     expect(db.createAudit).toHaveBeenCalledOnce();
   });

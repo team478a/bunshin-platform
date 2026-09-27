@@ -2801,3 +2801,12 @@
 - 候補ID由来の`automationKey`でBroadcastを一意にし、既存の配送Job、同意・友だち状態検証、再試行、監査、未投入Job回復を再利用する。
 - 個別のLINE受信設定が存在するServiceでは、有効かつ同意済みの管理者だけを受信者にする。
 - 通知は管理画面への入口に限定し、自動営業、契約変更、課金を実行しない。
+
+## D-116: OEM支援候補のLINE本文は用途別Service Templateから取得する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- `LINE / OEM_SUPPORT_CANDIDATE`の最新有効テンプレートをService単位で取得し、固定文を各所へ増やさない。
+- `name`、`serviceName`、`supportType`、`manageUrl`だけを置換対象とし、受信者別本文はBroadcast Recipientへ保存する。
+- テンプレートがないServiceには安全な既定文を使い、既存Serviceの通知を停止させない。

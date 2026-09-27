@@ -26,6 +26,12 @@ function handlingMode(value: Prisma.JsonValue): ServiceSupportAlertMode {
   return 'INTERNAL_ESCALATION';
 }
 
+const replace = (value: string, variables: Record<string, string>) =>
+  Object.entries(variables).reduce(
+    (result, [key, replacement]) => result.replaceAll(`{{${key}}}`, replacement),
+    value,
+  );
+
 export async function scheduleSocialActivityOemSupportCandidateLines(
   client: PrismaClient,
   input: {
@@ -73,6 +79,16 @@ export async function scheduleSocialActivityOemSupportCandidateLines(
                       slug: true,
                       displayName: true,
                       supportAlertPolicy: { select: { notifyByLine: true } },
+                      messageTemplates: {
+                        where: {
+                          channel: 'LINE',
+                          purpose: 'OEM_SUPPORT_CANDIDATE',
+                          isActive: true,
+                        },
+                        orderBy: { updatedAt: 'desc' },
+                        take: 1,
+                        select: { body: true },
+                      },
                     },
                   },
                 },
@@ -116,7 +132,15 @@ export async function scheduleSocialActivityOemSupportCandidateLines(
     }
     const automationKey = `oem-support-candidate:${candidate.id}`;
     const manageUrl = `${input.baseUrl.replace(/\/$/, '')}/s/${encodeURIComponent(service.slug)}/manage/personalization`;
-    const message = `${service.displayName}で「${supportLabel[mode]}」の確認が必要です。\n利用者への案内や課金は自動実行されません。\n\n確認する：${manageUrl}`;
+    const template =
+      service.messageTemplates[0]?.body ??
+      '{{serviceName}}で「{{supportType}}」の確認が必要です。\n利用者への案内や課金は自動実行されません。\n\n確認する：{{manageUrl}}';
+    const variables = {
+      serviceName: service.displayName,
+      supportType: supportLabel[mode],
+      manageUrl,
+    };
+    const message = replace(template, { ...variables, name: '運営担当者' });
     type ScheduledResult = {
       created: boolean;
       workspaceId: string;
@@ -171,6 +195,10 @@ export async function scheduleSocialActivityOemSupportCandidateLines(
             broadcastId: broadcast.id,
             groupMembershipId: recipient.id,
             userId: recipient.userId,
+            message: replace(template, {
+              ...variables,
+              name: recipient.user.displayName || '運営担当者',
+            }),
           })),
         });
         await tx.serviceLineBroadcastAuditLog.create({
