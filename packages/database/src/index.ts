@@ -212,6 +212,7 @@ export {
   type SocialActivityOemSupportCandidateProjectionSummary,
 } from './social-activity-oem-support-candidates';
 export { enqueueSocialActivityOemSupportCandidateEmails } from './social-activity-oem-support-candidate-email';
+export { scheduleSocialActivityOemSupportCandidateLines } from './social-activity-oem-support-candidate-line';
 export {
   listSocialActivityOemSupportCandidates,
   transitionSocialActivityOemSupportCandidate,

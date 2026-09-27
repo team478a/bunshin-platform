@@ -2791,3 +2791,13 @@
 - Service別のメールProvider、暗号化された資格情報、共通Resend Adapterを再利用する。
 - 候補と受信管理者の組を一意にし、Providerへは配送ID由来の冪等キーを渡す。
 - `DISABLED`、未検証Provider、停止中メールは配送しない。通知から自動営業、契約変更、課金は実行しない。
+
+## D-115: OEM支援候補のLINE通知は既存Service Broadcastを再利用する
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- LINE通知を有効にしたServiceだけを対象にし、有効な`SERVICE_OWNER / SERVICE_ADMIN`へ送る。支援対象の利用者本人には送らない。
+- 候補ID由来の`automationKey`でBroadcastを一意にし、既存の配送Job、同意・友だち状態検証、再試行、監査、未投入Job回復を再利用する。
+- 個別のLINE受信設定が存在するServiceでは、有効かつ同意済みの管理者だけを受信者にする。
+- 通知は管理画面への入口に限定し、自動営業、契約変更、課金を実行しない。
