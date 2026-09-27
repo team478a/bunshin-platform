@@ -2743,3 +2743,13 @@
 - 毎日03:10 JSTに確定済み日付までを評価し、行動だけでは`SUSPECTED`までとする。本人回答なしに障壁を確定しない。
 - Userごとの先頭Bunshinへ暗黙集約せず、対象Service内のACTIVEなSocial Bunshinを個別に評価する。
 - Scheduler再実行時は既存Evidence KeyとCase一意制約で二重保存を防ぎ、参加者ごとの失敗は他参加者の判定を止めない。
+
+## D-110: SNS継続支援の本人確認はLINEからWebへ導く
+
+- 日付: 2026-09-27
+- 状態: Accepted
+
+- LINEは本人確認があることだけを知らせ、回答は既存Web画面で行う。本人が回答する前の推定Categoryは通知文に出さない。
+- 通知予約前と実配信時に、Workspace、Service、Membership、User、Bunshin、LINE連携、通知同意、Case状態を再検証する。
+- Case IDと再発回数から決定的な通知キーを作り、同じ確認回の二重配信を防ぐ。
+- 配信時に本人回答済みであれば送信しない。

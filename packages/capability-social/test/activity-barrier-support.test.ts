@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSocialActivityBarrierLineMessage,
   buildSocialActivityBarrierQuestion,
   socialActivitySupportFor,
 } from '../src/activity-barrier-support';
@@ -41,6 +42,15 @@ function barrierCase(
 }
 
 describe('social activity barrier confirmation', () => {
+  it('builds a short LINE entry message without exposing inferred barrier categories', () => {
+    const message = buildSocialActivityBarrierLineMessage({
+      serviceName: 'ワタシワークス',
+      confirmationUrl: 'https://example.com/s/service/bunshins/bunshin-1',
+    });
+    expect(message).toContain('今の状況を確認する1問');
+    expect(message).toContain('https://example.com/s/service/bunshins/bunshin-1');
+    expect(message).not.toContain('時間がない');
+  });
   it('groups ambiguous candidates into one plain-language question', () => {
     const result = buildSocialActivityBarrierQuestion([
       barrierCase('case_1', 'TIME'),

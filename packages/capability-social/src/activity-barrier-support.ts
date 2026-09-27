@@ -86,6 +86,20 @@ export function socialActivityBarrierLabel(category: SocialActivityBarrierCatego
   return labels[category];
 }
 
+export function buildSocialActivityBarrierLineMessage(input: {
+  serviceName: string;
+  confirmationUrl: string;
+}) {
+  return [
+    `${input.serviceName}から、今の状況を確認する1問です。`,
+    '',
+    'SNSの取り組みで困っていることがあれば、当てはまるものを1つ選んでください。',
+    '回答に合わせて、次に進みやすい小さな方法をご案内します。',
+    '',
+    input.confirmationUrl,
+  ].join('\n');
+}
+
 const supportByCategory: Record<SocialActivityBarrierCategory, SocialActivitySupport> = {
   SETUP: {
     key: 'PROFILE_REVIEW',
