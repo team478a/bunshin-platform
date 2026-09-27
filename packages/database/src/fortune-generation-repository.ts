@@ -136,20 +136,32 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       if (!reading) return null;
-      const [bunshinProfile, recentReadings] = await Promise.all([
-        tx.bunshin.findFirst({
+      const [participantProfile, recentReadings] = await Promise.all([
+        tx.fortuneParticipant.findFirst({
           where: {
-            id: scope.bunshinId,
+            id: reading.participantId,
+            serviceSettingId: scope.id,
+            userId: input.actorUserId,
             workspaceId: scope.workspaceId,
-            groupId: scope.groupId,
-            status: 'ACTIVE',
+            personalizationBunshin: {
+              is: {
+                groupId: scope.groupId,
+                ownerUserId: input.actorUserId,
+                status: 'ACTIVE',
+              },
+            },
           },
           select: {
-            name: true,
-            objectiveSummary: true,
-            audienceSummary: true,
-            personalitySummary: true,
-            updatedAt: true,
+            personalizationBunshin: {
+              select: {
+                id: true,
+                name: true,
+                objectiveSummary: true,
+                audienceSummary: true,
+                personalitySummary: true,
+                updatedAt: true,
+              },
+            },
           },
         }),
         tx.fortuneReading.findMany({
@@ -168,7 +180,7 @@ export class PrismaFortuneGenerationRepository {
           },
         }),
       ]);
-      if (!bunshinProfile) return null;
+      const bunshinProfile = participantProfile?.personalizationBunshin ?? null;
       const feedbackIds = recentReadings.flatMap((item) =>
         item.feedback ? [item.feedback.id] : [],
       );
@@ -178,14 +190,18 @@ export class PrismaFortuneGenerationRepository {
           personalizationContext: {
             version: 'fortune-personalization-v1',
             sources: [
-              'BUNSHIN_PROFILE',
+              ...(bunshinProfile ? ['PARTICIPANT_BUNSHIN_PROFILE'] : []),
               ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
               ...(feedbackIds.length > 0 ? ['READING_FEEDBACK'] : []),
             ],
-            bunshin: {
-              id: scope.bunshinId,
-              updatedAt: bunshinProfile.updatedAt.toISOString(),
-            },
+            ...(bunshinProfile
+              ? {
+                  bunshin: {
+                    id: bunshinProfile.id,
+                    updatedAt: bunshinProfile.updatedAt.toISOString(),
+                  },
+                }
+              : {}),
             recentReadingIds: recentReadings.map((item) => item.id),
             feedbackIds,
           },
@@ -197,12 +213,16 @@ export class PrismaFortuneGenerationRepository {
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
         personalization: {
-          bunshinProfile: {
-            name: bunshinProfile.name,
-            objectiveSummary: bunshinProfile.objectiveSummary,
-            audienceSummary: bunshinProfile.audienceSummary,
-            personalitySummary: bunshinProfile.personalitySummary,
-          },
+          ...(bunshinProfile
+            ? {
+                bunshinProfile: {
+                  name: bunshinProfile.name,
+                  objectiveSummary: bunshinProfile.objectiveSummary,
+                  audienceSummary: bunshinProfile.audienceSummary,
+                  personalitySummary: bunshinProfile.personalitySummary,
+                },
+              }
+            : {}),
           recentReadings: recentReadings.map((item) => ({
             id: item.id,
             localDate: item.localDate.toISOString().slice(0, 10),

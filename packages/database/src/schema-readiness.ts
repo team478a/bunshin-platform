@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260927120000_add_fortune_personalization_audit';
+export const LATEST_DATABASE_MIGRATION = '20260927150000_add_fortune_participant_bunshin';

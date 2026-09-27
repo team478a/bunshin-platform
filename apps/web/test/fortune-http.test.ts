@@ -5,6 +5,7 @@ vi.mock('server-only', () => ({}));
 const state = vi.hoisted(() => ({
   user: null as { userId: string } | null,
   join: vi.fn(),
+  updatePersonalization: vi.fn(),
   today: vi.fn(),
   draw: vi.fn(),
   history: vi.fn(),
@@ -29,6 +30,7 @@ import {
   getFortuneTodayResponse,
   joinFortuneResponse,
   updateFortuneFeedbackResponse,
+  updateFortunePersonalizationResponse,
 } from '../src/http/fortune';
 
 const request = (path: string, init?: RequestInit) =>
@@ -51,10 +53,46 @@ describe('fortune HTTP contract', () => {
     state.join.mockResolvedValue({
       id: 'participant-1',
       ageConfirmedAt: new Date(),
+      personalizationBunshin: null,
+    });
+    state.updatePersonalization.mockResolvedValue({
+      id: 'participant-1',
+      ageConfirmedAt: new Date(),
+      personalizationBunshin: { id: '11111111-1111-4111-8111-111111111111', name: '私' },
     });
     state.draw.mockResolvedValue({ id: 'reading-1' });
     state.feedback.mockResolvedValue({ id: 'reading-1', feedbackRating: 'HELPFUL' });
     state.recordUse.mockResolvedValue({ id: 'membership-1' });
+  });
+
+  it('accepts only an authenticated participant Bunshin choice without authority fields', async () => {
+    const response = await updateFortunePersonalizationResponse(
+      request('/api/services/fortune/fortune/participation', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ bunshinId: '11111111-1111-4111-8111-111111111111' }),
+      }),
+      'fortune',
+    );
+    expect(response.status).toBe(200);
+    expect(state.updatePersonalization).toHaveBeenCalledWith({
+      serviceSlug: 'fortune',
+      actorUserId: 'user-1',
+      bunshinId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    const rejected = await updateFortunePersonalizationResponse(
+      request('/api/services/fortune/fortune/participation', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          bunshinId: '11111111-1111-4111-8111-111111111111',
+          actorUserId: 'attacker',
+        }),
+      }),
+      'fortune',
+    );
+    expect(rejected.status).toBe(400);
   });
 
   it('requires authentication for reads', async () => {

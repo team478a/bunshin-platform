@@ -19,6 +19,7 @@ const slug = z
   .max(80);
 const uuid = z.string().uuid();
 const joinBody = z.object({ ageConfirmed: z.literal(true) }).strict();
+const personalizationBody = z.object({ bunshinId: uuid.nullable() }).strict();
 const drawBody = z.object({ theme: z.enum(FORTUNE_THEMES) }).strict();
 const feedbackBody = z
   .object({
@@ -101,6 +102,16 @@ export const joinFortuneResponse = (request: Request, serviceSlug: string) =>
     },
     201,
   );
+
+export const updateFortunePersonalizationResponse = (request: Request, serviceSlug: string) =>
+  json(request, serviceSlug, async (actorUserId, parsedSlug) => {
+    const body = await requireJson(request, personalizationBody);
+    return (await fortuneDailyReadingService()).updatePersonalization({
+      serviceSlug: parsedSlug,
+      actorUserId,
+      bunshinId: body.bunshinId,
+    });
+  });
 
 export const getFortuneTodayResponse = (request: Request, serviceSlug: string) =>
   json(request, serviceSlug, async (actorUserId, parsedSlug) =>
