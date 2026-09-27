@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260927230000_add_service_support_alert_policy';
+export const LATEST_DATABASE_MIGRATION = '20260927233000_add_oem_support_candidate_email_delivery';
