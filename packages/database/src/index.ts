@@ -217,6 +217,10 @@ export {
   SOCIAL_ACTIVITY_OEM_CANDIDATE_ACTIONS,
   type SocialActivityOemCandidateAction,
 } from './social-activity-oem-support-admin';
+export {
+  resolveImprovedSocialActivityBarriers,
+  type SocialActivityBarrierResolutionSummary,
+} from './social-activity-barrier-resolution';
 export { PrismaAdminOperationsRepository } from './admin-operations';
 export { PrismaAdminAlertRepository } from './admin-alerts';
 export { PrismaProductionGateEvidenceRepository } from './production-gate-evidence';

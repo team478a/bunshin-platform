@@ -30,7 +30,10 @@ import {
   type SocialActivityBarrierProjectionSummary,
 } from '@bunshin/capability-social';
 import { getServerEnvironment } from '@bunshin/config';
-import type { SocialActivityOemSupportCandidateProjectionSummary } from '@bunshin/database';
+import type {
+  SocialActivityBarrierResolutionSummary,
+  SocialActivityOemSupportCandidateProjectionSummary,
+} from '@bunshin/database';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { toApiError } from '@bunshin/shared';
 import { authorizeCronRequest } from './cron-security';
@@ -89,6 +92,7 @@ export interface MissionSchedulerPort {
       socialActivityBarriers?: SocialActivityBarrierProjectionSummary;
       socialActivityBarrierLine?: SocialActivityBarrierLineScheduleSummary;
       socialActivityOemSupportCandidates?: SocialActivityOemSupportCandidateProjectionSummary;
+      socialActivityBarrierResolution?: SocialActivityBarrierResolutionSummary;
       incentives?: {
         points: {
           scanned: number;
@@ -325,6 +329,19 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         failures: 1,
         truncated: false,
       }));
+      const socialActivityBarrierResolution = await db
+        .resolveImprovedSocialActivityBarriers(db.prisma)
+        .catch(
+          () =>
+            ({
+              scanned: 0,
+              resolved: 0,
+              persistent: 0,
+              skipped: 0,
+              failures: 1,
+              truncated: false,
+            }) satisfies SocialActivityBarrierResolutionSummary,
+        );
       const socialActivityOemSupportCandidates = await db
         .projectSocialActivityOemSupportCandidates(db.prisma)
         .catch(
@@ -351,6 +368,7 @@ async function configuredScheduler(): Promise<MissionSchedulerPort> {
         socialActivityBarriers: socialActivityBarrierResult,
         socialActivityBarrierLine,
         socialActivityOemSupportCandidates,
+        socialActivityBarrierResolution,
         personalityLearning: personalityResult,
         incentives: { points: pointResult, badges: badgeResult },
       };
