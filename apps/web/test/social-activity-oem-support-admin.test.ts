@@ -44,6 +44,9 @@ describe('OEM SNS support candidate admin', () => {
     expect(page).toContain('営業や契約は自動実行されません');
     expect(page).not.toContain('candidate.memory');
     expect(page).not.toContain('candidate.postBody');
+    expect(page).toContain("automationKey: { startsWith: 'oem-support-candidate:' }");
+    expect(page).toContain('送信できなかった支援候補LINE');
+    expect(page).toContain('/manage/line');
   });
 
   it('scopes failed email retry to the managed service and records an audit', () => {

@@ -49,6 +49,7 @@ export default async function PersonalizationAuditPage({
     supportCandidates,
     supportAlertPolicy,
     failedSupportEmails,
+    failedSupportLines,
     supportManagers,
   ] = await Promise.all([
     db.prisma.dailyMission.findMany({
@@ -111,6 +112,25 @@ export default async function PersonalizationAuditPage({
         attemptCount: true,
         lastErrorCategory: true,
         updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    }),
+    db.prisma.serviceLineBroadcast.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        groupId: service.serviceId,
+        automationKey: { startsWith: 'oem-support-candidate:' },
+        recipients: { some: { status: 'FAILED' } },
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        recipients: {
+          where: { status: 'FAILED' },
+          select: { id: true, errorCategory: true },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: 20,
@@ -227,6 +247,31 @@ export default async function PersonalizationAuditPage({
                 </article>
               ))}
             </div>
+          </section>
+        ) : null}
+
+        {failedSupportLines.length > 0 ? (
+          <section className="settings-card">
+            <h2>送信できなかった支援候補LINE</h2>
+            <p>
+              失敗した宛先があります。公式LINE管理で原因を確認し、失敗した宛先だけを再送できます。
+            </p>
+            <ul className="settings-status-list">
+              {failedSupportLines.map((broadcast) => (
+                <li className="settings-status-item" key={broadcast.id}>
+                  <strong>{broadcast.title}</strong>
+                  <span>
+                    失敗 {broadcast.recipients.length}件／最終更新：{dateLabel(broadcast.updatedAt)}
+                    {broadcast.recipients[0]?.errorCategory
+                      ? `／分類：${broadcast.recipients[0].errorCategory}`
+                      : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link href={`/s/${service.configuration.slug}/manage/line` as Route}>
+              公式LINE管理で配信状況を確認
+            </Link>
           </section>
         ) : null}
 
