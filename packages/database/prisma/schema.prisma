@@ -187,6 +187,7 @@ enum ServiceMessageTemplatePurpose {
   REMINDER
   WEEKLY_REPORT
   GENERAL_ANNOUNCEMENT
+  OEM_SUPPORT_CANDIDATE
 }
 
 enum ServiceMembershipEventType {
@@ -2814,6 +2815,7 @@ model ServiceRegistrationEmailConfiguration {
   updatedAt           DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(6)
   configuration       ServiceConfiguration                 @relation(fields: [workspaceId, groupId, configurationId], references: [workspaceId, groupId, id], onDelete: Cascade)
   deliveries          ServiceRegistrationEmailDelivery[]
+  supportCandidateDeliveries SocialActivityOemSupportCandidateEmailDelivery[]
 
   @@unique([workspaceId, groupId], map: "service_registration_email_configurations_workspace_group_key")
   @@unique([workspaceId, groupId, configurationId], map: "service_registration_email_configurations_scope_key")
@@ -7073,10 +7075,45 @@ model SocialActivityOemSupportCandidate {
   supportIntervention    SocialActivitySupportIntervention       @relation(fields: [supportInterventionId], references: [id], onDelete: Cascade)
   evidence               SocialActivityBarrierEvidence           @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
   audits                 SocialActivityOemSupportCandidateAudit[]
+  emailDeliveries        SocialActivityOemSupportCandidateEmailDelivery[]
 
   @@index([status, detectedAt], map: "social_activity_oem_candidates_status_idx")
   @@index([caseId, detectedAt], map: "social_activity_oem_candidates_case_idx")
   @@map("social_activity_oem_support_candidates")
+}
+
+/// OEM支援候補をService Owner/Adminへ知らせた配送履歴。利用者本人へは送らない。
+model SocialActivityOemSupportCandidateEmailDelivery {
+  id                   String                                  @id @default(uuid()) @db.Uuid
+  workspaceId          String                                  @map("workspace_id") @db.Uuid
+  groupId              String                                  @map("group_id") @db.Uuid
+  configurationId      String                                  @map("configuration_id") @db.Uuid
+  candidateId          String                                  @map("candidate_id") @db.Uuid
+  emailConfigurationId String                                  @map("email_configuration_id") @db.Uuid
+  recipientUserId      String                                  @map("recipient_user_id") @db.Uuid
+  recipientEmail       String                                  @map("recipient_email") @db.VarChar(320)
+  recipientName        String?                                 @map("recipient_name") @db.VarChar(120)
+  fromName             String                                  @map("from_name") @db.VarChar(120)
+  fromEmail            String                                  @map("from_email") @db.VarChar(320)
+  replyToEmail         String?                                 @map("reply_to_email") @db.VarChar(320)
+  subject              String                                  @db.VarChar(200)
+  body                 String                                  @db.Text
+  handlingMode         ServiceSupportAlertMode                 @map("handling_mode")
+  status               ServiceRegistrationEmailDeliveryStatus @default(PENDING)
+  attemptCount         Int                                     @default(0) @map("attempt_count")
+  nextAttemptAt        DateTime                                @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  providerMessageId    String?                                 @map("provider_message_id") @db.VarChar(200)
+  lastErrorCategory    String?                                 @map("last_error_category") @db.VarChar(80)
+  sentAt               DateTime?                               @map("sent_at") @db.Timestamptz(6)
+  createdAt            DateTime                                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  candidate            SocialActivityOemSupportCandidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  emailConfiguration   ServiceRegistrationEmailConfiguration   @relation(fields: [emailConfigurationId], references: [id], onDelete: Restrict)
+
+  @@unique([candidateId, recipientUserId], map: "social_activity_oem_candidate_email_recipient_key")
+  @@index([status, nextAttemptAt], map: "social_activity_oem_candidate_email_status_idx")
+  @@index([workspaceId, groupId, createdAt], map: "social_activity_oem_candidate_email_scope_idx")
+  @@map("social_activity_oem_support_candidate_email_deliveries")
 }
 
 model SocialActivityOemSupportCandidateAudit {

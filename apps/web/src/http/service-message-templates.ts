@@ -12,6 +12,7 @@ const purpose = z.enum([
   'REMINDER',
   'WEEKLY_REPORT',
   'GENERAL_ANNOUNCEMENT',
+  'OEM_SUPPORT_CANDIDATE',
 ]);
 const saveSchema = z
   .object({

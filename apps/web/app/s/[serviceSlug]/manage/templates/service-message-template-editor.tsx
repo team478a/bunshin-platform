@@ -5,7 +5,12 @@ import { useState, type FormEvent } from 'react';
 type Template = {
   id: string;
   channel: 'EMAIL' | 'LINE';
-  purpose: 'REGISTRATION_COMPLETE' | 'REMINDER' | 'WEEKLY_REPORT' | 'GENERAL_ANNOUNCEMENT';
+  purpose:
+    | 'REGISTRATION_COMPLETE'
+    | 'REMINDER'
+    | 'WEEKLY_REPORT'
+    | 'GENERAL_ANNOUNCEMENT'
+    | 'OEM_SUPPORT_CANDIDATE';
   name: string;
   subject: string | null;
   body: string;
@@ -17,6 +22,7 @@ const purposeLabels: Record<Template['purpose'], string> = {
   REMINDER: '行動リマインド',
   WEEKLY_REPORT: '週次レポート',
   GENERAL_ANNOUNCEMENT: '任意のお知らせ',
+  OEM_SUPPORT_CANDIDATE: 'OEM支援候補',
 };
 
 const formText = (form: FormData, field: string) => {
@@ -89,7 +95,9 @@ export function ServiceMessageTemplateEditor({
     <>
       <section className="settings-card">
         <h2>{editing ? 'テンプレートを編集' : 'テンプレートを追加'}</h2>
-        <p>登録完了・リマインド・週次レポート・任意案内の文面を、サービスごとに保管できます。</p>
+        <p>
+          登録完了・リマインド・週次レポート・支援候補・任意案内の文面を、サービスごとに保管できます。
+        </p>
         <form
           className="admin-form-grid"
           onSubmit={(event) => void save(event)}
@@ -135,7 +143,8 @@ export function ServiceMessageTemplateEditor({
             本文
             <textarea name="body" required maxLength={10000} rows={8} defaultValue={value.body} />
             <small>
-              {'{{name}}'} と {'{{serviceName}}'} を使えます。
+              {'{{name}}'} と {'{{serviceName}}'} を使えます。支援候補では
+              {' {{supportType}}'} と {'{{manageUrl}}'} も使えます。
             </small>
           </label>
           <label className="field field--checkbox">
