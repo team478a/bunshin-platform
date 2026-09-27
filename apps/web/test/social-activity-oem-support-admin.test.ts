@@ -62,7 +62,7 @@ describe('OEM SNS support candidate admin', () => {
     expect(action).toContain('OEM_SUPPORT_EMAIL_RETRY_REQUESTED');
   });
 
-  it('lets managed services select support email recipients from active managers', () => {
+  it('lets managed services select support email and LINE recipients from active managers', () => {
     const action = readFileSync(
       join(
         process.cwd(),
@@ -73,7 +73,8 @@ describe('OEM SNS support candidate admin', () => {
     expect(action).toContain('resolveManagedServiceContext');
     expect(action).toContain("SERVICE_OWNER', 'SERVICE_ADMIN");
     expect(action).toContain("topic: 'OEM_SUPPORT_CANDIDATE'");
-    expect(action).toContain("channel: 'EMAIL'");
-    expect(action).toContain('OEM_SUPPORT_EMAIL_RECIPIENTS_UPDATED');
+    expect(action).toContain("channel: z.enum(['EMAIL', 'LINE'])");
+    expect(action).toContain('parsed.data.channel');
+    expect(action).toContain('OEM_SUPPORT_${parsed.data.channel}_RECIPIENTS_UPDATED');
   });
 });
