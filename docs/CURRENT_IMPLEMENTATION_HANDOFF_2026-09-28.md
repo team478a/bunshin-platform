@@ -15,6 +15,8 @@
 - `docs/ai-training/AI_TRAINING_PHASE1_IMPLEMENTATION_REPORT.md`
 - monorepo構成、package依存境界、Prisma migration、Next.js route
 - 最新mainのformat、typecheck、lint、unit test、production build
+- 空PostgreSQL 16への全migration適用、schema readiness、integration test
+- dependency auditとHigh / Critical脆弱性の修正
 - 元checkoutに残っている長期停止中rebaseの状態
 
 ## 2. 現在の実装判定
@@ -56,7 +58,16 @@
 
 - `docs/CURRENT_IMPLEMENTATION_HANDOFF_2026-09-28.md`（本文書）
 
-ソースコード、schema、migration、運用設定は変更していない。
+- `README.md`
+- `docs/IMPLEMENTATION_ROADMAP.md`
+- `docs/DATABASE_OPERATION.md`
+- `docs/FREE_MVP_PRODUCTION_GATE.md`
+- `apps/web/package.json`
+- `package.json`
+- `pnpm-lock.yaml`
+- `packages/database/test/database.integration.test.ts`
+
+schema、migration、運用Secret、本番環境は変更していない。
 
 ## 4. 主要な設計判断
 
@@ -65,19 +76,24 @@
 3. 停止中rebaseは元checkoutにそのまま保存し、最新mainから独立worktree / branchを作って引き継ぐ。
 4. 最新mainの `AGENTS.md` にある不変の制約を暗黙に弱めない。v1.0仕様と現行実装の差分は、Decision Logと最新機能文書を併用する現行ルールに従い、Governance課題として扱う。
 5. Production実運用の完了と、コード実装の完了を分けて判定する。
+6. Integration testは同じDBへ繰り返し実行できることをGateの一部とし、Bunshinより先にGroupを削除していたfixtureの依存順を修正する。
 
 ## 5. 実行した検証
 
 Node.js `v24.19.0`、pnpm `10.10.0`を使用した。
 
-| Command                          | Result                                        |
-| -------------------------------- | --------------------------------------------- |
-| `pnpm install --frozen-lockfile` | PASS                                          |
-| `pnpm format:check`              | PASS                                          |
-| `pnpm typecheck`                 | PASS（25 / 25 tasks）                         |
-| `pnpm lint`                      | PASS（25 / 25 tasks、architecture check含む） |
-| `pnpm test`                      | PASS（25 / 25 tasks）                         |
-| `pnpm build`                     | PASS（13 / 13 tasks）                         |
+| Command                             | Result                                        |
+| ----------------------------------- | --------------------------------------------- |
+| `pnpm install --frozen-lockfile`    | PASS                                          |
+| `pnpm format:check`                 | PASS                                          |
+| `pnpm typecheck`                    | PASS（25 / 25 tasks）                         |
+| `pnpm lint`                         | PASS（25 / 25 tasks、architecture check含む） |
+| `pnpm test`                         | PASS（25 / 25 tasks）                         |
+| `pnpm build`                        | PASS（13 / 13 tasks）                         |
+| `pnpm db:migrate:deploy`            | PASS（空PostgreSQL 16、213 migrations）       |
+| `pnpm db:assert-ready`              | PASS                                          |
+| `pnpm test:integration`             | PASS（42 tests / 1 file、同一DBで連続2回）    |
+| `pnpm audit --audit-level moderate` | PASS（既知の脆弱性0件）                       |
 
 主なテスト結果:
 
@@ -88,7 +104,9 @@ Node.js `v24.19.0`、pnpm `10.10.0`を使用した。
 - Training Capability: 32 passed / 9 files
 - Auth: 13 passed / 2 files
 
-`pnpm test` は通常テストであり、PostgreSQL実体を使う `pnpm test:integration`は実行していない。Production DB、LINE、AI Provider、Stripe等の外部サービスへの実接続も本監査の対象外。
+初回監査後の追加検証で、PostgreSQL実体を使う `pnpm test:integration` まで実行した。Production DB、LINE、AI Provider、Stripe等の外部サービスへの実接続は本監査の対象外。
+
+dependency auditでNext.js 16.3.1のCritical 2件、ESLint経由の`js-yaml` 4.3.1のHigh 1件、`fflate`とVitestのModerate 3件を確認した。Next.js 16.3.3、`js-yaml` 4.3.2、`fflate` 0.7.5、Vitest 4.1.11へ更新し、更新後のauditは既知の脆弱性0件になった。
 
 ## 6. 未解決事項
 
@@ -101,7 +119,7 @@ Node.js `v24.19.0`、pnpm `10.10.0`を使用した。
 
 ### Production / operation
 
-- Production migration status、backup / restore rehearsal、実端术smoke、LINE Go / No-Goの証跡はコードからは完了確認できない。
+- Production migration status、backup / restore rehearsal、実端末smoke、LINE Go / No-Goの最新証跡はコードからは完了確認できない。
 - `docs/REMAINING_FEATURE_IMPLEMENTATION_PLAN.md` のR0は、主に本番Migration後の実アカウント・実端末確認待ち。
 - 有料販売、SNS OAuth / 自動投稿は、R0と継続率検証が完了するまで先行しない。
 

@@ -117,7 +117,6 @@ integration('database ownership boundaries', () => {
     await client.groupFeaturePolicy.deleteMany();
     await client.groupInvitation.deleteMany();
     await client.groupMembership.deleteMany();
-    await client.group.deleteMany();
     await client.generationContextSnapshot.deleteMany();
     await client.missionTrendContext.deleteMany();
     await client.trendIdeaCandidateEvidence.deleteMany();
@@ -159,6 +158,7 @@ integration('database ownership boundaries', () => {
     await client.bunshinAudience.deleteMany();
     await client.bunshinObjective.deleteMany();
     await client.bunshin.deleteMany();
+    await client.group.deleteMany();
     await client.workspaceMembership.deleteMany();
     await client.workspace.deleteMany();
     await client.authIdentity.deleteMany();

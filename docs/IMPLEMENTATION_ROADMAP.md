@@ -1,8 +1,10 @@
 # BUNSHIN Platform 実装ロードマップ
 
+更新基準: 2026-09-28、`main` commit `ec30c9a5`。各Phase内の箇条書きは実装履歴を残しているため、冒頭の状態と最新の機能別報告書を現在状態の判断に使用する。コード完了は本番Migration、外部Provider接続、実端末検証、事業承認の完了を意味しない。
+
 ## マルチサービス化
 
-状態: MS-1、MS-2A、MS-2B、MS-2C完了。MS-2D サービス専用SOCIAL接続を段階実装中（MS-2D-S3-Bまで完了）。
+状態: MS-1〜MS-2D-S3-Bに加え、用途別サービス作成、初回設定、参加者向け活動・紹介導線までコード実装済み。個別機能の本番利用は各Production Gateの最新証跡を確認する。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。
 
@@ -394,7 +396,7 @@ FREE一般ユーザーへは開放せず、Productionで明示許可したGroup�
 
 ### Phase 7-J: 活動継続機能
 
-状態: J0文書完了。人間レビュー前にJ1以降へ進まない。詳細は`docs/ACTIVITY_CONTINUITY_REBASELINE.md`を正本候補とする。
+状態: J0〜J4-B2の活動確認、休止、Progress、復帰表示・LINE通知、管理集計、Rule Version管理までコード実装済み。本番通知と運用評価はProduction Gateの最新証跡待ち。詳細は`docs/ACTIVITY_CONTINUITY_REBASELINE.md`と最新の実装報告書を参照する。
 
 - J0: 現行監査、正本、行動定義、KPI、実装境界の再基準化 — 文書完了
 - J1: `MissionActivity`の確認・休み行動、週間・累積Progress Read Model、冪等性、Isolation — 完了
@@ -470,7 +472,7 @@ FREE継続率を確認する前に作り込まない。
 
 ## Phase AV: AIキャラクター動画 登録獲得実証
 
-状態: AV-2 公式Program管理・サービス採用・無料招待参加まで実装済み・レビュー待ち。AI女性キャラクターダンス動画は、汎用実践Program基盤上の第一号Programとして扱う。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
+状態: AV-1〜AV-4C2とAV-4D1をコード実装済み、AV-4D2はProvider非依存Coreの設計済み。外部Video Provider Adapter、完成動画の利用者フロー、Funnel計測、限定Pilotは未完了。AI女性キャラクターダンス動画は汎用実践Program基盤上の第一号Programとして扱う。詳細は`docs/AI_CHARACTER_VIDEO_ACQUISITION_PILOT.md`を正本候補とする。
 
 - AV-0: 汎用Program、作り方／完成品、利用者別ゴール、販売責任、登録経路、KPI、停止条件 — 文書作成済み
 - AV-1: Program Template / Version / Service Program / Offering / Enrollment Core — 完了
@@ -494,7 +496,7 @@ FREE継続率を確認する前に作り込まない。
 
 ## Phase 7-K: 販売プラン・契約・利用権基盤
 
-状態: K0文書完了。テストグループ専用LINEの先行実装は完了し、CI・Migrationレビュー待ち。人間レビュー前にK1以降へ進まない。詳細は`docs/SALES_PLAN_REBASELINE.md`を正本候補とする。
+状態: K0後に契約、利用権、Credit、商品・価格・注文、決済、購入ライフサイクル、請求、督促・自動回収、返金・異議申立て、およびOEM運用支援までコードが拡張されている。一般販売の開始は、最新のProduction Gate、法務・税務・価格・返金方針、Provider設定、実運用証跡の確認待ち。詳細は`docs/SALES_PLAN_REBASELINE.md`と最新の販売・OEM実装報告書を参照する。
 
 - K0: 現行監査、販売モデル、Tenant／Group境界、契約、座席、利用権、Credit、インセンティブ、決済、LINE、停止条件 — 文書完了
 - K0-LP1: テストグループ専用公式LINEのRouting Policy、版管理Configuration、環境分離、ACTIVE一意制約、Audit、管理画面、配信時Gate、専用Webhook／Connection — 実装完了、CI・Migrationレビュー待ち
@@ -508,7 +510,7 @@ FREE継続率を確認する前に作り込まない。
 - K8: 法務、税務、価格、返金、Provider、Isolation、復旧のProduction Gate
 - K9以降: 一般提供するGroup専用LINE、Reseller、Private OEMを個別判断。テストグループ限定の専用LINEはK0-LP1以降で先行検証する
 
-初期対象は個人、パートナー、Group Bundleとし、販売プラン名だけで機能分岐しない。`lineMode`、`billingMode`、`paymentOwner`、`priceOwner`、`apiCostOwner`、`entitlementSource`を分離する。K0の人間レビューと必要な事業判断が終わるまでSchema、Migration、決済接続を実装しない。
+初期対象は個人、パートナー、Group Bundleとし、販売プラン名だけで機能分岐しない。`lineMode`、`billingMode`、`paymentOwner`、`priceOwner`、`apiCostOwner`、`entitlementSource`を分離する。既に追加されたSchema、Migration、決済接続についてもこの責任分離を維持し、一般提供前に最新のProduction Gateを通す。
 
 ## Phase P: ワタシポイント
 
@@ -529,7 +531,7 @@ WPは継続行動を促す換金不能・譲渡不能のアプリ内特典とし
 
 ## Phase B: バッジ
 
-状態: B-3とB-4A完了。B-4Bのグループ・システム管理画面とCSV候補取込を実装しレビュー中。詳細は`docs/BADGE_FEATURE_REBASELINE.md`を正本とする。
+状態: B-1〜B-6B2C-BのBadge、Reward、通知、再試行、照合・緊急停止コードまで実装済み。B-6B2C-Cの外部チームによる30人・4週間限定検証は未実施。詳細は`docs/BADGE_FEATURE_REBASELINE.md`を正本とする。
 
 - B-0: 既存簡易Badge監査、User／Workspace／Group境界、Point分離、初期Catalog、移行方針 — 文書作成・推奨案承認済み
 - B-1: Badge Definition／Version／Progress／Award／Processing Event Core — 完了

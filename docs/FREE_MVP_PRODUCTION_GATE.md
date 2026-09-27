@@ -1,12 +1,25 @@
 # FREE SOCIAL MVP Production Gate
 
-更新日: 2026-08-26
+更新日: 2026-09-28
 
 ## 判定
 
 Phase 0〜5のコードは完了している。本番利用開始には、以下の人間確認と本番環境での実行記録が必要である。Secretや個人情報は本書へ記録せず、実行日時、担当者、対象commit、GitHub Actions run、確認結果だけを残す。
 
-2026-08-22時点の実査は`PRODUCTION_READINESS_AUDIT_2026-08-22.md`を参照する。現在の判定は**NO-GO**。
+2026-08-22時点の実査は`PRODUCTION_READINESS_AUDIT_2026-08-22.md`を参照する。以下の既存チェックは、その時点で記録されたcommitと実行結果の履歴であり、2026-09-28の最新mainへ自動継承しない。最新mainに対する本番証跡を再取得するまで、現在の判定は**NO-GO**。
+
+## 2026-09-28 Current Main Revalidation
+
+対象: `ec30c9a5036475a7d4e69d06a7fb62ed8efda29d`
+
+- [x] ローカルの空PostgreSQL 16へ全213 migrationを適用した
+- [x] `pnpm db:assert-ready`が成功した
+- [x] PostgreSQL実体を使うintegration test 42件が成功した
+- [ ] 対象commitのProduction migration workflowとrun URLを記録した
+- [ ] 対象commitのProduction Health Smokeとrun URLを記録した
+- [ ] 実アカウント・実端末・外部Providerの受け入れ確認を記録した
+
+ローカル再検証はmigrationの再現性を示すが、本番DB、本番Secret、外部Provider、法務・運用承認の証拠にはならない。
 
 ## A. 自動検証
 

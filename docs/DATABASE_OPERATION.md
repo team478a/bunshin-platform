@@ -8,21 +8,22 @@
 - Platform DBと既存Blog DBを共有しない
 - staging/productionは別Supabase projectにする
 
-## Models through Phase 3 Slice 3.1-A
+## Current Data Domains
 
-- `User`
-- `AuthIdentity`
-- `Workspace`
-- `WorkspaceMembership`
-- `PlatformAdmin`
-- `Bunshin` / `BunshinObjective` / `BunshinAudience` / `BunshinPersonality`
-- `OwnerKnowledge` / `BunshinKnowledgeGrant`
-- `BunshinMemory`
-- `BunshinCapabilityAssignment`
-- `SocialProfile`
-- `ContentPillar`
+2026-09-28時点のschemaは、初期Platform Foundationに加えて次の主要領域を含む。正確なmodel、relation、index、制約は `packages/database/prisma/schema.prisma` とmigrationを正本とし、この一覧からschemaを推測しない。
 
-Social ProfileとContent Pillar以外のSOCIAL固有table、BLOG固有、Mission、Feedback、Job tableは存在しない。
+- Identity / Workspace / Membership / Platform Administration
+- Bunshin / Objective / Audience / Personality / Knowledge Grant / Memory / Capability Assignment
+- SOCIAL Profile / Strategy / Content Pillar / Weekly Plan / Daily Mission / Decision / Activity / Post / Feedback
+- LINE configuration / connection / notification / retry / audit
+- Image / Video project / asset / render / usage
+- Service / Service Role / Campaign / Product Pack / Tracking Link / Onboarding
+- Program / Enrollment / Participant Goal / AI Training
+- Point / Badge / Reward / Credit / Entitlement
+- Contract / Product / Price / Order / Payment / Invoice / Collection / Refund / Dispute
+- Provider configuration / Job / Usage / Cost / Audit / Production Gate evidence
+
+既存BLOGは別DB・別境界として維持する。Platform DBへ暗黙に統合せず、移行する場合は専用計画、mapping、rollback、分離テストを用意する。
 
 ## Migration
 
