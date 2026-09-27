@@ -17,5 +17,7 @@ describe('OEM support candidate email boundary', () => {
     expect(worker).toContain('attemptCount: { lt: 3 }');
     expect(worker).toContain('serviceEmailApiKey');
     expect(worker).toContain('oem-support-candidate:${delivery.id}');
+    expect(worker).toContain('isSocialActivityOemSupportCandidateEmailDeliveryEligible');
+    expect(worker).toContain('NOTIFICATION_NO_LONGER_ELIGIBLE');
   });
 });
