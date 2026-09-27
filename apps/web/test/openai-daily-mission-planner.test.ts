@@ -96,7 +96,13 @@ describe('OpenAIDailyMissionPlanner', () => {
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
-      text: { format: { type: string; strict: boolean; schema: { properties: object } } };
+      text: {
+        format: {
+          type: string;
+          strict: boolean;
+          schema: { properties: Record<string, Record<string, unknown>> };
+        };
+      };
       input: Array<{ content: string }>;
     };
     expect(request).toMatchObject({
@@ -112,6 +118,9 @@ describe('OpenAIDailyMissionPlanner', () => {
       'personalizationSourceTypes',
       'personalizationReason',
     ]);
+    expect(request.text.format.schema.properties.personalizationSourceTypes).not.toHaveProperty(
+      'uniqueItems',
+    );
     expect(request.input[1]?.content).toContain('10年の経験');
     expect(request.input[1]?.content).toContain('personality-version-2');
     expect(request.input[1]?.content).toContain('いっしょに');
