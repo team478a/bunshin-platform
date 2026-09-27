@@ -149,6 +149,7 @@ export class PrismaFortuneGenerationRepository {
             objectiveSummary: true,
             audienceSummary: true,
             personalitySummary: true,
+            updatedAt: true,
           },
         }),
         tx.fortuneReading.findMany({
@@ -163,18 +164,45 @@ export class PrismaFortuneGenerationRepository {
           orderBy: [{ localDate: 'desc' }, { createdAt: 'desc' }],
           take: 7,
           include: {
-            feedback: { select: { rating: true, issueCode: true } },
+            feedback: { select: { id: true, rating: true, issueCode: true } },
           },
         }),
       ]);
       if (!bunshinProfile) return null;
+      const feedbackIds = recentReadings.flatMap((item) =>
+        item.feedback ? [item.feedback.id] : [],
+      );
+      await tx.fortuneReading.update({
+        where: { id: reading.id },
+        data: {
+          personalizationContext: {
+            version: 'fortune-personalization-v1',
+            sources: [
+              'BUNSHIN_PROFILE',
+              ...(recentReadings.length > 0 ? ['RECENT_READING'] : []),
+              ...(feedbackIds.length > 0 ? ['READING_FEEDBACK'] : []),
+            ],
+            bunshin: {
+              id: scope.bunshinId,
+              updatedAt: bunshinProfile.updatedAt.toISOString(),
+            },
+            recentReadingIds: recentReadings.map((item) => item.id),
+            feedbackIds,
+          },
+        },
+      });
       return {
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
         reading: await fortuneReadingView(tx, reading),
         personalization: {
-          bunshinProfile,
+          bunshinProfile: {
+            name: bunshinProfile.name,
+            objectiveSummary: bunshinProfile.objectiveSummary,
+            audienceSummary: bunshinProfile.audienceSummary,
+            personalitySummary: bunshinProfile.personalitySummary,
+          },
           recentReadings: recentReadings.map((item) => ({
             id: item.id,
             localDate: item.localDate.toISOString().slice(0, 10),

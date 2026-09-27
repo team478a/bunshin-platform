@@ -2960,6 +2960,7 @@ model FortuneReading {
   actionStep         String?                  @map("action_step") @db.VarChar(500)
   modelName          String?                  @map("model_name") @db.VarChar(120)
   promptVersion      String?                  @map("prompt_version") @db.VarChar(80)
+  personalizationContext Json?                @map("personalization_context")
   failureCode        String?                  @map("failure_code") @db.VarChar(80)
   generatedAt        DateTime?                @map("generated_at") @db.Timestamptz(6)
   firstViewedAt      DateTime?                @map("first_viewed_at") @db.Timestamptz(6)

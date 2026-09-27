@@ -45,12 +45,14 @@ function targetClient(target: unknown = scope) {
         objectiveSummary: '毎日を整える',
         audienceSummary: '占いを生活のヒントにしたい人',
         personalitySummary: '穏やかで具体的',
+        updatedAt: new Date('2026-09-25T00:00:00.000Z'),
       }),
     },
     fortuneReading: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn(),
       upsert: vi.fn(),
     },
@@ -172,7 +174,11 @@ describe('fortune repository isolation', () => {
         ...reading,
         id: '00000000-0000-4000-8000-000000000399',
         status: 'READY_AI',
-        feedback: { rating: 'NOT_HELPFUL', issueCode: 'TOO_VAGUE' },
+        feedback: {
+          id: '00000000-0000-4000-8000-000000000398',
+          rating: 'NOT_HELPFUL',
+          issueCode: 'TOO_VAGUE',
+        },
       },
     ]);
     const client = {
@@ -221,6 +227,21 @@ describe('fortune repository isolation', () => {
         }),
       }),
     );
+    expect(tx.fortuneReading.update).toHaveBeenCalledWith({
+      where: { id: readingId },
+      data: {
+        personalizationContext: {
+          version: 'fortune-personalization-v1',
+          sources: ['BUNSHIN_PROFILE', 'RECENT_READING', 'READING_FEEDBACK'],
+          bunshin: {
+            id: scope.bunshinId,
+            updatedAt: '2026-09-25T00:00:00.000Z',
+          },
+          recentReadingIds: ['00000000-0000-4000-8000-000000000399'],
+          feedbackIds: ['00000000-0000-4000-8000-000000000398'],
+        },
+      },
+    });
   });
 
   it('does not save feedback for another user or service reading', async () => {
