@@ -16,6 +16,22 @@ describe('OEM SNS support candidate admin', () => {
     expect(action).toContain('actorUserId: actor.userId');
   });
 
+  it('lets each managed service choose how support alerts are handled', () => {
+    const action = readFileSync(
+      join(
+        process.cwd(),
+        'app/s/[serviceSlug]/manage/personalization/support-alert-policy-action.ts',
+      ),
+      'utf8',
+    );
+    expect(action).toContain('OPTIONAL_UPSELL');
+    expect(action).toContain('INCLUDED_SUPPORT');
+    expect(action).toContain('INTERNAL_ESCALATION');
+    expect(action).toContain('DISABLED');
+    expect(action).toContain('resolveManagedServiceContext');
+    expect(action).toContain('serviceConfigurationAudit.create');
+  });
+
   it('does not expose participant content or memory on the candidate list', () => {
     const page = readFileSync(
       join(process.cwd(), 'app/s/[serviceSlug]/manage/personalization/page.tsx'),
