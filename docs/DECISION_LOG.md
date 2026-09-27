@@ -2819,3 +2819,12 @@
 - `OEM_SUPPORT_CANDIDATE`の受信設定は、Service Owner / Adminを対象にEMAILとLINEを別々に保存する。
 - EMAILはメールアドレス登録済み管理者だけを選択可能にし、LINEは実配信時にもLINE連携、通知同意、友だち状態を再検証する。
 - Service管理権限とWorkspace / Service境界を既存の管理Contextで検証し、設定変更をService監査へ記録する。
+
+## D-118: OEM支援LINEの失敗は個別化画面から既存LINE運用画面へ導く
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 候補ID由来の`automationKey`を持つBroadcastだけをWorkspace / Service内で抽出し、失敗件数と分類を個別化管理画面に表示する。
+- 再送処理を複製せず、既存の公式LINE管理画面にある失敗宛先だけの再送、監査、冪等Jobを再利用する。
+- 受信者の個人情報や通知本文は失敗一覧に表示しない。
