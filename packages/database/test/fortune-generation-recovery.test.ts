@@ -127,10 +127,14 @@ describe('interrupted fortune generation recovery', () => {
     };
     const fake = client([reading, other]);
     await recoverStaleFortuneReadings(fake.db, now);
-    expect(fake.updateMany.mock.calls.map(([input]) => input.where)).toEqual([
-      { ...reading, status: 'GENERATING', deletedAt: null },
-      { ...other, status: 'GENERATING', deletedAt: null },
-    ]);
+    expect(fake.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ where: { ...reading, status: 'GENERATING', deletedAt: null } }),
+    );
+    expect(fake.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ where: { ...other, status: 'GENERATING', deletedAt: null } }),
+    );
   });
 
   it('surfaces database failures so the next invocation can safely retry', async () => {
