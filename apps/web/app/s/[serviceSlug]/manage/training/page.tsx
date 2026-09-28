@@ -147,9 +147,18 @@ export default async function AiTrainingAdminPage({
         });
   const enrollmentIds = enrollments.map(({ id }) => id);
   const membershipIds = enrollments.map(({ groupMembershipId }) => groupMembershipId);
-  const [memberships, profiles, snapshots, assignments, answers, toolkitItems, workResultEvents] =
+  const [
+    memberships,
+    profiles,
+    snapshots,
+    assignments,
+    answers,
+    toolkitItems,
+    workResultEvents,
+    barrierEvents,
+  ] =
     enrollmentIds.length === 0
-      ? [[], [], [], [], [], [], []]
+      ? [[], [], [], [], [], [], [], []]
       : await Promise.all([
           db.prisma.groupMembership.findMany({
             where: {
@@ -241,6 +250,15 @@ export default async function AiTrainingAdminPage({
             },
             select: { programEnrollmentId: true, metadata: true },
           }),
+          db.prisma.programActionEvent.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              programEnrollmentId: { in: enrollmentIds },
+              eventType: 'TRAINING_BARRIER_RECORDED',
+            },
+            select: { programEnrollmentId: true, metadata: true },
+          }),
         ]);
   const programById = new Map(programs.map((item) => [item.id, item]));
   const membershipById = new Map(memberships.map((item) => [item.id, item]));
@@ -276,6 +294,20 @@ export default async function AiTrainingAdminPage({
     values.push(result as (typeof values)[number]);
     workResultsByEnrollment.set(event.programEnrollmentId, values);
   }
+  const barrierReasonsByEnrollment = new Map<string, string[]>();
+  for (const event of barrierEvents) {
+    const metadata =
+      typeof event.metadata === 'object' &&
+      event.metadata !== null &&
+      !Array.isArray(event.metadata)
+        ? (event.metadata as Record<string, unknown>)
+        : null;
+    const reason = metadata?.['barrierReason'];
+    if (typeof reason !== 'string') continue;
+    const values = barrierReasonsByEnrollment.get(event.programEnrollmentId) ?? [];
+    values.push(reason);
+    barrierReasonsByEnrollment.set(event.programEnrollmentId, values);
+  }
   const dashboard = buildAiTrainingAdminDashboard(
     enrollments.flatMap((enrollment) => {
       const member = membershipById.get(enrollment.groupMembershipId);
@@ -297,6 +329,7 @@ export default async function AiTrainingAdminPage({
           evaluationUpdatedAt: answer?.updatedAt ?? null,
           profileUpdatedAt: profile?.updatedAt ?? null,
           workResults: workResultsByEnrollment.get(enrollment.id) ?? [],
+          barrierReasons: barrierReasonsByEnrollment.get(enrollment.id) ?? [],
         },
       ];
     }),

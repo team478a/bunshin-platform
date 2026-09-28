@@ -1,6 +1,11 @@
-import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import {
+  TRAINING_BARRIER_REASONS,
+  TRAINING_BARRIER_REASON_LABELS,
+} from '@bunshin/capability-training';
+import { useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import type {
   TrainingAction,
+  TrainingBarrierReason,
   TrainingInteractionType,
   TrainingParticipantState,
 } from './ai-training-types';
@@ -23,10 +28,13 @@ export function AiTrainingMissionCard({
   postponed,
   setPostponed,
   interactionSaving,
+  barrierSaving,
   saving,
   message,
   error,
   recordInteraction,
+  adjustMission,
+  editGoal,
   submitAnswer,
 }: {
   state: TrainingParticipantState;
@@ -40,12 +48,18 @@ export function AiTrainingMissionCard({
   postponed: boolean;
   setPostponed: Dispatch<SetStateAction<boolean>>;
   interactionSaving: TrainingInteractionType | null;
+  barrierSaving: boolean;
   saving: boolean;
   message: string;
   error: string;
   recordInteraction: (interactionType: TrainingInteractionType) => Promise<void>;
+  adjustMission: (
+    adjustment: { type: 'BARRIER'; reason: TrainingBarrierReason } | { type: 'RESTORE_STANDARD' },
+  ) => Promise<void>;
+  editGoal: () => void;
   submitAnswer: (event?: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
+  const [barrierOpen, setBarrierOpen] = useState(false);
   return (
     <section className="service-entry__card training-card" aria-labelledby="training-action-title">
       <div className="resale-action-card__meta">
@@ -53,6 +67,10 @@ export function AiTrainingMissionCard({
         {action.display.difficulty ? (
           <span>{difficultyLabels[action.display.difficulty]}</span>
         ) : null}
+        {action.display.practiceMode ? (
+          <span>{action.display.practiceMode === 'WORK' ? '実務モード' : '練習モード'}</span>
+        ) : null}
+        {action.display.missionVariant === 'SHORT' ? <span>1分版</span> : null}
         {action.display.estimatedMinutes !== null ? (
           <span>目安 {action.display.estimatedMinutes}分</span>
         ) : null}
@@ -73,6 +91,16 @@ export function AiTrainingMissionCard({
       ) : null}
       {action.display.difficultyGuidance ? (
         <p className="training-field-help">{action.display.difficultyGuidance}</p>
+      ) : null}
+      {action.display.barrierGuidance ? (
+        <p className="notice notice--success" role="status">
+          {action.display.barrierGuidance}
+        </p>
+      ) : null}
+      {action.display.goalReviewRecommended ? (
+        <button className="button button--secondary" type="button" onClick={editGoal}>
+          学習目標を見直す
+        </button>
       ) : null}
       {action.display.learningObjective ? (
         <div className="training-learning-objective">
@@ -128,7 +156,45 @@ export function AiTrainingMissionCard({
           >
             {postponed ? '後で再開できます' : '後でやる'}
           </button>
+          <button
+            className="button button--secondary"
+            type="button"
+            aria-expanded={barrierOpen}
+            onClick={() => setBarrierOpen((open) => !open)}
+            disabled={barrierSaving || action.submission !== null}
+          >
+            進めにくい理由
+          </button>
         </div>
+      ) : null}
+      {barrierOpen && action.mode === 'WORK' && !action.submission ? (
+        <div className="training-hint" aria-label="進めにくい理由を選ぶ">
+          <strong>いちばん近い理由を選んでください</strong>
+          <p>自由記述は保存しません。選択した理由だけを次の課題調整に使います。</p>
+          <div className="training-support-actions">
+            {TRAINING_BARRIER_REASONS.map((reason) => (
+              <button
+                className="button button--secondary"
+                type="button"
+                key={reason}
+                disabled={barrierSaving}
+                onClick={() => void adjustMission({ type: 'BARRIER', reason })}
+              >
+                {TRAINING_BARRIER_REASON_LABELS[reason]}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {action.display.missionVariant === 'SHORT' && !action.submission ? (
+        <button
+          className="button button--secondary"
+          type="button"
+          disabled={barrierSaving}
+          onClick={() => void adjustMission({ type: 'RESTORE_STANDARD' })}
+        >
+          {barrierSaving ? '切り替えています…' : '通常版に戻す'}
+        </button>
       ) : null}
       {hintVisible ? (
         <div className="training-hint" role="status">

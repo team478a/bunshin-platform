@@ -92,6 +92,14 @@ export function TrainingAdminDashboard({
                   <strong>{dashboard.totals.usedAsIs + dashboard.totals.usedWithEdits}</strong>
                   <span>実務で利用</span>
                 </article>
+                <article>
+                  <strong>{dashboard.totals.barrierCount}</strong>
+                  <span>進めにくさ</span>
+                </article>
+                <article>
+                  <strong>{dashboard.totals.shortMissionCount}</strong>
+                  <span>1分版へ調整</span>
+                </article>
               </div>
               <p>
                 登録者 {dashboard.totals.participants}人のうち、受講中は
@@ -102,6 +110,11 @@ export function TrainingAdminDashboard({
                 実務利用の回答 {dashboard.totals.workResultCount}件（そのまま利用{' '}
                 {dashboard.totals.usedAsIs}、修正して利用 {dashboard.totals.usedWithEdits}、未利用{' '}
                 {dashboard.totals.notUsedYet}、対象外 {dashboard.totals.notApplicable}）
+              </p>
+              <p>
+                進めにくさの記録 {dashboard.totals.barrierCount}件（1分版へ調整{' '}
+                {dashboard.totals.shortMissionCount}、目標見直しを案内{' '}
+                {dashboard.totals.goalReviewBarrierCount}）
               </p>
             </section>
 

@@ -35,6 +35,7 @@ export type AiTrainingAdminParticipantInput = {
   evaluationUpdatedAt: Date | null;
   profileUpdatedAt: Date | null;
   workResults: Array<'USED_AS_IS' | 'USED_WITH_EDITS' | 'NOT_USED_YET' | 'NOT_APPLICABLE'>;
+  barrierReasons: string[];
 };
 
 export type AiTrainingAdminParticipant = {
@@ -67,6 +68,9 @@ export type AiTrainingAdminDashboard = {
     usedWithEdits: number;
     notUsedYet: number;
     notApplicable: number;
+    barrierCount: number;
+    shortMissionCount: number;
+    goalReviewBarrierCount: number;
   };
 };
 
@@ -206,6 +210,22 @@ export function buildAiTrainingAdminDashboard(
       ),
       notApplicable: input.reduce(
         (sum, item) => sum + item.workResults.filter((value) => value === 'NOT_APPLICABLE').length,
+        0,
+      ),
+      barrierCount: input.reduce((sum, item) => sum + item.barrierReasons.length, 0),
+      shortMissionCount: input.reduce(
+        (sum, item) =>
+          sum +
+          item.barrierReasons.filter((value) =>
+            ['BUSY', 'TOO_DIFFICULT', 'DONT_KNOW_HOW'].includes(value),
+          ).length,
+        0,
+      ),
+      goalReviewBarrierCount: input.reduce(
+        (sum, item) =>
+          sum +
+          item.barrierReasons.filter((value) => ['NOT_RELEVANT', 'LOW_VALUE'].includes(value))
+            .length,
         0,
       ),
     },

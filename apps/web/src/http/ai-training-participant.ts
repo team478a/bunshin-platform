@@ -11,6 +11,7 @@ import {
   TRAINING_USE_CASE_KEYS,
   TRAINING_DEVICE_TYPES,
   TRAINING_WORK_RESULTS,
+  TRAINING_BARRIER_REASONS,
   TrainingRuntimeError,
 } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
@@ -62,6 +63,17 @@ const interactionSchema = z
   .object({
     missionAssignmentId: uuid,
     interactionType: z.enum(TRAINING_INTERACTION_TYPES),
+    idempotencyKey: uuid,
+  })
+  .strict();
+const barrierActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('BARRIER'), reason: z.enum(TRAINING_BARRIER_REASONS) }).strict(),
+  z.object({ type: z.literal('RESTORE_STANDARD') }).strict(),
+]);
+const barrierSchema = z
+  .object({
+    missionAssignmentId: uuid,
+    action: barrierActionSchema,
     idempotencyKey: uuid,
   })
   .strict();
@@ -235,6 +247,44 @@ export async function recordAiTrainingInteractionResponse(
     }
     if (result.outcome === 'CONFLICT') {
       throw new ApplicationError('CONFLICT', 'training interaction could not be recorded');
+    }
+    return response(result, requestId);
+  } catch (error) {
+    return failure(error, requestId);
+  }
+}
+
+export async function recordAiTrainingBarrierResponse(
+  request: Request,
+  serviceSlug: string,
+  rawEnrollmentId: string,
+) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json')) {
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    }
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    const [service, value] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      barrierSchema.parseAsync(request.json()),
+    ]);
+    const db = await import('@bunshin/database');
+    const result = await new db.PrismaTrainingBarrierRepository(db.prisma).record({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      actorUserId: actor.userId,
+      programEnrollmentId: uuid.parse(rawEnrollmentId),
+      ...value,
+      occurredAt: new Date(),
+    });
+    if (result.outcome === 'NOT_FOUND') {
+      throw new ApplicationError('NOT_FOUND', 'training mission not found');
+    }
+    if (result.outcome === 'CONFLICT') {
+      throw new ApplicationError('CONFLICT', 'training mission can no longer be adjusted');
     }
     return response(result, requestId);
   } catch (error) {

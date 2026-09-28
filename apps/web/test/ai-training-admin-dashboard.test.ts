@@ -49,6 +49,7 @@ function participant(
     evaluationUpdatedAt: new Date('2026-09-20T00:00:00.000Z'),
     profileUpdatedAt: new Date('2026-09-19T00:00:00.000Z'),
     workResults: [],
+    barrierReasons: [],
     ...overrides,
   };
 }
@@ -70,6 +71,9 @@ describe('AI training admin dashboard', () => {
       usedWithEdits: 0,
       notUsedYet: 0,
       notApplicable: 0,
+      barrierCount: 0,
+      shortMissionCount: 0,
+      goalReviewBarrierCount: 0,
     });
     expect(dashboard.participants[0]).toMatchObject({
       participantName: '山田さん',
@@ -79,6 +83,20 @@ describe('AI training admin dashboard', () => {
       engagement: 'ACTIVE',
     });
     expect(JSON.stringify(dashboard)).not.toContain('answer');
+  });
+
+  it('aggregates structured barriers without exposing free text', () => {
+    const dashboard = buildAiTrainingAdminDashboard(
+      [participant({ barrierReasons: ['BUSY', 'TOO_DIFFICULT', 'NOT_RELEVANT'] })],
+      now,
+    );
+
+    expect(dashboard.totals).toMatchObject({
+      barrierCount: 3,
+      shortMissionCount: 2,
+      goalReviewBarrierCount: 1,
+    });
+    expect(JSON.stringify(dashboard)).not.toContain('freeText');
   });
 
   it('aggregates work usage without exposing answer content', () => {
