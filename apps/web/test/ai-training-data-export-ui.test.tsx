@@ -32,7 +32,8 @@ describe('training personal data download UI', () => {
       new URL('../app/s/[serviceSlug]/programs/page.tsx', import.meta.url),
       'utf8',
     );
-    expect(source).toContain("['COMPLETED', 'EXPIRED']");
+    expect(source).toContain("['COMPLETED', 'CANCELLED', 'EXPIRED']");
+    expect(source).toContain("enrollment.status !== 'CANCELLED'");
     expect(source).toContain('endedTrainingPrograms');
     expect(source).toContain('groupMembershipId: membership.id');
   });
