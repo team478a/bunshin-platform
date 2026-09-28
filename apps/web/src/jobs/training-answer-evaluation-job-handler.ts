@@ -160,9 +160,22 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
       }
 
       await db.prisma.$transaction(async (tx) => {
+        await db.lockTrainingEnrollmentData(tx, {
+          workspaceId: input.workspaceId,
+          groupId: input.groupId,
+          actorUserId: input.actorUserId,
+          programEnrollmentId: enrollment.id,
+        });
         const evaluatedAt = new Date();
         const updated = await tx.trainingMissionAnswer.updateMany({
-          where: { id: answer.id, evaluationStatus: 'PENDING' },
+          where: {
+            id: answer.id,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            programEnrollmentId: enrollment.id,
+            userId: input.actorUserId,
+            evaluationStatus: 'PENDING',
+          },
           data: {
             evaluationStatus: 'READY',
             evaluation: {

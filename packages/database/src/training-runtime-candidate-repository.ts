@@ -89,6 +89,8 @@ export class PrismaAiTrainingRuntimeCandidateRepository {
       programEnrollmentId: scope.enrollment.id,
       programTemplateVersionId: scope.program.programTemplateVersionId,
       participantUserId: input.actorUserId,
+      profileUpdatedAt: profile.updatedAt,
+      profileId: profile.id,
       settings: scope.settings,
       profile: {
         role: profile.role,

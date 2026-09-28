@@ -25,7 +25,7 @@ function platformJob(row: Prisma.JobGetPayload<object>): Job {
 }
 
 export class PrismaJobRepository implements JobRepository {
-  constructor(private readonly client: PrismaClient = prisma) {}
+  constructor(private readonly client: PrismaClient | Prisma.TransactionClient = prisma) {}
 
   async enqueue(input: EnqueueJobInput): Promise<Job> {
     const scope = await this.client.workspace.findFirst({

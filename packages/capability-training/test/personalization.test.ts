@@ -25,6 +25,8 @@ const candidate = (role: 'SALES' | 'OFFICE', target: string): AiTrainingRuntimeC
   programEnrollmentId: `enrollment-${role}`,
   programTemplateVersionId: 'version',
   participantUserId: `user-${role}`,
+  profileUpdatedAt: new Date('2026-09-28T00:00:00Z'),
+  profileId: 'profile-a',
   settings: { moduleKey: 'AI_TRAINING_V1', pauseAfterDays: 7, routeKey: 'PERSONALIZED' },
   profile: {
     role,
