@@ -2864,3 +2864,14 @@
 - OEM支援候補由来のBroadcastだけを識別し、CandidateがOPEN、LINE通知が有効、受信者がACTIVEなService Owner / Admin、個別同意が有効であることを再確認する。
 - 資格を失った宛先はProviderへ渡さず`SKIPPED / NOTIFICATION_NO_LONGER_ELIGIBLE`とし、対象がゼロならBroadcastを正常終了させる。
 - 一般のService Broadcastにはこの追加判定を適用せず、既存配信仕様を維持する。
+
+## D-123: Production Gateは自社限定の条件付き運用で検証する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 最新mainの自動Gate、Production Deployment、health / readiness、branch protectionが成功していることを前提に、自社管理アカウントだけでProduction運用を開始できる。
+- backup / restore、実端末、外部Provider、法務・運用の未完了項目は免除せず、運用中に対象commit、日時、担当者、結果を証跡として収集する。
+- 未検証Providerは必要になるまで無効とし、有効化時に疎通、失敗記録、費用上限を確認する。
+- データ境界違反、復旧不能、重大な認証障害が発生した場合は対象機能または運用を停止する。
+- この判断は一般公開、外部顧客向け販売、無人運用のGOを意味しない。それらは未完了Gateの完了後に再判定する。
