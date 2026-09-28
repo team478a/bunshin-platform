@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { AiTrainingDataDeletionCard } from './ai-training-data-deletion-card';
 
 export function AiTrainingDataExportCard({
   serviceSlug,
@@ -59,36 +60,42 @@ export function AiTrainingDataExportCard({
   }
 
   return (
-    <section className="service-entry__card" aria-labelledby={headingId}>
-      <h2 id={headingId}>
-        {programName ? `${programName}のデータを保存する` : '自分の研修データを保存する'}
-      </h2>
-      <p>
-        この研修の回答・AI評価・仕事情報・Toolkit・学習進捗を、JSONファイルで保存できます。データは削除されません。
-      </p>
-      <p>回答や仕事情報を含むため、共有端末への保存や他の人への送付にご注意ください。</p>
-      <label>
-        <input
-          type="checkbox"
-          checked={confirmed}
-          disabled={pending}
-          onChange={(event) => setConfirmed(event.target.checked)}
-        />
-        自分の端末に保存し、ファイルを安全に管理します
-      </label>
-      <button
-        type="button"
-        className="button button--secondary button--full"
-        disabled={!confirmed || pending}
-        onClick={() => void download()}
-      >
-        {pending ? 'ファイルを準備しています…' : '研修データをダウンロード'}
-      </button>
-      {message && (
-        <p role="status" aria-live="polite">
-          {message}
+    <>
+      <section className="service-entry__card" aria-labelledby={headingId}>
+        <h2 id={headingId}>
+          {programName ? `${programName}のデータを保存する` : '自分の研修データを保存する'}
+        </h2>
+        <p>
+          この研修の回答・AI評価・仕事情報・Toolkit・学習進捗を、JSONファイルで保存できます。データは削除されません。
         </p>
-      )}
-    </section>
+        <p>回答や仕事情報を含むため、共有端末への保存や他の人への送付にご注意ください。</p>
+        <label>
+          <input
+            type="checkbox"
+            checked={confirmed}
+            disabled={pending}
+            onChange={(event) => setConfirmed(event.target.checked)}
+          />
+          自分の端末に保存し、ファイルを安全に管理します
+        </label>
+        <button
+          type="button"
+          className="button button--secondary button--full"
+          disabled={!confirmed || pending}
+          onClick={() => void download()}
+        >
+          {pending ? 'ファイルを準備しています…' : '研修データをダウンロード'}
+        </button>
+        {message && (
+          <p role="status" aria-live="polite">
+            {message}
+          </p>
+        )}
+      </section>
+      <AiTrainingDataDeletionCard
+        serviceSlug={serviceSlug}
+        programEnrollmentId={programEnrollmentId}
+      />
+    </>
   );
 }

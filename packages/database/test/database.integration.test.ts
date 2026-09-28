@@ -89,6 +89,9 @@ import {
   PrismaGroupFeatureEntitlementRepository,
   recoverStaleFortuneReadings,
   PrismaTrainingPersonalDataExportRepository,
+  PrismaTrainingPersonalDataDeletionRepository,
+  PrismaTrainingToolkitRepository,
+  lockTrainingEnrollmentData,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -368,6 +371,258 @@ integration('database ownership boundaries', () => {
     expect(
       (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } })).answer,
     ).toBe('Owner answer');
+    const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+    const answerTarget = { ...scope, target: { kind: 'ANSWER' as const, answerId: answer.id } };
+    const before = await deletion.preview(answerTarget);
+    if (before.outcome !== 'PREVIEW') throw new Error('deletion preview expected');
+    expect(before.preview.counts).toMatchObject({ answers: 1, toolkit: 1, profiles: 0 });
+    expect(
+      await deletion.delete({
+        ...answerTarget,
+        actorUserId: other.user.id,
+        revision: before.preview.revision,
+        now,
+      }),
+    ).toEqual({ outcome: 'NOT_FOUND' });
+    expect(
+      await deletion.delete({
+        ...answerTarget,
+        workspaceId: other.workspace.id,
+        revision: before.preview.revision,
+        now,
+      }),
+    ).toEqual({ outcome: 'NOT_FOUND' });
+    await client.trainingMissionAnswer.update({
+      where: { id: answer.id },
+      data: { evaluationStatus: 'PENDING', evaluatedAt: null },
+    });
+    expect(
+      await deletion.delete({ ...answerTarget, revision: before.preview.revision, now }),
+    ).toEqual({ outcome: 'CONFLICT' });
+    const confirmed = await deletion.preview(answerTarget);
+    if (confirmed.outcome !== 'PREVIEW') throw new Error('fresh preview expected');
+    const evaluationJob = await client.job.create({
+      data: {
+        environment: 'DEVELOPMENT',
+        workspaceId: owner.workspace.id,
+        requestedBy: owner.user.id,
+        jobType: 'TRAINING_ANSWER_EVALUATE',
+        payloadReference: `training-evaluation:${group.id}:${enrollment.id}:${answer.id}:${owner.user.id}`,
+        idempotencyKey: randomUUID(),
+        correlationId: randomUUID(),
+      },
+    });
+    const unrelatedJob = await client.job.create({
+      data: {
+        environment: 'DEVELOPMENT',
+        workspaceId: owner.workspace.id,
+        requestedBy: owner.user.id,
+        jobType: 'TRAINING_ANSWER_EVALUATE',
+        payloadReference: `training-evaluation:${group.id}:${otherEnrollment.id}:${randomUUID()}:${owner.user.id}`,
+        idempotencyKey: randomUUID(),
+        correlationId: randomUUID(),
+      },
+    });
+    let releaseProvider!: () => void;
+    let releaseStaleWriter!: () => void;
+    let announceStaleSnapshot!: () => void;
+    const staleSnapshotReady = new Promise<void>((resolve) => {
+      announceStaleSnapshot = resolve;
+    });
+    const staleWriterGate = new Promise<void>((resolve) => {
+      releaseStaleWriter = resolve;
+    });
+    const staleWriter = client
+      .$transaction(
+        async (tx) => {
+          // A Serializable request already has a snapshot when it waits on our lock.
+          await tx.trainingMissionAnswer.findFirst({ where: { id: answer.id } });
+          announceStaleSnapshot();
+          await staleWriterGate;
+          await lockTrainingEnrollmentData(tx, scope);
+          await tx.trainingToolkitItem.create({
+            data: {
+              ...base,
+              programEnrollmentId: enrollment.id,
+              userId: owner.user.id,
+              trainingMissionAnswerId: answer.id,
+              missionAssignmentId: answer.missionAssignmentId,
+              missionDefinitionKey: 'AI_BASIC',
+              title: 'stale copy',
+              contentSnapshot: 'must not reappear',
+            },
+          });
+        },
+        { isolationLevel: 'Serializable' },
+      )
+      .then(
+        () => 'APPLIED',
+        (error: unknown) => {
+          const failure = error as { code?: string; meta?: { code?: string } };
+          if (failure.code === 'P2034' || failure.meta?.code === '40001') return 'REJECTED';
+          throw error;
+        },
+      );
+    await staleSnapshotReady;
+    const providerGate = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    // Simulate a worker that already read the answer and is still awaiting its provider.
+    const lateEvaluation = (async () => {
+      await providerGate;
+      return client.$transaction(async (tx) => {
+        await lockTrainingEnrollmentData(tx, scope);
+        const changed = await tx.trainingMissionAnswer.updateMany({
+          where: {
+            id: answer.id,
+            ...base,
+            programEnrollmentId: enrollment.id,
+            userId: owner.user.id,
+            evaluationStatus: 'PENDING',
+          },
+          data: {
+            evaluationStatus: 'READY',
+            evaluation: { result: 'PASS', feedback: 'must not reappear' },
+          },
+        });
+        if (changed.count === 1) throw new Error('deleted evaluation restored');
+        return changed.count;
+      });
+    })();
+    try {
+      expect(
+        await deletion.delete({ ...answerTarget, revision: confirmed.preview.revision, now }),
+      ).toMatchObject({ outcome: 'DELETED' });
+    } finally {
+      releaseProvider();
+      releaseStaleWriter();
+    }
+    expect(await lateEvaluation).toBe(0);
+    expect(await staleWriter).toBe('REJECTED');
+    expect((await client.job.findUniqueOrThrow({ where: { id: evaluationJob.id } })).status).toBe(
+      'CANCELLED',
+    );
+    expect((await client.job.findUniqueOrThrow({ where: { id: unrelatedJob.id } })).status).toBe(
+      'PENDING',
+    );
+    expect(
+      await deletion.delete({ ...answerTarget, revision: confirmed.preview.revision, now }),
+    ).toMatchObject({ outcome: 'ALREADY_DELETED' });
+    expect(await client.trainingMissionAnswer.count({ where: { id: answer.id } })).toBe(0);
+    expect(
+      await client.trainingToolkitItem.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.trainingParticipantProfile.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(1);
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: { ...base, programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBe(1);
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { status: 'ACTIVE' },
+    });
+    expect(
+      await new PrismaTrainingToolkitRepository(client).save({
+        ...scope,
+        answerId: answer.id,
+        idempotencyKey: randomUUID(),
+        occurredAt: now,
+      }),
+    ).toEqual({ outcome: 'NOT_FOUND' });
+    await client.programProgressSnapshot.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        programTemplateVersionId: version.id,
+        routeKey: 'PERSONALIZED',
+        phaseKey: 'FOUNDATION',
+        stateKey: 'ACTIVE',
+        ruleVersion: 'TEST_V1',
+        calculatedAt: now,
+      },
+    });
+    await client.programMemberPreference.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        groupMembershipId: membership.id,
+        preferredSupportMode: 'GUIDED',
+        notes: 'private learning notes',
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const allTarget = { ...scope, target: { kind: 'ALL' as const } };
+    const allPreview = await deletion.preview(allTarget);
+    if (allPreview.outcome !== 'PREVIEW') throw new Error('all data preview expected');
+    expect(allPreview.preview.counts).toMatchObject({
+      profiles: 1,
+      progress: 1,
+      assignments: 1,
+      preferences: 1,
+    });
+    expect(
+      await deletion.delete({ ...allTarget, revision: allPreview.preview.revision, now }),
+    ).toMatchObject({ outcome: 'DELETED' });
+    expect(
+      await client.trainingParticipantProfile.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.programProgressSnapshot.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.programMissionAssignment.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.programActionEvent.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.programMemberPreference.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: { ...base, programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBe(1);
+    expect(
+      (await client.programEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status,
+    ).toBe('ACTIVE');
+    await client.trainingParticipantProfile.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        groupMembershipId: membership.id,
+        userId: owner.user.id,
+        role: 'OFFICE',
+        aiLevel: 'BEGINNER',
+        workContext: { workDescription: 'New explicit assessment' },
+        updatedByUserId: owner.user.id,
+      },
+    });
+    expect(
+      await deletion.delete({ ...allTarget, revision: allPreview.preview.revision, now }),
+    ).toMatchObject({ outcome: 'ALREADY_DELETED' });
+    expect(
+      await client.trainingParticipantProfile.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(1);
     await client.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'REVOKED', revokedAt: new Date() },

@@ -32,9 +32,34 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
       }),
     ]);
     if (!enrollment || !actor) return null;
+    // AI training owns its mutable runtime and deletion lock; generic writers
+    // must not bypass that lifecycle.
+    if (await this.isTrainingEnrollment(enrollment)) return null;
     const manager = ['SERVICE_OWNER', 'SERVICE_ADMIN'].includes(actor.serviceRole);
     if (!manager && enrollment.groupMembershipId !== actor.id) return null;
     return enrollment;
+  }
+
+  private async isTrainingEnrollment(enrollment: {
+    workspaceId: string;
+    groupId: string;
+    serviceProgramId: string;
+  }) {
+    const program = await this.client.serviceProgram.findFirst({
+      where: {
+        id: enrollment.serviceProgramId,
+        workspaceId: enrollment.workspaceId,
+        groupId: enrollment.groupId,
+      },
+      select: { settings: true },
+    });
+    const settings = program?.settings;
+    return (
+      typeof settings === 'object' &&
+      settings !== null &&
+      !Array.isArray(settings) &&
+      settings['moduleKey'] === 'AI_TRAINING_V1'
+    );
   }
 
   private async versionMatchesEnrollment(input: {
@@ -272,6 +297,7 @@ export class PrismaProgramRuntimeRepository implements ProgramRuntimeRepository 
           })
         : await this.enrollmentAccess({ ...input, actorUserId: input.actorUserId });
     if (!enrollment) return null;
+    if (await this.isTrainingEnrollment(enrollment)) return null;
     if (input.missionAssignmentId !== null) {
       const assignment = await this.client.programMissionAssignment.findFirst({
         where: {

@@ -140,6 +140,8 @@ export interface AiTrainingRuntimeCandidate {
   programEnrollmentId: string;
   programTemplateVersionId: string;
   participantUserId: string;
+  profileUpdatedAt: Date;
+  profileId: string;
   settings: AiTrainingRuntimeSettings;
   profile: {
     role: TrainingRole;

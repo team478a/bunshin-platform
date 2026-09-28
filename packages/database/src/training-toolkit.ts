@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
+import { lockTrainingEnrollmentData } from './training-data-lock';
 
 export type TrainingToolkitItemView = {
   id: string;
@@ -84,6 +85,7 @@ export class PrismaTrainingToolkitRepository {
     try {
       return await this.client.$transaction(
         async (tx) => {
+          await lockTrainingEnrollmentData(tx, input);
           const answer = await tx.trainingMissionAnswer.findFirst({
             where: {
               id: input.answerId,
@@ -175,7 +177,10 @@ export class PrismaTrainingToolkitRepository {
         { isolationLevel: 'Serializable' },
       );
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        !['P2002', 'P2034'].includes(error.code)
+      ) {
         throw error;
       }
       const event = await this.client.programActionEvent.findUnique({ where: eventWhere });
