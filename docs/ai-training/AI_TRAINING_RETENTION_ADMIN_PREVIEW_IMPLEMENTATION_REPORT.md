@@ -9,6 +9,7 @@ main `c79af405`（#999）を基準とした。既存PreflightはCron Secretに�
 - capability-training/personal-data-retention.ts: 認証済み管理者のScope/結果契約。
 - database/training-retention-preview.ts、index: 共通の読み取り集計と管理者認可付き公開Repository。
 - `/s/[serviceSlug]/manage/training/retention` のPageとSummary、既存研修管理画面の入口。
+- Web service loader: 取得失敗の案内とPageの認可失効404を分離し、安全な障害記録を残す。
 - Database Unit/Integration、Web実Page/UIのテスト。
 - D-138、ロードマップ、本報告。
 

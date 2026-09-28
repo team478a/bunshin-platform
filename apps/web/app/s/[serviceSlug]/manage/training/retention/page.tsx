@@ -1,9 +1,8 @@
 import { notFound, redirect } from 'next/navigation';
 import { ApplicationError } from '@bunshin/shared';
-import { createLogger } from '@bunshin/observability';
-import type { TrainingRetentionAdminPreviewResult } from '@bunshin/capability-training';
 import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import { resolveManagedServiceContext } from '../../../../../../src/services/public-service';
+import { loadTrainingRetentionAdminPreview } from '../../../../../../src/services/ai-training-retention-admin';
 import { PublicShell } from '../../../../../ui/public-shell';
 import { TrainingRetentionSummary } from './retention-summary';
 
@@ -30,23 +29,12 @@ export default async function TrainingRetentionPage({
   );
   if (!service) notFound();
   const checkedAt = new Date();
-  let result: TrainingRetentionAdminPreviewResult | { outcome: 'UNAVAILABLE' };
-  try {
-    const { PrismaTrainingRetentionAdminPreviewRepository } = await import('@bunshin/database');
-    result = await new PrismaTrainingRetentionAdminPreviewRepository().preview({
-      workspaceId: service.workspaceId,
-      groupId: service.serviceId,
-      actorUserId: actor.userId,
-      now: checkedAt,
-    });
-  } catch {
-    createLogger().error('Training retention preview unavailable', {
-      workspaceId: service.workspaceId,
-      route: '/s/[serviceSlug]/manage/training/retention',
-      errorCode: 'TRAINING_RETENTION_PREVIEW_FAILED',
-    });
-    result = { outcome: 'UNAVAILABLE' };
-  }
+  const result = await loadTrainingRetentionAdminPreview({
+    workspaceId: service.workspaceId,
+    groupId: service.serviceId,
+    actorUserId: actor.userId,
+    now: checkedAt,
+  });
   if (result.outcome === 'FORBIDDEN') notFound();
   return (
     <PublicShell showPlatformBrand={false}>
