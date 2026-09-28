@@ -52,6 +52,35 @@ const base = {
 };
 
 describe('OpenAIMissionContentGenerator', () => {
+  it('uses low reasoning for configured gpt-5-mini while retaining the 45-second cap', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const fetcher = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            output: [{ content: [{ type: 'output_text', text: '{"body":"本文"}' }] }],
+          }),
+        ),
+      );
+      await new OpenAIMissionContentGenerator({
+        apiKey: 'test-key',
+        model: 'gpt-5-mini',
+        fetch: fetcher,
+      }).generate({
+        ...base,
+        contentPillar: { title: '実践', description: null },
+        grantedKnowledge: [],
+      });
+      expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+        model: 'gpt-5-mini',
+        reasoning: { effort: 'low' },
+        store: false,
+      });
+      expect(timeout).toHaveBeenCalledWith(45_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
   it('uses the format-specific strict schema and store false', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
@@ -96,7 +125,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v13-feedback-loop',
+      promptVersion: 'mission-content-generator-v14-bounded-reasoning',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -256,7 +285,7 @@ describe('OpenAIMissionContentGenerator', () => {
       }),
     ).rejects.toMatchObject({
       code: 'AI_PROVIDER_UNAVAILABLE',
-      cause: { category: 'RATE_LIMIT', status: 429 },
+      cause: { httpStatus: 429 },
     });
     const timedOut = new OpenAIMissionContentGenerator({
       apiKey: 'test-key',
@@ -270,12 +299,39 @@ describe('OpenAIMissionContentGenerator', () => {
       }),
     ).rejects.toMatchObject({
       code: 'AI_PROVIDER_UNAVAILABLE',
-      cause: { category: 'TIMEOUT_OR_NETWORK' },
+      cause: { reason: 'TIMEOUT' },
     });
   });
 });
 
 describe('OpenAIMissionQualityChecker', () => {
+  it('uses low reasoning for gpt-5-mini without skipping the quality check', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [
+            {
+              content: [
+                { type: 'output_text', text: '{"verdict":"REJECT","score":10,"issues":[]}' },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await new OpenAIMissionQualityChecker({
+      apiKey: 'test-key',
+      model: 'gpt-5-mini',
+      fetch: fetcher,
+    }).check({
+      ...base,
+      content: { body: '本文', threadParts: [], cta: null, caption: null, hashtags: [] },
+    });
+    expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      reasoning: { effort: 'low' },
+    });
+    expect(result.output.verdict).toBe('REJECT');
+  });
   it('returns strict quality metadata', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
@@ -305,7 +361,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v9-feedback-loop',
+      promptVersion: 'mission-quality-checker-v10-output-contract',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
@@ -316,6 +372,28 @@ describe('OpenAIMissionQualityChecker', () => {
     expect(JSON.stringify(request)).toContain('REPEATED_VISUAL_SCENE');
     expect(JSON.stringify(request)).toContain('CAROUSEL_NO_SOLUTION');
     expect(JSON.stringify(request)).toContain('CAROUSEL_HARD_TO_UNDERSTAND');
+    expect(request).toMatchObject({
+      text: {
+        format: {
+          schema: {
+            properties: {
+              score: { minimum: 0, maximum: 100 },
+              issues: {
+                items: {
+                  properties: {
+                    code: { minLength: 1, maxLength: 80, pattern: '\\S' },
+                    field: { minLength: 1, maxLength: 100 },
+                    message: { minLength: 1, maxLength: 500 },
+                    repairInstruction: { minLength: 1, maxLength: 500, pattern: '\\S' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(request)).toContain('REJECTでもrepairInstructionを省略せず');
   });
 
   it('surfaces provider failures without an approval result', async () => {

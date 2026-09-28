@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
 import { CompleteJob, EnqueueJob, FailJob, type Job, type JobRepository } from '../src';
 import {
   ExecuteMissionAutomationJob,
@@ -56,6 +57,52 @@ const scopes = (eligible = true): MissionAutomationScopeRepository => ({
 });
 
 describe('Mission automation jobs', () => {
+  it('does not retry quota exhaustion even when HTTP status is 429', async () => {
+    const repository = jobRepository();
+    const registry = new MissionAutomationHandlerRegistry().register('DAILY_MISSION_GENERATE', {
+      execute: vi.fn().mockRejectedValue(
+        new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'private detail', {
+          httpStatus: 429,
+          providerErrorCode: 'insufficient_quota',
+        }),
+      ),
+    });
+    await new ExecuteMissionAutomationJob(
+      scopes(),
+      registry,
+      new CompleteJob(repository, () => now),
+      new FailJob(repository, () => now),
+    ).execute(job, 'worker-1');
+    expect(repository.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failure: { errorCategory: 'AI_PROVIDER_QUOTA', retryable: false },
+        nextRetryAt: null,
+      }),
+    );
+  });
+
+  it.each(['TIMEOUT', 'NETWORK_ERROR'])('retains %s diagnostics for retry', async (reason) => {
+    const repository = jobRepository();
+    const registry = new MissionAutomationHandlerRegistry().register('DAILY_MISSION_GENERATE', {
+      execute: vi
+        .fn()
+        .mockRejectedValue(
+          new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'private detail', { reason }),
+        ),
+    });
+    await new ExecuteMissionAutomationJob(
+      scopes(),
+      registry,
+      new CompleteJob(repository, () => now),
+      new FailJob(repository, () => now),
+    ).execute(job, 'worker-1');
+    expect(repository.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failure: { errorCategory: `AI_PROVIDER_${reason}`, retryable: true },
+        nextRetryAt: new Date(now.getTime() + 30_000),
+      }),
+    );
+  });
   it('enqueues one environment-scoped weekly job per Bunshin and week', async () => {
     const repository = jobRepository();
     const scope = scopes();
@@ -153,6 +200,62 @@ describe('Mission automation jobs', () => {
       expect.objectContaining({
         failure: { errorCategory: 'AI_TEMPORARY', retryable: true },
         nextRetryAt: new Date(now.getTime() + 30_000),
+      }),
+    );
+  });
+
+  it.each([
+    'NOT_FOUND',
+    'VALIDATION_ERROR',
+    'CONTENT_REJECTED',
+    'CONFIGURATION_ERROR',
+    'FORBIDDEN',
+  ] as const)('does not retry permanent %s failures', async (code) => {
+    const repository = jobRepository();
+    const registry = new MissionAutomationHandlerRegistry().register('DAILY_MISSION_GENERATE', {
+      execute: vi.fn().mockRejectedValue(new ApplicationError(code, 'private detail')),
+    });
+    await new ExecuteMissionAutomationJob(
+      scopes(),
+      registry,
+      new CompleteJob(repository, () => now),
+      new FailJob(repository, () => now),
+    ).execute(job, 'worker-1');
+    expect(repository.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failure: { errorCategory: code, retryable: false },
+        nextRetryAt: null,
+      }),
+    );
+    expect(repository.complete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [400, false],
+    [401, false],
+    [403, false],
+    [408, true],
+    [429, true],
+    [503, true],
+  ] as const)('classifies Provider HTTP %s retryability', async (httpStatus, retryable) => {
+    const repository = jobRepository();
+    const registry = new MissionAutomationHandlerRegistry().register('DAILY_MISSION_GENERATE', {
+      execute: vi
+        .fn()
+        .mockRejectedValue(
+          new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'private detail', { httpStatus }),
+        ),
+    });
+    await new ExecuteMissionAutomationJob(
+      scopes(),
+      registry,
+      new CompleteJob(repository, () => now),
+      new FailJob(repository, () => now),
+    ).execute(job, 'worker-1');
+    expect(repository.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failure: { errorCategory: `AI_PROVIDER_HTTP_${httpStatus}`, retryable },
+        nextRetryAt: retryable ? new Date(now.getTime() + 30_000) : null,
       }),
     );
   });

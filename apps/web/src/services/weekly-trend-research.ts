@@ -18,6 +18,7 @@ import { GrokXTrendResearchAdapter } from '../providers/grok-x-trend-research';
 import { TrendSearchProviderError } from '../providers/trend-research-provider';
 
 const DAY = 86_400_000;
+const TREND_QUERY_VERSION = 'weekly-trend-research-v2-bounded-search';
 
 const allowedFormats: Record<SocialPlatform, SocialPreferredFormat[]> = {
   X: ['TEXT'],
@@ -154,7 +155,7 @@ export class WeeklyTrendResearchGenerationService {
           platform: context.platform,
           periodStart: date(periodStart),
           periodEnd: date(addDays(periodStart, 6)),
-          queryVersion: 'weekly-trend-research-v1',
+          queryVersion: TREND_QUERY_VERSION,
           providerKey: result.providerKey,
           completedAt,
           expiresAt,
@@ -169,7 +170,7 @@ export class WeeklyTrendResearchGenerationService {
         taskType: 'TREND_RESEARCH',
         provider: providerKey,
         model,
-        promptVersion: 'weekly-trend-research-v1',
+        promptVersion: TREND_QUERY_VERSION,
         status: 'SUCCESS',
         inputTokens: null,
         outputTokens: null,
@@ -184,7 +185,7 @@ export class WeeklyTrendResearchGenerationService {
         taskType: 'TREND_RESEARCH',
         provider: providerKey,
         model,
-        promptVersion: 'weekly-trend-research-v1',
+        promptVersion: TREND_QUERY_VERSION,
         status: 'FAILED',
         inputTokens: null,
         outputTokens: null,

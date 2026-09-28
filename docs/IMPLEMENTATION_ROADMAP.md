@@ -203,6 +203,8 @@ Phase 3.5〜3.7はCore Persistenceとauthenticated API/UIを別PRにする。AI�
 - DB idempotency claim、同時生成抑止、失敗状態 — 完了
 - Provider timeout・rate limit・不正JSON分類 — 完了
 
+2026-09-28の本番AI失敗調査に基づくGrok応答契約・処理時間、本文生成の推論量、品質Schema、恒久的Job失敗の再試行抑止はコード修正中。検証・本番反映・実運用での改善確認は区別し、`docs/AI_FAILURE_RESILIENCE_2026-09-28.md`に証跡と未解決の既存Pillar参照切れを記録する。
+
 画像・動画binaryを生成せず、外部サービスへ渡せる指示・Promptまでを提供する。Job、LINE、SNS自動投稿、Memory自動学習、BLOGはPhase 4完了条件へ含めない。
 
 ## Phase 5: Free MVP User Experience
