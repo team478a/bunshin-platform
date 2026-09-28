@@ -16,7 +16,7 @@ const fake = vi.hoisted(() => ({
   jobs: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
-  currentUserProvider: async () => ({ getCurrentUser: fake.actor }),
+  currentUserProvider: () => Promise.resolve({ getCurrentUser: fake.actor }),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: fake.service }));
 vi.mock('next/navigation', () => ({
