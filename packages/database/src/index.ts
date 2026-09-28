@@ -239,6 +239,7 @@ export { PrismaTrendOperationsRepository } from './trend-operations';
 export { PrismaProgramCoreRepository } from './program-runtime';
 export { PrismaProgramRuntimeRepository } from './program-runtime-execution';
 export { PrismaTrainingWorkResultRepository } from './training-work-result';
+export { PrismaTrainingPersonalDataExportRepository } from './training-personal-data-export';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,

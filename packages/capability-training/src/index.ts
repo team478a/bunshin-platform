@@ -252,3 +252,4 @@ export * from './growth';
 export * from './operations';
 export * from './personalization';
 export * from './barrier';
+export * from './personal-data-export';

@@ -16,6 +16,7 @@ import { resolveAuthenticatedMemberServicePage } from '../../../../../src/servic
 import { PublicShell } from '../../../../ui/public-shell';
 import { AiResaleActionCard } from './ai-resale-action-card';
 import { AiTrainingCard } from './ai-training-card';
+import { AiTrainingDataExportCard } from './ai-training-data-export-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,6 +152,10 @@ export default async function ProgramParticipantPage({
           >
             自分の成長を見る
           </a>
+          <AiTrainingDataExportCard
+            serviceSlug={serviceSlug}
+            programEnrollmentId={programEnrollmentId}
+          />
           <a className="button button--secondary button--full" href={`/s/${serviceSlug}/programs`}>
             参加中のプログラムへ戻る
           </a>
