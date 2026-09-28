@@ -10,7 +10,10 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolvePublicServiceContext } from '../services/public-service';
-import { buildServiceOnboardingAnswers } from '../services/service-onboarding-response';
+import {
+  buildServiceOnboardingAnswers,
+  nextOnboardingRefinementAt,
+} from '../services/service-onboarding-response';
 import {
   MINIMAL_BUSINESS_PROFILE_DEFAULTS,
   readServiceOnboardingSettings,
@@ -122,11 +125,13 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
           userId: actor.userId,
           questionsSnapshot: settings.questions,
           answers: entries,
+          nextRefinementAt: nextOnboardingRefinementAt(new Date()),
         },
         update: {
           questionsSnapshot: settings.questions,
           answers: entries,
           completedAt: new Date(),
+          nextRefinementAt: nextOnboardingRefinementAt(new Date()),
         },
         select: { id: true, completedAt: true },
       });

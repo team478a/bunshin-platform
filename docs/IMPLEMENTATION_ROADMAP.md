@@ -4,6 +4,8 @@
 
 ## マルチサービス化
 
+追加質問の見送り・再表示制御は`docs/HASSY_ONBOARDING_REFINEMENT_DEFERRAL_IMPLEMENTATION_REPORT.md`を参照。7日間の質問単位見送り、24時間の提示休止、アカウントからの手動回答編集を追加し、本番反映は別途確認する。
+
 状態: MS-1〜MS-2D-S3-Bに加え、用途別サービス作成、初回設定、参加者向け活動・紹介導線までコード実装済み。個別機能の本番利用は各Production Gateの最新証跡を確認する。
 
 MS-2Aでは既存個人Bunshinを維持し、サービス所属BunshinのnullableなGroup紐付け、参加者認可、サービス限定一覧境界を追加する。API/UI接続はMS-2Bで実施する。

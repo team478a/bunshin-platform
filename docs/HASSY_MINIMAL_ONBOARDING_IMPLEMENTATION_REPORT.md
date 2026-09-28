@@ -46,6 +46,8 @@ Business Profileを使うServiceでは、業種、会社名、商品、対象顧
 
 ## 8. 残課題
 
+この節はH1実装時点の履歴。追加質問の見送り・提示間隔の最新状態は`HASSY_ONBOARDING_REFINEMENT_DEFERRAL_IMPLEMENTATION_REPORT.md`を参照する。
+
 - H2 Barrier Coreは未実装。
 - 追加質問の表示cooldown・dismiss履歴はH2/H3で扱う。
 - ハッシー本番Serviceで`MINIMAL`を有効化する操作は、デプロイ後に対象を確認して実施する。

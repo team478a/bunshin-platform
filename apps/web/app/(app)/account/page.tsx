@@ -36,6 +36,7 @@ export default async function AccountPage({
           },
         },
         select: {
+          serviceOnboardingResponse: { select: { id: true } },
           group: {
             select: {
               name: true,
@@ -145,6 +146,18 @@ export default async function AccountPage({
           {scopedService ? `${scopedService.displayName}の設定` : '投稿パートナーの設定'}
         </h2>
         <nav className="settings-list" aria-label="投稿パートナーの設定">
+          {scopedService && scopedMembership?.serviceOnboardingResponse ? (
+            <Link
+              href={`/s/${scopedService.slug}/onboarding?edit=1` as Route}
+              className="settings-row"
+            >
+              <span>
+                <strong>あなたについての回答</strong>
+                <small>見送った質問への回答・登録済み回答の編集</small>
+              </span>
+              <span aria-hidden="true">›</span>
+            </Link>
+          ) : null}
           {scopedService ? (
             <Link href={`/s/${scopedService.slug}/home` as Route} className="settings-row">
               <span>

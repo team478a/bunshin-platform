@@ -48,7 +48,7 @@ export default async function ServiceOnboardingPage({
     select: {
       id: true,
       serviceOnboardingResponse: {
-        select: { id: true, answers: true },
+        select: { id: true, answers: true, refinementState: true, nextRefinementAt: true },
       },
       serviceMemberBusinessProfile: {
         select: {
@@ -81,9 +81,9 @@ export default async function ServiceOnboardingPage({
         membership.serviceMemberBusinessProfile?.businessFeatures &&
         membership.serviceMemberBusinessProfile.preferredTone,
       ));
-  const editing =
-    ['1', 'true'].includes((await searchParams).refine ?? '') ||
-    ['1', 'true'].includes((await searchParams).edit ?? '');
+  const query = await searchParams;
+  const refining = onboardingComplete && ['1', 'true'].includes(query.refine ?? '');
+  const editing = onboardingComplete && (refining || ['1', 'true'].includes(query.edit ?? ''));
   if (onboardingComplete && !editing) {
     redirect(`/s/${serviceSlug}/home` as Route);
   }
@@ -91,7 +91,13 @@ export default async function ServiceOnboardingPage({
   const initialAnswers = answersForCurrentQuestions(settings.questions, storedAnswers).map(
     (answer) => (editing && !answer ? 'まだ回答していません' : answer),
   );
-  const refinement = editing ? nextOnboardingRefinement(settings.questions, storedAnswers) : null;
+  const refinement = refining
+    ? nextOnboardingRefinement(settings.questions, storedAnswers, {
+        state: membership.serviceOnboardingResponse?.refinementState,
+        nextRefinementAt: membership.serviceOnboardingResponse?.nextRefinementAt,
+      })
+    : null;
+  if (refining && !refinement) redirect(`/s/${serviceSlug}/home` as Route);
   const industries = settings.businessProfileEnabled
     ? await db.prisma.industry.findMany({
         where: { status: 'ACTIVE' },
@@ -113,9 +119,11 @@ export default async function ServiceOnboardingPage({
             {editing ? 'あなた向けの内容をもっと正確に' : '最初のかんたん設定'}
           </p>
           <h1>
-            {editing
+            {refining
               ? '今日は1つだけ教えてください'
-              : settings.welcomeTitle || 'あなたのことを少し教えてください'}
+              : editing
+                ? '回答を編集する'
+                : settings.welcomeTitle || 'あなたのことを少し教えてください'}
           </h1>
           <p>
             {editing
