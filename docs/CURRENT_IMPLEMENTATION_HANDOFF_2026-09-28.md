@@ -1,8 +1,8 @@
 # 現行実装状況・引継ぎ監査
 
 - 監査日: 2026-09-28（Asia/Tokyo）
-- 対象: `origin/main` commit `ec30c9a5036475a7d4e69d06a7fb62ed8efda29d`
-- 対象PR: #975 merge後
+- 対象: `origin/main` commit `f96b830d`（PR #982 merge後）
+- 検証基準: PR #977の全品質Gateと、PR #978〜#982の各CI
 - 監査方法: 仕様・報告書・直近commit・ソース・品質Gateの読み取り検証
 
 ## 1. 調査した内容
@@ -44,15 +44,18 @@
 
 ### 直近の作業線
 
-最新mainは「ワタシワークス AI研修」のPhase 1個別化を実装済み。
+最新mainは「ワタシワークス AI研修」の個別化コアループに加え、Barrier対応から評価運用可視化までを実装済み。
 
 - `TrainingParticipantProfile.workContext`
 - 固定されたMission objective / criteriaを守る定型Personalization
 - PASS後の実務利用結果記録
 - 利用結果の次回Policyへの反映
-- 管理画面の匿名集計
+- Barrier理由に応じた決定的な分岐と1分版Assignment Variant
+- Practice / Work表示と通常版への復元
+- 回答評価の非同期Job、最大3回の再試行、失敗後の本人再投入
+- 管理画面の匿名集計と評価Jobの運用指標
 
-次の候補はBarrier reasonと1分版Missionだが、理由taxonomy、未実施判定日数、Reminder頻度、1分版を本人選択と自動提案のどちらにするかが未決定のため、本監査では実装を開始しない。
+Barrier reason、1分版、Practice / Work表示、非同期評価と運用指標はPR #980〜#982で完了した。次のコード候補はProviderによるScenario個別化、回答・評価・ToolkitのPrivacy lifecycle、運用通知である。ただし、いずれもPilot実測値または保持・閲覧方針の人間判断が必要であり、先行実装しない。自動Template検出も反復データが蓄積するまで実装しない。
 
 ## 3. 変更したファイル
 
@@ -115,9 +118,9 @@ dependency auditでNext.js 16.3.1のCritical 2件、ESLint経由の`js-yaml` 4.3
 ### Documentation governance
 
 - 最新mainの `AGENTS.md` は、古いPhase文書を履歴とし、Roadmap、Decision Log、最新機能文書を現行状態の判断材料にする内容へ更新済み。
-- `README.md` は現在もPhase 0〜5完了時点の説明で、LINE、画像・動画、Job、課金が未実装と記載されており、現行mainと矛盾する。
+- `README.md` は現行の主要Capability、Production Gateとの区別、v1.0仕様と後続文書の参照関係へ同期済み。
 - 正本はv1.0の初期MVP仕様のままだが、実装は後続の判断ログと個別報告書を根拠に大幅に拡張されている。
-- 次回の文書作業では、READMEを現行状態へ同期し、v1.0仕様と後続の承認済み決定の関係を読者に明示する必要がある。
+- 現在状態の判断では、v1.0仕様を不変のArchitecture境界として維持しつつ、Roadmap、Decision Log、最新の機能別報告書を併用する。
 
 ### Production / operation
 
@@ -133,23 +136,24 @@ dependency auditでNext.js 16.3.1のCritical 2件、ESLint経由の`js-yaml` 4.3
 
 - 回答本文と実務Contextの保持期間
 - 企業管理者・Support担当者の閲覧範囲と監査
-- 未実施理由の正式taxonomyと分岐
 - 未実施判定日数とReminder頻度
-- 1分版Missionを本人選択にするか自動提案にするか
-- PracticeからWork modeへの移行条件
+- Providerへ送る仕事Contextの最小範囲、Mask、送信前確認
+- 評価運用アラートの閾値と通知先責任者
+- ToolkitのExport・削除と契約終了時の扱い
+- 同種業務の反復データが何件あればTemplate提案を開始するか
 
 ## 7. 次へ進める条件
 
-1. READMEの現行状態への同期と、v1.0仕様から後続のDecision Logへの参照関係を明示する。
-2. コード追加より先に、R0 Production Gateの実施状況と本番証跡を確認する。
-3. AI研修の次実装を行う場合は、上記のBarrier / SHORT variantに関する事業判断を先に決定する。
-4. DB変更を含む作業では、migration、既存データ後方互換、Workspace / Service / Enrollment / User分離testを必須とする。
-5. 外部Providerを用いる作業では、model、Prompt Version、usage、cost、latency、resultの記録とFallbackを必須とする。
+1. コード追加より先に、R0 Production Gateの実施状況と本番証跡を確認する。
+2. AI研修の次実装を行う場合は、自社Pilotで成功率、再試行率、完了時間、Barrier、1分版、実務利用率を観測する。
+3. DB変更を含む作業では、migration、既存データ後方互換、Workspace / Service / Enrollment / User分離testを必須とする。
+4. 外部Providerを用いる作業では、model、Prompt Version、usage、cost、latency、resultの記録とFallbackを必須とする。
+5. Privacy lifecycleを実装する前に、保持期間、本人削除・Export、契約終了、管理者・Support閲覧範囲を決定する。
 
 ## 8. 推奨する次の作業順
 
 1. Production Gate / R0の現地証跡回収
-2. READMEと仕様・現行状態の参照関係を整理する文書PR
-3. AI研修Phase 1の非本番Pilotと品質・利用率計測
-4. 判断済み仕様に基づくBarrier reason / SHORT variantの小さな縦切り
-5. Pilot結果後に、Provider個別化、評価Job化、Practice / Work modeを別々に再判定
+2. 千ノ国メディアを含む専用LINEの対象者別接続・同意・友だち状態と実受信の確認
+3. AI研修の自社Pilotで個別化品質、Barrier、1分版、実務利用率、評価Job指標を観測
+4. 保持・削除・Export・閲覧範囲を決め、Privacy lifecycleを独立PRで実装
+5. Pilot結果後にProvider個別化、運用通知、Template提案を別々に再判定
