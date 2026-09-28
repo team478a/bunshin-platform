@@ -772,7 +772,13 @@ integration('database ownership boundaries', () => {
     expect(reopened.progressPurgedAt).toBeNull();
     const manager = await accounts.execute({ displayName: 'Training lifecycle manager' });
     await client.groupMembership.create({
-      data: { ...base, userId: manager.user.id, role: 'MANAGER', serviceRole: 'SERVICE_ADMIN' },
+      data: {
+        ...base,
+        userId: manager.user.id,
+        role: 'MANAGER',
+        serviceRole: 'SERVICE_ADMIN',
+        status: 'ACTIVE',
+      },
     });
     const lifecycle = new PrismaTrainingLifecycleRepository(client);
     const currentEnrollment = await client.programEnrollment.findUniqueOrThrow({
