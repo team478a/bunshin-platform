@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type * as TrainingModule from '@bunshin/capability-training';
 const fake = vi.hoisted(() => ({
   member: vi.fn(),
   enrollment: vi.fn(),
@@ -27,9 +28,7 @@ vi.mock(
   () => ({ AiTrainingDataExportCard: () => <div>PERSONAL_EXPORT</div> }),
 );
 vi.mock('@bunshin/capability-training', async () => {
-  const original = await vi.importActual<typeof import('@bunshin/capability-training')>(
-    '@bunshin/capability-training',
-  );
+  const original = await vi.importActual<typeof TrainingModule>('@bunshin/capability-training');
   return {
     ...original,
     AiTrainingParticipantService: class {
