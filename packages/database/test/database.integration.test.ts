@@ -184,6 +184,7 @@ integration('database ownership boundaries', () => {
         role: 'PARTICIPANT',
         serviceRole: 'PARTICIPANT',
         status: 'ACTIVE',
+        consentedAt: new Date(),
       },
     });
     const otherMembership = await client.groupMembership.create({
@@ -193,6 +194,7 @@ integration('database ownership boundaries', () => {
         role: 'PARTICIPANT',
         serviceRole: 'PARTICIPANT',
         status: 'ACTIVE',
+        consentedAt: new Date(),
       },
     });
     const template = await client.programTemplate.create({
@@ -368,7 +370,7 @@ integration('database ownership boundaries', () => {
     ).toBe('Owner answer');
     await client.groupMembership.update({
       where: { id: membership.id },
-      data: { status: 'SUSPENDED' },
+      data: { status: 'REVOKED', revokedAt: new Date() },
     });
     expect(await repository.read(scope)).toEqual({ outcome: 'NOT_FOUND' });
   });
