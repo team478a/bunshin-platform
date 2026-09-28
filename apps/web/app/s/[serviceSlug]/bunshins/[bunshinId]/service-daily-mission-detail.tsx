@@ -195,6 +195,7 @@ export function ServiceDailyMissionDetail({
       {mission.decision === 'REJECTED' ? <p>今回は使わないと記録しました。</p> : null}
       {active && mission.decision === 'ACCEPTED' ? (
         <ServiceDailyMissionAccepted
+          serviceSlug={serviceSlug}
           mission={mission}
           controller={controller}
           businessFree={businessFree}

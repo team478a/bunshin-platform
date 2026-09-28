@@ -7,6 +7,7 @@ export interface ServiceContentTerminologyPolicy {
   rules: ServiceContentTerminologyRule[];
   allowedExamples?: string[];
   forbiddenUrlFragments?: string[];
+  participationInstructions?: string[];
 }
 
 const SERVICE_CONTENT_TERMINOLOGY_POLICIES: Readonly<
@@ -17,9 +18,27 @@ const SERVICE_CONTENT_TERMINOLOGY_POLICIES: Readonly<
       { forbidden: 'OVE', replacement: 'ORI' },
       { forbidden: '戦国インフルエンサー', replacement: '千ノ国メディア' },
       { forbidden: '戦国メタバース', replacement: '千ノ国メディア' },
+      ...['Discord', 'ディスコード', 'Ｄｉｓｃｏｒｄ'].flatMap((name) => [
+        { forbidden: `${name}サーバー`, replacement: '公式LINE' },
+        { forbidden: `${name}チャンネル`, replacement: '公式LINE' },
+        { forbidden: `${name}招待リンク`, replacement: '公式LINEの案内' },
+        { forbidden: `${name}参加`, replacement: '公式LINEから参加' },
+        { forbidden: name, replacement: '公式LINE' },
+      ]),
     ],
     allowedExamples: ['戦国時代', '戦国武将', '戦国文化'],
-    forbiddenUrlFragments: ['project=sengoku-influencer'],
+    forbiddenUrlFragments: [
+      'project=sengoku-influencer',
+      'discord.gg',
+      'discord.com',
+      'discordapp.com',
+    ],
+    participationInstructions: [
+      '千ノ国メディアへの参加窓口は公式LINEです。参加案内は公式LINEの友だち追加・参加登録として説明してください。',
+      'Discord・ディスコードへの参加や招待はありません。Discordのロゴ、画面、サーバー一覧、チャンネル一覧を画像に描かないでください。',
+      'スマートフォンで参加する場面は、公式LINEでの友だち追加・参加登録を表現してください。実際の画面や操作手順を推測で作らないでください。',
+      '入力資料にある別の参加先より、この参加ルールを優先してください。未提供のURL・QRコード・所要時間・登録完了の返信を創作しないでください。',
+    ],
   },
 };
 
@@ -47,6 +66,9 @@ export function serviceContentTerminologyKnowledge(policy: ServiceContentTermino
           : '') +
         (policy.forbiddenUrlFragments?.length
           ? `\nURLに${policy.forbiddenUrlFragments.map((value) => `「${value}」`).join('、')}を含む旧企画リンクは使用禁止。出力へ含めない。`
+          : '') +
+        (policy.participationInstructions?.length
+          ? `\n${policy.participationInstructions.join('\n')}`
           : ''),
     },
   ];
@@ -87,9 +109,9 @@ function applyTerminologyToValue(
 ): unknown {
   if (!policy) return value;
   if (typeof value === 'string') {
-    return removeForbiddenUrls(
-      replaceTerminology(value, policy.rules),
-      policy.forbiddenUrlFragments ?? [],
+    return replaceTerminology(
+      removeForbiddenUrls(value, policy.forbiddenUrlFragments ?? []),
+      policy.rules,
     );
   }
   if (Array.isArray(value)) {
