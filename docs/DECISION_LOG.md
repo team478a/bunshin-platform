@@ -3002,3 +3002,13 @@
 - 終了1年でProfile・進捗・課題・目標・Preference・活動履歴を削除する。Toolkit本体は削除しない。新しい回答は自分の90日期限まで保持し、遅延評価は終了状態を再確認して確定しない。
 - SUPER_ADMIN本人・same-origin POST・明示Scope・確認文字列・対象Revisionを必須とする。DBでも管理者と所有境界を検証する。対象一覧は2000件を上限にし、確認後の変更は409、超過は413で拒否する。実行と既存Training書込は同じEnrollmentロックを取る。再送は確認Revision監査により冪等にする。
 - HTTP実行はdevelopment/stagingだけ許可し、production/その他は停止する。Cron登録、Provider呼出、LINE送信、本番有効化、過去行の一括消去は含めない。本番有効化には別途対象確認・停止/復旧手順・運営承認が必要。
+
+## D-135: AI研修の終了・取消・再開はサービス管理者の確認操作で確定する
+
+- 日付: 2026-09-29
+- 状態: Accepted（ユーザー依頼によるD-134の運用導線）
+- SERVICE_OWNER/ADMIN本人をDBでも再検証し、同一Workspace/ServiceのAI研修・参加者だけを対象とする。CONTENT_EDITOR、他サービス管理者、参加者は変更できない。
+- ACTIVEからCOMPLETED/CANCELLED、終了状態からACTIVEだけを許可する。現在状態・更新日時による確認Revision、理由、確認文字列、操作UUIDを必須とする。受講ロックと監査を同一Transactionで確定し、同じ操作の再送は冪等とする。
+- 再開はACTIVEなProgramとParticipant、現在の契約期間内に限定する。期限延長、課金・返金、契約Snapshot変更、終了日補完、消去データ復元は行わない。
+- 終了/取消時には受講固有の評価待ちJobをキャンセルし、PENDING回答はFAILEDへ移す。再開でも自動再評価・外部送信は行わない。遅延評価は既存ロック・PENDING条件で保存しない。
+- 終了日時・再開リセットはD-134のTriggerを使用する。本番保持期限処理の停止解除やCron変更は含めない。

@@ -136,13 +136,16 @@ export default async function AiTrainingAdminPage({
             workspaceId: service.workspaceId,
             groupId: service.serviceId,
             serviceProgramId: { in: programIds },
-            status: { in: ['INVITED', 'ACTIVE', 'COMPLETED', 'EXPIRED'] },
+            status: { in: ['INVITED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
           },
           select: {
             id: true,
             serviceProgramId: true,
             groupMembershipId: true,
             status: true,
+            updatedAt: true,
+            endsAt: true,
+            trainingRetention: { select: { endedAt: true } },
           },
           orderBy: { updatedAt: 'desc' },
         });
@@ -424,6 +427,15 @@ export default async function AiTrainingAdminPage({
 
   return (
     <TrainingAdminDashboard
+      lifecycleRows={enrollments.map((row) => ({
+        enrollmentId: row.id,
+        status: row.status,
+        updatedAt: row.updatedAt.toISOString(),
+        endedAt:
+          (
+            row.trainingRetention?.endedAt ?? (row.status === 'EXPIRED' ? row.endsAt : null)
+          )?.toISOString() ?? null,
+      }))}
       serviceSlug={serviceSlug}
       programs={programs}
       dashboard={dashboard}

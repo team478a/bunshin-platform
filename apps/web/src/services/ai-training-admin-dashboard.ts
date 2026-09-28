@@ -50,7 +50,7 @@ export type AiTrainingAdminParticipant = {
   currentMission: string;
   weakArea: string;
   lastActivityAt: Date | null;
-  engagement: 'NOT_STARTED' | 'ACTIVE' | 'NEEDS_SUPPORT' | 'INACTIVE' | 'COMPLETED';
+  engagement: 'NOT_STARTED' | 'ACTIVE' | 'NEEDS_SUPPORT' | 'INACTIVE' | 'COMPLETED' | 'ENDED';
 };
 
 export type AiTrainingAdminDashboard = {
@@ -144,13 +144,15 @@ export function buildAiTrainingAdminDashboard(
     const engagement =
       item.enrollmentStatus === 'COMPLETED'
         ? 'COMPLETED'
-        : !item.profile || (!item.assignment && completedMissionCount === 0)
-          ? 'NOT_STARTED'
-          : needsSupport
-            ? 'NEEDS_SUPPORT'
-            : !lastActivityAt || lastActivityAt < sevenDaysAgo
-              ? 'INACTIVE'
-              : 'ACTIVE';
+        : ['CANCELLED', 'EXPIRED'].includes(item.enrollmentStatus)
+          ? 'ENDED'
+          : !item.profile || (!item.assignment && completedMissionCount === 0)
+            ? 'NOT_STARTED'
+            : needsSupport
+              ? 'NEEDS_SUPPORT'
+              : !lastActivityAt || lastActivityAt < sevenDaysAgo
+                ? 'INACTIVE'
+                : 'ACTIVE';
     return {
       enrollmentId: item.enrollmentId,
       programName: item.programName,
@@ -176,7 +178,14 @@ export function buildAiTrainingAdminDashboard(
   ).length;
   return {
     participants: participants.sort((left, right) => {
-      const priority = { NEEDS_SUPPORT: 0, INACTIVE: 1, NOT_STARTED: 2, ACTIVE: 3, COMPLETED: 4 };
+      const priority = {
+        NEEDS_SUPPORT: 0,
+        INACTIVE: 1,
+        NOT_STARTED: 2,
+        ACTIVE: 3,
+        COMPLETED: 4,
+        ENDED: 5,
+      };
       return (
         priority[left.engagement] - priority[right.engagement] ||
         left.participantName.localeCompare(right.participantName, 'ja')

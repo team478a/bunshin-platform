@@ -1,5 +1,6 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
+import { PrismaTrainingLifecycleRepository } from '../src';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   CreateUserWithPersonalWorkspace,
@@ -769,6 +770,105 @@ integration('database ownership boundaries', () => {
     expect(reopened.endedAt).toBeNull();
     expect(reopened.workRedactedAt).toBeNull();
     expect(reopened.progressPurgedAt).toBeNull();
+    const manager = await accounts.execute({ displayName: 'Training lifecycle manager' });
+    await client.groupMembership.create({
+      data: { ...base, userId: manager.user.id, role: 'MANAGER', serviceRole: 'SERVICE_ADMIN' },
+    });
+    const lifecycle = new PrismaTrainingLifecycleRepository(client);
+    const currentEnrollment = await client.programEnrollment.findUniqueOrThrow({
+      where: { id: enrollment.id },
+    });
+    const lifecycleInput = {
+      ...base,
+      programEnrollmentId: enrollment.id,
+      actorUserId: manager.user.id,
+      action: 'CANCEL' as const,
+      expectedStatus: 'ACTIVE' as const,
+      expectedUpdatedAt: currentEnrollment.updatedAt,
+      operationId: randomUUID(),
+      reason: 'Pilot ended',
+      now: new Date(),
+    };
+    expect(await lifecycle.change({ ...lifecycleInput, actorUserId: owner.user.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    const pendingAnswer = await makeAnswer(
+      enrollment.id,
+      owner.user.id,
+      'Pending lifecycle answer',
+    );
+    const pendingJob = await client.job.create({
+      data: {
+        environment: 'DEVELOPMENT',
+        workspaceId: base.workspaceId,
+        requestedBy: owner.user.id,
+        jobType: 'TRAINING_ANSWER_EVALUATE',
+        payloadReference: `training-evaluation:${group.id}:${enrollment.id}:${pendingAnswer.id}:${owner.user.id}`,
+        idempotencyKey: `lifecycle-${randomUUID()}`,
+        correlationId: randomUUID(),
+        status: 'LEASED',
+        leaseOwner: 'test-worker',
+        leaseExpiresAt: new Date(Date.now() + 60000),
+      },
+    });
+    await client.trainingMissionAnswer.update({
+      where: { id: pendingAnswer.id },
+      data: { evaluationStatus: 'PENDING' },
+    });
+    expect(await lifecycle.change(lifecycleInput)).toEqual({
+      outcome: 'APPLIED',
+      status: 'CANCELLED',
+    });
+    const stoppedJob = await client.job.findUniqueOrThrow({ where: { id: pendingJob.id } });
+    expect(stoppedJob.status).toBe('CANCELLED');
+    expect(stoppedJob.leaseOwner).toBeNull();
+    expect(stoppedJob.cancelledAt).not.toBeNull();
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: pendingAnswer.id } }))
+        .evaluationStatus,
+    ).toBe('FAILED');
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: enrollment.id },
+        })
+      ).endedAt,
+    ).not.toBeNull();
+    expect(await lifecycle.change(lifecycleInput)).toEqual({
+      outcome: 'ALREADY_APPLIED',
+      status: 'CANCELLED',
+    });
+    const cancelledEnrollment = await client.programEnrollment.findUniqueOrThrow({
+      where: { id: enrollment.id },
+    });
+    const reopenInput = {
+      ...lifecycleInput,
+      action: 'REOPEN' as const,
+      expectedStatus: 'CANCELLED' as const,
+      expectedUpdatedAt: cancelledEnrollment.updatedAt,
+      operationId: randomUUID(),
+    };
+    expect(await lifecycle.change(reopenInput)).toEqual({ outcome: 'REOPEN_UNAVAILABLE' });
+    // Explicit test fixture contract change; lifecycle itself never extends dates.
+    await client.serviceProgram.update({ where: { id: program.id }, data: { status: 'ACTIVE' } });
+    const eligibleEnrollment = await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { endsAt: new Date(Date.now() + 86400000) },
+    });
+    expect(
+      await lifecycle.change({ ...reopenInput, expectedUpdatedAt: eligibleEnrollment.updatedAt }),
+    ).toEqual({ outcome: 'APPLIED', status: 'ACTIVE' });
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: enrollment.id },
+        })
+      ).endedAt,
+    ).toBeNull();
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: pendingAnswer.id } }))
+        .evaluationStatus,
+    ).toBe('FAILED');
     expect(
       await maintenance.preview({ ...retentionScope, workspaceId: other.workspace.id }),
     ).toEqual({ outcome: 'NOT_FOUND' });
