@@ -178,10 +178,22 @@ integration('database ownership boundaries', () => {
     });
     const base = { workspaceId: owner.workspace.id, groupId: group.id };
     const membership = await client.groupMembership.create({
-      data: { ...base, userId: owner.user.id, role: 'PARTICIPANT', serviceRole: 'PARTICIPANT' },
+      data: {
+        ...base,
+        userId: owner.user.id,
+        role: 'PARTICIPANT',
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+      },
     });
     const otherMembership = await client.groupMembership.create({
-      data: { ...base, userId: other.user.id, role: 'PARTICIPANT', serviceRole: 'PARTICIPANT' },
+      data: {
+        ...base,
+        userId: other.user.id,
+        role: 'PARTICIPANT',
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+      },
     });
     const template = await client.programTemplate.create({
       data: {
