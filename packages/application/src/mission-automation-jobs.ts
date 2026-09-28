@@ -317,11 +317,59 @@ export class ExecuteMissionAutomationJob {
       const classified =
         error instanceof MissionAutomationHandlerError
           ? error
-          : new MissionAutomationHandlerError('HANDLER_UNEXPECTED', true);
+          : classifyMissionAutomationFailure(error);
       return this.fail.execute(job, workerId, {
         errorCategory: classified.category,
         retryable: classified.retryable,
       });
     }
   }
+}
+
+function classifyMissionAutomationFailure(error: unknown): MissionAutomationHandlerError {
+  if (!(error instanceof ApplicationError))
+    return new MissionAutomationHandlerError('HANDLER_UNEXPECTED', true);
+  if (error.code === 'AI_PROVIDER_UNAVAILABLE') {
+    const cause = error.cause;
+    if (
+      cause &&
+      typeof cause === 'object' &&
+      'providerErrorCode' in cause &&
+      cause.providerErrorCode === 'insufficient_quota'
+    )
+      return new MissionAutomationHandlerError('AI_PROVIDER_QUOTA', false);
+    const status =
+      cause && typeof cause === 'object'
+        ? 'httpStatus' in cause
+          ? cause.httpStatus
+          : 'status' in cause
+            ? cause.status
+            : undefined
+        : undefined;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599)
+      return new MissionAutomationHandlerError(
+        `AI_PROVIDER_HTTP_${status}`,
+        status === 408 || status === 429 || status >= 500,
+      );
+    const reason =
+      cause && typeof cause === 'object' && 'reason' in cause ? cause.reason : undefined;
+    return new MissionAutomationHandlerError(
+      reason === 'TIMEOUT' || reason === 'NETWORK_ERROR'
+        ? `AI_PROVIDER_${reason}`
+        : 'AI_PROVIDER_UNAVAILABLE',
+      true,
+    );
+  }
+  return new MissionAutomationHandlerError(
+    error.code,
+    ![
+      'NOT_FOUND',
+      'FORBIDDEN',
+      'UNAUTHENTICATED',
+      'VALIDATION_ERROR',
+      'CONFIGURATION_ERROR',
+      'CONTENT_REJECTED',
+      'CONFLICT',
+    ].includes(error.code),
+  );
 }

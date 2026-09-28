@@ -93,6 +93,15 @@ export function createDailyMissionJobHandler(): MissionAutomationHandler {
             fallbackErrorCode:
               fallbackError instanceof ApplicationError ? fallbackError.code : 'INTERNAL_ERROR',
           });
+          // A rejected backup must never be sent, but must not hide a transient
+          // primary outage (or a permanent HTTP 400) from the Job retry policy.
+          if (
+            fallbackError instanceof ApplicationError &&
+            fallbackError.code === 'CONTENT_REJECTED' &&
+            error instanceof ApplicationError &&
+            error.code === 'AI_PROVIDER_UNAVAILABLE'
+          )
+            throw error;
           throw fallbackError;
         }
       }

@@ -104,7 +104,7 @@ describe('trend research provider adapters', () => {
     });
     expect(JSON.parse(sentRequest?.body as string)).toMatchObject({
       model: 'grok-4.6',
-      max_turns: 3,
+      max_turns: 2,
       tools: [{ type: 'x_search', from_date: '2026-08-01' }],
     });
   });
@@ -117,6 +117,83 @@ describe('trend research provider adapters', () => {
       safeTrendResult({ url: 'https://user:pass@example.com', title: '題', highlights: ['根拠'] }),
     ).toBeNull();
     expect(safeTrendResult({ url: 'https://example.com', title: '題', highlights: [] })).toBeNull();
+  });
+
+  it('Grok RESTの引用annotationを安全な根拠へ変換し、重複除去後に上限を適用する', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const adapter = new GrokXTrendResearchAdapter({
+        apiKey: 'test-secret',
+        model: 'grok-4.6',
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              status: 'completed',
+              citations: ['http://unsafe.example', 'https://x.com/example/status/1'],
+              output: [
+                {
+                  type: 'message',
+                  content: [
+                    {
+                      type: 'output_text',
+                      text: '根拠に基づいた短い概要',
+                      annotations: [
+                        { type: 'url_citation', url: 'https://x.com/example/status/1' },
+                        { type: 'url_citation', url: 'https://x.com/example/status/2' },
+                        { type: 'other', url: 'https://x.com/example/status/3' },
+                      ],
+                    },
+                  ],
+                },
+              ],
+              usage: { server_side_tool_usage_details: { x_search_calls: 2 } },
+            }),
+          ),
+        ),
+      });
+      const result = await adapter.search({ ...query, maximumResults: 2 });
+      expect(result.items.map((item) => item.url)).toEqual([
+        'https://x.com/example/status/1',
+        'https://x.com/example/status/2',
+      ]);
+      expect(result.creditsUsed).toBe(2);
+      expect(timeout).toHaveBeenCalledWith(60_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it.each([
+    null,
+    [],
+    { output: {} },
+    { output_text: ' ', citations: ['https://x.com/a'] },
+    { output_text: '概要', citations: [] },
+    { status: 'incomplete', output_text: '途中の概要', citations: ['https://x.com/a'] },
+  ])('Grokの不正・空・不完全な応答を安全に分類する: %j', async (response) => {
+    const adapter = new GrokXTrendResearchAdapter({
+      apiKey: 'test-secret',
+      model: 'grok-4.6',
+      fetch: vi.fn().mockResolvedValue(new Response(JSON.stringify(response))),
+    });
+    await expect(adapter.search(query)).rejects.toMatchObject({
+      category: 'INVALID_RESPONSE',
+      retryable: false,
+    });
+  });
+
+  it('Grokの本文読み取り中のtimeoutも再試行可能にする', async () => {
+    const response = new Response('{}');
+    vi.spyOn(response, 'json').mockRejectedValue(new DOMException('private body', 'AbortError'));
+    const adapter = new GrokXTrendResearchAdapter({
+      apiKey: 'test-secret',
+      model: 'grok-4.6',
+      fetch: vi.fn().mockResolvedValue(response),
+    });
+    await expect(adapter.search(query)).rejects.toMatchObject({
+      category: 'TIMEOUT_OR_NETWORK',
+      retryable: true,
+    });
   });
 
   it.each([
