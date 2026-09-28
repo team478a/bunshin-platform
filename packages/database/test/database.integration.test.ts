@@ -868,12 +868,12 @@ integration('database ownership boundaries', () => {
     );
     await client.groupMembership.updateMany({
       where: { ...base, userId: manager.user.id },
-      data: { status: 'SUSPENDED' },
+      data: { status: 'REVOKED', revokedAt: new Date() },
     });
     expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
     await client.groupMembership.updateMany({
       where: { ...base, userId: manager.user.id },
-      data: { status: 'ACTIVE' },
+      data: { status: 'ACTIVE', revokedAt: null },
     });
     const pendingJob = await client.job.create({
       data: {
