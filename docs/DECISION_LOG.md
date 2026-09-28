@@ -2899,3 +2899,13 @@
 - Provider試行ごとにmodel、Prompt Version、usage、原価、処理時間、成否を別のAI Usage Eventとして記録する。
 - 評価とMission、Profile、Progress、監査Eventの更新は同じDB transactionで確定し、部分的な進捗更新を残さない。
 - 受講画面は30秒まで状態を確認するが、画面を閉じてもJobは継続する。`FAILED` は保存済み回答から本人が明示的に再投入できる。
+
+## D-126: AI研修の評価運用はService単位の集計指標で観測する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 自社Pilotで非同期評価を運用検証できるよう、直近7日間の評価Job成功率、再試行、最終失敗、本人再投入、平均完了時間をService管理画面へ表示する。
+- 現在の処理中Job、最古の待機時間、`PENDING` / `FAILED` 回答数も表示し、回復が必要な滞留を確認可能にする。
+- 集計はWorkspace、Service、AI研修Enrollmentの境界内に限定し、回答本文、評価本文、参加者別の失敗情報、Provider responseは取得・表示しない。
+- 固定の自動警報閾値はPilot観測前に決めず、まず実測値を収集する。閾値と通知経路は運用データに基づく後続判断とする。
