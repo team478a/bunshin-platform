@@ -42,8 +42,7 @@ export async function readMissionProviderResponse(response: Response) {
   let value: ResponseValue | null = null;
   try {
     const parsed: unknown = JSON.parse(body);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-      value = parsed;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) value = parsed;
   } catch {
     // HTTP status still takes precedence for HTML/empty error responses.
   }
