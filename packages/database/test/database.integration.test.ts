@@ -653,6 +653,18 @@ integration('database ownership boundaries', () => {
       update: { role: 'SUPER_ADMIN', status: 'ACTIVE' },
     });
     const freshAnswer = await makeAnswer(enrollment.id, owner.user.id, 'Retention answer');
+    const retentionEvent = await client.programActionEvent.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        missionAssignmentId: freshAnswer.missionAssignmentId,
+        eventType: 'ANSWER_SUBMITTED',
+        idempotencyKey: `retention-${randomUUID()}`,
+        metadata: { workDescription: 'Erase event copy' },
+        actorUserId: owner.user.id,
+        occurredAt: now,
+      },
+    });
     await client.trainingParticipantProfile.updateMany({
       where: { ...base, programEnrollmentId: enrollment.id },
       data: { skillScores: { AI_BASIC: 80 } },
@@ -710,6 +722,10 @@ integration('database ownership boundaries', () => {
     expect(preservedProfile.role).toBe('OTHER');
     expect(preservedProfile.skillScores).toEqual({ AI_BASIC: 80 });
     expect(
+      (await client.programActionEvent.findUniqueOrThrow({ where: { id: retentionEvent.id } }))
+        .metadata,
+    ).toEqual({});
+    expect(
       (await client.programEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } }))
         .offeringSnapshot,
     ).toEqual({ contract: 'Keep contract' });
@@ -731,6 +747,12 @@ integration('database ownership boundaries', () => {
       }),
     ).toBe(0);
     const savedResults = await new PrismaTrainingToolkitRepository(client).list(scope);
+    expect(await client.programActionEvent.count({ where: { id: retentionEvent.id } })).toBe(0);
+    expect(
+      await client.programMissionAssignment.count({
+        where: { id: freshAnswer.missionAssignmentId },
+      }),
+    ).toBe(0);
     expect(savedResults?.[0]?.content).toBe('Keep this saved result');
     expect(
       await client.trainingMissionAnswer.count({
