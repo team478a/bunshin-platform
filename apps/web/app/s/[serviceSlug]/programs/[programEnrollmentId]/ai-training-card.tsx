@@ -144,16 +144,46 @@ export function AiTrainingCard({
 
   async function evaluateAnswer(answerId: string) {
     evaluationKey.current ??= crypto.randomUUID();
-    const data = (await readPayload(
+    const queued = (await readPayload(
       await fetch(`${endpoint}/answers/${answerId}/evaluate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ idempotencyKey: evaluationKey.current }),
       }),
-    )) as { evaluation: Evaluation };
-    setEvaluation(data.evaluation);
+    )) as { status: 'PENDING' | 'READY'; evaluation?: Evaluation };
     evaluationKey.current = null;
-    setMessage('回答を確認しました。結果を見て、次へ進んでください。');
+    if (queued.status === 'READY' && queued.evaluation) {
+      setEvaluation(queued.evaluation);
+      setMessage('回答を確認しました。結果を見て、次へ進んでください。');
+      return;
+    }
+    setMessage('AIが回答を確認しています。このまま少しお待ちください。');
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      const status = (await readPayload(
+        await fetch(`${endpoint}/answers/${answerId}/evaluate`, { cache: 'no-store' }),
+      )) as { status: 'PENDING' | 'READY' | 'FAILED'; evaluation?: Evaluation };
+      if (status.status === 'READY' && status.evaluation) {
+        setEvaluation(status.evaluation);
+        setMessage('回答を確認しました。結果を見て、次へ進んでください。');
+        return;
+      }
+      if (status.status === 'FAILED') {
+        setState((current) =>
+          current.action
+            ? {
+                ...current,
+                action: {
+                  ...current.action,
+                  submission: { answerId, evaluationStatus: 'FAILED' },
+                },
+              }
+            : current,
+        );
+        throw new Error('AI評価を完了できませんでした。もう一度試すことができます。');
+      }
+    }
+    setMessage('AI評価を続けています。後でこの画面から状況を確認できます。');
   }
 
   async function submitAnswer(event?: FormEvent<HTMLFormElement>) {

@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { resolveMemberServiceContext } from '../services/public-service';
+import { enqueueAiTrainingEvaluation } from '../services/ai-training-evaluation-queue';
 
 const uuid = z.string().uuid();
 const submissionSchema = z
@@ -210,6 +211,18 @@ export async function submitAiTrainingAnswerResponse(
     if (result.outcome === 'CONFLICT') {
       throw new ApplicationError('CONFLICT', 'training answer has already been submitted');
     }
+    const submitted = result as {
+      outcome: 'SUBMITTED' | 'ALREADY_SUBMITTED';
+      answer: { id: string };
+    };
+    await enqueueAiTrainingEvaluation({
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      enrollmentId: uuid.parse(rawEnrollmentId),
+      answerId: submitted.answer.id,
+      actorUserId: actor.userId,
+      correlationId: requestId,
+    });
     return response(result, requestId);
   } catch (error) {
     return failure(error, requestId);
