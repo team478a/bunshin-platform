@@ -4,6 +4,8 @@
 
 ## マルチサービス化
 
+AI研修の本人削除は`docs/ai-training/AI_TRAINING_PERSONAL_DATA_DELETION_IMPLEMENTATION_REPORT.md`を参照。回答1件/全学習データのPreviewと明示確認、既存書込/評価との競合防止を接続する。自動保持期限は次の独立PRであり、本番反映や既存データの自動消去を開始した証拠とは扱わない。
+
 AI研修の本人Exportは`docs/ai-training/AI_TRAINING_PERSONAL_DATA_EXPORT_IMPLEMENTATION_REPORT.md`を参照。本人・Service・Enrollment単位のJSONダウンロードを接続する。承認済みの本人削除・90日/1年の自動期限削除は後続PRで実装し、現在稼働済みとは扱わない。
 
 追加質問の見送り・再表示制御は`docs/HASSY_ONBOARDING_REFINEMENT_DEFERRAL_IMPLEMENTATION_REPORT.md`を参照。7日間の質問単位見送り、24時間の提示休止、アカウントからの手動回答編集を追加し、本番反映は別途確認する。

@@ -51,6 +51,8 @@ const candidate = (): AiTrainingRuntimeCandidate => ({
   programEnrollmentId: input.programEnrollmentId,
   programTemplateVersionId: '55555555-5555-4555-8555-555555555555',
   participantUserId: input.actorUserId,
+  profileUpdatedAt: new Date('2026-09-28T00:00:00Z'),
+  profileId: 'profile-a',
   settings: { moduleKey: 'AI_TRAINING_V1', pauseAfterDays: 7, routeKey: 'PERSONALIZED' },
   profile: {
     role: 'SALES',

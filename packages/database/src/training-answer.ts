@@ -1,6 +1,7 @@
 import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
+import { lockTrainingEnrollmentData } from './training-data-lock';
 
 export type TrainingAnswerSubmissionResult =
   | {
@@ -77,6 +78,7 @@ export class PrismaTrainingAnswerRepository {
 
     try {
       return await this.client.$transaction(async (tx) => {
+        await lockTrainingEnrollmentData(tx, input);
         const assignment = await tx.programMissionAssignment.findFirst({
           where: {
             id: input.missionAssignmentId,

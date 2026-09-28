@@ -1,6 +1,7 @@
 import type { AiTrainingRuntimeRepository } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { resolveScope, sameDecision, StaleTrainingRuntimeWrite } from './training-runtime-shared';
+import { lockTrainingEnrollmentData } from './training-data-lock';
 
 export class PrismaAiTrainingRuntimeDecisionRepository {
   constructor(private readonly client: PrismaClient) {}
@@ -9,6 +10,10 @@ export class PrismaAiTrainingRuntimeDecisionRepository {
     try {
       return await this.client.$transaction(
         async (tx) => {
+          await lockTrainingEnrollmentData(tx, {
+            ...input.candidate,
+            actorUserId: input.candidate.participantUserId,
+          });
           const scope = await resolveScope(
             tx,
             {
@@ -26,6 +31,22 @@ export class PrismaAiTrainingRuntimeDecisionRepository {
             return 'NOT_FOUND' as const;
           }
           const mission = scope.missions.find(({ key }) => key === input.decision.actionKey);
+          const profile = await tx.trainingParticipantProfile.findFirst({
+            where: {
+              id: input.candidate.profileId,
+              workspaceId: input.candidate.workspaceId,
+              groupId: input.candidate.groupId,
+              programEnrollmentId: scope.enrollment.id,
+              userId: input.candidate.participantUserId,
+              groupMembershipId: scope.membership.id,
+            },
+            select: { updatedAt: true },
+          });
+          if (
+            !profile ||
+            profile.updatedAt.getTime() !== input.candidate.profileUpdatedAt.getTime()
+          )
+            return 'STALE' as const;
           if (
             !mission ||
             mission.key !== input.mission.key ||
