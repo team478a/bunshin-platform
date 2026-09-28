@@ -1,6 +1,10 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
-import { PrismaTrainingLifecycleRepository, listTrainingAdminEvaluationMetrics } from '../src';
+import {
+  PrismaTrainingLifecycleRepository,
+  listTrainingAdminEvaluationMetrics,
+  PrismaTrainingRetentionAdminPreviewRepository,
+} from '../src';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   CreateUserWithPersonalWorkspace,
@@ -782,6 +786,26 @@ integration('database ownership boundaries', () => {
       },
     });
     const lifecycle = new PrismaTrainingLifecycleRepository(client);
+    const adminPreview = new PrismaTrainingRetentionAdminPreviewRepository(client);
+    const adminPreviewScope = { ...base, actorUserId: manager.user.id, now: new Date() };
+    expect(await adminPreview.preview(adminPreviewScope)).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: { mode: 'DRY_RUN', enrollments: 2, retainedToolkit: 1, endDateUnresolved: 1 },
+    });
+    expect(
+      await adminPreview.preview({ ...adminPreviewScope, actorUserId: owner.user.id }),
+    ).toEqual({ outcome: 'FORBIDDEN' });
+    expect(
+      await adminPreview.preview({ ...adminPreviewScope, workspaceId: other.workspace.id }),
+    ).toEqual({ outcome: 'FORBIDDEN' });
+    expect(await adminPreview.preview({ ...adminPreviewScope, groupId: randomUUID() })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: { programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBe(1);
     const currentEnrollment = await client.programEnrollment.findUniqueOrThrow({
       where: { id: enrollment.id },
     });
@@ -855,6 +879,7 @@ integration('database ownership boundaries', () => {
       data: { serviceRole: 'CONTENT_EDITOR' },
     });
     expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    expect(await adminPreview.preview(adminPreviewScope)).toEqual({ outcome: 'FORBIDDEN' });
     await client.groupMembership.updateMany({
       where: { ...base, userId: manager.user.id },
       data: { serviceRole: 'SERVICE_ADMIN' },
@@ -871,6 +896,7 @@ integration('database ownership boundaries', () => {
       data: { status: 'REVOKED', revokedAt: new Date() },
     });
     expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    expect(await adminPreview.preview(adminPreviewScope)).toEqual({ outcome: 'FORBIDDEN' });
     await client.groupMembership.updateMany({
       where: { ...base, userId: manager.user.id },
       data: { status: 'ACTIVE', revokedAt: null },
