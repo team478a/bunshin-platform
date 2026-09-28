@@ -81,7 +81,9 @@ export default async function ServiceMemberHome({
       role: true,
       serviceRole: true,
       user: { select: { displayName: true } },
-      serviceOnboardingResponse: { select: { id: true, answers: true } },
+      serviceOnboardingResponse: {
+        select: { id: true, answers: true, refinementState: true, nextRefinementAt: true },
+      },
       serviceMemberBusinessProfile: { select: { id: true, createdAt: true } },
       featureAssignments: {
         where: { status: 'ENABLED' },
@@ -109,6 +111,10 @@ export default async function ServiceMemberHome({
   const onboardingRefinement = nextOnboardingRefinement(
     onboarding.questions,
     readServiceOnboardingAnswers(membership.serviceOnboardingResponse?.answers),
+    {
+      state: membership.serviceOnboardingResponse?.refinementState,
+      nextRefinementAt: membership.serviceOnboardingResponse?.nextRefinementAt ?? null,
+    },
   );
   if (
     (onboarding.questions.length > 0 && !membership.serviceOnboardingResponse) ||

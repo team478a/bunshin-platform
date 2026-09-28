@@ -3120,6 +3120,8 @@ model ServiceOnboardingResponse {
   userId            String          @map("user_id") @db.Uuid
   questionsSnapshot Json            @map("questions_snapshot")
   answers           Json
+  refinementState   Json            @default("{}") @map("refinement_state")
+  nextRefinementAt  DateTime?       @map("next_refinement_at") @db.Timestamptz(6)
   completedAt       DateTime        @default(now()) @map("completed_at") @db.Timestamptz(6)
   createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)

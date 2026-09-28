@@ -3,6 +3,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { progressStatusLabel } from '../../../../src/activity-progress';
 import type { MissionProgressView, weeklyCalendar } from '../../../../src/activity-progress';
+import { DeferRefinementButton } from '../onboarding/defer-refinement-button';
 
 interface ServiceHomeHeaderProps {
   displayName: string;
@@ -57,6 +58,7 @@ export function ProfileRefinementSection({
       >
         1問に答える
       </Link>
+      <DeferRefinementButton serviceSlug={serviceSlug} question={question} />
     </section>
   );
 }

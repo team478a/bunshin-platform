@@ -168,6 +168,118 @@ integration('database ownership boundaries', () => {
 
   afterAll(async () => client.$disconnect());
 
+  it('persists membership-scoped refinement metadata and rejects cross-owner or stale writes', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Refinement owner' });
+    const other = await accounts.execute({ displayName: 'Refinement other' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Refinement fixture' },
+    });
+    const membership = await client.groupMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        userId: owner.user.id,
+        role: 'PARTICIPANT',
+      },
+    });
+    const scope = {
+      workspaceId: owner.workspace.id,
+      groupId: group.id,
+      groupMembershipId: membership.id,
+      userId: owner.user.id,
+    };
+    const response = await client.serviceOnboardingResponse.create({
+      data: {
+        ...scope,
+        questionsSnapshot: ['目的は？'],
+        answers: [{ question: '目的は？', answer: 'まだ回答していません' }],
+      },
+    });
+    expect(response.refinementState).toEqual({});
+    expect(response.nextRefinementAt).toBeNull();
+    expect(
+      await client.serviceOnboardingResponse.findFirst({
+        where: { ...scope, userId: other.user.id },
+      }),
+    ).toBeNull();
+    const nextRefinementAt = new Date(Date.now() + 86400000);
+    const data = {
+      refinementState: {
+        version: 1,
+        deferred: [
+          {
+            question: '目的は？',
+            at: new Date().toISOString(),
+            until: nextRefinementAt.toISOString(),
+          },
+        ],
+        history: [],
+      },
+      nextRefinementAt,
+    };
+    expect(
+      (
+        await client.serviceOnboardingResponse.updateMany({
+          where: {
+            ...scope,
+            userId: other.user.id,
+            id: response.id,
+            updatedAt: response.updatedAt,
+          },
+          data,
+        })
+      ).count,
+    ).toBe(0);
+    expect(
+      (
+        await client.serviceOnboardingResponse.updateMany({
+          where: {
+            ...scope,
+            workspaceId: other.workspace.id,
+            id: response.id,
+            updatedAt: response.updatedAt,
+          },
+          data,
+        })
+      ).count,
+    ).toBe(0);
+    const savedAnswer = [{ question: '目的は？', answer: '地域のお客様に届けたい' }];
+    await client.serviceOnboardingResponse.update({
+      where: { id: response.id },
+      data: { answers: savedAnswer, updatedAt: new Date(response.updatedAt.getTime() + 1000) },
+    });
+    expect(
+      (
+        await client.serviceOnboardingResponse.updateMany({
+          where: { ...scope, id: response.id, updatedAt: response.updatedAt },
+          data,
+        })
+      ).count,
+    ).toBe(0);
+    const latest = await client.serviceOnboardingResponse.findUniqueOrThrow({
+      where: { id: response.id },
+    });
+    expect(
+      (
+        await client.serviceOnboardingResponse.updateMany({
+          where: { ...scope, id: response.id, updatedAt: latest.updatedAt },
+          data,
+        })
+      ).count,
+    ).toBe(1);
+    const saved = await client.serviceOnboardingResponse.findUniqueOrThrow({
+      where: { id: response.id },
+    });
+    expect(saved.answers).toEqual(savedAnswer);
+    expect(saved.refinementState).toEqual(data.refinementState);
+    expect(saved.nextRefinementAt).toEqual(nextRefinementAt);
+    await client.group.delete({ where: { id: group.id } });
+    expect(
+      await client.serviceOnboardingResponse.findUnique({ where: { id: response.id } }),
+    ).toBeNull();
+  });
+
   it('recovers abandoned fortune generation once without replacing other owners or completed results', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const settingIds: string[] = [];
