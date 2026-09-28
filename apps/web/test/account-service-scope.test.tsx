@@ -74,6 +74,8 @@ describe('service-scoped account page', () => {
     expect(rendered).not.toContain('ワタシワークス公式を運営する');
     expect(rendered).not.toContain('/s/watashi-works-official/manage');
     expect(rendered).toContain('/s/watashi-works-official/bunshins');
+    expect(rendered).toContain('/s/watashi-works-official/line');
+    expect(rendered).toContain('LINEの接続・お知らせ設定');
     expect(rendered).not.toContain('運営団体・サービスを管理');
     expect(rendered).not.toContain('知識');
     expect(rendered).not.toContain('グループ');
