@@ -8,21 +8,22 @@
 - Platform DBと既存Blog DBを共有しない
 - staging/productionは別Supabase projectにする
 
-## Models through Phase 3 Slice 3.1-A
+## Current Data Domains
 
-- `User`
-- `AuthIdentity`
-- `Workspace`
-- `WorkspaceMembership`
-- `PlatformAdmin`
-- `Bunshin` / `BunshinObjective` / `BunshinAudience` / `BunshinPersonality`
-- `OwnerKnowledge` / `BunshinKnowledgeGrant`
-- `BunshinMemory`
-- `BunshinCapabilityAssignment`
-- `SocialProfile`
-- `ContentPillar`
+2026-09-28時点のschemaは、初期Platform Foundationに加えて次の主要領域を含む。正確なmodel、relation、index、制約は `packages/database/prisma/schema.prisma` とmigrationを正本とし、この一覧からschemaを推測しない。
 
-Social ProfileとContent Pillar以外のSOCIAL固有table、BLOG固有、Mission、Feedback、Job tableは存在しない。
+- Identity / Workspace / Membership / Platform Administration
+- Bunshin / Objective / Audience / Personality / Knowledge Grant / Memory / Capability Assignment
+- SOCIAL Profile / Strategy / Content Pillar / Weekly Plan / Daily Mission / Decision / Activity / Post / Feedback
+- LINE configuration / connection / notification / retry / audit
+- Image / Video project / asset / render / usage
+- Service / Service Role / Campaign / Product Pack / Tracking Link / Onboarding
+- Program / Enrollment / Participant Goal / AI Training
+- Point / Badge / Reward / Credit / Entitlement
+- Contract / Product / Price / Order / Payment / Invoice / Collection / Refund / Dispute
+- Provider configuration / Job / Usage / Cost / Audit / Production Gate evidence
+
+既存BLOGは別DB・別境界として維持する。Platform DBへ暗黙に統合せず、移行する場合は専用計画、mapping、rollback、分離テストを用意する。
 
 ## Migration
 
@@ -32,37 +33,36 @@ pnpm db:migrate:dev
 pnpm db:migrate:deploy
 ```
 
-`migrate:dev`はlocal developmentだけで使用する。CIは空のtest DBへ`migrate deploy`して検証する。本番migrationはCIやVercel buildから自動適用せず、承認された変更windowで明示実行する。
+`migrate:dev`はlocal developmentだけで使用する。CIは空のtest DBへVercel Productionと同じwrapper経由で`migrate deploy`を実行し、その後にschema readinessとintegration testを検証する。
 
-VercelのProduction buildは、読み取り専用の`pnpm db:assert-ready`を最初に実行する。Repository内で最新のmigrationが本番DBの`_prisma_migrations`へ正常完了として記録されていなければ、buildを失敗させて新しいApplicationの公開を止める。このGateはmigrationを適用しない。
+VercelのProduction buildは、`pnpm db:migrate:vercel`、`pnpm db:assert-ready`、Web buildの順に実行する。Production以外ではwrapperがmigrationをskipし、Productionでは`DATABASE_URL`または`DIRECT_URL`が欠けていれば停止する。MigrationまたはSchema Gateが失敗した場合はbuildを失敗させ、新しいApplicationを公開しない。
 
-## Production Migration Workflow
+## Production Release Migration Workflow
 
-本番migrationは`.github/workflows/production-migrate.yml`をGitHub Actionsから手動実行する。
+本番migrationは、承認済みの`main`を`production` branchへ反映するVercel Production releaseのbuild先頭で実行する。旧`.github/workflows/production-migrate.yml`は、GitHub側の古いDB SecretとVercel側の有効な接続情報が分離していたため、2026-09-07に廃止した。背景と障害再発防止策は`PRODUCTION_SCHEMA_SAFETY_REPORT.md`を参照する。
 
 事前設定:
 
-1. GitHub repositoryのSettingsからEnvironment `production`を作成する。
-2. Environment protection rulesでrequired reviewerを1名以上設定する。
-3. `production` Environment secretsへ`DATABASE_URL`と`DIRECT_URL`を登録する。
-4. `DATABASE_URL`にはSupabase Shared Transaction Pooler（port 6543、`pgbouncer=true&connection_limit=1`）を使う。
-5. `DIRECT_URL`にはSupabase Shared Session Pooler（port 5432）を使う。
-6. branch protectionと通常CIが成功していることを確認する。
+1. Vercel Productionに`DATABASE_URL`、`DIRECT_URL`、必要なら`SUPABASE_SESSION_POOLER_HOST`をserver-onlyで登録する。
+2. `DATABASE_URL`にはSupabase Shared Transaction Poolerを使う。
+3. `DIRECT_URL`にはmigration可能なdirectまたはsession接続を使う。Direct hostを使う場合、wrapperはProduction build中だけIPv4 session poolerへ変換する。
+4. `main`のrequired CI `verify` / `database`が成功していることを確認する。
+5. migrationの前方互換性、backup、rollbackまたはforward-fix方針を確認する。
+6. `production` branchへの直接pushを禁止し、release PRをレビューする。
 
 実行:
 
-1. GitHub Actionsで`Production Database Migration`を選ぶ。
-2. `Run workflow`のbranchが`main`であることを確認する。
-3. confirmationへ`MIGRATE_PRODUCTION`と入力する。
-4. Environment reviewerが対象commitとmigrationを確認して承認する。
-5. `migrate status`、`migrate deploy`、再度の`migrate status`が成功したことを確認する。
-6. Vercelの`/api/health/ready`とSupabase Table Editorを確認する。
+1. `main`から`production`へのrelease PRを作り、対象commit、CI、migration、backup方針を確認する。
+2. release PRを承認して`production`へmergeする。
+3. Vercel Production Deploymentで`db:migrate:vercel`、`db:assert-ready`、Web buildが順に成功したことを確認する。
+4. `/api/health/live`と`/api/health/ready`を確認する。
+5. GitHubの`Production Health Smoke`が対象release後に成功したことを記録する。
 
 `/api/health/ready`はDBへの接続だけでなく、Applicationが要求する最新migrationも確認する。`databaseSchema: current`がない、またはHTTP 503の場合は、画面確認へ進まずmigration状態を調べる。
 
-GitHub Environmentの`DATABASE_URL`と`DIRECT_URL`は、SupabaseのDB passwordを変更した直後にVercel Productionと同時更新する。片方だけを更新しない。認証情報が古いと承認済みmigration workflow自体を実行できないため、password変更手順の完了条件に両方の更新を含める。
+DB password変更時はVercel Productionの`DATABASE_URL`と`DIRECT_URL`を同時更新する。片方だけを更新しない。旧GitHub Environmentに同名Secretが残っていても、現行release経路の正本として扱わない。
 
-Workflowは同時に1実行だけ許可し、進行中のproduction migrationを新しい実行でcancelしない。Secret値をlogへ出すcommandを追加してはいけない。
+Secret値をbuild log、GitHub Actions log、PR、運用文書へ出すcommandを追加してはいけない。
 
 ## Supabase Setup
 

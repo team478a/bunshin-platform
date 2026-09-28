@@ -1,12 +1,28 @@
 # FREE SOCIAL MVP Production Gate
 
-更新日: 2026-08-26
+更新日: 2026-09-28
 
 ## 判定
 
 Phase 0〜5のコードは完了している。本番利用開始には、以下の人間確認と本番環境での実行記録が必要である。Secretや個人情報は本書へ記録せず、実行日時、担当者、対象commit、GitHub Actions run、確認結果だけを残す。
 
-2026-08-22時点の実査は`PRODUCTION_READINESS_AUDIT_2026-08-22.md`を参照する。現在の判定は**NO-GO**。
+2026-08-22時点の実査は`PRODUCTION_READINESS_AUDIT_2026-08-22.md`を参照する。以下の既存チェックは、その時点で記録されたcommitと実行結果の履歴である。2026-09-28の最新mainについて自動Gateは再確認できたが、人間による受け入れ、backup / restore、外部Provider、法務・運用項目が残るため、現在の判定は**NO-GO**。
+
+## 2026-09-28 Current Main Revalidation
+
+対象: `ec30c9a5036475a7d4e69d06a7fb62ed8efda29d`
+
+- [x] ローカルの空PostgreSQL 16へ全213 migrationを適用した
+- [x] `pnpm db:assert-ready`が成功した
+- [x] PostgreSQL実体を使うintegration test 42件が成功した
+- [x] `main`から`production`へのrelease PR #976をmergeした（production commit `7e0d0217`）
+- [x] Vercel Production Deployment `6698418895`が成功した
+- [x] 対象commitのProduction Health Smokeが成功した（manual run `36353422831`、scheduled run `36354229640`）
+- [x] 2026-09-28の実査でlive / readinessが成功し、`databaseSchema: current`を確認した
+- [ ] Vercel build logの保存先と保持期間を運用記録へ残した
+- [ ] 実アカウント・実端末・外部Providerの受け入れ確認を記録した
+
+現行の本番migrationはGitHub Actionsの手動workflowではなく、Vercel Production build先頭の`db:migrate:vercel`で適用する。ローカル再検証と本番自動Gate成功は、backup / restore、Secretの接続種別、外部Provider、法務・運用承認の証拠にはならない。
 
 ## A. 自動検証
 
@@ -30,6 +46,8 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 - [x] 最新mainで`prisma migrate status`が最新である
 - [x] `/api/health/ready`が`database: ok`を返す
 - [x] Production Health Smokeが成功した（run `32535679734`）
+
+上記の2026-08-22履歴以降、手動migration workflowは廃止された。現行方式と2026-09-28の証跡は冒頭のCurrent Main Revalidationおよび`PRODUCTION_GATE_REVALIDATION_2026-09-28.md`を参照する。
 
 ## C. Auth / AI / Application Configuration
 
