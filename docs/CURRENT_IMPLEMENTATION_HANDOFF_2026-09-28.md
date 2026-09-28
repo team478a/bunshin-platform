@@ -125,6 +125,7 @@ dependency auditでNext.js 16.3.1のCritical 2件、ESLint経由の`js-yaml` 4.3
 - Production migrationは、廃止済みのGitHub Actions手動workflowではなく、Vercel Production build先頭で適用する現行方式へ文書を同期した。
 - backup / restore rehearsal、実端末smoke、LINE Go / No-Go、外部Provider、人間による受け入れの最新証跡は完了確認できない。
 - `production` branchはGitHub branch protectionでPR経由、strictな`verify` / `database`、会話解決、管理者適用、force push / branch削除禁止を設定済み。共同編集者が1名のため承認数は0件で、第二レビュアー追加時に再評価する。
+- Production Gateは、自社管理アカウントだけで未完了項目を運用中に検証する`CONDITIONAL GO`へ変更した。一般公開、外部顧客向け販売、無人運用は引き続き未承認。
 - `docs/REMAINING_FEATURE_IMPLEMENTATION_PLAN.md` のR0は、主に本番Migration後の実アカウント・実端末確認待ち。
 - 有料販売、SNS OAuth / 自動投稿は、R0と継続率検証が完了するまで先行しない。
 
