@@ -179,7 +179,7 @@ describe('personal training data deletion', () => {
   it('rejects missing owners/enrollments/modules and oversize data without writes', async () => {
     for (const name of ['groupMembership', 'programEnrollment', 'serviceProgram'] as const) {
       const { tx, repository } = fixture();
-      tx[name].findFirst.mockResolvedValue(null as never);
+      tx[name].findFirst.mockResolvedValue(null);
       expect(await repository.preview(all)).toEqual({ outcome: 'NOT_FOUND' });
       expect(await repository.delete({ ...all, revision: 'a'.repeat(64), now })).toEqual({
         outcome: 'NOT_FOUND',
@@ -204,7 +204,7 @@ describe('personal training data deletion', () => {
   });
   it('handles a confirmed retry without erasing fresh data and propagates database failures', async () => {
     const { tx, repository } = fixture();
-    tx.programAuditLog.findFirst.mockResolvedValue({ id: 'audit-a' } as never);
+    tx.programAuditLog.findFirst.mockResolvedValue({ id: 'audit-a' });
     expect(await repository.delete({ ...all, revision: 'a'.repeat(64), now })).toMatchObject({
       outcome: 'ALREADY_DELETED',
     });
