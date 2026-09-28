@@ -154,6 +154,15 @@ export default async function AccountPage({
               <span aria-hidden="true">›</span>
             </Link>
           ) : null}
+          {scopedService ? (
+            <Link href={`/s/${scopedService.slug}/line` as Route} className="settings-row">
+              <span>
+                <strong>LINEの接続・お知らせ設定</strong>
+                <small>接続状態を確認して、LINEで受け取る</small>
+              </span>
+              <span aria-hidden="true">›</span>
+            </Link>
+          ) : null}
           <Link
             href={scopedService ? `/s/${scopedService.slug}/bunshins` : '/bunshins'}
             className="settings-row"
