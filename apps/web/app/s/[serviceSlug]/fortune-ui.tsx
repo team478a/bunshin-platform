@@ -36,6 +36,9 @@ export function ReadingCard({
         <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
       </h2>
       {reading.title && <h3>{reading.title}</h3>}
+      {reading.status === 'FAILED' && (
+        <p role="status">結果を表示できませんでした。今日は引き直さず、明日またお試しください。</p>
+      )}
       {!linked && reading.body && <p className="fortune-reading-body">{reading.body}</p>}
       {!linked && reading.actionStep && (
         <div className="fortune-action-step">

@@ -11,12 +11,16 @@
 ## 2. 変更したファイル
 
 - `packages/database/src/fortune-generation-recovery.ts`
+- `packages/database/src/fortune-shared.ts`
 - `packages/database/src/index.ts`
 - `packages/database/test/fortune-generation-recovery.test.ts`
+- `packages/database/test/fortune-reading-failure-view.test.ts`
 - `packages/database/test/database.integration.test.ts`
 - `apps/web/src/http/fortune-generation-recovery.ts`
 - `apps/web/app/api/internal/fortune/recover-generating/route.ts`
 - `apps/web/test/fortune-generation-recovery.test.ts`
+- `apps/web/test/fortune-failed-result-ui.test.tsx`
+- `apps/web/app/s/[serviceSlug]/fortune-ui.tsx`
 - `apps/web/vercel.json`
 - `docs/DECISION_LOG.md`
 - `docs/IMPLEMENTATION_ROADMAP.md`
@@ -26,6 +30,7 @@
 
 - 更新後10分未満の処理、正常完了、削除済みを対象から除外し、5分ごとの認証済みProduction Cronで最大100件を処理する。
 - 保存済みの標準本文・行動を保持したまま`READY_BASIC`へ戻す。空の標準結果は公開せず`FAILED`として明示する。
+- `FAILED`の本文・行動・タイトルは本人APIでも返さず、画面には翌日の再利用案内を表示する。保存データ自体は削除しない。
 - 全所有境界・状態・更新日時・本文を再照合し、並行完了・削除・変更・重複Cronが同じ結果を上書きしない。
 - カードと日付を変更せず、1日1回の制約を維持する。AI・LINE・決済を再実行しない。
 - 既存のstatus、failureCode、updatedAtを使い、Schema変更・Migrationは不要。監視ログは集計値と安全なエラーコードのみとする。
@@ -35,8 +40,8 @@
 
 新規Unit testは、対象条件、所有境界、標準文保持、不完全結果拒否、競合時の更新拒否、冪等性、DB失敗、Cron認証、非Production停止、例外本文非記録を確認する。
 
-- Databaseの復旧・既存Isolation・期限削除テスト: 21件成功。
-- Webの復旧・既存Lifecycle・占いHTTPテスト: 17件成功。
+- Databaseの復旧・失敗結果非公開・既存Isolation・期限削除テスト: 24件成功。
+- Webの復旧・失敗時画面・既存Lifecycle・占いHTTPテスト: 18件成功。
 - 最初のWeb実行は未設定Cronの期待statusを500とした1件が失敗したが、既存の共通エラー契約（503）へ修正し、再実行は成功した。
 
 実DB統合テストでは2つのWorkspace・Service・利用者の結果を作成し、並行復旧の一度だけの更新、正常結果・新しい生成・削除済みの保持、遅延完了の拒否を検証する。
