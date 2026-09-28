@@ -24,6 +24,25 @@ import {
   type TrainingMissionPersonalizer,
   type TrainingWorkContext,
 } from './personalization';
+import {
+  isTrainingBarrierReason,
+  resolveTrainingBarrierAdjustment,
+  type TrainingBarrierReason,
+  type TrainingMissionVariant,
+  type TrainingPracticeMode,
+} from './barrier';
+
+export interface AiTrainingStandardVariantSnapshot {
+  title: string;
+  task: string;
+  instructions: string[];
+  estimatedMinutes: number | null;
+  constraints: readonly string[];
+  successCriteria: readonly string[];
+  evaluationCriteria: readonly string[];
+  difficulty: TrainingMissionDifficulty;
+  difficultyGuidance: string;
+}
 
 export interface AiTrainingRuntimeSettings {
   moduleKey: 'AI_TRAINING_V1';
@@ -41,7 +60,7 @@ export interface TrainingMissionDefinition {
 }
 
 export interface AiTrainingActionDisplaySnapshot {
-  schemaVersion: 1 | 2 | 3 | 4;
+  schemaVersion: 1 | 2 | 3 | 4 | 5;
   actionKey: TrainingActionKey;
   mode: 'WORK' | 'WAIT';
   reasonCode: string;
@@ -54,7 +73,8 @@ export interface AiTrainingActionDisplaySnapshot {
     | 'TRAINING_FIXED_V1'
     | 'TRAINING_PRACTICE_V2'
     | 'TRAINING_ADAPTIVE_V3'
-    | 'TRAINING_PERSONALIZED_V4';
+    | 'TRAINING_PERSONALIZED_V4'
+    | 'TRAINING_BARRIER_AWARE_V5';
   learningObjective?: string;
   businessScenario?: string;
   constraints?: readonly string[];
@@ -70,7 +90,12 @@ export interface AiTrainingActionDisplaySnapshot {
   personalizationStatus?: 'PERSONALIZED' | 'FIXED_FALLBACK';
   personalizationReason?: string;
   hint?: string;
-  practiceMode?: 'PRACTICE' | 'WORK';
+  practiceMode?: TrainingPracticeMode;
+  missionVariant?: TrainingMissionVariant;
+  barrierReason?: TrainingBarrierReason;
+  barrierGuidance?: string;
+  goalReviewRecommended?: boolean;
+  standardVariant?: AiTrainingStandardVariantSnapshot;
 }
 
 export interface AiTrainingParticipantAction {
@@ -299,11 +324,15 @@ export async function renderPersonalizedAiTrainingAction(input: {
   const fixed = renderAiTrainingAction(input.decision, input.mission, input.difficultyDecision);
   const base: AiTrainingActionDisplaySnapshot = {
     ...fixed,
-    schemaVersion: 4 as const,
-    renderer: 'TRAINING_PERSONALIZED_V4' as const,
+    schemaVersion: 5 as const,
+    renderer: 'TRAINING_BARRIER_AWARE_V5' as const,
     catalogVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
     personalizationVersion: AI_TRAINING_PERSONALIZATION_VERSION,
-    practiceMode: 'PRACTICE' as const,
+    practiceMode:
+      input.candidate.currentPhase !== 'FOUNDATION' && (input.candidate.workUseCount ?? 0) > 0
+        ? ('WORK' as const)
+        : ('PRACTICE' as const),
+    missionVariant: 'STANDARD' as const,
   };
   if (input.decision.mode === 'WAIT') {
     return { ...base, personalizationStatus: 'FIXED_FALLBACK' };
@@ -335,6 +364,93 @@ export async function renderPersonalizedAiTrainingAction(input: {
   }
 }
 
+const captureStandardVariant = (
+  display: AiTrainingActionDisplaySnapshot,
+): AiTrainingStandardVariantSnapshot => ({
+  title: display.title,
+  task: display.task,
+  instructions: [...display.instructions],
+  estimatedMinutes: display.estimatedMinutes,
+  constraints: [...(display.constraints ?? [])],
+  successCriteria: [...(display.successCriteria ?? [])],
+  evaluationCriteria: [...(display.evaluationCriteria ?? [])],
+  difficulty: display.difficulty ?? 'STANDARD',
+  difficultyGuidance: display.difficultyGuidance ?? difficultyGuidance.STANDARD,
+});
+
+export function applyTrainingBarrierAdjustment(
+  display: AiTrainingActionDisplaySnapshot,
+  barrierReason: TrainingBarrierReason,
+): AiTrainingActionDisplaySnapshot {
+  const adjustment = resolveTrainingBarrierAdjustment(barrierReason);
+  const standardVariant = display.standardVariant ?? captureStandardVariant(display);
+  const shared = {
+    ...display,
+    schemaVersion: 5 as const,
+    renderer: 'TRAINING_BARRIER_AWARE_V5' as const,
+    barrierReason,
+    barrierGuidance: adjustment.guidance,
+    goalReviewRecommended: adjustment.goalReviewRecommended,
+    missionVariant: adjustment.missionVariant,
+    standardVariant,
+  };
+  if (adjustment.missionVariant === 'STANDARD') {
+    return {
+      ...shared,
+      title: standardVariant.title,
+      task: standardVariant.task,
+      instructions: [...standardVariant.instructions],
+      estimatedMinutes: standardVariant.estimatedMinutes,
+      constraints: [...standardVariant.constraints],
+      successCriteria: [...standardVariant.successCriteria],
+      evaluationCriteria: [...standardVariant.evaluationCriteria],
+      difficulty: standardVariant.difficulty,
+      difficultyGuidance: standardVariant.difficultyGuidance,
+    };
+  }
+  const firstCriterion = standardVariant.successCriteria[0] ?? '課題の要点を1つ回答に含める';
+  const firstEvaluation = standardVariant.evaluationCriteria[0] ?? firstCriterion;
+  return {
+    ...shared,
+    title: `${standardVariant.title}（1分版）`,
+    task: `「${firstCriterion}」を満たす短い回答を1つ作ってください。`,
+    instructions: ['課題の要点を1つ確認する', '短い回答を1つ作る', '回答欄から提出する'],
+    estimatedMinutes: 1,
+    constraints: standardVariant.constraints.slice(0, 1),
+    successCriteria: [firstCriterion],
+    evaluationCriteria: [firstEvaluation],
+    difficulty: adjustment.difficulty ?? standardVariant.difficulty,
+    difficultyGuidance:
+      adjustment.difficulty === 'EASY'
+        ? difficultyGuidance.EASY
+        : '1分で要点を1つ試します。短い回答で構いません。',
+  };
+}
+
+export function restoreTrainingStandardVariant(
+  display: AiTrainingActionDisplaySnapshot,
+): AiTrainingActionDisplaySnapshot | null {
+  if (!display.standardVariant) return null;
+  const standard = display.standardVariant;
+  return {
+    ...display,
+    schemaVersion: 5,
+    renderer: 'TRAINING_BARRIER_AWARE_V5',
+    title: standard.title,
+    task: standard.task,
+    instructions: [...standard.instructions],
+    estimatedMinutes: standard.estimatedMinutes,
+    constraints: [...standard.constraints],
+    successCriteria: [...standard.successCriteria],
+    evaluationCriteria: [...standard.evaluationCriteria],
+    difficulty: standard.difficulty,
+    difficultyGuidance: standard.difficultyGuidance,
+    missionVariant: 'STANDARD',
+    barrierGuidance: '通常版に戻しました。',
+    goalReviewRecommended: false,
+  };
+}
+
 export function parseAiTrainingActionDisplay(
   value: unknown,
 ): AiTrainingActionDisplaySnapshot | null {
@@ -344,7 +460,7 @@ export function parseAiTrainingActionDisplay(
   const quality = typeof actionKey === 'string' ? getAiTrainingMissionQuality(actionKey) : null;
   if (
     !quality ||
-    ![1, 2, 3, 4].includes(Number(display['schemaVersion'])) ||
+    ![1, 2, 3, 4, 5].includes(Number(display['schemaVersion'])) ||
     typeof actionKey !== 'string' ||
     !['WORK', 'WAIT'].includes(String(display['mode'])) ||
     typeof display['reasonCode'] !== 'string' ||
@@ -362,6 +478,7 @@ export function parseAiTrainingActionDisplay(
       'TRAINING_PRACTICE_V2',
       'TRAINING_ADAPTIVE_V3',
       'TRAINING_PERSONALIZED_V4',
+      'TRAINING_BARRIER_AWARE_V5',
     ].includes(String(display['renderer']))
   ) {
     return null;
@@ -393,6 +510,12 @@ export function parseAiTrainingActionDisplay(
             isDifficulty(display['difficulty']) ? display['difficulty'] : quality.difficulty
           ],
     qualityVersion: AI_TRAINING_MISSION_QUALITY_VERSION,
+    ...(isTrainingBarrierReason(display['barrierReason'])
+      ? { barrierReason: display['barrierReason'] }
+      : {}),
+    ...(['STANDARD', 'SHORT'].includes(String(display['missionVariant']))
+      ? { missionVariant: display['missionVariant'] as TrainingMissionVariant }
+      : {}),
   };
 }
 

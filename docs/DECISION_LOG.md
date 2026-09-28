@@ -2875,3 +2875,15 @@
 - 未検証Providerは必要になるまで無効とし、有効化時に疎通、失敗記録、費用上限を確認する。
 - データ境界違反、復旧不能、重大な認証障害が発生した場合は対象機能または運用を停止する。
 - この判断は一般公開、外部顧客向け販売、無人運用のGOを意味しない。それらは未完了Gateの完了後に再判定する。
+
+## D-124: AI研修のBarrierは構造化EventとAssignment Variantで扱う
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 進めにくい理由は `BUSY / TOO_DIFFICULT / NOT_RELEVANT / DONT_KNOW_HOW / LOW_VALUE / OTHER` の選択式とし、自由記述や回答本文をBarrier Eventへ保存しない。
+- `BUSY` は1分版、`TOO_DIFFICULT / DONT_KNOW_HOW` はやさしい1分版、`NOT_RELEVANT / LOW_VALUE` は学習目標の見直しへ決定的に分岐する。
+- 1分版は新しいMissionを生成せず、現在のAssignmentのVariantとして保存する。学習目的を維持し、成功条件と評価条件を1項目へ縮小する。
+- 通常版の内容をAssignment Snapshot内に保持し、本人が回答前に通常版へ戻せるようにする。回答提出後のVariant変更は許可しない。
+- Practice / Workは表示上明示し、FOUNDATION完了後かつ実務利用実績がある場合だけWorkとする。
+- AI ProviderへMission選定、Barrier分岐、学習目的、評価条件の決定を委ねない。

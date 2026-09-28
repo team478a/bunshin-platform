@@ -18,6 +18,7 @@ import type {
   TrainingRole,
   TrainingDeviceType,
   TrainingWorkResult,
+  TrainingBarrierReason,
 } from './ai-training-types';
 
 export type { TrainingParticipantState } from './ai-training-types';
@@ -68,6 +69,8 @@ export function AiTrainingCard({
   const [helpVisible, setHelpVisible] = useState(false);
   const [postponed, setPostponed] = useState(false);
   const [interactionSaving, setInteractionSaving] = useState<TrainingInteractionType | null>(null);
+  const [barrierSaving, setBarrierSaving] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toolkitSaving, setToolkitSaving] = useState(false);
   const [toolkitSaved, setToolkitSaved] = useState(false);
@@ -81,6 +84,7 @@ export function AiTrainingCard({
   const interactionKeys = useRef<Partial<Record<TrainingInteractionType, string>>>({});
   const toolkitKey = useRef<string | null>(null);
   const workResultKey = useRef<string | null>(null);
+  const barrierKeys = useRef<Record<string, string>>({});
   const action = state.action;
 
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${state.enrollmentId}`;
@@ -128,6 +132,7 @@ export function AiTrainingCard({
         }),
       )) as { state: TrainingParticipantState };
       setState(data.state);
+      setEditingProfile(false);
       profileKey.current = null;
       setMessage('設定を保存し、あなたに合う最初の課題を用意しました。');
     } catch (cause) {
@@ -220,6 +225,41 @@ export function AiTrainingCard({
     }
   }
 
+  async function adjustMission(
+    adjustment: { type: 'BARRIER'; reason: TrainingBarrierReason } | { type: 'RESTORE_STANDARD' },
+  ) {
+    if (!action || action.mode !== 'WORK' || action.submission) return;
+    setBarrierSaving(true);
+    setError('');
+    const key = adjustment.type === 'BARRIER' ? adjustment.reason : adjustment.type;
+    barrierKeys.current[key] ??= crypto.randomUUID();
+    try {
+      const data = (await readPayload(
+        await fetch(`${endpoint}/barriers`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            missionAssignmentId: action.id,
+            action: adjustment,
+            idempotencyKey: barrierKeys.current[key],
+          }),
+        }),
+      )) as { display: NonNullable<TrainingParticipantState['action']>['display'] };
+      delete barrierKeys.current[key];
+      setState({ ...state, action: { ...action, status: 'STARTED', display: data.display } });
+      setMessage(
+        adjustment.type === 'RESTORE_STANDARD'
+          ? '通常版に戻しました。'
+          : '選んだ理由に合わせて課題を調整しました。',
+      );
+    } catch (cause) {
+      delete barrierKeys.current[key];
+      setError(cause instanceof Error ? cause.message : '課題を調整できませんでした。');
+    } finally {
+      setBarrierSaving(false);
+    }
+  }
+
   async function saveToToolkit() {
     const answerId = state.action?.submission?.answerId;
     if (!answerId || evaluation?.result !== 'PASS') return;
@@ -287,6 +327,7 @@ export function AiTrainingCard({
       setWorkResult(null);
       workResultKey.current = null;
       interactionKeys.current = {};
+      barrierKeys.current = {};
       setMessage('次の課題を表示しました。');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '次の課題を取得できませんでした。');
@@ -305,7 +346,7 @@ export function AiTrainingCard({
     );
   }
 
-  if (!state.profile || state.profile.workContextComplete === false) {
+  if (!state.profile || state.profile.workContextComplete === false || editingProfile) {
     return (
       <AiTrainingSetupCard
         setupStep={setupStep}
@@ -382,10 +423,16 @@ export function AiTrainingCard({
       postponed={postponed}
       setPostponed={setPostponed}
       interactionSaving={interactionSaving}
+      barrierSaving={barrierSaving}
       saving={saving}
       message={message}
       error={error}
       recordInteraction={recordInteraction}
+      adjustMission={adjustMission}
+      editGoal={() => {
+        setSetupStep(1);
+        setEditingProfile(true);
+      }}
       submitAnswer={submitAnswer}
     />
   );

@@ -152,11 +152,30 @@ describe('AiTrainingParticipantService', () => {
     expect(state.action?.display.learningObjective).toContain('AIに任せる作業');
     expect(state.action?.display.businessScenario).toContain('商談後のメール作成');
     expect(state.action?.display.successCriteria).toContain('作業内容が具体的');
-    expect(state.action?.display.schemaVersion).toBe(4);
+    expect(state.action?.display.schemaVersion).toBe(5);
+    expect(state.action?.display.renderer).toBe('TRAINING_BARRIER_AWARE_V5');
+    expect(state.action?.display.practiceMode).toBe('PRACTICE');
+    expect(state.action?.display.missionVariant).toBe('STANDARD');
     expect(state.action?.display.personalizationStatus).toBe('PERSONALIZED');
     expect(state.action?.display.difficulty).toBe('EASY');
     expect(state.action?.display.difficultyReasonCode).toBe('FOUNDATION_EASY');
     expect(repository.writes).toBe(1);
+  });
+
+  it('uses work mode only after foundation and confirmed work usage', async () => {
+    const repository = new MemoryRepository();
+    repository.runtimeCandidate = {
+      ...candidate(),
+      currentPhase: 'PRACTICE',
+      workUseCount: 1,
+    };
+
+    const state = await new AiTrainingParticipantService(
+      repository,
+      new AiTrainingV1Policy(),
+    ).current(input);
+
+    expect(state.action?.display.practiceMode).toBe('WORK');
   });
 
   it('reuses the active assignment instead of creating a duplicate', async () => {
