@@ -47,8 +47,9 @@ DB schema、migration、APIキー、管理者のProvider選択、配信同意は
 
 - 関連Provider / Pipeline / Diagnosticsテスト: 初回50件成功。Mission Job追加テスト: 最新19件成功。
 - `pnpm typecheck`: 25 / 25成功。
-- 初回`pnpm test`: Backend含む24 / 25タスク成功。Webは1,540件成功、日次生成の既存2件が5秒制限でtimeout。該当ファイルを制限変更なしで単独再実行し10 / 10成功。全Webテストをworker数2で再確認中。
-- lint / format / buildの最終結果とCIのverify/databaseはPRで確認する。未完了を成功として扱わない。
+- 初回`pnpm test`: Backend含む24 / 25タスク成功。Webは1,540件成功、日次生成の既存2件が5秒制限でtimeout。該当ファイルを制限変更なしで単独再実行し10 / 10成功。全Webの再実行は中断され、完了結果なし。
+- 変更した15ファイルのPrettier check成功。
+- ローカルlintは中断され、buildは負荷を抑えるため停止した。最終のformat / typecheck / lint / test / buildとDB統合検証は[PR #989のCI](https://github.com/team478a/bunshin-platform/pull/989/checks)を正本とする。未完了を成功として扱わない。
 - `git diff --check`: 成功。
 
 ## 5. 未解決事項
