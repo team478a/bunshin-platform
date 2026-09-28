@@ -2978,3 +2978,15 @@
 - 削除と全Training書込は、同一Transaction内でWorkspace/Group/Enrollment固有の行ロックを最初に取得する。古いRuntime CandidateはProfileの更新日時を再検証する。評価Workerは削除後に回答が存在しなければ評価・進捗を保存しない。
 - 評価Jobは本人・Service・Enrollment・回答参照を限定してキャンセルし、本文を含まない削除Revision・件数だけを監査へ記録する。再送は同じRevisionなら冪等に成功する。Providerへ送信済みの処理を撤回する保証はしない。
 - Backup、既に端末へ保存したExport、外部Provider、契約・費用記録の消去は本操作の対象外と画面に明示する。自動保持期限は後続PRであり、本PRは本番の一括消去を行わない。
+
+## D-133: AI研修の保持期限は非破壊Preflightで対象と起算日の不足を確認する
+
+- 日付: 2026-09-28
+- 状態: Accepted（D-131の保持期限実装の事前検証）
+
+- 最初のPRは期限判定と読み取り専用の対象集計に限定する。削除API、定期実行登録、既存データへの期限設定は行わない。
+- 回答・評価は回答作成日時から90日。仕事情報は確定した終了日から90日、進捗・点数は暦年の1年後（2月29日は翌年2月末）を期限とする。期限時刻ちょうどから対象とする。
+- `EXPIRED`で過去の`endsAt`がある場合のみ期限終了日として採用する。`COMPLETED`/`CANCELLED`の`endsAt`や`updatedAt`を実際の終了日時と推定しない。起算日未確定は判定保留として集計する。
+- Cron Secretによる認証を必須とし、Workspace/Groupを明示したPOSTだけで集計する。AI研修Programと同一Scopeの参加者所有境界を再検証する。最大100 Enrollment、1000 Programを超えた場合は部分成功を返さない。
+- 本文、評価、仕事情報、点数、Toolkit本文は取得せず、件数だけを返す。明示保存Toolkitは対象から除外する。Backup/Provider/端末Export、契約・費用・監査の消去を保証しない。
+- 実削除は別PRで、終了日時の確定方法、評価Jobとの競合防止、保存Toolkit維持、監査、停止条件を実装・確認してから接続する。本Preflightを自動削除の稼働済み証拠にしない。

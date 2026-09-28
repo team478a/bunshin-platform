@@ -90,6 +90,7 @@ import {
   recoverStaleFortuneReadings,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
+  PrismaTrainingRetentionPreviewRepository,
   PrismaTrainingToolkitRepository,
   lockTrainingEnrollmentData,
 } from '../src';
@@ -371,6 +372,27 @@ integration('database ownership boundaries', () => {
     expect(
       (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } })).answer,
     ).toBe('Owner answer');
+    const retention = new PrismaTrainingRetentionPreviewRepository(client);
+    const afterNinetyDays = new Date(now.getTime() + 91 * 86400000);
+    expect(await retention.preview({ ...base, now: afterNinetyDays })).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: {
+        enrollments: 2,
+        answersAndEvaluationsDue: 2,
+        retainedToolkit: 1,
+        endDateUnresolved: 2,
+        workProfilesDue: 0,
+      },
+    });
+    expect(
+      await retention.preview({ ...base, workspaceId: other.workspace.id, now: afterNinetyDays }),
+    ).toMatchObject({ summary: { enrollments: 0, answersAndEvaluationsDue: 0 } });
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } })).answer,
+    ).toBe('Owner answer');
+    expect(
+      await client.trainingToolkitItem.count({ where: { trainingMissionAnswerId: answer.id } }),
+    ).toBe(1);
     const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
     const answerTarget = { ...scope, target: { kind: 'ANSWER' as const, answerId: answer.id } };
     const before = await deletion.preview(answerTarget);
