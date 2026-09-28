@@ -102,7 +102,7 @@ describe('training retention preview', () => {
   });
   it('skips inconsistent ownership without reading any personal table', async () => {
     const { repository, tx } = fixture();
-    tx.groupMembership.findFirst.mockResolvedValue(null as never);
+    tx.groupMembership.findFirst.mockResolvedValue(null);
     expect(await repository.preview(scope)).toMatchObject({
       summary: { ownershipUnresolved: 1, answersAndEvaluationsDue: 0 },
     });
