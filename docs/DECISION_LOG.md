@@ -2,6 +2,15 @@
 
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
+## D-137: 研修管理集計はDBで評価自由文を除外する
+
+- 日付: 2026-09-29
+- 状態: Accepted（既存Privacy方針との実装差分修正）
+- 管理画面のREADY回答取得では評価JSON全体を読み込まない。DBでPASS/REVIEWと既知6技能の0〜100の数値だけに射影し、回答本文・評価自由文・未知フィールドを返さない。
+- DBの同一Queryで活動中のSERVICE_OWNER/ADMIN、Workspace/Service、本人所属と回答User、AI研修Program、対象Enrollmentを再検証する。CONTENT_EDITORや他サービス管理者は対象外。
+- 個人の弱点欄はProfileの復習必要フラグ等から固定文言を表示し、AI評価のweaknessesを表示しない。既存のPASS/REVIEW・技能改善集計と本人の評価閲覧は維持する。
+- DB変更・Migration、管理者への個人回答閲覧許可、Provider呼出、本番データ変更は行わない。
+
 ## D-104: 販売可能な共通会員境界は既存Service Membershipを拡張する
 
 - 日付: 2026-09-16

@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+AI研修の管理集計の評価自由文除外は`docs/ai-training/AI_TRAINING_ADMIN_EVALUATION_PRIVACY_IMPLEMENTATION_REPORT.md`を参照。評価JSON全体・weaknessesの取得表示を止め、DB認可と許可値だけの射影を使う。個人回答閲覧権限は追加しない。
+
 AI研修の受講者向け終了案内は`docs/ai-training/AI_TRAINING_ENDED_PARTICIPANT_IMPLEMENTATION_REPORT.md`を参照。終了/取消/期限終了を本人限定・読み取り専用で表示し、Runtimeを呼ばない。取消時のToolkit/Export権限は拡張せず、再開は既存管理者操作を使用する。
 
 AI研修の管理者による終了・取消・再開は`docs/ai-training/AI_TRAINING_ENROLLMENT_LIFECYCLE_IMPLEMENTATION_REPORT.md`を参照。確認状態/更新時刻・受講ロック・再送監査で変更し、終了時の評価待ち処理を停止する。再開で契約期間延長や削除データ復元を行わず、本番保持期限処理の停止は維持する。

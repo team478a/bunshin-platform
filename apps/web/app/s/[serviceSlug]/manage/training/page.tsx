@@ -225,20 +225,11 @@ export default async function AiTrainingAdminPage({
             },
             orderBy: [{ programEnrollmentId: 'asc' }, { sequence: 'desc' }],
           }),
-          db.prisma.trainingMissionAnswer.findMany({
-            where: {
-              workspaceId: service.workspaceId,
-              groupId: service.serviceId,
-              programEnrollmentId: { in: enrollmentIds },
-              evaluationStatus: 'READY',
-            },
-            select: {
-              programEnrollmentId: true,
-              evaluation: true,
-              evaluatedAt: true,
-              updatedAt: true,
-            },
-            orderBy: { updatedAt: 'desc' },
+          db.listTrainingAdminEvaluationMetrics({
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            actorUserId: actor.userId,
+            enrollmentIds,
           }),
           db.prisma.trainingToolkitItem.findMany({
             where: {
@@ -358,7 +349,6 @@ export default async function AiTrainingAdminPage({
           profile,
           progress: snapshotByEnrollment.get(enrollment.id) ?? null,
           assignment: assignmentByEnrollment.get(enrollment.id) ?? null,
-          latestEvaluation: answer?.evaluation ?? null,
           evaluationUpdatedAt: answer?.updatedAt ?? null,
           profileUpdatedAt: profile?.updatedAt ?? null,
           workResults: workResultsByEnrollment.get(enrollment.id) ?? [],

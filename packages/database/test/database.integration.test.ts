@@ -1,6 +1,6 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
-import { PrismaTrainingLifecycleRepository } from '../src';
+import { PrismaTrainingLifecycleRepository, listTrainingAdminEvaluationMetrics } from '../src';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   CreateUserWithPersonalWorkspace,
@@ -804,6 +804,77 @@ integration('database ownership boundaries', () => {
       owner.user.id,
       'Pending lifecycle answer',
     );
+    await client.trainingMissionAnswer.update({
+      where: { id: pendingAnswer.id },
+      data: {
+        evaluation: {
+          result: 'PASS',
+          weaknesses: ['PRIVATE_EVALUATION'],
+          strengths: ['PRIVATE_STRENGTH'],
+          skills: {
+            promptStructure: 75,
+            contextSetting: 'PRIVATE_SCORE',
+            constraintSetting: -1,
+            outputControl: 101,
+            businessApplication: { secret: 'PRIVATE_OBJECT' },
+            revisionSkill: 40,
+            unknown: 'PRIVATE_UNKNOWN',
+          },
+        },
+      },
+    });
+    const metricsScope = { ...base, actorUserId: manager.user.id, enrollmentIds: [enrollment.id] };
+    const metrics = await listTrainingAdminEvaluationMetrics(metricsScope, client);
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]?.evaluation).toEqual({
+      result: 'PASS',
+      skills: { promptStructure: 75, revisionSkill: 40 },
+    });
+    expect(JSON.stringify(metrics)).not.toContain('PRIVATE');
+    expect(JSON.stringify(metrics)).not.toContain('Pending lifecycle answer');
+    expect(
+      await listTrainingAdminEvaluationMetrics(
+        { ...metricsScope, actorUserId: owner.user.id },
+        client,
+      ),
+    ).toEqual([]);
+    expect(
+      await listTrainingAdminEvaluationMetrics({ ...metricsScope, groupId: randomUUID() }, client),
+    ).toEqual([]);
+    expect(
+      await listTrainingAdminEvaluationMetrics(
+        { ...metricsScope, workspaceId: other.workspace.id },
+        client,
+      ),
+    ).toEqual([]);
+    expect(
+      await listTrainingAdminEvaluationMetrics({ ...metricsScope, enrollmentIds: [] }, client),
+    ).toEqual([]);
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'CONTENT_EDITOR' },
+    });
+    expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'SERVICE_ADMIN' },
+    });
+    await client.trainingMissionAnswer.update({
+      where: { id: pendingAnswer.id },
+      data: { evaluation: { result: 'PRIVATE_RESULT', skills: ['PRIVATE_SKILL'] } },
+    });
+    expect((await listTrainingAdminEvaluationMetrics(metricsScope, client))[0]?.evaluation).toEqual(
+      { result: null, skills: {} },
+    );
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
     const pendingJob = await client.job.create({
       data: {
         environment: 'DEVELOPMENT',
@@ -822,6 +893,7 @@ integration('database ownership boundaries', () => {
       where: { id: pendingAnswer.id },
       data: { evaluationStatus: 'PENDING' },
     });
+    expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
     expect(await lifecycle.change(lifecycleInput)).toEqual({
       outcome: 'APPLIED',
       status: 'CANCELLED',

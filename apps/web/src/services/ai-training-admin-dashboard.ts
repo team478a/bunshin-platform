@@ -31,7 +31,6 @@ export type AiTrainingAdminParticipantInput = {
     missionDefinitionKey: string;
     displaySnapshot: unknown;
   } | null;
-  latestEvaluation: unknown;
   evaluationUpdatedAt: Date | null;
   profileUpdatedAt: Date | null;
   workResults: Array<'USED_AS_IS' | 'USED_WITH_EDITS' | 'NOT_USED_YET' | 'NOT_APPLICABLE'>;
@@ -100,14 +99,6 @@ function currentMissionTitle(input: AiTrainingAdminParticipantInput): string {
 }
 
 function latestWeakArea(input: AiTrainingAdminParticipantInput): string {
-  const evaluation = objectValue(input.latestEvaluation);
-  const weaknesses = evaluation?.['weaknesses'];
-  if (Array.isArray(weaknesses)) {
-    const first = weaknesses.find(
-      (item): item is string => typeof item === 'string' && item.length > 0,
-    );
-    if (first) return first;
-  }
   if (input.profile?.needsReview || (input.profile?.recentFailures ?? 0) >= 2)
     return '基礎の復習が必要です';
   if (input.progress?.bottleneckKey) return input.progress.bottleneckKey;
