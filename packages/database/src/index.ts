@@ -146,6 +146,10 @@ export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export { PrismaTrainingLifecycleRepository } from './training-enrollment-lifecycle';
 export {
+  listTrainingAdminEvaluationMetrics,
+  type TrainingAdminEvaluationMetric,
+} from './training-admin-evaluation-metrics';
+export {
   getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
   listActiveRewardsPilotServiceAccesses,

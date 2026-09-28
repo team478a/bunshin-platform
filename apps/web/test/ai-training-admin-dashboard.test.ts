@@ -43,9 +43,6 @@ function participant(
       missionDefinitionKey: 'SALES_EMAIL',
       displaySnapshot: { title: '営業メールを作る' },
     },
-    latestEvaluation: {
-      weaknesses: ['出力条件を追加しましょう'],
-    },
     evaluationUpdatedAt: new Date('2026-09-20T00:00:00.000Z'),
     profileUpdatedAt: new Date('2026-09-19T00:00:00.000Z'),
     workResults: [],
@@ -79,7 +76,7 @@ describe('AI training admin dashboard', () => {
       participantName: '山田さん',
       roleLabel: '営業',
       currentMission: '営業メールを作る',
-      weakArea: '出力条件を追加しましょう',
+      weakArea: 'まだ記録がありません',
       engagement: 'ACTIVE',
     });
     expect(JSON.stringify(dashboard)).not.toContain('answer');
@@ -97,6 +94,14 @@ describe('AI training admin dashboard', () => {
       goalReviewBarrierCount: 1,
     });
     expect(JSON.stringify(dashboard)).not.toContain('freeText');
+  });
+
+  it('uses a fixed support label rather than AI evaluation prose', () => {
+    const source = participant();
+    source.profile!.needsReview = true;
+    const dashboard = buildAiTrainingAdminDashboard([source], now);
+    expect(dashboard.participants[0]?.weakArea).toBe('基礎の復習が必要です');
+    expect(JSON.stringify(dashboard)).not.toContain('weaknesses');
   });
 
   it('aggregates work usage without exposing answer content', () => {
@@ -141,7 +146,6 @@ describe('AI training admin dashboard', () => {
         needsReview: true,
         recentFailures: 2,
       },
-      latestEvaluation: null,
     });
     const dashboard = buildAiTrainingAdminDashboard([inactive, review], now);
 
@@ -158,7 +162,10 @@ describe('AI training admin dashboard', () => {
     expect(page.match(/groupId: service\.serviceId/g)?.length).toBeGreaterThanOrEqual(7);
     expect(page).toContain('programEnrollmentId: { in: enrollmentIds }');
     expect(page).toContain("serviceRole: 'PARTICIPANT'");
-    expect(page).toContain('evaluatedAt: true');
+    expect(page).toContain('db.listTrainingAdminEvaluationMetrics({');
+    expect(page).toContain('actorUserId: actor.userId');
+    expect(page).not.toContain('evaluation: true');
+    expect(page).not.toContain('latestEvaluation:');
     expect(page).not.toContain('answer: true');
   });
 
