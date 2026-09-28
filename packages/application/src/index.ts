@@ -80,6 +80,7 @@ export * from './badge-reward';
 export * from './badge-entitlement-consumption';
 export * from './group-knowledge';
 export * from './group-knowledge-extraction-job';
+export * from './training-answer-evaluation-job';
 export * from './badge-reward-operations';
 export * from './service-foundation';
 export * from './service-staff-role';

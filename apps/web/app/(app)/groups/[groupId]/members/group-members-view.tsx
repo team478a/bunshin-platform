@@ -58,6 +58,9 @@ export function GroupMembersView({ model }: { model: GroupMembersPageModel }) {
     pendingMemberships,
     activeMemberships,
     activeOperators,
+    lineReadyCount,
+    lineNeedsAttentionCount,
+    lineStatusByMembershipId,
     onboardingRequired,
     elevated,
     canManageStaff,
@@ -131,6 +134,18 @@ export function GroupMembersView({ model }: { model: GroupMembersPageModel }) {
             <dt>利用できる機能</dt>
             <dd>{group.featurePolicies.length}件</dd>
           </div>
+          {group.serviceConfiguration ? (
+            <>
+              <div>
+                <dt>LINE配信対象</dt>
+                <dd>{lineReadyCount}人</dd>
+              </div>
+              <div>
+                <dt>LINE確認必要</dt>
+                <dd>{lineNeedsAttentionCount}人</dd>
+              </div>
+            </>
+          ) : null}
         </dl>
         <nav aria-label="参加者管理の項目" className="settings-anchor-nav">
           <a href="#member-invitation">1. 招待する</a>
@@ -207,6 +222,9 @@ export function GroupMembersView({ model }: { model: GroupMembersPageModel }) {
                     {group.serviceConfiguration && onboardingRequired
                       ? `・初回設定${membership.serviceOnboardingResponse ? '完了' : '未完了'}`
                       : ''}
+                    {group.serviceConfiguration
+                      ? `・${lineStatusByMembershipId.get(membership.id)?.label ?? 'LINE状態不明'}`
+                      : ''}
                     ）
                   </option>
                 ))}
@@ -229,6 +247,30 @@ export function GroupMembersView({ model }: { model: GroupMembersPageModel }) {
                 <dd>{lastUsedLabel(selectedMember.lastUsedAt)}</dd>
               </div>
             </dl>
+            {group.serviceConfiguration ? (
+              <section className="settings-card settings-card--nested">
+                <h3>LINE配信の状態</h3>
+                {(() => {
+                  const lineStatus = lineStatusByMembershipId.get(selectedMember.id);
+                  return lineStatus ? (
+                    <>
+                      <p
+                        className={`notice ${lineStatus.ready ? 'notice--success' : 'notice--danger'}`}
+                        role="status"
+                      >
+                        <strong>{lineStatus.label}</strong>
+                      </p>
+                      <p>{lineStatus.description}</p>
+                      {query.service ? (
+                        <a href={`/s/${query.service}/manage/line`}>公式LINEの設定を確認する</a>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p>LINEの状態を確認できませんでした。</p>
+                  );
+                })()}
+              </section>
+            ) : null}
             {group.serviceConfiguration ? (
               <section className="settings-card settings-card--nested">
                 <h3>初回設定の状況</h3>

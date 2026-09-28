@@ -2864,3 +2864,58 @@
 - OEM支援候補由来のBroadcastだけを識別し、CandidateがOPEN、LINE通知が有効、受信者がACTIVEなService Owner / Admin、個別同意が有効であることを再確認する。
 - 資格を失った宛先はProviderへ渡さず`SKIPPED / NOTIFICATION_NO_LONGER_ELIGIBLE`とし、対象がゼロならBroadcastを正常終了させる。
 - 一般のService Broadcastにはこの追加判定を適用せず、既存配信仕様を維持する。
+
+## D-123: Production Gateは自社限定の条件付き運用で検証する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 最新mainの自動Gate、Production Deployment、health / readiness、branch protectionが成功していることを前提に、自社管理アカウントだけでProduction運用を開始できる。
+- backup / restore、実端末、外部Provider、法務・運用の未完了項目は免除せず、運用中に対象commit、日時、担当者、結果を証跡として収集する。
+- 未検証Providerは必要になるまで無効とし、有効化時に疎通、失敗記録、費用上限を確認する。
+- データ境界違反、復旧不能、重大な認証障害が発生した場合は対象機能または運用を停止する。
+- この判断は一般公開、外部顧客向け販売、無人運用のGOを意味しない。それらは未完了Gateの完了後に再判定する。
+
+## D-124: AI研修のBarrierは構造化EventとAssignment Variantで扱う
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 進めにくい理由は `BUSY / TOO_DIFFICULT / NOT_RELEVANT / DONT_KNOW_HOW / LOW_VALUE / OTHER` の選択式とし、自由記述や回答本文をBarrier Eventへ保存しない。
+- `BUSY` は1分版、`TOO_DIFFICULT / DONT_KNOW_HOW` はやさしい1分版、`NOT_RELEVANT / LOW_VALUE` は学習目標の見直しへ決定的に分岐する。
+- 1分版は新しいMissionを生成せず、現在のAssignmentのVariantとして保存する。学習目的を維持し、成功条件と評価条件を1項目へ縮小する。
+- 通常版の内容をAssignment Snapshot内に保持し、本人が回答前に通常版へ戻せるようにする。回答提出後のVariant変更は許可しない。
+- Practice / Workは表示上明示し、FOUNDATION完了後かつ実務利用実績がある場合だけWorkとする。
+- AI ProviderへMission選定、Barrier分岐、学習目的、評価条件の決定を委ねない。
+
+## D-125: AI研修の回答評価は共通Job基盤で非同期実行する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 回答保存APIは回答を保存した後、回答IDだけを参照する `TRAINING_ANSWER_EVALUATE` Jobを冪等投入する。回答本文をJob payloadへ複製しない。
+- Workerは実行直前にWorkspace、Service、Participant、Enrollment、AI研修Program、Answerの境界と有効状態を再検証する。
+- Provider障害は共通Job基盤の指数バックオフで最大3回まで再試行し、全試行失敗時だけAnswerを `FAILED` にする。
+- Provider試行ごとにmodel、Prompt Version、usage、原価、処理時間、成否を別のAI Usage Eventとして記録する。
+- 評価とMission、Profile、Progress、監査Eventの更新は同じDB transactionで確定し、部分的な進捗更新を残さない。
+- 受講画面は30秒まで状態を確認するが、画面を閉じてもJobは継続する。`FAILED` は保存済み回答から本人が明示的に再投入できる。
+
+## D-126: AI研修の評価運用はService単位の集計指標で観測する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 自社Pilotで非同期評価を運用検証できるよう、直近7日間の評価Job成功率、再試行、最終失敗、本人再投入、平均完了時間をService管理画面へ表示する。
+- 現在の処理中Job、最古の待機時間、`PENDING` / `FAILED` 回答数も表示し、回復が必要な滞留を確認可能にする。
+- 集計はWorkspace、Service、AI研修Enrollmentの境界内に限定し、回答本文、評価本文、参加者別の失敗情報、Provider responseは取得・表示しない。
+- 固定の自動警報閾値はPilot観測前に決めず、まず実測値を収集する。閾値と通知経路は運用データに基づく後続判断とする。
+
+## D-127: 参加者別LINE診断は配信資格の分類だけを表示する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- サービス管理者の参加者画面では、現在環境の配信設定と既存配信処理が使う参加状態、サービス同意、アカウント状態、接続状態、通知同意、友だち状態を基に配信可否を判定する。
+- Provider User ID、Channel Secret、Access Tokenなどの外部識別子・秘密値は取得・表示しない。管理者には復旧に必要な分類と案内だけを示す。
+- 診断画面から同意、友だち状態、接続状態を自動変更しない。サービス設定の問題は既存LINE設定画面、参加者固有の問題は本人への接続案内で解消する。
+- 診断は読み取り専用とし、画面表示時に外部Providerへの追加問い合わせを行わない。

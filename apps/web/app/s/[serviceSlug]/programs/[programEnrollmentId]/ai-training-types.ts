@@ -6,12 +6,13 @@ import type {
   TrainingUseCaseKey,
   TrainingDeviceType,
   TrainingWorkResult,
+  TrainingBarrierReason,
 } from '@bunshin/capability-training';
 
 export type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
 export type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
 export type TrainingInteractionType = 'HINT_VIEWED' | 'HELP_REQUESTED' | 'TRAINING_POSTPONED';
-export type { TrainingDeviceType, TrainingWorkResult };
+export type { TrainingBarrierReason, TrainingDeviceType, TrainingWorkResult };
 
 export type TrainingParticipantState = {
   enrollmentId: string;
@@ -62,6 +63,10 @@ export type TrainingParticipantState = {
       personalizationVersion?: string | undefined;
       personalizationStatus?: 'PERSONALIZED' | 'FIXED_FALLBACK' | undefined;
       practiceMode?: 'PRACTICE' | 'WORK' | undefined;
+      missionVariant?: 'STANDARD' | 'SHORT' | undefined;
+      barrierReason?: TrainingBarrierReason | undefined;
+      barrierGuidance?: string | undefined;
+      goalReviewRecommended?: boolean | undefined;
     };
     reevaluateAt: string | null;
     submission: {

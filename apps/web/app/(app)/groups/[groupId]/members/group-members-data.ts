@@ -1,7 +1,9 @@
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { currentLineEnvironment } from '../../../../../src/line/secure-configuration';
 import { readServiceOnboardingSettings } from '../../../../../src/services/service-onboarding-settings';
+import { resolveGroupMemberLineStatus } from './group-member-line-status';
 
 export type GroupMembersSearchParams = {
   member?: string;
@@ -25,6 +27,7 @@ export async function loadGroupMembersPage({
   const groupId = z.uuid().safeParse(rawGroupId);
   if (!groupId.success) notFound();
   const db = await import('@bunshin/database');
+  const lineEnvironment = currentLineEnvironment();
   const now = new Date();
   const localDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
   const localMonth = localDate.slice(0, 7);
@@ -68,6 +71,22 @@ export async function loadGroupMembersPage({
       workspaceId: true,
       name: true,
       serviceConfiguration: { select: { id: true } },
+      lineRoutingPolicies: {
+        where: { environment: lineEnvironment },
+        select: { mode: true, pilotEnabled: true },
+        take: 1,
+      },
+      lineChannelConfigurations: {
+        where: { environment: lineEnvironment, status: 'ACTIVE' },
+        select: {
+          id: true,
+          globallyPaused: true,
+          lastVerifiedAt: true,
+          lastErrorCategory: true,
+        },
+        orderBy: { version: 'desc' },
+        take: 1,
+      },
       serviceRegistrationPolicy: { select: { onboardingConfig: true, surveyConfig: true } },
       workspace: { select: { name: true } },
       memberships: {
@@ -78,7 +97,31 @@ export async function loadGroupMembersPage({
           status: true,
           consentedAt: true,
           lastUsedAt: true,
-          user: { select: { displayName: true, email: true } },
+          user: {
+            select: {
+              displayName: true,
+              email: true,
+              status: true,
+              lineConnections: {
+                where: { environment: lineEnvironment },
+                select: {
+                  status: true,
+                  friendshipStatus: true,
+                  notificationConsentAt: true,
+                },
+                take: 1,
+              },
+            },
+          },
+          lineConnections: {
+            where: { configuration: { environment: lineEnvironment, status: 'ACTIVE' } },
+            select: {
+              configurationId: true,
+              status: true,
+              friendshipStatus: true,
+              notificationConsentAt: true,
+            },
+          },
           serviceMemberBusinessProfile: { select: { businessName: true } },
           serviceOnboardingResponse: { select: { completedAt: true } },
           featureAssignments: true,
@@ -121,6 +164,51 @@ export async function loadGroupMembersPage({
     group.serviceRegistrationPolicy?.surveyConfig,
   );
   const onboardingRequired = onboardingSettings.questions.length > 0;
+  const lineRouting = group.lineRoutingPolicies[0];
+  const lineMode = lineRouting?.mode ?? 'SHARED';
+  const lineConfiguration = group.lineChannelConfigurations[0];
+  const sharedLineConfiguration =
+    lineMode === 'SHARED'
+      ? await db.prisma.lineChannelConfiguration.findFirst({
+          where: {
+            environment: lineEnvironment,
+            status: 'ACTIVE',
+            lastVerifiedAt: { not: null },
+            lastErrorCategory: null,
+          },
+          select: { globallyPaused: true },
+          orderBy: { version: 'desc' },
+        })
+      : null;
+  const lineStatusByMembershipId = new Map(
+    group.memberships.map((membership) => {
+      const connection =
+        lineMode === 'DEDICATED'
+          ? (membership.lineConnections.find(
+              (item) => item.configurationId === lineConfiguration?.id,
+            ) ?? null)
+          : (membership.user.lineConnections[0] ?? null);
+      return [
+        membership.id,
+        resolveGroupMemberLineStatus({
+          membershipStatus: membership.status,
+          membershipConsentedAt: membership.consentedAt,
+          userStatus: membership.user.status,
+          mode: lineMode,
+          dedicatedPilotEnabled: lineRouting?.pilotEnabled ?? false,
+          configurationReady:
+            lineMode === 'DEDICATED'
+              ? Boolean(lineConfiguration?.lastVerifiedAt && !lineConfiguration.lastErrorCategory)
+              : Boolean(sharedLineConfiguration),
+          globallyPaused:
+            lineMode === 'DEDICATED'
+              ? Boolean(lineConfiguration?.globallyPaused)
+              : Boolean(sharedLineConfiguration?.globallyPaused),
+          connection,
+        }),
+      ] as const;
+    }),
+  );
   const selectedMember =
     group.memberships.find(
       (item) => item.id === query.member && item.status !== 'PENDING_APPROVAL',
@@ -139,6 +227,9 @@ export async function loadGroupMembersPage({
   const rewardsPilotCount = activeMemberships.filter(
     (membership) => membership.serviceRole === 'PARTICIPANT' && membership.consentedAt,
   ).length;
+  const lineReadyCount = activeMemberships.filter(
+    (membership) => lineStatusByMembershipId.get(membership.id)?.ready,
+  ).length;
   const assignments = new Map(
     (selectedMember?.featureAssignments ?? []).map((item) => [item.featureKey, item]),
   );
@@ -153,6 +244,9 @@ export async function loadGroupMembersPage({
     pendingMemberships,
     activeMemberships,
     activeOperators,
+    lineReadyCount,
+    lineNeedsAttentionCount: activeMemberships.length - lineReadyCount,
+    lineStatusByMembershipId,
     rewardsPilotCount,
     assignments,
     selectedUsage,

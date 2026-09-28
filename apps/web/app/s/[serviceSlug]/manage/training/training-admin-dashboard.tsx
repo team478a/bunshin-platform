@@ -2,6 +2,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { parseAiTrainingOperationsSettings } from '@bunshin/capability-training';
 import type { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
+import type { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import type { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { PublicShell } from '../../../../ui/public-shell';
 
@@ -31,6 +32,7 @@ type TrainingAdminDashboardProps = {
   programs: Array<{ id: string; displayName: string; settings: TrainingOperationsSettingsSource }>;
   dashboard: ReturnType<typeof buildAiTrainingAdminDashboard>;
   analytics: ReturnType<typeof buildAiTrainingPilotAnalytics>;
+  evaluationOperations: ReturnType<typeof buildAiTrainingEvaluationOperations>;
   helpRequests: Array<{ id: string; participantName: string; occurredAt: Date }>;
   updateTrainingOperations: (formData: FormData) => Promise<void>;
   resolveTrainingHelp: (formData: FormData) => Promise<void>;
@@ -41,6 +43,7 @@ export function TrainingAdminDashboard({
   programs,
   dashboard,
   analytics,
+  evaluationOperations,
   helpRequests,
   updateTrainingOperations,
   resolveTrainingHelp,
@@ -92,6 +95,14 @@ export function TrainingAdminDashboard({
                   <strong>{dashboard.totals.usedAsIs + dashboard.totals.usedWithEdits}</strong>
                   <span>実務で利用</span>
                 </article>
+                <article>
+                  <strong>{dashboard.totals.barrierCount}</strong>
+                  <span>進めにくさ</span>
+                </article>
+                <article>
+                  <strong>{dashboard.totals.shortMissionCount}</strong>
+                  <span>1分版へ調整</span>
+                </article>
               </div>
               <p>
                 登録者 {dashboard.totals.participants}人のうち、受講中は
@@ -102,6 +113,11 @@ export function TrainingAdminDashboard({
                 実務利用の回答 {dashboard.totals.workResultCount}件（そのまま利用{' '}
                 {dashboard.totals.usedAsIs}、修正して利用 {dashboard.totals.usedWithEdits}、未利用{' '}
                 {dashboard.totals.notUsedYet}、対象外 {dashboard.totals.notApplicable}）
+              </p>
+              <p>
+                進めにくさの記録 {dashboard.totals.barrierCount}件（1分版へ調整{' '}
+                {dashboard.totals.shortMissionCount}、目標見直しを案内{' '}
+                {dashboard.totals.goalReviewBarrierCount}）
               </p>
             </section>
 
@@ -262,6 +278,61 @@ export function TrainingAdminDashboard({
                   <strong>{analytics.toolkitSavePercent}%</strong>
                   <span>Toolkit保存</span>
                   <small>{analytics.toolkitSavedParticipants}人が保存</small>
+                </article>
+              </div>
+            </section>
+
+            <section className="settings-card training-admin__analytics">
+              <h2>AI評価の稼働状況</h2>
+              <p>
+                個別の回答本文は表示せず、直近{evaluationOperations.periodDays}
+                日間の評価Jobと現在の未解決件数だけを集計しています。
+              </p>
+              <div className="training-analytics-grid">
+                <article>
+                  <strong>
+                    {evaluationOperations.successPercent === null
+                      ? '—'
+                      : `${evaluationOperations.successPercent}%`}
+                  </strong>
+                  <span>評価成功率</span>
+                  <small>
+                    成功 {evaluationOperations.succeeded}件 / 最終失敗 {evaluationOperations.dead}件
+                  </small>
+                </article>
+                <article>
+                  <strong>{evaluationOperations.retried}</strong>
+                  <span>再試行が発生</span>
+                  <small>{evaluationOperations.requested}件の評価依頼を観測</small>
+                </article>
+                <article>
+                  <strong>{evaluationOperations.reEnqueued}</strong>
+                  <span>本人が再投入</span>
+                  <small>最終失敗後にもう一度試した件数</small>
+                </article>
+                <article>
+                  <strong>
+                    {evaluationOperations.averageCompletionSeconds === null
+                      ? '—'
+                      : `${evaluationOperations.averageCompletionSeconds}秒`}
+                  </strong>
+                  <span>平均完了時間</span>
+                  <small>成功した評価の投入から完了まで</small>
+                </article>
+                <article>
+                  <strong>{evaluationOperations.activeJobs}</strong>
+                  <span>処理中のJob</span>
+                  <small>
+                    最古の待機{' '}
+                    {evaluationOperations.oldestActiveMinutes === null
+                      ? 'なし'
+                      : `${evaluationOperations.oldestActiveMinutes}分`}
+                  </small>
+                </article>
+                <article>
+                  <strong>{evaluationOperations.failedAnswers}</strong>
+                  <span>再実行待ちの回答</span>
+                  <small>PENDING {evaluationOperations.pendingAnswers}件</small>
                 </article>
               </div>
             </section>

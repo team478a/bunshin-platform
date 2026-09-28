@@ -18,6 +18,7 @@ import type {
   TrainingRole,
   TrainingDeviceType,
   TrainingWorkResult,
+  TrainingBarrierReason,
 } from './ai-training-types';
 
 export type { TrainingParticipantState } from './ai-training-types';
@@ -68,6 +69,8 @@ export function AiTrainingCard({
   const [helpVisible, setHelpVisible] = useState(false);
   const [postponed, setPostponed] = useState(false);
   const [interactionSaving, setInteractionSaving] = useState<TrainingInteractionType | null>(null);
+  const [barrierSaving, setBarrierSaving] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toolkitSaving, setToolkitSaving] = useState(false);
   const [toolkitSaved, setToolkitSaved] = useState(false);
@@ -81,6 +84,7 @@ export function AiTrainingCard({
   const interactionKeys = useRef<Partial<Record<TrainingInteractionType, string>>>({});
   const toolkitKey = useRef<string | null>(null);
   const workResultKey = useRef<string | null>(null);
+  const barrierKeys = useRef<Record<string, string>>({});
   const action = state.action;
 
   const endpoint = `/api/services/${encodeURIComponent(serviceSlug)}/ai-training/enrollments/${state.enrollmentId}`;
@@ -128,6 +132,7 @@ export function AiTrainingCard({
         }),
       )) as { state: TrainingParticipantState };
       setState(data.state);
+      setEditingProfile(false);
       profileKey.current = null;
       setMessage('設定を保存し、あなたに合う最初の課題を用意しました。');
     } catch (cause) {
@@ -139,16 +144,46 @@ export function AiTrainingCard({
 
   async function evaluateAnswer(answerId: string) {
     evaluationKey.current ??= crypto.randomUUID();
-    const data = (await readPayload(
+    const queued = (await readPayload(
       await fetch(`${endpoint}/answers/${answerId}/evaluate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ idempotencyKey: evaluationKey.current }),
       }),
-    )) as { evaluation: Evaluation };
-    setEvaluation(data.evaluation);
+    )) as { status: 'PENDING' | 'READY'; evaluation?: Evaluation };
     evaluationKey.current = null;
-    setMessage('回答を確認しました。結果を見て、次へ進んでください。');
+    if (queued.status === 'READY' && queued.evaluation) {
+      setEvaluation(queued.evaluation);
+      setMessage('回答を確認しました。結果を見て、次へ進んでください。');
+      return;
+    }
+    setMessage('AIが回答を確認しています。このまま少しお待ちください。');
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      const status = (await readPayload(
+        await fetch(`${endpoint}/answers/${answerId}/evaluate`, { cache: 'no-store' }),
+      )) as { status: 'PENDING' | 'READY' | 'FAILED'; evaluation?: Evaluation };
+      if (status.status === 'READY' && status.evaluation) {
+        setEvaluation(status.evaluation);
+        setMessage('回答を確認しました。結果を見て、次へ進んでください。');
+        return;
+      }
+      if (status.status === 'FAILED') {
+        setState((current) =>
+          current.action
+            ? {
+                ...current,
+                action: {
+                  ...current.action,
+                  submission: { answerId, evaluationStatus: 'FAILED' },
+                },
+              }
+            : current,
+        );
+        throw new Error('AI評価を完了できませんでした。もう一度試すことができます。');
+      }
+    }
+    setMessage('AI評価を続けています。後でこの画面から状況を確認できます。');
   }
 
   async function submitAnswer(event?: FormEvent<HTMLFormElement>) {
@@ -220,6 +255,41 @@ export function AiTrainingCard({
     }
   }
 
+  async function adjustMission(
+    adjustment: { type: 'BARRIER'; reason: TrainingBarrierReason } | { type: 'RESTORE_STANDARD' },
+  ) {
+    if (!action || action.mode !== 'WORK' || action.submission) return;
+    setBarrierSaving(true);
+    setError('');
+    const key = adjustment.type === 'BARRIER' ? adjustment.reason : adjustment.type;
+    barrierKeys.current[key] ??= crypto.randomUUID();
+    try {
+      const data = (await readPayload(
+        await fetch(`${endpoint}/barriers`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            missionAssignmentId: action.id,
+            action: adjustment,
+            idempotencyKey: barrierKeys.current[key],
+          }),
+        }),
+      )) as { display: NonNullable<TrainingParticipantState['action']>['display'] };
+      delete barrierKeys.current[key];
+      setState({ ...state, action: { ...action, status: 'STARTED', display: data.display } });
+      setMessage(
+        adjustment.type === 'RESTORE_STANDARD'
+          ? '通常版に戻しました。'
+          : '選んだ理由に合わせて課題を調整しました。',
+      );
+    } catch (cause) {
+      delete barrierKeys.current[key];
+      setError(cause instanceof Error ? cause.message : '課題を調整できませんでした。');
+    } finally {
+      setBarrierSaving(false);
+    }
+  }
+
   async function saveToToolkit() {
     const answerId = state.action?.submission?.answerId;
     if (!answerId || evaluation?.result !== 'PASS') return;
@@ -287,6 +357,7 @@ export function AiTrainingCard({
       setWorkResult(null);
       workResultKey.current = null;
       interactionKeys.current = {};
+      barrierKeys.current = {};
       setMessage('次の課題を表示しました。');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '次の課題を取得できませんでした。');
@@ -305,7 +376,7 @@ export function AiTrainingCard({
     );
   }
 
-  if (!state.profile || state.profile.workContextComplete === false) {
+  if (!state.profile || state.profile.workContextComplete === false || editingProfile) {
     return (
       <AiTrainingSetupCard
         setupStep={setupStep}
@@ -382,10 +453,16 @@ export function AiTrainingCard({
       postponed={postponed}
       setPostponed={setPostponed}
       interactionSaving={interactionSaving}
+      barrierSaving={barrierSaving}
       saving={saving}
       message={message}
       error={error}
       recordInteraction={recordInteraction}
+      adjustMission={adjustMission}
+      editGoal={() => {
+        setSetupStep(1);
+        setEditingProfile(true);
+      }}
       submitAnswer={submitAnswer}
     />
   );
