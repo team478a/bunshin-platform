@@ -6,6 +6,7 @@ import {
 } from '@bunshin/capability-training';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
+import { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 import { TrainingAdminDashboard } from './training-admin-dashboard';
@@ -147,6 +148,7 @@ export default async function AiTrainingAdminPage({
         });
   const enrollmentIds = enrollments.map(({ id }) => id);
   const membershipIds = enrollments.map(({ groupMembershipId }) => groupMembershipId);
+  const evaluationPeriodStart = new Date(Date.now() - 7 * 86_400_000);
   const [
     memberships,
     profiles,
@@ -156,9 +158,11 @@ export default async function AiTrainingAdminPage({
     toolkitItems,
     workResultEvents,
     barrierEvents,
+    evaluationJobs,
+    evaluationAnswerStatuses,
   ] =
     enrollmentIds.length === 0
-      ? [[], [], [], [], [], [], [], []]
+      ? [[], [], [], [], [], [], [], [], [], []]
       : await Promise.all([
           db.prisma.groupMembership.findMany({
             where: {
@@ -259,6 +263,32 @@ export default async function AiTrainingAdminPage({
             },
             select: { programEnrollmentId: true, metadata: true },
           }),
+          db.prisma.job.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              jobType: 'TRAINING_ANSWER_EVALUATE',
+              payloadReference: { startsWith: `training-evaluation:${service.serviceId}:` },
+              OR: [
+                { createdAt: { gte: evaluationPeriodStart } },
+                { status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] } },
+              ],
+            },
+            select: {
+              status: true,
+              attemptCount: true,
+              idempotencyKey: true,
+              createdAt: true,
+              completedAt: true,
+            },
+          }),
+          db.prisma.trainingMissionAnswer.findMany({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              programEnrollmentId: { in: enrollmentIds },
+            },
+            select: { evaluationStatus: true },
+          }),
         ]);
   const programById = new Map(programs.map((item) => [item.id, item]));
   const membershipById = new Map(memberships.map((item) => [item.id, item]));
@@ -349,6 +379,11 @@ export default async function AiTrainingAdminPage({
     })),
     toolkitEnrollmentIds: toolkitItems.map(({ programEnrollmentId }) => programEnrollmentId),
   });
+  const evaluationOperations = buildAiTrainingEvaluationOperations({
+    jobs: evaluationJobs,
+    answerStatuses: evaluationAnswerStatuses.map(({ evaluationStatus }) => evaluationStatus),
+    now: new Date(),
+  });
   const helpEvents =
     enrollmentIds.length === 0
       ? []
@@ -393,6 +428,7 @@ export default async function AiTrainingAdminPage({
       programs={programs}
       dashboard={dashboard}
       analytics={analytics}
+      evaluationOperations={evaluationOperations}
       helpRequests={helpRequests}
       updateTrainingOperations={updateTrainingOperations}
       resolveTrainingHelp={resolveTrainingHelp}

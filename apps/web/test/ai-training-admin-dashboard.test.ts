@@ -171,4 +171,18 @@ describe('AI training admin dashboard', () => {
     expect(page).toContain('Skill改善');
     expect(page).toContain('Toolkit保存');
   });
+
+  it('shows scoped evaluation operations without exposing answer content', () => {
+    expect(page).toContain("jobType: 'TRAINING_ANSWER_EVALUATE'");
+    expect(page).toContain(
+      'payloadReference: { startsWith: `training-evaluation:${service.serviceId}:` }',
+    );
+    expect(page).toContain("status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] }");
+    expect(page).toContain('AI評価の稼働状況');
+    expect(page).toContain('評価成功率');
+    expect(page).toContain('再試行が発生');
+    expect(page).toContain('本人が再投入');
+    expect(page).toContain('再実行待ちの回答');
+    expect(page).not.toContain('select: { answer: true }');
+  });
 });
