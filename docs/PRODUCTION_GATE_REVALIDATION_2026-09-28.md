@@ -16,16 +16,17 @@
 
 ## 2. 確認できた証跡
 
-| 対象                   | 証跡                                                                                                                                                                             | 結果                         |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| main CI                | runs [36352543330](https://github.com/team478a/bunshin-platform/actions/runs/36352543330) / [36352723888](https://github.com/team478a/bunshin-platform/actions/runs/36352723888) | `verify` / `database`成功    |
-| release PR             | [#976](https://github.com/team478a/bunshin-platform/pull/976) `main` → `production`                                                                                              | merge済み                    |
-| production commit      | `7e0d0217`                                                                                                                                                                       | `ec30c9a5`を親に含む         |
-| Vercel Production      | [Deployment URL](https://bunshin-platform-pmq0q3ixx-team478as-projects.vercel.app) / GitHub Deployment `6698418895`                                                              | success                      |
-| manual health smoke    | run [36353422831](https://github.com/team478a/bunshin-platform/actions/runs/36353422831)                                                                                         | live / readiness成功         |
-| scheduled health smoke | run [36354229640](https://github.com/team478a/bunshin-platform/actions/runs/36354229640)                                                                                         | success                      |
-| 直接実査               | `www.watashi-works.com`                                                                                                                                                          | live `ok`、readiness `ready` |
-| readiness checks       | configuration / authentication / database / databaseSchema                                                                                                                       | すべて`ok` / `current`       |
+| 対象                         | 証跡                                                                                                                                                                             | 結果                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| main CI                      | runs [36352543330](https://github.com/team478a/bunshin-platform/actions/runs/36352543330) / [36352723888](https://github.com/team478a/bunshin-platform/actions/runs/36352723888) | `verify` / `database`成功                             |
+| release PR                   | [#976](https://github.com/team478a/bunshin-platform/pull/976) `main` → `production`                                                                                              | merge済み                                             |
+| production commit            | `7e0d0217`                                                                                                                                                                       | `ec30c9a5`を親に含む                                  |
+| Vercel Production            | [Deployment URL](https://bunshin-platform-pmq0q3ixx-team478as-projects.vercel.app) / GitHub Deployment `6698418895`                                                              | success                                               |
+| manual health smoke          | run [36353422831](https://github.com/team478a/bunshin-platform/actions/runs/36353422831)                                                                                         | live / readiness成功                                  |
+| scheduled health smoke       | run [36354229640](https://github.com/team478a/bunshin-platform/actions/runs/36354229640)                                                                                         | success                                               |
+| 直接実査                     | `www.watashi-works.com`                                                                                                                                                          | live `ok`、readiness `ready`                          |
+| readiness checks             | configuration / authentication / database / databaseSchema                                                                                                                       | すべて`ok` / `current`                                |
+| production branch protection | GitHub branch protection API                                                                                                                                                     | PR必須、承認0件、`verify` / `database`必須、admin適用 |
 
 Secret値、個人情報、接続文字列は取得・記録していない。
 
@@ -46,11 +47,11 @@ Secret値、個人情報、接続文字列は取得・記録していない。
 3. Preview / Developmentではmigrationを実行しない。
 4. GitHub Environmentに残るDB Secret名は、現行Vercel release経路の接続情報として扱わない。
 5. 自動Gate成功だけでProduction全体をGOにしない。
+6. `production`はPR経由を必須とする。共同編集者が1名のため承認数は0件とし、strictな`verify` / `database`、会話解決、管理者適用、force push / branch削除禁止で保護する。第二レビュアー追加時に承認数1件を再評価する。
 
 ## 5. 未解決事項
 
-- `production` branchにGitHub branch protectionが設定されていない。
-- PR #976にはGitHub review記録がない。
+- PR #976にはGitHub review記録がない。2026-09-28に追加したbranch protectionは以後のrelease PRへ適用される。
 - Supabase backup保持期間とrestore rehearsalの最新記録がない。
 - Vercel Production build logの保存先・保持期間が運用文書にない。
 - Production Magic Link、LINE、AI Provider、Stripe、実端末の最新受け入れ記録がない。
@@ -58,8 +59,7 @@ Secret値、個人情報、接続文字列は取得・記録していない。
 
 ## 6. 次へ進める条件
 
-1. `production` branchへ直接push禁止、required CI、会話解決、必要なレビューを設定する。
-2. backup / restore、接続種別、build log保持を運用担当者が確認する。
-3. `FREE_MVP_SMOKE_TEST.md`に従い、実アカウント・実端末の受け入れを記録する。
-4. LINE、AI、Stripeは各Go / No-Goを個別に実施し、未使用Providerは無理に有効化しない。
-5. 人間によるsecurity / privacy / legal review完了後にのみGOへ変更する。
+1. backup / restore、接続種別、build log保持を運用担当者が確認する。
+2. `FREE_MVP_SMOKE_TEST.md`に従い、実アカウント・実端末の受け入れを記録する。
+3. LINE、AI、Stripeは各Go / No-Goを個別に実施し、未使用Providerは無理に有効化しない。
+4. 人間によるsecurity / privacy / legal review完了後にのみGOへ変更する。

@@ -28,6 +28,7 @@ Phase 0〜5のコードは完了している。本番利用開始には、以下
 
 - [x] `main`のCI `verify` / `database`が成功している
 - [x] main branch protectionで両checkをrequiredにした
+- [x] production branch protectionでPR経由、両check、会話解決をrequiredにし、管理者へ適用した（承認0件。第二レビュアー追加時に再評価）
 - [x] Vercel Production deploymentが成功している
 - [x] 空PostgreSQLへの全migration適用が成功している
 - [x] dependency auditの重大問題を確認した（2026-08-22、既知の脆弱性0件）
