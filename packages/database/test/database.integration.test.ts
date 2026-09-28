@@ -270,8 +270,10 @@ integration('database ownership boundaries', () => {
         expect(row.cardCode).toBe('THE_FOOL');
         expect(row.failureCode).toBe(state === 'stale' ? 'AI_GENERATION_INTERRUPTED' : null);
       }
+      const recoveredId = readingIds[0];
+      if (!recoveredId) throw new Error('fortune recovery fixture was not created');
       const lateCompletion = await client.fortuneReading.updateMany({
-        where: { id: readingIds[0], status: 'GENERATING' },
+        where: { id: recoveredId, status: 'GENERATING' },
         data: { status: 'READY_AI', readingText: 'Late AI result' },
       });
       expect(lateCompletion.count).toBe(0);
