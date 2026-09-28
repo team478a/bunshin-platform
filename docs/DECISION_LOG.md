@@ -2990,3 +2990,15 @@
 - Cron Secretによる認証を必須とし、Workspace/Groupを明示したPOSTだけで集計する。AI研修Programと同一Scopeの参加者所有境界を再検証する。最大100 Enrollment、1000 Programを超えた場合は部分成功を返さない。
 - 本文、評価、仕事情報、点数、Toolkit本文は取得せず、件数だけを返す。明示保存Toolkitは対象から除外する。Backup/Provider/端末Export、契約・費用・監査の消去を保証しない。
 - 実削除は別PRで、終了日時の確定方法、評価Jobとの競合防止、保存Toolkit維持、監査、停止条件を実装・確認してから接続する。本Preflightを自動削除の稼働済み証拠にしない。
+
+## D-134: AI研修の期限処理は終了記録・確認Revision・受講排他を用い、本番では停止する
+
+- 日付: 2026-09-28
+- 状態: Accepted（D-131、D-133の後続実装）
+
+- AI研修専用のRetention Stateを追加する。今後の受講状態の終了への変更時にDBで終了日を記録し、再開時は終了日と期限処理済み印をリセットする。過去の完了/取消日時はMigrationで推測・補完しない。EXPIREDの確定した過去endsAtは既存方針通り利用できる。
+- 回答90日で本文・評価・回答由来Eventを削除し、未完了課題と評価Jobを停止する。本人が明示保存したToolkitとその保存Eventは保持する。元の回答がなくてもToolkitは読める。
+- 終了90日で仕事Profileの職種・仕事Context・用途・課題・希望Topic、目標Snapshot・自由文・課題表示Snapshot・活動metadataを消去する。集計点数・進捗は1年まで保持する。契約Snapshotと監査の存在は保持し、参加監査のgoalSnapshotだけを除去する。
+- 終了1年でProfile・進捗・課題・目標・Preference・活動履歴を削除する。Toolkit本体は削除しない。新しい回答は自分の90日期限まで保持し、遅延評価は終了状態を再確認して確定しない。
+- SUPER_ADMIN本人・same-origin POST・明示Scope・確認文字列・対象Revisionを必須とする。DBでも管理者と所有境界を検証する。対象一覧は2000件を上限にし、確認後の変更は409、超過は413で拒否する。実行と既存Training書込は同じEnrollmentロックを取る。再送は確認Revision監査により冪等にする。
+- HTTP実行はdevelopment/stagingだけ許可し、production/その他は停止する。Cron登録、Provider呼出、LINE送信、本番有効化、過去行の一括消去は含めない。本番有効化には別途対象確認・停止/復旧手順・運営承認が必要。

@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { trainingAnswerRetentionCutoff, trainingEndRetentionEligibility } from '../src';
+import {
+  trainingAnswerRetentionCutoff,
+  trainingEndRetentionEligibility,
+  trainingRetentionEndDate,
+} from '../src';
 
 describe('training retention policy', () => {
+  it('uses the recorded actual end for completed and cancelled training, never a planned date', () => {
+    const endsAt = new Date('2027-01-01');
+    const recordedEnd = new Date('2026-09-28');
+    expect(trainingRetentionEndDate({ status: 'COMPLETED', endsAt, recordedEnd })).toBe(
+      recordedEnd,
+    );
+    expect(trainingRetentionEndDate({ status: 'CANCELLED', endsAt, recordedEnd: null })).toBeNull();
+  });
+  it('ignores stale end records while training is active', () => {
+    expect(
+      trainingRetentionEndDate({
+        status: 'ACTIVE',
+        endsAt: new Date('2025-01-01'),
+        recordedEnd: new Date('2025-01-01'),
+      }),
+    ).toBeNull();
+  });
   it('uses an exact 90-day answer cutoff without changing the supplied clock', () => {
     const now = new Date('2026-09-28T12:34:56.789Z');
     expect(trainingAnswerRetentionCutoff(now).toISOString()).toBe('2026-06-30T12:34:56.789Z');

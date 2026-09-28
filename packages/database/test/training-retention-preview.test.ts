@@ -10,6 +10,7 @@ function fixture() {
     endsAt: new Date('2025-09-28T00:00:00Z'),
   };
   const tx = {
+    trainingDataRetentionState: { findFirst: vi.fn().mockResolvedValue(null) },
     serviceProgram: { findMany: vi.fn().mockResolvedValue([{ id: 'program' }]) },
     programEnrollment: { findMany: vi.fn().mockResolvedValue([enrollment]) },
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ userId: 'user' }) },

@@ -4,6 +4,8 @@
 
 ## マルチサービス化
 
+AI研修の期限処理は`docs/ai-training/AI_TRAINING_RETENTION_EXECUTION_IMPLEMENTATION_REPORT.md`を参照。終了状態への将来の変更を記録し、確認Revision付きの回答90日・仕事情報終了90日・進捗終了1年の処理を実装する。Toolkitは保持。本番実行APIは停止し、定期実行・本番有効化は別途承認・変更が必要。
+
 AI研修の保持期限Preflightは`docs/ai-training/AI_TRAINING_RETENTION_PREFLIGHT_IMPLEMENTATION_REPORT.md`を参照。承認済み90日/暦年1年の期限判定とScope限定の読み取り専用件数確認を追加する。実削除・定期実行・本番有効化は未実装。終了日不明の受講は判定保留とする。
 
 AI研修の本人削除は`docs/ai-training/AI_TRAINING_PERSONAL_DATA_DELETION_IMPLEMENTATION_REPORT.md`を参照。回答1件/全学習データのPreviewと明示確認、既存書込/評価との競合防止を接続する。自動保持期限は次の独立PRであり、本番反映や既存データの自動消去を開始した証拠とは扱わない。

@@ -91,6 +91,7 @@ import {
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
   PrismaTrainingRetentionPreviewRepository,
+  PrismaTrainingRetentionExecutionRepository,
   PrismaTrainingToolkitRepository,
   lockTrainingEnrollmentData,
 } from '../src';
@@ -645,6 +646,135 @@ integration('database ownership boundaries', () => {
         where: { ...base, programEnrollmentId: enrollment.id },
       }),
     ).toBe(1);
+    // Retention uses future virtual clocks only against this isolated test fixture.
+    await client.platformAdmin.upsert({
+      where: { userId: owner.user.id },
+      create: { userId: owner.user.id, role: 'SUPER_ADMIN' },
+      update: { role: 'SUPER_ADMIN', status: 'ACTIVE' },
+    });
+    const freshAnswer = await makeAnswer(enrollment.id, owner.user.id, 'Retention answer');
+    const retentionEvent = await client.programActionEvent.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        missionAssignmentId: freshAnswer.missionAssignmentId,
+        eventType: 'ANSWER_SUBMITTED',
+        idempotencyKey: `retention-${randomUUID()}`,
+        metadata: { workDescription: 'Erase event copy' },
+        actorUserId: owner.user.id,
+        occurredAt: now,
+      },
+    });
+    await client.trainingParticipantProfile.updateMany({
+      where: { ...base, programEnrollmentId: enrollment.id },
+      data: { skillScores: { AI_BASIC: 80 } },
+    });
+    await client.trainingToolkitItem.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        userId: owner.user.id,
+        missionAssignmentId: freshAnswer.missionAssignmentId,
+        trainingMissionAnswerId: freshAnswer.id,
+        missionDefinitionKey: 'AI_BASIC',
+        title: 'Explicit retained toolkit',
+        contentSnapshot: 'Keep this saved result',
+      },
+    });
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        status: 'COMPLETED',
+        goalSnapshot: { workDescription: 'Erase goal copy' },
+        offeringSnapshot: { contract: 'Keep contract' },
+      },
+    });
+    const endedRecord = await client.trainingDataRetentionState.findUniqueOrThrow({
+      where: { programEnrollmentId: enrollment.id },
+    });
+    expect(endedRecord.endedAt).not.toBeNull();
+    const maintenance = new PrismaTrainingRetentionExecutionRepository(client);
+    const retentionScope = {
+      ...base,
+      programEnrollmentId: enrollment.id,
+      operatorUserId: owner.user.id,
+      now: new Date(endedRecord.endedAt!.getTime() + 91 * 86400000),
+    };
+    const retentionCheck = await maintenance.preview(retentionScope);
+    if (retentionCheck.outcome !== 'PREVIEW') throw new Error('retention preview required');
+    expect(retentionCheck.preview.counts).toMatchObject({
+      answers: 1,
+      workProfiles: 1,
+      retainedToolkit: 1,
+    });
+    expect(await maintenance.execute({ ...retentionScope, revision: '0'.repeat(64) })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    expect(await client.trainingMissionAnswer.count({ where: { id: freshAnswer.id } })).toBe(1);
+    expect(
+      await maintenance.execute({ ...retentionScope, revision: retentionCheck.preview.revision }),
+    ).toMatchObject({ outcome: 'APPLIED' });
+    expect(await client.trainingMissionAnswer.count({ where: { id: freshAnswer.id } })).toBe(0);
+    const preservedProfile = await client.trainingParticipantProfile.findFirstOrThrow({
+      where: { ...base, programEnrollmentId: enrollment.id },
+    });
+    expect(preservedProfile.workContext).toEqual({});
+    expect(preservedProfile.role).toBe('OTHER');
+    expect(preservedProfile.skillScores).toEqual({ AI_BASIC: 80 });
+    expect(
+      (await client.programActionEvent.findUniqueOrThrow({ where: { id: retentionEvent.id } }))
+        .metadata,
+    ).toEqual({});
+    expect(
+      (await client.programEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } }))
+        .offeringSnapshot,
+    ).toEqual({ contract: 'Keep contract' });
+    expect(
+      await maintenance.execute({ ...retentionScope, revision: retentionCheck.preview.revision }),
+    ).toMatchObject({ outcome: 'ALREADY_APPLIED' });
+    const yearScope = {
+      ...retentionScope,
+      now: new Date(endedRecord.endedAt!.getTime() + 367 * 86400000),
+    };
+    const yearCheck = await maintenance.preview(yearScope);
+    if (yearCheck.outcome !== 'PREVIEW') throw new Error('year preview required');
+    expect(
+      await maintenance.execute({ ...yearScope, revision: yearCheck.preview.revision }),
+    ).toMatchObject({ outcome: 'APPLIED' });
+    expect(
+      await client.trainingParticipantProfile.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    const savedResults = await new PrismaTrainingToolkitRepository(client).list(scope);
+    expect(await client.programActionEvent.count({ where: { id: retentionEvent.id } })).toBe(0);
+    expect(
+      await client.programMissionAssignment.count({
+        where: { id: freshAnswer.missionAssignmentId },
+      }),
+    ).toBe(0);
+    expect(savedResults?.[0]?.content).toBe('Keep this saved result');
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: { ...base, programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBe(1);
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { status: 'ACTIVE' },
+    });
+    const reopened = await client.trainingDataRetentionState.findUniqueOrThrow({
+      where: { programEnrollmentId: enrollment.id },
+    });
+    expect(reopened.endedAt).toBeNull();
+    expect(reopened.workRedactedAt).toBeNull();
+    expect(reopened.progressPurgedAt).toBeNull();
+    expect(
+      await maintenance.preview({ ...retentionScope, workspaceId: other.workspace.id }),
+    ).toEqual({ outcome: 'NOT_FOUND' });
+    expect(await maintenance.preview({ ...retentionScope, operatorUserId: other.user.id })).toEqual(
+      { outcome: 'FORBIDDEN' },
+    );
     await client.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'REVOKED', revokedAt: new Date() },
