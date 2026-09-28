@@ -167,6 +167,17 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           programEnrollmentId: enrollment.id,
         });
         const evaluatedAt = new Date();
+        const stillActive = await tx.programEnrollment.findFirst({
+          where: {
+            id: enrollment.id,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: membership.id,
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        });
+        if (!stillActive) return;
         const updated = await tx.trainingMissionAnswer.updateMany({
           where: {
             id: answer.id,

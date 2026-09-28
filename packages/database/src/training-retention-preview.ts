@@ -4,6 +4,7 @@ import {
   TRAINING_RETENTION_POLICY_VERSION,
   trainingAnswerRetentionCutoff,
   trainingEndRetentionEligibility,
+  trainingRetentionEndDate,
   type TrainingRetentionPreviewRepository,
   type TrainingRetentionPreviewResult,
   type TrainingRetentionPreviewScope,
@@ -60,8 +61,12 @@ export class PrismaTrainingRetentionPreviewRepository implements TrainingRetenti
             programEnrollmentId: enrollment.id,
             userId: membership.userId,
           };
+          const retention = await tx.trainingDataRetentionState.findFirst({
+            where: { ...scope, programEnrollmentId: enrollment.id },
+            select: { endedAt: true, workRedactedAt: true, progressPurgedAt: true },
+          });
           const ended = trainingEndRetentionEligibility(
-            enrollment.status === 'EXPIRED' ? enrollment.endsAt : null,
+            trainingRetentionEndDate({ ...enrollment, recordedEnd: retention?.endedAt ?? null }),
             input.now,
           );
           if (
@@ -73,12 +78,13 @@ export class PrismaTrainingRetentionPreviewRepository implements TrainingRetenti
           const [answers, toolkit, profiles, progress] = await Promise.all([
             tx.trainingMissionAnswer.count({ where: { ...personal, createdAt: { lte: cutoff } } }),
             tx.trainingToolkitItem.count({ where: personal }),
-            ended.workInformationDue || ended.progressAndScoresDue
+            (ended.workInformationDue && !retention?.workRedactedAt) ||
+            (ended.progressAndScoresDue && !retention?.progressPurgedAt)
               ? tx.trainingParticipantProfile.count({
                   where: { ...personal, groupMembershipId: enrollment.groupMembershipId },
                 })
               : 0,
-            ended.progressAndScoresDue
+            ended.progressAndScoresDue && !retention?.progressPurgedAt
               ? tx.programProgressSnapshot.count({
                   where: { ...scope, programEnrollmentId: enrollment.id },
                 })
@@ -86,8 +92,10 @@ export class PrismaTrainingRetentionPreviewRepository implements TrainingRetenti
           ]);
           summary.answersAndEvaluationsDue += answers;
           summary.retainedToolkit += toolkit;
-          if (ended.workInformationDue) summary.workProfilesDue += profiles;
-          if (ended.progressAndScoresDue) summary.scoreProfilesDue += profiles;
+          if (ended.workInformationDue && !retention?.workRedactedAt)
+            summary.workProfilesDue += profiles;
+          if (ended.progressAndScoresDue && !retention?.progressPurgedAt)
+            summary.scoreProfilesDue += profiles;
           summary.progressSnapshotsDue += progress;
         }
         return { outcome: 'PREVIEW', summary };

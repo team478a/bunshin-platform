@@ -49,3 +49,47 @@ export type TrainingRetentionPreviewResult =
 export interface TrainingRetentionPreviewRepository {
   preview(input: TrainingRetentionPreviewScope): Promise<TrainingRetentionPreviewResult>;
 }
+
+export interface TrainingRetentionExecutionScope {
+  workspaceId: string;
+  groupId: string;
+  programEnrollmentId: string;
+  operatorUserId: string;
+  now: Date;
+}
+export interface TrainingRetentionExecutionCounts {
+  answers: number;
+  workProfiles: number;
+  progressProfiles: number;
+  progressSnapshots: number;
+  assignmentSnapshots: number;
+  assignments: number;
+  activities: number;
+  goals: number;
+  preferences: number;
+  retainedToolkit: number;
+}
+export type TrainingRetentionExecutionPreview = {
+  revision: string;
+  counts: TrainingRetentionExecutionCounts;
+  endDateUnresolved: boolean;
+};
+export type TrainingRetentionExecutionResult =
+  | { outcome: 'PREVIEW'; preview: TrainingRetentionExecutionPreview }
+  | { outcome: 'APPLIED' | 'ALREADY_APPLIED'; counts: TrainingRetentionExecutionCounts }
+  | { outcome: 'NOT_FOUND' | 'FORBIDDEN' | 'CONFLICT' | 'TOO_LARGE' };
+export interface TrainingRetentionExecutionRepository {
+  preview(input: TrainingRetentionExecutionScope): Promise<TrainingRetentionExecutionResult>;
+  execute(
+    input: TrainingRetentionExecutionScope & { revision: string },
+  ): Promise<TrainingRetentionExecutionResult>;
+}
+
+export function trainingRetentionEndDate(input: {
+  status: string;
+  endsAt: Date | null;
+  recordedEnd: Date | null;
+}): Date | null {
+  if (!['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(input.status)) return null;
+  return input.recordedEnd ?? (input.status === 'EXPIRED' ? input.endsAt : null);
+}
