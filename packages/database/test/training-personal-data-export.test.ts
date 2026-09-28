@@ -13,35 +13,31 @@ function fixture() {
   const tx = {
     groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-a' }) },
     programEnrollment: {
-      findFirst: vi
-        .fn()
-        .mockResolvedValue({
-          id: input.programEnrollmentId,
-          serviceProgramId: 'program-a',
-          status: 'COMPLETED',
-          supportMode: 'GUIDED',
-          startsAt: now,
-          endsAt: now,
-          createdAt: now,
-        }),
+      findFirst: vi.fn().mockResolvedValue({
+        id: input.programEnrollmentId,
+        serviceProgramId: 'program-a',
+        status: 'COMPLETED',
+        supportMode: 'GUIDED',
+        startsAt: now,
+        endsAt: now,
+        createdAt: now,
+      }),
     },
     serviceProgram: { findFirst: vi.fn().mockResolvedValue({ id: 'program-a' }) },
     trainingParticipantProfile: { findFirst: vi.fn().mockResolvedValue(null) },
     programProgressSnapshot: { findFirst: vi.fn().mockResolvedValue(null) },
     programMissionAssignment: { findMany: vi.fn().mockResolvedValue([]) },
     trainingMissionAnswer: {
-      findMany: vi
-        .fn()
-        .mockResolvedValue([
-          {
-            id: 'answer-a',
-            answer: '本人の回答',
-            evaluation: { result: 'PASS' },
-            evaluatedAt: now,
-            createdAt: now,
-            updatedAt: now,
-          },
-        ]),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'answer-a',
+          answer: '本人の回答',
+          evaluation: { result: 'PASS' },
+          evaluatedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]),
     },
     trainingToolkitItem: { findMany: vi.fn().mockResolvedValue([]) },
     programActionEvent: { findMany: vi.fn().mockResolvedValue([]) },

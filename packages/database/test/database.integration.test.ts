@@ -186,6 +186,7 @@ integration('database ownership boundaries', () => {
     const template = await client.programTemplate.create({
       data: {
         workspaceId: base.workspaceId,
+        ownerGroupId: group.id,
         name: 'Training export',
         description: 'Fixture',
         category: 'TRAINING',
@@ -242,7 +243,7 @@ integration('database ownership boundaries', () => {
           goalSnapshot: {},
           offeringSnapshot: {},
           invitedByUserId: owner.user.id,
-          startsAt: now,
+          startsAt: new Date(now.getTime() - 86400000),
           endsAt: now,
         },
       });
