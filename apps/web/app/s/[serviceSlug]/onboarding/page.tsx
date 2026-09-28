@@ -94,7 +94,7 @@ export default async function ServiceOnboardingPage({
   const refinement = refining
     ? nextOnboardingRefinement(settings.questions, storedAnswers, {
         state: membership.serviceOnboardingResponse?.refinementState,
-        nextRefinementAt: membership.serviceOnboardingResponse?.nextRefinementAt,
+        nextRefinementAt: membership.serviceOnboardingResponse?.nextRefinementAt ?? null,
       })
     : null;
   if (refining && !refinement) redirect(`/s/${serviceSlug}/home` as Route);

@@ -113,7 +113,7 @@ export default async function ServiceMemberHome({
     readServiceOnboardingAnswers(membership.serviceOnboardingResponse?.answers),
     {
       state: membership.serviceOnboardingResponse?.refinementState,
-      nextRefinementAt: membership.serviceOnboardingResponse?.nextRefinementAt,
+      nextRefinementAt: membership.serviceOnboardingResponse?.nextRefinementAt ?? null,
     },
   );
   if (
