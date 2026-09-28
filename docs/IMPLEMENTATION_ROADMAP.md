@@ -1,6 +1,6 @@
 # BUNSHIN Platform 実装ロードマップ
 
-更新基準: 2026-09-28、`main` commit `ec30c9a5`。各Phase内の箇条書きは実装履歴を残しているため、冒頭の状態と最新の機能別報告書を現在状態の判断に使用する。コード完了は本番Migration、外部Provider接続、実端末検証、事業承認の完了を意味しない。
+更新基準: 2026-09-28、`main` commit `f96b830d`。各Phase内の箇条書きは実装履歴を残しているため、冒頭の状態と最新の機能別報告書を現在状態の判断に使用する。コード完了は本番Migration、外部Provider接続、実端末検証、事業承認の完了を意味しない。
 
 ## マルチサービス化
 
@@ -83,6 +83,18 @@ MS-3-Iでは、千ノ国メディアと副業向けサービスで共通利用�
 - MS-5: 課金・OEM
 
 MS-1とMS-2を完了する前に、第一号サービスを一般公開しない。
+
+## AI研修
+
+状態: 個別化コアループ、実務利用結果、Barrier理由、1分版、Practice / Work表示、非同期回答評価、失敗回復、Service管理画面の評価運用指標までコード実装済み。詳細は`docs/ai-training/AI_TRAINING_CURRENT_STATE_AUDIT.md`と最新の同ディレクトリ内実装報告を正本とする。
+
+- 仕事内容と時間がかかる仕事を使う定型Personalizationは、Mission key、learning objective、criteriaを変更しない。
+- 実務利用結果は回答本文を複製せず、versionedな`ProgramActionEvent`として次回Policyへ反映する。
+- Barrierは選択式理由から決定的に分岐し、1分版は別MissionではなくAssignment Variantとして保存する。
+- 回答評価は共通Job基盤で非同期実行し、最大3回の再試行、最終失敗、本人再投入、AI Usage監査を記録する。
+- 管理画面はService単位の集計だけを表示し、回答本文、評価本文、参加者別Provider失敗情報を取得しない。
+
+次のコード候補はProviderによるScenario個別化、Privacy lifecycle、運用通知、Template提案である。Provider品質・警報閾値・Template提案はPilot実測後に判断し、Privacy lifecycleは保持期間、本人削除・Export、契約終了、管理者・Support閲覧範囲を決定してから実装する。
 
 ## 基本方針
 
