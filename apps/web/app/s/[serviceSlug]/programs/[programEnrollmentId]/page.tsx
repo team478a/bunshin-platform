@@ -17,6 +17,7 @@ import { PublicShell } from '../../../../ui/public-shell';
 import { AiResaleActionCard } from './ai-resale-action-card';
 import { AiTrainingCard } from './ai-training-card';
 import { AiTrainingDataExportCard } from './ai-training-data-export-card';
+import { AiTrainingEndedCard } from './ai-training-ended-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,18 +49,18 @@ export default async function ProgramParticipantPage({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       groupMembershipId: membership.id,
-      status: { in: ['ACTIVE', 'COMPLETED', 'EXPIRED'] },
+      status: { in: ['ACTIVE', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
     },
-    select: { serviceProgramId: true },
+    select: { serviceProgramId: true, status: true, endsAt: true },
   });
-  if (!enrollment) notFound();
+  if (!enrollment || enrollment.status === 'INVITED') notFound();
   const program = await db.prisma.serviceProgram.findFirst({
     where: {
       id: enrollment.serviceProgramId,
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
     },
-    select: { settings: true },
+    select: { settings: true, displayName: true },
   });
   if (!program) notFound();
   const moduleKey =
@@ -75,6 +76,34 @@ export default async function ProgramParticipantPage({
   } as CSSProperties;
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
+    if (enrollment.status !== 'ACTIVE') {
+      const retention = await db.prisma.trainingDataRetentionState.findFirst({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          programEnrollmentId,
+        },
+        select: { endedAt: true },
+      });
+      const endedAt =
+        retention?.endedAt ??
+        (enrollment.status === 'EXPIRED' && enrollment.endsAt && enrollment.endsAt <= new Date()
+          ? enrollment.endsAt
+          : null);
+      return (
+        <PublicShell showPlatformBrand={false}>
+          <main className="service-entry resale-action-page training-page" style={style}>
+            <AiTrainingEndedCard
+              serviceSlug={serviceSlug}
+              programEnrollmentId={programEnrollmentId}
+              programName={program.displayName}
+              status={enrollment.status}
+              endedAt={endedAt}
+            />
+          </main>
+        </PublicShell>
+      );
+    }
     let trainingState;
     try {
       trainingState = await new AiTrainingParticipantService(
@@ -164,6 +193,7 @@ export default async function ProgramParticipantPage({
     );
   }
 
+  if (enrollment.status === 'CANCELLED') notFound();
   const participant = new AiResaleParticipantService(
     new db.PrismaAiResaleParticipantRepository(db.prisma),
     new db.PrismaAiResaleRuntimeRepository(db.prisma),

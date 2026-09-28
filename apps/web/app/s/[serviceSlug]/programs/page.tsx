@@ -5,7 +5,10 @@ import { currentPaymentEnvironment } from '../../../../src/payments/secure-confi
 import { PublicShell } from '../../../ui/public-shell';
 import { MemberProgramsEditor } from './member-programs-editor';
 import { ProgramProductCatalog } from './program-product-catalog';
-import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
+import {
+  AI_TRAINING_V1_MODULE_KEY,
+  TRAINING_ENROLLMENT_STATUS_LABELS,
+} from '@bunshin/capability-training';
 import { AiTrainingDataExportCard } from './[programEnrollmentId]/ai-training-data-export-card';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +44,7 @@ export default async function MemberProgramsPage({
   });
   const enrollments = allEnrollments.filter((item) => item.status === 'ACTIVE');
   const endedEnrollments = allEnrollments.filter((item) =>
-    ['COMPLETED', 'EXPIRED'].includes(item.status),
+    ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(item.status),
   );
   const endedTrainingPrograms = endedEnrollments.length
     ? await db.prisma.serviceProgram.findMany({
@@ -267,12 +270,23 @@ export default async function MemberProgramsPage({
             (item) => item.id === enrollment.serviceProgramId,
           );
           return program ? (
-            <AiTrainingDataExportCard
-              key={enrollment.id}
-              serviceSlug={serviceSlug}
-              programEnrollmentId={enrollment.id}
-              programName={program.displayName}
-            />
+            <section className="settings-card" key={enrollment.id}>
+              <h2>{program.displayName}</h2>
+              <p>受講状態：{TRAINING_ENROLLMENT_STATUS_LABELS[enrollment.status]}</p>
+              <a
+                className="button button--secondary"
+                href={`/s/${serviceSlug}/programs/${enrollment.id}`}
+              >
+                受講状況を確認する
+              </a>
+              {enrollment.status !== 'CANCELLED' && (
+                <AiTrainingDataExportCard
+                  serviceSlug={serviceSlug}
+                  programEnrollmentId={enrollment.id}
+                  programName={program.displayName}
+                />
+              )}
+            </section>
           ) : null;
         })}
       </main>
