@@ -778,6 +778,7 @@ integration('database ownership boundaries', () => {
         role: 'MANAGER',
         serviceRole: 'SERVICE_ADMIN',
         status: 'ACTIVE',
+        consentedAt: new Date(),
       },
     });
     const lifecycle = new PrismaTrainingLifecycleRepository(client);
