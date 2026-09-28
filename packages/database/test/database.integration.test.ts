@@ -88,6 +88,7 @@ import {
   PrismaCampaignRepository,
   PrismaGroupFeatureEntitlementRepository,
   recoverStaleFortuneReadings,
+  PrismaTrainingPersonalDataExportRepository,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -167,6 +168,212 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+
+  it('exports only the owners training records even after completion and program archive', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Training export owner' });
+    const other = await accounts.execute({ displayName: 'Training export other' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Training export fixture' },
+    });
+    const base = { workspaceId: owner.workspace.id, groupId: group.id };
+    const membership = await client.groupMembership.create({
+      data: {
+        ...base,
+        userId: owner.user.id,
+        role: 'PARTICIPANT',
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const otherMembership = await client.groupMembership.create({
+      data: {
+        ...base,
+        userId: other.user.id,
+        role: 'PARTICIPANT',
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const template = await client.programTemplate.create({
+      data: {
+        workspaceId: base.workspaceId,
+        ownerGroupId: group.id,
+        name: 'Training export',
+        description: 'Fixture',
+        category: 'TRAINING',
+        targetAudience: 'Participants',
+        createdByUserId: owner.user.id,
+      },
+    });
+    const version = await client.programTemplateVersion.create({
+      data: {
+        workspaceId: base.workspaceId,
+        programTemplateId: template.id,
+        version: 1,
+        definition: {},
+        createdByUserId: owner.user.id,
+      },
+    });
+    const program = await client.serviceProgram.create({
+      data: {
+        ...base,
+        programTemplateVersionId: version.id,
+        displayName: 'Training export',
+        description: 'Fixture',
+        status: 'ARCHIVED',
+        settings: { moduleKey: 'AI_TRAINING_V1' },
+        createdByUserId: owner.user.id,
+      },
+    });
+    const offering = await client.programOffering.create({
+      data: {
+        ...base,
+        serviceProgramId: program.id,
+        version: 1,
+        seller: 'SERVICE',
+        priceOwner: 'SERVICE',
+        paymentOwner: 'SERVICE',
+        apiCostOwner: 'SERVICE',
+        supportOwner: 'SERVICE',
+        contentOwner: 'SERVICE',
+        characterOwner: 'SERVICE',
+        termsSnapshot: {},
+        createdByUserId: owner.user.id,
+      },
+    });
+    const now = new Date();
+    const makeEnrollment = (groupMembershipId: string) =>
+      client.programEnrollment.create({
+        data: {
+          ...base,
+          groupMembershipId,
+          serviceProgramId: program.id,
+          programOfferingId: offering.id,
+          status: 'COMPLETED',
+          supportMode: 'GUIDED',
+          goalSnapshot: {},
+          offeringSnapshot: {},
+          invitedByUserId: owner.user.id,
+          startsAt: new Date(now.getTime() - 86400000),
+          endsAt: now,
+        },
+      });
+    const enrollment = await makeEnrollment(membership.id);
+    const otherEnrollment = await makeEnrollment(otherMembership.id);
+    const makeAnswer = async (programEnrollmentId: string, userId: string, answer: string) => {
+      const assignment = await client.programMissionAssignment.create({
+        data: {
+          ...base,
+          programEnrollmentId,
+          programTemplateVersionId: version.id,
+          sequence: 1,
+          routeKey: 'PERSONALIZED',
+          phaseKey: 'FOUNDATION',
+          missionDefinitionKey: 'AI_BASIC',
+          displaySnapshot: {},
+          ruleVersion: 'TEST_V1',
+          presentedAt: now,
+        },
+      });
+      return client.trainingMissionAnswer.create({
+        data: {
+          ...base,
+          programEnrollmentId,
+          missionAssignmentId: assignment.id,
+          userId,
+          answer,
+          evaluationStatus: 'READY',
+          evaluation: { result: 'PASS' },
+          evaluatedAt: now,
+        },
+      });
+    };
+    const answer = await makeAnswer(enrollment.id, owner.user.id, 'Owner answer');
+    await makeAnswer(otherEnrollment.id, other.user.id, 'Other participant private answer');
+    await client.trainingParticipantProfile.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        groupMembershipId: membership.id,
+        userId: owner.user.id,
+        role: 'OFFICE',
+        aiLevel: 'BEGINNER',
+        workContext: { workDescription: 'Owner work information' },
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.trainingToolkitItem.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        missionAssignmentId: answer.missionAssignmentId,
+        trainingMissionAnswerId: answer.id,
+        userId: owner.user.id,
+        missionDefinitionKey: 'AI_BASIC',
+        title: 'Owner toolkit',
+        contentSnapshot: 'Owner toolkit content',
+      },
+    });
+    await client.programActionEvent.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        eventType: 'ANSWER_SUBMITTED',
+        idempotencyKey: `export-owner-${randomUUID()}`,
+        metadata: { privateDiagnostic: 'MUST_NOT_EXPORT' },
+        actorUserId: owner.user.id,
+        occurredAt: now,
+      },
+    });
+    await client.programActionEvent.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        eventType: 'ADMIN_NOTE',
+        idempotencyKey: `export-admin-${randomUUID()}`,
+        metadata: {},
+        actorUserId: other.user.id,
+        occurredAt: now,
+      },
+    });
+    const repository = new PrismaTrainingPersonalDataExportRepository(client);
+    const scope = { ...base, actorUserId: owner.user.id, programEnrollmentId: enrollment.id };
+    const result = await repository.read(scope);
+    expect(result.outcome).toBe('FOUND');
+    if (result.outcome !== 'FOUND') throw new Error('expected own training export');
+    expect(result.data.answers).toHaveLength(1);
+    expect(result.data.answers[0]?.['answer']).toBe('Owner answer');
+    expect(result.data.toolkit).toHaveLength(1);
+    expect(result.data.activities).toHaveLength(1);
+    const json = JSON.stringify(result.data);
+    expect(json).toContain('Owner work information');
+    expect(json).not.toContain('Other participant private answer');
+    expect(json).not.toContain('MUST_NOT_EXPORT');
+    expect(json).not.toContain('ADMIN_NOTE');
+    expect(await repository.read({ ...scope, programEnrollmentId: otherEnrollment.id })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(await repository.read({ ...scope, actorUserId: other.user.id })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(await repository.read({ ...scope, workspaceId: other.workspace.id })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(await repository.read({ ...scope, groupId: randomUUID() })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } })).answer,
+    ).toBe('Owner answer');
+    await client.groupMembership.update({
+      where: { id: membership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await repository.read(scope)).toEqual({ outcome: 'NOT_FOUND' });
+  });
 
   it('persists membership-scoped refinement metadata and rejects cross-owner or stale writes', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
