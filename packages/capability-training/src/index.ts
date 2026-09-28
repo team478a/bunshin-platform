@@ -255,3 +255,4 @@ export * from './barrier';
 export * from './personal-data-export';
 export * from './personal-data-deletion';
 export * from './personal-data-retention';
+export * from './enrollment-lifecycle';

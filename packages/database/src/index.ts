@@ -144,6 +144,7 @@ export {
 } from './badge-reward';
 export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
+export { PrismaTrainingLifecycleRepository } from './training-enrollment-lifecycle';
 export {
   getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
