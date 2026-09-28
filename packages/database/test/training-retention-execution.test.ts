@@ -152,6 +152,9 @@ describe('training retention execution', () => {
     expect(tx.trainingParticipantProfile.deleteMany).toHaveBeenCalled();
     expect(tx.programProgressSnapshot.deleteMany).toHaveBeenCalled();
     expect(tx.programMissionAssignment.deleteMany).toHaveBeenCalled();
+    expect(tx.programActionEvent.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.programMissionAssignment.deleteMany.mock.invocationCallOrder[0]!,
+    );
     expect(tx.trainingDataRetentionState.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ update: { workRedactedAt: now, progressPurgedAt: now } }),
     );

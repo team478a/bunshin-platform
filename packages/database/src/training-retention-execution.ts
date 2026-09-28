@@ -126,8 +126,8 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
               where: { ...personal, groupMembershipId: owned.membership.id },
             });
             await tx.programProgressSnapshot.deleteMany({ where: scope });
-            await tx.programMissionAssignment.deleteMany({ where: scope });
             await tx.programActionEvent.deleteMany({ where: scope });
+            await tx.programMissionAssignment.deleteMany({ where: scope });
             await tx.programMemberGoal.deleteMany({
               where: { ...scope, groupMembershipId: owned.membership.id },
             });
