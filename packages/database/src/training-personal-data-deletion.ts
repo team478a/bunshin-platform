@@ -126,7 +126,8 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
             });
             await tx.programEnrollment.updateMany({
               where: {
-                ...scope,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
                 id: input.programEnrollmentId,
                 groupMembershipId: owned.membershipId,
               },
