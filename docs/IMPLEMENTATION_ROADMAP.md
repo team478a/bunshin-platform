@@ -4,6 +4,8 @@
 
 ## マルチサービス化
 
+AI研修の保持期限Preflightは`docs/ai-training/AI_TRAINING_RETENTION_PREFLIGHT_IMPLEMENTATION_REPORT.md`を参照。承認済み90日/暦年1年の期限判定とScope限定の読み取り専用件数確認を追加する。実削除・定期実行・本番有効化は未実装。終了日不明の受講は判定保留とする。
+
 AI研修の本人削除は`docs/ai-training/AI_TRAINING_PERSONAL_DATA_DELETION_IMPLEMENTATION_REPORT.md`を参照。回答1件/全学習データのPreviewと明示確認、既存書込/評価との競合防止を接続する。自動保持期限は次の独立PRであり、本番反映や既存データの自動消去を開始した証拠とは扱わない。
 
 AI研修の本人Exportは`docs/ai-training/AI_TRAINING_PERSONAL_DATA_EXPORT_IMPLEMENTATION_REPORT.md`を参照。本人・Service・Enrollment単位のJSONダウンロードを接続する。承認済みの本人削除・90日/1年の自動期限削除は後続PRで実装し、現在稼働済みとは扱わない。

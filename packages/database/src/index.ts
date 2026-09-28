@@ -242,6 +242,7 @@ export { PrismaTrainingWorkResultRepository } from './training-work-result';
 export { PrismaTrainingPersonalDataExportRepository } from './training-personal-data-export';
 export { lockTrainingEnrollmentData } from './training-data-lock';
 export { PrismaTrainingPersonalDataDeletionRepository } from './training-personal-data-deletion';
+export { PrismaTrainingRetentionPreviewRepository } from './training-retention-preview';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,
