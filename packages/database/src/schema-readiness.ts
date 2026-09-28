@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260928060000_add_training_work_context';
+export const LATEST_DATABASE_MIGRATION = '20260928120000_add_onboarding_refinement_deferral';
