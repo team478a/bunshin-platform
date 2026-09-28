@@ -142,8 +142,8 @@ Local / GitHub Actions
 2. migrationの前方互換性とrollback方法をレビューする
 3. stagingが存在する場合だけ、backup確認、migration、health checkを先に実施する
 4. production変更時間と担当者を記録する
-5. production backupを確認し、`Production Database Migration` workflowを`main`から手動実行する
-6. production deployとsmoke testを実行する
+5. production backupを確認し、`main`から`production`へのrelease PRを承認・mergeする
+6. Vercel Production build先頭のmigration、schema readiness、Web buildとsmoke testを確認する
 7. 失敗時は安易にdown migrationせず、restoreまたはforward fixを承認して実施する
 
 ## 本番化のGate
@@ -157,6 +157,8 @@ Local / GitHub Actions
 - [ ] domain、利用規約、プライバシーポリシー、問い合わせ導線がある
 - [ ] security reviewとdependency auditが成功している
 - [ ] incident、rollback、data deletionの手順がある
+
+2026-09-28実査では、`main`のbranch protectionとrequired checkは有効だが、`production` branch protectionは未設定だった。Vercel側の`production` branch限定設定だけに依存せず、直接push禁止、required CI、会話解決、必要なレビューをGitHub側でも設定するまで運用課題として残す。
 
 ## 再評価条件
 

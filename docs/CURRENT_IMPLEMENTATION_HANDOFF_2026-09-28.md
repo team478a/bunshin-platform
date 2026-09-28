@@ -57,11 +57,13 @@
 ## 3. 変更したファイル
 
 - `docs/CURRENT_IMPLEMENTATION_HANDOFF_2026-09-28.md`（本文書）
-
 - `README.md`
 - `docs/IMPLEMENTATION_ROADMAP.md`
 - `docs/DATABASE_OPERATION.md`
 - `docs/FREE_MVP_PRODUCTION_GATE.md`
+- `docs/DEPLOYMENT_GUIDE.md`
+- `docs/PRODUCTION_ENVIRONMENT_PLAN.md`
+- `docs/PRODUCTION_GATE_REVALIDATION_2026-09-28.md`
 - `apps/web/package.json`
 - `package.json`
 - `pnpm-lock.yaml`
@@ -119,7 +121,10 @@ dependency auditでNext.js 16.3.1のCritical 2件、ESLint経由の`js-yaml` 4.3
 
 ### Production / operation
 
-- Production migration status、backup / restore rehearsal、実端末smoke、LINE Go / No-Goの最新証跡はコードからは完了確認できない。
+- 最新mainを含むVercel Production Deployment、live / readiness、Production Health Smokeの成功は再確認済み。
+- Production migrationは、廃止済みのGitHub Actions手動workflowではなく、Vercel Production build先頭で適用する現行方式へ文書を同期した。
+- backup / restore rehearsal、実端末smoke、LINE Go / No-Go、外部Provider、人間による受け入れの最新証跡は完了確認できない。
+- `production` branchはVercelのデプロイ対象として限定されているが、GitHub branch protectionが未設定。
 - `docs/REMAINING_FEATURE_IMPLEMENTATION_PLAN.md` のR0は、主に本番Migration後の実アカウント・実端末確認待ち。
 - 有料販売、SNS OAuth / 自動投稿は、R0と継続率検証が完了するまで先行しない。
 

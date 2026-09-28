@@ -2,14 +2,14 @@
 
 ## Vercel
 
-| 項目            | 設定                                                                    |
-| --------------- | ----------------------------------------------------------------------- |
-| Root Directory  | `apps/web`                                                              |
-| Install Command | Vercelのpnpm workspace自動検出                                          |
-| Build Command   | `cd ../.. && pnpm db:assert-ready && pnpm turbo run build --filter=web` |
-| Output          | Next.js default `.next`                                                 |
-| Node.js         | 24.x                                                                    |
-| Function Region | Tokyo `hnd1`                                                            |
+| 項目            | 設定                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| Root Directory  | `apps/web`                                                                                        |
+| Install Command | Vercelのpnpm workspace自動検出                                                                    |
+| Build Command   | `cd ../.. && pnpm db:migrate:vercel && pnpm db:assert-ready && pnpm turbo run build --filter=web` |
+| Output          | Next.js default `.next`                                                                           |
+| Node.js         | 24.x                                                                                              |
+| Function Region | Tokyo `hnd1`                                                                                      |
 
 `apps/web/vercel.json`にもframework、build command、Function regionを定義している。Vercel ProjectのRoot Directoryが`apps/web`であるため、設定fileも同directoryへ置く。
 
@@ -40,11 +40,11 @@ SOCIAL Intelligenceを有効にする場合は、Productionだけにserver-only�
 1. `main`でCIのtypecheck/lint/test/buildが成功していることを確認する。
 2. migrationがある場合はbackupと互換性を確認する。
 3. `main`から`production`へのPull Requestを作成し、公開差分を確認する。
-4. 承認済み手順で対象環境へ`prisma migrate deploy`する。
-5. Pull Requestを`production`へマージし、Vercel Production Deploymentを開始する。
-6. `/api/health/live`と`/api/health/ready`を確認する。
+4. Pull Requestを`production`へマージし、Vercel Production Deploymentを開始する。
+5. Production build先頭の`db:migrate:vercel`と、直後の`db:assert-ready`が成功したことを確認する。
+6. Web build完了後、`/api/health/live`と`/api/health/ready`を確認する。
 
-Vercel buildは手順3の抜けを`db:assert-ready`で検出し、最新migrationが未適用なら公開前に停止する。`Production Health Smoke`は15分ごとにも実行し、正式ドメインのreadinessで`databaseSchema: current`を確認する。
+Vercel Production buildは最新migrationを適用し、`db:assert-ready`で適用結果を検証する。どちらかが失敗した場合は新しいApplicationを公開しない。Preview / Developmentではmigrationを適用しない。`Production Health Smoke`は15分ごとにも実行し、正式ドメインのreadinessで`databaseSchema: current`を確認する。
 
 Job状態・lease・retryはPostgreSQLを正本とし、Vercel CronはScheduler / Workerの短時間triggerとしてのみ使用する。独立Worker / Cloud RunとLINE Pushは後続Phaseの承認まで追加しない。
 
