@@ -58,6 +58,23 @@ export class ExportTrainingPersonalData {
     ) {
       return { outcome: 'TOO_LARGE' };
     }
+    // Reject large content before allocating an entire pretty-printed file.
+    const encoder = new TextEncoder();
+    let contentBytes = 0;
+    const records = [
+      result.data.enrollment,
+      result.data.profile,
+      result.data.progress,
+      ...result.data.assignments,
+      ...result.data.answers,
+      ...result.data.toolkit,
+      ...result.data.activities,
+      ...result.data.goals,
+    ];
+    for (const record of records) {
+      contentBytes += encoder.encode(JSON.stringify(record)).byteLength;
+      if (contentBytes > TRAINING_EXPORT_MAX_BYTES) return { outcome: 'TOO_LARGE' };
+    }
     const json = JSON.stringify(
       {
         format: 'BUNSHIN_AI_TRAINING_PERSONAL_DATA',
@@ -68,7 +85,7 @@ export class ExportTrainingPersonalData {
       null,
       2,
     );
-    if (new TextEncoder().encode(json).byteLength > TRAINING_EXPORT_MAX_BYTES)
+    if (encoder.encode(json).byteLength > TRAINING_EXPORT_MAX_BYTES)
       return { outcome: 'TOO_LARGE' };
     return {
       outcome: 'EXPORTED',
