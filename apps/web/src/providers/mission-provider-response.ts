@@ -43,7 +43,7 @@ export async function readMissionProviderResponse(response: Response) {
   try {
     const parsed: unknown = JSON.parse(body);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-      value = parsed as ResponseValue;
+      value = parsed;
   } catch {
     // HTTP status still takes precedence for HTML/empty error responses.
   }
