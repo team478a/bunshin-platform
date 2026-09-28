@@ -87,6 +87,7 @@ import {
   PrismaAdvertisingSafetyRepository,
   PrismaCampaignRepository,
   PrismaGroupFeatureEntitlementRepository,
+  recoverStaleFortuneReadings,
 } from '../src';
 
 const testUrl = process.env['DATABASE_URL'] ?? '';
@@ -166,6 +167,127 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+
+  it('recovers abandoned fortune generation once without replacing other owners or completed results', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const settingIds: string[] = [];
+    const now = new Date();
+    const staleAt = new Date(now.getTime() - 20 * 60_000);
+    const readingIds: string[] = [];
+    try {
+      for (const label of ['A', 'B']) {
+        const owner = await accounts.execute({ displayName: `Fortune recovery ${label}` });
+        const group = await client.group.create({
+          data: { workspaceId: owner.workspace.id, name: `Fortune recovery ${label}` },
+        });
+        const membership = await client.groupMembership.create({
+          data: {
+            workspaceId: owner.workspace.id,
+            groupId: group.id,
+            userId: owner.user.id,
+            role: 'PARTICIPANT',
+          },
+        });
+        const configuration = await client.serviceConfiguration.create({
+          data: {
+            workspaceId: owner.workspace.id,
+            groupId: group.id,
+            slug: `fortune-recovery-${randomUUID()}`,
+            displayName: `Fortune recovery ${label}`,
+            description: 'Integration fixture',
+            operatorName: 'Test',
+            createdByUserId: owner.user.id,
+            updatedByUserId: owner.user.id,
+          },
+        });
+        const bunshin = await client.bunshin.create({
+          data: {
+            workspaceId: owner.workspace.id,
+            groupId: group.id,
+            ownerUserId: owner.user.id,
+            name: `Fortune recovery ${label}`,
+            slug: `fortune-${randomUUID()}`,
+            type: 'COPY',
+            objectiveSummary: 'Daily guidance',
+            audienceSummary: 'Owner',
+            personalitySummary: 'Helpful',
+          },
+        });
+        const setting = await client.fortuneServiceSetting.create({
+          data: {
+            workspaceId: owner.workspace.id,
+            groupId: group.id,
+            configurationId: configuration.id,
+            bunshinId: bunshin.id,
+          },
+        });
+        settingIds.push(setting.id);
+        const participant = await client.fortuneParticipant.create({
+          data: {
+            workspaceId: owner.workspace.id,
+            groupId: group.id,
+            serviceSettingId: setting.id,
+            groupMembershipId: membership.id,
+            userId: owner.user.id,
+            ageConfirmedAt: now,
+          },
+        });
+        for (const [index, state] of ['stale', 'fresh', 'complete', 'deleted'].entries()) {
+          const row = await client.fortuneReading.create({
+            data: {
+              workspaceId: owner.workspace.id,
+              groupId: group.id,
+              serviceSettingId: setting.id,
+              participantId: participant.id,
+              memberUserId: owner.user.id,
+              localDate: new Date(Date.UTC(2026, 8, 28 - index)),
+              theme: 'WORK',
+              cardCode: 'THE_FOOL',
+              orientation: 'UPRIGHT',
+              status: state === 'complete' ? 'READY_AI' : 'GENERATING',
+              readingText: `Approved text ${label}-${state}`,
+              actionStep: `Action ${label}`,
+              updatedAt: state === 'fresh' ? now : staleAt,
+              deletedAt: state === 'deleted' ? staleAt : null,
+            },
+          });
+          readingIds.push(row.id);
+        }
+      }
+      const results = await Promise.all([
+        recoverStaleFortuneReadings(client, now),
+        recoverStaleFortuneReadings(client, now),
+      ]);
+      expect(results.reduce((sum, result) => sum + result.recovered, 0)).toBe(2);
+      expect(results.reduce((sum, result) => sum + result.failed, 0)).toBe(0);
+      for (const [index, id] of readingIds.entries()) {
+        const row = await client.fortuneReading.findUniqueOrThrow({ where: { id } });
+        const state = ['stale', 'fresh', 'complete', 'deleted'][index % 4];
+        expect(row.status).toBe(
+          state === 'stale' ? 'READY_BASIC' : state === 'complete' ? 'READY_AI' : 'GENERATING',
+        );
+        expect(row.readingText).toBe(`Approved text ${index < 4 ? 'A' : 'B'}-${state}`);
+        expect(row.cardCode).toBe('THE_FOOL');
+        expect(row.failureCode).toBe(state === 'stale' ? 'AI_GENERATION_INTERRUPTED' : null);
+      }
+      const lateCompletion = await client.fortuneReading.updateMany({
+        where: { id: readingIds[0], status: 'GENERATING' },
+        data: { status: 'READY_AI', readingText: 'Late AI result' },
+      });
+      expect(lateCompletion.count).toBe(0);
+      expect(await recoverStaleFortuneReadings(client, now)).toEqual({
+        candidates: 0,
+        recovered: 0,
+        failed: 0,
+      });
+    } finally {
+      await client.fortuneReading.deleteMany({ where: { serviceSettingId: { in: settingIds } } });
+      await client.fortuneParticipant.deleteMany({
+        where: { serviceSettingId: { in: settingIds } },
+      });
+      await client.fortuneServiceSetting.deleteMany({ where: { id: { in: settingIds } } });
+    }
+  });
 
   it('stores only a hashed viewing session and consumes video LINE proofs once under concurrency', async () => {
     const stateHash = randomUUID().replaceAll('-', '').repeat(2);

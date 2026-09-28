@@ -86,6 +86,10 @@ MS-3-Jでは、サービス運営管理者の参加者画面へ参加者別のLI
 
 MS-1とMS-2を完了する前に、第一号サービスを一般公開しない。
 
+## 占い
+
+占いの中断生成復旧はD-129に従い、最終更新から10分以上の`GENERATING`を保存済み標準結果へ戻す認証済みCronをコード実装した。カード再抽選・AI再実行・LINE再送はしない。検証結果は対象PRのCI、本番反映・Cron実行は別確認とする。詳細は`FORTUNE_GENERATION_RECOVERY_IMPLEMENTATION_REPORT.md`を参照。
+
 ## AI研修
 
 状態: 個別化コアループ、実務利用結果、Barrier理由、1分版、Practice / Work表示、非同期回答評価、失敗回復、Service管理画面の評価運用指標までコード実装済み。詳細は`docs/ai-training/AI_TRAINING_CURRENT_STATE_AUDIT.md`と最新の同ディレクトリ内実装報告を正本とする。
