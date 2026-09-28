@@ -2887,3 +2887,15 @@
 - 通常版の内容をAssignment Snapshot内に保持し、本人が回答前に通常版へ戻せるようにする。回答提出後のVariant変更は許可しない。
 - Practice / Workは表示上明示し、FOUNDATION完了後かつ実務利用実績がある場合だけWorkとする。
 - AI ProviderへMission選定、Barrier分岐、学習目的、評価条件の決定を委ねない。
+
+## D-125: AI研修の回答評価は共通Job基盤で非同期実行する
+
+- 日付: 2026-09-28
+- 状態: Accepted
+
+- 回答保存APIは回答を保存した後、回答IDだけを参照する `TRAINING_ANSWER_EVALUATE` Jobを冪等投入する。回答本文をJob payloadへ複製しない。
+- Workerは実行直前にWorkspace、Service、Participant、Enrollment、AI研修Program、Answerの境界と有効状態を再検証する。
+- Provider障害は共通Job基盤の指数バックオフで最大3回まで再試行し、全試行失敗時だけAnswerを `FAILED` にする。
+- Provider試行ごとにmodel、Prompt Version、usage、原価、処理時間、成否を別のAI Usage Eventとして記録する。
+- 評価とMission、Profile、Progress、監査Eventの更新は同じDB transactionで確定し、部分的な進捗更新を残さない。
+- 受講画面は30秒まで状態を確認するが、画面を閉じてもJobは継続する。`FAILED` は保存済み回答から本人が明示的に再投入できる。

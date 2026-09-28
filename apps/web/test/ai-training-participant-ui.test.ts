@@ -57,7 +57,9 @@ describe('AI training participant UI', () => {
     expect(card).toContain('あなたの回答');
     expect(card).toContain('今回確認した力');
     expect(card).toContain('skillStateLabel');
-    expect(card).toContain('回答の確認を再開する');
+    expect(card).toContain('評価状況を確認する');
+    expect(card).toContain('AI評価をもう一度試す');
+    expect(card).toContain('window.setTimeout(resolve, 2_000)');
     expect(card).toContain('次の課題を見る');
     expect(card).toContain('ヒントを見る');
     expect(card).toContain('困った');

@@ -269,7 +269,12 @@ export function AiTrainingMissionCard({
         </div>
       ) : action.submission ? (
         <div className="training-pending">
-          <p>回答は保存されています。AIによる確認を再開できます。</p>
+          <p>
+            {action.submission.evaluationStatus === 'FAILED'
+              ? '回答は保存されています。AI評価をもう一度試すことができます。'
+              : '回答は保存されています。AIが確認中です。画面を閉じても処理は続きます。'}
+          </p>
+          {message ? <p className="notice notice--success">{message}</p> : null}
           {error ? <p className="notice notice--error">{error}</p> : null}
           <button
             className="button button--primary button--full"
@@ -279,7 +284,11 @@ export function AiTrainingMissionCard({
             }}
             disabled={saving}
           >
-            {saving ? '確認しています…' : '回答の確認を再開する'}
+            {saving
+              ? '確認しています…'
+              : action.submission.evaluationStatus === 'FAILED'
+                ? 'AI評価をもう一度試す'
+                : '評価状況を確認する'}
           </button>
         </div>
       ) : (
