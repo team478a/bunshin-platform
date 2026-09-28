@@ -7,7 +7,7 @@ import {
 import { AI_TRAINING_MISSION_QUALITY } from './mission-quality';
 import type { TrainingGoalKey } from './learning-catalog';
 
-export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_3';
+export const AI_TRAINING_V1_RULE_VERSION = 'AI_TRAINING_V1_RULES_4';
 export const AI_TRAINING_V1_MODULE_KEY = 'AI_TRAINING_V1';
 export const TRAINING_ROLES = ['SALES', 'OFFICE', 'MANAGER', 'OTHER'] as const;
 export const TRAINING_AI_LEVELS = ['BEGINNER', 'INTERMEDIATE'] as const;
@@ -251,3 +251,4 @@ export * from './skill-evaluation';
 export * from './growth';
 export * from './operations';
 export * from './personalization';
+export * from './barrier';

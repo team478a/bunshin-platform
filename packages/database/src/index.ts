@@ -71,6 +71,11 @@ export { addProgramCalendarDays, PrismaAiResaleRuntimeRepository } from './resal
 export { PrismaAiResaleParticipantRepository } from './resale-participant';
 export { PrismaTrainingAnswerRepository } from './training-answer';
 export { PrismaTrainingInteractionRepository } from './training-interaction';
+export {
+  PrismaTrainingBarrierRepository,
+  type TrainingBarrierAction,
+  type TrainingBarrierWriteResult,
+} from './training-barrier';
 export { PrismaTrainingToolkitRepository } from './training-toolkit';
 export type { SaveTrainingToolkitItemResult, TrainingToolkitItemView } from './training-toolkit';
 export { PrismaTrainingGrowthRepository } from './training-growth';

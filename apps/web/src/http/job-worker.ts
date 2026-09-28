@@ -11,6 +11,7 @@ import {
   ExpireServiceCredits,
   ExecuteGroupKnowledgeExtractionJob,
   ExecuteServiceLineBroadcastJob,
+  ExecuteTrainingAnswerEvaluationJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -62,6 +63,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createSocialImageGenerationJobHandler },
     { createGroupKnowledgeExtractionJobHandler },
     { createServiceLineBroadcastJobHandler },
+    { createTrainingAnswerEvaluationJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
@@ -73,6 +75,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/social-image-generation-job-handler'),
     import('../jobs/group-knowledge-extraction-job-handler'),
     import('../jobs/service-line-broadcast-job-handler'),
+    import('../jobs/training-answer-evaluation-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -123,6 +126,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     complete,
     fail,
   );
+  const trainingEvaluationExecutor = new ExecuteTrainingAnswerEvaluationJob(
+    createTrainingAnswerEvaluationJobHandler(),
+    complete,
+    fail,
+  );
   // PDF / video extraction can legitimately wait up to 120 seconds on the provider.
   // Keep the lease longer than every configured provider timeout so another cron
   // invocation cannot claim and charge for the same extraction concurrently.
@@ -142,7 +150,9 @@ async function configuredWorker(): Promise<JobWorkerPort> {
                   ? groupKnowledgeExecutor.execute(job, workerId)
                   : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
                     ? serviceLineBroadcastExecutor.execute(job, workerId)
-                    : missionExecutor.execute(job, workerId),
+                    : job.jobType === 'TRAINING_ANSWER_EVALUATE'
+                      ? trainingEvaluationExecutor.execute(job, workerId)
+                      : missionExecutor.execute(job, workerId),
   });
 }
 

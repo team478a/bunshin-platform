@@ -112,7 +112,7 @@ Local / GitHub Actions
 - [ ] Supabase Pro organizationを作成する
 - [x] productionをTokyoで作成する
 - [x] stagingは実運用開始まで作成しない方針を採用する
-- [ ] GitHub branch protectionで`verify`と`database`をrequiredにする
+- [x] GitHub branch protectionで`production`へのPR、`verify`、`database`、会話解決をrequiredにする
 - [ ] GitHub Environment `production`にrequired reviewerとDB secretsを設定する
 - [ ] Vercel projectをGitHub repositoryへ接続する
 - [ ] Vercel Root Directoryを`apps/web`、Framework Presetを`Next.js`にする
@@ -142,8 +142,8 @@ Local / GitHub Actions
 2. migrationの前方互換性とrollback方法をレビューする
 3. stagingが存在する場合だけ、backup確認、migration、health checkを先に実施する
 4. production変更時間と担当者を記録する
-5. production backupを確認し、`Production Database Migration` workflowを`main`から手動実行する
-6. production deployとsmoke testを実行する
+5. production backupを確認し、`main`から`production`へのrelease PRを承認・mergeする
+6. Vercel Production build先頭のmigration、schema readiness、Web buildとsmoke testを確認する
 7. 失敗時は安易にdown migrationせず、restoreまたはforward fixを承認して実施する
 
 ## 本番化のGate
@@ -157,6 +157,8 @@ Local / GitHub Actions
 - [ ] domain、利用規約、プライバシーポリシー、問い合わせ導線がある
 - [ ] security reviewとdependency auditが成功している
 - [ ] incident、rollback、data deletionの手順がある
+
+2026-09-28に`production`へbranch protectionを設定した。PR経由、strictな`verify` / `database`、会話解決、管理者への適用を必須とし、force pushとbranch削除を禁止している。共同編集者が1名のため承認数は0件とし、第二レビュアー追加時に1件へ引き上げる。これはbranch保護の完了を示すが、backup / restoreや本番受け入れを代替しない。
 
 ## 再評価条件
 

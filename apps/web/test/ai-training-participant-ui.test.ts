@@ -57,11 +57,19 @@ describe('AI training participant UI', () => {
     expect(card).toContain('あなたの回答');
     expect(card).toContain('今回確認した力');
     expect(card).toContain('skillStateLabel');
-    expect(card).toContain('回答の確認を再開する');
+    expect(card).toContain('評価状況を確認する');
+    expect(card).toContain('AI評価をもう一度試す');
+    expect(card).toContain('window.setTimeout(resolve, 2_000)');
     expect(card).toContain('次の課題を見る');
     expect(card).toContain('ヒントを見る');
     expect(card).toContain('困った');
     expect(card).toContain('後でやる');
+    expect(card).toContain('進めにくい理由');
+    expect(card).toContain('1分版');
+    expect(card).toContain('通常版に戻す');
+    expect(card).toContain('練習モード');
+    expect(card).toContain('実務モード');
+    expect(card).toContain('学習目標を見直す');
     expect(card).toContain('復習してもう一度回答する');
     expect(card).toContain('同じ課題から続けられます');
     expect(card).toContain('My AI Toolkitに保存する');
@@ -73,6 +81,7 @@ describe('AI training participant UI', () => {
     expect(growth).toContain('得意と、次に伸ばす力');
     expect(growth).toContain('できるようになったこと');
     expect(page).toContain('difficultyGuidance: trainingState.action.display.difficultyGuidance');
+    expect(page).toContain('missionVariant: trainingState.action.display.missionVariant');
   });
 
   it('uses same-origin authenticated endpoints and idempotency keys', () => {
@@ -85,6 +94,9 @@ describe('AI training participant UI', () => {
     expect(card).toContain('idempotencyKey: interactionKeys.current[interactionType]');
     expect(http).toContain('PrismaTrainingInteractionRepository');
     expect(http).toContain('TRAINING_INTERACTION_TYPES');
+    expect(http).toContain('TRAINING_BARRIER_REASONS');
+    expect(http).toContain('PrismaTrainingBarrierRepository');
+    expect(card).toContain('idempotencyKey: barrierKeys.current[key]');
     expect(card).toContain('idempotencyKey: toolkitKey.current');
     expect(http).toContain('PrismaTrainingToolkitRepository');
   });
