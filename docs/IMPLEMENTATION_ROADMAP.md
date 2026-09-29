@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+機能不足の再監査は`docs/FUNCTIONAL_GAPS_AUDIT_20260929.md`を参照。第一作業単位のOEM決済CSV期間指定・上限超過時の欠落防止は`docs/OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`を参照。日本時間の受付日で絞り、10,000件を超えた場合は部分CSVを返さない。入金/返金日の会計期間集計、上限撤廃、本番設定変更は含めない。
+
 AI研修の管理画面の受講期間表示は`docs/ai-training/AI_TRAINING_ADMIN_PERIOD_STATUS_IMPLEMENTATION_REPORT.md`を参照。期限後ACTIVEは状態未更新の期限終了として表示し、開始前/開始日時不明とともに受講中・継続率・声かけ集計から除く。利用状況と登録状態を分け、LifecycleのCASや確定終了日・保持期限起算日を表示から書き換えない。
 
 AI研修の受講期間ガードは`docs/ai-training/AI_TRAINING_PERIOD_GUARDS_IMPLEMENTATION_REPORT.md`を参照。ACTIVEでも開始前/期限後は新しい学習操作・課題生成・評価を拒否し、ロック後/Provider直前/評価保存前に再確認する。Toolkit/本人Exportは維持し、自動終了状態更新や保持期限起算日の補完、課金・削除・本番設定変更は含めない。
