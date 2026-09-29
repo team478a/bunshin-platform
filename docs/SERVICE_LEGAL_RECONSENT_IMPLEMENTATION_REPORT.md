@@ -11,7 +11,7 @@
 ## 2. 変更したファイル
 
 - `packages/application/src/service-participation.ts`、`packages/database/src/service-participation*.ts`: 本人の現在版・同意済みIDの表示と、所属状態を変えない最新版再同意を追加。
-- `apps/web/app/s/[serviceSlug]/legal-consent/*`、`apps/web/app/api/services/[serviceSlug]/legal-consent/route.ts`、`apps/web/src/http/service-participation.ts`: 本人画面とsame-origin/認証/入力検証つきAPI。
+- `apps/web/app/s/[serviceSlug]/legal-consent/*`、`apps/web/app/api/services/[serviceSlug]/legal-consent/route.ts`、`apps/web/src/http/service-participation.ts`、`apps/web/src/auth/line-return.ts`: 本人画面とsame-origin/認証/入力検証つきAPI、認証後の復帰先を追加。
 - 参加フォーム、Serviceホーム、LINE設定画面: 3種類の文書を参加時に提示し、既存参加者へ再同意の入口を追加。
 - Application/DB単体・隔離DB統合テスト、D-157、この報告と機能監査・Roadmap。
 
