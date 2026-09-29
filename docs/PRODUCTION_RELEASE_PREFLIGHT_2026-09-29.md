@@ -6,6 +6,7 @@
 
 - 現行Production branch: `cc30b69a413282ed7ac3b6e856d643d422a193ce`。GitHub Deployment `6704721593`はsuccess（2026-09-28）。公開ドメインでの厳密な実行SHA検証とは区別する。
 - リリース対象main: `3e57e72bdbc2e6f4db07ec6197e38d852f6d5c11`（#1010まで）。以後のmain更新を自動追加しないよう、このSHAから`codex/release-service-isolation-20260929`を作成した。
+- productionの既存merge履歴を通常mergeで取り込み、strictな保護ブランチの最新base条件を満たす。Applicationのtreeは固定mainのまま、固定SHAとの差分は本報告書1件だけであることを再確認する。productionが後で更新された場合は再監査が必要。
 - 実装・テスト・文書の未反映差分: 237ファイル、17,586行追加、562行削除。追加する本報告書はこの数に含まない。productionと共通祖先`f79a5fec`のtreeは一致し、production固有コミットによる未確認の実装差分はない。
 - マージ済み21件のPRと、SQL migration、Productionの実行停止条件、フラグ、Cron、Deployment/DB運用文書、CIを確認した。
 - 正式ドメインのliveは`ok`、readyは`ready`、configuration/authentication/databaseは`ok`、databaseSchemaは`current`だった。これは現行稼働版の健全性であり、新migration適用の証拠ではない。
