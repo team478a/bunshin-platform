@@ -328,9 +328,11 @@ describe('member product suggestion policies', () => {
       'private-a',
     );
     expect(response.status).toBe(200);
-    const data = (await response.json()).data;
-    expect(data.candidates[0].characterCount).toBeLessThanOrEqual(limit);
-    expect(data.candidates[0].body.split('#PR')).toHaveLength(2);
+    const payload = (await response.json()) as {
+      data: { candidates: Array<{ characterCount: number; body: string }> };
+    };
+    expect(payload.data.candidates[0]!.characterCount).toBeLessThanOrEqual(limit);
+    expect(payload.data.candidates[0]!.body.split('#PR')).toHaveLength(2);
   });
   it('uses reloaded product/personality and scoped URL, quota, usage and activity', async () => {
     m.member.mockResolvedValue(context('service-b', 'workspace-b'));
