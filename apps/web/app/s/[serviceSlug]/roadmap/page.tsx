@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { localDateInTimezone } from '../../../../src/activity-progress';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
-import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
@@ -16,10 +16,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return {
-    title: service ? `${service.configuration.displayName}｜90日計画` : '90日計画',
-  };
+  return memberServiceMetadata((await params).serviceSlug, '90日計画');
 }
 
 const phaseState = (day: number, phase: (typeof BUSINESS_GROWTH_PROGRAM_PHASES)[number]) =>

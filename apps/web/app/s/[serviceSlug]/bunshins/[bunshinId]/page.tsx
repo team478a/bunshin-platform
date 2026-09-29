@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
+import { memberServiceMetadata } from '../../../../../src/services/member-service-metadata';
 import { loadServiceBunshinDetail } from './service-bunshin-detail-data';
 import { ServiceBunshinDetailView } from './service-bunshin-detail-view';
 
@@ -10,12 +10,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string; bunshinId: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return {
-    title: service
-      ? `${service.configuration.displayName}｜投稿パートナーホーム`
-      : '投稿パートナーホーム',
-  };
+  return memberServiceMetadata((await params).serviceSlug, '投稿パートナーホーム');
 }
 
 export default async function ServiceBunshinDetailPage({

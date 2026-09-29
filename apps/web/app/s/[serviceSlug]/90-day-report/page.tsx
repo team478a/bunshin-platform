@@ -3,7 +3,7 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
-import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { loadBusinessProgramReport } from '../../../../src/services/business-program-report-data';
 import { BusinessProgramReportView } from '../../../ui/business-program-report';
@@ -16,10 +16,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return {
-    title: service ? `${service.configuration.displayName}｜90日集客レポート` : '90日集客レポート',
-  };
+  return memberServiceMetadata((await params).serviceSlug, '90日集客レポート');
 }
 
 export default async function BusinessProgramReportPage({
