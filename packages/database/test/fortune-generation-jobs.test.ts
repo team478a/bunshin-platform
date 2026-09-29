@@ -68,7 +68,8 @@ function setup() {
     fortuneFeedback: { findUnique: vi.fn().mockResolvedValue(null) },
     job: {
       findFirst: vi.fn().mockResolvedValue({ id: lease.jobId }),
-      upsert: vi.fn().mockResolvedValue(job),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(job),
     },
   };
   const db = {
@@ -91,9 +92,12 @@ describe('fortune queue and lease isolation', () => {
       body: reading.readingText,
     });
     expect(test.db.$transaction).toHaveBeenCalledOnce();
-    expect(test.tx.job.upsert).toHaveBeenCalledWith(
+    expect(test.tx.job.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
+        skipDuplicates: true,
+        data: expect.objectContaining({
+          environment: 'DEVELOPMENT',
+          idempotencyKey: job.payloadReference,
           workspaceId: scope.workspaceId,
           bunshinId: scope.bunshinId,
           requestedBy: actorUserId,
@@ -102,6 +106,14 @@ describe('fortune queue and lease isolation', () => {
         }),
       }),
     );
+    expect(test.tx.job.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: {
+        environment_idempotencyKey: {
+          environment: 'DEVELOPMENT',
+          idempotencyKey: job.payloadReference,
+        },
+      },
+    });
     expect(test.tx.fortuneReading.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -116,11 +128,23 @@ describe('fortune queue and lease isolation', () => {
     );
   });
 
+  it('reuses a concurrently inserted job after the DB skips the duplicate', async () => {
+    const test = setup();
+    test.tx.job.createMany.mockResolvedValue({ count: 0 });
+    await expect(test.queue.enqueue(input)).resolves.toMatchObject({ status: 'GENERATING' });
+    expect(test.tx.job.createMany).toHaveBeenCalledOnce();
+    expect(test.tx.job.findUniqueOrThrow).toHaveBeenCalledOnce();
+    expect(test.tx.job.createMany.mock.invocationCallOrder[0]).toBeLessThan(
+      test.tx.job.findUniqueOrThrow.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it.each(['SUCCEEDED', 'DEAD', 'CANCELLED'])(
     'does not restart a terminal %s job',
     async (status) => {
       const test = setup();
-      test.tx.job.upsert.mockResolvedValue({ ...job, status });
+      test.tx.job.createMany.mockResolvedValue({ count: 0 });
+      test.tx.job.findUniqueOrThrow.mockResolvedValue({ ...job, status });
       await expect(test.queue.enqueue(input)).resolves.toMatchObject({ status: 'READY_BASIC' });
       expect(test.tx.fortuneReading.updateMany).not.toHaveBeenCalled();
     },
@@ -128,7 +152,8 @@ describe('fortune queue and lease isolation', () => {
 
   it('rejects an idempotency collision with another requester', async () => {
     const test = setup();
-    test.tx.job.upsert.mockResolvedValue({ ...job, requestedBy: id('99') });
+    test.tx.job.createMany.mockResolvedValue({ count: 0 });
+    test.tx.job.findUniqueOrThrow.mockResolvedValue({ ...job, requestedBy: id('99') });
     await expect(test.queue.enqueue(input)).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(test.tx.fortuneReading.updateMany).not.toHaveBeenCalled();
   });
@@ -137,7 +162,8 @@ describe('fortune queue and lease isolation', () => {
     const test = setup();
     test.tx.fortuneServiceSetting.findFirst.mockResolvedValue(null);
     await expect(test.queue.enqueue(input)).resolves.toBeNull();
-    expect(test.tx.job.upsert).not.toHaveBeenCalled();
+    expect(test.tx.job.createMany).not.toHaveBeenCalled();
+    expect(test.tx.job.findUniqueOrThrow).not.toHaveBeenCalled();
   });
 
   it('does not claim a job from another workspace, service or Bunshin', async () => {

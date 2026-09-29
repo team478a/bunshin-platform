@@ -284,7 +284,9 @@ integration('database ownership boundaries', () => {
     };
     try {
       await expect(queue.enqueue({ ...input, actorUserId: other.user.id })).resolves.toBeNull();
-      await Promise.all([queue.enqueue(input), queue.enqueue(input)]);
+      // Every concurrent request must fulfill, not merely leave one persisted job.
+      const enqueued = await Promise.all(Array.from({ length: 8 }, () => queue.enqueue(input)));
+      expect(enqueued).toHaveLength(8);
       const jobs = await client.job.findMany({
         where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
       });
