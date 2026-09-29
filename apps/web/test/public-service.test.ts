@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
 vi.mock('server-only', () => ({}));
 
 const state = vi.hoisted(() => ({ findPublicBySlug: vi.fn(), findMemberBySlug: vi.fn() }));
@@ -12,6 +13,7 @@ vi.mock('@bunshin/database', () => ({
 import {
   resolveMemberServiceContext,
   resolvePublicServiceContext,
+  resolveVisitorServiceContext,
 } from '../src/services/public-service';
 
 const configuration = {
@@ -106,6 +108,53 @@ describe('public service context', () => {
       actorUserId: 'member-1',
       now: expect.any(Date),
     });
+  });
+
+  it('uses member access for a private service visitor without a public lookup', async () => {
+    state.findMemberBySlug.mockResolvedValue({ ...configuration, visibility: 'PRIVATE' });
+    await expect(
+      resolveVisitorServiceContext('side-job-support', 'member-1'),
+    ).resolves.toMatchObject({
+      configuration: { visibility: 'PRIVATE' },
+      workspaceId: 'workspace-1',
+      serviceId: 'service-1',
+    });
+    expect(state.findPublicBySlug).not.toHaveBeenCalled();
+  });
+
+  it('keeps anonymous and authenticated nonmembers on public-only access', async () => {
+    state.findMemberBySlug.mockRejectedValue(new ApplicationError('NOT_FOUND', 'not a member'));
+    state.findPublicBySlug.mockResolvedValue(configuration);
+    await expect(resolveVisitorServiceContext('side-job-support', null)).resolves.toMatchObject({
+      workspaceId: 'workspace-1',
+    });
+    expect(state.findMemberBySlug).not.toHaveBeenCalled();
+    await expect(
+      resolveVisitorServiceContext('side-job-support', 'other-user'),
+    ).resolves.toMatchObject({
+      workspaceId: 'workspace-1',
+    });
+    expect(state.findPublicBySlug).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not expose a private service to anonymous or unrelated visitors', async () => {
+    state.findMemberBySlug.mockRejectedValue(new ApplicationError('NOT_FOUND', 'not a member'));
+    state.findPublicBySlug.mockRejectedValue(new ApplicationError('NOT_FOUND', 'private'));
+    await expect(resolveVisitorServiceContext('side-job-support', null)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await expect(
+      resolveVisitorServiceContext('side-job-support', 'other-user'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('does not turn an unexpected member lookup failure into public access', async () => {
+    state.findMemberBySlug.mockRejectedValue(new Error('database offline'));
+    state.findPublicBySlug.mockResolvedValue(configuration);
+    await expect(resolveVisitorServiceContext('side-job-support', 'member-1')).rejects.toThrow(
+      'database offline',
+    );
+    expect(state.findPublicBySlug).not.toHaveBeenCalled();
   });
 
   it.each(['Bad-Slug', '../admin', 'service?next=evil', ''])(

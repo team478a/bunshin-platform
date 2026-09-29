@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## D-155: 閲覧用のヘルプ・マニュアル・法務文書は公開訪問者と既存参加者を分ける
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の画面監査とPR #1018のマージ確認）
+- 公開Serviceは匿名/未参加のログイン済みUserにも既存の閲覧入口を維持する。非公開ServiceはACTIVEな既存参加者だけがヘルプ・対応するマニュアル・公開済み法務文書を閲覧できる。まず本人のMember Serviceを確認し、所属拒否に限りPublic Serviceへ解決し直す。予期しない障害やProvider障害は公開fallbackで隠さない。
+- マニュアルのService取得はUserごとに分離し、同じSlugの異なるUserへcache結果を暗黙共有しない。匿名の非公開閲覧は許可しない。
+- 非公開Serviceの法務文書はService解決のWorkspace/Groupと文書type、PUBLISHED/有効日時に限定して取得する。公開Serviceの既存参加同意・法務閲覧ロジックは変更しない。DRAFT/将来版や他Service文書を返さない。
+- 公開登録・参加申請・法務同意の承認条件、管理権限、設定、DB schema/migration、本番データ、実LINE/AIを変更しない。その他画面のMetadataの公開名解決は今回のアクセス権修正から分けて監査する。
+
 ## D-154: Program目標の管理操作と本人操作は独立したService権限で解決する
 
 - 日付: 2026-09-30
