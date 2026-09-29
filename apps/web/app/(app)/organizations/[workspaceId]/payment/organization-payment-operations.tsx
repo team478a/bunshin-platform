@@ -9,6 +9,7 @@ import type {
   PaymentAction,
   RecentPurchaseView,
 } from './organization-payment-types';
+import { OrganizationPaymentExport } from './organization-payment-export';
 
 export function OrganizationPaymentOperations({
   workspaceId,
@@ -83,14 +84,7 @@ export function OrganizationPaymentOperations({
 
       <section className="settings-card" aria-labelledby="recent-purchases-title">
         <h2 id="recent-purchases-title">最近の購入</h2>
-        <p>
-          <a
-            className="button button--secondary"
-            href={`/api/organizations/${workspaceId}/payments/export`}
-          >
-            決済台帳をCSVで保存する
-          </a>
-        </p>
+        <OrganizationPaymentExport workspaceId={workspaceId} />
         {recentPurchases.length === 0 ? (
           <p>購入記録はまだありません。</p>
         ) : (
