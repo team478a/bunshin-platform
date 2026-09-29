@@ -328,12 +328,12 @@ integration('database ownership boundaries', () => {
       ).resolves.toBeNull();
       await client.groupMembership.update({
         where: { id: membership.id },
-        data: { status: 'SUSPENDED' },
+        data: { status: 'REVOKED', revokedAt: new Date() },
       });
       await expect(verifyFortuneGenerationJob(client, current)).resolves.toBe(false);
       await client.groupMembership.update({
         where: { id: membership.id },
-        data: { status: 'ACTIVE' },
+        data: { status: 'ACTIVE', revokedAt: null },
       });
       const output = {
         body: 'Validated AI result',
