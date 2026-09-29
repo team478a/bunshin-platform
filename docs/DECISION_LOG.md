@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## D-159: Serviceの商品パックとCampaign操作は公開状態でなく内容編集権限で判定する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-158後の残存Public Resolver監査）
+- 管理画面で扱う商品パックとCampaignの5 APIは、認証済み本人のACTIVEなService所属と`CONTENT`権限からWorkspace/Groupを解決する。非公開Serviceの権限者も操作でき、匿名・他Service・権限不足は拒否する。
+- Request内のGroup IDやPack/Campaign IDは既存のService/Repository境界で再検証する。管理画面の役割、参加者向け公開入口、商品/参加同意、Provider、DB schema、本番設定は変更しない。
+- 不存在・権限不足と予期せぬDB障害を区別し、APIエラーをprivate/no-storeで返す。
+
 ## D-158: 参加者専用画面のMetadataも本人のMember Serviceから解決する
 
 - 日付: 2026-09-30

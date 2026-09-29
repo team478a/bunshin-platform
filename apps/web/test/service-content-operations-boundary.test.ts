@@ -30,6 +30,24 @@ describe('service content operations boundary', () => {
     expect(source('src/http/campaigns.ts')).toContain('value.groupId !== groupId');
   });
 
+  it('uses authenticated content scope before all service content APIs', () => {
+    const routes = [
+      'app/api/services/[serviceSlug]/campaigns/route.ts',
+      'app/api/services/[serviceSlug]/campaigns/[campaignId]/transition/route.ts',
+      'app/api/services/[serviceSlug]/product-packs/route.ts',
+      'app/api/services/[serviceSlug]/product-packs/[productPackId]/versions/route.ts',
+      'app/api/services/[serviceSlug]/product-packs/[productPackId]/versions/[versionId]/publish/route.ts',
+    ];
+    for (const route of routes) {
+      const endpoint = source(route);
+      expect(endpoint).toContain('service-content-context');
+      expect(endpoint).not.toContain('resolvePublicServiceContext');
+    }
+    expect(source('src/http/service-content-context.ts')).toContain(
+      "resolveManagedServiceContext(serviceSlug, actor.userId, 'CONTENT')",
+    );
+  });
+
   it('keeps service manager navigation under the service slug', () => {
     const home = [
       'app/s/[serviceSlug]/home/page.tsx',

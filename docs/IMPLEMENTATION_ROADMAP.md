@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開Serviceの商品パック・Campaign管理APIは`docs/PRIVATE_SERVICE_CONTENT_OPERATIONS_IMPLEMENTATION_REPORT.md`を参照。管理画面と同じ認証済み`CONTENT`権限でServiceを解決し、公開状態に依存しない。既存Workspace/Group所有・内容編集・同意境界を維持する。本番反映・実端末確認は別作業。
+
 非公開サービスの参加者画面Metadataは`docs/PRIVATE_SERVICE_MEMBER_METADATA_IMPLEMENTATION_REPORT.md`を参照。9画面の表示名を本人Member Serviceから取得し、公開登録入口のPublic判定は維持する。匿名/所属外への名前漏えいと未知障害の握りつぶしを避ける。本番反映・実端末確認は別作業。
 
 Service法務文書の再同意は`docs/SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`を参照。既存参加者の最新版同意を初回参加から分離し、非公開Serviceを含む本人導線と、公開3文書がある場合の参加同意を揃える。本番データ監査・実端末確認・リリースは別作業。

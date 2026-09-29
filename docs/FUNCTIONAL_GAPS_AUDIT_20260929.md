@@ -19,8 +19,9 @@ main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は�
 9. **法務文書のtype別最新有効版: 今回修正**。公開表示・参加同意・既存参加者利用・通知同意判定が複数版で旧版を選び得たため、最大versionへ統一。過去の旧同意を自動付替えず、実データ/再同意導線の本番確認は別作業。詳細は`SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`。
 10. **既存参加者の最新版への再同意導線: 今回実装**。初回登録とは別に本人の現在版を確認・追記し、非公開の既存参加者にも提供する。公開参加の最大2文書制限も現行利用判定に合わせて3種へ修正。詳細は`SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`。
 11. **非公開サービスの参加者画面Metadata: 今回修正**。9画面のタイトル表示を本人Member Serviceから解決し、匿名/所属外には汎用タイトル、未知障害は再送出する。公開登録入口はPublic Resolverを維持。詳細は`PRIVATE_SERVICE_MEMBER_METADATA_IMPLEMENTATION_REPORT.md`。
+12. **非公開サービスの商品パック・Campaign管理API: 今回修正**。管理画面はCONTENT権限を使用する一方、5 API入口だけPublic Resolverで非公開Serviceを拒否していた。認証済み管理者/内容編集者のService権限へ統一し、匿名・他Service/権限不足と予期せぬ障害を区別する。詳細は`PRIVATE_SERVICE_CONTENT_OPERATIONS_IMPLEMENTATION_REPORT.md`。
 
-参加者専用画面に残っていたMetadata用Public Resolverは今回の9画面で分離した。匿名公開入口を維持すべき箇所と他の既存参加者操作は個別監査し、これだけで全非公開Service対応完了とは扱わない。
+参加者専用画面のMetadataと管理者向け商品パック・Campaign APIのPublic Resolverは用途別に分離した。匿名公開入口を維持すべき箇所と外部計測受口などの残存公開判定は個別監査し、これだけで全非公開Service対応完了とは扱わない。
 
 千ノ国・ハッシー・OEM等で該当する共通機能の修正。公開登録やService固有の業種/質問フローを共通化しない。本作業では設定・Provider実呼出・本番データを変更しない。
 
