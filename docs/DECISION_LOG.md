@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## D-152: 本人の商品紹介操作もMember Service境界で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1015のマージ確認）
+- 本人の商品プロフィール保存/非表示、コピー/自己申告投稿、紹介文生成は認証後のMember Service解決へ統一する。非公開Serviceの既存参加者を許可し、利用期間・ACTIVE Workspace/Group/本人所属は維持する。
+- 入力Schemaは広げず不一致/不正な非表示IDを400へ明示変換する。Workspace/Group/操作者はサーバーで解決し、本人の商品・分身・活動・ACTIVE MEMBER URLと公式商品の自Service再照合/同意/公開期間を維持する。
+- 生成入力の本人設定・公式商品、URLのProvider非送信、承認URL/#PR/必須表記/禁止表現/媒体上限、組織Quota、モデル/Prompt版/Token/原価/時間/成否の記録、活動の重複防止は維持する。生成Quotaへ自ServiceのgroupIdも渡し、既存Service上限を迂回しない。設定値やQuota実装は変更せず、実Providerは呼ばずテストでmockする。
+- 動画通知、画面の公開判定追加監査、DB schema/migration、設定、本番データ、匿名公開入口と実AI/LINE/Storage呼出は本作業に含めない。
+
 ## D-151: 初回回答・紹介コード・本人専用URLは参加者のServiceで解決する
 
 - 日付: 2026-09-29

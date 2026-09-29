@@ -6,6 +6,16 @@ const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.
 describe('member product content UI boundary', () => {
   const form = source('app/s/[serviceSlug]/tracking-link/member-product-content-form.tsx');
 
+  it.each([
+    'member-product-profiles.ts',
+    'member-product-activity.ts',
+    'member-product-suggestions.ts',
+  ])('keeps %s inside the authenticated member service', (file) => {
+    const http = source(`src/http/${file}`);
+    expect(http).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(http).not.toContain('resolvePublicServiceContext');
+    expect(http).toContain("new ApplicationError('UNAUTHENTICATED'");
+  });
   it('uses only operator-approved active member URLs', () => {
     expect(form).toContain("link.status === 'ACTIVE'");
     expect(form).toContain('externalTrackingLinkId: linkId');
@@ -67,6 +77,7 @@ describe('member product content UI boundary', () => {
     expect(http).toContain("item.status === 'ACTIVE'");
     expect(http).toContain('resolveOpenAiRuntimeConfiguration()');
     expect(http).toContain('withOrganizationAiGenerationQuota');
+    expect(http).toContain('groupId: scope.groupId');
     expect(http).toContain("taskType: 'MEMBER_PRODUCT_COPY_GENERATOR'");
     expect(http).not.toContain('process.env.OPENAI_API_KEY');
   });
