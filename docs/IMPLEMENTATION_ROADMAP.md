@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開サービスのProgram目標権限分離は`docs/PRIVATE_SERVICE_PROGRAM_GOALS_IMPLEMENTATION_REPORT.md`を参照。支援方針/目標候補は管理Resolverだけ、本人の希望/目標はMember Resolverだけを使用し、公開判定や権限fallbackを前提にしない。本人Enrollment/受講ロック後の研修期間条件、方針選択許可/版/監査と過去目標保持を維持する。入力400と管理不存在404を区別し、未知障害を握りつぶさない。公開入口/画面、DB、設定、本番データ、Providerは変更せず、残る画面監査と本番反映は別作業。
+
 非公開サービスの動画配信参加者操作は`docs/PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`を参照。閲覧/採用/辞退/自己申告投稿とダウンロードを認証後のMember Service解決へ合わせる。期限切れ/取消済みの投稿副作用を先に拒否し、本人Project/Render/Storage Key・未削除/期限・採用条件を照合する。署名URL準備成功後だけ履歴を保存し、拒否/不存在/未知障害を区別する。実LINE/Storage、設定、DB、本番データは変更しない。残る画面/Program目標の公開判定監査と本番反映は別作業。
 
 非公開サービスの本人商品紹介API対応は`docs/PRIVATE_SERVICE_PRODUCT_CONTENT_IMPLEMENTATION_REPORT.md`を参照。保存/非表示、コピー/自己申告投稿、紹介文生成は認証後のMember Service解決へ合わせ、本人の商品/分身/ACTIVE URL/公式商品再照合を維持する。生成Quotaにも自Service IDを渡し既存Service上限を迂回しない。URL非送信、PR/公式ルール/媒体上限と使用量記録は維持する。匿名公開入口、設定、DB、本番データ、実Providerは変更しない。動画通知と画面の追加監査、本番反映は別作業。
