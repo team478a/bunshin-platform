@@ -28,6 +28,7 @@ Preview RevisionはVersion・Scope・操作者・対象本人/所属・受講状
 ## 4. 実行した検証
 
 - ローカルDatabase関連4ファイル64件、Web関連5ファイル55件が成功。変更ファイルlint、architecture check、`git diff --check`も成功。最終型確認と全体CIは下記の対象HEADの結果を参照する。
+- 初回CIの並行確定でraw SQLのSerializable競合がP2010/SQLSTATE 40001となることを確認した。通常のP2034とともに409へ分類し、他のSQLSTATEや未知DBエラーは失敗として伝播する回帰テストを追加した。排他や制約を緩めず、最新HEADで再検証する。
 
 - Unitで個別Scope・Role・Module・日時妥当性・既存記録維持・Revision変更・確定/監査順序・未確定CAS・再送/再開後拒否・DB例外・一覧上限/所有境界を検証。
 - HTTP/UI/Pageで認証/Origin/Scope差替え/JSON上限、PreviewとConfirm分離、日本時間と不正日付、初期空入力と未確認、取得障害/認可失効/上限の案内を検証。

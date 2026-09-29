@@ -315,7 +315,8 @@ export class PrismaTrainingEndDateRepository implements TrainingEndDateRepositor
     } catch (error) {
       if (
         error instanceof EndDateConflict ||
-        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034')
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === 'P2034' || (error.code === 'P2010' && error.meta?.['code'] === '40001')))
       )
         return { outcome: 'CONFLICT' };
       throw error;

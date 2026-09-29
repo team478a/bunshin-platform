@@ -286,4 +286,21 @@ describe('individual training end date confirmation', () => {
     f.tx.trainingDataRetentionState.updateMany.mockRejectedValue(new Error('db down'));
     await expect(f.repo.confirm(confirm)).rejects.toThrow('db down');
   });
+  it.each(['40001', '23505'])(
+    'classifies raw SQL state %s without swallowing other DB failures',
+    async (code) => {
+      const f = fixture();
+      const confirm = await f.confirmation();
+      const error = new Prisma.PrismaClientKnownRequestError('raw query failed', {
+        code: 'P2010',
+        clientVersion: 'test',
+        meta: { code },
+      });
+      f.tx.$queryRaw.mockRejectedValue(error);
+      if (code === '40001') expect(await f.repo.confirm(confirm)).toEqual({ outcome: 'CONFLICT' });
+      else await expect(f.repo.confirm(confirm)).rejects.toBe(error);
+      expect(f.tx.trainingDataRetentionState.updateMany).not.toHaveBeenCalled();
+      expect(f.tx.programAuditLog.create).not.toHaveBeenCalled();
+    },
+  );
 });
