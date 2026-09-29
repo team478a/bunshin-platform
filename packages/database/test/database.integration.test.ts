@@ -94,6 +94,9 @@ import {
   PrismaCampaignRepository,
   PrismaGroupFeatureEntitlementRepository,
   recoverStaleFortuneReadings,
+  PrismaFortuneGenerationQueue,
+  PrismaFortuneRepository,
+  verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
   PrismaTrainingRetentionPreviewRepository,
@@ -179,6 +182,218 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+
+  it('deduplicates fortune jobs and rejects foreign, revoked and superseded generation leases', async () => {
+    const owner = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Fortune async owner' });
+    const other = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Fortune async other' });
+    const base = { workspaceId: owner.workspace.id };
+    const group = await client.group.create({
+      data: { ...base, name: `Fortune async ${randomUUID()}` },
+    });
+    const membership = await client.groupMembership.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        userId: owner.user.id,
+        role: 'PARTICIPANT',
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        slug: `fortune-async-${randomUUID()}`,
+        displayName: 'Fortune async',
+        description: 'Fixture',
+        operatorName: 'Test',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const bunshin = await client.bunshin.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        ownerUserId: owner.user.id,
+        name: 'Fortune async',
+        slug: `fortune-${randomUUID()}`,
+        type: 'COPY',
+        objectiveSummary: 'Daily guidance',
+        audienceSummary: 'Owner',
+        personalitySummary: 'Helpful',
+      },
+    });
+    await client.bunshinCapabilityAssignment.create({
+      data: {
+        ...base,
+        bunshinId: bunshin.id,
+        capabilityType: 'FORTUNE',
+        assignedByUserId: owner.user.id,
+      },
+    });
+    const setting = await client.fortuneServiceSetting.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        configurationId: configuration.id,
+        bunshinId: bunshin.id,
+        enabled: true,
+        aiEnabled: true,
+      },
+    });
+    const participant = await client.fortuneParticipant.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        serviceSettingId: setting.id,
+        groupMembershipId: membership.id,
+        userId: owner.user.id,
+        ageConfirmedAt: new Date(),
+      },
+    });
+    const reading = await client.fortuneReading.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        serviceSettingId: setting.id,
+        participantId: participant.id,
+        memberUserId: owner.user.id,
+        localDate: new Date('2026-09-29T00:00:00Z'),
+        theme: 'WORK',
+        cardCode: 'THE_FOOL',
+        orientation: 'UPRIGHT',
+        status: 'READY_BASIC',
+        readingText: 'Approved basic result',
+        actionStep: 'Small action',
+      },
+    });
+    const queue = new PrismaFortuneGenerationQueue(client, 'DEVELOPMENT');
+    const repository = new PrismaFortuneRepository(client);
+    const input = {
+      serviceSlug: configuration.slug,
+      actorUserId: owner.user.id,
+      readingId: reading.id,
+    };
+    try {
+      await expect(queue.enqueue({ ...input, actorUserId: other.user.id })).resolves.toBeNull();
+      await Promise.all([queue.enqueue(input), queue.enqueue(input)]);
+      const jobs = await client.job.findMany({
+        where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
+      });
+      expect(jobs).toHaveLength(1);
+      const job = jobs[0]!;
+      expect(job.maxAttempts).toBe(3);
+      expect(job.payloadReference).toBe(`fortune-generation:${setting.id}:${reading.id}`);
+      const lease = {
+        ...base,
+        bunshinId: bunshin.id,
+        serviceSettingId: setting.id,
+        jobId: job.id,
+        workerId: 'fortune-worker-a',
+        attemptCount: 1,
+      };
+      await client.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'LEASED',
+          leaseOwner: lease.workerId,
+          leaseExpiresAt: new Date(Date.now() + 300_000),
+          attemptCount: 1,
+        },
+      });
+      const claim = await repository.claimAiGeneration({ ...input, jobLease: lease });
+      expect(claim?.generationRevision).toBeInstanceOf(Date);
+      if (!claim?.generationRevision) throw new Error('fortune claim missing');
+      const current = { ...input, jobLease: lease, generationRevision: claim.generationRevision };
+      await expect(verifyFortuneGenerationJob(client, current)).resolves.toBe(true);
+      await expect(
+        repository.claimAiGeneration({
+          ...input,
+          jobLease: { ...lease, workspaceId: other.workspace.id },
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        repository.claimAiGeneration({
+          ...input,
+          jobLease: { ...lease, serviceSettingId: randomUUID() },
+        }),
+      ).resolves.toBeNull();
+      await client.groupMembership.update({
+        where: { id: membership.id },
+        data: { status: 'SUSPENDED' },
+      });
+      await expect(verifyFortuneGenerationJob(client, current)).resolves.toBe(false);
+      await client.groupMembership.update({
+        where: { id: membership.id },
+        data: { status: 'ACTIVE' },
+      });
+      const output = {
+        body: 'Validated AI result',
+        actionStep: 'Another small action',
+        model: 'mock',
+        promptVersion: 'test-v1',
+        inputTokens: 1,
+        outputTokens: 2,
+        latencyMs: 3,
+      };
+      await client.job.update({
+        where: { id: job.id },
+        data: { leaseOwner: 'fortune-worker-b', attemptCount: 2 },
+      });
+      await expect(repository.completeAiGeneration({ ...current, output })).resolves.toBeNull();
+      const secondLease = { ...lease, workerId: 'fortune-worker-b', attemptCount: 2 };
+      const secondClaim = await repository.claimAiGeneration({ ...input, jobLease: secondLease });
+      if (!secondClaim?.generationRevision) throw new Error('second fortune claim missing');
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: { status: 'DELETED', deletedAt: new Date() },
+      });
+      await expect(
+        repository.completeAiGeneration({
+          ...input,
+          jobLease: secondLease,
+          generationRevision: secondClaim.generationRevision,
+          output,
+        }),
+      ).resolves.toBeNull();
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: {
+          status: 'GENERATING',
+          deletedAt: null,
+          updatedAt: new Date(Date.now() - 20 * 60_000),
+        },
+      });
+      await recoverStaleFortuneReadings(client, new Date());
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: reading.id } })).status,
+      ).toBe('GENERATING');
+      await client.job.update({
+        where: { id: job.id },
+        data: { status: 'DEAD', leaseOwner: null, leaseExpiresAt: null },
+      });
+      await recoverStaleFortuneReadings(client, new Date());
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: reading.id } })).status,
+      ).toBe('READY_BASIC');
+      await expect(queue.enqueue(input)).resolves.toMatchObject({ status: 'READY_BASIC' });
+      expect(await client.job.count({ where: { id: job.id } })).toBe(1);
+    } finally {
+      await client.job.deleteMany({
+        where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
+      });
+      await client.fortuneReading.deleteMany({ where: { id: reading.id } });
+      await client.fortuneParticipant.deleteMany({ where: { id: participant.id } });
+      await client.fortuneServiceSetting.deleteMany({ where: { id: setting.id } });
+    }
+  });
 
   it('exports only the owners training records even after completion and program archive', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));

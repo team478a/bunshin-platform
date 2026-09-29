@@ -1,5 +1,15 @@
 # BUNSHIN Platform Decision Log
 
+## D-145: 占いAIは標準結果を維持した非同期Jobと試行単位の再試行へ分離する
+
+- 日付: 2026-09-29
+- 状態: Accepted（不足機能の実装依頼）
+- 同じService/本人/日付のカードと承認済み標準結果を維持し、AIだけを共通Jobへ投入する。JobとGENERATINGへの変更は同じTransactionで確定し、Reading固有の冪等キーで重複投入・最終失敗後の自動再生成を防ぐ。Jobへ本文・Memoryを複製しない。
+- WorkerはWorkspace/Service/本人/Bunshin/能力、参加同意、未削除、現在のJob leaseと試行番号を再検証する。完了・fallbackにもJob行ロックとReading更新Revisionを用い、期限切れ実行・削除・復旧後の上書きを拒否する。
+- timeout/network、429、5xxのみ最大3回・既存Backoffで再試行する。設定/権限不備、その他HTTPエラー、空・不正・危険な出力は再試行せず標準結果へ戻す。各実試行で使用量・原価・Quotaのキーを分ける。Provider response本文や例外・秘密値を診断へ保存しない。
+- 既存10分中断復旧は有効な待機/再試行/lease付きJobを優先する。Jobが終了・消失して中断したReadingだけを安全に復旧する。Worker停止時も標準本文を表示できる。
+- `FORTUNE_ASYNC_GENERATION_ENABLED=true`で新規投入を有効化する。無効化後も既存Jobは安全に処理する。既存同期方式を維持し、本番設定、実AI呼出、LINE送信、過去失敗の一括再投入は本作業では行わない。既存Job schemaを利用し、DB schema変更は不要。
+
 ## D-144: 認証復帰を試行単位の本人確認・単回記録へ分離する
 
 - 日付: 2026-09-29

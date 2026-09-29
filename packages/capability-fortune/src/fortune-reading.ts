@@ -1,6 +1,10 @@
 import { FORTUNE_THEMES, type FortuneTheme } from './fortune-definition';
 import { type FortuneReadingOutput, validateFortuneReadingOutput } from './fortune-knowledge';
 import { FortunePolicyError } from './fortune-policy-error';
+import type {
+  FortuneAiGenerationQueue,
+  FortuneGenerationJobLease,
+} from './fortune-generation-queue';
 import { drawTarotCard, type FortuneOrientation, type SecureRandomSource } from './tarot';
 
 export type FortuneReadingState = 'GENERATING' | 'READY_AI' | 'READY_BASIC' | 'FAILED' | 'DELETED';
@@ -44,6 +48,8 @@ export type CreateFortuneReadingResult =
   | { kind: 'KNOWLEDGE_NOT_READY' };
 
 export interface FortuneAiGenerationClaim {
+  generationRevision?: Date;
+  jobAttempt?: { jobId: string; attemptCount: number };
   workspaceId: string;
   groupId: string;
   bunshinId: string;
@@ -88,6 +94,7 @@ export interface FortuneAiReadingGenerator {
     serviceSlug: string;
     actorUserId: string;
     claim: FortuneAiGenerationClaim;
+    assertAllowed?: () => Promise<void>;
   }): Promise<FortuneAiReadingResult>;
 }
 
@@ -120,17 +127,22 @@ export interface FortuneRepository {
     orientation: FortuneOrientation;
   }): Promise<CreateFortuneReadingResult>;
   claimAiGeneration(input: {
+    jobLease?: FortuneGenerationJobLease;
     serviceSlug: string;
     actorUserId: string;
     readingId: string;
   }): Promise<FortuneAiGenerationClaim | null>;
   completeAiGeneration(input: {
+    jobLease?: FortuneGenerationJobLease;
+    generationRevision?: Date;
     serviceSlug: string;
     actorUserId: string;
     readingId: string;
     output: FortuneAiReadingResult;
   }): Promise<FortuneReadingView | null>;
   fallbackAiGeneration(input: {
+    jobLease?: FortuneGenerationJobLease;
+    generationRevision?: Date;
     serviceSlug: string;
     actorUserId: string;
     readingId: string;
@@ -173,6 +185,7 @@ export class FortuneDailyReadingService {
     private readonly repository: FortuneRepository,
     private readonly random: SecureRandomSource,
     private readonly aiGenerator?: FortuneAiReadingGenerator,
+    private readonly aiQueue?: FortuneAiGenerationQueue,
   ) {}
 
   async join(input: {
@@ -235,7 +248,11 @@ export class FortuneDailyReadingService {
       actorUserId: input.actorUserId,
       localDate,
     });
-    if (existing) return existing;
+    if (existing) {
+      if (this.aiQueue && existing.status === 'READY_BASIC')
+        return (await this.aiQueue.enqueue({ ...input, readingId: existing.id })) ?? existing;
+      return existing;
+    }
     const theme = parseFortuneTheme(input.theme);
     const draw = drawTarotCard(this.random);
     const result = await this.repository.createBasicReading({
@@ -247,6 +264,10 @@ export class FortuneDailyReadingService {
       orientation: draw.orientation,
     });
     if (result.kind === 'READY') {
+      if (this.aiQueue)
+        return (
+          (await this.aiQueue.enqueue({ ...input, readingId: result.reading.id })) ?? result.reading
+        );
       if (!this.aiGenerator) return result.reading;
       const claim = await this.repository.claimAiGeneration({
         serviceSlug: input.serviceSlug,

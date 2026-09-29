@@ -7,6 +7,7 @@ export * from './line-notification-preference';
 export * from './legal-governance';
 export * from './account-deletion';
 export * from './job-runtime';
+export * from './fortune-generation-job';
 export * from './bunshin-management';
 export * from './owner-knowledge';
 export * from './bunshin-memory';

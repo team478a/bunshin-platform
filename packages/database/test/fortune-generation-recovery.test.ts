@@ -18,11 +18,35 @@ const reading = {
 function client(rows: unknown[] = [reading]) {
   const findMany = vi.fn().mockResolvedValue(rows);
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-  const db = { fortuneReading: { findMany, updateMany } } as unknown as PrismaClient;
-  return { db, findMany, updateMany };
+  const findJob = vi.fn().mockResolvedValue(null);
+  const db = {
+    fortuneReading: { findMany, updateMany },
+    job: { findFirst: findJob },
+  } as unknown as PrismaClient;
+  return { db, findMany, updateMany, findJob };
 }
 
 describe('interrupted fortune generation recovery', () => {
+  it('preserves queued or retrying AI generation rather than racing its worker', async () => {
+    const fake = client();
+    fake.findJob.mockResolvedValue({ id: 'queued-job' });
+    await expect(recoverStaleFortuneReadings(fake.db, now)).resolves.toEqual({
+      candidates: 1,
+      recovered: 0,
+      failed: 0,
+    });
+    expect(fake.updateMany).not.toHaveBeenCalled();
+    expect(fake.findJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: reading.workspaceId,
+          requestedBy: reading.memberUserId,
+          payloadReference: 'fortune-generation:setting-a:reading-a',
+          status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] },
+        }),
+      }),
+    );
+  });
   it('only selects undeleted generating readings stale for at least ten minutes, in bounded order', async () => {
     const fake = client([]);
     await expect(recoverStaleFortuneReadings(fake.db, now)).resolves.toEqual({
