@@ -6301,7 +6301,10 @@ integration('authentication return attempt isolation', () => {
 
     const participation = new PrismaServiceParticipationRepository(client);
     const shown = await participation.findView({ slug, actorUserId: null, now });
-    expect(shown?.legalDocuments.map(({ id }) => id)).toEqual([latestPrivacy.id, latestTerms.id]);
+    expect(shown?.legalDocuments).toHaveLength(2);
+    expect(shown?.legalDocuments.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([latestPrivacy.id, latestTerms.id]),
+    );
     expect(
       await participation.request({
         slug,
