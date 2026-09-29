@@ -70,12 +70,11 @@ export class PrismaFortuneGenerationQueue implements FortuneAiGenerationQueue {
       });
       if (!reading) return null;
       const reference = fortuneGenerationPayloadReference(scope.id, reading.id);
-      const job = await tx.job.upsert({
-        where: {
-          environment_idempotencyKey: { environment: this.environment, idempotencyKey: reference },
-        },
-        update: {},
-        create: {
+      // Empty-update Prisma upsert can race on concurrent inserts. Let the DB
+      // ignore duplicates atomically, then validate the persisted job's scope.
+      await tx.job.createMany({
+        skipDuplicates: true,
+        data: {
           environment: this.environment,
           workspaceId: scope.workspaceId,
           bunshinId: scope.bunshinId,
@@ -86,6 +85,11 @@ export class PrismaFortuneGenerationQueue implements FortuneAiGenerationQueue {
           correlationId: `fortune:${reading.id}`,
           requestedBy: input.actorUserId,
           maxAttempts: 3,
+        },
+      });
+      const job = await tx.job.findUniqueOrThrow({
+        where: {
+          environment_idempotencyKey: { environment: this.environment, idempotencyKey: reference },
         },
       });
       if (
