@@ -5,7 +5,7 @@ import { requireSameOrigin } from '../../../src/auth/request-security';
 import {
   LINE_AUTH_RETURN_COOKIE,
   lineAuthReturnFromCookie,
-  videoAuthReturnProjectId,
+  requiresPlatformOnboarding,
 } from '../../../src/auth/line-return';
 import { createSupabaseServerClient } from '../../../src/auth/supabase';
 
@@ -49,8 +49,7 @@ export async function POST(request: Request): Promise<Response> {
       where: { userId: currentUser.userId },
       select: { status: true },
     });
-    const needsOnboarding =
-      registration?.status !== 'COMPLETED' && !videoAuthReturnProjectId(returnTo);
+    const needsOnboarding = requiresPlatformOnboarding(registration?.status, returnTo);
     const destination = !needsOnboarding
       ? new URL(returnTo ?? '/bunshins', request.url)
       : new URL('/onboarding', request.url);

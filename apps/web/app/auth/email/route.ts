@@ -35,7 +35,9 @@ export async function POST(request: Request): Promise<Response> {
         303,
       );
     }
-    const response = NextResponse.redirect(new URL('/login?sent=1', request.url), 303);
+    const sentUrl = new URL('/login?sent=1', request.url);
+    if (returnTo) sentUrl.searchParams.set('returnTo', returnTo);
+    const response = NextResponse.redirect(sentUrl, 303);
     if (returnTo) {
       response.cookies.set(LINE_AUTH_RETURN_COOKIE, returnTo, {
         httpOnly: true,
@@ -44,6 +46,8 @@ export async function POST(request: Request): Promise<Response> {
         maxAge: LINE_AUTH_RETURN_MAX_AGE_SECONDS,
         path: '/',
       });
+    } else {
+      response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
     }
     return response;
   } catch {

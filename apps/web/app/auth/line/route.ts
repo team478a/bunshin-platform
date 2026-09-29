@@ -37,6 +37,8 @@ export async function POST(request: Request): Promise<Response> {
         maxAge: LINE_AUTH_RETURN_MAX_AGE_SECONDS,
         path: '/',
       });
+    } else {
+      response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
     }
     return response;
   } catch {

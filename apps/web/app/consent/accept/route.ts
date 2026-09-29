@@ -5,7 +5,7 @@ import { requireSameOrigin } from '../../../src/auth/request-security';
 import {
   LINE_AUTH_RETURN_COOKIE,
   lineAuthReturnFromCookie,
-  videoAuthReturnProjectId,
+  requiresPlatformOnboarding,
 } from '../../../src/auth/line-return';
 
 export async function POST(request: Request) {
@@ -25,8 +25,7 @@ export async function POST(request: Request) {
       where: { userId: user.userId },
       select: { status: true },
     });
-    const needsOnboarding =
-      registration?.status !== 'COMPLETED' && !videoAuthReturnProjectId(returnTo);
+    const needsOnboarding = requiresPlatformOnboarding(registration?.status, returnTo);
     const destination = !needsOnboarding
       ? new URL(returnTo ?? '/bunshins', request.url)
       : new URL('/onboarding', request.url);
