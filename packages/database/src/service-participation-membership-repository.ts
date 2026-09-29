@@ -2,6 +2,7 @@ import type { ServiceParticipationRepository } from '@bunshin/application';
 import { type PrismaClient, prisma } from './client';
 import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
+import { latestServiceLegalDocuments } from './service-legal-latest';
 
 export class PrismaServiceParticipationMembershipRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -39,11 +40,9 @@ export class PrismaServiceParticipationMembershipRepository {
           effectiveAt: { lte: input.now },
         },
         orderBy: [{ type: 'asc' }, { version: 'desc' }],
-        select: { id: true, type: true },
+        select: { id: true, type: true, version: true },
       });
-      const requiredIds = [
-        ...new Map(published.map((document) => [document.type, document.id])).values(),
-      ];
+      const requiredIds = latestServiceLegalDocuments(published).map((document) => document.id);
       if (requiredIds.length > 0) {
         const accepted = await tx.serviceLegalConsent.count({
           where: {

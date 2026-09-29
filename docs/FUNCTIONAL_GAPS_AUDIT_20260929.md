@@ -15,9 +15,10 @@ main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は�
 5. **本人商品紹介の保存/非表示・コピー/投稿完了・紹介文生成API: PR #1016で実装済み**。認証後のMember Service解決と厳格Schemaの400変換、生成Quotaへの自Service ID接続を追加。本人/Service/分身/承認URLと公式商品、生成安全条件・ログ・冪等性を維持する。詳細は`PRIVATE_SERVICE_PRODUCT_CONTENT_IMPLEMENTATION_REPORT.md`。
 6. **動画配信の閲覧/採用/辞退/投稿完了・ダウンロード: PR #1017で実装済み**。Member Service解決、期限/取消の副作用前拒否、本人Project/Render/Storage Keyの照合、準備成功後の履歴記録、APIエラー/Cache Policyを追加。詳細は`PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`。
 7. **Program支援方針/目標候補・本人希望/目標の権限分離: PR #1018で実装済み**。公開限定の前段Resolverを除き、管理ResolverとMember Resolverを操作別に分離。本人Enrollment/受講ロック/研修専用期間条件、方針/候補のService照合と版/監査を維持する。詳細は`PRIVATE_SERVICE_PROGRAM_GOALS_IMPLEMENTATION_REPORT.md`。
-8. **ヘルプ・マニュアル・法務文書の閲覧分離: 今回修正**。非公開Serviceの既存参加者へ案内と公開済み文書を表示し、公開Serviceの匿名/未参加者案内を維持する。本文の所有境界/有効版とUser別マニュアルcacheを確認。詳細は`PRIVATE_SERVICE_VISITOR_PAGES_IMPLEMENTATION_REPORT.md`。
+8. **ヘルプ・マニュアル・法務文書の閲覧分離: PR #1019で実装済み**。非公開Serviceの既存参加者へ案内と公開済み文書を表示し、公開Serviceの匿名/未参加者案内を維持する。本文の所有境界/有効版とUser別マニュアルcacheを確認。詳細は`PRIVATE_SERVICE_VISITOR_PAGES_IMPLEMENTATION_REPORT.md`。
+9. **法務文書のtype別最新有効版: 今回修正**。公開表示・参加同意・既存参加者利用・通知同意判定が複数版で旧版を選び得たため、最大versionへ統一。過去の旧同意を自動付替えず、実データ/再同意導線の本番確認は別作業。詳細は`SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`。
 
-他の画面には主にMetadata用の公開Resolverが残る。匿名公開入口を維持すべき箇所と既存参加者操作を個別監査する。上記8件の修正だけで全非公開Service対応完了とは扱わない。
+他の画面には主にMetadata用の公開Resolverが残る。匿名公開入口を維持すべき箇所と既存参加者操作を個別監査する。上記9件の修正だけで全非公開Service対応完了とは扱わない。
 
 千ノ国・ハッシー・OEM等で該当する共通機能の修正。公開登録やService固有の業種/質問フローを共通化しない。本作業では設定・Provider実呼出・本番データを変更しない。
 
