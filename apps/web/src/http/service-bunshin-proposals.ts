@@ -6,7 +6,7 @@ import { requireSameOrigin } from '../auth/request-security';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
 import { fallbackBunshinProposals } from './bunshin-proposals';
 import { OpenAIBunshinProposalGenerator } from '../providers/openai-bunshin-proposal-generator';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import {
   readServiceOnboardingAnswers,
   serviceOnboardingProposalContext,
@@ -18,7 +18,7 @@ export async function serviceBunshinProposalsResponse(request: Request, serviceS
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const service = await resolvePublicServiceContext(serviceSlug);
+    const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const membership = await db.prisma.groupMembership.findFirst({
       where: {

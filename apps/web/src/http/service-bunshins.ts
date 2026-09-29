@@ -11,7 +11,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 const createSchema = z
   .object({
@@ -28,6 +28,12 @@ async function actorUserId(): Promise<string> {
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
   return actor.userId;
+}
+
+async function memberScope(serviceSlug: string) {
+  const actor = await actorUserId();
+  const service = await resolveMemberServiceContext(serviceSlug, actor);
+  return { service, actor };
 }
 
 async function useCases() {
@@ -71,10 +77,7 @@ async function response(request: Request, operation: () => Promise<unknown>, sta
 
 export function listServiceBunshinsResponse(request: Request, serviceSlug: string) {
   return response(request, async () => {
-    const [service, actor] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      actorUserId(),
-    ]);
+    const { service, actor } = await memberScope(serviceSlug);
     return (await useCases()).list.execute({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
@@ -90,10 +93,7 @@ export function createServiceBunshinResponse(request: Request, serviceSlug: stri
       requireSameOrigin(request);
       const parsed = createSchema.safeParse(await jsonBody(request));
       if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-      const [service, actor] = await Promise.all([
-        resolvePublicServiceContext(serviceSlug),
-        actorUserId(),
-      ]);
+      const { service, actor } = await memberScope(serviceSlug);
       return (await useCases()).create.execute({
         workspaceId: service.workspaceId,
         groupId: service.serviceId,
@@ -116,10 +116,7 @@ export function getServiceBunshinResponse(
   bunshinId: string,
 ) {
   return response(request, async () => {
-    const [service, actor] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      actorUserId(),
-    ]);
+    const { service, actor } = await memberScope(serviceSlug);
     return (await useCases()).get.execute({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
@@ -138,10 +135,7 @@ export function updateServiceBunshinResponse(
     requireSameOrigin(request);
     const parsed = updateSchema.safeParse(await jsonBody(request));
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-    const [service, actor] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      actorUserId(),
-    ]);
+    const { service, actor } = await memberScope(serviceSlug);
     return (await useCases()).update.execute({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
@@ -169,10 +163,7 @@ export function archiveServiceBunshinResponse(
   return response(request, async () => {
     requireSameOrigin(request);
     await jsonBody(request);
-    const [service, actor] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      actorUserId(),
-    ]);
+    const { service, actor } = await memberScope(serviceSlug);
     return (await useCases()).archive.execute({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,

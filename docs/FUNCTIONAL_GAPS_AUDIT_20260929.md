@@ -4,6 +4,18 @@
 
 ## 確認できた機能不足と推奨順
 
+### 追加監査: 非公開サービスの参加者操作API
+
+main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は初回監査4件の実装後に発見した機能不具合であり、本番で不正参照が起きた証拠ではない。
+
+1. **投稿パートナーの一覧・作成・取得・編集・停止と初回回答からの候補提案: 今回修正**。認証後の本人Member Service解決を使用し、非公開Serviceの既存参加者も操作できる。Service所属の編集/停止にも本人所有を必須とし、個人用管理権限は維持する。詳細は`PRIVATE_SERVICE_BUNSHIN_OPERATIONS_IMPLEMENTATION_REPORT.md`。
+2. **SNS設定・投稿テーマ・週間計画の操作API: 残タスク**。同じ公開限定判定を後続の独立PRで修正する。
+3. **投稿の採否・完了・実行結果の保存API: 残タスク**。前項の後に本人・Service・Bunshin境界を保って対応する。
+
+千ノ国・ハッシー・OEM等で該当する共通機能の修正。公開登録やService固有の業種/質問フローを共通化しない。本作業では設定・Provider実呼出・本番データを変更しない。
+
+### 初回監査の4件
+
 1. **OEM決済CSVの受付期間指定と上限超過検出: PR #1003で実装済み**。日本時間の期間指定・10,001件目の検出・部分CSV拒否・画面案内を追加。同期10,000件上限自体は残る。詳細は`OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`。
 2. **AI研修の無料・手動登録受講の自動期限終了: 今回バッチを実装**。購入に紐づかないACTIVE受講を明示Service限定でEXPIREDへ冪等に確定し、評価待ちを停止する。ロック・所有/Module再確認・CAS・最小システム監査・既存終了日Triggerを使用。development/stagingの内部実行口だけを追加し、本番停止・定期実行未登録を維持する。詳細は`ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`。有料期限処理は変更しない。
 3. **占いAI生成の非同期化と再試行: PR #1007で実装済み**。D-145に従うQueue/Worker、最大3回の一時障害再試行、lease/本人/Service/Bunshin境界、試行別Quota/使用量記録、標準結果の即時表示をコード実装した。既定無効の`FORTUNE_ASYNC_GENERATION_ENABLED`で既存同期方式を維持する。CI検証は対象PR、本番有効化・実AI検証は別作業。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。

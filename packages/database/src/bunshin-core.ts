@@ -286,6 +286,7 @@ export class PrismaBunshinRepository implements BunshinRepository {
           workspaceId: input.workspaceId,
           groupId: input.groupId ?? null,
           status: { not: 'ARCHIVED' },
+          ...(input.groupId ? { ownerUserId: input.actorUserId } : {}),
           workspace: { status: 'ACTIVE' },
           AND: [
             {
