@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+AI研修の過去の未確定終了日時の管理者個別確定は`docs/ai-training/AI_TRAINING_END_DATE_CONFIRMATION_IMPLEMENTATION_REPORT.md`を参照。自Serviceの管理者が証跡・日本時間の日時・理由を指定し、Preview Revisionと受講排他で未確定日時のみを保存し監査する。アーカイブ/退会後の記録にも対応する。既存確定日上書き・自動推定・一括補完・データ削除・本番期限処理の停止解除は行わない。
+
 AI研修の無料・手動登録受講の期限終了バッチは`docs/ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`を参照。購入に紐づかない受講をService限定・期間/所有/Module/CAS再確認で終了し、評価待ちを停止する。最小システム監査を保持し、確定終了日記録は既存Triggerを使う。内部実行口はdevelopment/stagingのみで、本番停止・Cron未登録・保持期限消去停止を維持する。
 
 複数Service同時ログインの復帰分離は`docs/AUTH_RETURN_ATTEMPTS_IMPLEMENTATION_REPORT.md`を参照。試行別proof・PKCE flowId・単回DB記録・本人に束ねた同意を実装する。初期値は無効で、本番有効化にはSupabase Redirect URL/メールテンプレートと実端末の確認が必要。マージだけで本番稼働済みとは扱わない。

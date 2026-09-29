@@ -7,6 +7,7 @@ const fake = vi.hoisted(() => ({
   actor: vi.fn(),
   service: vi.fn(),
   preview: vi.fn(),
+  unresolved: vi.fn(),
   log: vi.fn(),
 }));
 vi.mock('../src/auth/current-user', () => ({
@@ -15,6 +16,7 @@ vi.mock('../src/auth/current-user', () => ({
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: fake.service }));
 vi.mock('@bunshin/observability', () => ({ createLogger: () => ({ error: fake.log }) }));
 vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
   notFound: () => {
     throw new Error('NOT_FOUND');
   },
@@ -26,6 +28,9 @@ vi.mock('../app/ui/public-shell', () => ({
   PublicShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('@bunshin/database', () => ({
+  PrismaTrainingEndDateRepository: class {
+    listUnresolved = fake.unresolved;
+  },
   PrismaTrainingRetentionAdminPreviewRepository: class {
     preview = fake.preview;
   },
@@ -53,6 +58,7 @@ describe('retention admin page', () => {
     fake.actor.mockResolvedValue({ userId: 'manager' });
     fake.service.mockResolvedValue({ workspaceId: 'workspace', serviceId: 'service' });
     fake.preview.mockResolvedValue({ outcome: 'PREVIEW', summary });
+    fake.unresolved.mockResolvedValue({ outcome: 'ROWS', rows: [] });
   });
   it('uses authenticated service scope and only renders counts', async () => {
     const html = renderToStaticMarkup(await page());
@@ -87,6 +93,46 @@ describe('retention admin page', () => {
   it('fails closed if database authorization changed', async () => {
     fake.preview.mockResolvedValue({ outcome: 'FORBIDDEN' });
     await expect(page()).rejects.toThrow('NOT_FOUND');
+  });
+  it('renders individual evidence-based action for archived historical enrollment in own service', async () => {
+    fake.unresolved.mockResolvedValue({
+      outcome: 'ROWS',
+      rows: [
+        {
+          enrollmentId: 'historical',
+          participantLabel: 'Historical participant',
+          programLabel: 'Archived program',
+          status: 'COMPLETED',
+          startsAt: null,
+          updatedAt: checkedAt.toISOString(),
+        },
+      ],
+    });
+    const html = renderToStaticMarkup(await page());
+    expect(fake.unresolved).toHaveBeenCalledWith({
+      workspaceId: 'workspace',
+      groupId: 'service',
+      actorUserId: 'manager',
+    });
+    expect(html).toContain('Historical participant');
+    expect(html).toContain('Archived program');
+    expect(html).toContain('受講ID：historical');
+    expect(html).toContain('確定前に確認');
+    expect(html).not.toContain('終了日時を確定</button>');
+  });
+  it('rejects list authorization loss separately from successful summary authorization', async () => {
+    fake.unresolved.mockResolvedValue({ outcome: 'FORBIDDEN' });
+    await expect(page()).rejects.toThrow('NOT_FOUND');
+  });
+  it('shows list failure/limits without claiming zero unresolved records', async () => {
+    fake.unresolved.mockRejectedValue(new Error('PRIVATE_LIST_EXCEPTION'));
+    let html = renderToStaticMarkup(await page());
+    expect(html).toContain('未確定の一覧を取得できませんでした');
+    expect(html).not.toContain('PRIVATE_LIST_EXCEPTION');
+    fake.unresolved.mockResolvedValue({ outcome: 'TOO_LARGE' });
+    html = renderToStaticMarkup(await page());
+    expect(html).toContain('部分一覧からの確定操作は表示しません');
+    expect(html).not.toContain('確定前に確認');
   });
   it('does not disguise service resolution database failures as missing membership', async () => {
     fake.service.mockRejectedValue(new Error('Database unavailable'));

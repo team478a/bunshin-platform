@@ -2,6 +2,7 @@ import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
 import {
   PrismaTrainingLifecycleRepository,
+  PrismaTrainingEndDateRepository,
   listTrainingAdminEvaluationMetrics,
   PrismaTrainingRetentionAdminPreviewRepository,
   trainingEnrollmentPeriodWhere,
@@ -1623,6 +1624,167 @@ integration('database ownership boundaries', () => {
         })
       ).endedAt,
     ).toBeNull();
+    // A legacy terminal enrollment is inserted directly by the isolated fixture;
+    // unlike a lifecycle transition, it has no recorded end date.
+    const endDates = new PrismaTrainingEndDateRepository(client);
+    const endInput = {
+      ...base,
+      programEnrollmentId: otherEnrollment.id,
+      actorUserId: manager.user.id,
+      endedAt: new Date(now.getTime() - 12 * 3600000),
+      reason: 'Reviewed historical completion notice',
+      now: new Date(),
+    };
+    const previewEnd = await endDates.preview(endInput);
+    if (previewEnd.outcome !== 'PREVIEW') throw new Error('historical end preview required');
+    expect(previewEnd.preview).toMatchObject({
+      status: 'COMPLETED',
+      endedAt: endInput.endedAt.toISOString(),
+      workInformationDue: false,
+      progressAndScoresDue: false,
+    });
+    expect(
+      await client.trainingDataRetentionState.findUnique({
+        where: { programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBeNull();
+    expect(JSON.stringify(previewEnd)).not.toContain('Other participant private answer');
+    expect(await endDates.preview({ ...endInput, actorUserId: other.user.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(await endDates.preview({ ...endInput, workspaceId: other.workspace.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(await endDates.preview({ ...endInput, groupId: randomUUID() })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(await endDates.preview({ ...endInput, programEnrollmentId: randomUUID() })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(await endDates.preview({ ...endInput, programEnrollmentId: enrollment.id })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    expect(
+      await endDates.preview({ ...endInput, endedAt: new Date(endInput.now.getTime() + 60000) }),
+    ).toEqual({ outcome: 'INVALID_DATE' });
+    expect(
+      await endDates.preview({ ...endInput, endedAt: new Date(now.getTime() - 2 * 86400000) }),
+    ).toEqual({ outcome: 'INVALID_DATE' });
+    const confirmEnd = {
+      ...endInput,
+      revision: previewEnd.preview.revision,
+      operationId: randomUUID(),
+    };
+    await client.serviceProgram.update({ where: { id: program.id }, data: { status: 'ARCHIVED' } });
+    await client.groupMembership.update({
+      where: { id: otherMembership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await endDates.listUnresolved(endInput)).toMatchObject({
+      outcome: 'ROWS',
+      rows: [{ enrollmentId: otherEnrollment.id }],
+    });
+    expect(await endDates.listUnresolved({ ...endInput, actorUserId: other.user.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    await client.groupMembership.update({
+      where: { id: otherMembership.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    await client.serviceProgram.update({ where: { id: program.id }, data: { status: 'ACTIVE' } });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'CONTENT_EDITOR' },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'FORBIDDEN' });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'SERVICE_ADMIN', status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'FORBIDDEN' });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    await client.serviceProgram.update({
+      where: { id: program.id },
+      data: { settings: { moduleKey: 'OTHER_MODULE' } },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'NOT_FOUND' });
+    await client.serviceProgram.update({
+      where: { id: program.id },
+      data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+    });
+    expect(await endDates.confirm({ ...confirmEnd, reason: 'different evidence' })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    const confirmations = await Promise.all([
+      endDates.confirm(confirmEnd),
+      endDates.confirm(confirmEnd),
+    ]);
+    expect(confirmations.filter(({ outcome }) => outcome === 'APPLIED')).toHaveLength(1);
+    expect(
+      confirmations.every(({ outcome }) =>
+        ['APPLIED', 'ALREADY_APPLIED', 'CONFLICT'].includes(outcome),
+      ),
+    ).toBe(true);
+    expect(await endDates.confirm(confirmEnd)).toMatchObject({ outcome: 'ALREADY_APPLIED' });
+    expect(await endDates.confirm({ ...confirmEnd, operationId: randomUUID() })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    const endState = await client.trainingDataRetentionState.findUniqueOrThrow({
+      where: { programEnrollmentId: otherEnrollment.id },
+    });
+    expect(endState.endedAt).toEqual(endInput.endedAt);
+    expect(endState.workRedactedAt).toBeNull();
+    expect(endState.progressPurgedAt).toBeNull();
+    const endAudit = await client.programAuditLog.findMany({
+      where: { ...base, resourceId: otherEnrollment.id, action: 'TRAINING_END_DATE_CONFIRMED' },
+    });
+    expect(endAudit).toHaveLength(1);
+    expect(endAudit[0]?.performedByUserId).toBe(manager.user.id);
+    expect(endAudit[0]?.afterData).toMatchObject({
+      reason: endInput.reason,
+      endedAt: endInput.endedAt.toISOString(),
+    });
+    expect(
+      await client.programEnrollment.findUniqueOrThrow({ where: { id: otherEnrollment.id } }),
+    ).toEqual(otherEnrollment);
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: {
+          ...base,
+          programEnrollmentId: otherEnrollment.id,
+          answer: 'Other participant private answer',
+        },
+      }),
+    ).toBe(1);
+    expect(
+      (
+        await client.trainingToolkitItem.findMany({
+          where: { ...base, programEnrollmentId: enrollment.id },
+        })
+      )[0]?.contentSnapshot,
+    ).toBe('Keep this saved result');
+    expect(await adminPreview.preview({ ...adminPreviewScope, now: endInput.now })).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: { endDateUnresolved: 0 },
+    });
+    // Explicit fixture reopening exercises the existing trigger. Old confirmation
+    // must not restore the date after it was reset for a new learning period.
+    await client.programEnrollment.update({
+      where: { id: otherEnrollment.id },
+      data: { status: 'ACTIVE' },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'CONFLICT' });
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: otherEnrollment.id },
+        })
+      ).endedAt,
+    ).toBeNull();
+
     await client.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'REVOKED', revokedAt: new Date() },

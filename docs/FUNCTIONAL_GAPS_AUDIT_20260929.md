@@ -1,13 +1,13 @@
 # 機能不足の再監査（2026-09-29）
 
-対象は千ノ国メディア、ハッシーSNSサポート、占い、AI研修、OEM。設定・接続・運用確認を未実装機能に数えない。初回基準はmain `bf3ba611`（PR #1002まで）。現在はmain `5d4a32d1`（PR #1007まで）とPR #1004の期限終了バッチの差分へ更新。PRマージやコード存在を本番稼働の証拠にはしない。
+対象は千ノ国メディア、ハッシーSNSサポート、占い、AI研修、OEM。設定・接続・運用確認を未実装機能に数えない。初回基準はmain `bf3ba611`（PR #1002まで）。現在はmain `89a3c8c6`（PR #1004/#1008まで）と今回の過去終了日時個別確定の差分へ更新。PRマージやコード存在を本番稼働の証拠にはしない。
 
 ## 確認できた機能不足と推奨順
 
 1. **OEM決済CSVの受付期間指定と上限超過検出: PR #1003で実装済み**。日本時間の期間指定・10,001件目の検出・部分CSV拒否・画面案内を追加。同期10,000件上限自体は残る。詳細は`OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`。
 2. **AI研修の無料・手動登録受講の自動期限終了: 今回バッチを実装**。購入に紐づかないACTIVE受講を明示Service限定でEXPIREDへ冪等に確定し、評価待ちを停止する。ロック・所有/Module再確認・CAS・最小システム監査・既存終了日Triggerを使用。development/stagingの内部実行口だけを追加し、本番停止・定期実行未登録を維持する。詳細は`ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`。有料期限処理は変更しない。
 3. **占いAI生成の非同期化と再試行: PR #1007で実装済み**。D-145に従うQueue/Worker、最大3回の一時障害再試行、lease/本人/Service/Bunshin境界、試行別Quota/使用量記録、標準結果の即時表示をコード実装した。既定無効の`FORTUNE_ASYNC_GENERATION_ENABLED`で既存同期方式を維持する。CI検証は対象PR、本番有効化・実AI検証は別作業。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。
-4. **AI研修の過去終了日不明データの管理者確定手段**。既存Preflightは終了日不明を判定保留にし、自動推定しない。必要な場合はPreview・理由・確認・監査付きの確定操作を設計する。終了日の決定方法は業務判断を要するため、一括補完や実削除を先行しない。
+4. **AI研修の過去終了日不明データの管理者確定手段: 今回個別操作を実装**。管理者が証跡を確認して日時・理由を指定し、Preview・確認Revision・受講排他・未確定CAS・監査で保存する。既存確定日を上書きせず、アーカイブ/退会後の記録にも対応する。事実不明なら保留のままにし、自動推定・一括補完・実削除・本番期限処理の停止解除は行わない。詳細は`ai-training/AI_TRAINING_END_DATE_CONFIRMATION_IMPLEMENTATION_REPORT.md`。検証は対象PRのCI、本番確認は別作業。
 
 ## 実装済みと確認した項目
 
