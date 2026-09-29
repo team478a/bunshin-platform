@@ -187,6 +187,11 @@ export async function finishServiceLineLink(request: Request) {
     const state = url.searchParams.get('state');
     const code = url.searchParams.get('code');
     if (!state || !/^[\w-]{43}$/.test(state)) throw new Error('Invalid state');
+    const db = await import('@bunshin/database');
+    const attempt = await db.prisma.serviceLineLinkAttempt.findUnique({
+      where: { stateHash: hashLineState(state) },
+    });
+    if (attempt) destination = returnPath(attempt.serviceSlug, attempt.bunshinId);
     const browserCookies = await cookies();
     const attemptCookie = lineLinkAttemptCookie(state);
     const browserProof = browserCookies.get(attemptCookie);
@@ -195,11 +200,6 @@ export async function finishServiceLineLink(request: Request) {
     const browserState = browserProof?.value ?? browserCookies.get(lineLinkCookie)?.value;
     if (state !== browserState) throw new Error('Invalid browser proof');
     if (browserProof) completedCookie = attemptCookie;
-    const db = await import('@bunshin/database');
-    const attempt = await db.prisma.serviceLineLinkAttempt.findUnique({
-      where: { stateHash: hashLineState(state) },
-    });
-    if (attempt) destination = returnPath(attempt.serviceSlug, attempt.bunshinId);
     if (url.searchParams.has('error')) {
       result = 'failed';
       throw new Error('LINE authorization cancelled');

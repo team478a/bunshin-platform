@@ -278,6 +278,9 @@ describe('service LINE linking', () => {
         new Request(`https://example.com/auth/service-line/callback?state=${state}&${query}`),
       );
       expect(outcome(response)).toBe('session-expired');
+      expect(new URL(response.headers.get('location')!).pathname).toBe(
+        `/s/service/bunshins/${id}/line`,
+      );
       expect(response.headers.get('set-cookie')).toBeNull();
       expect(m.claim).not.toHaveBeenCalled();
       expect(m.verify).not.toHaveBeenCalled();
