@@ -8,6 +8,7 @@ import {
 import { type PrismaClient, Prisma } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { stopTrainingEnrollmentEvaluations } from './training-evaluation-stop';
 
 export class PrismaTrainingLifecycleRepository implements TrainingLifecycleRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -120,33 +121,15 @@ export class PrismaTrainingLifecycleRepository implements TrainingLifecycleRepos
           });
           if (updated.count !== 1) return { outcome: 'CONFLICT' };
           if (target !== 'ACTIVE') {
-            await tx.job.updateMany({
-              where: {
-                workspaceId: input.workspaceId,
-                requestedBy: member.userId,
-                jobType: 'TRAINING_ANSWER_EVALUATE',
-                status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] },
-                payloadReference: {
-                  startsWith: `training-evaluation:${input.groupId}:${input.programEnrollmentId}:`,
-                },
-              },
-              data: {
-                status: 'CANCELLED',
-                cancelledAt: input.now,
-                leaseOwner: null,
-                leaseExpiresAt: null,
-                nextRetryAt: null,
-              },
-            });
-            await tx.trainingMissionAnswer.updateMany({
-              where: {
+            await stopTrainingEnrollmentEvaluations(
+              tx,
+              {
                 ...scope,
                 programEnrollmentId: input.programEnrollmentId,
-                userId: member.userId,
-                evaluationStatus: 'PENDING',
+                actorUserId: member.userId,
               },
-              data: { evaluationStatus: 'FAILED' },
-            });
+              input.now,
+            );
           }
           await tx.programAuditLog.create({
             data: {

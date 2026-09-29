@@ -173,7 +173,11 @@ describe('personal training data deletion', () => {
     expect(tx.trainingParticipantProfile.deleteMany).not.toHaveBeenCalled();
     expect(tx.programMissionAssignment.deleteMany).not.toHaveBeenCalled();
     expect(tx.programActionEvent.deleteMany).toHaveBeenCalledWith({
-      where: expect.objectContaining({ actorUserId: scope.actorUserId, OR: expect.any(Array) }),
+      where: expect.objectContaining({
+        actorUserId: scope.actorUserId,
+        OR: expect.any(Array),
+        eventType: { not: 'TRAINING_ENROLLMENT_EXPIRED' },
+      }),
     });
   });
   it('rejects missing owners/enrollments/modules and oversize data without writes', async () => {
