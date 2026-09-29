@@ -5353,6 +5353,72 @@ integration('database ownership boundaries', () => {
   });
 });
 
+integration('authentication return attempt isolation', () => {
+  const client = new PrismaClient();
+  afterAll(async () => client.$disconnect());
+  it('enforces single claims, actor-bound consumption and private RLS storage', async () => {
+    const ids = [randomUUID(), randomUUID()];
+    const actor = randomUUID();
+    try {
+      for (const [index, id] of ids.entries())
+        await client.authReturnAttempt.create({
+          data: {
+            id,
+            proofHash: String(index).repeat(64),
+            method: 'LINE',
+            origin: 'https://bunshin.example',
+            returnPath: `/s/project-${index}/line`,
+            expiresAt: new Date(Date.now() + 600_000),
+          },
+        });
+      const claims = await Promise.all(
+        ids.slice(0, 1).flatMap((id) =>
+          [1, 2].map(() =>
+            client.authReturnAttempt.updateMany({
+              where: { id, stage: 'PENDING' },
+              data: { stage: 'CLAIMED' },
+            }),
+          ),
+        ),
+      );
+      expect(claims.reduce((sum, result) => sum + result.count, 0)).toBe(1);
+      await client.authReturnAttempt.updateMany({
+        where: { id: ids[0]!, stage: 'CLAIMED' },
+        data: { stage: 'AUTHENTICATED', actorUserId: actor },
+      });
+      expect(
+        (
+          await client.authReturnAttempt.updateMany({
+            where: { id: ids[0]!, stage: 'AUTHENTICATED', actorUserId: randomUUID() },
+            data: { stage: 'CONSUMED' },
+          })
+        ).count,
+      ).toBe(0);
+      expect(
+        (
+          await client.authReturnAttempt.updateMany({
+            where: { id: ids[0]!, stage: 'AUTHENTICATED', actorUserId: actor },
+            data: { stage: 'CONSUMED', actorUserId: null, returnPath: null },
+          })
+        ).count,
+      ).toBe(1);
+      expect((await client.authReturnAttempt.findUnique({ where: { id: ids[1]! } }))?.stage).toBe(
+        'PENDING',
+      );
+      const tables = await client.$queryRaw<
+        Array<{ relrowsecurity: boolean }>
+      >`SELECT relrowsecurity FROM pg_class WHERE relname = 'auth_return_attempts'`;
+      expect(tables[0]?.relrowsecurity).toBe(true);
+      const policies = await client.$queryRaw<
+        Array<{ policyname: string }>
+      >`SELECT policyname FROM pg_policies WHERE tablename = 'auth_return_attempts'`;
+      expect(policies).toHaveLength(0);
+    } finally {
+      await client.authReturnAttempt.deleteMany({ where: { id: { in: ids } } });
+    }
+  });
+});
+
 function ownerScope(owner: { workspace: { id: string }; user: { id: string } }, bunshinId: string) {
   return { workspaceId: owner.workspace.id, actorUserId: owner.user.id, bunshinId };
 }
