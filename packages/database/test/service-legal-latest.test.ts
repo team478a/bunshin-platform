@@ -35,6 +35,8 @@ const m = {
   memberFirst: vi.fn(),
   workspace: vi.fn(),
   consentCount: vi.fn(),
+  consentRows: vi.fn(),
+  consentCreate: vi.fn(),
   memberUpdate: vi.fn(),
   event: vi.fn(),
   preference: vi.fn(),
@@ -44,7 +46,11 @@ const client = {
   serviceLegalDocument: { findMany: m.documents },
   groupMembership: { findUnique: m.memberUnique, findFirst: m.memberFirst, update: m.memberUpdate },
   workspaceMembership: { findUnique: m.workspace },
-  serviceLegalConsent: { count: m.consentCount },
+  serviceLegalConsent: {
+    count: m.consentCount,
+    findMany: m.consentRows,
+    createMany: m.consentCreate,
+  },
   serviceMembershipEvent: { createMany: m.event },
   serviceNotificationPreference: { findUnique: m.preference },
   $transaction: (callback: (tx: typeof client) => unknown) => callback(client),
@@ -59,6 +65,8 @@ beforeEach(() => {
   m.workspace.mockResolvedValue({ status: 'ACTIVE' });
   m.memberUpdate.mockResolvedValue(membership);
   m.preference.mockResolvedValue(null);
+  m.consentRows.mockResolvedValue([]);
+  m.consentCreate.mockResolvedValue({ count: 2 });
 });
 
 describe('latest effective service legal document', () => {
@@ -115,7 +123,6 @@ describe('latest effective service legal document', () => {
         where: expect.objectContaining({
           workspaceId: 'workspace-a',
           groupId: 'service-a',
-          type: { in: ['TERMS', 'PRIVACY'] },
           status: 'PUBLISHED',
           effectiveAt: { lte: at },
         }),
@@ -178,5 +185,59 @@ describe('latest effective service legal document', () => {
       repository.recordUse({ slug: 'public-a', actorUserId: 'user-a', now: at }),
     ).resolves.toMatchObject({ id: 'membership-a' });
     expect(m.consentCount).not.toHaveBeenCalled();
+  });
+
+  it('shows only this active member current legal documents and consent state', async () => {
+    m.consentRows.mockResolvedValue([{ legalDocumentId: 'privacy-v2' }]);
+    const repository = new PrismaServiceParticipationMembershipRepository(client);
+    const input = { slug: 'public-a', actorUserId: 'user-a', now: at };
+    await expect(repository.findLegalConsentView(input)).resolves.toMatchObject({
+      acceptedDocumentIds: ['privacy-v2'],
+      legalDocuments: [
+        expect.objectContaining({ id: 'terms-v3' }),
+        expect.objectContaining({ id: 'privacy-v2' }),
+      ],
+    });
+    expect(m.consentRows).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        groupMembershipId: 'membership-a',
+        userId: 'user-a',
+        legalDocumentId: { in: ['terms-v3', 'privacy-v2'] },
+      }),
+      select: { legalDocumentId: true },
+    });
+    m.memberFirst.mockResolvedValue(null);
+    await expect(repository.findLegalConsentView(input)).resolves.toBeNull();
+    expect(m.consentRows).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds only current-version consent for the active member without changing membership', async () => {
+    const repository = new PrismaServiceParticipationMembershipRepository(client);
+    const input = { slug: 'public-a', actorUserId: 'user-a', now: at };
+    await expect(
+      repository.acceptLegalDocuments({ ...input, legalDocumentIds: ['terms-v1', 'privacy-v2'] }),
+    ).resolves.toBe(false);
+    expect(m.consentCreate).not.toHaveBeenCalled();
+    await expect(
+      repository.acceptLegalDocuments({ ...input, legalDocumentIds: ['terms-v3', 'privacy-v2'] }),
+    ).resolves.toBe(true);
+    expect(m.consentCreate).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ legalDocumentId: 'terms-v3', groupMembershipId: 'membership-a' }),
+        expect.objectContaining({
+          legalDocumentId: 'privacy-v2',
+          groupMembershipId: 'membership-a',
+        }),
+      ]),
+      skipDuplicates: true,
+    });
+    expect(m.memberUpdate).not.toHaveBeenCalled();
+    m.memberFirst.mockResolvedValue(null);
+    await expect(
+      repository.acceptLegalDocuments({ ...input, legalDocumentIds: ['terms-v3', 'privacy-v2'] }),
+    ).resolves.toBe(false);
+    expect(m.consentCreate).toHaveBeenCalledTimes(1);
   });
 });

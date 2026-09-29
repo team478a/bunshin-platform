@@ -44,9 +44,10 @@ export default async function ServiceLineSettingsPage({
               現在、サービスのLINE配信を利用できません。運営者へお問い合わせください。
             </p>
           ) : !consented ? (
-            <p>
-              サービスへの参加同意を確認できません。サービスのホームで参加手続きを確認してください。
-            </p>
+            <>
+              <p>サービスへの参加同意を確認できません。現在の文書への同意を確認してください。</p>
+              <Link href={`/s/${slug}/legal-consent` as Route}>利用規約などを確認する</Link>
+            </>
           ) : (
             <>
               <h2>{connected ? 'LINE接続済み' : 'LINE接続は未完了です'}</h2>

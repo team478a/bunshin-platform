@@ -19,6 +19,16 @@ export async function loadServiceLineSettings(serviceSlug: string, actorUserId: 
     select: { id: true, consentedAt: true },
   });
   if (!membership) throw new ApplicationError('NOT_FOUND', 'membership not found');
+  const legalConsent = membership.consentedAt
+    ? await new db.PrismaServiceParticipationRepository().findLegalConsentView({
+        slug: serviceSlug,
+        actorUserId,
+        now: new Date(),
+      })
+    : null;
+  const consented =
+    legalConsent?.legalDocuments.every(({ id }) => legalConsent.acceptedDocumentIds.includes(id)) ??
+    false;
   const scope = { workspaceId: service.workspaceId, groupId: service.serviceId };
   const [policy, partners] = await Promise.all([
     db.prisma.groupLineRoutingPolicy.findUnique({
@@ -73,6 +83,6 @@ export async function loadServiceLineSettings(serviceSlug: string, actorUserId: 
     partners,
     available,
     connected,
-    consented: Boolean(membership.consentedAt),
+    consented,
   };
 }

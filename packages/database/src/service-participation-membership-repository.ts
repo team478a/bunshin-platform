@@ -1,11 +1,121 @@
 import type { ServiceParticipationRepository } from '@bunshin/application';
-import { type PrismaClient, prisma } from './client';
+import { Prisma, type PrismaClient, prisma } from './client';
 import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
 import { latestServiceLegalDocuments } from './service-legal-latest';
 
 export class PrismaServiceParticipationMembershipRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
+
+  async findLegalConsentView(
+    input: Parameters<ServiceParticipationRepository['findLegalConsentView']>[0],
+  ) {
+    const configuration = await this.client.serviceConfiguration.findFirst({
+      where: {
+        slug: input.slug,
+        group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+        AND: [
+          { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+          { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+        ],
+      },
+      select: { workspaceId: true, groupId: true },
+    });
+    if (configuration === null) return null;
+    const membership = await this.client.groupMembership.findFirst({
+      where: {
+        workspaceId: configuration.workspaceId,
+        groupId: configuration.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        consentedAt: { not: null },
+      },
+      select: { id: true },
+    });
+    if (membership === null) return null;
+    const published = await this.client.serviceLegalDocument.findMany({
+      where: {
+        workspaceId: configuration.workspaceId,
+        groupId: configuration.groupId,
+        status: 'PUBLISHED',
+        effectiveAt: { lte: input.now },
+      },
+      select: { id: true, type: true, version: true, title: true, content: true },
+    });
+    const legalDocuments = latestServiceLegalDocuments(published);
+    const accepted = await this.client.serviceLegalConsent.findMany({
+      where: {
+        workspaceId: configuration.workspaceId,
+        groupId: configuration.groupId,
+        groupMembershipId: membership.id,
+        userId: input.actorUserId,
+        legalDocumentId: { in: legalDocuments.map(({ id }) => id) },
+      },
+      select: { legalDocumentId: true },
+    });
+    return {
+      legalDocuments,
+      acceptedDocumentIds: accepted.map(({ legalDocumentId }) => legalDocumentId),
+    };
+  }
+
+  async acceptLegalDocuments(
+    input: Parameters<ServiceParticipationRepository['acceptLegalDocuments']>[0],
+  ) {
+    return this.client.$transaction(
+      async (tx) => {
+        const configuration = await tx.serviceConfiguration.findFirst({
+          where: {
+            slug: input.slug,
+            group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+            AND: [
+              { OR: [{ startsAt: null }, { startsAt: { lte: input.now } }] },
+              { OR: [{ endsAt: null }, { endsAt: { gt: input.now } }] },
+            ],
+          },
+          select: { workspaceId: true, groupId: true },
+        });
+        if (configuration === null) return false;
+        const membership = await tx.groupMembership.findFirst({
+          where: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            userId: input.actorUserId,
+            status: 'ACTIVE',
+            consentedAt: { not: null },
+          },
+          select: { id: true },
+        });
+        if (membership === null) return false;
+        const published = await tx.serviceLegalDocument.findMany({
+          where: {
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            status: 'PUBLISHED',
+            effectiveAt: { lte: input.now },
+          },
+          select: { id: true, type: true, version: true },
+        });
+        const requiredIds = latestServiceLegalDocuments(published)
+          .map(({ id }) => id)
+          .sort();
+        if (requiredIds.join(':') !== [...input.legalDocumentIds].sort().join(':')) return false;
+        await tx.serviceLegalConsent.createMany({
+          data: requiredIds.map((legalDocumentId) => ({
+            workspaceId: configuration.workspaceId,
+            groupId: configuration.groupId,
+            groupMembershipId: membership.id,
+            userId: input.actorUserId,
+            legalDocumentId,
+            consentedAt: input.now,
+          })),
+          skipDuplicates: true,
+        });
+        return true;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
 
   async recordUse(input: Parameters<ServiceParticipationRepository['recordUse']>[0]) {
     return this.client.$transaction(async (tx) => {
