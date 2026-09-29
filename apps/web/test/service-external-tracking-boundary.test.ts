@@ -20,6 +20,16 @@ describe('service external tracking boundary', () => {
     expect(editor).toContain('apiBase ??');
   });
 
+  it('authorizes the private service API with the same management role as its page', () => {
+    const route = source('app/api/services/[serviceSlug]/external-tracking/[[...path]]/route.ts');
+    expect(route).toContain(
+      "resolveManagedServiceContext(serviceSlug, actor.userId, 'ADMINISTRATION')",
+    );
+    expect(route).not.toContain('resolvePublicServiceContext');
+    expect(route).toContain('service.workspaceId');
+    expect(route).toContain('service.serviceId');
+  });
+
   it('keeps result API state in the operation container while the result view stays presentational', () => {
     const editor = source('app/(app)/admin/external-tracking/external-tracking-operations.tsx');
     const results = source('app/(app)/admin/external-tracking/external-tracking-results.tsx');

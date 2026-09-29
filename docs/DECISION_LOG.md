@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## D-160: 専用URL・外部計測のService管理APIは管理権限で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-159後の残存Public Resolver監査）
+- Service配下の専用URL/外部計測管理APIは、管理画面と同じ認証済み本人のACTIVEな`ADMINISTRATION`権限からWorkspace/Serviceを解決する。非公開Serviceの管理者も操作でき、匿名・他Service・権限不足を拒否する。
+- 下層のGroup ID照合、RepositoryのService限定とMANAGER権限、同一Origin、URL/CSV/結果Tokenの既存検証を維持する。Service外の成果受信Webhookと公開登録入口は変更しない。
+- 不存在・権限不足と予期せぬDB障害を区別し、API失敗応答をprivate/no-storeとする。設定、DB schema、本番データ、Provider呼出は変更しない。
+
 ## D-159: Serviceの商品パックとCampaign操作は公開状態でなく内容編集権限で判定する
 
 - 日付: 2026-09-30
