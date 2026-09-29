@@ -1,5 +1,6 @@
 import { GetRequiredLegalConsents } from '@bunshin/application';
 import { redirect } from 'next/navigation';
+import type { Route } from 'next';
 import { headers } from 'next/headers';
 import { currentUserProvider } from '../../src/auth/current-user';
 import { PublicShell } from '../ui/public-shell';
@@ -56,7 +57,9 @@ export default async function ConsentPage({
       if (error instanceof AuthReturnContextError) redirect('/login?error=auth-context');
       throw error;
     }
-    redirect(authReturnDestination(context, profile?.status));
+    // Next narrows redirect after typed routes are generated; clean CI sees a string instead.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Required with generated Next typed routes; destinations are allowlisted.
+    redirect(authReturnDestination(context, profile?.status) as Route);
   }
   return (
     <PublicShell>
