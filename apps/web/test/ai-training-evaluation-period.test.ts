@@ -168,9 +168,14 @@ describe('training evaluation period boundaries', () => {
     fake.assignment.mockResolvedValue({ missionDefinitionKey: 'AI_BASIC', displaySnapshot: {} });
     fake.runtime.mockResolvedValue({ apiKey: 'test-only', model: 'mock' });
     const later = new Date(now.getTime() + 60000);
-    fake.evaluate.mockImplementation(async () => {
+    fake.evaluate.mockImplementation(() => {
       vi.setSystemTime(later);
-      return { provider: 'mock', model: 'mock', promptVersion: 'mock', evaluation: {} };
+      return Promise.resolve({
+        provider: 'mock',
+        model: 'mock',
+        promptVersion: 'mock',
+        evaluation: {},
+      });
     });
     await expect(createTrainingAnswerEvaluationJobHandler().execute(input)).rejects.toMatchObject({
       retryable: false,
