@@ -5,9 +5,15 @@ import { PublicShell } from '../../ui/public-shell';
 export default async function LoginConfirmPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token_hash?: string; type?: string }>;
+  searchParams: Promise<{ token_hash?: string; type?: string; authAttempt?: string | string[] }>;
 }) {
   const query = await searchParams;
+  if (
+    query.authAttempt !== undefined &&
+    (typeof query.authAttempt !== 'string' ||
+      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(query.authAttempt))
+  )
+    redirect('/login?error=auth-context');
   if (
     query.token_hash === undefined ||
     !/^[A-Za-z0-9_-]+$/.test(query.token_hash) ||
@@ -27,6 +33,9 @@ export default async function LoginConfirmPage({
         <form className="form-stack" action="/auth/confirm" method="post">
           <input type="hidden" name="token_hash" value={query.token_hash} />
           <input type="hidden" name="type" value="email" />
+          {query.authAttempt && (
+            <input type="hidden" name="authAttempt" value={query.authAttempt} />
+          )}
           <PendingSubmitButton pendingLabel="ログインしています…">
             ワタシワークスへログイン
           </PendingSubmitButton>

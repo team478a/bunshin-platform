@@ -5,10 +5,14 @@ import type {
   MissionContentGeneratorProviderInput,
   SocialPreferredFormat,
 } from '@bunshin/capability-social';
-import { ApplicationError } from '@bunshin/shared';
+import {
+  missionReasoningOptions,
+  missionTransportFailure,
+  readMissionProviderResponse,
+} from './mission-provider-response';
 
 export const MISSION_CONTENT_GENERATOR_PROMPT_VERSION =
-  'mission-content-generator-v13-feedback-loop';
+  'mission-content-generator-v14-bounded-reasoning';
 
 const stringArray = (maxItems: number) => ({
   type: 'array',
@@ -94,13 +98,6 @@ const schemas: Record<SocialPreferredFormat, object> = {
   }),
 };
 
-type ResponseValue = {
-  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
-  usage?: { input_tokens?: number; output_tokens?: number };
-  model?: string;
-  error?: unknown;
-};
-
 export class OpenAIMissionContentGenerator implements MissionContentGeneratorPort {
   constructor(
     private readonly options: {
@@ -125,6 +122,7 @@ export class OpenAIMissionContentGenerator implements MissionContentGeneratorPor
         signal: AbortSignal.timeout(this.options.timeoutMs ?? 45_000),
         body: JSON.stringify({
           model,
+          ...missionReasoningOptions(model),
           store: false,
           input: [
             {
@@ -145,33 +143,11 @@ export class OpenAIMissionContentGenerator implements MissionContentGeneratorPor
         }),
       });
     } catch (error) {
-      throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'mission content provider timeout', {
-        category: 'TIMEOUT_OR_NETWORK',
-        error,
-      });
+      throw missionTransportFailure(error);
     }
-    const value = (await response.json()) as ResponseValue;
-    if (!response.ok)
-      throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'mission content provider failed', {
-        category: response.status === 429 ? 'RATE_LIMIT' : 'PROVIDER_ERROR',
-        status: response.status,
-        error: value.error,
-      });
-    const text = value.output
-      ?.flatMap((item) => item.content ?? [])
-      .find((item) => item.type === 'output_text')?.text;
-    if (!text) throw new ApplicationError('INTERNAL_ERROR', 'mission content returned no output');
-    let output: MissionContent;
-    try {
-      output = JSON.parse(text) as MissionContent;
-    } catch (error) {
-      throw new ApplicationError('INTERNAL_ERROR', 'mission content returned invalid output', {
-        category: 'INVALID_JSON',
-        error,
-      });
-    }
+    const { value, output } = await readMissionProviderResponse(response);
     return {
-      output,
+      output: output as MissionContent,
       model: value.model ?? model,
       promptVersion: MISSION_CONTENT_GENERATOR_PROMPT_VERSION,
       inputTokens: value.usage?.input_tokens ?? null,

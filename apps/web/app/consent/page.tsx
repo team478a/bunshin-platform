@@ -1,19 +1,66 @@
 import { GetRequiredLegalConsents } from '@bunshin/application';
 import { redirect } from 'next/navigation';
+import type { Route } from 'next';
+import { headers } from 'next/headers';
 import { currentUserProvider } from '../../src/auth/current-user';
 import { PublicShell } from '../ui/public-shell';
 import { PendingSubmitButton } from '../ui/pending-submit-button';
+import {
+  singleAuthAttemptId,
+  readAuthReturnContext,
+  authReturnPageRequest,
+  consumeAuthReturnAttempt,
+  authReturnDestination,
+  AuthReturnContextError,
+} from '../../src/auth/auth-return-attempt';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ConsentPage() {
+export default async function ConsentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ authAttempt?: string | string[] }>;
+}) {
   const user = await (await currentUserProvider()).getCurrentUser();
   if (!user) redirect('/login');
+  const query = await searchParams;
+  const context = await (async () => {
+    try {
+      const id = singleAuthAttemptId(
+        query.authAttempt === undefined
+          ? []
+          : Array.isArray(query.authAttempt)
+            ? query.authAttempt
+            : [query.authAttempt],
+      );
+      const request = authReturnPageRequest('/consent', new Headers(await headers()), id);
+      return await readAuthReturnContext(request, id, {
+        actorUserId: user.userId,
+        allowUnscoped: true,
+      });
+    } catch {
+      redirect('/login?error=auth-context');
+    }
+  })();
   const db = await import('@bunshin/database');
   const documents = await new GetRequiredLegalConsents(
     new db.PrismaLegalConsentRepository(),
   ).execute(user.userId);
-  if (documents.length === 0 || documents.every((item) => item.consentedAt)) redirect('/bunshins');
+  if (documents.length === 0 || documents.every((item) => item.consentedAt)) {
+    const profile = await db.prisma.userRegistrationProfile.findUnique({
+      where: { userId: user.userId },
+      select: { status: true },
+    });
+    try {
+      await consumeAuthReturnAttempt(context, user.userId);
+    } catch (error) {
+      if (error instanceof AuthReturnContextError) redirect('/login?error=auth-context');
+      throw error;
+    }
+    // Next narrows redirect after typed routes are generated; clean CI sees a string instead.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Required with generated Next typed routes; destinations are allowlisted.
+    redirect(authReturnDestination(context, profile?.status) as Route);
+  }
   return (
     <PublicShell>
       <section className="consent-page" aria-labelledby="consent-title">
@@ -23,6 +70,7 @@ export default async function ConsentPage() {
           <p>安心してご利用いただくため、現在の規約とプライバシーポリシーをご確認ください。</p>
         </div>
         <form action="/consent/accept" method="post">
+          {context.attempt && <input type="hidden" name="authAttempt" value={context.attempt.id} />}
           <div className="consent-documents">
             {documents.map((document) => (
               <section className="legal-card consent-document" key={document.id}>

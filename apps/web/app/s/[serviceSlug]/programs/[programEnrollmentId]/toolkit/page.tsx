@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../../../src/services/member-service-page';
 import { PublicShell } from '../../../../../ui/public-shell';
 import { ToolkitList } from './toolkit-list';
+import { AiTrainingDataExportCard } from '../ai-training-data-export-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,10 @@ export default async function TrainingToolkitPage({
         </header>
         <ToolkitList
           items={items.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() }))}
+        />
+        <AiTrainingDataExportCard
+          serviceSlug={serviceSlug}
+          programEnrollmentId={programEnrollmentId}
         />
         <a
           className="button button--secondary button--full"

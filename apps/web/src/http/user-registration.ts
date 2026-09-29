@@ -6,10 +6,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { safeLineAuthReturnPath } from '../auth/line-return';
 import { currentLineEnvironment } from '../line/secure-configuration';
-import {
-  DEFAULT_SERVICE_PROFILE_QUESTIONS,
-  readServiceOnboardingSettings,
-} from '../services/service-onboarding-settings';
+import { DEFAULT_SERVICE_PROFILE_QUESTIONS } from '../services/service-onboarding-settings';
 
 const purposes = [
   'ATTRACT',
@@ -95,19 +92,9 @@ export async function userRegistrationResponse(request: Request) {
     const value = updateSchema.parse(await request.json());
     const { complete, notificationConsent, returnTo, ...fields } = value;
     const safeReturnTo = safeLineAuthReturnPath(returnTo);
-    const serviceSlug = safeReturnTo?.match(/^\/s\/([a-z0-9]+(?:-[a-z0-9]+)*)/)?.[1] ?? null;
-    const serviceConfiguration = serviceSlug
-      ? await db.prisma.serviceConfiguration.findFirst({
-          where: { slug: serviceSlug, visibility: 'PUBLIC', group: { status: 'ACTIVE' } },
-          select: { registration: { select: { onboardingConfig: true, surveyConfig: true } } },
-        })
-      : null;
-    const requiredQuestions = serviceConfiguration?.registration
-      ? readServiceOnboardingSettings(
-          serviceConfiguration.registration.onboardingConfig,
-          serviceConfiguration.registration.surveyConfig,
-        ).profileQuestions
-      : DEFAULT_SERVICE_PROFILE_QUESTIONS;
+    if (safeReturnTo?.startsWith('/s/') || safeReturnTo?.startsWith('/account?service='))
+      throw new ApplicationError('VALIDATION_ERROR', 'Use service-specific onboarding');
+    const requiredQuestions = DEFAULT_SERVICE_PROFILE_QUESTIONS;
     if (
       value.complete &&
       ((requiredQuestions.industry && !value.primaryIndustryId) ||

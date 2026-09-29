@@ -8,6 +8,7 @@ import {
   type ServiceBusinessProfileInputMode,
 } from '../../../../src/services/service-onboarding-settings';
 import { isLowInformationOnboardingAnswer } from '../../../../src/services/service-onboarding-response';
+import { DeferRefinementButton } from './defer-refinement-button';
 
 const OTHER = '__OTHER__';
 
@@ -410,6 +411,13 @@ export function ServiceOnboardingForm({
       >
         {saving ? '保存しています…' : editMode ? '回答を保存する' : '回答してはじめる'}
       </button>
+      {editMode && focusQuestionIndex !== null && questions[focusQuestionIndex] && (
+        <DeferRefinementButton
+          serviceSlug={serviceSlug}
+          question={questions[focusQuestionIndex]}
+          disabled={saving}
+        />
+      )}
       {message && <p role="alert">{message}</p>}
     </form>
   );

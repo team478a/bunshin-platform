@@ -8,6 +8,8 @@ import {
 } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
+import { lockTrainingEnrollmentData } from './training-data-lock';
+import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 
 export type TrainingBarrierAction =
   { type: 'BARRIER'; reason: TrainingBarrierReason } | { type: 'RESTORE_STANDARD' };
@@ -41,6 +43,7 @@ export class PrismaTrainingBarrierRepository {
     try {
       return await this.client.$transaction(
         async (tx) => {
+          await lockTrainingEnrollmentData(tx, input);
           const membership = await tx.groupMembership.findFirst({
             where: {
               workspaceId: input.workspaceId,
@@ -60,6 +63,7 @@ export class PrismaTrainingBarrierRepository {
               groupMembershipId: membership.id,
               status: 'ACTIVE',
               startsAt: { not: null },
+              AND: [trainingEnrollmentPeriodWhere(new Date())],
             },
             select: { id: true, serviceProgramId: true },
           });

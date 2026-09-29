@@ -13,6 +13,7 @@ const serverSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+    FORTUNE_ASYNC_GENERATION_ENABLED: z.enum(['true', 'false']).default('false'),
     APP_URL: z.url(),
     DATABASE_URL: z.string().min(1),
     DIRECT_URL: z.string().min(1),

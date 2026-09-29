@@ -310,8 +310,28 @@ describe('service automatic preparation and delivery', () => {
     );
     await expect(
       createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' }),
-    ).rejects.toThrow('fallback duplicates presented content');
+    ).rejects.toThrow('quota reached');
     expect(m.prepare).not.toHaveBeenCalled();
     expect(m.enqueue).not.toHaveBeenCalled();
   });
+
+  it.each([400, 429, 503])(
+    'preserves primary HTTP %s when no safe fallback exists',
+    async (httpStatus) => {
+      m.policy.mockResolvedValue({
+        onboardingConfig: { dailyIdeaDelivery: { enabled: true } },
+        surveyConfig: null,
+      });
+      const primary = new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'primary failed', {
+        httpStatus,
+      });
+      m.daily.mockRejectedValue(primary);
+      m.fallback.mockRejectedValue(new ApplicationError('CONTENT_REJECTED', 'duplicate'));
+      await expect(
+        createDailyMissionJobHandler().execute({ job, localDate: '2026-09-07' }),
+      ).rejects.toBe(primary);
+      expect(m.prepare).not.toHaveBeenCalled();
+      expect(m.enqueue).not.toHaveBeenCalled();
+    },
+  );
 });

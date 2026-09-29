@@ -1,6 +1,8 @@
 import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
+import { lockTrainingEnrollmentData } from './training-data-lock';
+import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 
 export type TrainingAnswerSubmissionResult =
   | {
@@ -37,6 +39,7 @@ export class PrismaTrainingAnswerRepository {
           groupId: input.groupId,
           status: 'ACTIVE',
           startsAt: { not: null },
+          AND: [trainingEnrollmentPeriodWhere(new Date())],
         },
         select: { id: true, groupMembershipId: true, serviceProgramId: true },
       }),
@@ -77,6 +80,19 @@ export class PrismaTrainingAnswerRepository {
 
     try {
       return await this.client.$transaction(async (tx) => {
+        await lockTrainingEnrollmentData(tx, input);
+        const active = await tx.programEnrollment.findFirst({
+          where: {
+            id: enrollment.id,
+            workspaceId: input.workspaceId,
+            groupId: input.groupId,
+            groupMembershipId: membership.id,
+            status: 'ACTIVE',
+            AND: [trainingEnrollmentPeriodWhere(new Date())],
+          },
+          select: { id: true },
+        });
+        if (!active) return { outcome: 'NOT_FOUND' } as const;
         const assignment = await tx.programMissionAssignment.findFirst({
           where: {
             id: input.missionAssignmentId,

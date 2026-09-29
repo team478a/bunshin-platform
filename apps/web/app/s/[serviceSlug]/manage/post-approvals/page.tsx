@@ -49,7 +49,7 @@ export default async function ServicePostApprovalsPage({
   async function savePolicy(formData: FormData) {
     'use server';
     const current = await (await currentUserProvider()).getCurrentUser();
-    if (!current) redirect('/login');
+    if (!current) redirect(`/login?returnTo=${encodeURIComponent(path(serviceSlug))}`);
     const value = policySchema.safeParse(Object.fromEntries(formData));
     if (!value.success) redirect(`${path(serviceSlug)}?error=policy` as Route);
     const currentService = await resolveManagedServiceContext(serviceSlug, current.userId).catch(
@@ -91,7 +91,7 @@ export default async function ServicePostApprovalsPage({
   async function review(formData: FormData) {
     'use server';
     const current = await (await currentUserProvider()).getCurrentUser();
-    if (!current) redirect('/login');
+    if (!current) redirect(`/login?returnTo=${encodeURIComponent(path(serviceSlug))}`);
     const value = reviewSchema.safeParse(Object.fromEntries(formData));
     if (!value.success) redirect(`${path(serviceSlug)}?error=review` as Route);
     const currentService = await resolveManagedServiceContext(serviceSlug, current.userId).catch(

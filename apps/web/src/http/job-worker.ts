@@ -12,6 +12,7 @@ import {
   ExecuteGroupKnowledgeExtractionJob,
   ExecuteServiceLineBroadcastJob,
   ExecuteTrainingAnswerEvaluationJob,
+  ExecuteFortuneGenerationJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -64,6 +65,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     { createGroupKnowledgeExtractionJobHandler },
     { createServiceLineBroadcastJobHandler },
     { createTrainingAnswerEvaluationJobHandler },
+    { createFortuneGenerationJobHandler },
   ] = await Promise.all([
     import('../jobs/weekly-plan-job-handler'),
     import('../jobs/daily-mission-job-handler'),
@@ -76,6 +78,7 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     import('../jobs/group-knowledge-extraction-job-handler'),
     import('../jobs/service-line-broadcast-job-handler'),
     import('../jobs/training-answer-evaluation-job-handler'),
+    import('../jobs/fortune-generation-job-handler'),
   ]);
   const registry = new MissionAutomationHandlerRegistry()
     .register('WEEKLY_PLAN_PREPARE', createWeeklyPlanJobHandler())
@@ -132,6 +135,11 @@ async function configuredWorker(): Promise<JobWorkerPort> {
     fail,
   );
   // PDF / video extraction can legitimately wait up to 120 seconds on the provider.
+  const fortuneExecutor = new ExecuteFortuneGenerationJob(
+    createFortuneGenerationJobHandler(),
+    complete,
+    fail,
+  );
   // Keep the lease longer than every configured provider timeout so another cron
   // invocation cannot claim and charge for the same extraction concurrently.
   return new RunJobWorkerBatch(new ClaimJob(jobs, 5 * 60_000), {
@@ -152,7 +160,9 @@ async function configuredWorker(): Promise<JobWorkerPort> {
                     ? serviceLineBroadcastExecutor.execute(job, workerId)
                     : job.jobType === 'TRAINING_ANSWER_EVALUATE'
                       ? trainingEvaluationExecutor.execute(job, workerId)
-                      : missionExecutor.execute(job, workerId),
+                      : job.jobType === 'FORTUNE_READING_GENERATE'
+                        ? fortuneExecutor.execute(job, workerId)
+                        : missionExecutor.execute(job, workerId),
   });
 }
 

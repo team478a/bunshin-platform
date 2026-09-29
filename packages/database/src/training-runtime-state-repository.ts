@@ -14,7 +14,12 @@ export class PrismaAiTrainingRuntimeStateRepository {
   constructor(private readonly client: PrismaClient) {}
 
   async findState(input: Parameters<AiTrainingRuntimeRepository['findState']>[0]) {
-    const scope = await resolveScope(this.client, input, ['ACTIVE', 'COMPLETED', 'EXPIRED']);
+    const scope = await resolveScope(
+      this.client,
+      input,
+      ['ACTIVE', 'COMPLETED', 'EXPIRED'],
+      input.now,
+    );
     if (!scope) return null;
     const [profile, progress, goal] = await Promise.all([
       this.client.trainingParticipantProfile.findFirst({

@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   identityCreate: vi.fn(),
   verifyOtp: vi.fn(),
   acceptConsents: vi.fn(),
+  signInWithOtp: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -30,6 +31,7 @@ vi.mock('../src/auth/supabase', () => ({
         signInWithOAuth: state.signInWithOAuth,
         exchangeCodeForSession: state.exchangeCodeForSession,
         verifyOtp: state.verifyOtp,
+        signInWithOtp: state.signInWithOtp,
       },
     }),
 }));
@@ -69,13 +71,62 @@ import { GET as completeLineLogin } from '../app/auth/line/callback/route';
 import { POST as startLineLogin } from '../app/auth/line/route';
 import { POST as completeEmailLogin } from '../app/auth/confirm/route';
 import { POST as acceptConsents } from '../app/consent/accept/route';
+import { POST as startEmailLogin } from '../app/auth/email/route';
 
 describe('LINE login routes', () => {
+  it('keeps the current project on provider failure and clears an older cookie', async () => {
+    const path = '/s/current-service/line';
+    const headers = {
+      origin: 'https://bunshin.example',
+      'content-type': 'application/x-www-form-urlencoded',
+      cookie: 'bunshin_line_auth_return=%2Fs%2Fold-service%2Fline',
+    };
+    state.signInWithOAuth.mockResolvedValue({ data: {}, error: new Error('unavailable') });
+    state.signInWithOtp.mockResolvedValue({ error: { status: 429 } });
+    for (const start of [startLineLogin, startEmailLogin]) {
+      const response = await start(
+        new Request('https://bunshin.example/auth/login', {
+          method: 'POST',
+          headers,
+          body: new URLSearchParams({ email: 'member@example.com', returnTo: path }),
+        }),
+      );
+      const location = new URL(response.headers.get('location')!);
+      expect(location.pathname).toBe('/login');
+      expect(location.searchParams.get('returnTo')).toBe(path);
+      expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+    }
+  });
+
+  it('preserves the current service after failed LINE or email callback', async () => {
+    const path = '/s/media/line';
+    const headers = {
+      origin: 'https://bunshin.example',
+      cookie: `bunshin_line_auth_return=${encodeURIComponent(path)}`,
+    };
+    state.verifyOtp.mockResolvedValue({ error: new Error('expired') });
+    for (const response of [
+      await completeLineLogin(
+        new Request('https://bunshin.example/auth/line/callback?error=access_denied', { headers }),
+      ),
+      await completeEmailLogin(
+        new Request('https://bunshin.example/auth/confirm', {
+          method: 'POST',
+          headers,
+          body: new URLSearchParams({ token_hash: 'expired-token', type: 'email' }),
+        }),
+      ),
+    ]) {
+      expect(new URL(response.headers.get('location')!).searchParams.get('returnTo')).toBe(path);
+      expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+    }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     state.requiredConsents = [];
     state.registrationStatus = 'COMPLETED';
     state.verifyOtp.mockResolvedValue({ error: null });
+    state.signInWithOtp.mockResolvedValue({ error: null });
     state.acceptConsents.mockResolvedValue(undefined);
     state.connect.mockResolvedValue({ id: 'connection-1' });
     state.identityCreate.mockResolvedValue({ id: 'identity-1' });
@@ -149,7 +200,7 @@ describe('LINE login routes', () => {
       }),
     );
 
-    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
   });
 
   it('exchanges a valid callback code and enters the application', async () => {
@@ -176,6 +227,142 @@ describe('LINE login routes', () => {
     );
 
     expect(response.headers.get('location')).toBe('https://bunshin.example/onboarding');
+  });
+
+  it.each(['media', 'sns-support', 'fortune', 'ai-training', 'oem'])(
+    'returns %s after LINE, email and consent without global setup',
+    async (slug) => {
+      state.registrationStatus = 'IN_PROGRESS';
+      for (const path of [
+        `/s/${slug}`,
+        `/s/${slug}/line`,
+        `/s/${slug}/home`,
+        `/s/${slug}/onboarding`,
+        `/s/${slug}/manage/training`,
+        `/account?service=${slug}`,
+      ]) {
+        const headers = {
+          origin: 'https://bunshin.example',
+          cookie: `bunshin_line_auth_return=${encodeURIComponent(path)}`,
+        };
+        const responses = [
+          await completeLineLogin(
+            new Request('https://bunshin.example/auth/line/callback?code=one-time-code', {
+              headers,
+            }),
+          ),
+          await completeEmailLogin(
+            new Request('https://bunshin.example/auth/confirm', {
+              method: 'POST',
+              headers,
+              body: new URLSearchParams({ token_hash: 'valid-token', type: 'email' }),
+            }),
+          ),
+          await acceptConsents(
+            new Request('https://bunshin.example/consent/accept', {
+              method: 'POST',
+              headers,
+              body: new URLSearchParams({ documentId: 'required-document' }),
+            }),
+          ),
+        ];
+        for (const response of responses) {
+          expect(response.headers.get('location')).toBe(`https://bunshin.example${path}`);
+          expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+        }
+        state.requiredConsents = [{ consentedAt: null }];
+        expect(
+          (
+            await completeLineLogin(
+              new Request('https://bunshin.example/auth/line/callback?code=one-time-code', {
+                headers,
+              }),
+            )
+          ).headers.get('location'),
+        ).toBe('https://bunshin.example/consent');
+        expect(
+          (
+            await completeEmailLogin(
+              new Request('https://bunshin.example/auth/confirm', {
+                method: 'POST',
+                headers,
+                body: new URLSearchParams({ token_hash: 'valid-token', type: 'email' }),
+              }),
+            )
+          ).headers.get('location'),
+        ).toBe('https://bunshin.example/consent');
+        state.requiredConsents = [];
+      }
+    },
+  );
+
+  it('clears a previous service context when starting login without a valid return', async () => {
+    for (const start of [startLineLogin, startEmailLogin]) {
+      const response = await start(
+        new Request('https://bunshin.example/auth/login', {
+          method: 'POST',
+          headers: {
+            origin: 'https://bunshin.example',
+            'content-type': 'application/x-www-form-urlencoded',
+            cookie: 'bunshin_line_auth_return=%2Fs%2Fold-service%2Fline',
+          },
+          body: new URLSearchParams({ email: 'member@example.com' }),
+        }),
+      );
+      expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+    }
+  });
+
+  it('keeps the current project through both authentication starts and email confirmation UI', async () => {
+    for (const start of [startLineLogin, startEmailLogin]) {
+      const response = await start(
+        new Request('https://bunshin.example/auth/login', {
+          method: 'POST',
+          headers: {
+            origin: 'https://bunshin.example',
+            'content-type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            email: 'member@example.com',
+            returnTo: '/s/new-service/line',
+          }),
+        }),
+      );
+      expect(response.headers.get('set-cookie')).toContain('new-service');
+      if (start === startEmailLogin)
+        expect(new URL(response.headers.get('location')!).searchParams.get('returnTo')).toBe(
+          '/s/new-service/line',
+        );
+    }
+  });
+
+  it('does not force industry setup on image viewing after login or consent', async () => {
+    state.registrationStatus = 'IN_PROGRESS';
+    const path = '/image-access/11111111-1111-4111-8111-111111111111';
+    const headers = {
+      origin: 'https://bunshin.example',
+      cookie: `bunshin_line_auth_return=${encodeURIComponent(path)}`,
+    };
+    for (const response of [
+      await completeLineLogin(
+        new Request('https://bunshin.example/auth/line/callback?code=one-time-code', { headers }),
+      ),
+      await completeEmailLogin(
+        new Request('https://bunshin.example/auth/confirm', {
+          method: 'POST',
+          headers,
+          body: new URLSearchParams({ token_hash: 'valid-token', type: 'email' }),
+        }),
+      ),
+      await acceptConsents(
+        new Request('https://bunshin.example/consent/accept', {
+          method: 'POST',
+          headers,
+          body: new URLSearchParams({ documentId: 'required-document' }),
+        }),
+      ),
+    ])
+      expect(response.headers.get('location')).toBe(`https://bunshin.example${path}`);
   });
 
   const videoPath = '/video-access/11111111-1111-4111-8111-111111111111';

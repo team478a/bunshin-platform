@@ -5,9 +5,67 @@ import {
   missionReturnPath,
   safeLineAuthReturnPath,
   videoAuthReturnProjectId,
+  serviceAuthReturnSlug,
+  requiresPlatformOnboarding,
+  serviceAuthLoginPath,
 } from '../src/auth/line-return';
 
 describe('LINE authentication return path', () => {
+  it('does not trust arbitrary service slugs supplied to a login redirect', () => {
+    expect(serviceAuthLoginPath('/s/media/manage/points')).toBe(
+      '/login?returnTo=%2Fs%2Fmedia%2Fmanage%2Fpoints',
+    );
+    expect(serviceAuthLoginPath('/s/media/../fortune/manage/points')).toBe('/login');
+    expect(serviceAuthLoginPath('/s//evil.example/manage/points')).toBe('/login');
+  });
+  const id = '11111111-1111-4111-8111-111111111111';
+  it.each(['media', 'sns-support', 'fortune', 'ai-training', 'oem'])(
+    'keeps %s flows isolated',
+    (slug) => {
+      for (const path of [
+        `/s/${slug}`,
+        `/s/${slug}/home`,
+        `/s/${slug}/line`,
+        `/s/${slug}/onboarding`,
+        `/s/${slug}/bunshins/${id}/line`,
+        `/s/${slug}/programs/${id}/toolkit`,
+        `/s/${slug}/manage/training/retention`,
+        `/account?service=${slug}`,
+      ]) {
+        expect(safeLineAuthReturnPath(path)).toBe(path);
+        expect(serviceAuthReturnSlug(path)).toBe(slug);
+        expect(requiresPlatformOnboarding(null, path)).toBe(false);
+      }
+    },
+  );
+
+  it.each([
+    '/s/media/../fortune/line',
+    '/s/media/%2e%2e/fortune/line',
+    '/s/media/%2fhome',
+    '/s/media/home?service=fortune',
+    '/s/media/home#x',
+    '/account?service=media&service=fortune',
+    '/account?service=media&next=/admin',
+    '/s/media/unknown',
+    '/s/media/manage/unknown',
+    '/s/media/home/extra',
+    '/s/media?ref=FIRST&ref=SECOND',
+    '/s/media?ref=FIRST&rc=11111111-1111-4111-8111-111111111111&rc=22222222-2222-4222-8222-222222222222',
+    '/s/MEDIA/line',
+    '/s/media/HOME',
+    '//evil.example/s/media/line',
+  ])('rejects service context aliases: %s', (path) => {
+    expect(safeLineAuthReturnPath(path)).toBeNull();
+    expect(serviceAuthReturnSlug(path)).toBeNull();
+  });
+
+  it('keeps platform setup separate and treats both viewers equally', () => {
+    expect(requiresPlatformOnboarding(null, null)).toBe(true);
+    expect(requiresPlatformOnboarding('COMPLETED', null)).toBe(false);
+    expect(requiresPlatformOnboarding(null, `/image-access/${id}`)).toBe(false);
+    expect(requiresPlatformOnboarding(null, `/video-access/${id}`)).toBe(false);
+  });
   it('keeps the exact video viewer path through the authentication cookie', () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const path = `/video-access/${id}`;

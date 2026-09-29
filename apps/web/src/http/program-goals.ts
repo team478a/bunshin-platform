@@ -1,4 +1,5 @@
 import 'server-only';
+import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -161,6 +162,53 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       },
     });
     if (!enrollment) throw new ApplicationError('NOT_FOUND', 'enrollment not found');
+    const writeScope = {
+      workspaceId: publicService.workspaceId,
+      groupId: publicService.serviceId,
+      programEnrollmentId: enrollment.id,
+      actorUserId: actor.userId,
+    };
+    const writeMembershipId = membership.id;
+    const writeProgramId = enrollment.serviceProgramId;
+    async function writeWithEnrollmentLock<T>(
+      save: (
+        tx: Pick<
+          typeof db.prisma,
+          'programMemberPreference' | 'programMemberGoal' | 'programEnrollment'
+        >,
+      ) => Promise<T>,
+    ): Promise<T> {
+      return db.prisma.$transaction(async (tx) => {
+        await db.lockTrainingEnrollmentData(tx, writeScope);
+        const program = await tx.serviceProgram.findFirst({
+          where: {
+            id: writeProgramId,
+            workspaceId: publicService.workspaceId,
+            groupId: publicService.serviceId,
+          },
+          select: { settings: true },
+        });
+        if (!program) throw new ApplicationError('NOT_FOUND', 'program not found');
+        const isTraining =
+          program.settings !== null &&
+          typeof program.settings === 'object' &&
+          !Array.isArray(program.settings) &&
+          program.settings['moduleKey'] === AI_TRAINING_V1_MODULE_KEY;
+        const active = await tx.programEnrollment.findFirst({
+          where: {
+            id: writeScope.programEnrollmentId,
+            workspaceId: publicService.workspaceId,
+            groupId: publicService.serviceId,
+            groupMembershipId: writeMembershipId,
+            status: 'ACTIVE',
+            ...(isTraining ? { AND: [db.trainingEnrollmentPeriodWhere(new Date())] } : {}),
+          },
+          select: { id: true },
+        });
+        if (!active) throw new ApplicationError('NOT_FOUND', 'enrollment not active');
+        return save(tx);
+      });
+    }
     if (value.action === 'SAVE_PREFERENCE') {
       const policy = await db.prisma.serviceProgramSupportPolicy.findFirst({
         where: {
@@ -173,23 +221,25 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       const allowed = policy?.allowedSupportModes as string[] | undefined;
       if (!policy?.memberMayChoose || !allowed?.includes(value.preferredSupportMode))
         throw new ApplicationError('FORBIDDEN', 'support preference unavailable');
-      const row = await db.prisma.programMemberPreference.upsert({
-        where: { programEnrollmentId: enrollment.id },
-        create: {
-          workspaceId: publicService.workspaceId,
-          groupId: publicService.serviceId,
-          programEnrollmentId: enrollment.id,
-          groupMembershipId: membership.id,
-          preferredSupportMode: value.preferredSupportMode,
-          notes: value.notes,
-          updatedByUserId: actor.userId,
-        },
-        update: {
-          preferredSupportMode: value.preferredSupportMode,
-          notes: value.notes,
-          updatedByUserId: actor.userId,
-        },
-      });
+      const row = await writeWithEnrollmentLock((tx) =>
+        tx.programMemberPreference.upsert({
+          where: { programEnrollmentId: enrollment.id },
+          create: {
+            workspaceId: publicService.workspaceId,
+            groupId: publicService.serviceId,
+            programEnrollmentId: enrollment.id,
+            groupMembershipId: membership.id,
+            preferredSupportMode: value.preferredSupportMode,
+            notes: value.notes,
+            updatedByUserId: actor.userId,
+          },
+          update: {
+            preferredSupportMode: value.preferredSupportMode,
+            notes: value.notes,
+            updatedByUserId: actor.userId,
+          },
+        }),
+      );
       return reply(row, requestId);
     }
     const definition = value.goalDefinitionId
@@ -209,7 +259,7 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
     const dueAt = value.dueAt ? new Date(value.dueAt) : null;
     if (dueAt && dueAt <= startsAt)
       throw new ApplicationError('VALIDATION_ERROR', 'goal due date must be future');
-    const row = await db.prisma.$transaction(async (tx) => {
+    const row = await writeWithEnrollmentLock(async (tx) => {
       await tx.programMemberGoal.updateMany({
         where: {
           workspaceId: publicService.workspaceId,

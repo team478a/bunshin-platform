@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PendingSubmitButton } from '../../../../../ui/pending-submit-button';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { currentUserProvider } from '../../../../../../src/auth/current-user';
 import {
   serviceLineLinkScope,
   ServiceLineLinkUnavailable,
@@ -17,6 +18,11 @@ export default async function ServiceLinePage({
   searchParams: Promise<{ lineResult?: string }>;
 }) {
   const { serviceSlug, bunshinId } = await params;
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor)
+    redirect(
+      `/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/bunshins/${bunshinId}/line`)}`,
+    );
   const scope = await serviceLineLinkScope(serviceSlug, bunshinId).catch((error: unknown) => {
     if (error instanceof ServiceLineLinkUnavailable || isRouteNotFound(error)) return null;
     throw error;
@@ -67,6 +73,10 @@ export default async function ServiceLinePage({
     'configuration-unavailable': {
       title: '現在LINEへ接続できません',
       body: 'ログイン状態またはサービスのLINE設定を確認できませんでした。画面を更新しても直らない場合は運営者へご連絡ください。',
+    },
+    'attempt-limit': {
+      title: 'LINE接続の確認が複数進行中です',
+      body: '開いているLINEの本人確認を完了するか、10分待ってからもう一度接続を始めてください。進行中の接続は変更していません。',
     },
     'session-expired': {
       title: 'LINEの本人確認が期限切れになりました',

@@ -10,6 +10,18 @@ const migration = readFileSync(
 );
 
 describe('service onboarding response persistence', () => {
+  it('adds backwards-compatible refinement metadata without changing answers or ownership', () => {
+    const refinementMigration = readFileSync(
+      new URL(
+        '../prisma/migrations/20260928120000_add_onboarding_refinement_deferral/migration.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+    expect(refinementMigration).toContain('"refinement_state" JSONB NOT NULL DEFAULT');
+    expect(refinementMigration).toContain('"next_refinement_at" TIMESTAMPTZ(6)');
+    expect(refinementMigration).not.toMatch(/DROP|DELETE|UPDATE/);
+  });
   it('keeps one current response for each service membership', () => {
     expect(migration).toContain('service_onboarding_responses_group_membership_id_key');
   });

@@ -22,6 +22,8 @@ function participant(
   return {
     enrollmentId: 'enrollment-1',
     enrollmentStatus: 'ACTIVE',
+    startsAt: new Date('2026-09-01T00:00:00Z'),
+    endsAt: null,
     programName: 'AI研修30日',
     participantName: '山田さん',
     participantEmail: 'yamada@example.com',
@@ -43,9 +45,6 @@ function participant(
       missionDefinitionKey: 'SALES_EMAIL',
       displaySnapshot: { title: '営業メールを作る' },
     },
-    latestEvaluation: {
-      weaknesses: ['出力条件を追加しましょう'],
-    },
     evaluationUpdatedAt: new Date('2026-09-20T00:00:00.000Z'),
     profileUpdatedAt: new Date('2026-09-19T00:00:00.000Z'),
     workResults: [],
@@ -55,12 +54,69 @@ function participant(
 }
 
 describe('AI training admin dashboard', () => {
+  it('excludes past expiry, future start, unknown start and invitation from active/support/continuation while keeping history', () => {
+    const rows = [
+      participant(),
+      participant({
+        enrollmentId: 'expired-active',
+        endsAt: now,
+        profile: {
+          role: 'SALES',
+          aiLevel: 'BEGINNER',
+          currentTopic: null,
+          needsReview: true,
+          recentFailures: 3,
+        },
+      }),
+      participant({ enrollmentId: 'future', startsAt: new Date(now.getTime() + 1) }),
+      participant({ enrollmentId: 'unknown', startsAt: null }),
+      participant({ enrollmentId: 'invited', enrollmentStatus: 'INVITED' }),
+      participant({ enrollmentId: 'expired-record', enrollmentStatus: 'EXPIRED' }),
+      participant({ enrollmentId: 'completed', enrollmentStatus: 'COMPLETED' }),
+      participant({ enrollmentId: 'cancelled', enrollmentStatus: 'CANCELLED' }),
+    ];
+    const dashboard = buildAiTrainingAdminDashboard(rows, now);
+    expect(dashboard.totals).toMatchObject({
+      active: 1,
+      expired: 2,
+      pendingExpiryUpdate: 1,
+      beforeStart: 1,
+      startUnresolved: 1,
+      continuedWithinSevenDays: 1,
+      continuationPercent: 100,
+      needsSupport: 0,
+      completedMissions: 24,
+    });
+    expect(
+      dashboard.participants.find((row) => row.enrollmentId === 'expired-active'),
+    ).toMatchObject({ engagement: 'ENDED', displayStatus: 'PERIOD_ENDED' });
+    expect(dashboard.participants.find((row) => row.enrollmentId === 'future')?.engagement).toBe(
+      'BEFORE_START',
+    );
+    expect(dashboard.participants.find((row) => row.enrollmentId === 'unknown')?.engagement).toBe(
+      'PERIOD_UNRESOLVED',
+    );
+    expect(rows[1]?.enrollmentStatus).toBe('ACTIVE');
+  });
+  it('uses zero rather than a misleading continuation rate when no enrollment is in period', () => {
+    const dashboard = buildAiTrainingAdminDashboard([participant({ endsAt: now })], now);
+    expect(dashboard.totals).toMatchObject({
+      active: 0,
+      continuedWithinSevenDays: 0,
+      continuationPercent: 0,
+      needsSupport: 0,
+    });
+  });
   it('summarizes active participation without exposing answer text', () => {
     const dashboard = buildAiTrainingAdminDashboard([participant()], now);
 
     expect(dashboard.totals).toEqual({
       participants: 1,
       active: 1,
+      expired: 0,
+      pendingExpiryUpdate: 0,
+      beforeStart: 0,
+      startUnresolved: 0,
       continuedWithinSevenDays: 1,
       continuationPercent: 100,
       needsSupport: 0,
@@ -79,7 +135,7 @@ describe('AI training admin dashboard', () => {
       participantName: '山田さん',
       roleLabel: '営業',
       currentMission: '営業メールを作る',
-      weakArea: '出力条件を追加しましょう',
+      weakArea: 'まだ記録がありません',
       engagement: 'ACTIVE',
     });
     expect(JSON.stringify(dashboard)).not.toContain('answer');
@@ -97,6 +153,14 @@ describe('AI training admin dashboard', () => {
       goalReviewBarrierCount: 1,
     });
     expect(JSON.stringify(dashboard)).not.toContain('freeText');
+  });
+
+  it('uses a fixed support label rather than AI evaluation prose', () => {
+    const source = participant();
+    source.profile!.needsReview = true;
+    const dashboard = buildAiTrainingAdminDashboard([source], now);
+    expect(dashboard.participants[0]?.weakArea).toBe('基礎の復習が必要です');
+    expect(JSON.stringify(dashboard)).not.toContain('weaknesses');
   });
 
   it('aggregates work usage without exposing answer content', () => {
@@ -141,7 +205,6 @@ describe('AI training admin dashboard', () => {
         needsReview: true,
         recentFailures: 2,
       },
-      latestEvaluation: null,
     });
     const dashboard = buildAiTrainingAdminDashboard([inactive, review], now);
 
@@ -158,7 +221,10 @@ describe('AI training admin dashboard', () => {
     expect(page.match(/groupId: service\.serviceId/g)?.length).toBeGreaterThanOrEqual(7);
     expect(page).toContain('programEnrollmentId: { in: enrollmentIds }');
     expect(page).toContain("serviceRole: 'PARTICIPANT'");
-    expect(page).toContain('evaluatedAt: true');
+    expect(page).toContain('db.listTrainingAdminEvaluationMetrics({');
+    expect(page).toContain('actorUserId: actor.userId');
+    expect(page).not.toContain('evaluation: true');
+    expect(page).not.toContain('latestEvaluation:');
     expect(page).not.toContain('answer: true');
   });
 

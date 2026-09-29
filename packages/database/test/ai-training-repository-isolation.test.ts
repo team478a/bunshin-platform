@@ -66,6 +66,7 @@ describe('AI training repository isolation', () => {
   it('does not save a profile when the actor has no participant membership in scope', async () => {
     const tx = {
       groupMembership: { findFirst: vi.fn().mockResolvedValue(null) },
+      $queryRaw: vi.fn().mockResolvedValue([]),
       programEnrollment: { findFirst: vi.fn() },
       serviceProgram: { findFirst: vi.fn() },
       trainingParticipantProfile: { upsert: vi.fn() },
@@ -147,6 +148,7 @@ describe('AI training repository isolation', () => {
     const tx = {
       groupMembership: { findFirst: vi.fn().mockResolvedValue(null) },
       programEnrollment: { findFirst: vi.fn() },
+      $queryRaw: vi.fn().mockResolvedValue([]),
       serviceProgram: { findFirst: vi.fn() },
       programMissionAssignment: { findFirst: vi.fn() },
       programActionEvent: { create: vi.fn() },
@@ -204,6 +206,7 @@ describe('AI training repository isolation', () => {
     const occurredAt = new Date('2026-09-28T01:00:00.000Z');
     const tx = {
       groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: 'membership-1' }) },
+      $queryRaw: vi.fn().mockResolvedValue([]),
       programEnrollment: {
         findFirst: vi.fn().mockResolvedValue({
           id: scope.programEnrollmentId,

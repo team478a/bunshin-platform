@@ -1,18 +1,25 @@
 import { NextResponse } from 'next/server';
 import { currentUserProvider } from '../../../../src/auth/current-user';
-import { createSupabaseServerClient } from '../../../../src/auth/supabase';
+import {
+  createSupabaseServerClient,
+  createSupabaseAttemptClient,
+} from '../../../../src/auth/supabase';
+import { loginErrorResponse } from '../../../../src/auth/login-error';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { recordAuthenticatedRegistrationEvent } from '../../../../src/registration/funnel';
 import {
-  LINE_AUTH_RETURN_COOKIE,
-  lineAuthReturnFromCookie,
-  videoAuthReturnProjectId,
-} from '../../../../src/auth/line-return';
-
-function clearReturnCookie(response: NextResponse): NextResponse {
-  response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
-  return response;
-}
+  singleAuthAttemptId,
+  readAuthReturnContext,
+  claimAuthReturnAttempt,
+  authenticateAuthReturnAttempt,
+  consumeAuthReturnAttempt,
+  cancelAuthReturnAttempt,
+  clearAuthReturnCookie,
+  authConsentPath,
+  authReturnDestination,
+  AuthReturnContextError,
+  type AuthReturnContext,
+} from '../../../../src/auth/auth-return-attempt';
 
 function lineProviderUserId(user: {
   identities?: Array<{
@@ -49,21 +56,33 @@ async function lineFriendshipStatus(providerToken: string | null | undefined) {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  let context: AuthReturnContext | null = null;
+  let ownedStage: 'PENDING' | 'CLAIMED' | 'AUTHENTICATED' = 'PENDING';
+  let claimed = false;
   try {
     const url = new URL(request.url);
-    const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
+    const id = singleAuthAttemptId(url.searchParams.getAll('authAttempt'));
+    context = await readAuthReturnContext(request, id, { method: 'LINE' });
     const code = url.searchParams.get('code');
     if (url.searchParams.has('error') || code === null || code.length > 2048)
       throw new Error('LINE callback rejected');
 
-    const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    await claimAuthReturnAttempt(context);
+    claimed = true;
+    ownedStage = 'CLAIMED';
+    if (context.attempt && !context.attempt.pkceFlowId) throw new AuthReturnContextError();
+    const buffered = context.attempt ? await createSupabaseAttemptClient() : null;
+    const supabase = buffered?.client ?? (await createSupabaseServerClient());
+    const { data, error } = context.attempt
+      ? await supabase.auth.exchangeCodeForSession(code, { flowId: context.attempt.pkceFlowId! })
+      : await supabase.auth.exchangeCodeForSession(code);
     if (error !== null) throw error;
+    const providerUserId = data.user ? lineProviderUserId(data.user) : null;
+    if (!providerUserId) throw new Error('verified LINE identity unavailable');
+    if (buffered) await buffered.commitCookies();
 
     const currentUser = await (await currentUserProvider()).getCurrentUser();
     if (currentUser === null) throw new Error('user unavailable');
-    const providerUserId = data.user ? lineProviderUserId(data.user) : null;
-    if (!providerUserId) throw new Error('verified LINE identity unavailable');
 
     const db = await import('@bunshin/database');
     await db.prisma.$transaction(async (tx) => {
@@ -115,26 +134,37 @@ export async function GET(request: Request): Promise<Response> {
       userId: currentUser.userId,
       source: 'LINE_OAUTH',
     });
+    await authenticateAuthReturnAttempt(context, currentUser.userId);
+    ownedStage = 'AUTHENTICATED';
     const required = await new db.PrismaLegalConsentRepository().findRequiredForUser(
       currentUser.userId,
     );
     if (required.some((item) => !item.consentedAt))
-      return NextResponse.redirect(new URL('/consent', request.url), 303);
-    if (videoAuthReturnProjectId(returnTo))
-      return clearReturnCookie(NextResponse.redirect(new URL(returnTo!, request.url), 303));
+      return NextResponse.redirect(new URL(authConsentPath(context), request.url), 303);
     const registration = await db.prisma.userRegistrationProfile.findUnique({
       where: { userId: currentUser.userId },
       select: { status: true },
     });
-    if (registration?.status !== 'COMPLETED') {
-      const onboarding = new URL('/onboarding', request.url);
-      if (returnTo) onboarding.searchParams.set('returnTo', returnTo);
-      return clearReturnCookie(NextResponse.redirect(onboarding, 303));
-    }
-    return clearReturnCookie(
-      NextResponse.redirect(new URL(returnTo ?? '/bunshins', request.url), 303),
+    await consumeAuthReturnAttempt(context, currentUser.userId);
+    return clearAuthReturnCookie(
+      NextResponse.redirect(
+        new URL(authReturnDestination(context, registration?.status), request.url),
+        303,
+      ),
+      context,
     );
-  } catch {
-    return clearReturnCookie(NextResponse.redirect(new URL('/login?error=1', request.url), 303));
+  } catch (error) {
+    const cancelled =
+      claimed || !(error instanceof AuthReturnContextError)
+        ? await cancelAuthReturnAttempt(context, ownedStage)
+        : false;
+    return clearAuthReturnCookie(
+      loginErrorResponse(
+        request,
+        error instanceof AuthReturnContextError ? 'auth-context' : '1',
+        context?.returnTo ?? null,
+      ),
+      claimed || cancelled ? context : null,
+    );
   }
 }
