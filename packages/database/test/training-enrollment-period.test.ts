@@ -115,7 +115,12 @@ describe('AI training period enforcement', () => {
         where: expect.objectContaining({
           id: 'enrollment',
           groupMembershipId: 'membership',
-          AND: [trainingEnrollmentPeriodWhere(expect.any(Date))],
+          AND: [
+            {
+              startsAt: { lte: expect.any(Date) },
+              OR: [{ endsAt: null }, { endsAt: { gt: expect.any(Date) } }],
+            },
+          ],
         }),
       }),
     );
