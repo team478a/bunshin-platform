@@ -12,6 +12,7 @@ import {
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 
 export type TrainingProfileWriteResult =
   | {
@@ -71,6 +72,7 @@ export class PrismaTrainingParticipantProfileRepository {
               groupMembershipId: membership.id,
               status: 'ACTIVE',
               startsAt: { not: null },
+              AND: [trainingEnrollmentPeriodWhere(new Date())],
             },
             select: { id: true, serviceProgramId: true, endsAt: true },
           });

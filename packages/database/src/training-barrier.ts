@@ -9,6 +9,7 @@ import {
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 
 export type TrainingBarrierAction =
   { type: 'BARRIER'; reason: TrainingBarrierReason } | { type: 'RESTORE_STANDARD' };
@@ -62,6 +63,7 @@ export class PrismaTrainingBarrierRepository {
               groupMembershipId: membership.id,
               status: 'ACTIVE',
               startsAt: { not: null },
+              AND: [trainingEnrollmentPeriodWhere(new Date())],
             },
             select: { id: true, serviceProgramId: true },
           });

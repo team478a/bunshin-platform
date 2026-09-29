@@ -1,4 +1,5 @@
 import 'server-only';
+import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
@@ -168,6 +169,7 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       actorUserId: actor.userId,
     };
     const writeMembershipId = membership.id;
+    const writeProgramId = enrollment.serviceProgramId;
     async function writeWithEnrollmentLock<T>(
       save: (
         tx: Pick<
@@ -178,6 +180,20 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
     ): Promise<T> {
       return db.prisma.$transaction(async (tx) => {
         await db.lockTrainingEnrollmentData(tx, writeScope);
+        const program = await tx.serviceProgram.findFirst({
+          where: {
+            id: writeProgramId,
+            workspaceId: publicService.workspaceId,
+            groupId: publicService.serviceId,
+          },
+          select: { settings: true },
+        });
+        if (!program) throw new ApplicationError('NOT_FOUND', 'program not found');
+        const isTraining =
+          program.settings !== null &&
+          typeof program.settings === 'object' &&
+          !Array.isArray(program.settings) &&
+          program.settings['moduleKey'] === AI_TRAINING_V1_MODULE_KEY;
         const active = await tx.programEnrollment.findFirst({
           where: {
             id: writeScope.programEnrollmentId,
@@ -185,6 +201,7 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
             groupId: publicService.serviceId,
             groupMembershipId: writeMembershipId,
             status: 'ACTIVE',
+            ...(isTraining ? { AND: [db.trainingEnrollmentPeriodWhere(new Date())] } : {}),
           },
           select: { id: true },
         });

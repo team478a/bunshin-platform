@@ -246,6 +246,7 @@ export { PrismaProgramRuntimeRepository } from './program-runtime-execution';
 export { PrismaTrainingWorkResultRepository } from './training-work-result';
 export { PrismaTrainingPersonalDataExportRepository } from './training-personal-data-export';
 export { lockTrainingEnrollmentData } from './training-data-lock';
+export { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 export { PrismaTrainingPersonalDataDeletionRepository } from './training-personal-data-deletion';
 export { PrismaTrainingRetentionPreviewRepository } from './training-retention-preview';
 export { PrismaTrainingRetentionAdminPreviewRepository } from './training-retention-preview';

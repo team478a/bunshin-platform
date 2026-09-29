@@ -51,7 +51,7 @@ export default async function ProgramParticipantPage({
       groupMembershipId: membership.id,
       status: { in: ['ACTIVE', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
     },
-    select: { serviceProgramId: true, status: true, endsAt: true },
+    select: { serviceProgramId: true, status: true, startsAt: true, endsAt: true },
   });
   if (!enrollment || enrollment.status === 'INVITED') notFound();
   const program = await db.prisma.serviceProgram.findFirst({
@@ -76,7 +76,11 @@ export default async function ProgramParticipantPage({
   } as CSSProperties;
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
-    if (enrollment.status !== 'ACTIVE') {
+    const now = new Date();
+    const periodEnded =
+      enrollment.status === 'ACTIVE' && enrollment.endsAt && enrollment.endsAt <= now;
+    if (enrollment.status !== 'ACTIVE' || periodEnded) {
+      const displayStatus = enrollment.status === 'ACTIVE' ? 'EXPIRED' : enrollment.status;
       const retention = await db.prisma.trainingDataRetentionState.findFirst({
         where: {
           workspaceId: service.workspaceId,
@@ -86,8 +90,8 @@ export default async function ProgramParticipantPage({
         select: { endedAt: true },
       });
       const endedAt =
-        retention?.endedAt ??
-        (enrollment.status === 'EXPIRED' && enrollment.endsAt && enrollment.endsAt <= new Date()
+        (periodEnded ? enrollment.endsAt : retention?.endedAt) ??
+        (displayStatus === 'EXPIRED' && enrollment.endsAt && enrollment.endsAt <= now
           ? enrollment.endsAt
           : null);
       return (
@@ -97,9 +101,24 @@ export default async function ProgramParticipantPage({
               serviceSlug={serviceSlug}
               programEnrollmentId={programEnrollmentId}
               programName={program.displayName}
-              status={enrollment.status}
+              status={displayStatus}
               endedAt={endedAt}
             />
+          </main>
+        </PublicShell>
+      );
+    }
+    if (!enrollment.startsAt || enrollment.startsAt > now) {
+      return (
+        <PublicShell showPlatformBrand={false}>
+          <main className="service-entry resale-action-page training-page" style={style}>
+            <header className="service-entry__header">
+              <h1>AI研修の開始前です</h1>
+            </header>
+            <section className="settings-card">
+              <p>受講開始後に、今日の課題と回答提出をご利用いただけます。</p>
+              <a href={`/s/${serviceSlug}/programs`}>プログラム一覧へ戻る</a>
+            </section>
           </main>
         </PublicShell>
       );
@@ -114,7 +133,7 @@ export default async function ProgramParticipantPage({
         groupId: service.serviceId,
         actorUserId: actor.userId,
         programEnrollmentId,
-        now: new Date(),
+        now,
       });
     } catch (error) {
       if (error instanceof TrainingRuntimeError && error.code === 'NOT_FOUND') notFound();

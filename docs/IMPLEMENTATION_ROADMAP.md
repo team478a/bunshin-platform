@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+AI研修の受講期間ガードは`docs/ai-training/AI_TRAINING_PERIOD_GUARDS_IMPLEMENTATION_REPORT.md`を参照。ACTIVEでも開始前/期限後は新しい学習操作・課題生成・評価を拒否し、ロック後/Provider直前/評価保存前に再確認する。Toolkit/本人Exportは維持し、自動終了状態更新や保持期限起算日の補完、課金・削除・本番設定変更は含めない。
+
 AI研修の読み取り専用保持期限管理画面は`docs/ai-training/AI_TRAINING_RETENTION_ADMIN_PREVIEW_IMPLEMENTATION_REPORT.md`を参照。自Serviceの件数と終了日・所有境界の判定保留だけを集計し、DBでも管理者を再検証する。削除操作・終了日補完・定期実行・本番有効化は追加しない。
 
 AI研修の管理集計の評価自由文除外は`docs/ai-training/AI_TRAINING_ADMIN_EVALUATION_PRIVACY_IMPLEMENTATION_REPORT.md`を参照。評価JSON全体・weaknessesの取得表示を止め、DB認可と許可値だけの射影を使う。個人回答閲覧権限は追加しない。

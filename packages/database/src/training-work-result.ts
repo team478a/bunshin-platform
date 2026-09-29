@@ -2,6 +2,7 @@ import { AI_TRAINING_V1_MODULE_KEY, type TrainingWorkResult } from '@bunshin/cap
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 
 export type TrainingWorkResultWriteResult =
   | { outcome: 'RECORDED' | 'ALREADY_RECORDED'; eventId: string }
@@ -51,6 +52,7 @@ export class PrismaTrainingWorkResultRepository {
             groupId: input.groupId,
             groupMembershipId: membership.id,
             status: 'ACTIVE',
+            AND: [trainingEnrollmentPeriodWhere(new Date())],
           },
           select: { id: true, serviceProgramId: true },
         });

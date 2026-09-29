@@ -107,12 +107,49 @@ describe('ended training participant view', () => {
     fake.enrollment.mockResolvedValue({
       serviceProgramId: 'program',
       status: 'ACTIVE',
+      startsAt: new Date('2020-01-01'),
       endsAt: null,
     });
     expect(renderToStaticMarkup(await renderPage())).toContain('ACTIVE_TRAINING');
     expect(fake.current).toHaveBeenCalledOnce();
     expect(fake.retention).not.toHaveBeenCalled();
   });
+  it('blocks runtime at the exact expiry boundary while retaining toolkit and export links', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-09-29T01:00:00Z');
+    vi.setSystemTime(now);
+    try {
+      fake.enrollment.mockResolvedValue({
+        serviceProgramId: 'program',
+        status: 'ACTIVE',
+        startsAt: new Date('2020-01-01'),
+        endsAt: now,
+      });
+      const html = renderToStaticMarkup(await renderPage());
+      expect(html).toContain('受講期間は終了しています');
+      expect(html).toContain('/toolkit');
+      expect(html).toContain('PERSONAL_EXPORT');
+      expect(fake.current).not.toHaveBeenCalled();
+      expect(html).not.toContain('ACTIVE_TRAINING');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it.each([null, new Date('2999-01-01')])(
+    'shows the pre-start view without runtime (%s)',
+    async (startsAt) => {
+      fake.enrollment.mockResolvedValue({
+        serviceProgramId: 'program',
+        status: 'ACTIVE',
+        startsAt,
+        endsAt: null,
+      });
+      const html = renderToStaticMarkup(await renderPage());
+      expect(html).toContain('開始前です');
+      expect(fake.current).not.toHaveBeenCalled();
+      expect(fake.retention).not.toHaveBeenCalled();
+    },
+  );
   it('requires scoped active participant ownership before loading end information', async () => {
     await renderPage();
     expect(fake.member).toHaveBeenCalledWith({
