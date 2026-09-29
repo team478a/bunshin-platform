@@ -14,7 +14,7 @@
 - `apps/web/src/http/service-daily-mission-outcomes.ts`: 業務成果の機能設定とScopeを同じContextから解決。
 - `apps/web/src/http/service-social-insights.ts`: SNS数字/画像読取を認証後のMember Service解決へ変更。
 - `apps/web/src/http/service-daily-actions.ts`: メモ/写真記録も同じ解決方式へ変更。
-- HTTP実行テスト2件追加、日々の記録の既存実行テストと境界テスト2件更新。
+- HTTP実行テスト2件追加、日々の記録の既存実行テストと境界テスト3件更新（Variantの共通認可検証を含む）。
 - Decision Log D-150、Roadmap、機能不足監査、この報告書。
 
 ## 3. 主要な設計判断
@@ -29,6 +29,7 @@
 ## 4. 実行した検証
 
 - 対象Web6ファイルで136テスト成功。日々の記録へ匿名・非参加者・Service切替の追加テスト3件を含む。
+- 初回全Web検証は2,218件中2,217件成功。Variantの静的境界テスト1件に旧公開限定Resolverの期待値が残っていたため、Member Resolver使用と公開限定Resolver不使用の検証へ更新した。修正後の対象6ファイル143テスト成功。生成Policy・Origin・入力Scope拒否の検証は維持し、全WebとCIを再実行する。
 - 追加HTTPテストは実Application/SOCIAL Use Caseを使用し、認証・Service Resolver・Repository・画像抽出Portをmockする。非公開参加者の操作、別Service/Bunshin切替、所有拒否、ID注入/異Origin、SOCIAL停止、Service固有の機能制限、投稿者照合、Metrics/使用量のScopeを確認する。
 - Web型検査、変更コードlint、format、既存DB所有境界19テスト、アーキテクチャ境界とその10テスト、`git diff --check`が成功。全Webの最終結果はPRと作業報告で確認する。実DB統合と全体buildはCIの隔離環境で検証する。
 
