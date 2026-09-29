@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## D-147: 専用LINE再連携は試行別proofと既存参加者のサービス境界を使う
+
+- 日付: 2026-09-29
+- 状態: Accepted（監査で確認した2件の修正をユーザーが承認）
+- 専用LINEの新規接続はランダムstateのSHA-256を名前に含む試行別HttpOnly Cookieへ分離する。10分の期限、PKCE、nonce、本人/Configuration照合、DB単回CASを維持する。別Service・同じServiceの再試行・古い取消Callbackが他試行のCookieを上書き/削除しない。
+- Cookieは同じブラウザで最大4試行とし、上限時は既存試行を消さず開始を拒否する。Callbackでは一致した自試行のCookieだけを除去する。旧共通Cookieは一致したstateだけ互換検証に使い、新規発行も削除もせず既存10分期限で失効させる。
+- 接続ページ、開始、Callback、既存動画通知再試行は公開Slug解決でなく本人のACTIVE MembershipによるService解決を使う。非公開サービスの既存参加者を許可し、利用期間・Workspace/Group・Bunshin本人所有・参加同意・専用LINE設定の検証は維持する。匿名参加、他Service参照、管理権限の拡大はしない。
+- DB schema/migration、共通ログインの有効化、業種/初回質問、設定、本番データ、Provider実呼出、LINE送信は変更しない。
+
 ## D-146: 不明な過去の研修終了日時は管理者の個別確認でのみ確定する
 
 - 日付: 2026-09-29

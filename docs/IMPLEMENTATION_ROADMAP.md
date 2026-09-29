@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+専用LINE再連携の試行分離と非公開サービス既存参加者対応は`docs/SERVICE_LINE_RECONNECTION_ISOLATION_IMPLEMENTATION_REPORT.md`を参照。試行別Cookie・自試行限定の後処理・既存Member Service認可を使い、複数Service/同一Serviceの再試行が干渉しないようにする。旧Cookieは一致する開始済み試行だけ短期互換で検証し、設定・本番データ・共通認証の有効化・実LINE送信は変更しない。本番実端末確認は別途必要。
+
 AI研修の過去の未確定終了日時の管理者個別確定は`docs/ai-training/AI_TRAINING_END_DATE_CONFIRMATION_IMPLEMENTATION_REPORT.md`を参照。自Serviceの管理者が証跡・日本時間の日時・理由を指定し、Preview Revisionと受講排他で未確定日時のみを保存し監査する。アーカイブ/退会後の記録にも対応する。既存確定日上書き・自動推定・一括補完・データ削除・本番期限処理の停止解除は行わない。
 
 AI研修の無料・手動登録受講の期限終了バッチは`docs/ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`を参照。購入に紐づかない受講をService限定・期間/所有/Module/CAS再確認で終了し、評価待ちを停止する。最小システム監査を保持し、確定終了日記録は既存Triggerを使う。内部実行口はdevelopment/stagingのみで、本番停止・Cron未登録・保持期限消去停止を維持する。

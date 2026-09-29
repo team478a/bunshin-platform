@@ -7,14 +7,17 @@ import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import { AesGcmLineSecretCrypto, currentLineEnvironment } from '../line/secure-configuration';
 import {
   createLineLinkProof,
   hashLineState,
+  isLineLinkAttemptCookie,
   lineLinkAuthorization,
+  lineLinkAttemptCookie,
   lineLinkCookie,
   lineLinkLifetimeMs,
+  lineLinkMaxBrowserAttempts,
   verifyServiceLineCode,
 } from '../line/service-line-oauth';
 
@@ -35,6 +38,7 @@ export type ServiceLineLinkResult =
   | 'request-invalid'
   | 'consent-required'
   | 'configuration-unavailable'
+  | 'attempt-limit'
   | 'session-expired'
   | 'session-changed'
   | 'verification-failed'
@@ -55,7 +59,7 @@ export async function serviceLineLinkScope(slug: string, bunshinId: string) {
     throw new ServiceLineLinkUnavailable('Invalid scope');
   const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) throw new ServiceLineLinkUnavailable('Session required');
-  const service = await resolvePublicServiceContext(slug);
+  const service = await resolveMemberServiceContext(slug, actor.userId);
   const db = await import('@bunshin/database');
   const bunshin = await db.prisma.bunshin.findFirst({
     where: {
@@ -127,6 +131,13 @@ export async function startServiceLineLink(request: Request) {
     }
     result = 'configuration-unavailable';
     const scope = await serviceLineLinkScope(slug, id);
+    result = 'attempt-limit';
+    const browserCookies = await cookies();
+    if (
+      browserCookies.getAll().filter(({ name }) => isLineLinkAttemptCookie(name)).length >=
+      lineLinkMaxBrowserAttempts
+    )
+      throw new Error('Too many LINE connection attempts');
     result = 'failed';
     const proof = createLineLinkProof();
     await scope.db.prisma.serviceLineLinkAttempt.deleteMany({
@@ -152,7 +163,7 @@ export async function startServiceLineLink(request: Request) {
       }),
       303,
     );
-    response.cookies.set(lineLinkCookie, proof.state, {
+    response.cookies.set(lineLinkAttemptCookie(proof.state), proof.state, {
       httpOnly: true,
       sameSite: 'lax',
       secure: new URL(callbackUrl()).protocol === 'https:',
@@ -170,11 +181,20 @@ export async function startServiceLineLink(request: Request) {
 export async function finishServiceLineLink(request: Request) {
   let destination = '/account';
   let result: ServiceLineLinkResult = 'session-expired';
+  let completedCookie: string | null = null;
   try {
     const url = new URL(request.url);
     const state = url.searchParams.get('state');
     const code = url.searchParams.get('code');
     if (!state || !/^[\w-]{43}$/.test(state)) throw new Error('Invalid state');
+    const browserCookies = await cookies();
+    const attemptCookie = lineLinkAttemptCookie(state);
+    const browserProof = browserCookies.get(attemptCookie);
+    // Only old in-flight attempts may use the legacy cookie. Never clear it: a newer
+    // legacy start response might have replaced it while this callback was running.
+    const browserState = browserProof?.value ?? browserCookies.get(lineLinkCookie)?.value;
+    if (state !== browserState) throw new Error('Invalid browser proof');
+    if (browserProof) completedCookie = attemptCookie;
     const db = await import('@bunshin/database');
     const attempt = await db.prisma.serviceLineLinkAttempt.findUnique({
       where: { stateHash: hashLineState(state) },
@@ -184,8 +204,7 @@ export async function finishServiceLineLink(request: Request) {
       result = 'failed';
       throw new Error('LINE authorization cancelled');
     }
-    const browserState = (await cookies()).get(lineLinkCookie)?.value;
-    if (state !== browserState || !code || code.length > 2048) throw new Error('Invalid callback');
+    if (!code || code.length > 2048) throw new Error('Invalid callback');
     if (!attempt || attempt.consumedAt || attempt.expiresAt <= new Date())
       throw new Error('Expired attempt');
     result = 'session-changed';
@@ -269,7 +288,8 @@ export async function finishServiceLineLink(request: Request) {
     reportFailure(request, 'callback', result);
   }
   const response = redirectTo(`${destination}?lineResult=${result}`);
-  response.cookies.set(lineLinkCookie, '', { maxAge: 0, path: '/auth/service-line' });
+  if (completedCookie)
+    response.cookies.set(completedCookie, '', { maxAge: 0, path: '/auth/service-line' });
   return response;
 }
 

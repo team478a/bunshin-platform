@@ -3,8 +3,17 @@ import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 export const lineLinkCookie = 'service-line-link';
+export const lineLinkAttemptCookiePrefix = `${lineLinkCookie}-`;
+export const lineLinkMaxBrowserAttempts = 4;
 export const lineLinkLifetimeMs = 10 * 60_000;
 export const hashLineState = (value: string) => createHash('sha256').update(value).digest('hex');
+export function lineLinkAttemptCookie(state: string) {
+  if (!/^[\w-]{43}$/.test(state)) throw new Error('Invalid LINE state');
+  return `${lineLinkAttemptCookiePrefix}${hashLineState(state)}`;
+}
+export const isLineLinkAttemptCookie = (name: string) =>
+  name.startsWith(lineLinkAttemptCookiePrefix) &&
+  /^[0-9a-f]{64}$/.test(name.slice(lineLinkAttemptCookiePrefix.length));
 export function createLineLinkProof() {
   const state = randomBytes(32).toString('base64url');
   const nonce = randomBytes(32).toString('base64url');
