@@ -72,7 +72,8 @@ describe('mission content variant HTTP and UI boundary', () => {
   );
 
   it('derives the service scope on the server and enables safe service generation', () => {
-    expect(serviceHttp).toContain('resolvePublicServiceContext(serviceSlug)');
+    expect(serviceHttp).toContain('resolveMemberServiceContext(serviceSlug, actor)');
+    expect(serviceHttp).not.toContain('resolvePublicServiceContext');
     expect(serviceHttp).toContain('groupId: service.serviceId');
     expect(serviceHttp).toContain('serviceSafeMode: true');
     expect(serviceHttp).not.toContain('groupId: z.');
