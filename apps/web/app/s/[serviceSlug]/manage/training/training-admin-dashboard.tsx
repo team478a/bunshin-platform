@@ -20,6 +20,8 @@ const dateTimeLabel = (value: Date | null) =>
 
 const engagementLabel = {
   NOT_STARTED: '初期設定待ち',
+  BEFORE_START: '開始前',
+  PERIOD_UNRESOLVED: '開始日時を確認',
   ACTIVE: '継続中',
   NEEDS_SUPPORT: '復習を支援',
   INACTIVE: '再開を支援',
@@ -30,6 +32,7 @@ const engagementLabel = {
 type TrainingOperationsSettingsSource = Parameters<typeof parseAiTrainingOperationsSettings>[0];
 
 type TrainingAdminDashboardProps = {
+  checkedAt: Date;
   lifecycleRows: TrainingLifecycleRow[];
   serviceSlug: string;
   programs: Array<{ id: string; displayName: string; settings: TrainingOperationsSettingsSource }>;
@@ -42,6 +45,7 @@ type TrainingAdminDashboardProps = {
 };
 
 export function TrainingAdminDashboard({
+  checkedAt,
   lifecycleRows,
   serviceSlug,
   programs,
@@ -59,6 +63,10 @@ export function TrainingAdminDashboard({
           <p className="eyebrow">サービス管理者</p>
           <h1>AI研修の進み具合</h1>
           <p>受講者が今どこまで進み、誰に声かけが必要かを確認できます。</p>
+          <p>
+            期間判定の確認時刻：{checkedAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+            （日本時間）。最新の状況は画面を更新して確認してください。
+          </p>
           <Link href={`/s/${serviceSlug}/manage` as Route}>← 管理メニューへ戻る</Link>
           <p>
             <Link href={`/s/${serviceSlug}/manage/training/retention` as Route} prefetch={false}>
@@ -117,6 +125,14 @@ export function TrainingAdminDashboard({
                 登録者 {dashboard.totals.participants}人のうち、受講中は
                 {dashboard.totals.active}
                 人です。継続率は、受講中で直近7日以内に研修を進めた人の割合です。
+              </p>
+              <p>
+                受講中・継続率・声かけは、登録状態が受講中かつ受講期間内の受講だけを対象にします。履歴・完了課題・実務利用の集計は終了後も含みます。
+              </p>
+              <p>
+                期限終了 {dashboard.totals.expired}件（うち状態未更新{' '}
+                {dashboard.totals.pendingExpiryUpdate}件）、開始前 {dashboard.totals.beforeStart}
+                件、開始日時未確定 {dashboard.totals.startUnresolved}件。
               </p>
               <p>
                 実務利用の回答 {dashboard.totals.workResultCount}件（そのまま利用{' '}
@@ -401,7 +417,7 @@ export function TrainingAdminDashboard({
                         </dl>
                         {lifecycle && (
                           <TrainingLifecycleCard
-                            key={lifecycle.updatedAt}
+                            key={`${lifecycle.updatedAt}:${lifecycle.displayStatus}`}
                             serviceSlug={serviceSlug}
                             row={lifecycle}
                           />

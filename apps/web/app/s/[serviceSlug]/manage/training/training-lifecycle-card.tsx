@@ -6,10 +6,17 @@ import {
   type TrainingEnrollmentStatus,
   type TrainingLifecycleAction,
 } from '@bunshin/capability-training';
+import {
+  TRAINING_ENROLLMENT_DISPLAY_LABELS,
+  type TrainingEnrollmentDisplayStatus,
+} from '../../../../../src/services/ai-training-enrollment-display';
 
 export type TrainingLifecycleRow = {
   enrollmentId: string;
   status: TrainingEnrollmentStatus;
+  displayStatus: TrainingEnrollmentDisplayStatus;
+  startsAt: string | null;
+  endsAt: string | null;
   updatedAt: string;
   endedAt: string | null;
 };
@@ -81,8 +88,30 @@ export function TrainingLifecycleCard({
   }
   return (
     <div className="settings-form">
-      <p>受講状態：{TRAINING_ENROLLMENT_STATUS_LABELS[row.status]}</p>
-      {row.status !== 'ACTIVE' && row.status !== 'INVITED' && (
+      <p>利用状況：{TRAINING_ENROLLMENT_DISPLAY_LABELS[row.displayStatus]}</p>
+      <p>登録状態：{TRAINING_ENROLLMENT_STATUS_LABELS[row.status]}</p>
+      <p>
+        予定開始日時：
+        {row.startsAt
+          ? new Date(row.startsAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+          : '未確定'}
+      </p>
+      <p>
+        予定終了日時：
+        {row.endsAt
+          ? new Date(row.endsAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+          : '期限の指定なし'}
+      </p>
+      {row.displayStatus === 'PERIOD_ENDED' && (
+        <p>
+          受講期間は終了していますが、登録状態は未更新です。終了・取消は理由と確認が必要な別操作です。この表示だけでは確定終了日やデータ保持期限は変更しません。
+        </p>
+      )}
+      {row.displayStatus === 'START_UNRESOLVED' && (
+        <p>開始日時が未確定のため、現在は学習操作を利用できません。</p>
+      )}
+      {(row.displayStatus === 'PERIOD_ENDED' ||
+        (row.status !== 'ACTIVE' && row.status !== 'INVITED')) && (
         <p>
           確定終了日時：
           {row.endedAt

@@ -57,6 +57,7 @@ describe('admin evaluation privacy composition', () => {
         serviceProgramId: 'program',
         groupMembershipId: 'member',
         status: 'ACTIVE',
+        startsAt: new Date('2020-01-01'),
         updatedAt: new Date(),
         endsAt: null,
         trainingRetention: null,
@@ -107,5 +108,50 @@ describe('admin evaluation privacy composition', () => {
     );
     expect(fake.metrics).not.toHaveBeenCalled();
     expect(fake.answers).not.toHaveBeenCalled();
+  });
+  it('passes the same server period projection to totals and lifecycle without changing CAS status or inventing an end', async () => {
+    vi.useFakeTimers();
+    const checkedAt = new Date('2026-09-29T01:00:00Z');
+    vi.setSystemTime(checkedAt);
+    try {
+      fake.enrollments.mockResolvedValue([
+        {
+          id: 'enrollment',
+          serviceProgramId: 'program',
+          groupMembershipId: 'member',
+          status: 'ACTIVE',
+          startsAt: new Date('2020-01-01'),
+          endsAt: checkedAt,
+          updatedAt: checkedAt,
+          trainingRetention: null,
+        },
+      ]);
+      const result = await Page({ params: Promise.resolve({ serviceSlug: 'training' }) });
+      expect(result.props.checkedAt).toEqual(checkedAt);
+      expect(result.props.dashboard.totals).toMatchObject({
+        active: 0,
+        pendingExpiryUpdate: 1,
+        continuationPercent: 0,
+      });
+      expect(result.props.lifecycleRows).toEqual([
+        {
+          enrollmentId: 'enrollment',
+          status: 'ACTIVE',
+          displayStatus: 'PERIOD_ENDED',
+          startsAt: new Date('2020-01-01').toISOString(),
+          endsAt: checkedAt.toISOString(),
+          updatedAt: checkedAt.toISOString(),
+          endedAt: null,
+        },
+      ]);
+      expect(fake.enrollments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({ startsAt: true, endsAt: true }),
+          where: expect.objectContaining({ workspaceId: 'workspace', groupId: 'service' }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
