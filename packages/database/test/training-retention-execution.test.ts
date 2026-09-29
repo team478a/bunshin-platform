@@ -130,6 +130,20 @@ describe('training retention execution', () => {
       }),
     );
     expect(tx.trainingParticipantProfile.deleteMany).not.toHaveBeenCalled();
+    expect(tx.programActionEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ eventType: { not: 'TRAINING_ENROLLMENT_EXPIRED' } }),
+      }),
+    );
+    expect(tx.programActionEvent.updateMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace',
+        groupId: 'group',
+        programEnrollmentId: 'enrollment',
+        eventType: { not: 'TRAINING_ENROLLMENT_EXPIRED' },
+      },
+      data: { metadata: {} },
+    });
     expect(tx.programProgressSnapshot.deleteMany).not.toHaveBeenCalled();
     expect(tx.$queryRaw).toHaveBeenCalled();
     expect(tx.job.updateMany).toHaveBeenCalledWith(
@@ -152,6 +166,14 @@ describe('training retention execution', () => {
     expect(tx.trainingParticipantProfile.deleteMany).toHaveBeenCalled();
     expect(tx.programProgressSnapshot.deleteMany).toHaveBeenCalled();
     expect(tx.programMissionAssignment.deleteMany).toHaveBeenCalled();
+    expect(tx.programActionEvent.deleteMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace',
+        groupId: 'group',
+        programEnrollmentId: 'enrollment',
+        eventType: { not: 'TRAINING_ENROLLMENT_EXPIRED' },
+      },
+    });
     expect(tx.programActionEvent.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
       tx.programMissionAssignment.deleteMany.mock.invocationCallOrder[0]!,
     );

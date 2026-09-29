@@ -7,6 +7,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
 import { trainingRetentionOwner, trainingRetentionSnapshot } from './training-retention-snapshot';
+import { TRAINING_ENROLLMENT_EXPIRED_EVENT } from './training-audit-events';
 
 const action = 'TRAINING_RETENTION_APPLIED';
 export class PrismaTrainingRetentionExecutionRepository implements TrainingRetentionExecutionRepository {
@@ -126,7 +127,9 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
               where: { ...personal, groupMembershipId: owned.membership.id },
             });
             await tx.programProgressSnapshot.deleteMany({ where: scope });
-            await tx.programActionEvent.deleteMany({ where: scope });
+            await tx.programActionEvent.deleteMany({
+              where: { ...scope, eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT } },
+            });
             await tx.programMissionAssignment.deleteMany({ where: scope });
             await tx.programMemberGoal.deleteMany({
               where: { ...scope, groupMembershipId: owned.membership.id },
@@ -162,7 +165,10 @@ export class PrismaTrainingRetentionExecutionRepository implements TrainingReten
                 revision: { increment: 1 },
               },
             });
-            await tx.programActionEvent.updateMany({ where: scope, data: { metadata: {} } });
+            await tx.programActionEvent.updateMany({
+              where: { ...scope, eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT } },
+              data: { metadata: {} },
+            });
             await tx.programMemberGoal.updateMany({
               where: { ...scope, groupMembershipId: owned.membership.id },
               data: { title: '保持期限により削除済み', unit: '' },

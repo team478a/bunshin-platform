@@ -8,6 +8,7 @@ import {
   type TrainingRetentionExecutionScope,
 } from '@bunshin/capability-training';
 import type { Prisma } from '@prisma/client';
+import { TRAINING_ENROLLMENT_EXPIRED_EVENT } from './training-audit-events';
 
 export async function trainingRetentionOwner(
   tx: Prisma.TransactionClient,
@@ -108,7 +109,7 @@ export async function trainingRetentionSnapshot(
       tx.programActionEvent.findMany({
         where:
           work || progress
-            ? scope
+            ? { ...scope, eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT } }
             : {
                 ...scope,
                 sourceResourceType: 'TRAINING_MISSION_ANSWER',

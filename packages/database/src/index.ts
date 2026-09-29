@@ -150,6 +150,11 @@ export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export { PrismaTrainingLifecycleRepository } from './training-enrollment-lifecycle';
 export {
+  expireUnpurchasedTrainingEnrollments,
+  TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
+  type TrainingEnrollmentExpiryInput,
+} from './training-enrollment-expiry';
+export {
   listTrainingAdminEvaluationMetrics,
   type TrainingAdminEvaluationMetric,
 } from './training-admin-evaluation-metrics';
