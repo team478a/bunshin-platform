@@ -32,7 +32,7 @@ export async function trainingEnrollmentExpiryResponse(request: Request): Promis
     const params = new URL(request.url).searchParams;
     if (new URL(request.url).search.length > 1024)
       return Response.json({ requestId }, { status: 413, headers });
-    if (request.body || [...params.keys()].some((key) => params.getAll(key).length !== 1))
+    if ([...params.keys()].some((key) => params.getAll(key).length !== 1))
       throw new ApplicationError(
         'VALIDATION_ERROR',
         'unambiguous scope query without body required',
@@ -40,6 +40,23 @@ export async function trainingEnrollmentExpiryResponse(request: Request): Promis
     const parsed = schema.safeParse(Object.fromEntries(params));
     if (!parsed.success)
       throw new ApplicationError('VALIDATION_ERROR', 'valid service scope required');
+    // Next.js may provide an empty stream for a bodyless POST. Never parse
+    // a second scope from the body; reject non-empty input at the first chunk.
+    if (request.body) {
+      const reader = request.body.getReader();
+      try {
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          if (part.value.byteLength > 0) {
+            await reader.cancel();
+            throw new ApplicationError('VALIDATION_ERROR', 'body input is not accepted');
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
     const result = await runTrainingEnrollmentExpiry(parsed.data);
     logger.info('training enrollment expiry batch complete', {
       requestId,

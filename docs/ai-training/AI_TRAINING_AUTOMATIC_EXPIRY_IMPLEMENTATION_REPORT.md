@@ -24,13 +24,13 @@ main `63483601`（PR #1003マージ後）を基準に、Program購入の期限�
 
 Serializable競合（P2034/SQLSTATE 40001）はconflicts件数で明示する。候補変更はskipped、101件目はhasMoreで示す。スキャンが0件なら0件であり、DB例外を0件成功へ変えない。
 
-内部実行口は`POST /api/internal/ai-training/expire-enrollments?workspaceId=<UUID>&groupId=<UUID>`。Cron SecretのBearer認証が必須。Bodyを受け付けず、Scopeの重複/未知値/不正UUID/1024文字超過を拒否する。処理時刻はサーバーのみが指定する。development/stagingだけ実行可能で、production/previewは503 DISABLED。GETと本番定期実行は追加しない。
+内部実行口は`POST /api/internal/ai-training/expire-enrollments?workspaceId=<UUID>&groupId=<UUID>`。Cron SecretのBearer認証が必須。本文による入力を受け付けず（空ストリームは許可）、Scopeの重複/未知値/不正UUID/1024文字超過を拒否する。処理時刻はサーバーのみが指定する。development/stagingだけ実行可能で、production/previewは503 DISABLED。GETと本番定期実行は追加しない。
 
 ## 4. 実行した検証
 
-- Database関連4ファイル/45件、Web関連2ファイル/35件成功。対象SQL、所有/Module/購入/CAS条件、終了/停止/監査の順序、100件上限と残件、競合/例外、Cron認証/環境停止/入力と、既存手動Lifecycle・学習データ削除/保持期限処理を回帰検証。
+- Database関連4ファイル/45件、Web関連2ファイル/36件成功。対象SQL、所有/Module/購入/CAS条件、終了/停止/監査の順序、100件上限と残件、競合/例外、Cron認証/環境停止/入力と、既存手動Lifecycle・学習データ削除/保持期限処理を回帰検証。空POSTストリームの追加検証も成功。
 - Webルート境界2件、Database型検査、git diff --check成功。
-- Web型検査と変更ファイルLintも成功。初回CI実DB検証では新規Fixtureが同じWorkspaceに同名Serviceを作り、一意制約に違反した。Fixture名を分離して再検証する。DB制約は変更しない。
+- Web型検査と変更ファイルLintも成功。初回CI実DB検証では新規Fixtureが同じWorkspaceに同名Serviceを作り、一意制約に違反した。Fixture名を分離し、実DB統合46件が成功。DB制約は変更しない。空POSTストリームと入力Bodyを区別する追加テストも最終差分で検証する。
 - Web型検査・変更ファイルLint・全体format/typecheck/lint/test/buildと実DB統合の最終結果は、対象HEADのCIとPR検証欄を正とする。
 
 実DBでは2 Workspaceと別Service/Module、有料購入、期限なし/未来/開始不明/招待/終了済みを用意し、並行バッチで一度だけ終了すること、確定終了日、評価待ち停止、本文/仕事情報/点数/Toolkit維持、再実行と遅延評価拒否を確認する。テストFixtureだけを使う既存保持期限・本人削除の検証で、最小終了監査が維持されることも確認する。

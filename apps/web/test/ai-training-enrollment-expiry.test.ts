@@ -33,7 +33,7 @@ function request(params = query, method = 'POST', secret = 'test-cron-secret', b
     {
       method,
       headers: { authorization: `Bearer ${secret}` },
-      ...(body ? { body } : {}),
+      ...(body !== undefined ? { body } : {}),
     },
   );
 }
@@ -128,6 +128,12 @@ describe('training enrollment expiry execution boundary', () => {
         .status,
     ).toBe(400);
     expect(fake.expire).not.toHaveBeenCalled();
+  });
+  it('accepts an explicitly empty POST body stream', async () => {
+    const incoming = request(query, 'POST', 'test-cron-secret', '');
+    expect(incoming.body).not.toBeNull();
+    expect((await trainingEnrollmentExpiryResponse(incoming)).status).toBe(200);
+    expect(fake.expire).toHaveBeenCalledTimes(1);
   });
   it('bounds the query length before scope processing', async () => {
     expect(
