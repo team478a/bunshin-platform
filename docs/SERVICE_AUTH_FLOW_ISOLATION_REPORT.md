@@ -11,7 +11,7 @@
 ## 2. 変更したファイル
 
 - `apps/web/src/auth/line-return.ts`: サービスページ/アカウントの厳密な復帰許可、共通登録の要否、サービス限定ログインURL。
-- `apps/web/app/auth/{line,confirm,email}`、`app/consent/accept`: LINE/メール/同意後の統一判定、古いCookie除去、メール送信案内で戻り先保持。
+- `apps/web/app/auth/{line,confirm,email}`、`app/consent/accept`、`src/auth/login-error.ts`: LINE/メール/同意後の統一判定、古いCookie除去、メール送信案内とProvider失敗/認証取消/期限切れ時の再試行画面で戻り先保持。
 - `app/onboarding/page.tsx`、`src/http/user-registration.ts`: 旧サービスリンクを戻し、サービス回答の共通Userへの保存を拒否。個人利用の共通登録は維持。
 - `src/services/member-service-page.ts`: サービスslugと戻り先が異なる場合は認証/取得前に拒否。
 - `app/s/[serviceSlug]/bunshins/[bunshinId]/line/page.tsx`: 未ログインでも元の専用接続画面へ復帰する入口。
@@ -29,7 +29,7 @@
 - 認証/専用LINE/初期設定関連8ファイル108件成功（追加検証前の時点）。
 - 所属/管理者/招待/初期設定/AI研修LINE境界9ファイル39件成功。
 - サービスの既存ページ60件と管理画面6入口の復帰一覧テスト66件成功。
-- 最終関連11ファイル190件成功。共通登録画面/APIの分離、別Serviceへの戻り先の拒否、LINE/メール/法務同意後の5用途別復帰、Cookie置換/除去、重複紹介queryを含む。
+- 最終関連11ファイル192件成功。共通登録画面/APIの分離、別Serviceへの戻り先の拒否、LINE/メール/法務同意後の5用途別復帰、Cookie置換/除去、重複紹介query、認証開始/復帰失敗時の再試行を含む。
 - Web全体379ファイル1750件成功（最後のページ一覧等追加前）。Web typecheck、変更TypeScriptのlint、Prettier、`git diff --check`成功。
 - 全packageの型/lint/test/buildとDB migration検証はPR CIで確認する。本番OAuthは実行していない。
 

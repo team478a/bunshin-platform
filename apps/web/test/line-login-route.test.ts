@@ -74,6 +74,53 @@ import { POST as acceptConsents } from '../app/consent/accept/route';
 import { POST as startEmailLogin } from '../app/auth/email/route';
 
 describe('LINE login routes', () => {
+  it('keeps the current project on provider failure and clears an older cookie', async () => {
+    const path = '/s/current-service/line';
+    const headers = {
+      origin: 'https://bunshin.example',
+      'content-type': 'application/x-www-form-urlencoded',
+      cookie: 'bunshin_line_auth_return=%2Fs%2Fold-service%2Fline',
+    };
+    state.signInWithOAuth.mockResolvedValue({ data: {}, error: new Error('unavailable') });
+    state.signInWithOtp.mockResolvedValue({ error: { status: 429 } });
+    for (const start of [startLineLogin, startEmailLogin]) {
+      const response = await start(
+        new Request('https://bunshin.example/auth/login', {
+          method: 'POST',
+          headers,
+          body: new URLSearchParams({ email: 'member@example.com', returnTo: path }),
+        }),
+      );
+      const location = new URL(response.headers.get('location')!);
+      expect(location.pathname).toBe('/login');
+      expect(location.searchParams.get('returnTo')).toBe(path);
+      expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+    }
+  });
+
+  it('preserves the current service after failed LINE or email callback', async () => {
+    const path = '/s/media/line';
+    const headers = {
+      origin: 'https://bunshin.example',
+      cookie: `bunshin_line_auth_return=${encodeURIComponent(path)}`,
+    };
+    state.verifyOtp.mockResolvedValue({ error: new Error('expired') });
+    for (const response of [
+      await completeLineLogin(
+        new Request('https://bunshin.example/auth/line/callback?error=access_denied', { headers }),
+      ),
+      await completeEmailLogin(
+        new Request('https://bunshin.example/auth/confirm', {
+          method: 'POST',
+          headers,
+          body: new URLSearchParams({ token_hash: 'expired-token', type: 'email' }),
+        }),
+      ),
+    ]) {
+      expect(new URL(response.headers.get('location')!).searchParams.get('returnTo')).toBe(path);
+      expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+    }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     state.requiredConsents = [];

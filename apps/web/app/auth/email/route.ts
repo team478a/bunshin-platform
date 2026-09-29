@@ -8,17 +8,19 @@ import {
   safeLineAuthReturnPath,
 } from '../../../src/auth/line-return';
 import { createSupabaseServerClient } from '../../../src/auth/supabase';
+import { loginErrorResponse } from '../../../src/auth/login-error';
 
 const inputSchema = z.object({ email: z.email().max(320) });
 
 export async function POST(request: Request): Promise<Response> {
+  let returnTo: string | null = null;
   try {
     requireSameOrigin(request);
     const form = await request.formData();
-    const input = inputSchema.safeParse(Object.fromEntries(form));
-    if (!input.success) return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
     const returnValue = form.get('returnTo');
-    const returnTo = safeLineAuthReturnPath(typeof returnValue === 'string' ? returnValue : null);
+    returnTo = safeLineAuthReturnPath(typeof returnValue === 'string' ? returnValue : null);
+    const input = inputSchema.safeParse(Object.fromEntries(form));
+    if (!input.success) return loginErrorResponse(request, '1', returnTo);
     const supabase = await createSupabaseServerClient();
     const environment = getServerEnvironment();
     const { error } = await supabase.auth.signInWithOtp({
@@ -30,10 +32,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     if (error) {
       const rateLimited = error.status === 429 || error.code === 'over_email_send_rate_limit';
-      return NextResponse.redirect(
-        new URL(`/login?error=${rateLimited ? 'rate-limit' : 'email'}`, request.url),
-        303,
-      );
+      return loginErrorResponse(request, rateLimited ? 'rate-limit' : 'email', returnTo);
     }
     const sentUrl = new URL('/login?sent=1', request.url);
     if (returnTo) sentUrl.searchParams.set('returnTo', returnTo);
@@ -51,6 +50,6 @@ export async function POST(request: Request): Promise<Response> {
     }
     return response;
   } catch {
-    return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
+    return loginErrorResponse(request, '1', returnTo);
   }
 }
