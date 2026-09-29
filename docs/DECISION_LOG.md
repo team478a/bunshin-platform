@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## D-149: SNS設定・発信方針・投稿テーマ・週間計画は参加者本人のサービスで解決する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装と前段PRのマージ確認）
+- SNS設定、アカウント発信方針、投稿テーマ、週間計画の各HTTP APIは認証済みUserを先に確認し、既存Member Service解決を使う。非公開Serviceの既存ACTIVE参加者を許可し、利用期間・Workspace/Group/所属の判定は維持する。
+- Workspace/Group/操作者はサーバーで解決し、既存RepositoryのService/Bunshin本人所有条件とSOCIAL能力確認、入力Schema、同一Origin判定を維持する。Service固有の業種・初回回答を共通化しない。
+- 生成時の自Service公式知識、参加Campaign、用語変換、業務投稿配分、Quota/使用量/冪等キーと確定済み計画のテーマ保護を変更しない。実Provider呼出はせず、テストでは生成Portをmockする。
+- 投稿採否・完了・成果/振り返りのAPIは別PRとする。公開登録・Metadata、個人用操作、DB schema/migration、設定、本番データ、LINE送信は変更しない。
+
 ## D-148: 投稿パートナー操作は公開状態ではなく参加者本人のサービス境界で認可する
 
 - 日付: 2026-09-29

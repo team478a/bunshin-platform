@@ -15,7 +15,8 @@ const detailPage = readFileSync(
 
 describe('service account strategy boundary', () => {
   it('derives service authority on the server', () => {
-    expect(source).toContain('resolvePublicServiceContext(serviceSlug)');
+    expect(source).toContain('resolveMemberServiceContext(serviceSlug, actor)');
+    expect(source).not.toContain('resolvePublicServiceContext');
     expect(source).toContain('groupId: service.serviceId');
     expect(source).not.toContain('groupId: z.');
     expect(source).not.toContain('workspaceId: z.');

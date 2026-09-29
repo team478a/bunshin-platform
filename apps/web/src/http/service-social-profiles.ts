@@ -18,7 +18,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 const values = {
   handle: z.string().nullable().optional(),
@@ -95,10 +95,8 @@ async function respond(request: Request, operation: () => Promise<unknown>, stat
 }
 
 async function scope(serviceSlug: string, bunshinId: string) {
-  const [service, actor] = await Promise.all([
-    resolvePublicServiceContext(serviceSlug),
-    actorUserId(),
-  ]);
+  const actor = await actorUserId();
+  const service = await resolveMemberServiceContext(serviceSlug, actor);
   return {
     workspaceId: service.workspaceId,
     groupId: service.serviceId,
