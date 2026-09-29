@@ -13,7 +13,7 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: m.actor }),
 }));
 vi.mock('../src/services/public-service', () => ({
-  resolvePublicServiceContext: () =>
+  resolveMemberServiceContext: () =>
     Promise.resolve({ workspaceId: 'workspace', serviceId: 'group' }),
   resolveManagedServiceContext: vi.fn(),
 }));

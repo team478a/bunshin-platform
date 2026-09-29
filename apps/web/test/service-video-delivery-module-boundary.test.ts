@@ -23,6 +23,8 @@ describe('service video delivery HTTP module boundary', () => {
     expect(admin).toContain('RevokeVideoDelivery');
     expect(member).toContain('RecordManualPost');
     expect(member).toContain('SupabaseVideoRenderOutputStorage');
+    expect(member).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(member).not.toContain('resolvePublicServiceContext');
     expect(csvExport).toContain('videoDelivery.findMany');
     expect(csvExport).not.toContain('sendDeliveryNotice');
   });

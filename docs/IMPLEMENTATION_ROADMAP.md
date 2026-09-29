@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開サービスの動画配信参加者操作は`docs/PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`を参照。閲覧/採用/辞退/自己申告投稿とダウンロードを認証後のMember Service解決へ合わせる。期限切れ/取消済みの投稿副作用を先に拒否し、本人Project/Render/Storage Key・未削除/期限・採用条件を照合する。署名URL準備成功後だけ履歴を保存し、拒否/不存在/未知障害を区別する。実LINE/Storage、設定、DB、本番データは変更しない。残る画面/Program目標の公開判定監査と本番反映は別作業。
+
 非公開サービスの本人商品紹介API対応は`docs/PRIVATE_SERVICE_PRODUCT_CONTENT_IMPLEMENTATION_REPORT.md`を参照。保存/非表示、コピー/自己申告投稿、紹介文生成は認証後のMember Service解決へ合わせ、本人の商品/分身/ACTIVE URL/公式商品再照合を維持する。生成Quotaにも自Service IDを渡し既存Service上限を迂回しない。URL非送信、PR/公式ルール/媒体上限と使用量記録は維持する。匿名公開入口、設定、DB、本番データ、実Providerは変更しない。動画通知と画面の追加監査、本番反映は別作業。
 
 非公開サービスの初回回答・紹介コード・本人専用URL API対応は`docs/PRIVATE_SERVICE_ONBOARDING_REFERRALS_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決を使い、Service固有の質問/事業プロフィール・紹介設定・本人所属・許可ドメインとDRAFT保存を維持する。Schema不一致は400、未知Resolver障害は500として区別する。匿名の紹介先登録・公開入口、設定、本番データは変更しない。商品紹介・動画通知と画面の追加監査、本番反映は別作業。

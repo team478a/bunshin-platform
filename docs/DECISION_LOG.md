@@ -1,5 +1,15 @@
 # BUNSHIN Platform Decision Log
 
+## D-153: 動画配信の参加者操作はMember Serviceと利用可能状態を先に確認する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1016のマージ確認）
+- 閲覧/採用/辞退/自己申告投稿とダウンロードは認証後のMember Service解決へ合わせ、利用期間・ACTIVE Workspace/Group/本人所属と既存Repositoryの受信者/状態条件を維持する。不正Delivery IDは400へ明示変換する。
+- 自己申告投稿/ダウンロードでは取得済みDeliveryの期限切れ・EXPIRED/REVOKEDを関連投稿/Storage操作より先に拒否する。本人の未取消Project取得失敗も投稿記録前に拒否する。POSTED再送、採用必須、SOCIAL能力、元Missionと紹介Milestone、元Missionなし手動動画を維持する。新しい排他保証は追加しない。
+- ダウンロードは同じWorkspace/Service/本人/Project/Renderの未削除・期限内SUCCEEDED行と正本形式のStorage Keyを照合し、署名URL準備後にDOWNLOADEDを記録する。準備失敗や拒否時にURLを返さず、失敗を成功履歴にしない。履歴は実端末保存の確認ではなく引渡し準備を表す。
+- 全例外を404にするdownload catchを既存APIエラー変換へ合わせ、拒否/不存在/未知障害を区別する。本人用成功/失敗/署名URL redirectはprivate no-store、redirectはno-referrerとする。
+- 公開入口・専用LINE OAuth/送信・通知Snapshot/再試行・DB schema/migration・設定・本番データを変更しない。Storageはテストでmockし実署名URLを発行しない。
+
 ## D-152: 本人の商品紹介操作もMember Service境界で解決する
 
 - 日付: 2026-09-30
