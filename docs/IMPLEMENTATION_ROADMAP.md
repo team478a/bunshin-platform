@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開サービスの投稿操作・成果・日々の記録API対応は`docs/PRIVATE_SERVICE_POSTING_OUTCOMES_IMPLEMENTATION_REPORT.md`を参照。共通Mission Scope、業務成果、SNS数字保存/画像読取、メモ/写真を認証後のMember Service解決へ合わせる。業務成果設定は同じContextから解決し、Service固有の機能制限・本人所有・参加同意・SOCIAL能力を維持する。実Provider呼出、本番設定/データ、匿名登録は変更しない。商品紹介・紹介リンク・初回設定・動画通知等の別機能判定は後続監査、本番反映は別作業。
+
 非公開サービスのSNS設定・発信方針・投稿テーマ・週間計画API対応は`docs/PRIVATE_SERVICE_SOCIAL_PLANNING_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決へ合わせ、本人所有・SOCIAL能力・入力/Origin検証と生成時の自Service知識/用語/Quota等を維持する。投稿採否/完了/成果・振り返りは次の独立PR。本番反映・実端末確認は別作業。
 
 非公開サービスの投稿パートナー操作対応は`docs/PRIVATE_SERVICE_BUNSHIN_OPERATIONS_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決で一覧・作成・取得・編集・停止と初回回答からの候補提案を接続する。サービス所属の編集/停止は本人所有に限定し、個人用Bunshin管理権限は維持する。SNS設定・投稿テーマ・週間計画・投稿操作の公開限定判定は後続の独立PRとする。本番反映・実端末確認は別途必要。

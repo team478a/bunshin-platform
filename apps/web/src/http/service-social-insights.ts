@@ -11,7 +11,7 @@ import {
   SOCIAL_INSIGHT_EXTRACTION_PROMPT_VERSION,
   SocialInsightExtractionError,
 } from '../providers/openai-social-insight-extractor';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
 import { SOCIAL_INSIGHT_METRIC_KEYS } from '../services/social-insights';
 import { POST_PERFORMANCE_METRIC_KEYS, writePostPerformance } from '../services/post-performance';
@@ -83,11 +83,9 @@ async function respond(request: Request, operation: (requestId: string) => Promi
 }
 
 async function resolveScope(serviceSlug: string, bunshinId: string) {
-  const [service, actor] = await Promise.all([
-    resolvePublicServiceContext(serviceSlug),
-    (await currentUserProvider()).getCurrentUser(),
-  ]);
+  const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+  const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
   const onboarding = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,

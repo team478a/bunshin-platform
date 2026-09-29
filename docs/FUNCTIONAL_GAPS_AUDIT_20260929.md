@@ -9,8 +9,10 @@
 main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は初回監査4件の実装後に発見した機能不具合であり、本番で不正参照が起きた証拠ではない。
 
 1. **投稿パートナーの一覧・作成・取得・編集・停止と初回回答からの候補提案: PR #1012で実装済み**。認証後の本人Member Service解決を使用し、非公開Serviceの既存参加者も操作できる。Service所属の編集/停止にも本人所有を必須とし、個人用管理権限は維持する。詳細は`PRIVATE_SERVICE_BUNSHIN_OPERATIONS_IMPLEMENTATION_REPORT.md`。
-2. **SNS設定・発信方針・投稿テーマ・週間計画の操作API: 今回修正**。4種類19操作を認証後のMember Service解決へ合わせ、本人所有・SOCIAL能力・入力/Origin検証と生成時の自Service公式知識/用語/Quota等を維持する。詳細は`PRIVATE_SERVICE_SOCIAL_PLANNING_IMPLEMENTATION_REPORT.md`。
-3. **投稿の採否・完了・実行結果の保存/振り返りAPI: 残タスク**。前項の後に本人・Service・Bunshin境界を保って対応する。
+2. **SNS設定・発信方針・投稿テーマ・週間計画の操作API: PR #1013で実装済み**。4種類19操作を認証後のMember Service解決へ合わせ、本人所有・SOCIAL能力・入力/Origin検証と生成時の自Service公式知識/用語/Quota等を維持する。詳細は`PRIVATE_SERVICE_SOCIAL_PLANNING_IMPLEMENTATION_REPORT.md`。
+3. **投稿の採否・完了・実行結果の保存/振り返りAPI: 今回修正**。共通Mission Scope、業務成果、SNS数字保存/読取と日々のメモ/写真を認証後のMember Service解決へ合わせ、Service固有の機能設定・本人所有・同意・SOCIAL能力を維持する。詳細は`PRIVATE_SERVICE_POSTING_OUTCOMES_IMPLEMENTATION_REPORT.md`。本番反映は別途必要。
+
+商品紹介・紹介リンク・初回設定・動画通知等の別機能APIにも公開Resolverが残る。匿名公開入口を維持すべき箇所と既存参加者操作を個別監査する。上記3件の修正だけで全非公開Service対応完了とは扱わない。
 
 千ノ国・ハッシー・OEM等で該当する共通機能の修正。公開登録やService固有の業種/質問フローを共通化しない。本作業では設定・Provider実呼出・本番データを変更しない。
 

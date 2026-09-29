@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## D-150: 投稿操作・成果・日々の記録は本人のMember Service境界で認可する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装と前段PRのマージ確認）
+- 投稿採否/活動/自己申告投稿/評価、共通Daily Mission操作Scope、業務成果、SNS数字保存/画像読取、日々のメモ/写真記録は認証済みUserを先に取得し、既存Member Service解決を使う。非公開Serviceの既存ACTIVE参加者を許可し、利用期間・Workspace/Group/所属・本人所有・既存参加同意条件を維持する。
+- 業務成果の設定と操作Scopeは同じMember Service解決結果から作り、別の匿名公開判定や再取得した操作者を混ぜない。businessProfileEnabledの機能制限は維持し、千ノ国等へ業種/成果項目を強制しない。
+- 既存SOCIAL能力、Mission/投稿者照合、Schema/同一Origin、再送キー、使用量・紹介Milestone、写真権利/Storage条件と自Service知識・生成/VariantのPolicyは変更しない。実AI/Storage/LINE呼出はせずテストではPortをmockする。
+- 商品紹介・紹介リンク・初回登録・動画通知など別機能の残る公開判定は本PRに混ぜない。個人用API、公開登録/Metadata、DB schema/migration、設定、本番データを変更しない。
+
 ## D-149: SNS設定・発信方針・投稿テーマ・週間計画は参加者本人のサービスで解決する
 
 - 日付: 2026-09-29
