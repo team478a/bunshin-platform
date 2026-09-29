@@ -1,7 +1,12 @@
-import { ListServiceBunshins, businessGrowthProgramStatus } from '@bunshin/application';
+import {
+  ListServiceBunshins,
+  ServiceParticipationService,
+  businessGrowthProgramStatus,
+} from '@bunshin/application';
 import { GetMissionProgress } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import type { Metadata, Route } from 'next';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
@@ -78,6 +83,7 @@ export default async function ServiceMemberHome({
     },
     select: {
       id: true,
+      consentedAt: true,
       role: true,
       serviceRole: true,
       user: { select: { displayName: true } },
@@ -101,6 +107,14 @@ export default async function ServiceMemberHome({
     },
   });
   if (!membership) redirect(`/s/${service.configuration.slug}` as Route);
+  const legalConsent = membership.consentedAt
+    ? await new ServiceParticipationService(
+        new db.PrismaServiceParticipationRepository(),
+      ).findLegalConsentView({ slug: serviceSlug, actorUserId: actor.userId })
+    : null;
+  const needsLegalConsent =
+    legalConsent?.legalDocuments.some(({ id }) => !legalConsent.acceptedDocumentIds.includes(id)) ??
+    false;
   const onboarding = readServiceOnboardingSettings(
     service.configuration.registration.onboardingConfig,
     service.configuration.registration.surveyConfig,
@@ -208,6 +222,18 @@ export default async function ServiceMemberHome({
           logoUrl={service.configuration.brand.logoUrl}
           memberName={membership.user.displayName}
         />
+        {needsLegalConsent && (
+          <section className="service-entry__card" aria-labelledby="legal-consent-title">
+            <h2 id="legal-consent-title">利用規約などの更新があります</h2>
+            <p>現在有効な文書を確認し、同意してください。</p>
+            <Link
+              className="button button--primary button--full"
+              href={`/s/${service.configuration.slug}/legal-consent` as Route}
+            >
+              文書を確認する
+            </Link>
+          </section>
+        )}
         {isServiceAnnouncementVisible(announcement, now) && (
           <ServiceAnnouncementSection message={announcement.message} title={announcement.title} />
         )}

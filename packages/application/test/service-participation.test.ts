@@ -17,6 +17,8 @@ const membership = {
 
 const repository = (): ServiceParticipationRepository => ({
   findView: vi.fn(() => Promise.resolve(null)),
+  findLegalConsentView: vi.fn(() => Promise.resolve(null)),
+  acceptLegalDocuments: vi.fn(() => Promise.resolve(true)),
   request: vi.fn(() => Promise.resolve(membership)),
   approve: vi.fn(() => Promise.resolve({ ...membership, status: 'ACTIVE' as const })),
   recordUse: vi.fn(() => Promise.resolve({ ...membership, status: 'ACTIVE' as const })),
@@ -71,6 +73,36 @@ describe('ServiceParticipationService', () => {
         legalDocumentIds: ['terms-1', 'terms-1'],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('requires unique current document IDs for reconsent without invoking registration', async () => {
+    const acceptLegalDocuments = vi.fn(() => Promise.resolve(true));
+    const request = vi.fn(() => Promise.resolve(membership));
+    const service = new ServiceParticipationService({
+      ...repository(),
+      acceptLegalDocuments,
+      request,
+    });
+    await expect(
+      service.acceptLegalDocuments({
+        slug: 'sample-service',
+        actorUserId: 'user-1',
+        legalDocumentIds: ['terms-1', 'terms-1'],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await service.acceptLegalDocuments({
+      slug: 'sample-service',
+      actorUserId: 'user-1',
+      legalDocumentIds: ['terms-2', 'privacy-1', 'commerce-1'],
+    });
+    expect(acceptLegalDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'sample-service',
+        actorUserId: 'user-1',
+        legalDocumentIds: ['terms-2', 'privacy-1', 'commerce-1'],
+      }),
+    );
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('normalizes a referral code before sending it to the repository', async () => {

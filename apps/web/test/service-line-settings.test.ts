@@ -7,10 +7,14 @@ const mocks = vi.hoisted(() => ({
   partners: vi.fn(),
   configuration: vi.fn(),
   connection: vi.fn(),
+  legalConsentView: vi.fn(),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: mocks.context }));
 vi.mock('../src/line/secure-configuration', () => ({ currentLineEnvironment: () => 'PRODUCTION' }));
 vi.mock('@bunshin/database', () => ({
+  PrismaServiceParticipationRepository: class {
+    findLegalConsentView = mocks.legalConsentView;
+  },
   prisma: {
     groupMembership: { findFirst: mocks.membership },
     groupLineRoutingPolicy: { findUnique: mocks.policy },
@@ -42,6 +46,10 @@ describe('participant LINE settings', () => {
       status: 'ACTIVE',
       friendshipStatus: 'FOLLOWING',
       notificationConsentAt: new Date(),
+    });
+    mocks.legalConsentView.mockResolvedValue({
+      legalDocuments: [{ id: 'terms-v2' }],
+      acceptedDocumentIds: ['terms-v2'],
     });
   });
 
@@ -109,5 +117,17 @@ describe('participant LINE settings', () => {
       globallyPaused: true,
     });
     expect((await loadServiceLineSettings('service-a', 'user-a')).available).toBe(false);
+  });
+
+  it('requires current service legal consent before reporting LINE settings ready', async () => {
+    mocks.legalConsentView.mockResolvedValue({
+      legalDocuments: [{ id: 'terms-v2' }],
+      acceptedDocumentIds: ['terms-v1'],
+    });
+    const result = await loadServiceLineSettings('service-a', 'user-a');
+    expect(result.consented).toBe(false);
+    expect(mocks.legalConsentView).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'service-a', actorUserId: 'user-a' }),
+    );
   });
 });

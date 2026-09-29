@@ -17,6 +17,7 @@ main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は�
 7. **Program支援方針/目標候補・本人希望/目標の権限分離: PR #1018で実装済み**。公開限定の前段Resolverを除き、管理ResolverとMember Resolverを操作別に分離。本人Enrollment/受講ロック/研修専用期間条件、方針/候補のService照合と版/監査を維持する。詳細は`PRIVATE_SERVICE_PROGRAM_GOALS_IMPLEMENTATION_REPORT.md`。
 8. **ヘルプ・マニュアル・法務文書の閲覧分離: PR #1019で実装済み**。非公開Serviceの既存参加者へ案内と公開済み文書を表示し、公開Serviceの匿名/未参加者案内を維持する。本文の所有境界/有効版とUser別マニュアルcacheを確認。詳細は`PRIVATE_SERVICE_VISITOR_PAGES_IMPLEMENTATION_REPORT.md`。
 9. **法務文書のtype別最新有効版: 今回修正**。公開表示・参加同意・既存参加者利用・通知同意判定が複数版で旧版を選び得たため、最大versionへ統一。過去の旧同意を自動付替えず、実データ/再同意導線の本番確認は別作業。詳細は`SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`。
+10. **既存参加者の最新版への再同意導線: 今回実装**。初回登録とは別に本人の現在版を確認・追記し、非公開の既存参加者にも提供する。公開参加の最大2文書制限も現行利用判定に合わせて3種へ修正。詳細は`SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`。
 
 他の画面には主にMetadata用の公開Resolverが残る。匿名公開入口を維持すべき箇所と既存参加者操作を個別監査する。上記9件の修正だけで全非公開Service対応完了とは扱わない。
 

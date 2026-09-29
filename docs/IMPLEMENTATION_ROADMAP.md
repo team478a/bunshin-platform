@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Service法務文書の再同意は`docs/SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`を参照。既存参加者の最新版同意を初回参加から分離し、非公開Serviceを含む本人導線と、公開3文書がある場合の参加同意を揃える。本番データ監査・実端末確認・リリースは別作業。
+
 Service法務文書の最新有効版統一は`docs/SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`を参照。公開表示/参加Transaction/既存参加者利用/通知Preferenceの4経路で、同じWorkspace/ServiceのPUBLISHED・有効日時以前の文書をtypeごと最大versionへ揃える。旧版だけへの同意で新版を満たさず、古い画面からの申請は拒否する。旧同意データの自動付替え・本番データ/設定/DB schema/Providerは変更しない。隔離DBと全体CI、本番の旧版同意件数/再同意導線は別々に確認する。
 
 非公開サービスのヘルプ・マニュアル・法務文書の閲覧分離は`docs/PRIVATE_SERVICE_VISITOR_PAGES_IMPLEMENTATION_REPORT.md`を参照。公開Serviceは匿名/未参加のログイン済みUserの案内を維持し、非公開Serviceは既存参加者だけに案内と公開済み法務文書を表示する。本人Member拒否だけPublic判定へ戻し、DB障害を隠さない。マニュアルのcacheをUser別に分け、文書は自Workspace/Group・公開済み/有効版へ限定する。公開登録/同意、設定/DB、本番データ/Providerを変更しない。他のMetadata表示と本番反映は別作業。

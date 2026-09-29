@@ -6274,7 +6274,7 @@ integration('authentication return attempt isolation', () => {
     const now = new Date();
     const effectiveAt = new Date(now.getTime() - 60_000);
     const createDocument = (
-      type: 'TERMS' | 'PRIVACY',
+      type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE',
       version: number,
       status: 'PUBLISHED' | 'DRAFT',
       when: Date | null,
@@ -6296,20 +6296,21 @@ integration('authentication return attempt isolation', () => {
     const oldTerms = await createDocument('TERMS', 1, 'PUBLISHED', effectiveAt);
     const latestTerms = await createDocument('TERMS', 2, 'PUBLISHED', effectiveAt);
     const latestPrivacy = await createDocument('PRIVACY', 1, 'PUBLISHED', effectiveAt);
+    const commerce = await createDocument('COMMERCE_DISCLOSURE', 1, 'PUBLISHED', effectiveAt);
     await createDocument('TERMS', 3, 'PUBLISHED', new Date(now.getTime() + 60_000));
     await createDocument('PRIVACY', 2, 'DRAFT', null);
 
     const participation = new PrismaServiceParticipationRepository(client);
     const shown = await participation.findView({ slug, actorUserId: null, now });
-    expect(shown?.legalDocuments).toHaveLength(2);
+    expect(shown?.legalDocuments).toHaveLength(3);
     expect(shown?.legalDocuments.map(({ id }) => id)).toEqual(
-      expect.arrayContaining([latestPrivacy.id, latestTerms.id]),
+      expect.arrayContaining([latestPrivacy.id, latestTerms.id, commerce.id]),
     );
     expect(
       await participation.request({
         slug,
         actorUserId: participant.user.id,
-        legalDocumentIds: [oldTerms.id, latestPrivacy.id],
+        legalDocumentIds: [oldTerms.id, latestPrivacy.id, commerce.id],
         referralCode: null,
         referralClickId: null,
         now,
@@ -6321,7 +6322,7 @@ integration('authentication return attempt isolation', () => {
     const joined = await participation.request({
       slug,
       actorUserId: participant.user.id,
-      legalDocumentIds: [latestTerms.id, latestPrivacy.id],
+      legalDocumentIds: [latestTerms.id, latestPrivacy.id, commerce.id],
       referralCode: null,
       referralClickId: null,
       now,
@@ -6336,6 +6337,7 @@ integration('authentication return attempt isolation', () => {
       expect.arrayContaining([
         { legalDocumentId: latestTerms.id },
         { legalDocumentId: latestPrivacy.id },
+        { legalDocumentId: commerce.id },
       ]),
     );
     expect(
@@ -6367,6 +6369,35 @@ integration('authentication return attempt isolation', () => {
       await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
     ).toBeNull();
     expect((await notifications.get(preferenceInput)).accessible).toBe(false);
+    const consentView = await participation.findLegalConsentView({
+      slug,
+      actorUserId: participant.user.id,
+      now,
+    });
+    expect(consentView?.legalDocuments.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([latestTerms.id, latestPrivacy.id, commerce.id]),
+    );
+    expect(consentView?.acceptedDocumentIds).not.toContain(latestTerms.id);
+    expect(
+      await participation.acceptLegalDocuments({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [oldTerms.id, latestPrivacy.id, commerce.id],
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      await participation.acceptLegalDocuments({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [latestTerms.id, latestPrivacy.id, commerce.id],
+        now,
+      }),
+    ).toBe(true);
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).not.toBeNull();
+    expect((await notifications.get(preferenceInput)).accessible).toBe(true);
   });
 });
 

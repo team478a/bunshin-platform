@@ -80,6 +80,17 @@ export default async function ServiceEntryPage({
   const participation = await new ServiceParticipationService(
     new db.PrismaServiceParticipationRepository(),
   ).findView({ slug: serviceSlug, actorUserId: currentUser?.userId ?? null });
+  const legalConsent =
+    currentUser &&
+    participation.membership?.status === 'ACTIVE' &&
+    participation.membership.consentedAt
+      ? await new ServiceParticipationService(
+          new db.PrismaServiceParticipationRepository(),
+        ).findLegalConsentView({ slug: serviceSlug, actorUserId: currentUser.userId })
+      : null;
+  const needsLegalConsent =
+    legalConsent?.legalDocuments.some(({ id }) => !legalConsent.acceptedDocumentIds.includes(id)) ??
+    false;
   const copy = registrationCopy[configuration.registration.mode];
   const referralCode =
     configuration.registration.referralEnabled && typeof query.ref === 'string' ? query.ref : null;
@@ -121,13 +132,30 @@ export default async function ServiceEntryPage({
           {participation.membership?.status === 'ACTIVE' ? (
             <>
               <h2 id="registration-title">参加手続きは完了しています</h2>
-              <p>このサービスを利用できます。</p>
-              <Link
-                className="button button--primary button--full"
-                href={`/s/${configuration.slug}/onboarding` as Route}
-              >
-                利用をはじめる
-              </Link>
+              {needsLegalConsent ? (
+                <>
+                  <p>文書が更新されています。利用を続ける前に現在の版を確認してください。</p>
+                  <Link
+                    className="button button--primary button--full"
+                    href={`/s/${configuration.slug}/legal-consent` as Route}
+                  >
+                    文書を確認する
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p>このサービスを利用できます。</p>
+                  <Link
+                    className="button button--primary button--full"
+                    href={`/s/${configuration.slug}/onboarding` as Route}
+                  >
+                    利用をはじめる
+                  </Link>
+                  <Link href={`/s/${configuration.slug}/legal-consent` as Route}>
+                    現在の利用規約などを確認する
+                  </Link>
+                </>
+              )}
             </>
           ) : participation.membership?.status === 'PENDING_APPROVAL' ? (
             <>
@@ -140,10 +168,7 @@ export default async function ServiceEntryPage({
               <h2 id="registration-title">{copy.title}</h2>
               <p>{copy.description}</p>
               <ParticipationForm
-                documents={participation.legalDocuments.filter(
-                  (document): document is typeof document & { type: 'TERMS' | 'PRIVACY' } =>
-                    document.type === 'TERMS' || document.type === 'PRIVACY',
-                )}
+                documents={participation.legalDocuments}
                 requiresApproval={participation.registrationMode === 'APPROVAL_REQUIRED'}
                 referralCode={referralCode}
                 referralClickId={referralClickId}
