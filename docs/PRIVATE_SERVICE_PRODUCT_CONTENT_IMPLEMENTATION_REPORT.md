@@ -29,8 +29,8 @@
 
 ## 4. 実行した検証
 
-- 関連3ファイル92テスト成功。新規HTTP実行72件、UI/静的認可境界15件、既存Provider契約5件。生成後の所有拒否、3媒体の上限/PR表記、Service上限拒否を含む。
-- アーキテクチャ境界とその否定テスト10件、初回変更コードlint、`git diff --check`成功。最終型/lint/format、全Web、全package/実DB CI結果はPRと作業報告へ記録する。
+- 関連3ファイル92テスト成功。新規HTTP実行75件、UI/静的認可境界15件、既存Provider契約2件。生成後の所有拒否、3媒体の上限/PR表記、Service上限拒否を含む。
+- 全Web395ファイル2,348テスト成功。Web型検査、最終変更コードlint/format、アーキテクチャ境界とその否定テスト10件、`git diff --check`成功。追加テストのJSON応答型を明示しlintを再確認した。全package/実DBの最終HEAD CI結果はPRと作業報告へ記録する。
 - 実Application Service/Finalizerを使用し、認証/Service Resolver/DB Port/Runtime/Quota/Provider/ログをmockする。実生成・課金・通知を行わない。
 
 ## 5. 未解決事項
