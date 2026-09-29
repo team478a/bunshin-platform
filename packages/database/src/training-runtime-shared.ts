@@ -11,6 +11,7 @@ import {
   type TrainingMissionDefinition,
 } from '@bunshin/capability-training';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -46,6 +47,7 @@ export async function resolveScope(
     programEnrollmentId: string;
   },
   statuses: Array<'ACTIVE' | 'COMPLETED' | 'EXPIRED'>,
+  now = new Date(),
 ): Promise<Scope | null> {
   const enrollment = await db.programEnrollment.findFirst({
     where: {
@@ -54,6 +56,7 @@ export async function resolveScope(
       groupId: input.groupId,
       status: { in: statuses },
       startsAt: { not: null },
+      AND: [{ OR: [{ status: { not: 'ACTIVE' } }, trainingEnrollmentPeriodWhere(now)] }],
     },
   });
   if (!enrollment?.startsAt) return null;

@@ -44,6 +44,14 @@ describe('service Bunshin owner boundary', () => {
     expect(method).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
   });
 
+  it('limits service-scoped updates and archives to the owner even for workspace admins', () => {
+    const start = source.indexOf('private async updateManaged');
+    const end = source.indexOf('export class PrismaBunshinCapabilityAssignmentRepository', start);
+    const method = source.slice(start, end);
+    expect(method).toContain('groupId: input.groupId ?? null');
+    expect(method).toContain('input.groupId ? { ownerUserId: input.actorUserId } : {}');
+  });
+
   it('keeps capability assignments inside the requested service and owner boundary', () => {
     const start = source.indexOf('export class PrismaBunshinCapabilityAssignmentRepository');
     const end = source.indexOf('export class PrismaSocialProfileRepository', start);

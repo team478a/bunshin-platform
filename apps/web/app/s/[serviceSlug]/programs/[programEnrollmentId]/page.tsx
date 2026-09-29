@@ -17,6 +17,7 @@ import { PublicShell } from '../../../../ui/public-shell';
 import { AiResaleActionCard } from './ai-resale-action-card';
 import { AiTrainingCard } from './ai-training-card';
 import { AiTrainingDataExportCard } from './ai-training-data-export-card';
+import { AiTrainingEndedCard } from './ai-training-ended-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,18 +49,18 @@ export default async function ProgramParticipantPage({
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       groupMembershipId: membership.id,
-      status: { in: ['ACTIVE', 'COMPLETED', 'EXPIRED'] },
+      status: { in: ['ACTIVE', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
     },
-    select: { serviceProgramId: true },
+    select: { serviceProgramId: true, status: true, startsAt: true, endsAt: true },
   });
-  if (!enrollment) notFound();
+  if (!enrollment || enrollment.status === 'INVITED') notFound();
   const program = await db.prisma.serviceProgram.findFirst({
     where: {
       id: enrollment.serviceProgramId,
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
     },
-    select: { settings: true },
+    select: { settings: true, displayName: true },
   });
   if (!program) notFound();
   const moduleKey =
@@ -75,6 +76,53 @@ export default async function ProgramParticipantPage({
   } as CSSProperties;
 
   if (moduleKey === AI_TRAINING_V1_MODULE_KEY) {
+    const now = new Date();
+    const periodEnded =
+      enrollment.status === 'ACTIVE' && enrollment.endsAt && enrollment.endsAt <= now;
+    if (enrollment.status !== 'ACTIVE' || periodEnded) {
+      const displayStatus = enrollment.status === 'ACTIVE' ? 'EXPIRED' : enrollment.status;
+      const retention = await db.prisma.trainingDataRetentionState.findFirst({
+        where: {
+          workspaceId: service.workspaceId,
+          groupId: service.serviceId,
+          programEnrollmentId,
+        },
+        select: { endedAt: true },
+      });
+      const endedAt =
+        (periodEnded ? enrollment.endsAt : retention?.endedAt) ??
+        (displayStatus === 'EXPIRED' && enrollment.endsAt && enrollment.endsAt <= now
+          ? enrollment.endsAt
+          : null);
+      return (
+        <PublicShell showPlatformBrand={false}>
+          <main className="service-entry resale-action-page training-page" style={style}>
+            <AiTrainingEndedCard
+              serviceSlug={serviceSlug}
+              programEnrollmentId={programEnrollmentId}
+              programName={program.displayName}
+              status={displayStatus}
+              endedAt={endedAt}
+            />
+          </main>
+        </PublicShell>
+      );
+    }
+    if (!enrollment.startsAt || enrollment.startsAt > now) {
+      return (
+        <PublicShell showPlatformBrand={false}>
+          <main className="service-entry resale-action-page training-page" style={style}>
+            <header className="service-entry__header">
+              <h1>AI研修の開始前です</h1>
+            </header>
+            <section className="settings-card">
+              <p>受講開始後に、今日の課題と回答提出をご利用いただけます。</p>
+              <a href={`/s/${serviceSlug}/programs`}>プログラム一覧へ戻る</a>
+            </section>
+          </main>
+        </PublicShell>
+      );
+    }
     let trainingState;
     try {
       trainingState = await new AiTrainingParticipantService(
@@ -85,7 +133,7 @@ export default async function ProgramParticipantPage({
         groupId: service.serviceId,
         actorUserId: actor.userId,
         programEnrollmentId,
-        now: new Date(),
+        now,
       });
     } catch (error) {
       if (error instanceof TrainingRuntimeError && error.code === 'NOT_FOUND') notFound();
@@ -164,6 +212,7 @@ export default async function ProgramParticipantPage({
     );
   }
 
+  if (enrollment.status === 'CANCELLED') notFound();
   const participant = new AiResaleParticipantService(
     new db.PrismaAiResaleParticipantRepository(db.prisma),
     new db.PrismaAiResaleRuntimeRepository(db.prisma),

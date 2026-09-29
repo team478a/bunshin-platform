@@ -36,6 +36,11 @@ export function ReadingCard({
         <small>（{reading.orientation === 'UPRIGHT' ? '正位置' : '逆位置'}）</small>
       </h2>
       {reading.title && <h3>{reading.title}</h3>}
+      {reading.status === 'GENERATING' && (
+        <p role="status">
+          AIが結果を整えています。先に標準の結果をご覧いただけます。しばらくしてページを更新してください。
+        </p>
+      )}
       {reading.status === 'FAILED' && (
         <p role="status">結果を表示できませんでした。今日は引き直さず、明日またお試しください。</p>
       )}
@@ -46,7 +51,7 @@ export function ReadingCard({
           <p>{reading.actionStep}</p>
         </div>
       )}
-      {!linked && reading.body && (
+      {!linked && reading.body && reading.status !== 'GENERATING' && (
         <FortuneFeedbackButtons
           serviceSlug={serviceSlug}
           readingId={reading.id}

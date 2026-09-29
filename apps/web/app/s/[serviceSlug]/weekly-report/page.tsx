@@ -3,7 +3,7 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
-import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { loadServiceWeeklyProgressReports } from '../../../../src/services/weekly-progress-report-data';
 import {
@@ -24,10 +24,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return {
-    title: service ? `${service.configuration.displayName}｜今週のふり返り` : '今週のふり返り',
-  };
+  return memberServiceMetadata((await params).serviceSlug, '今週のふり返り');
 }
 
 const dateLabel = (value: string) =>

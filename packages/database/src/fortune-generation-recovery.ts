@@ -1,4 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
+import {
+  FORTUNE_GENERATION_JOB_TYPE,
+  fortuneGenerationPayloadReference,
+} from '@bunshin/application';
 
 // Provider requests have a 45-second deadline. Allow ample time for persistence
 // before treating a process interruption as abandoned generation.
@@ -33,6 +37,18 @@ export async function recoverStaleFortuneReadings(
   });
   const summary = { candidates: candidates.length, recovered: 0, failed: 0 };
   for (const reading of candidates) {
+    const queued = await db.job.findFirst({
+      where: {
+        workspaceId: reading.workspaceId,
+        requestedBy: reading.memberUserId,
+        jobType: FORTUNE_GENERATION_JOB_TYPE,
+        capabilityType: 'FORTUNE',
+        payloadReference: fortuneGenerationPayloadReference(reading.serviceSettingId, reading.id),
+        status: { in: ['PENDING', 'LEASED', 'RETRY_SCHEDULED'] },
+      },
+      select: { id: true },
+    });
+    if (queued) continue;
     const hasBasicResult = Boolean(reading.readingText?.trim() && reading.actionStep?.trim());
     // Compare-and-set: a concurrent completion, deletion or context update wins.
     // Do not redraw cards, re-run AI, or replace the persisted approved text.

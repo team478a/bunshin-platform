@@ -11,9 +11,10 @@ export default async function ServiceMessageTemplatesPage({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }) {
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
   const { serviceSlug } = await params;
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor)
+    redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/templates`)}`);
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');

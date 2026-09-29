@@ -15,6 +15,15 @@ const http = [
 const worker = readFileSync(new URL('../src/http/job-worker.ts', import.meta.url), 'utf8');
 
 describe('AI training evaluation job boundary', () => {
+  it('revalidates active enrollment after the data lock before saving a late evaluation', () => {
+    const lock = handler.indexOf('await db.lockTrainingEnrollmentData');
+    const active = handler.indexOf('const stillActive', lock);
+    const save = handler.indexOf('tx.trainingMissionAnswer.updateMany', lock);
+    expect(active).toBeGreaterThan(lock);
+    expect(save).toBeGreaterThan(active);
+    expect(handler).toContain('if (!stillActive) {');
+    expect(handler).toContain('db.trainingEnrollmentPeriodWhere(evaluatedAt)');
+  });
   it('revalidates workspace, service, participant, enrollment and answer before provider use', () => {
     expect(handler).toContain('workspaceId: input.workspaceId');
     expect(handler).toContain('groupId: input.groupId');

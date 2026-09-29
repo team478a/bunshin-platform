@@ -6,6 +6,7 @@ import {
 } from '@bunshin/capability-training';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
+import { trainingEnrollmentDisplayStatus } from '../../../../../src/services/ai-training-enrollment-display';
 import { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
@@ -136,19 +137,24 @@ export default async function AiTrainingAdminPage({
             workspaceId: service.workspaceId,
             groupId: service.serviceId,
             serviceProgramId: { in: programIds },
-            status: { in: ['INVITED', 'ACTIVE', 'COMPLETED', 'EXPIRED'] },
+            status: { in: ['INVITED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
           },
           select: {
             id: true,
             serviceProgramId: true,
             groupMembershipId: true,
             status: true,
+            updatedAt: true,
+            startsAt: true,
+            endsAt: true,
+            trainingRetention: { select: { endedAt: true } },
           },
           orderBy: { updatedAt: 'desc' },
         });
   const enrollmentIds = enrollments.map(({ id }) => id);
   const membershipIds = enrollments.map(({ groupMembershipId }) => groupMembershipId);
-  const evaluationPeriodStart = new Date(Date.now() - 7 * 86_400_000);
+  const checkedAt = new Date();
+  const evaluationPeriodStart = new Date(checkedAt.getTime() - 7 * 86_400_000);
   const [
     memberships,
     profiles,
@@ -222,20 +228,11 @@ export default async function AiTrainingAdminPage({
             },
             orderBy: [{ programEnrollmentId: 'asc' }, { sequence: 'desc' }],
           }),
-          db.prisma.trainingMissionAnswer.findMany({
-            where: {
-              workspaceId: service.workspaceId,
-              groupId: service.serviceId,
-              programEnrollmentId: { in: enrollmentIds },
-              evaluationStatus: 'READY',
-            },
-            select: {
-              programEnrollmentId: true,
-              evaluation: true,
-              evaluatedAt: true,
-              updatedAt: true,
-            },
-            orderBy: { updatedAt: 'desc' },
+          db.listTrainingAdminEvaluationMetrics({
+            workspaceId: service.workspaceId,
+            groupId: service.serviceId,
+            actorUserId: actor.userId,
+            enrollmentIds,
           }),
           db.prisma.trainingToolkitItem.findMany({
             where: {
@@ -349,13 +346,14 @@ export default async function AiTrainingAdminPage({
         {
           enrollmentId: enrollment.id,
           enrollmentStatus: enrollment.status,
+          startsAt: enrollment.startsAt,
+          endsAt: enrollment.endsAt,
           programName: program.displayName,
           participantName: member.user.displayName || member.user.email || '参加者',
           participantEmail: member.user.email,
           profile,
           progress: snapshotByEnrollment.get(enrollment.id) ?? null,
           assignment: assignmentByEnrollment.get(enrollment.id) ?? null,
-          latestEvaluation: answer?.evaluation ?? null,
           evaluationUpdatedAt: answer?.updatedAt ?? null,
           profileUpdatedAt: profile?.updatedAt ?? null,
           workResults: workResultsByEnrollment.get(enrollment.id) ?? [],
@@ -363,7 +361,7 @@ export default async function AiTrainingAdminPage({
         },
       ];
     }),
-    new Date(),
+    checkedAt,
   );
   const analytics = buildAiTrainingPilotAnalytics({
     enrollmentIds,
@@ -382,7 +380,7 @@ export default async function AiTrainingAdminPage({
   const evaluationOperations = buildAiTrainingEvaluationOperations({
     jobs: evaluationJobs,
     answerStatuses: evaluationAnswerStatuses.map(({ evaluationStatus }) => evaluationStatus),
-    now: new Date(),
+    now: checkedAt,
   });
   const helpEvents =
     enrollmentIds.length === 0
@@ -424,7 +422,21 @@ export default async function AiTrainingAdminPage({
 
   return (
     <TrainingAdminDashboard
+      lifecycleRows={enrollments.map((row) => ({
+        enrollmentId: row.id,
+        status: row.status,
+        displayStatus: trainingEnrollmentDisplayStatus(row, checkedAt),
+        startsAt: row.startsAt?.toISOString() ?? null,
+        endsAt: row.endsAt?.toISOString() ?? null,
+        updatedAt: row.updatedAt.toISOString(),
+        endedAt:
+          (
+            row.trainingRetention?.endedAt ??
+            (row.status === 'EXPIRED' && row.endsAt && row.endsAt <= checkedAt ? row.endsAt : null)
+          )?.toISOString() ?? null,
+      }))}
       serviceSlug={serviceSlug}
+      checkedAt={checkedAt}
       programs={programs}
       dashboard={dashboard}
       analytics={analytics}

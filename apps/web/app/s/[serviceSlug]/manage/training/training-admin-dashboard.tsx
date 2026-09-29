@@ -5,6 +5,7 @@ import type { buildAiTrainingAdminDashboard } from '../../../../../src/services/
 import type { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import type { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { PublicShell } from '../../../../ui/public-shell';
+import { TrainingLifecycleCard, type TrainingLifecycleRow } from './training-lifecycle-card';
 
 const dateTimeLabel = (value: Date | null) =>
   value
@@ -19,15 +20,20 @@ const dateTimeLabel = (value: Date | null) =>
 
 const engagementLabel = {
   NOT_STARTED: '初期設定待ち',
+  BEFORE_START: '開始前',
+  PERIOD_UNRESOLVED: '開始日時を確認',
   ACTIVE: '継続中',
   NEEDS_SUPPORT: '復習を支援',
   INACTIVE: '再開を支援',
   COMPLETED: '修了',
+  ENDED: '受講終了',
 } as const;
 
 type TrainingOperationsSettingsSource = Parameters<typeof parseAiTrainingOperationsSettings>[0];
 
 type TrainingAdminDashboardProps = {
+  checkedAt: Date;
+  lifecycleRows: TrainingLifecycleRow[];
   serviceSlug: string;
   programs: Array<{ id: string; displayName: string; settings: TrainingOperationsSettingsSource }>;
   dashboard: ReturnType<typeof buildAiTrainingAdminDashboard>;
@@ -39,6 +45,8 @@ type TrainingAdminDashboardProps = {
 };
 
 export function TrainingAdminDashboard({
+  checkedAt,
+  lifecycleRows,
   serviceSlug,
   programs,
   dashboard,
@@ -55,7 +63,16 @@ export function TrainingAdminDashboard({
           <p className="eyebrow">サービス管理者</p>
           <h1>AI研修の進み具合</h1>
           <p>受講者が今どこまで進み、誰に声かけが必要かを確認できます。</p>
+          <p>
+            期間判定の確認時刻：{checkedAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+            （日本時間）。最新の状況は画面を更新して確認してください。
+          </p>
           <Link href={`/s/${serviceSlug}/manage` as Route}>← 管理メニューへ戻る</Link>
+          <p>
+            <Link href={`/s/${serviceSlug}/manage/training/retention` as Route} prefetch={false}>
+              研修データの保持期限を確認（読み取り専用）
+            </Link>
+          </p>
         </header>
 
         {programs.length === 0 ? (
@@ -108,6 +125,14 @@ export function TrainingAdminDashboard({
                 登録者 {dashboard.totals.participants}人のうち、受講中は
                 {dashboard.totals.active}
                 人です。継続率は、受講中で直近7日以内に研修を進めた人の割合です。
+              </p>
+              <p>
+                受講中・継続率・声かけは、登録状態が受講中かつ受講期間内の受講だけを対象にします。履歴・完了課題・実務利用の集計は終了後も含みます。
+              </p>
+              <p>
+                期限終了 {dashboard.totals.expired}件（うち状態未更新{' '}
+                {dashboard.totals.pendingExpiryUpdate}件）、開始前 {dashboard.totals.beforeStart}
+                件、開始日時未確定 {dashboard.totals.startUnresolved}件。
               </p>
               <p>
                 実務利用の回答 {dashboard.totals.workResultCount}件（そのまま利用{' '}
@@ -344,47 +369,62 @@ export function TrainingAdminDashboard({
                 <p>AI研修へ登録された受講者はまだいません。</p>
               ) : (
                 <div className="training-admin__participants">
-                  {dashboard.participants.map((participant) => (
-                    <article className="training-admin__participant" key={participant.enrollmentId}>
-                      <div className="training-admin__participant-heading">
-                        <div>
-                          <h3>{participant.participantName}</h3>
-                          <p>{participant.programName}</p>
+                  {dashboard.participants.map((participant) => {
+                    const lifecycle = lifecycleRows.find(
+                      (row) => row.enrollmentId === participant.enrollmentId,
+                    );
+                    return (
+                      <article
+                        className="training-admin__participant"
+                        key={participant.enrollmentId}
+                      >
+                        <div className="training-admin__participant-heading">
+                          <div>
+                            <h3>{participant.participantName}</h3>
+                            <p>{participant.programName}</p>
+                          </div>
+                          <strong data-engagement={participant.engagement}>
+                            {engagementLabel[participant.engagement]}
+                          </strong>
                         </div>
-                        <strong data-engagement={participant.engagement}>
-                          {engagementLabel[participant.engagement]}
-                        </strong>
-                      </div>
-                      <dl>
-                        <div>
-                          <dt>受講者の設定</dt>
-                          <dd>
-                            {participant.roleLabel}・{participant.aiLevelLabel}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>進捗</dt>
-                          <dd>{participant.completedMissionCount}課題を完了</dd>
-                        </div>
-                        <div>
-                          <dt>現在のテーマ</dt>
-                          <dd>{participant.currentTopic}</dd>
-                        </div>
-                        <div>
-                          <dt>直近の課題</dt>
-                          <dd>{participant.currentMission}</dd>
-                        </div>
-                        <div>
-                          <dt>苦手・確認点</dt>
-                          <dd>{participant.weakArea}</dd>
-                        </div>
-                        <div>
-                          <dt>最終実施</dt>
-                          <dd>{dateTimeLabel(participant.lastActivityAt)}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                  ))}
+                        <dl>
+                          <div>
+                            <dt>受講者の設定</dt>
+                            <dd>
+                              {participant.roleLabel}・{participant.aiLevelLabel}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>進捗</dt>
+                            <dd>{participant.completedMissionCount}課題を完了</dd>
+                          </div>
+                          <div>
+                            <dt>現在のテーマ</dt>
+                            <dd>{participant.currentTopic}</dd>
+                          </div>
+                          <div>
+                            <dt>直近の課題</dt>
+                            <dd>{participant.currentMission}</dd>
+                          </div>
+                          <div>
+                            <dt>苦手・確認点</dt>
+                            <dd>{participant.weakArea}</dd>
+                          </div>
+                          <div>
+                            <dt>最終実施</dt>
+                            <dd>{dateTimeLabel(participant.lastActivityAt)}</dd>
+                          </div>
+                        </dl>
+                        {lifecycle && (
+                          <TrainingLifecycleCard
+                            key={`${lifecycle.updatedAt}:${lifecycle.displayStatus}`}
+                            serviceSlug={serviceSlug}
+                            row={lifecycle}
+                          />
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </section>

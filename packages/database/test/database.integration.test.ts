@@ -1,5 +1,13 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
+import {
+  PrismaTrainingLifecycleRepository,
+  PrismaTrainingEndDateRepository,
+  listTrainingAdminEvaluationMetrics,
+  PrismaTrainingRetentionAdminPreviewRepository,
+  trainingEnrollmentPeriodWhere,
+  expireUnpurchasedTrainingEnrollments,
+} from '../src';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   CreateUserWithPersonalWorkspace,
@@ -88,9 +96,16 @@ import {
   PrismaCampaignRepository,
   PrismaGroupFeatureEntitlementRepository,
   recoverStaleFortuneReadings,
+  PrismaFortuneGenerationQueue,
+  PrismaFortuneRepository,
+  verifyFortuneGenerationJob,
   PrismaTrainingPersonalDataExportRepository,
   PrismaTrainingPersonalDataDeletionRepository,
+  PrismaTrainingRetentionPreviewRepository,
+  PrismaTrainingRetentionExecutionRepository,
   PrismaTrainingToolkitRepository,
+  PrismaServiceParticipationRepository,
+  PrismaServiceNotificationPreferenceRepository,
   lockTrainingEnrollmentData,
 } from '../src';
 
@@ -171,6 +186,600 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+
+  it('expires unpurchased training once with scoped evaluation stop and retention recording', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Expiry owner' });
+    const other = await accounts.execute({ displayName: 'Expiry other workspace' });
+    const at = new Date();
+    const endsAt = new Date(at.getTime() - 1000);
+    const setup = async (account: typeof owner) => {
+      const group = await client.group.create({
+        data: { workspaceId: account.workspace.id, name: `Expiry fixture ${randomUUID()}` },
+      });
+      const scope = { workspaceId: account.workspace.id, groupId: group.id };
+      const template = await client.programTemplate.create({
+        data: {
+          workspaceId: scope.workspaceId,
+          ownerGroupId: group.id,
+          name: 'Expiry',
+          description: 'Fixture',
+          category: 'TRAINING',
+          targetAudience: 'Participants',
+          createdByUserId: account.user.id,
+        },
+      });
+      const version = await client.programTemplateVersion.create({
+        data: {
+          workspaceId: scope.workspaceId,
+          programTemplateId: template.id,
+          version: 1,
+          definition: {},
+          createdByUserId: account.user.id,
+        },
+      });
+      const program = await client.serviceProgram.create({
+        data: {
+          ...scope,
+          programTemplateVersionId: version.id,
+          displayName: 'Expiry',
+          description: 'Fixture',
+          status: 'ACTIVE',
+          settings: { moduleKey: 'AI_TRAINING_V1' },
+          createdByUserId: account.user.id,
+        },
+      });
+      const offering = await client.programOffering.create({
+        data: {
+          ...scope,
+          serviceProgramId: program.id,
+          version: 1,
+          seller: 'SERVICE',
+          priceOwner: 'SERVICE',
+          paymentOwner: 'SERVICE',
+          apiCostOwner: 'SERVICE',
+          supportOwner: 'SERVICE',
+          contentOwner: 'SERVICE',
+          characterOwner: 'SERVICE',
+          termsSnapshot: {},
+          createdByUserId: account.user.id,
+        },
+      });
+      return { scope, program, offering, version, operatorUserId: account.user.id };
+    };
+    const a = await setup(owner);
+    const b = await setup(owner);
+    const c = await setup(other);
+    const makeEnrollment = async (
+      fixture: typeof a,
+      userId: string,
+      options: {
+        status?: 'ACTIVE' | 'INVITED' | 'CANCELLED';
+        endsAt?: Date | null;
+        startsAt?: Date | null;
+      } = {},
+    ) => {
+      const membership = await client.groupMembership.upsert({
+        where: { groupId_userId: { groupId: fixture.scope.groupId, userId } },
+        create: {
+          ...fixture.scope,
+          userId,
+          role: 'PARTICIPANT',
+          serviceRole: 'PARTICIPANT',
+          status: 'ACTIVE',
+          consentedAt: at,
+        },
+        update: {},
+      });
+      const enrollment = await client.programEnrollment.create({
+        data: {
+          ...fixture.scope,
+          groupMembershipId: membership.id,
+          serviceProgramId: fixture.program.id,
+          programOfferingId: fixture.offering.id,
+          status: options.status ?? 'ACTIVE',
+          supportMode: 'GUIDED',
+          goalSnapshot: {},
+          offeringSnapshot: { retained: true },
+          invitedByUserId: fixture.operatorUserId,
+          startsAt:
+            options.startsAt === undefined ? new Date(at.getTime() - 86400000) : options.startsAt,
+          endsAt: options.endsAt === undefined ? endsAt : options.endsAt,
+        },
+      });
+      return { enrollment, membership, userId };
+    };
+    const expired = await makeEnrollment(a, owner.user.id);
+    const manualUser = await accounts.execute({ displayName: 'Expiry manual' });
+    const manual = await makeEnrollment(a, manualUser.user.id);
+    await client.groupMembership.update({
+      where: { id: manual.membership.id },
+      data: { status: 'REVOKED', revokedAt: at },
+    });
+    const newParticipant = async (name: string) =>
+      (await accounts.execute({ displayName: name })).user.id;
+    const future = await makeEnrollment(a, await newParticipant('Expiry future'), {
+      endsAt: new Date(at.getTime() + 86400000),
+    });
+    const noEnd = await makeEnrollment(a, await newParticipant('Expiry no end'), { endsAt: null });
+    const invited = await makeEnrollment(a, await newParticipant('Expiry invited'), {
+      status: 'INVITED',
+    });
+    const cancelled = await makeEnrollment(a, await newParticipant('Expiry cancelled'), {
+      status: 'CANCELLED',
+    });
+    const noStart = await makeEnrollment(a, await newParticipant('Expiry no start'), {
+      startsAt: null,
+    });
+    const paid = await makeEnrollment(a, await newParticipant('Expiry paid'));
+    const sideService = await makeEnrollment(b, owner.user.id);
+    const sideWorkspace = await makeEnrollment(c, other.user.id);
+    const otherModuleProgram = await client.serviceProgram.create({
+      data: {
+        ...a.scope,
+        programTemplateVersionId: a.version.id,
+        displayName: 'Other module',
+        description: 'Fixture',
+        status: 'ACTIVE',
+        settings: { moduleKey: 'OTHER' },
+        createdByUserId: owner.user.id,
+      },
+    });
+    const otherOffering = await client.programOffering.create({
+      data: {
+        ...a.scope,
+        serviceProgramId: otherModuleProgram.id,
+        version: 1,
+        seller: 'SERVICE',
+        priceOwner: 'SERVICE',
+        paymentOwner: 'SERVICE',
+        apiCostOwner: 'SERVICE',
+        supportOwner: 'SERVICE',
+        contentOwner: 'SERVICE',
+        characterOwner: 'SERVICE',
+        termsSnapshot: {},
+        createdByUserId: owner.user.id,
+      },
+    });
+    const otherModule = await makeEnrollment(
+      { ...a, program: otherModuleProgram, offering: otherOffering },
+      owner.user.id,
+    );
+    const configuration = await client.organizationPaymentConfiguration.create({
+      data: {
+        workspaceId: a.scope.workspaceId,
+        environment: 'DEVELOPMENT',
+        encryptedSecretKey: 'fixture-only',
+        secretKeyMask: 'fixture',
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const purchase = await client.programPurchase.create({
+      data: {
+        ...a.scope,
+        buyerUserId: paid.userId,
+        groupMembershipId: paid.membership.id,
+        programOfferingId: a.offering.id,
+        paymentConfigurationId: configuration.id,
+        status: 'PAID',
+        amountYen: 100,
+        paidAt: at,
+        paidEnrollmentId: paid.enrollment.id,
+        idempotencyKey: randomUUID(),
+        metadata: {},
+      },
+    });
+    try {
+      const personal = {
+        ...a.scope,
+        programEnrollmentId: expired.enrollment.id,
+        userId: owner.user.id,
+      };
+      const assignment = await client.programMissionAssignment.create({
+        data: {
+          ...a.scope,
+          programEnrollmentId: expired.enrollment.id,
+          programTemplateVersionId: a.version.id,
+          sequence: 1,
+          routeKey: 'PERSONALIZED',
+          phaseKey: 'FOUNDATION',
+          missionDefinitionKey: 'AI_BASIC',
+          displaySnapshot: {},
+          ruleVersion: 'TEST_V1',
+          presentedAt: at,
+        },
+      });
+      const answer = await client.trainingMissionAnswer.create({
+        data: {
+          ...personal,
+          missionAssignmentId: assignment.id,
+          answer: 'Retain answer',
+          evaluationStatus: 'PENDING',
+        },
+      });
+      const toolkit = await client.trainingToolkitItem.create({
+        data: {
+          ...personal,
+          missionAssignmentId: assignment.id,
+          trainingMissionAnswerId: answer.id,
+          missionDefinitionKey: 'AI_BASIC',
+          title: 'Retain toolkit',
+          contentSnapshot: 'Retain toolkit content',
+        },
+      });
+      const profile = await client.trainingParticipantProfile.create({
+        data: {
+          ...personal,
+          groupMembershipId: expired.membership.id,
+          role: 'OFFICE',
+          aiLevel: 'BEGINNER',
+          workContext: { description: 'Retain work' },
+          skillScores: { promptStructure: 50 },
+          updatedByUserId: owner.user.id,
+        },
+      });
+      const jobData = {
+        environment: 'DEVELOPMENT' as const,
+        workspaceId: a.scope.workspaceId,
+        requestedBy: owner.user.id,
+        jobType: 'TRAINING_ANSWER_EVALUATE' as const,
+        payloadReference: `training-evaluation:${a.scope.groupId}:${expired.enrollment.id}:${answer.id}:${owner.user.id}`,
+        idempotencyKey: randomUUID(),
+        correlationId: randomUUID(),
+      };
+      const job = await client.job.create({ data: jobData });
+      const unrelatedJob = await client.job.create({
+        data: {
+          ...jobData,
+          payloadReference: `training-evaluation:${a.scope.groupId}:${future.enrollment.id}:${randomUUID()}:${owner.user.id}`,
+          idempotencyKey: randomUUID(),
+          correlationId: randomUUID(),
+        },
+      });
+      expect(
+        await expireUnpurchasedTrainingEnrollments(client, {
+          ...a.scope,
+          workspaceId: c.scope.workspaceId,
+          now: at,
+        }),
+      ).toMatchObject({ expired: 0 });
+      const results = await Promise.all([
+        expireUnpurchasedTrainingEnrollments(client, { ...a.scope, now: at }),
+        expireUnpurchasedTrainingEnrollments(client, { ...a.scope, now: at }),
+      ]);
+      expect(results.reduce((sum, result) => sum + result.expired, 0)).toBe(2);
+      expect(
+        await client.programEnrollment.findUnique({ where: { id: expired.enrollment.id } }),
+      ).toMatchObject({ status: 'EXPIRED', endsAt, offeringSnapshot: { retained: true } });
+      expect(
+        await client.programEnrollment.findUnique({ where: { id: manual.enrollment.id } }),
+      ).toMatchObject({ status: 'EXPIRED' });
+      expect(
+        await client.trainingDataRetentionState.findUnique({
+          where: { programEnrollmentId: expired.enrollment.id },
+        }),
+      ).toMatchObject({ endedAt: endsAt });
+      expect(
+        await client.trainingMissionAnswer.findUnique({ where: { id: answer.id } }),
+      ).toMatchObject({ answer: 'Retain answer', evaluationStatus: 'FAILED' });
+      expect(await client.job.findUnique({ where: { id: job.id } })).toMatchObject({
+        status: 'CANCELLED',
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        nextRetryAt: null,
+      });
+      expect(await client.job.findUnique({ where: { id: unrelatedJob.id } })).toMatchObject({
+        status: 'PENDING',
+      });
+      expect(
+        await client.trainingToolkitItem.findUnique({ where: { id: toolkit.id } }),
+      ).toMatchObject({ contentSnapshot: 'Retain toolkit content' });
+      expect(
+        await client.trainingParticipantProfile.findUnique({ where: { id: profile.id } }),
+      ).toMatchObject({
+        workContext: { description: 'Retain work' },
+        skillScores: { promptStructure: 50 },
+      });
+      for (const held of [
+        future,
+        noEnd,
+        invited,
+        cancelled,
+        noStart,
+        paid,
+        sideService,
+        sideWorkspace,
+        otherModule,
+      ]) {
+        expect(
+          await client.programEnrollment.findUnique({ where: { id: held.enrollment.id } }),
+        ).toMatchObject({ status: held.enrollment.status });
+        expect(
+          await client.trainingDataRetentionState.count({
+            where: { programEnrollmentId: held.enrollment.id },
+          }),
+        ).toBe(0);
+      }
+      const auditWhere = { ...a.scope, eventType: 'TRAINING_ENROLLMENT_EXPIRED' };
+      expect(await client.programActionEvent.count({ where: auditWhere })).toBe(2);
+      expect(
+        await expireUnpurchasedTrainingEnrollments(client, { ...a.scope, now: at }),
+      ).toMatchObject({ candidates: 0, expired: 0 });
+      expect(await client.programActionEvent.count({ where: auditWhere })).toBe(2);
+      // A late worker cannot publish an evaluation after the ending transaction.
+      expect(
+        await client.trainingMissionAnswer.updateMany({
+          where: { ...personal, id: answer.id, evaluationStatus: 'PENDING' },
+          data: { evaluationStatus: 'READY' },
+        }),
+      ).toMatchObject({ count: 0 });
+      await client.platformAdmin.create({
+        data: { userId: owner.user.id, role: 'SUPER_ADMIN', status: 'ACTIVE' },
+      });
+      const retention = new PrismaTrainingRetentionExecutionRepository(client);
+      const retentionInput = {
+        ...a.scope,
+        programEnrollmentId: expired.enrollment.id,
+        operatorUserId: owner.user.id,
+        now: new Date(at.getTime() + 370 * 86400000),
+      };
+      const retentionPreview = await retention.preview(retentionInput);
+      if (retentionPreview.outcome !== 'PREVIEW') throw new Error('retention preview expected');
+      expect(retentionPreview.preview.counts.activities).toBe(0);
+      expect(
+        await retention.execute({ ...retentionInput, revision: retentionPreview.preview.revision }),
+      ).toMatchObject({ outcome: 'APPLIED' });
+      expect(await client.programActionEvent.count({ where: auditWhere })).toBe(2);
+      const expiryAudit = await client.programActionEvent.findFirstOrThrow({
+        where: { ...auditWhere, programEnrollmentId: expired.enrollment.id },
+      });
+      expect(expiryAudit).toMatchObject({
+        actorUserId: null,
+        metadata: {
+          source: 'SYSTEM',
+          reasonCode: 'ENROLLMENT_PERIOD_ENDED',
+          endsAt: endsAt.toISOString(),
+        },
+      });
+      const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
+      const deletionInput = {
+        ...a.scope,
+        programEnrollmentId: expired.enrollment.id,
+        actorUserId: owner.user.id,
+        target: { kind: 'ALL' as const },
+      };
+      const deletionPreview = await deletion.preview(deletionInput);
+      if (deletionPreview.outcome !== 'PREVIEW')
+        throw new Error('personal deletion preview expected');
+      expect(deletionPreview.preview.counts.activities).toBe(0);
+      expect(
+        await deletion.delete({
+          ...deletionInput,
+          revision: deletionPreview.preview.revision,
+          now: retentionInput.now,
+        }),
+      ).toMatchObject({ outcome: 'DELETED' });
+      expect(await client.programActionEvent.count({ where: auditWhere })).toBe(2);
+    } finally {
+      await client.programPurchase.delete({ where: { id: purchase.id } });
+      await client.organizationPaymentConfiguration.delete({ where: { id: configuration.id } });
+    }
+  });
+
+  it('deduplicates fortune jobs and rejects foreign, revoked and superseded generation leases', async () => {
+    const owner = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Fortune async owner' });
+    const other = await new CreateUserWithPersonalWorkspace(
+      new PrismaAccountUnitOfWork(client),
+    ).execute({ displayName: 'Fortune async other' });
+    const base = { workspaceId: owner.workspace.id };
+    const group = await client.group.create({
+      data: { ...base, name: `Fortune async ${randomUUID()}` },
+    });
+    const membership = await client.groupMembership.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        userId: owner.user.id,
+        role: 'PARTICIPANT',
+        serviceRole: 'PARTICIPANT',
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        slug: `fortune-async-${randomUUID()}`,
+        displayName: 'Fortune async',
+        description: 'Fixture',
+        operatorName: 'Test',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const bunshin = await client.bunshin.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        ownerUserId: owner.user.id,
+        name: 'Fortune async',
+        slug: `fortune-${randomUUID()}`,
+        status: 'ACTIVE',
+        type: 'COPY',
+        objectiveSummary: 'Daily guidance',
+        audienceSummary: 'Owner',
+        personalitySummary: 'Helpful',
+      },
+    });
+    await client.bunshinCapabilityAssignment.create({
+      data: {
+        ...base,
+        bunshinId: bunshin.id,
+        capabilityType: 'FORTUNE',
+        assignedByUserId: owner.user.id,
+      },
+    });
+    const setting = await client.fortuneServiceSetting.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        configurationId: configuration.id,
+        bunshinId: bunshin.id,
+        enabled: true,
+        aiEnabled: true,
+      },
+    });
+    const participant = await client.fortuneParticipant.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        serviceSettingId: setting.id,
+        groupMembershipId: membership.id,
+        userId: owner.user.id,
+        ageConfirmedAt: new Date(),
+      },
+    });
+    const reading = await client.fortuneReading.create({
+      data: {
+        ...base,
+        groupId: group.id,
+        serviceSettingId: setting.id,
+        participantId: participant.id,
+        memberUserId: owner.user.id,
+        localDate: new Date('2026-09-29T00:00:00Z'),
+        theme: 'WORK',
+        cardCode: 'THE_FOOL',
+        orientation: 'UPRIGHT',
+        status: 'READY_BASIC',
+        readingText: 'Approved basic result',
+        actionStep: 'Small action',
+      },
+    });
+    const queue = new PrismaFortuneGenerationQueue(client, 'DEVELOPMENT');
+    const repository = new PrismaFortuneRepository(client);
+    const input = {
+      serviceSlug: configuration.slug,
+      actorUserId: owner.user.id,
+      readingId: reading.id,
+    };
+    try {
+      await expect(queue.enqueue({ ...input, actorUserId: other.user.id })).resolves.toBeNull();
+      // Every concurrent request must fulfill, not merely leave one persisted job.
+      const enqueued = await Promise.all(Array.from({ length: 8 }, () => queue.enqueue(input)));
+      expect(enqueued).toHaveLength(8);
+      const jobs = await client.job.findMany({
+        where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
+      });
+      expect(jobs).toHaveLength(1);
+      const job = jobs[0]!;
+      expect(job.maxAttempts).toBe(3);
+      expect(job.payloadReference).toBe(`fortune-generation:${setting.id}:${reading.id}`);
+      const lease = {
+        ...base,
+        bunshinId: bunshin.id,
+        serviceSettingId: setting.id,
+        jobId: job.id,
+        workerId: 'fortune-worker-a',
+        attemptCount: 1,
+      };
+      await client.job.update({
+        where: { id: job.id },
+        data: {
+          status: 'LEASED',
+          leaseOwner: lease.workerId,
+          leaseExpiresAt: new Date(Date.now() + 300_000),
+          attemptCount: 1,
+        },
+      });
+      const claim = await repository.claimAiGeneration({ ...input, jobLease: lease });
+      expect(claim?.generationRevision).toBeInstanceOf(Date);
+      if (!claim?.generationRevision) throw new Error('fortune claim missing');
+      const current = { ...input, jobLease: lease, generationRevision: claim.generationRevision };
+      await expect(verifyFortuneGenerationJob(client, current)).resolves.toBe(true);
+      await expect(
+        repository.claimAiGeneration({
+          ...input,
+          jobLease: { ...lease, workspaceId: other.workspace.id },
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        repository.claimAiGeneration({
+          ...input,
+          jobLease: { ...lease, serviceSettingId: randomUUID() },
+        }),
+      ).resolves.toBeNull();
+      await client.groupMembership.update({
+        where: { id: membership.id },
+        data: { status: 'REVOKED', revokedAt: new Date() },
+      });
+      await expect(verifyFortuneGenerationJob(client, current)).resolves.toBe(false);
+      await client.groupMembership.update({
+        where: { id: membership.id },
+        data: { status: 'ACTIVE', revokedAt: null },
+      });
+      const output = {
+        body: 'Validated AI result',
+        actionStep: 'Another small action',
+        model: 'mock',
+        promptVersion: 'test-v1',
+        inputTokens: 1,
+        outputTokens: 2,
+        latencyMs: 3,
+      };
+      await client.job.update({
+        where: { id: job.id },
+        data: { leaseOwner: 'fortune-worker-b', attemptCount: 2 },
+      });
+      await expect(repository.completeAiGeneration({ ...current, output })).resolves.toBeNull();
+      const secondLease = { ...lease, workerId: 'fortune-worker-b', attemptCount: 2 };
+      const secondClaim = await repository.claimAiGeneration({ ...input, jobLease: secondLease });
+      if (!secondClaim?.generationRevision) throw new Error('second fortune claim missing');
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: { status: 'DELETED', deletedAt: new Date() },
+      });
+      await expect(
+        repository.completeAiGeneration({
+          ...input,
+          jobLease: secondLease,
+          generationRevision: secondClaim.generationRevision,
+          output,
+        }),
+      ).resolves.toBeNull();
+      await client.fortuneReading.update({
+        where: { id: reading.id },
+        data: {
+          status: 'GENERATING',
+          deletedAt: null,
+          updatedAt: new Date(Date.now() - 20 * 60_000),
+        },
+      });
+      await recoverStaleFortuneReadings(client, new Date());
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: reading.id } })).status,
+      ).toBe('GENERATING');
+      await client.job.update({
+        where: { id: job.id },
+        data: { status: 'DEAD', leaseOwner: null, leaseExpiresAt: null },
+      });
+      await recoverStaleFortuneReadings(client, new Date());
+      expect(
+        (await client.fortuneReading.findUniqueOrThrow({ where: { id: reading.id } })).status,
+      ).toBe('READY_BASIC');
+      await expect(queue.enqueue(input)).resolves.toMatchObject({ status: 'READY_BASIC' });
+      expect(await client.job.count({ where: { id: job.id } })).toBe(1);
+    } finally {
+      await client.job.deleteMany({
+        where: { workspaceId: base.workspaceId, jobType: 'FORTUNE_READING_GENERATE' },
+      });
+      await client.fortuneReading.deleteMany({ where: { id: reading.id } });
+      await client.fortuneParticipant.deleteMany({ where: { id: participant.id } });
+      await client.fortuneServiceSetting.deleteMany({ where: { id: setting.id } });
+    }
+  });
 
   it('exports only the owners training records even after completion and program archive', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
@@ -371,6 +980,27 @@ integration('database ownership boundaries', () => {
     expect(
       (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } })).answer,
     ).toBe('Owner answer');
+    const retention = new PrismaTrainingRetentionPreviewRepository(client);
+    const afterNinetyDays = new Date(now.getTime() + 91 * 86400000);
+    expect(await retention.preview({ ...base, now: afterNinetyDays })).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: {
+        enrollments: 2,
+        answersAndEvaluationsDue: 2,
+        retainedToolkit: 1,
+        endDateUnresolved: 2,
+        workProfilesDue: 0,
+      },
+    });
+    expect(
+      await retention.preview({ ...base, workspaceId: other.workspace.id, now: afterNinetyDays }),
+    ).toMatchObject({ summary: { enrollments: 0, answersAndEvaluationsDue: 0 } });
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: answer.id } })).answer,
+    ).toBe('Owner answer');
+    expect(
+      await client.trainingToolkitItem.count({ where: { trainingMissionAnswerId: answer.id } }),
+    ).toBe(1);
     const deletion = new PrismaTrainingPersonalDataDeletionRepository(client);
     const answerTarget = { ...scope, target: { kind: 'ANSWER' as const, answerId: answer.id } };
     const before = await deletion.preview(answerTarget);
@@ -623,6 +1253,540 @@ integration('database ownership boundaries', () => {
         where: { ...base, programEnrollmentId: enrollment.id },
       }),
     ).toBe(1);
+    // Retention uses future virtual clocks only against this isolated test fixture.
+    await client.platformAdmin.upsert({
+      where: { userId: owner.user.id },
+      create: { userId: owner.user.id, role: 'SUPER_ADMIN' },
+      update: { role: 'SUPER_ADMIN', status: 'ACTIVE' },
+    });
+    const freshAnswer = await makeAnswer(enrollment.id, owner.user.id, 'Retention answer');
+    const retentionEvent = await client.programActionEvent.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        missionAssignmentId: freshAnswer.missionAssignmentId,
+        eventType: 'ANSWER_SUBMITTED',
+        idempotencyKey: `retention-${randomUUID()}`,
+        metadata: { workDescription: 'Erase event copy' },
+        actorUserId: owner.user.id,
+        occurredAt: now,
+      },
+    });
+    await client.trainingParticipantProfile.updateMany({
+      where: { ...base, programEnrollmentId: enrollment.id },
+      data: { skillScores: { AI_BASIC: 80 } },
+    });
+    await client.trainingToolkitItem.create({
+      data: {
+        ...base,
+        programEnrollmentId: enrollment.id,
+        userId: owner.user.id,
+        missionAssignmentId: freshAnswer.missionAssignmentId,
+        trainingMissionAnswerId: freshAnswer.id,
+        missionDefinitionKey: 'AI_BASIC',
+        title: 'Explicit retained toolkit',
+        contentSnapshot: 'Keep this saved result',
+      },
+    });
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        status: 'COMPLETED',
+        goalSnapshot: { workDescription: 'Erase goal copy' },
+        offeringSnapshot: { contract: 'Keep contract' },
+      },
+    });
+    const endedRecord = await client.trainingDataRetentionState.findUniqueOrThrow({
+      where: { programEnrollmentId: enrollment.id },
+    });
+    expect(endedRecord.endedAt).not.toBeNull();
+    const maintenance = new PrismaTrainingRetentionExecutionRepository(client);
+    const retentionScope = {
+      ...base,
+      programEnrollmentId: enrollment.id,
+      operatorUserId: owner.user.id,
+      now: new Date(endedRecord.endedAt!.getTime() + 91 * 86400000),
+    };
+    const retentionCheck = await maintenance.preview(retentionScope);
+    if (retentionCheck.outcome !== 'PREVIEW') throw new Error('retention preview required');
+    expect(retentionCheck.preview.counts).toMatchObject({
+      answers: 1,
+      workProfiles: 1,
+      retainedToolkit: 1,
+    });
+    expect(await maintenance.execute({ ...retentionScope, revision: '0'.repeat(64) })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    expect(await client.trainingMissionAnswer.count({ where: { id: freshAnswer.id } })).toBe(1);
+    expect(
+      await maintenance.execute({ ...retentionScope, revision: retentionCheck.preview.revision }),
+    ).toMatchObject({ outcome: 'APPLIED' });
+    expect(await client.trainingMissionAnswer.count({ where: { id: freshAnswer.id } })).toBe(0);
+    const preservedProfile = await client.trainingParticipantProfile.findFirstOrThrow({
+      where: { ...base, programEnrollmentId: enrollment.id },
+    });
+    expect(preservedProfile.workContext).toEqual({});
+    expect(preservedProfile.role).toBe('OTHER');
+    expect(preservedProfile.skillScores).toEqual({ AI_BASIC: 80 });
+    expect(
+      (await client.programActionEvent.findUniqueOrThrow({ where: { id: retentionEvent.id } }))
+        .metadata,
+    ).toEqual({});
+    expect(
+      (await client.programEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } }))
+        .offeringSnapshot,
+    ).toEqual({ contract: 'Keep contract' });
+    expect(
+      await maintenance.execute({ ...retentionScope, revision: retentionCheck.preview.revision }),
+    ).toMatchObject({ outcome: 'ALREADY_APPLIED' });
+    const yearScope = {
+      ...retentionScope,
+      now: new Date(endedRecord.endedAt!.getTime() + 367 * 86400000),
+    };
+    const yearCheck = await maintenance.preview(yearScope);
+    if (yearCheck.outcome !== 'PREVIEW') throw new Error('year preview required');
+    expect(
+      await maintenance.execute({ ...yearScope, revision: yearCheck.preview.revision }),
+    ).toMatchObject({ outcome: 'APPLIED' });
+    expect(
+      await client.trainingParticipantProfile.count({
+        where: { ...base, programEnrollmentId: enrollment.id },
+      }),
+    ).toBe(0);
+    const savedResults = await new PrismaTrainingToolkitRepository(client).list(scope);
+    expect(await client.programActionEvent.count({ where: { id: retentionEvent.id } })).toBe(0);
+    expect(
+      await client.programMissionAssignment.count({
+        where: { id: freshAnswer.missionAssignmentId },
+      }),
+    ).toBe(0);
+    expect(savedResults?.[0]?.content).toBe('Keep this saved result');
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: { ...base, programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBe(1);
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { status: 'ACTIVE' },
+    });
+    const reopened = await client.trainingDataRetentionState.findUniqueOrThrow({
+      where: { programEnrollmentId: enrollment.id },
+    });
+    expect(reopened.endedAt).toBeNull();
+    expect(reopened.workRedactedAt).toBeNull();
+    expect(reopened.progressPurgedAt).toBeNull();
+    const manager = await accounts.execute({ displayName: 'Training lifecycle manager' });
+    await client.groupMembership.create({
+      data: {
+        ...base,
+        userId: manager.user.id,
+        role: 'MANAGER',
+        serviceRole: 'SERVICE_ADMIN',
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const lifecycle = new PrismaTrainingLifecycleRepository(client);
+    const adminPreview = new PrismaTrainingRetentionAdminPreviewRepository(client);
+    const adminPreviewScope = { ...base, actorUserId: manager.user.id, now: new Date() };
+    expect(await adminPreview.preview(adminPreviewScope)).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: { mode: 'DRY_RUN', enrollments: 2, retainedToolkit: 1, endDateUnresolved: 1 },
+    });
+    expect(
+      await adminPreview.preview({ ...adminPreviewScope, actorUserId: owner.user.id }),
+    ).toEqual({ outcome: 'FORBIDDEN' });
+    expect(
+      await adminPreview.preview({ ...adminPreviewScope, workspaceId: other.workspace.id }),
+    ).toEqual({ outcome: 'FORBIDDEN' });
+    expect(await adminPreview.preview({ ...adminPreviewScope, groupId: randomUUID() })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: { programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBe(1);
+    const currentEnrollment = await client.programEnrollment.findUniqueOrThrow({
+      where: { id: enrollment.id },
+    });
+    const lifecycleInput = {
+      ...base,
+      programEnrollmentId: enrollment.id,
+      actorUserId: manager.user.id,
+      action: 'CANCEL' as const,
+      expectedStatus: 'ACTIVE' as const,
+      expectedUpdatedAt: currentEnrollment.updatedAt,
+      operationId: randomUUID(),
+      reason: 'Pilot ended',
+      now: new Date(),
+    };
+    expect(await lifecycle.change({ ...lifecycleInput, actorUserId: owner.user.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    const pendingAnswer = await makeAnswer(
+      enrollment.id,
+      owner.user.id,
+      'Pending lifecycle answer',
+    );
+    await client.trainingMissionAnswer.update({
+      where: { id: pendingAnswer.id },
+      data: {
+        evaluation: {
+          result: 'PASS',
+          weaknesses: ['PRIVATE_EVALUATION'],
+          strengths: ['PRIVATE_STRENGTH'],
+          skills: {
+            promptStructure: 75,
+            contextSetting: 'PRIVATE_SCORE',
+            constraintSetting: -1,
+            outputControl: 101,
+            businessApplication: { secret: 'PRIVATE_OBJECT' },
+            revisionSkill: 40,
+            unknown: 'PRIVATE_UNKNOWN',
+          },
+        },
+      },
+    });
+    const metricsScope = { ...base, actorUserId: manager.user.id, enrollmentIds: [enrollment.id] };
+    const metrics = await listTrainingAdminEvaluationMetrics(metricsScope, client);
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]?.evaluation).toEqual({
+      result: 'PASS',
+      skills: { promptStructure: 75, revisionSkill: 40 },
+    });
+    expect(JSON.stringify(metrics)).not.toContain('PRIVATE');
+    expect(JSON.stringify(metrics)).not.toContain('Pending lifecycle answer');
+    expect(
+      await listTrainingAdminEvaluationMetrics(
+        { ...metricsScope, actorUserId: owner.user.id },
+        client,
+      ),
+    ).toEqual([]);
+    expect(
+      await listTrainingAdminEvaluationMetrics({ ...metricsScope, groupId: randomUUID() }, client),
+    ).toEqual([]);
+    expect(
+      await listTrainingAdminEvaluationMetrics(
+        { ...metricsScope, workspaceId: other.workspace.id },
+        client,
+      ),
+    ).toEqual([]);
+    expect(
+      await listTrainingAdminEvaluationMetrics({ ...metricsScope, enrollmentIds: [] }, client),
+    ).toEqual([]);
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'CONTENT_EDITOR' },
+    });
+    expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    expect(await adminPreview.preview(adminPreviewScope)).toEqual({ outcome: 'FORBIDDEN' });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'SERVICE_ADMIN' },
+    });
+    await client.trainingMissionAnswer.update({
+      where: { id: pendingAnswer.id },
+      data: { evaluation: { result: 'PRIVATE_RESULT', skills: ['PRIVATE_SKILL'] } },
+    });
+    expect((await listTrainingAdminEvaluationMetrics(metricsScope, client))[0]?.evaluation).toEqual(
+      { result: null, skills: {} },
+    );
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    expect(await adminPreview.preview(adminPreviewScope)).toEqual({ outcome: 'FORBIDDEN' });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    const pendingJob = await client.job.create({
+      data: {
+        environment: 'DEVELOPMENT',
+        workspaceId: base.workspaceId,
+        requestedBy: owner.user.id,
+        jobType: 'TRAINING_ANSWER_EVALUATE',
+        payloadReference: `training-evaluation:${group.id}:${enrollment.id}:${pendingAnswer.id}:${owner.user.id}`,
+        idempotencyKey: `lifecycle-${randomUUID()}`,
+        correlationId: randomUUID(),
+        status: 'LEASED',
+        leaseOwner: 'test-worker',
+        leaseExpiresAt: new Date(Date.now() + 60000),
+      },
+    });
+    await client.trainingMissionAnswer.update({
+      where: { id: pendingAnswer.id },
+      data: { evaluationStatus: 'PENDING' },
+    });
+    expect(await listTrainingAdminEvaluationMetrics(metricsScope, client)).toEqual([]);
+    expect(await lifecycle.change(lifecycleInput)).toEqual({
+      outcome: 'APPLIED',
+      status: 'CANCELLED',
+    });
+    const stoppedJob = await client.job.findUniqueOrThrow({ where: { id: pendingJob.id } });
+    expect(stoppedJob.status).toBe('CANCELLED');
+    expect(stoppedJob.leaseOwner).toBeNull();
+    expect(stoppedJob.cancelledAt).not.toBeNull();
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: pendingAnswer.id } }))
+        .evaluationStatus,
+    ).toBe('FAILED');
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: enrollment.id },
+        })
+      ).endedAt,
+    ).not.toBeNull();
+    expect(await lifecycle.change(lifecycleInput)).toEqual({
+      outcome: 'ALREADY_APPLIED',
+      status: 'CANCELLED',
+    });
+    const cancelledEnrollment = await client.programEnrollment.findUniqueOrThrow({
+      where: { id: enrollment.id },
+    });
+    const reopenInput = {
+      ...lifecycleInput,
+      action: 'REOPEN' as const,
+      expectedStatus: 'CANCELLED' as const,
+      expectedUpdatedAt: cancelledEnrollment.updatedAt,
+      operationId: randomUUID(),
+    };
+    expect(await lifecycle.change(reopenInput)).toEqual({ outcome: 'REOPEN_UNAVAILABLE' });
+    // Explicit test fixture contract change; lifecycle itself never extends dates.
+    await client.serviceProgram.update({ where: { id: program.id }, data: { status: 'ACTIVE' } });
+    const eligibleEnrollment = await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { endsAt: new Date(Date.now() + 86400000) },
+    });
+    expect(
+      await lifecycle.change({ ...reopenInput, expectedUpdatedAt: eligibleEnrollment.updatedAt }),
+    ).toEqual({ outcome: 'APPLIED', status: 'ACTIVE' });
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: enrollment.id },
+        })
+      ).endedAt,
+    ).toBeNull();
+    expect(
+      (await client.trainingMissionAnswer.findUniqueOrThrow({ where: { id: pendingAnswer.id } }))
+        .evaluationStatus,
+    ).toBe('FAILED');
+    expect(
+      await maintenance.preview({ ...retentionScope, workspaceId: other.workspace.id }),
+    ).toEqual({ outcome: 'NOT_FOUND' });
+    expect(await maintenance.preview({ ...retentionScope, operatorUserId: other.user.id })).toEqual(
+      { outcome: 'FORBIDDEN' },
+    );
+    const liveEnrollment = await client.programEnrollment.findUniqueOrThrow({
+      where: { id: enrollment.id },
+    });
+    const periodLookup = (at: Date, workspaceId = base.workspaceId) =>
+      client.programEnrollment.findFirst({
+        where: {
+          ...base,
+          workspaceId,
+          id: enrollment.id,
+          groupMembershipId: membership.id,
+          status: 'ACTIVE',
+          AND: [trainingEnrollmentPeriodWhere(at)],
+        },
+        select: { id: true },
+      });
+    expect(await periodLookup(liveEnrollment.startsAt!)).toEqual({ id: enrollment.id });
+    expect(await periodLookup(new Date(liveEnrollment.startsAt!.getTime() - 1))).toBeNull();
+    expect(await periodLookup(new Date(liveEnrollment.endsAt!.getTime() - 1))).toEqual({
+      id: enrollment.id,
+    });
+    expect(await periodLookup(liveEnrollment.endsAt!)).toBeNull();
+    expect(await periodLookup(new Date(), other.workspace.id)).toBeNull();
+    await client.programEnrollment.update({ where: { id: enrollment.id }, data: { endsAt: null } });
+    expect(await periodLookup(new Date('2099-01-01'))).toEqual({ id: enrollment.id });
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { startsAt: null },
+    });
+    expect(await periodLookup(new Date())).toBeNull();
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { startsAt: liveEnrollment.startsAt, endsAt: liveEnrollment.endsAt },
+    });
+    // Period checks never transition status or fabricate a retention origin.
+    expect(
+      (await client.programEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status,
+    ).toBe('ACTIVE');
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: enrollment.id },
+        })
+      ).endedAt,
+    ).toBeNull();
+    // A legacy terminal enrollment is inserted directly by the isolated fixture;
+    // unlike a lifecycle transition, it has no recorded end date.
+    const endDates = new PrismaTrainingEndDateRepository(client);
+    const endInput = {
+      ...base,
+      programEnrollmentId: otherEnrollment.id,
+      actorUserId: manager.user.id,
+      endedAt: new Date(now.getTime() - 12 * 3600000),
+      reason: 'Reviewed historical completion notice',
+      now: new Date(),
+    };
+    const previewEnd = await endDates.preview(endInput);
+    if (previewEnd.outcome !== 'PREVIEW') throw new Error('historical end preview required');
+    expect(previewEnd.preview).toMatchObject({
+      status: 'COMPLETED',
+      endedAt: endInput.endedAt.toISOString(),
+      workInformationDue: false,
+      progressAndScoresDue: false,
+    });
+    expect(
+      await client.trainingDataRetentionState.findUnique({
+        where: { programEnrollmentId: otherEnrollment.id },
+      }),
+    ).toBeNull();
+    expect(JSON.stringify(previewEnd)).not.toContain('Other participant private answer');
+    expect(await endDates.preview({ ...endInput, actorUserId: other.user.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(await endDates.preview({ ...endInput, workspaceId: other.workspace.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(await endDates.preview({ ...endInput, groupId: randomUUID() })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    expect(await endDates.preview({ ...endInput, programEnrollmentId: randomUUID() })).toEqual({
+      outcome: 'NOT_FOUND',
+    });
+    expect(await endDates.preview({ ...endInput, programEnrollmentId: enrollment.id })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    expect(
+      await endDates.preview({ ...endInput, endedAt: new Date(endInput.now.getTime() + 60000) }),
+    ).toEqual({ outcome: 'INVALID_DATE' });
+    expect(
+      await endDates.preview({ ...endInput, endedAt: new Date(now.getTime() - 2 * 86400000) }),
+    ).toEqual({ outcome: 'INVALID_DATE' });
+    const confirmEnd = {
+      ...endInput,
+      revision: previewEnd.preview.revision,
+      operationId: randomUUID(),
+    };
+    await client.serviceProgram.update({ where: { id: program.id }, data: { status: 'ARCHIVED' } });
+    await client.groupMembership.update({
+      where: { id: otherMembership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await endDates.listUnresolved(endInput)).toMatchObject({
+      outcome: 'ROWS',
+      rows: [{ enrollmentId: otherEnrollment.id }],
+    });
+    expect(await endDates.listUnresolved({ ...endInput, actorUserId: other.user.id })).toEqual({
+      outcome: 'FORBIDDEN',
+    });
+    await client.groupMembership.update({
+      where: { id: otherMembership.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    await client.serviceProgram.update({ where: { id: program.id }, data: { status: 'ACTIVE' } });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'CONTENT_EDITOR' },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'FORBIDDEN' });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { serviceRole: 'SERVICE_ADMIN', status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'FORBIDDEN' });
+    await client.groupMembership.updateMany({
+      where: { ...base, userId: manager.user.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    await client.serviceProgram.update({
+      where: { id: program.id },
+      data: { settings: { moduleKey: 'OTHER_MODULE' } },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'NOT_FOUND' });
+    await client.serviceProgram.update({
+      where: { id: program.id },
+      data: { settings: { moduleKey: 'AI_TRAINING_V1' } },
+    });
+    expect(await endDates.confirm({ ...confirmEnd, reason: 'different evidence' })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    const confirmations = await Promise.all([
+      endDates.confirm(confirmEnd),
+      endDates.confirm(confirmEnd),
+    ]);
+    expect(confirmations.filter(({ outcome }) => outcome === 'APPLIED')).toHaveLength(1);
+    expect(
+      confirmations.every(({ outcome }) =>
+        ['APPLIED', 'ALREADY_APPLIED', 'CONFLICT'].includes(outcome),
+      ),
+    ).toBe(true);
+    expect(await endDates.confirm(confirmEnd)).toMatchObject({ outcome: 'ALREADY_APPLIED' });
+    expect(await endDates.confirm({ ...confirmEnd, operationId: randomUUID() })).toEqual({
+      outcome: 'CONFLICT',
+    });
+    const endState = await client.trainingDataRetentionState.findUniqueOrThrow({
+      where: { programEnrollmentId: otherEnrollment.id },
+    });
+    expect(endState.endedAt).toEqual(endInput.endedAt);
+    expect(endState.workRedactedAt).toBeNull();
+    expect(endState.progressPurgedAt).toBeNull();
+    const endAudit = await client.programAuditLog.findMany({
+      where: { ...base, resourceId: otherEnrollment.id, action: 'TRAINING_END_DATE_CONFIRMED' },
+    });
+    expect(endAudit).toHaveLength(1);
+    expect(endAudit[0]?.performedByUserId).toBe(manager.user.id);
+    expect(endAudit[0]?.afterData).toMatchObject({
+      reason: endInput.reason,
+      endedAt: endInput.endedAt.toISOString(),
+    });
+    expect(
+      await client.programEnrollment.findUniqueOrThrow({ where: { id: otherEnrollment.id } }),
+    ).toEqual(otherEnrollment);
+    expect(
+      await client.trainingMissionAnswer.count({
+        where: {
+          ...base,
+          programEnrollmentId: otherEnrollment.id,
+          answer: 'Other participant private answer',
+        },
+      }),
+    ).toBe(1);
+    expect(
+      (
+        await client.trainingToolkitItem.findMany({
+          where: { ...base, programEnrollmentId: enrollment.id },
+        })
+      )[0]?.contentSnapshot,
+    ).toBe('Keep this saved result');
+    expect(await adminPreview.preview({ ...adminPreviewScope, now: endInput.now })).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: { endDateUnresolved: 0 },
+    });
+    // Explicit fixture reopening exercises the existing trigger. Old confirmation
+    // must not restore the date after it was reset for a new learning period.
+    await client.programEnrollment.update({
+      where: { id: otherEnrollment.id },
+      data: { status: 'ACTIVE' },
+    });
+    expect(await endDates.confirm(confirmEnd)).toEqual({ outcome: 'CONFLICT' });
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: otherEnrollment.id },
+        })
+      ).endedAt,
+    ).toBeNull();
+
     await client.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'REVOKED', revokedAt: new Date() },
@@ -2782,6 +3946,74 @@ integration('database ownership boundaries', () => {
         (item) => item.id,
       ),
     ).not.toContain(memberBunshin.id);
+  });
+
+  it('keeps service partner writes owner-only even for workspace administrators', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Service partner owner' });
+    const member = await accounts.execute({ displayName: 'Service partner member' });
+    const admin = await accounts.execute({ displayName: 'Service partner admin' });
+    await client.workspaceMembership.createMany({
+      data: [
+        { workspaceId: owner.workspace.id, userId: member.user.id, role: 'MEMBER' },
+        { workspaceId: owner.workspace.id, userId: admin.user.id, role: 'ADMIN' },
+      ],
+    });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Partner service' },
+    });
+    const otherGroup = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Other partner service' },
+    });
+    for (const groupId of [group.id, otherGroup.id]) {
+      await client.groupMembership.createMany({
+        data: [owner.user.id, member.user.id, admin.user.id].map((userId) => ({
+          workspaceId: owner.workspace.id,
+          groupId,
+          userId,
+          role: 'PARTICIPANT' as const,
+          status: 'ACTIVE' as const,
+          consentedAt: new Date(),
+        })),
+      });
+    }
+    const repository = new PrismaBunshinRepository(client);
+    const own = { workspaceId: owner.workspace.id, groupId: group.id, actorUserId: member.user.id };
+    const created = await repository.create({
+      ...own,
+      name: 'Partner',
+      slug: `service-${randomUUID()}`,
+      type: 'EXPERT',
+      objectiveSummary: 'Purpose',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Tone',
+    });
+    const reference = { ...own, bunshinId: created.id };
+    for (const actorUserId of [owner.user.id, admin.user.id]) {
+      const foreign = { ...reference, actorUserId };
+      expect(await repository.find(foreign)).toBeNull();
+      expect(await repository.update({ ...foreign, name: 'stolen' })).toBeNull();
+      expect(await repository.archive(foreign)).toBeNull();
+    }
+    expect(
+      await repository.update({ ...reference, groupId: otherGroup.id, name: 'wrong service' }),
+    ).toBeNull();
+    expect(await repository.archive({ ...reference, groupId: otherGroup.id })).toBeNull();
+    expect(await repository.update({ ...reference, name: 'edited' })).toMatchObject({
+      name: 'edited',
+    });
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: member.user.id } },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await repository.update({ ...reference, name: 'revoked' })).toBeNull();
+    expect(await repository.archive(reference)).toBeNull();
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: member.user.id } },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    expect(await repository.archive(reference)).toMatchObject({ status: 'ARCHIVED' });
+    expect(await repository.find(reference)).toBeNull();
   });
 
   it('isolates Capability Assignment and enforces idempotent state transitions', async () => {
@@ -4948,6 +6180,224 @@ integration('database ownership boundaries', () => {
       Array<{ relrowsecurity: boolean }>
     >`SELECT relrowsecurity FROM pg_class WHERE relname = 'social_image_samples'`;
     expect(tables[0]?.relrowsecurity).toBe(true);
+  });
+});
+
+integration('authentication return attempt isolation', () => {
+  const client = new PrismaClient();
+  afterAll(async () => client.$disconnect());
+  it('enforces single claims, actor-bound consumption and private RLS storage', async () => {
+    const ids = [randomUUID(), randomUUID()];
+    const actor = randomUUID();
+    try {
+      for (const [index, id] of ids.entries())
+        await client.authReturnAttempt.create({
+          data: {
+            id,
+            proofHash: String(index).repeat(64),
+            method: 'LINE',
+            origin: 'https://bunshin.example',
+            returnPath: `/s/project-${index}/line`,
+            expiresAt: new Date(Date.now() + 600_000),
+          },
+        });
+      const claims = await Promise.all(
+        ids.slice(0, 1).flatMap((id) =>
+          [1, 2].map(() =>
+            client.authReturnAttempt.updateMany({
+              where: { id, stage: 'PENDING' },
+              data: { stage: 'CLAIMED' },
+            }),
+          ),
+        ),
+      );
+      expect(claims.reduce((sum, result) => sum + result.count, 0)).toBe(1);
+      await client.authReturnAttempt.updateMany({
+        where: { id: ids[0]!, stage: 'CLAIMED' },
+        data: { stage: 'AUTHENTICATED', actorUserId: actor },
+      });
+      expect(
+        (
+          await client.authReturnAttempt.updateMany({
+            where: { id: ids[0]!, stage: 'AUTHENTICATED', actorUserId: randomUUID() },
+            data: { stage: 'CONSUMED' },
+          })
+        ).count,
+      ).toBe(0);
+      expect(
+        (
+          await client.authReturnAttempt.updateMany({
+            where: { id: ids[0]!, stage: 'AUTHENTICATED', actorUserId: actor },
+            data: { stage: 'CONSUMED', actorUserId: null, returnPath: null },
+          })
+        ).count,
+      ).toBe(1);
+      expect((await client.authReturnAttempt.findUnique({ where: { id: ids[1]! } }))?.stage).toBe(
+        'PENDING',
+      );
+      const tables = await client.$queryRaw<
+        Array<{ relrowsecurity: boolean }>
+      >`SELECT relrowsecurity FROM pg_class WHERE relname = 'auth_return_attempts'`;
+      expect(tables[0]?.relrowsecurity).toBe(true);
+      const policies = await client.$queryRaw<
+        Array<{ policyname: string }>
+      >`SELECT policyname FROM pg_policies WHERE tablename = 'auth_return_attempts'`;
+      expect(policies).toHaveLength(0);
+    } finally {
+      await client.authReturnAttempt.deleteMany({ where: { id: { in: ids } } });
+    }
+  });
+  it('selects the latest effective service legal versions for display, consent, use and notification access', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Service legal owner' });
+    const participant = await accounts.execute({ displayName: 'Service legal participant' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: `Legal ${randomUUID()}` },
+    });
+    const scope = { workspaceId: owner.workspace.id, groupId: group.id };
+    const slug = `legal-${randomUUID()}`;
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        ...scope,
+        slug,
+        displayName: 'Legal fixture',
+        description: 'Test',
+        operatorName: 'Operator',
+        visibility: 'PUBLIC',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.serviceRegistrationPolicy.create({
+      data: { ...scope, configurationId: configuration.id, mode: 'PUBLIC' },
+    });
+    const now = new Date();
+    const effectiveAt = new Date(now.getTime() - 60_000);
+    const createDocument = (
+      type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE',
+      version: number,
+      status: 'PUBLISHED' | 'DRAFT',
+      when: Date | null,
+    ) =>
+      client.serviceLegalDocument.create({
+        data: {
+          ...scope,
+          configurationId: configuration.id,
+          type,
+          version,
+          title: `${type} v${version}`,
+          content: `Text v${version}`,
+          status,
+          effectiveAt: when,
+          publishedAt: status === 'PUBLISHED' ? now : null,
+          createdByUserId: owner.user.id,
+        },
+      });
+    const oldTerms = await createDocument('TERMS', 1, 'PUBLISHED', effectiveAt);
+    const latestTerms = await createDocument('TERMS', 2, 'PUBLISHED', effectiveAt);
+    const latestPrivacy = await createDocument('PRIVACY', 1, 'PUBLISHED', effectiveAt);
+    const commerce = await createDocument('COMMERCE_DISCLOSURE', 1, 'PUBLISHED', effectiveAt);
+    await createDocument('TERMS', 3, 'PUBLISHED', new Date(now.getTime() + 60_000));
+    await createDocument('PRIVACY', 2, 'DRAFT', null);
+
+    const participation = new PrismaServiceParticipationRepository(client);
+    const shown = await participation.findView({ slug, actorUserId: null, now });
+    expect(shown?.legalDocuments).toHaveLength(3);
+    expect(shown?.legalDocuments.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([latestPrivacy.id, latestTerms.id, commerce.id]),
+    );
+    expect(
+      await participation.request({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [oldTerms.id, latestPrivacy.id, commerce.id],
+        referralCode: null,
+        referralClickId: null,
+        now,
+      }),
+    ).toBeNull();
+    expect(
+      await client.groupMembership.count({ where: { ...scope, userId: participant.user.id } }),
+    ).toBe(0);
+    const joined = await participation.request({
+      slug,
+      actorUserId: participant.user.id,
+      legalDocumentIds: [latestTerms.id, latestPrivacy.id, commerce.id],
+      referralCode: null,
+      referralClickId: null,
+      now,
+    });
+    expect(joined?.status).toBe('ACTIVE');
+    expect(
+      await client.serviceLegalConsent.findMany({
+        where: { ...scope, groupMembershipId: joined!.id },
+        select: { legalDocumentId: true },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        { legalDocumentId: latestTerms.id },
+        { legalDocumentId: latestPrivacy.id },
+        { legalDocumentId: commerce.id },
+      ]),
+    );
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).not.toBeNull();
+    const notifications = new PrismaServiceNotificationPreferenceRepository(client);
+    const preferenceInput = {
+      slug,
+      actorUserId: participant.user.id,
+      topic: 'DAILY_MISSION',
+      channel: 'LINE' as const,
+      now,
+    };
+    expect((await notifications.get(preferenceInput)).accessible).toBe(true);
+
+    await client.serviceLegalConsent.deleteMany({
+      where: { ...scope, groupMembershipId: joined!.id, legalDocumentId: latestTerms.id },
+    });
+    await client.serviceLegalConsent.create({
+      data: {
+        ...scope,
+        groupMembershipId: joined!.id,
+        userId: participant.user.id,
+        legalDocumentId: oldTerms.id,
+        consentedAt: now,
+      },
+    });
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).toBeNull();
+    expect((await notifications.get(preferenceInput)).accessible).toBe(false);
+    const consentView = await participation.findLegalConsentView({
+      slug,
+      actorUserId: participant.user.id,
+      now,
+    });
+    expect(consentView?.legalDocuments.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([latestTerms.id, latestPrivacy.id, commerce.id]),
+    );
+    expect(consentView?.acceptedDocumentIds).not.toContain(latestTerms.id);
+    expect(
+      await participation.acceptLegalDocuments({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [oldTerms.id, latestPrivacy.id, commerce.id],
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      await participation.acceptLegalDocuments({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [latestTerms.id, latestPrivacy.id, commerce.id],
+        now,
+      }),
+    ).toBe(true);
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).not.toBeNull();
+    expect((await notifications.get(preferenceInput)).accessible).toBe(true);
   });
 });
 

@@ -3,6 +3,10 @@ import {
   TRAINING_SKILL_LABELS,
   type TrainingSkillKey,
 } from '@bunshin/capability-training';
+import {
+  trainingEnrollmentDisplayStatus,
+  type TrainingEnrollmentDisplayStatus,
+} from './ai-training-enrollment-display';
 
 type TrainingRole = 'SALES' | 'OFFICE' | 'MANAGER' | 'OTHER';
 type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
@@ -10,6 +14,8 @@ type TrainingAiLevel = 'BEGINNER' | 'INTERMEDIATE';
 export type AiTrainingAdminParticipantInput = {
   enrollmentId: string;
   enrollmentStatus: 'INVITED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+  startsAt: Date | null;
+  endsAt: Date | null;
   programName: string;
   participantName: string;
   participantEmail: string | null;
@@ -31,7 +37,6 @@ export type AiTrainingAdminParticipantInput = {
     missionDefinitionKey: string;
     displaySnapshot: unknown;
   } | null;
-  latestEvaluation: unknown;
   evaluationUpdatedAt: Date | null;
   profileUpdatedAt: Date | null;
   workResults: Array<'USED_AS_IS' | 'USED_WITH_EDITS' | 'NOT_USED_YET' | 'NOT_APPLICABLE'>;
@@ -40,6 +45,7 @@ export type AiTrainingAdminParticipantInput = {
 
 export type AiTrainingAdminParticipant = {
   enrollmentId: string;
+  displayStatus: TrainingEnrollmentDisplayStatus;
   programName: string;
   participantName: string;
   participantEmail: string | null;
@@ -50,7 +56,15 @@ export type AiTrainingAdminParticipant = {
   currentMission: string;
   weakArea: string;
   lastActivityAt: Date | null;
-  engagement: 'NOT_STARTED' | 'ACTIVE' | 'NEEDS_SUPPORT' | 'INACTIVE' | 'COMPLETED';
+  engagement:
+    | 'NOT_STARTED'
+    | 'BEFORE_START'
+    | 'PERIOD_UNRESOLVED'
+    | 'ACTIVE'
+    | 'NEEDS_SUPPORT'
+    | 'INACTIVE'
+    | 'COMPLETED'
+    | 'ENDED';
 };
 
 export type AiTrainingAdminDashboard = {
@@ -58,6 +72,10 @@ export type AiTrainingAdminDashboard = {
   totals: {
     participants: number;
     active: number;
+    expired: number;
+    pendingExpiryUpdate: number;
+    beforeStart: number;
+    startUnresolved: number;
     continuedWithinSevenDays: number;
     continuationPercent: number;
     needsSupport: number;
@@ -100,14 +118,6 @@ function currentMissionTitle(input: AiTrainingAdminParticipantInput): string {
 }
 
 function latestWeakArea(input: AiTrainingAdminParticipantInput): string {
-  const evaluation = objectValue(input.latestEvaluation);
-  const weaknesses = evaluation?.['weaknesses'];
-  if (Array.isArray(weaknesses)) {
-    const first = weaknesses.find(
-      (item): item is string => typeof item === 'string' && item.length > 0,
-    );
-    if (first) return first;
-  }
   if (input.profile?.needsReview || (input.profile?.recentFailures ?? 0) >= 2)
     return '基礎の復習が必要です';
   if (input.progress?.bottleneckKey) return input.progress.bottleneckKey;
@@ -133,6 +143,10 @@ export function buildAiTrainingAdminDashboard(
 ): AiTrainingAdminDashboard {
   const sevenDaysAgo = new Date(now.getTime() - 7 * DAY_MS);
   const participants = input.map<AiTrainingAdminParticipant>((item) => {
+    const displayStatus = trainingEnrollmentDisplayStatus(
+      { status: item.enrollmentStatus, startsAt: item.startsAt, endsAt: item.endsAt },
+      now,
+    );
     const lastActivityAt = latestDate([
       item.progress?.lastActionAt,
       item.evaluationUpdatedAt,
@@ -142,17 +156,26 @@ export function buildAiTrainingAdminDashboard(
     const needsSupport =
       item.profile?.needsReview === true || (item.profile?.recentFailures ?? 0) >= 2;
     const engagement =
-      item.enrollmentStatus === 'COMPLETED'
+      displayStatus === 'COMPLETED'
         ? 'COMPLETED'
-        : !item.profile || (!item.assignment && completedMissionCount === 0)
-          ? 'NOT_STARTED'
-          : needsSupport
-            ? 'NEEDS_SUPPORT'
-            : !lastActivityAt || lastActivityAt < sevenDaysAgo
-              ? 'INACTIVE'
-              : 'ACTIVE';
+        : ['CANCELLED', 'EXPIRED', 'PERIOD_ENDED'].includes(displayStatus)
+          ? 'ENDED'
+          : displayStatus === 'BEFORE_START'
+            ? 'BEFORE_START'
+            : displayStatus === 'START_UNRESOLVED'
+              ? 'PERIOD_UNRESOLVED'
+              : displayStatus === 'INVITED' ||
+                  !item.profile ||
+                  (!item.assignment && completedMissionCount === 0)
+                ? 'NOT_STARTED'
+                : needsSupport
+                  ? 'NEEDS_SUPPORT'
+                  : !lastActivityAt || lastActivityAt < sevenDaysAgo
+                    ? 'INACTIVE'
+                    : 'ACTIVE';
     return {
       enrollmentId: item.enrollmentId,
+      displayStatus,
       programName: item.programName,
       participantName: item.participantName,
       participantEmail: item.participantEmail,
@@ -166,17 +189,22 @@ export function buildAiTrainingAdminDashboard(
       engagement,
     };
   });
-  const activeParticipants = participants.filter(
-    (item) =>
-      input.find((source) => source.enrollmentId === item.enrollmentId)?.enrollmentStatus ===
-      'ACTIVE',
-  );
+  const activeParticipants = participants.filter((item) => item.displayStatus === 'ACTIVE');
   const continuedWithinSevenDays = activeParticipants.filter(
     (item) => item.lastActivityAt && item.lastActivityAt >= sevenDaysAgo,
   ).length;
   return {
     participants: participants.sort((left, right) => {
-      const priority = { NEEDS_SUPPORT: 0, INACTIVE: 1, NOT_STARTED: 2, ACTIVE: 3, COMPLETED: 4 };
+      const priority = {
+        NEEDS_SUPPORT: 0,
+        INACTIVE: 1,
+        NOT_STARTED: 2,
+        ACTIVE: 3,
+        COMPLETED: 4,
+        ENDED: 5,
+        BEFORE_START: 6,
+        PERIOD_UNRESOLVED: 7,
+      };
       return (
         priority[left.engagement] - priority[right.engagement] ||
         left.participantName.localeCompare(right.participantName, 'ja')
@@ -185,6 +213,14 @@ export function buildAiTrainingAdminDashboard(
     totals: {
       participants: participants.length,
       active: activeParticipants.length,
+      expired: participants.filter((item) =>
+        ['EXPIRED', 'PERIOD_ENDED'].includes(item.displayStatus),
+      ).length,
+      pendingExpiryUpdate: participants.filter((item) => item.displayStatus === 'PERIOD_ENDED')
+        .length,
+      beforeStart: participants.filter((item) => item.displayStatus === 'BEFORE_START').length,
+      startUnresolved: participants.filter((item) => item.displayStatus === 'START_UNRESOLVED')
+        .length,
       continuedWithinSevenDays,
       continuationPercent:
         activeParticipants.length === 0

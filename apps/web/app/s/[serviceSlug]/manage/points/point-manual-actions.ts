@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { serviceAuthLoginPath } from '../../../../../src/auth/line-return';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
 
 const bonusSchema = z.object({
@@ -38,7 +39,13 @@ const expiryFrom = (now: Date) => {
 export async function grantBonus(formData: FormData) {
   'use server';
   const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
+  const requestedSlug = formData.get('serviceSlug');
+  if (!actor)
+    redirect(
+      serviceAuthLoginPath(
+        `/s/${typeof requestedSlug === 'string' ? requestedSlug : ''}/manage/points`,
+      ),
+    );
   const parsed = bonusSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect('/groups');
   const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
@@ -154,7 +161,13 @@ export async function grantBonus(formData: FormData) {
 export async function correctPoints(formData: FormData) {
   'use server';
   const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
+  const requestedSlug = formData.get('serviceSlug');
+  if (!actor)
+    redirect(
+      serviceAuthLoginPath(
+        `/s/${typeof requestedSlug === 'string' ? requestedSlug : ''}/manage/points`,
+      ),
+    );
   const parsed = correctionSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect('/groups');
   const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;
@@ -231,7 +244,13 @@ export async function correctPoints(formData: FormData) {
 export async function cancelRecovery(formData: FormData) {
   'use server';
   const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
+  const requestedSlug = formData.get('serviceSlug');
+  if (!actor)
+    redirect(
+      serviceAuthLoginPath(
+        `/s/${typeof requestedSlug === 'string' ? requestedSlug : ''}/manage/points`,
+      ),
+    );
   const parsed = recoveryCancellationSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect('/groups');
   const returnPath = `/s/${parsed.data.serviceSlug}/manage/points` as Route;

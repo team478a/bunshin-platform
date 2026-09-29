@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { EnqueueJob, TRAINING_ANSWER_EVALUATION_JOB_TYPE } from '@bunshin/application';
+import { AI_TRAINING_V1_MODULE_KEY } from '@bunshin/capability-training';
 import { getServerEnvironment } from '@bunshin/config';
 import { ApplicationError } from '@bunshin/shared';
 
@@ -27,6 +28,40 @@ export async function enqueueAiTrainingEvaluation(input: {
       actorUserId: input.actorUserId,
       programEnrollmentId: input.enrollmentId,
     });
+    const membership = await tx.groupMembership.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        userId: input.actorUserId,
+        status: 'ACTIVE',
+        serviceRole: 'PARTICIPANT',
+      },
+      select: { id: true },
+    });
+    if (!membership) throw new ApplicationError('NOT_FOUND', 'training participant unavailable');
+    const enrollment = await tx.programEnrollment.findFirst({
+      where: {
+        id: input.enrollmentId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        groupMembershipId: membership.id,
+        status: 'ACTIVE',
+        AND: [db.trainingEnrollmentPeriodWhere(new Date())],
+      },
+      select: { id: true, serviceProgramId: true },
+    });
+    if (!enrollment) throw new ApplicationError('NOT_FOUND', 'training enrollment unavailable');
+    const program = await tx.serviceProgram.findFirst({
+      where: {
+        id: enrollment.serviceProgramId,
+        workspaceId: input.workspaceId,
+        groupId: input.groupId,
+        status: 'ACTIVE',
+        settings: { path: ['moduleKey'], equals: AI_TRAINING_V1_MODULE_KEY },
+      },
+      select: { id: true },
+    });
+    if (!program) throw new ApplicationError('NOT_FOUND', 'training program unavailable');
     const answer = await tx.trainingMissionAnswer.findFirst({
       where: {
         id: input.answerId,

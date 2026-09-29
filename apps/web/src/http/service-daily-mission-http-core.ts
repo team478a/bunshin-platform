@@ -9,7 +9,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { BUSINESS_OUTCOME_KEYS } from '../services/business-outcomes';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import { dailyMissionGenerationError } from './daily-mission-generation-error';
 
 export const uuidSchema = z.string().uuid();
@@ -93,11 +93,14 @@ export async function body(request: Request): Promise<unknown> {
   }
 }
 
+export async function serviceDailyMissionMemberContext(serviceSlug: string) {
+  const actor = await actorUserId();
+  const service = await resolveMemberServiceContext(serviceSlug, actor);
+  return { service, actor };
+}
+
 export async function serviceDailyMissionScope(serviceSlug: string, bunshinId: string) {
-  const [service, actor] = await Promise.all([
-    resolvePublicServiceContext(serviceSlug),
-    actorUserId(),
-  ]);
+  const { service, actor } = await serviceDailyMissionMemberContext(serviceSlug);
   return {
     workspaceId: service.workspaceId,
     groupId: service.serviceId,

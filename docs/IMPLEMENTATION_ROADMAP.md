@@ -1,8 +1,62 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開Serviceの専用URL・外部計測管理APIは`docs/PRIVATE_SERVICE_EXTERNAL_TRACKING_IMPLEMENTATION_REPORT.md`を参照。管理画面と同じ本人の`ADMINISTRATION`権限でServiceを解決し、公開状態には依存しない。成果受信Webhookは別経路として維持する。本番反映・実端末確認は別作業。
+
+非公開Serviceの商品パック・Campaign管理APIは`docs/PRIVATE_SERVICE_CONTENT_OPERATIONS_IMPLEMENTATION_REPORT.md`を参照。管理画面と同じ認証済み`CONTENT`権限でServiceを解決し、公開状態に依存しない。既存Workspace/Group所有・内容編集・同意境界を維持する。本番反映・実端末確認は別作業。
+
+非公開サービスの参加者画面Metadataは`docs/PRIVATE_SERVICE_MEMBER_METADATA_IMPLEMENTATION_REPORT.md`を参照。9画面の表示名を本人Member Serviceから取得し、公開登録入口のPublic判定は維持する。匿名/所属外への名前漏えいと未知障害の握りつぶしを避ける。本番反映・実端末確認は別作業。
+
+Service法務文書の再同意は`docs/SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`を参照。既存参加者の最新版同意を初回参加から分離し、非公開Serviceを含む本人導線と、公開3文書がある場合の参加同意を揃える。本番データ監査・実端末確認・リリースは別作業。
+
+Service法務文書の最新有効版統一は`docs/SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`を参照。公開表示/参加Transaction/既存参加者利用/通知Preferenceの4経路で、同じWorkspace/ServiceのPUBLISHED・有効日時以前の文書をtypeごと最大versionへ揃える。旧版だけへの同意で新版を満たさず、古い画面からの申請は拒否する。旧同意データの自動付替え・本番データ/設定/DB schema/Providerは変更しない。隔離DBと全体CI、本番の旧版同意件数/再同意導線は別々に確認する。
+
+非公開サービスのヘルプ・マニュアル・法務文書の閲覧分離は`docs/PRIVATE_SERVICE_VISITOR_PAGES_IMPLEMENTATION_REPORT.md`を参照。公開Serviceは匿名/未参加のログイン済みUserの案内を維持し、非公開Serviceは既存参加者だけに案内と公開済み法務文書を表示する。本人Member拒否だけPublic判定へ戻し、DB障害を隠さない。マニュアルのcacheをUser別に分け、文書は自Workspace/Group・公開済み/有効版へ限定する。公開登録/同意、設定/DB、本番データ/Providerを変更しない。他のMetadata表示と本番反映は別作業。
+
+非公開サービスのProgram目標権限分離は`docs/PRIVATE_SERVICE_PROGRAM_GOALS_IMPLEMENTATION_REPORT.md`を参照。支援方針/目標候補は管理Resolverだけ、本人の希望/目標はMember Resolverだけを使用し、公開判定や権限fallbackを前提にしない。本人Enrollment/受講ロック後の研修期間条件、方針選択許可/版/監査と過去目標保持を維持する。入力400と管理不存在404を区別し、未知障害を握りつぶさない。公開入口/画面、DB、設定、本番データ、Providerは変更せず、残る画面監査と本番反映は別作業。
+
+非公開サービスの動画配信参加者操作は`docs/PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`を参照。閲覧/採用/辞退/自己申告投稿とダウンロードを認証後のMember Service解決へ合わせる。期限切れ/取消済みの投稿副作用を先に拒否し、本人Project/Render/Storage Key・未削除/期限・採用条件を照合する。署名URL準備成功後だけ履歴を保存し、拒否/不存在/未知障害を区別する。実LINE/Storage、設定、DB、本番データは変更しない。残る画面/Program目標の公開判定監査と本番反映は別作業。
+
+非公開サービスの本人商品紹介API対応は`docs/PRIVATE_SERVICE_PRODUCT_CONTENT_IMPLEMENTATION_REPORT.md`を参照。保存/非表示、コピー/自己申告投稿、紹介文生成は認証後のMember Service解決へ合わせ、本人の商品/分身/ACTIVE URL/公式商品再照合を維持する。生成Quotaにも自Service IDを渡し既存Service上限を迂回しない。URL非送信、PR/公式ルール/媒体上限と使用量記録は維持する。匿名公開入口、設定、DB、本番データ、実Providerは変更しない。動画通知と画面の追加監査、本番反映は別作業。
+
+非公開サービスの初回回答・紹介コード・本人専用URL API対応は`docs/PRIVATE_SERVICE_ONBOARDING_REFERRALS_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決を使い、Service固有の質問/事業プロフィール・紹介設定・本人所属・許可ドメインとDRAFT保存を維持する。Schema不一致は400、未知Resolver障害は500として区別する。匿名の紹介先登録・公開入口、設定、本番データは変更しない。商品紹介・動画通知と画面の追加監査、本番反映は別作業。
+
+非公開サービスの投稿操作・成果・日々の記録API対応は`docs/PRIVATE_SERVICE_POSTING_OUTCOMES_IMPLEMENTATION_REPORT.md`を参照。共通Mission Scope、業務成果、SNS数字保存/画像読取、メモ/写真を認証後のMember Service解決へ合わせる。業務成果設定は同じContextから解決し、Service固有の機能制限・本人所有・参加同意・SOCIAL能力を維持する。実Provider呼出、本番設定/データ、匿名登録は変更しない。商品紹介・紹介リンク・初回設定・動画通知等の別機能判定は後続監査、本番反映は別作業。
+
+非公開サービスのSNS設定・発信方針・投稿テーマ・週間計画API対応は`docs/PRIVATE_SERVICE_SOCIAL_PLANNING_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決へ合わせ、本人所有・SOCIAL能力・入力/Origin検証と生成時の自Service知識/用語/Quota等を維持する。投稿採否/完了/成果・振り返りは次の独立PR。本番反映・実端末確認は別作業。
+
+非公開サービスの投稿パートナー操作対応は`docs/PRIVATE_SERVICE_BUNSHIN_OPERATIONS_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決で一覧・作成・取得・編集・停止と初回回答からの候補提案を接続する。サービス所属の編集/停止は本人所有に限定し、個人用Bunshin管理権限は維持する。SNS設定・投稿テーマ・週間計画・投稿操作の公開限定判定は後続の独立PRとする。本番反映・実端末確認は別途必要。
+
+専用LINE再連携の試行分離と非公開サービス既存参加者対応は`docs/SERVICE_LINE_RECONNECTION_ISOLATION_IMPLEMENTATION_REPORT.md`を参照。試行別Cookie・自試行限定の後処理・既存Member Service認可を使い、複数Service/同一Serviceの再試行が干渉しないようにする。旧Cookieは一致する開始済み試行だけ短期互換で検証し、設定・本番データ・共通認証の有効化・実LINE送信は変更しない。本番実端末確認は別途必要。
+
+AI研修の過去の未確定終了日時の管理者個別確定は`docs/ai-training/AI_TRAINING_END_DATE_CONFIRMATION_IMPLEMENTATION_REPORT.md`を参照。自Serviceの管理者が証跡・日本時間の日時・理由を指定し、Preview Revisionと受講排他で未確定日時のみを保存し監査する。アーカイブ/退会後の記録にも対応する。既存確定日上書き・自動推定・一括補完・データ削除・本番期限処理の停止解除は行わない。
+
+AI研修の無料・手動登録受講の期限終了バッチは`docs/ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`を参照。購入に紐づかない受講をService限定・期間/所有/Module/CAS再確認で終了し、評価待ちを停止する。最小システム監査を保持し、確定終了日記録は既存Triggerを使う。内部実行口はdevelopment/stagingのみで、本番停止・Cron未登録・保持期限消去停止を維持する。
+
+複数Service同時ログインの復帰分離は`docs/AUTH_RETURN_ATTEMPTS_IMPLEMENTATION_REPORT.md`を参照。試行別proof・PKCE flowId・単回DB記録・本人に束ねた同意を実装する。初期値は無効で、本番有効化にはSupabase Redirect URL/メールテンプレートと実端末の確認が必要。マージだけで本番稼働済みとは扱わない。
+
+サービス認証・LINE再連携の混在防止は`docs/SERVICE_AUTH_FLOW_ISOLATION_REPORT.md`を参照。認証/同意後にサービスへ復帰し、共通業種登録は挟まない。サービス固有の参加・事業プロフィール・研修・占いの判定は維持する。管理入口/操作・画像閲覧の類似ケースも修正し、既存ページ一覧の回帰テストで許可リストの漏れを確認する。本番実端末/リッチメニュー確認と複数同時認証の復帰情報は未確認・後続作業。
+
+機能不足の再監査は`docs/FUNCTIONAL_GAPS_AUDIT_20260929.md`を参照。第一作業単位のOEM決済CSV期間指定・上限超過時の欠落防止は`docs/OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`を参照。日本時間の受付日で絞り、10,000件を超えた場合は部分CSVを返さない。入金/返金日の会計期間集計、上限撤廃、本番設定変更は含めない。
+
+AI研修の管理画面の受講期間表示は`docs/ai-training/AI_TRAINING_ADMIN_PERIOD_STATUS_IMPLEMENTATION_REPORT.md`を参照。期限後ACTIVEは状態未更新の期限終了として表示し、開始前/開始日時不明とともに受講中・継続率・声かけ集計から除く。利用状況と登録状態を分け、LifecycleのCASや確定終了日・保持期限起算日を表示から書き換えない。
+
+AI研修の受講期間ガードは`docs/ai-training/AI_TRAINING_PERIOD_GUARDS_IMPLEMENTATION_REPORT.md`を参照。ACTIVEでも開始前/期限後は新しい学習操作・課題生成・評価を拒否し、ロック後/Provider直前/評価保存前に再確認する。Toolkit/本人Exportは維持し、自動終了状態更新や保持期限起算日の補完、課金・削除・本番設定変更は含めない。
+
+AI研修の読み取り専用保持期限管理画面は`docs/ai-training/AI_TRAINING_RETENTION_ADMIN_PREVIEW_IMPLEMENTATION_REPORT.md`を参照。自Serviceの件数と終了日・所有境界の判定保留だけを集計し、DBでも管理者を再検証する。削除操作・終了日補完・定期実行・本番有効化は追加しない。
+
+AI研修の管理集計の評価自由文除外は`docs/ai-training/AI_TRAINING_ADMIN_EVALUATION_PRIVACY_IMPLEMENTATION_REPORT.md`を参照。評価JSON全体・weaknessesの取得表示を止め、DB認可と許可値だけの射影を使う。個人回答閲覧権限は追加しない。
+
+AI研修の受講者向け終了案内は`docs/ai-training/AI_TRAINING_ENDED_PARTICIPANT_IMPLEMENTATION_REPORT.md`を参照。終了/取消/期限終了を本人限定・読み取り専用で表示し、Runtimeを呼ばない。取消時のToolkit/Export権限は拡張せず、再開は既存管理者操作を使用する。
+
+AI研修の管理者による終了・取消・再開は`docs/ai-training/AI_TRAINING_ENROLLMENT_LIFECYCLE_IMPLEMENTATION_REPORT.md`を参照。確認状態/更新時刻・受講ロック・再送監査で変更し、終了時の評価待ち処理を停止する。再開で契約期間延長や削除データ復元を行わず、本番保持期限処理の停止は維持する。
+
 更新基準: 2026-09-28、`main` commit `f96b830d`。各Phase内の箇条書きは実装履歴を残しているため、冒頭の状態と最新の機能別報告書を現在状態の判断に使用する。コード完了は本番Migration、外部Provider接続、実端末検証、事業承認の完了を意味しない。
 
 ## マルチサービス化
+
+AI研修の期限処理は`docs/ai-training/AI_TRAINING_RETENTION_EXECUTION_IMPLEMENTATION_REPORT.md`を参照。終了状態への将来の変更を記録し、確認Revision付きの回答90日・仕事情報終了90日・進捗終了1年の処理を実装する。Toolkitは保持。本番実行APIは停止し、定期実行・本番有効化は別途承認・変更が必要。
+
+AI研修の保持期限Preflightは`docs/ai-training/AI_TRAINING_RETENTION_PREFLIGHT_IMPLEMENTATION_REPORT.md`を参照。承認済み90日/暦年1年の期限判定とScope限定の読み取り専用件数確認を追加する。実削除・定期実行・本番有効化は未実装。終了日不明の受講は判定保留とする。
 
 AI研修の本人削除は`docs/ai-training/AI_TRAINING_PERSONAL_DATA_DELETION_IMPLEMENTATION_REPORT.md`を参照。回答1件/全学習データのPreviewと明示確認、既存書込/評価との競合防止を接続する。自動保持期限は次の独立PRであり、本番反映や既存データの自動消去を開始した証拠とは扱わない。
 
@@ -95,6 +149,8 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 ## 占い
 
 占いの中断生成復旧はD-129に従い、最終更新から10分以上の`GENERATING`を保存済み標準結果へ戻す認証済みCronをコード実装した。カード再抽選・AI再実行・LINE再送はしない。検証結果は対象PRのCI、本番反映・Cron実行は別確認とする。詳細は`FORTUNE_GENERATION_RECOVERY_IMPLEMENTATION_REPORT.md`を参照。
+
+占いAIの非同期Job/最大3回再試行をD-145に従ってコード実装した。標準結果を先に返し、本人/Service/Bunshin・lease・更新Revisionを検証してAI結果を確定する。試行別Quota/使用量を記録し、有効なJobがあるReadingを中断復旧から除く。`FORTUNE_ASYNC_GENERATION_ENABLED`は既定無効で本番設定は変更していない。検証結果は対象PRのCI、本番稼働は別確認。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。
 
 ## AI研修
 

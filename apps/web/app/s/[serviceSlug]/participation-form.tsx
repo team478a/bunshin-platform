@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 interface LegalDocument {
   id: string;
-  type: 'TERMS' | 'PRIVACY';
+  type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE';
   version: number;
   title: string;
   content: string;

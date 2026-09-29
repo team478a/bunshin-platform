@@ -11,7 +11,8 @@ describe('service weekly report boundaries', () => {
       new URL('../app/s/[serviceSlug]/manage/weekly-report/page.tsx', import.meta.url),
       'utf8',
     );
-    expect(participant).toContain('resolvePublicServiceContext');
+    expect(participant).toContain('memberServiceMetadata');
+    expect(participant).not.toContain('resolvePublicServiceContext');
     expect(participant).toContain('userId: actor.userId');
     expect(participant).toContain('期限が近いポイントがあります');
     expect(participant).toContain('ポイントの期限と履歴を見る');

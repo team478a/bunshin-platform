@@ -4,12 +4,13 @@ import type {
   FortuneFeedbackIssue,
   FortuneOrientation,
   FortuneAiGenerationClaim,
-  FortuneAiReadingResult,
   FortuneReadingView,
   FortuneTheme,
+  FortuneRepository,
 } from '@bunshin/capability-fortune';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { dateOnly, fortuneReadingView, fortuneTarget } from './fortune-shared';
+import { lockFortuneGenerationLease } from './fortune-generation-jobs';
 
 export class PrismaFortuneGenerationRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -111,20 +112,39 @@ export class PrismaFortuneGenerationRepository {
     });
   }
 
-  async claimAiGeneration(input: {
-    serviceSlug: string;
-    actorUserId: string;
-    readingId: string;
-  }): Promise<FortuneAiGenerationClaim | null> {
+  async claimAiGeneration(
+    input: Parameters<FortuneRepository['claimAiGeneration']>[0],
+  ): Promise<FortuneAiGenerationClaim | null> {
     return this.db.$transaction(async (tx) => {
       const scope = await fortuneTarget(tx, input.serviceSlug, input.actorUserId);
       if (!scope || !scope.aiEnabled) return null;
+      const lease = input.jobLease;
+      if (
+        lease &&
+        (scope.id !== lease.serviceSettingId ||
+          scope.workspaceId !== lease.workspaceId ||
+          scope.bunshinId !== lease.bunshinId ||
+          !(await lockFortuneGenerationLease(tx, lease, input.actorUserId, input.readingId)))
+      )
+        return null;
       const claimed = await tx.fortuneReading.updateMany({
         where: {
           id: input.readingId,
           serviceSettingId: scope.id,
           memberUserId: input.actorUserId,
-          status: 'READY_BASIC',
+          status: lease ? 'GENERATING' : 'READY_BASIC',
+          ...(lease
+            ? {
+                workspaceId: scope.workspaceId,
+                groupId: scope.groupId,
+                deletedAt: null,
+                participant: {
+                  workspaceId: scope.workspaceId,
+                  serviceSettingId: scope.id,
+                  userId: input.actorUserId,
+                },
+              }
+            : {}),
         },
         data: { status: 'GENERATING', failureCode: null },
       });
@@ -218,7 +238,7 @@ export class PrismaFortuneGenerationRepository {
       const feedbackIds = recentReadings.flatMap((item) =>
         item.feedback ? [item.feedback.id] : [],
       );
-      await tx.fortuneReading.update({
+      const contextualized = await tx.fortuneReading.update({
         where: { id: reading.id },
         data: {
           personalizationContext: {
@@ -244,6 +264,12 @@ export class PrismaFortuneGenerationRepository {
         },
       });
       return {
+        ...(lease
+          ? {
+              generationRevision: contextualized.updatedAt,
+              jobAttempt: { jobId: lease.jobId, attemptCount: lease.attemptCount },
+            }
+          : {}),
         workspaceId: scope.workspaceId,
         groupId: scope.groupId,
         bunshinId: scope.bunshinId,
@@ -285,20 +311,54 @@ export class PrismaFortuneGenerationRepository {
     });
   }
 
-  async completeAiGeneration(input: {
-    serviceSlug: string;
-    actorUserId: string;
-    readingId: string;
-    output: FortuneAiReadingResult;
-  }): Promise<FortuneReadingView | null> {
-    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+  async completeAiGeneration(
+    input: Parameters<FortuneRepository['completeAiGeneration']>[0],
+  ): Promise<FortuneReadingView | null> {
+    if (input.jobLease)
+      return this.db.$transaction(async (tx) => {
+        if (
+          !input.generationRevision ||
+          !(await lockFortuneGenerationLease(
+            tx,
+            input.jobLease!,
+            input.actorUserId,
+            input.readingId,
+          ))
+        )
+          return null;
+        return this.saveComplete(input, tx);
+      });
+    return this.saveComplete(input);
+  }
+
+  private async saveComplete(
+    input: Parameters<FortuneRepository['completeAiGeneration']>[0],
+    db: PrismaClient | Prisma.TransactionClient = this.db,
+  ): Promise<FortuneReadingView | null> {
+    const scope = await fortuneTarget(db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
-    const updated = await this.db.fortuneReading.updateMany({
+    if (
+      input.jobLease &&
+      (!scope.aiEnabled ||
+        scope.id !== input.jobLease.serviceSettingId ||
+        scope.workspaceId !== input.jobLease.workspaceId ||
+        scope.bunshinId !== input.jobLease.bunshinId)
+    )
+      return null;
+    const updated = await db.fortuneReading.updateMany({
       where: {
         id: input.readingId,
         serviceSettingId: scope.id,
         memberUserId: input.actorUserId,
         status: 'GENERATING',
+        ...(input.jobLease
+          ? {
+              updatedAt: input.generationRevision,
+              workspaceId: scope.workspaceId,
+              groupId: scope.groupId,
+              deletedAt: null,
+            }
+          : {}),
       },
       data: {
         status: 'READY_AI',
@@ -311,41 +371,74 @@ export class PrismaFortuneGenerationRepository {
       },
     });
     if (updated.count !== 1) return null;
-    const row = await this.db.fortuneReading.findFirst({
+    const row = await db.fortuneReading.findFirst({
       where: {
         id: input.readingId,
         serviceSettingId: scope.id,
         memberUserId: input.actorUserId,
       },
     });
-    return row ? fortuneReadingView(this.db, row) : null;
+    return row ? fortuneReadingView(db, row) : null;
   }
 
-  async fallbackAiGeneration(input: {
-    serviceSlug: string;
-    actorUserId: string;
-    readingId: string;
-    failureCode: string;
-  }): Promise<FortuneReadingView | null> {
-    const scope = await fortuneTarget(this.db, input.serviceSlug, input.actorUserId);
+  async fallbackAiGeneration(
+    input: Parameters<FortuneRepository['fallbackAiGeneration']>[0],
+  ): Promise<FortuneReadingView | null> {
+    if (input.jobLease)
+      return this.db.$transaction(async (tx) => {
+        if (
+          !input.generationRevision ||
+          !(await lockFortuneGenerationLease(
+            tx,
+            input.jobLease!,
+            input.actorUserId,
+            input.readingId,
+          ))
+        )
+          return null;
+        return this.saveFallback(input, tx);
+      });
+    return this.saveFallback(input);
+  }
+
+  private async saveFallback(
+    input: Parameters<FortuneRepository['fallbackAiGeneration']>[0],
+    db: PrismaClient | Prisma.TransactionClient = this.db,
+  ): Promise<FortuneReadingView | null> {
+    const scope = await fortuneTarget(db, input.serviceSlug, input.actorUserId);
     if (!scope) return null;
-    const updated = await this.db.fortuneReading.updateMany({
+    if (
+      input.jobLease &&
+      (scope.id !== input.jobLease.serviceSettingId ||
+        scope.workspaceId !== input.jobLease.workspaceId ||
+        scope.bunshinId !== input.jobLease.bunshinId)
+    )
+      return null;
+    const updated = await db.fortuneReading.updateMany({
       where: {
         id: input.readingId,
         serviceSettingId: scope.id,
         memberUserId: input.actorUserId,
         status: 'GENERATING',
+        ...(input.jobLease
+          ? {
+              updatedAt: input.generationRevision,
+              workspaceId: scope.workspaceId,
+              groupId: scope.groupId,
+              deletedAt: null,
+            }
+          : {}),
       },
       data: { status: 'READY_BASIC', failureCode: input.failureCode, modelName: null },
     });
     if (updated.count !== 1) return null;
-    const row = await this.db.fortuneReading.findFirst({
+    const row = await db.fortuneReading.findFirst({
       where: {
         id: input.readingId,
         serviceSettingId: scope.id,
         memberUserId: input.actorUserId,
       },
     });
-    return row ? fortuneReadingView(this.db, row) : null;
+    return row ? fortuneReadingView(db, row) : null;
   }
 }

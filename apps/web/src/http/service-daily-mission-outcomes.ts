@@ -4,7 +4,6 @@ import { RecordManualPost, RecordMissionFeedback } from '@bunshin/capability-soc
 import { ApplicationError } from '@bunshin/shared';
 import { requireSameOrigin } from '../auth/request-security';
 import { readBusinessOutcomes, writeBusinessOutcomes } from '../services/business-outcomes';
-import { resolvePublicServiceContext } from '../services/public-service';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
 import { missionActivityDto } from './mission-engagement';
 import { missionFeedbackDto, postRecordDto } from './mission-outcome';
@@ -14,6 +13,7 @@ import {
   feedbackSchema,
   postSchema,
   respond,
+  serviceDailyMissionMemberContext,
   serviceDailyMissionScope,
   uuidSchema,
 } from './service-daily-mission-http-core';
@@ -88,14 +88,19 @@ export function recordServiceBusinessOutcomeResponse(
     requireSameOrigin(request);
     const parsed = businessOutcomeSchema.safeParse(await body(request));
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
-    const service = await resolvePublicServiceContext(serviceSlug);
+    const { service, actor } = await serviceDailyMissionMemberContext(serviceSlug);
     const onboarding = readServiceOnboardingSettings(
       service.configuration.registration.onboardingConfig,
       service.configuration.registration.surveyConfig,
     );
     if (!onboarding.businessProfileEnabled)
       throw new ApplicationError('FORBIDDEN', 'business outcome reporting is not enabled');
-    const value = await serviceDailyMissionScope(serviceSlug, bunshinId);
+    const value = {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      bunshinId,
+      actorUserId: actor,
+    };
     const db = await import('@bunshin/database');
     const repository = new db.PrismaMissionOutcomeRepository();
     const post = await repository.getPost({

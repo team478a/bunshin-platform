@@ -1,7 +1,9 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { currentUserProvider } from '../../../../src/auth/current-user';
+import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
+import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
 import { isFortuneServicePackage } from '../../../../src/services/service-creation-templates';
 import { FortuneManual } from './fortune-manual';
 import { SennokuniManual } from './sennokuni-manual';
@@ -9,9 +11,14 @@ import { SennokuniManual } from './sennokuni-manual';
 export const dynamic = 'force-dynamic';
 const SENNOKUNI_SLUG = 'sennokuni-media';
 
-const manualService = cache(async (serviceSlug: string) => {
-  const service = await resolvePublicServiceContext(serviceSlug).catch(() => null);
-  if (!service) return null;
+const manualService = cache(async (serviceSlug: string, actorUserId: string | null) => {
+  let service;
+  try {
+    service = await resolveVisitorServiceContext(serviceSlug, actorUserId);
+  } catch (error) {
+    if (isRouteNotFound(error)) return null;
+    throw error;
+  }
   if (serviceSlug === SENNOKUNI_SLUG) return { service, kind: 'SENNOKUNI' as const };
   const db = await import('@bunshin/database');
   const hasFortuneSetting = await db.prisma.fortuneServiceSetting.findFirst({
@@ -29,7 +36,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const result = await manualService((await params).serviceSlug);
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  const result = await manualService((await params).serviceSlug, actor?.userId ?? null);
   if (!result) return { title: 'かんたんマニュアル' };
   return {
     title: `${result.service.configuration.displayName}｜かんたんマニュアル`,
@@ -45,7 +53,8 @@ export default async function ServiceManualPage({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }) {
-  const result = await manualService((await params).serviceSlug);
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  const result = await manualService((await params).serviceSlug, actor?.userId ?? null);
   if (!result) notFound();
   if (result.kind === 'SENNOKUNI') return <SennokuniManual />;
   return (

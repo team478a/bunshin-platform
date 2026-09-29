@@ -16,11 +16,12 @@ describe('program goals API and UI boundary', () => {
     expect(http).toContain('requireSameOrigin(request)');
     expect(http).toContain('currentUserProvider');
     expect(http).toContain('resolveManagedServiceContext');
-    expect(http).toContain('resolvePublicServiceContext');
+    expect(http).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(http).not.toContain('resolvePublicServiceContext');
   });
   it('scopes manager and member writes by workspace, service, enrollment, and membership', () => {
-    expect(http).toContain('workspaceId: publicService.workspaceId');
-    expect(http).toContain('groupId: publicService.serviceId');
+    expect(http).toContain('workspaceId: memberService.workspaceId');
+    expect(http).toContain('groupId: memberService.serviceId');
     expect(http).toContain('groupMembershipId: membership.id');
     expect(http).toContain('programEnrollmentId: enrollment.id');
   });

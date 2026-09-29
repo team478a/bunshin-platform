@@ -2,6 +2,35 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum AuthReturnAttemptMethod {
+  LINE
+  EMAIL
+}
+
+enum AuthReturnAttemptStage {
+  PENDING
+  CLAIMED
+  AUTHENTICATED
+  CONSUMED
+}
+
+model AuthReturnAttempt {
+  id                String                  @id @db.Uuid
+  proofHash         String                  @map("proof_hash") @db.Char(64)
+  method            AuthReturnAttemptMethod
+  stage             AuthReturnAttemptStage  @default(PENDING)
+  origin            String                  @db.VarChar(255)
+  returnPath        String?                 @map("return_path") @db.VarChar(2048)
+  pkceFlowId        String?                 @map("pkce_flow_id") @db.VarChar(64)
+  loginIdentityHash String?                 @map("login_identity_hash") @db.Char(64)
+  actorUserId       String?                 @map("actor_user_id") @db.Uuid
+  expiresAt         DateTime                @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("auth_return_attempts")
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -343,28 +372,45 @@ model ProgramOffering {
 }
 
 model ProgramEnrollment {
-  id                String                  @id @default(uuid()) @db.Uuid
-  workspaceId       String                  @map("workspace_id") @db.Uuid
-  groupId           String                  @map("group_id") @db.Uuid
-  groupMembershipId String                  @map("group_membership_id") @db.Uuid
-  serviceProgramId  String                  @map("service_program_id") @db.Uuid
-  programOfferingId String                  @map("program_offering_id") @db.Uuid
-  status            ProgramEnrollmentStatus @default(INVITED)
-  supportMode       ProgramSupportMode      @map("support_mode")
-  goalSnapshot      Json                    @map("goal_snapshot")
-  offeringSnapshot  Json                    @map("offering_snapshot")
-  invitedByUserId   String                  @map("invited_by_user_id") @db.Uuid
-  startsAt          DateTime?               @map("starts_at") @db.Timestamptz(3)
-  endsAt            DateTime?               @map("ends_at") @db.Timestamptz(3)
-  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  paidPurchase      ProgramPurchase?        @relation("ProgramPurchasePaidEnrollment")
+  id                String                      @id @default(uuid()) @db.Uuid
+  workspaceId       String                      @map("workspace_id") @db.Uuid
+  groupId           String                      @map("group_id") @db.Uuid
+  groupMembershipId String                      @map("group_membership_id") @db.Uuid
+  serviceProgramId  String                      @map("service_program_id") @db.Uuid
+  programOfferingId String                      @map("program_offering_id") @db.Uuid
+  status            ProgramEnrollmentStatus     @default(INVITED)
+  supportMode       ProgramSupportMode          @map("support_mode")
+  goalSnapshot      Json                        @map("goal_snapshot")
+  offeringSnapshot  Json                        @map("offering_snapshot")
+  invitedByUserId   String                      @map("invited_by_user_id") @db.Uuid
+  startsAt          DateTime?                   @map("starts_at") @db.Timestamptz(3)
+  endsAt            DateTime?                   @map("ends_at") @db.Timestamptz(3)
+  createdAt         DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  paidPurchase      ProgramPurchase?            @relation("ProgramPurchasePaidEnrollment")
+  trainingRetention TrainingDataRetentionState?
 
   @@unique([groupMembershipId, serviceProgramId])
   @@unique([workspaceId, groupId, id])
   @@unique([workspaceId, groupId, id, groupMembershipId])
   @@index([workspaceId, groupId, groupMembershipId, status])
   @@map("program_enrollments")
+}
+
+model TrainingDataRetentionState {
+  programEnrollmentId String            @id @map("program_enrollment_id") @db.Uuid
+  workspaceId         String            @map("workspace_id") @db.Uuid
+  groupId             String            @map("group_id") @db.Uuid
+  endedAt             DateTime?         @map("ended_at") @db.Timestamptz(3)
+  workRedactedAt      DateTime?         @map("work_redacted_at") @db.Timestamptz(3)
+  progressPurgedAt    DateTime?         @map("progress_purged_at") @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  enrollment          ProgramEnrollment @relation(fields: [workspaceId, groupId, programEnrollmentId], references: [workspaceId, groupId, id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, groupId, programEnrollmentId], map: "training_retention_scope_enrollment_key")
+  @@index([workspaceId, groupId], map: "training_retention_scope_idx")
+  @@map("training_data_retention_states")
 }
 
 model ProgramMissionAssignment {

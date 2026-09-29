@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
-import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
@@ -28,8 +28,7 @@ export async function generateMetadata({
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
-  const service = await resolvePublicServiceContext(serviceSlug).catch(() => null);
-  return { title: service ? `${service.configuration.displayName}｜活動・紹介` : '活動・紹介' };
+  return memberServiceMetadata(serviceSlug, '活動・紹介');
 }
 
 export default async function ServiceMemberActivityPage({

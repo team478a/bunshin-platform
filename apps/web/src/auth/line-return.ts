@@ -1,7 +1,45 @@
+import type { Route } from 'next';
+
 export const LINE_AUTH_RETURN_COOKIE = 'bunshin_line_auth_return';
 export const LINE_AUTH_RETURN_MAX_AGE_SECONDS = 10 * 60;
 
 const MAX_STATE_LENGTH = 2048;
+
+const serviceSlugPattern = '[a-z0-9]+(?:-[a-z0-9]+)*';
+const uuidPattern = '[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}';
+const servicePagePattern = new RegExp(
+  `^/s/${serviceSlugPattern}/(?:home|line|legal-consent|onboarding|bunshins(?:/new|/${uuidPattern}(?:/line)?)?|programs(?:/${uuidPattern}(?:/toolkit|/growth)?)?|today|activity|history|images|videos(?:/${uuidPattern})?|video-assets|settings|credits|commerce|roadmap|diagnosis|readings/${uuidPattern}|manual|help|tracking-link|90-day-report|manage(?:/(?:settings|members|legal|line|email|templates|campaigns|badges|points|credits|knowledge|characters|product-packs|external-tracking|referral-rewards|programs|program-goals|personalization|post-approvals|weekly-report|90-day-report|video-operations|video-deliveries|image-operations|training(?:/retention)?|fortune(?:/manual)?))?)$`,
+);
+
+export function serviceAuthLoginPath(returnTo: string): Route {
+  const safe = safeLineAuthReturnPath(returnTo);
+  return safe && serviceAuthReturnSlug(safe)
+    ? (`/login?returnTo=${encodeURIComponent(safe)}` as Route)
+    : '/login';
+}
+
+/** Navigation context only; destination pages must still authorize the actor. */
+export function serviceAuthReturnSlug(value: string | null | undefined): string | null {
+  const safe = safeLineAuthReturnPath(value);
+  if (!safe) return null;
+  const url = new URL(safe, 'https://bunshin.invalid');
+  return (
+    url.pathname.match(/^\/s\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/|$)/)?.[1] ??
+    (url.pathname === '/account' ? url.searchParams.get('service') : null)
+  );
+}
+
+export function requiresPlatformOnboarding(
+  registrationStatus: string | null | undefined,
+  returnTo: string | null | undefined,
+): boolean {
+  return (
+    registrationStatus !== 'COMPLETED' &&
+    !serviceAuthReturnSlug(returnTo) &&
+    !videoAuthReturnProjectId(returnTo) &&
+    !imageAuthReturnSampleId(returnTo)
+  );
+}
 
 export function videoAuthReturnProjectId(value: string | null | undefined): string | null {
   return (
@@ -34,6 +72,22 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
   try {
     const url = new URL(value, 'https://bunshin.invalid');
     if (url.origin !== 'https://bunshin.invalid' || url.hash) return null;
+    // Reject encoded separators, dot segments and other normalization aliases.
+    if (value.split('?')[0] !== url.pathname || url.pathname.includes('%')) return null;
+    if (url.pathname === '/account') {
+      const slug = url.searchParams.get('service');
+      if (
+        !slug ||
+        !new RegExp(`^${serviceSlugPattern}$`).test(slug) ||
+        url.searchParams.getAll('service').length !== 1 ||
+        [...url.searchParams.keys()].some((key) => key !== 'service')
+      )
+        return null;
+      return `/account?service=${slug}`;
+    }
+    if (servicePagePattern.test(url.pathname) && url.search === '') {
+      return url.pathname;
+    }
     if (videoAuthReturnProjectId(value)) return value;
     if (imageAuthReturnSampleId(value)) return value;
     if (/^\/groups\/invitations\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && url.search === '')
@@ -66,6 +120,8 @@ export function safeLineAuthReturnPath(value: string | null | undefined): string
       if ([...url.searchParams.keys()].some((key) => key !== 'ref' && key !== 'rc')) return null;
       const referralCode = url.searchParams.get('ref');
       const referralClickId = url.searchParams.get('rc');
+      if (url.searchParams.getAll('ref').length !== 1 || url.searchParams.getAll('rc').length > 1)
+        return null;
       if (referralCode === null || !/^[A-Z0-9]{6,80}$/.test(referralCode)) return null;
       if (
         referralClickId !== null &&

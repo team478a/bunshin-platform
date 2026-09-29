@@ -3,6 +3,7 @@ import type {
   ServiceNotificationPreferenceRepository,
 } from '@bunshin/application';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { latestServiceLegalDocuments } from './service-legal-latest';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -53,11 +54,9 @@ async function activeMembership(db: Db, input: { slug: string; actorUserId: stri
       effectiveAt: { lte: input.now },
     },
     orderBy: [{ type: 'asc' }, { version: 'desc' }],
-    select: { id: true, type: true },
+    select: { id: true, type: true, version: true },
   });
-  const requiredIds = [
-    ...new Map(documents.map((document) => [document.type, document.id])).values(),
-  ];
+  const requiredIds = latestServiceLegalDocuments(documents).map((document) => document.id);
   if (requiredIds.length > 0) {
     const accepted = await db.serviceLegalConsent.count({
       where: {

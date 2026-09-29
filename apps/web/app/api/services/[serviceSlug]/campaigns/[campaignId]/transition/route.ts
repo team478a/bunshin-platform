@@ -1,11 +1,12 @@
 import { transitionCampaignResponse } from '../../../../../../../src/http/campaigns';
-import { resolvePublicServiceContext } from '../../../../../../../src/services/public-service';
+import { withServiceContentContext } from '../../../../../../../src/http/service-content-context';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ serviceSlug: string; campaignId: string }> },
 ) {
   const { serviceSlug, campaignId } = await params;
-  const service = await resolvePublicServiceContext(serviceSlug);
-  return transitionCampaignResponse(request, service.workspaceId, campaignId, service.serviceId);
+  return withServiceContentContext(request, serviceSlug, (service) =>
+    transitionCampaignResponse(request, service.workspaceId, campaignId, service.serviceId),
+  );
 }

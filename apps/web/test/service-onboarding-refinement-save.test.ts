@@ -10,7 +10,7 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () =>
     Promise.resolve({ getCurrentUser: () => Promise.resolve({ userId: 'user-a' }) }),
 }));
-vi.mock('../src/services/public-service', () => ({ resolvePublicServiceContext: state.service }));
+vi.mock('../src/services/public-service', () => ({ resolveMemberServiceContext: state.service }));
 vi.mock('@bunshin/application', () => ({
   ServiceReferralRewardService: class {
     completeMilestone = state.reward;

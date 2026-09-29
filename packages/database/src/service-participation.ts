@@ -16,6 +16,18 @@ export class PrismaServiceParticipationRepository implements ServiceParticipatio
     return this.registration.findView(input);
   }
 
+  findLegalConsentView(
+    input: Parameters<ServiceParticipationRepository['findLegalConsentView']>[0],
+  ) {
+    return this.membership.findLegalConsentView(input);
+  }
+
+  acceptLegalDocuments(
+    input: Parameters<ServiceParticipationRepository['acceptLegalDocuments']>[0],
+  ) {
+    return this.membership.acceptLegalDocuments(input);
+  }
+
   request(input: Parameters<ServiceParticipationRepository['request']>[0]) {
     return this.registration.request(input);
   }

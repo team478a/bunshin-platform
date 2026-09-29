@@ -1,6 +1,225 @@
 # BUNSHIN Platform Decision Log
 
+## D-160: 専用URL・外部計測のService管理APIは管理権限で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-159後の残存Public Resolver監査）
+- Service配下の専用URL/外部計測管理APIは、管理画面と同じ認証済み本人のACTIVEな`ADMINISTRATION`権限からWorkspace/Serviceを解決する。非公開Serviceの管理者も操作でき、匿名・他Service・権限不足を拒否する。
+- 下層のGroup ID照合、RepositoryのService限定とMANAGER権限、同一Origin、URL/CSV/結果Tokenの既存検証を維持する。Service外の成果受信Webhookと公開登録入口は変更しない。
+- 不存在・権限不足と予期せぬDB障害を区別し、API失敗応答をprivate/no-storeとする。設定、DB schema、本番データ、Provider呼出は変更しない。
+
+## D-159: Serviceの商品パックとCampaign操作は公開状態でなく内容編集権限で判定する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-158後の残存Public Resolver監査）
+- 管理画面で扱う商品パックとCampaignの5 APIは、認証済み本人のACTIVEなService所属と`CONTENT`権限からWorkspace/Groupを解決する。非公開Serviceの権限者も操作でき、匿名・他Service・権限不足は拒否する。
+- Request内のGroup IDやPack/Campaign IDは既存のService/Repository境界で再検証する。管理画面の役割、参加者向け公開入口、商品/参加同意、Provider、DB schema、本番設定は変更しない。
+- 不存在・権限不足と予期せぬDB障害を区別し、APIエラーをprivate/no-storeで返す。
+
+## D-158: 参加者専用画面のMetadataも本人のMember Serviceから解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-155後に残った非公開Serviceの汎用タイトル）
+- 参加者専用9画面のページタイトルは認証済み本人のMember Serviceから表示名を取得する。匿名・所属外・停止中にはサービス名を返さず汎用タイトルとする。公開登録入口だけPublic ServiceのMetadataを維持する。
+- 本文の認可は既存のMember判定を維持し、Metadataをアクセス許可として用いない。所属不存在だけ汎用タイトルへ戻し、DB等の未知障害は隠さない。User IDを含む認可結果をSlugだけでcacheしない。
+- 本作業でサービスのVisibility、参加・同意フロー、Provider、DB schema、本番データを変更しない。
+
+## D-157: Service法務文書の再同意を参加申請から分離する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-156の利用停止からの本人復帰導線）
+- 既存参加者の最新公開版への再同意は、本人のACTIVE Membershipを維持したまま、Service/Workspace/本人をDBで再検証して追記する。参加申請を再実行せず、承認状態・紹介・登録メール・商品自動登録を変更しない。
+- 送信時に有効なtype別最大versionの文書ID集合と完全一致した場合だけ保存する。旧版同意は監査履歴として保持し、他Serviceへ流用しない。非公開Serviceの既存参加者も同じ本人用導線を使う。
+- 現行の利用/通知判定が要求する公開文書はTERMS、PRIVACY、COMMERCE_DISCLOSUREを含むため、参加画面と再同意画面も同じ集合を提示する。法務本文・公開条件を変更しない。法務上の同意対象の再定義は別判断とする。
+- 本番データの移行、本人への一斉送信、デプロイは含めない。リリース前に旧版同意者の件数・再同意導線を読み取り専用で確認する。
+
+## D-156: Service法務文書の表示・参加・利用・通知同意は同じ最新有効版を判定する
+
+- 日付: 2026-09-30
+- 状態: Accepted（PR #1019マージ後に確認した版選択不一致の修正）
+- Service内でPUBLISHEDかつ有効日時以前の文書だけを対象とし、文書typeごとに最大versionを選ぶ。DB返却順序やMapの後勝ちへ依存しない。公開表示、参加時の同意ID、利用開始記録、通知設定の同意確認の4経路を同じ選択処理に合わせる。
+- 新版が有効になった後は旧版だけの同意で参加/利用/通知設定の条件を満たさない。申請時はTransaction内で最新IDを再確認し、古い画面からの同意IDを拒否する。旧同意記録を消さず、既存の再同意・運用導線を維持する。
+- Workspace/Group/本人/所属・公開登録条件と既存の法務文書status/有効日時を維持する。非公開Serviceの既存参加者向け文書閲覧も最大versionと一致させる。法務本文、公開/廃止運用、Provider、DB schema/migration、本番データは変更しない。実DBの複数版/境界とmockテストで検証する。
+
+## D-155: 閲覧用のヘルプ・マニュアル・法務文書は公開訪問者と既存参加者を分ける
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の画面監査とPR #1018のマージ確認）
+- 公開Serviceは匿名/未参加のログイン済みUserにも既存の閲覧入口を維持する。非公開ServiceはACTIVEな既存参加者だけがヘルプ・対応するマニュアル・公開済み法務文書を閲覧できる。まず本人のMember Serviceを確認し、所属拒否に限りPublic Serviceへ解決し直す。予期しない障害やProvider障害は公開fallbackで隠さない。
+- マニュアルのService取得はUserごとに分離し、同じSlugの異なるUserへcache結果を暗黙共有しない。匿名の非公開閲覧は許可しない。
+- 非公開Serviceの法務文書はService解決のWorkspace/Groupと文書type、PUBLISHED/有効日時に限定して取得する。公開Serviceの既存参加同意・法務閲覧ロジックは変更しない。DRAFT/将来版や他Service文書を返さない。
+- 公開登録・参加申請・法務同意の承認条件、管理権限、設定、DB schema/migration、本番データ、実LINE/AIを変更しない。その他画面のMetadataの公開名解決は今回のアクセス権修正から分けて監査する。
+
+## D-154: Program目標の管理操作と本人操作は独立したService権限で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1017のマージ確認）
+- 支援方針/目標候補の管理操作は既存ADMINISTRATION Resolverだけを使い、公開Service/参加者Resolverを前提にしない。本人の希望/目標はMember Serviceだけを使い、管理者権限へのfallbackを追加しない。非公開Serviceの既存参加者を対象にし、利用期間・ACTIVE Workspace/Group/本人所属を維持する。
+- Enrollment/Program/候補/方針/監査/保存はサーバー解決したWorkspace/Serviceへ限定する。本人Membership/ACTIVE Enrollment、受講ロック後の再確認、AI研修だけの期間条件、支援方法選択の許可、方針版管理と過去目標の保持を維持する。
+- 入力型と許可フィールドは広げず、Schema不一致/壊れたJSONは400へ明示変換する。未知キーは従来通り無視し、所有Scopeとして利用しない。既存管理ResolverのSERVICE_NOT_FOUNDだけ404へ変換し、未知障害500を握りつぶさない。
+- 管理/本人フローの実行テストを追加する。公開入口/画面、DB schema/migration、設定、本番データ、実AI/LINE、期限処理の本番有効化を変更しない。既存の版競合や方針/候補変更の新しい排他保証は追加しない。
+
+## D-153: 動画配信の参加者操作はMember Serviceと利用可能状態を先に確認する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1016のマージ確認）
+- 閲覧/採用/辞退/自己申告投稿とダウンロードは認証後のMember Service解決へ合わせ、利用期間・ACTIVE Workspace/Group/本人所属と既存Repositoryの受信者/状態条件を維持する。不正Delivery IDは400へ明示変換する。
+- 自己申告投稿/ダウンロードでは取得済みDeliveryの期限切れ・EXPIRED/REVOKEDを関連投稿/Storage操作より先に拒否する。本人の未取消Project取得失敗も投稿記録前に拒否する。POSTED再送、採用必須、SOCIAL能力、元Missionと紹介Milestone、元Missionなし手動動画を維持する。新しい排他保証は追加しない。
+- ダウンロードは同じWorkspace/Service/本人/Project/Renderの未削除・期限内SUCCEEDED行と正本形式のStorage Keyを照合し、署名URL準備後にDOWNLOADEDを記録する。準備失敗や拒否時にURLを返さず、失敗を成功履歴にしない。履歴は実端末保存の確認ではなく引渡し準備を表す。
+- 全例外を404にするdownload catchを既存APIエラー変換へ合わせ、拒否/不存在/未知障害を区別する。本人用成功/失敗/署名URL redirectはprivate no-store、redirectはno-referrerとする。
+- 公開入口・専用LINE OAuth/送信・通知Snapshot/再試行・DB schema/migration・設定・本番データを変更しない。Storageはテストでmockし実署名URLを発行しない。
+
+## D-152: 本人の商品紹介操作もMember Service境界で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1015のマージ確認）
+- 本人の商品プロフィール保存/非表示、コピー/自己申告投稿、紹介文生成は認証後のMember Service解決へ統一する。非公開Serviceの既存参加者を許可し、利用期間・ACTIVE Workspace/Group/本人所属は維持する。
+- 入力Schemaは広げず不一致/不正な非表示IDを400へ明示変換する。Workspace/Group/操作者はサーバーで解決し、本人の商品・分身・活動・ACTIVE MEMBER URLと公式商品の自Service再照合/同意/公開期間を維持する。
+- 生成入力の本人設定・公式商品、URLのProvider非送信、承認URL/#PR/必須表記/禁止表現/媒体上限、組織Quota、モデル/Prompt版/Token/原価/時間/成否の記録、活動の重複防止は維持する。生成Quotaへ自ServiceのgroupIdも渡し、既存Service上限を迂回しない。設定値やQuota実装は変更せず、実Providerは呼ばずテストでmockする。
+- 動画通知、画面の公開判定追加監査、DB schema/migration、設定、本番データ、匿名公開入口と実AI/LINE/Storage呼出は本作業に含めない。
+
+## D-151: 初回回答・紹介コード・本人専用URLは参加者のServiceで解決する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装とPR #1014のマージ確認）
+- 初回回答保存、紹介コード発行、本人の代理店URL保存は認証後にMember Serviceを解決する。利用期間・ACTIVE Workspace/Group/本人所属を維持し、非公開Serviceの既存参加者を対象にする。
+- 初回質問、businessProfileEnabledとFULL/MINIMAL、業種検証、自Service所属への保存、既存投稿パートナー作成と紹介Milestoneを維持する。千ノ国へ共通業種入力を追加せず、ハッシー等の事業プロフィール要件を外さない。
+- 紹介コードの設定・所属・停止状態・安定キー・重複防止、代理店URLの自Service Repository/許可ドメイン検証とDRAFT保存を維持する。紹介先の匿名登録は公開条件のままにし、非公開Serviceへの新規参加を許可したとは扱わない。
+- 紹介コード解決で全例外をNOT_FOUNDへ変換するcatchを除去し、Member ResolverのApplicationErrorと未知障害を既存APIエラー変換へ渡す。障害を参加不可と誤報しない。
+- 初回回答/代理店URLの厳格Schema不一致をVALIDATION_ERROR（400）へ明示変換する。旧parseAsyncの例外が500になっていたため、許可フィールドや型を広げずsafeParseAsyncで拒否を保持する。
+- 商品紹介・動画通知・画面の追加監査は別作業。DB変更、公開登録、設定、本番データ、Provider/通知呼出は行わない。
+
+## D-150: 投稿操作・成果・日々の記録は本人のMember Service境界で認可する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装と前段PRのマージ確認）
+- 投稿採否/活動/自己申告投稿/評価、共通Daily Mission操作Scope、業務成果、SNS数字保存/画像読取、日々のメモ/写真記録は認証済みUserを先に取得し、既存Member Service解決を使う。非公開Serviceの既存ACTIVE参加者を許可し、利用期間・Workspace/Group/所属・本人所有・既存参加同意条件を維持する。
+- 業務成果の設定と操作Scopeは同じMember Service解決結果から作り、別の匿名公開判定や再取得した操作者を混ぜない。businessProfileEnabledの機能制限は維持し、千ノ国等へ業種/成果項目を強制しない。
+- 既存SOCIAL能力、Mission/投稿者照合、Schema/同一Origin、再送キー、使用量・紹介Milestone、写真権利/Storage条件と自Service知識・生成/VariantのPolicyは変更しない。実AI/Storage/LINE呼出はせずテストではPortをmockする。
+- 商品紹介・紹介リンク・初回登録・動画通知など別機能の残る公開判定は本PRに混ぜない。個人用API、公開登録/Metadata、DB schema/migration、設定、本番データを変更しない。
+
+## D-149: SNS設定・発信方針・投稿テーマ・週間計画は参加者本人のサービスで解決する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装と前段PRのマージ確認）
+- SNS設定、アカウント発信方針、投稿テーマ、週間計画の各HTTP APIは認証済みUserを先に確認し、既存Member Service解決を使う。非公開Serviceの既存ACTIVE参加者を許可し、利用期間・Workspace/Group/所属の判定は維持する。
+- Workspace/Group/操作者はサーバーで解決し、既存RepositoryのService/Bunshin本人所有条件とSOCIAL能力確認、入力Schema、同一Origin判定を維持する。Service固有の業種・初回回答を共通化しない。
+- 生成時の自Service公式知識、参加Campaign、用語変換、業務投稿配分、Quota/使用量/冪等キーと確定済み計画のテーマ保護を変更しない。実Provider呼出はせず、テストでは生成Portをmockする。
+- 投稿採否・完了・成果/振り返りのAPIは別PRとする。公開登録・Metadata、個人用操作、DB schema/migration、設定、本番データ、LINE送信は変更しない。
+
+## D-148: 投稿パートナー操作は公開状態ではなく参加者本人のサービス境界で認可する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の機能不足修正をユーザーが承認）
+- サービス所属投稿パートナーの一覧・作成・取得・編集・停止と初回回答からの候補提案は、認証後に既存Member Service解決を使う。非公開サービスの既存ACTIVE参加者も操作できるようにし、利用期間とWorkspace/Group/所属の検証を維持する。公開入口・匿名登録・Metadataの公開判定は変更しない。
+- 候補提案は本人の当該Service所属から初回回答・事業プロフィールを再取得し、他Serviceや共通プロフィールへ切り替えない。Providerの呼出・fallback仕様は変更しない。
+- 一覧/取得の既存本人所有条件に合わせ、サービス所属Bunshinの編集/停止にも本人所有条件を追加する。Workspace OWNER/ADMINでも参加者向け操作で他人のサービス所属Bunshinを変更できない。個人用Bunshinの既存管理権限は維持する。
+- SNS設定・週間計画・投稿採否/完了/成果APIは別PRとする。DB schema/migration、設定、本番データ、実AI呼出、LINE送信は変更しない。
+
+## D-147: 専用LINE再連携は試行別proofと既存参加者のサービス境界を使う
+
+- 日付: 2026-09-29
+- 状態: Accepted（監査で確認した2件の修正をユーザーが承認）
+- 専用LINEの新規接続はランダムstateのSHA-256を名前に含む試行別HttpOnly Cookieへ分離する。10分の期限、PKCE、nonce、本人/Configuration照合、DB単回CASを維持する。別Service・同じServiceの再試行・古い取消Callbackが他試行のCookieを上書き/削除しない。
+- Cookieは同じブラウザで最大4試行とし、上限時は既存試行を消さず開始を拒否する。Callbackでは一致した自試行のCookieだけを除去する。旧共通Cookieは一致したstateだけ互換検証に使い、新規発行も削除もせず既存10分期限で失効させる。
+- 接続ページ、開始、Callback、既存動画通知再試行は公開Slug解決でなく本人のACTIVE MembershipによるService解決を使う。非公開サービスの既存参加者を許可し、利用期間・Workspace/Group・Bunshin本人所有・参加同意・専用LINE設定の検証は維持する。匿名参加、他Service参照、管理権限の拡大はしない。
+- DB schema/migration、共通ログインの有効化、業種/初回質問、設定、本番データ、Provider実呼出、LINE送信は変更しない。
+
+## D-146: 不明な過去の研修終了日時は管理者の個別確認でのみ確定する
+
+- 日付: 2026-09-29
+- 状態: Accepted（管理者による証跡確認・日時指定・理由/監査付き操作をユーザーが承認）
+- 既存の保持期限ページに個別操作を分けて表示し、アーカイブProgram/退会済み参加者も所有境界が有効なら扱う。未確定対象100受講/1000Programを超えた一覧は部分表示せず拒否する。対象確認用の表示名・Program名・受講IDだけを取得し、メール・回答本文などは一覧にも取得しない。
+- 自ServiceのACTIVEなSERVICE_OWNER/ADMINをDBでも再検証し、所有関係が有効なAI_TRAINING_V1の終了/取消/期限終了済み受講1件だけを扱う。既存の確定日時、EXPIREDの既知予定終了日時、処理済み保持期限印は上書きしない。自動推定・既定日時・一括補完は追加しない。
+- 管理者が証跡を確認して終了日時（日本時間）と個人情報を含まない根拠/理由を指定する。未来、既知開始より前、不正な日時は拒否。Previewは状態・候補日時・保持期限への影響だけを返し、回答/評価/仕事情報/点数/Toolkit本文を取得しない。
+- 本人/Scope/受講Revision/保持期限状態/候補日時/理由/期限判定を束ねた確認Revisionを使う。共通受講ロックとSerializable transactionで再検証し、未確定日時だけを保存して最小Program監査へ操作者・理由・日時・Operation IDを記録する。再開/別操作/候補変更後の古い確認、他Service/本人への差替えは拒否。同一操作再送は二重保存しない。
+- 受講状態・予定期間・学習情報・契約/課金・Jobは変更しない。終了日時は既存の保持期限起算日に使うが、本操作で削除・通知・定期実行・本番保持期限処理の停止解除は行わない。Schemaは既存保持期限記録/Program監査を利用し、migration追加なし。
+
+## D-145: 占いAIは標準結果を維持した非同期Jobと試行単位の再試行へ分離する
+
+- 日付: 2026-09-29
+- 状態: Accepted（不足機能の実装依頼）
+- 同時投入のDB重複防止は`createMany(skipDuplicates: true)`による原子的な挿入と既存Jobの再取得で行う。空updateのPrisma upsertは同時insertでP2002となるため使わない。既存Jobの本人/Workspace/Bunshin/用途の照合とReadingのCASは維持し、重複時にJobを更新・再開しない。
+- 同じService/本人/日付のカードと承認済み標準結果を維持し、AIだけを共通Jobへ投入する。JobとGENERATINGへの変更は同じTransactionで確定し、Reading固有の冪等キーで重複投入・最終失敗後の自動再生成を防ぐ。Jobへ本文・Memoryを複製しない。
+- WorkerはWorkspace/Service/本人/Bunshin/能力、参加同意、未削除、現在のJob leaseと試行番号を再検証する。完了・fallbackにもJob行ロックとReading更新Revisionを用い、期限切れ実行・削除・復旧後の上書きを拒否する。
+- timeout/network、429、5xxのみ最大3回・既存Backoffで再試行する。設定/権限不備、その他HTTPエラー、空・不正・危険な出力は再試行せず標準結果へ戻す。各実試行で使用量・原価・Quotaのキーを分ける。Provider response本文や例外・秘密値を診断へ保存しない。
+- 既存10分中断復旧は有効な待機/再試行/lease付きJobを優先する。Jobが終了・消失して中断したReadingだけを安全に復旧する。Worker停止時も標準本文を表示できる。
+- `FORTUNE_ASYNC_GENERATION_ENABLED=true`で新規投入を有効化する。無効化後も既存Jobは安全に処理する。既存同期方式を維持し、本番設定、実AI呼出、LINE送信、過去失敗の一括再投入は本作業では行わない。既存Job schemaを利用し、DB schema変更は不要。
+
+## D-144: 認証復帰を試行単位の本人確認・単回記録へ分離する
+
+- 日付: 2026-09-29
+- 状態: Accepted（複数Service同時ログインの混在防止依頼）
+- 認証試行ごとにランダムID、10分のHttpOnly browser proof、RLS有効なサーバー記録を作る。戻り先・origin・LINE/EMAIL・段階を対応付け、Callbackのclaimと復帰のconsumeはCASで一度だけ許可する。法務同意は認証済みUserに束ね、別Userのセッションへ変わった場合は拒否する。
+- LINEのPKCEは既存SDKのflowId指定で自試行のverifierだけを使う。メールは送信先の短期hashと検証済みemailを照合する。検証中のSupabase Cookieはbufferし、成功・本人照合後にのみcommitする。既存の共有User sessionをService別Identityへ分割しない。
+- Cookie/URLで試行が確認できない場合に、別試行や共通戻り先Cookieを借りない。期限切れ・別ブラウザ・重複Callback・本人変更は再ログインを案内する。戻り先は認可ではなく、遷移先のWorkspace/Group/本人/役割の既存検証を維持する。
+- 既存ログインを壊さないため開始の有効化は`AUTH_RETURN_ATTEMPTS_ENABLED=true`の明示設定を必要とする。Supabase Redirect URL allowlistとemail templateで試行IDを伝達する確認後に有効化する。設定変更・認証メール送信・本番OAuth操作は今回行わない。既に始めた試行の復帰は停止設定後も厳密に検証する。
+- 試行記録は認証前の一時情報でありテナント業務データを保存しない。短期に期限切れ行を削除する。認証token、code、verifier、proof、email、戻り先のsigned tokenをログに出さない。
+
+## D-143: サービス認証復帰は共通登録から分離し、遷移先でサービス認可を検証する
+
+- 日付: 2026-09-29
+- 状態: Accepted（LINE再連携と類似ケースの分離依頼）
+- サービスの入口・参加・ホーム・LINE・初期設定・参加者/管理画面・サービス別アカウントへ認証復帰するとき、User共通の業種プロフィールを要求しない。共通法務同意は維持し、遷移先で既存Workspace/Group/本人/役割の認可とサービス固有の初期設定を検証する。URLの許可はデータアクセス権を付与しない。
+- 戻り先は既存ページの厳密な許可リストで保持する。外部URL、正規化で別サービスへ変わるパス、任意query、未知の末尾を拒否する。認証開始で戻り先がない場合は古いCookieを消し、別プロジェクトへ誤復帰しない。
+- 共通登録へサービスの戻り先を渡した旧リンクは当該サービスへ戻す。サービス経由のプロフィールを共通Userへ書き込ませない。ハッシーのServiceMemberBusinessProfileなど既存サービス固有の設定は変更しない。画像閲覧も動画と同様、共通業種登録を要求しない。
+- 設定変更、LINE送信、本番OAuth操作、既存データの移行・削除は行わない。
+
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
+
+## D-142: 購入に紐づかないAI研修の期限終了はService限定の冪等バッチで確定する
+
+- 日付: 2026-09-29
+- 状態: Accepted（ユーザー依頼による次の不足機能実装）
+- 明示Workspace/Service内のAI_TRAINING_V1で、購入に紐づかないACTIVE受講の開始/終了日時が既知・順序正常、endsAtが処理時刻以下の場合だけEXPIREDへ移す。期限なし、開始日不明、INVITED/終了済み、有料購入、別Module/Serviceは変更しない。休止/退会後も所有境界が有効なら期限終了できる。
+- 最大100受講と101件目を確認する。共通受講ロック、所有境界とModuleの再検証、候補更新時刻/終了日時のCASを使い、状態変更・評価Job停止・PENDING回答FAILED化・システム監査EventをSerializable transactionで確定する。競合は件数で明示し、未知DBエラーを成功にしない。途中失敗時の既に確定した受講は再実行で二重変更しない。
+- 手動Lifecycleと自動期限終了で評価停止処理を共用する。本文・点数・進捗・Toolkit・契約Snapshot、startsAt/endsAtは保持する。既存の終了状態遷移Triggerが確定終了日を記録する。過去の終了済み行や不明終了日を補完しない。
+- 自動終了はactorUserIdなし・source SYSTEMの固定理由/状態/日付だけのEventで監査し、本人操作と誤帰属させない。この最小Eventは学習データの本人削除/保持期限処理とそのPreviewから除外し、既存の最小監査保持方針を維持する。学習本文を監査へ複製しない。
+- Cron Secret認証のPOST内部実行口を追加し、明示Scopeを厳格に検証する。development/stagingだけ実行でき、production/previewは503停止。定期実行登録、既存有料期限処理変更、Provider・通知・課金・本番削除/停止解除は行わない。
+
+## D-141: OEM決済CSVは日本時間の受付期間と全件取得の成否を明示する
+
+- 日付: 2026-09-29
+- 状態: Accepted（不足機能の洗い出し・実装依頼の第一作業単位）
+- 受付日時createdAtを日本時間の開始日以上・終了日の翌日未満で絞る。from/toは双方指定または双方未指定。存在しない日付、逆順、重複/未知パラメータを拒否する。入金日・返金日による会計集計とは扱わない。
+- Workspace OWNER/ADMINまたは既存Platform Adminの認可、Organization ACTIVE、サービス名のWorkspace境界を維持する。CSV列、BOM、数式対策、金額計算を変更しない。
+- 最大10,000件に対して10,001件目を確認し、超過時は413と固定の期間絞込案内を返す。部分CSVは返さない。同期Exportの上限を撤廃したとは扱わない。
+- 画面に開始/終了日、期間の意味、件数上限、失敗時の案内を追加する。未指定の全期間取得も上限内で維持する。DB変更、課金、Provider呼出、本番設定変更は含めない。
+
+## D-140: 研修管理画面は利用期間と登録状態を分ける
+
+- 日付: 2026-09-29
+- 状態: Accepted（ユーザー依頼による管理画面の期限表示統合）
+- 1回のサーバー確認時刻で、ACTIVEの利用可否を開始日時以下・終了日時未満として表示判定する。期限後は「期限終了（状態未更新）」、開始前/開始日時なしも区別し、受講中・継続率・声かけ集計から除く。登録状態、履歴・学習成果の集計は保持する。
+- Lifecycle操作には登録状態とupdatedAtをそのまま渡し、見かけの期限終了をEXPIREDへ書き換えて送信しない。管理者の明示的終了/取消は既存確認・監査を維持する。再開・延長を追加しない。
+- 予定終了日時と確定終了日時を分け、ACTIVEの期限超過から確定終了日・保持期限起算日を補完しない。画面閲覧で状態更新・削除・通知・課金や設定変更を行わない。
+
+## D-139: AI研修の学習操作は状態だけでなく受講期間を確認する
+
+- 日付: 2026-09-29
+- 状態: Accepted（次の実装タスクとして期間判定の差分を修正）
+- 学習操作はACTIVEかつ開始日時以下・終了日時未満のサーバー時刻に限定する。終了日時なしは期間上限なし。終了日時と同時刻は期限後として扱う。
+- Runtime、初期設定、回答、学習操作、目標/設定変更、評価QueueとWorkerを同じDB期間条件へ揃える。書込は受講ロック取得後に現在時刻で再確認し、期限内に始めたAI評価も保存前に確認する。
+- ACTIVEのまま終了予定日を過ぎた本人画面は期限終了案内を表示し、Runtimeを起動しない。これは利用可否の表示であり、DB状態更新や終了日記録・保持期限起算日の確定ではない。
+- Toolkit/本人Exportの既存権限を維持する。契約延長、自動終了Cron、課金、通知、削除、過去終了日の補完、Provider実呼出や本番操作は含めない。
+
+## D-138: 保持期限の管理画面は自Serviceの集計だけを読み取り専用で示す
+
+- 日付: 2026-09-29
+- 状態: Accepted（ユーザー依頼によるPreflightの管理画面接続）
+- SERVICE_OWNER/ADMINだけにService Slugから解決した保持期限集計を表示する。Repositoryも同じ読み取りTransactionで活動中の管理者・User・Workspace・Serviceを再検証する。
+- 既存Preflightの期限判定・件数上限・所有境界検証を共用する。本文・評価・仕事情報・点数・Toolkit本文・個人名・監査理由を表示取得せず、カテゴリ件数と終了日/所有境界の判定保留件数だけを示す。
+- 最大100受講/1000Programを超えた場合やDB障害時は部分集計・0件成功に置き換えない。確認時刻、情報カテゴリ間の重複、Toolkit保持、起算日を推定しないことを明示する。
+- 終了日補完、削除、Cron登録、Provider、通知、本番実行APIの停止解除は含めない。内部Cron Secretによる既存Preflight APIの認証契約は変更しない。
+
+## D-137: 研修管理集計はDBで評価自由文を除外する
+
+- 日付: 2026-09-29
+- 状態: Accepted（既存Privacy方針との実装差分修正）
+- 管理画面のREADY回答取得では評価JSON全体を読み込まない。DBでPASS/REVIEWと既知6技能の0〜100の数値だけに射影し、回答本文・評価自由文・未知フィールドを返さない。
+- DBの同一Queryで活動中のSERVICE_OWNER/ADMIN、Workspace/Service、本人所属と回答User、AI研修Program、対象Enrollmentを再検証する。CONTENT_EDITORや他サービス管理者は対象外。
+- 個人の弱点欄はProfileの復習必要フラグ等から固定文言を表示し、AI評価のweaknessesを表示しない。既存のPASS/REVIEW・技能改善集計と本人の評価閲覧は維持する。
+- DB変更・Migration、管理者への個人回答閲覧許可、Provider呼出、本番データ変更は行わない。
 
 ## D-104: 販売可能な共通会員境界は既存Service Membershipを拡張する
 
@@ -2978,3 +3197,46 @@
 - 削除と全Training書込は、同一Transaction内でWorkspace/Group/Enrollment固有の行ロックを最初に取得する。古いRuntime CandidateはProfileの更新日時を再検証する。評価Workerは削除後に回答が存在しなければ評価・進捗を保存しない。
 - 評価Jobは本人・Service・Enrollment・回答参照を限定してキャンセルし、本文を含まない削除Revision・件数だけを監査へ記録する。再送は同じRevisionなら冪等に成功する。Providerへ送信済みの処理を撤回する保証はしない。
 - Backup、既に端末へ保存したExport、外部Provider、契約・費用記録の消去は本操作の対象外と画面に明示する。自動保持期限は後続PRであり、本PRは本番の一括消去を行わない。
+
+## D-133: AI研修の保持期限は非破壊Preflightで対象と起算日の不足を確認する
+
+- 日付: 2026-09-28
+- 状態: Accepted（D-131の保持期限実装の事前検証）
+
+- 最初のPRは期限判定と読み取り専用の対象集計に限定する。削除API、定期実行登録、既存データへの期限設定は行わない。
+- 回答・評価は回答作成日時から90日。仕事情報は確定した終了日から90日、進捗・点数は暦年の1年後（2月29日は翌年2月末）を期限とする。期限時刻ちょうどから対象とする。
+- `EXPIRED`で過去の`endsAt`がある場合のみ期限終了日として採用する。`COMPLETED`/`CANCELLED`の`endsAt`や`updatedAt`を実際の終了日時と推定しない。起算日未確定は判定保留として集計する。
+- Cron Secretによる認証を必須とし、Workspace/Groupを明示したPOSTだけで集計する。AI研修Programと同一Scopeの参加者所有境界を再検証する。最大100 Enrollment、1000 Programを超えた場合は部分成功を返さない。
+- 本文、評価、仕事情報、点数、Toolkit本文は取得せず、件数だけを返す。明示保存Toolkitは対象から除外する。Backup/Provider/端末Export、契約・費用・監査の消去を保証しない。
+- 実削除は別PRで、終了日時の確定方法、評価Jobとの競合防止、保存Toolkit維持、監査、停止条件を実装・確認してから接続する。本Preflightを自動削除の稼働済み証拠にしない。
+
+## D-134: AI研修の期限処理は終了記録・確認Revision・受講排他を用い、本番では停止する
+
+- 日付: 2026-09-28
+- 状態: Accepted（D-131、D-133の後続実装）
+
+- AI研修専用のRetention Stateを追加する。今後の受講状態の終了への変更時にDBで終了日を記録し、再開時は終了日と期限処理済み印をリセットする。過去の完了/取消日時はMigrationで推測・補完しない。EXPIREDの確定した過去endsAtは既存方針通り利用できる。
+- 回答90日で本文・評価・回答由来Eventを削除し、未完了課題と評価Jobを停止する。本人が明示保存したToolkitとその保存Eventは保持する。元の回答がなくてもToolkitは読める。
+- 終了90日で仕事Profileの職種・仕事Context・用途・課題・希望Topic、目標Snapshot・自由文・課題表示Snapshot・活動metadataを消去する。集計点数・進捗は1年まで保持する。契約Snapshotと監査の存在は保持し、参加監査のgoalSnapshotだけを除去する。
+- 終了1年でProfile・進捗・課題・目標・Preference・活動履歴を削除する。Toolkit本体は削除しない。新しい回答は自分の90日期限まで保持し、遅延評価は終了状態を再確認して確定しない。
+- SUPER_ADMIN本人・same-origin POST・明示Scope・確認文字列・対象Revisionを必須とする。DBでも管理者と所有境界を検証する。対象一覧は2000件を上限にし、確認後の変更は409、超過は413で拒否する。実行と既存Training書込は同じEnrollmentロックを取る。再送は確認Revision監査により冪等にする。
+- HTTP実行はdevelopment/stagingだけ許可し、production/その他は停止する。Cron登録、Provider呼出、LINE送信、本番有効化、過去行の一括消去は含めない。本番有効化には別途対象確認・停止/復旧手順・運営承認が必要。
+
+## D-135: AI研修の終了・取消・再開はサービス管理者の確認操作で確定する
+
+- 日付: 2026-09-29
+- 状態: Accepted（ユーザー依頼によるD-134の運用導線）
+- SERVICE_OWNER/ADMIN本人をDBでも再検証し、同一Workspace/ServiceのAI研修・参加者だけを対象とする。CONTENT_EDITOR、他サービス管理者、参加者は変更できない。
+- ACTIVEからCOMPLETED/CANCELLED、終了状態からACTIVEだけを許可する。現在状態・更新日時による確認Revision、理由、確認文字列、操作UUIDを必須とする。受講ロックと監査を同一Transactionで確定し、同じ操作の再送は冪等とする。
+- 再開はACTIVEなProgramとParticipant、現在の契約期間内に限定する。期限延長、課金・返金、契約Snapshot変更、終了日補完、消去データ復元は行わない。
+- 終了/取消時には受講固有の評価待ちJobをキャンセルし、PENDING回答はFAILEDへ移す。再開でも自動再評価・外部送信は行わない。遅延評価は既存ロック・PENDING条件で保存しない。
+- 終了日時・再開リセットはD-134のTriggerを使用する。本番保持期限処理の停止解除やCron変更は含めない。
+
+## D-136: 終了したAI研修は本人限定の読み取り専用案内へ分岐する
+
+- 日付: 2026-09-29
+- 状態: Accepted（受講者側の終了・取消表示のユーザー依頼）
+- ACTIVEな本人Service ParticipantのEnrollmentをWorkspace/Service/会員IDで検証してから、AI研修のCOMPLETED/CANCELLED/EXPIREDを読み取り専用の状態案内へ分岐する。非AI研修の取消、招待中、他参加者、所属失効は引き続き404とする。
+- 終了表示ではRuntime.current、課題生成、回答提出、評価・再試行、Job投入を呼ばない。管理者の操作理由・監査・回答本文を取得表示しない。確定終了記録だけを表示し、EXPIREDの過去endsAt以外は推定しない。
+- 終了研修を本人プログラム一覧から確認できる。COMPLETED/EXPIREDの既存Toolkit/Export権限は維持し、CANCELLEDへ閲覧権限を拡大しない。再開は既存管理者操作と現在の参加/契約期間条件を必要とし、本人の案内閲覧で受講状態を変更しない。
+- 本番削除有効化、通知送信、返金、契約変更、削除データ復元は含めない。

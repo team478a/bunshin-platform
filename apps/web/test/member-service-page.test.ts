@@ -44,6 +44,14 @@ describe('authenticated member service page', () => {
     expect(mocks.resolveMember).toHaveBeenCalledWith('private-service', 'user-a');
   });
 
+  it('rejects a different project in the return path before authentication or lookup', async () => {
+    await expect(
+      resolveAuthenticatedMemberServicePage('service-a', '/s/service-b/line'),
+    ).rejects.toThrow('NOT_FOUND');
+    expect(mocks.currentUser).not.toHaveBeenCalled();
+    expect(mocks.resolveMember).not.toHaveBeenCalled();
+  });
+
   it('preserves the requested page through login', async () => {
     mocks.currentUser.mockResolvedValue(null);
     await expect(

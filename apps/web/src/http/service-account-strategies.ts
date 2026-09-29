@@ -18,7 +18,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import { recordAiUsageSafely } from '../observability/ai-usage';
 import { withOrganizationAiGenerationQuota } from '../organization-ai-generation-quota';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
 import { applyServiceContentTerminology } from '../services/service-content-terminology';
 
@@ -60,10 +60,8 @@ async function body(request: Request): Promise<unknown> {
 }
 
 async function scope(serviceSlug: string, bunshinId: string) {
-  const [service, actor] = await Promise.all([
-    resolvePublicServiceContext(serviceSlug),
-    actorUserId(),
-  ]);
+  const actor = await actorUserId();
+  const service = await resolveMemberServiceContext(serviceSlug, actor);
   return {
     workspaceId: service.workspaceId,
     groupId: service.serviceId,

@@ -3,6 +3,10 @@ import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
+import {
+  ORGANIZATION_PAYMENT_EXPORT_LIMIT,
+  organizationPaymentExportPeriod,
+} from '../payments/organization-payment-export-period';
 import { csv } from './admin-report-export';
 
 type PaymentExportRow = {
@@ -84,7 +88,12 @@ export function organizationPaymentCsvRows(
 export async function organizationPaymentExportResponse(request: Request, rawWorkspaceId: string) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
-    const workspaceId = z.string().uuid().parse(rawWorkspaceId);
+    const parsedWorkspaceId = z.string().uuid().safeParse(rawWorkspaceId);
+    if (!parsedWorkspaceId.success) {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid workspace id');
+    }
+    const workspaceId = parsedWorkspaceId.data;
+    const period = organizationPaymentExportPeriod(new URL(request.url).searchParams);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
     const db = await import('@bunshin/database');
@@ -108,9 +117,9 @@ export async function organizationPaymentExportResponse(request: Request, rawWor
       throw new ApplicationError('NOT_FOUND', 'organization unavailable');
     }
     const purchases = await db.prisma.programPurchase.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-      take: 10_000,
+      where: { workspaceId, ...(period.createdAt ? { createdAt: period.createdAt } : {}) },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: ORGANIZATION_PAYMENT_EXPORT_LIMIT + 1,
       select: {
         id: true,
         groupId: true,
@@ -132,6 +141,19 @@ export async function organizationPaymentExportResponse(request: Request, rawWor
         buyer: { select: { displayName: true, email: true } },
       },
     });
+    if (purchases.length > ORGANIZATION_PAYMENT_EXPORT_LIMIT) {
+      return Response.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            reason: 'EXPORT_LIMIT_EXCEEDED',
+            message: '対象が10,000件を超えています。受付期間を狭めて再度保存してください。',
+            requestId,
+          },
+        },
+        { status: 413, headers: { 'cache-control': 'private, no-store' } },
+      );
+    }
     const groupIds = [...new Set(purchases.map((purchase) => purchase.groupId))];
     const groups =
       groupIds.length === 0
@@ -150,7 +172,7 @@ export async function organizationPaymentExportResponse(request: Request, rawWor
       {
         headers: {
           'content-type': 'text/csv; charset=utf-8',
-          'content-disposition': `attachment; filename="organization-payments-${workspaceId}.csv"`,
+          'content-disposition': `attachment; filename="organization-payments-${workspaceId}${period.from ? `-${period.from}-${period.to}` : ''}.csv"`,
           'cache-control': 'private, no-store',
           'x-content-type-options': 'nosniff',
         },

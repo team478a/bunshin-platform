@@ -67,6 +67,10 @@ export {
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
 export { recoverStaleFortuneReadings } from './fortune-generation-recovery';
+export {
+  PrismaFortuneGenerationQueue,
+  verifyFortuneGenerationJob,
+} from './fortune-generation-jobs';
 export { PrismaResaleItemRepository } from './resale';
 export { addProgramCalendarDays, PrismaAiResaleRuntimeRepository } from './resale-runtime';
 export { PrismaAiResaleParticipantRepository } from './resale-participant';
@@ -144,6 +148,17 @@ export {
 } from './badge-reward';
 export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
+export { PrismaTrainingLifecycleRepository } from './training-enrollment-lifecycle';
+export { PrismaTrainingEndDateRepository } from './training-end-date-confirmation';
+export {
+  expireUnpurchasedTrainingEnrollments,
+  TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
+  type TrainingEnrollmentExpiryInput,
+} from './training-enrollment-expiry';
+export {
+  listTrainingAdminEvaluationMetrics,
+  type TrainingAdminEvaluationMetric,
+} from './training-admin-evaluation-metrics';
 export {
   getActiveRewardsPilotAccess,
   hasActiveRewardsPilotAccess,
@@ -241,7 +256,11 @@ export { PrismaProgramRuntimeRepository } from './program-runtime-execution';
 export { PrismaTrainingWorkResultRepository } from './training-work-result';
 export { PrismaTrainingPersonalDataExportRepository } from './training-personal-data-export';
 export { lockTrainingEnrollmentData } from './training-data-lock';
+export { trainingEnrollmentPeriodWhere } from './training-enrollment-period';
 export { PrismaTrainingPersonalDataDeletionRepository } from './training-personal-data-deletion';
+export { PrismaTrainingRetentionPreviewRepository } from './training-retention-preview';
+export { PrismaTrainingRetentionAdminPreviewRepository } from './training-retention-preview';
+export { PrismaTrainingRetentionExecutionRepository } from './training-retention-execution';
 export {
   PrismaServiceFoundationRepository,
   PrismaServiceStaffRoleRepository,

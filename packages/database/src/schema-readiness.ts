@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260928120000_add_onboarding_refinement_deferral';
+export const LATEST_DATABASE_MIGRATION = '20260929070000_auth_return_attempts';

@@ -10,6 +10,7 @@ import {
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from './index';
 import { lockTrainingEnrollmentData } from './training-data-lock';
+import { TRAINING_ENROLLMENT_EXPIRED_EVENT } from './training-audit-events';
 
 const auditAction = 'TRAINING_PERSONAL_DATA_DELETED';
 
@@ -263,6 +264,7 @@ export class PrismaTrainingPersonalDataDeletionRepository implements TrainingPer
     });
     const eventWhere: Prisma.ProgramActionEventWhereInput = {
       ...scope,
+      eventType: { not: TRAINING_ENROLLMENT_EXPIRED_EVENT },
       ...(all
         ? {}
         : {
