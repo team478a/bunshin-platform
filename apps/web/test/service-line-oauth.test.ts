@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createLineLinkProof,
   hashLineState,
+  isLineLinkAttemptCookie,
   lineLinkAuthorization,
+  lineLinkAttemptCookie,
+  lineLinkCookie,
   verifyServiceLineCode,
 } from '../src/line/service-line-oauth';
 
@@ -30,6 +33,16 @@ function provider(identity: unknown = claims, friendFlag = true) {
     .mockResolvedValueOnce(Response.json({ friendFlag }));
 }
 describe('service LINE proof verification', () => {
+  it('uses a fixed safe hashed cookie name for each independent attempt', () => {
+    const state = 'a'.repeat(43);
+    expect(lineLinkAttemptCookie(state)).toBe(`${lineLinkCookie}-${hashLineState(state)}`);
+    expect(lineLinkAttemptCookie(state)).not.toContain(state);
+    expect(lineLinkAttemptCookie('b'.repeat(43))).not.toBe(lineLinkAttemptCookie(state));
+    expect(isLineLinkAttemptCookie(lineLinkAttemptCookie(state))).toBe(true);
+    expect(isLineLinkAttemptCookie(lineLinkCookie)).toBe(false);
+    expect(isLineLinkAttemptCookie(`${lineLinkCookie}-invalid`)).toBe(false);
+    expect(() => lineLinkAttemptCookie('bad;cookie=value')).toThrow('Invalid LINE state');
+  });
   it('uses fresh independent state, nonce and S256 PKCE', () => {
     const proof = createLineLinkProof();
     expect(

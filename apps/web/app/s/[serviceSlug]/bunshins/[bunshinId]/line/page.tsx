@@ -74,6 +74,10 @@ export default async function ServiceLinePage({
       title: '現在LINEへ接続できません',
       body: 'ログイン状態またはサービスのLINE設定を確認できませんでした。画面を更新しても直らない場合は運営者へご連絡ください。',
     },
+    'attempt-limit': {
+      title: 'LINE接続の確認が複数進行中です',
+      body: '開いているLINEの本人確認を完了するか、10分待ってからもう一度接続を始めてください。進行中の接続は変更していません。',
+    },
     'session-expired': {
       title: 'LINEの本人確認が期限切れになりました',
       body: 'この画面とLINEの本人確認で別のブラウザが開いた可能性があります。この画面から、もう一度接続を始めてください。',

@@ -35,6 +35,8 @@
 
 ## 5. 未解決事項・今回の範囲外
 
+専用LINE再連携の共通Cookie干渉と非公開参加者の接続判定は後続の`docs/SERVICE_LINE_RECONNECTION_ISOLATION_IMPLEMENTATION_REPORT.md`で修正する。共通ログインの試行分離とは別の経路であり、双方の本番反映・実端末検証は区別する。
+
 後続の試行単位分離の実装・有効化条件は`docs/AUTH_RETURN_ATTEMPTS_IMPLEMENTATION_REPORT.md`を参照。以下はこの報告時点の履歴であり、後続実装の本番有効化を意味しない。
 
 - 本番SHA、対象者の実際の遷移、千ノ国の保存設定、公式LINEリッチメニュー/LIFFのリンク、iPhone OAuth復帰は未確認。本番設定を変更した証拠ではない。
