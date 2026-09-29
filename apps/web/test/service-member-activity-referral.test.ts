@@ -21,6 +21,8 @@ describe('service member activity and referral', () => {
     expect(endpoint).toContain("status: 'ACTIVE'");
     expect(endpoint).toContain('registration.referralEnabled');
     expect(endpoint).toContain('requireSameOrigin(request)');
+    expect(endpoint).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(endpoint).not.toContain('resolvePublicServiceContext');
   });
 
   it('shows only service-scoped referral, credit, and badge activity', () => {

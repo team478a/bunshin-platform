@@ -1,5 +1,16 @@
 # BUNSHIN Platform Decision Log
 
+## D-151: 初回回答・紹介コード・本人専用URLは参加者のServiceで解決する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装とPR #1014のマージ確認）
+- 初回回答保存、紹介コード発行、本人の代理店URL保存は認証後にMember Serviceを解決する。利用期間・ACTIVE Workspace/Group/本人所属を維持し、非公開Serviceの既存参加者を対象にする。
+- 初回質問、businessProfileEnabledとFULL/MINIMAL、業種検証、自Service所属への保存、既存投稿パートナー作成と紹介Milestoneを維持する。千ノ国へ共通業種入力を追加せず、ハッシー等の事業プロフィール要件を外さない。
+- 紹介コードの設定・所属・停止状態・安定キー・重複防止、代理店URLの自Service Repository/許可ドメイン検証とDRAFT保存を維持する。紹介先の匿名登録は公開条件のままにし、非公開Serviceへの新規参加を許可したとは扱わない。
+- 紹介コード解決で全例外をNOT_FOUNDへ変換するcatchを除去し、Member ResolverのApplicationErrorと未知障害を既存APIエラー変換へ渡す。障害を参加不可と誤報しない。
+- 初回回答/代理店URLの厳格Schema不一致をVALIDATION_ERROR（400）へ明示変換する。旧parseAsyncの例外が500になっていたため、許可フィールドや型を広げずsafeParseAsyncで拒否を保持する。
+- 商品紹介・動画通知・画面の追加監査は別作業。DB変更、公開登録、設定、本番データ、Provider/通知呼出は行わない。
+
 ## D-150: 投稿操作・成果・日々の記録は本人のMember Service境界で認可する
 
 - 日付: 2026-09-29
