@@ -230,4 +230,28 @@ describe('attempt-scoped authentication return records', () => {
       ),
     ).resolves.toMatchObject({ attempt: null, returnTo: '/s/legacy/line' });
   });
+
+  it('does not let a consumed or expired proof block later unscoped consent or supply its old destination', async () => {
+    const context = await createAuthReturnAttempt(start(), 'LINE', '/s/media/line');
+    await claimAuthReturnAttempt(context);
+    await authenticateAuthReturnAttempt(context, actor);
+    await consumeAuthReturnAttempt(context, actor);
+    await expect(
+      readAuthReturnContext(callback([context]), null, { allowUnscoped: true, actorUserId: actor }),
+    ).resolves.toEqual({ attempt: null, returnTo: null });
+    const pending = await createAuthReturnAttempt(start(), 'LINE', '/s/training/home');
+    attemptRows.get(pending.attempt.id)!.expiresAt = new Date(Date.now() - 1);
+    await expect(
+      readAuthReturnContext(callback([context, pending]), null, {
+        allowUnscoped: true,
+        actorUserId: actor,
+      }),
+    ).resolves.toEqual({ attempt: null, returnTo: null });
+    await expect(
+      readAuthReturnContext(callback([context]), context.attempt.id, { actorUserId: actor }),
+    ).rejects.toThrow();
+    await expect(
+      readAuthReturnContext(callback([pending]), pending.attempt.id, { actorUserId: actor }),
+    ).rejects.toThrow();
+  });
 });

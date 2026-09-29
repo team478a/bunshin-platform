@@ -227,11 +227,21 @@ export async function readAuthReturnContext(
   options: { method?: Method; actorUserId?: string; allowUnscoped?: boolean } = {},
 ): Promise<AuthReturnContext> {
   if (!id) {
-    if (
-      authReturnAttemptsEnabled() &&
-      (!options.allowUnscoped || attemptCookies(request.headers.get('cookie')).size > 0)
-    )
-      throw new AuthReturnContextError();
+    if (authReturnAttemptsEnabled()) {
+      if (!options.allowUnscoped) throw new AuthReturnContextError();
+      const browserCookies = attemptCookies(request.headers.get('cookie'));
+      if (browserCookies.size) {
+        const db = await database();
+        const active = await db.prisma.authReturnAttempt.findMany({
+          where: {
+            id: { in: [...browserCookies.keys()] },
+            stage: { not: 'CONSUMED' },
+            expiresAt: { gt: new Date() },
+          },
+        });
+        if (active.length) throw new AuthReturnContextError();
+      }
+    }
     return {
       attempt: null,
       returnTo: authReturnAttemptsEnabled()

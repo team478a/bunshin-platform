@@ -26,7 +26,7 @@
 
 ## 4. 実行した検証
 
-- 最終関連6ファイル45件成功。2プロジェクト逆順、重複Callback、missing proof/selector、別origin/Provider、期限切れ、別User同意、メール本人不一致、試行ごとのCookie除去、session commit保留、同意済み画面の復帰を含む。
+- 最終関連6ファイル46件成功。使用済み/期限切れCookieが後の共通同意を妨げず古い復帰先も供給しない回帰テスト、2プロジェクト逆順、重複Callback、missing proof/selector、別origin/Provider、期限切れ、別User同意、メール本人不一致、試行ごとのCookie除去、session commit保留、同意済み画面の復帰を含む。
 - Web全体383ファイル1,840件成功（最後の同意済み画面テスト追加前）。
 - 実Supabase SDKの偽HTTP契約テスト成功。逆順の独立flow交換、消費済み/未知flowの拒否、最新verifierの借用がないことを確認。実Providerへ通信していない。
 - Prisma format/generate成功。DB統合テストにCAS/本人照合/RLSの検証を追加。実DB migration・全package lint/typecheck/test/buildはPR CIで確認する。
@@ -38,7 +38,7 @@
 - 元ブラウザのCookieが必要。別ブラウザ/端末・10分経過後は元サービスからの再試行を案内する。クロスブラウザ継続を保証しない。
 - 観測できた有効試行は最大4件。完全同時の開始の厳密なquotaではない。SDK native flow indexも複数requestの書込競合を完全には解決しない。verifierが失われた場合は別試行を使わず拒否する。
 - 論理期限は10分。期限行は次の認証開始時に最大100件ずつ削除するため、物理削除が10分ちょうどに行われるわけではない。定期掃除jobは追加しない。
-- 同意済みのServer Componentから直接復帰した場合、消費済みproof Cookieは次の開始/期限まで残り得る。DBの単回状態で再利用を拒否し、次の開始ではstaleとして除去する。
+- 同意済みのServer Componentから直接復帰した場合、消費済みproof Cookieは次の開始/期限まで残り得る。DBの単回状態で再利用を拒否し、次の開始ではstaleとして除去する。後の共通同意は進行中の記録がなければ許可するが、使用済み/期限切れの戻り先は決して借りない。
 - PR #1004の研修期限処理は別の未マージ作業であり混ぜない。
 
 ## 6. 本番有効化と次へ進む条件
