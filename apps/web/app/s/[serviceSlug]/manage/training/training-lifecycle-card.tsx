@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { TrainingEndDateCard } from './training-end-date-card';
 import {
   TRAINING_ENROLLMENT_STATUS_LABELS,
   type TrainingEnrollmentStatus,
@@ -195,6 +196,11 @@ export function TrainingLifecycleCard({
           </button>
         </>
       )}
+      <TrainingEndDateCard
+        key={`${row.status}:${row.updatedAt}:${row.endedAt ?? 'unknown'}`}
+        serviceSlug={serviceSlug}
+        row={row}
+      />
       {message && <p role="status">{message}</p>}
     </div>
   );

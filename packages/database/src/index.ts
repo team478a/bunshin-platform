@@ -149,6 +149,7 @@ export {
 export { PrismaBadgeRewardOperationsRepository } from './badge-reward-operations';
 export { LATEST_DATABASE_MIGRATION } from './schema-readiness';
 export { PrismaTrainingLifecycleRepository } from './training-enrollment-lifecycle';
+export { PrismaTrainingEndDateRepository } from './training-end-date-confirmation';
 export {
   expireUnpurchasedTrainingEnrollments,
   TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
