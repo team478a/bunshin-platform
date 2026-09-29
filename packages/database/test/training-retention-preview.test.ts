@@ -1,7 +1,64 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PrismaTrainingRetentionPreviewRepository } from '../src';
+import {
+  PrismaTrainingRetentionPreviewRepository,
+  PrismaTrainingRetentionAdminPreviewRepository,
+} from '../src';
 
 const scope = { workspaceId: 'workspace', groupId: 'group', now: new Date('2026-09-28T00:00:00Z') };
+describe('service admin retention preview', () => {
+  const input = { ...scope, actorUserId: 'manager' };
+  it('authorizes the active service manager within the same snapshot as the counts', async () => {
+    const { adminRepository, tx, client } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValueOnce({ userId: 'manager' });
+    expect(await adminRepository.preview(input)).toMatchObject({
+      outcome: 'PREVIEW',
+      summary: { enrollments: 1, answersAndEvaluationsDue: 2 },
+    });
+    expect(tx.groupMembership.findFirst).toHaveBeenNthCalledWith(1, {
+      where: {
+        workspaceId: 'workspace',
+        groupId: 'group',
+        userId: 'manager',
+        status: 'ACTIVE',
+        serviceRole: { in: ['SERVICE_OWNER', 'SERVICE_ADMIN'] },
+        user: { status: 'ACTIVE' },
+        group: { status: 'ACTIVE', workspace: { status: 'ACTIVE' } },
+      },
+      select: { id: true },
+    });
+    expect(client.$transaction).toHaveBeenCalledOnce();
+    expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'RepeatableRead',
+      timeout: 40000,
+    });
+  });
+  it('reads no programs or personal counts when the scope or role is not authorized', async () => {
+    const { adminRepository, tx } = fixture();
+    tx.groupMembership.findFirst.mockResolvedValue(null);
+    expect(await adminRepository.preview(input)).toEqual({ outcome: 'FORBIDDEN' });
+    expect(tx.serviceProgram.findMany).not.toHaveBeenCalled();
+    expect(tx.trainingMissionAnswer.count).not.toHaveBeenCalled();
+  });
+  it('preserves the enrollment bound and does not return partial results', async () => {
+    const { adminRepository, tx, enrollment } = fixture();
+    tx.programEnrollment.findMany.mockResolvedValue(Array.from({ length: 101 }, () => enrollment));
+    expect(await adminRepository.preview(input)).toEqual({ outcome: 'TOO_LARGE' });
+    expect(tx.trainingMissionAnswer.count).not.toHaveBeenCalled();
+  });
+  it('preserves the program bound', async () => {
+    const { adminRepository, tx } = fixture();
+    tx.serviceProgram.findMany.mockResolvedValue(
+      Array.from({ length: 1001 }, () => ({ id: 'program' })),
+    );
+    expect(await adminRepository.preview(input)).toEqual({ outcome: 'TOO_LARGE' });
+    expect(tx.programEnrollment.findMany).not.toHaveBeenCalled();
+  });
+  it('does not convert a database failure to zero counts', async () => {
+    const { adminRepository, tx } = fixture();
+    tx.trainingToolkitItem.count.mockRejectedValue(new Error('Database unavailable'));
+    await expect(adminRepository.preview(input)).rejects.toThrow('Database unavailable');
+  });
+});
 function fixture() {
   const enrollment = {
     id: 'enrollment',
@@ -26,6 +83,7 @@ function fixture() {
     tx,
     enrollment,
     repository: new PrismaTrainingRetentionPreviewRepository(client as never),
+    adminRepository: new PrismaTrainingRetentionAdminPreviewRepository(client as never),
     client,
   };
 }

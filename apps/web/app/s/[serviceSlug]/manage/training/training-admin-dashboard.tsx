@@ -60,6 +60,11 @@ export function TrainingAdminDashboard({
           <h1>AI研修の進み具合</h1>
           <p>受講者が今どこまで進み、誰に声かけが必要かを確認できます。</p>
           <Link href={`/s/${serviceSlug}/manage` as Route}>← 管理メニューへ戻る</Link>
+          <p>
+            <Link href={`/s/${serviceSlug}/manage/training/retention` as Route} prefetch={false}>
+              研修データの保持期限を確認（読み取り専用）
+            </Link>
+          </p>
         </header>
 
         {programs.length === 0 ? (

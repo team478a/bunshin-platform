@@ -50,6 +50,14 @@ export interface TrainingRetentionPreviewRepository {
   preview(input: TrainingRetentionPreviewScope): Promise<TrainingRetentionPreviewResult>;
 }
 
+export type TrainingRetentionAdminPreviewResult =
+  TrainingRetentionPreviewResult | { outcome: 'FORBIDDEN' };
+export interface TrainingRetentionAdminPreviewRepository {
+  preview(
+    input: TrainingRetentionPreviewScope & { actorUserId: string },
+  ): Promise<TrainingRetentionAdminPreviewResult>;
+}
+
 export interface TrainingRetentionExecutionScope {
   workspaceId: string;
   groupId: string;
