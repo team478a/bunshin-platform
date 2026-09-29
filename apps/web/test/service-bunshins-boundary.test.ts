@@ -19,7 +19,8 @@ const listSource = readFileSync(
 
 describe('service Bunshin web boundary', () => {
   it('resolves the service scope on the server instead of accepting IDs from the body', () => {
-    expect(httpSource).toContain('resolvePublicServiceContext(serviceSlug)');
+    expect(httpSource).toContain('resolveMemberServiceContext(serviceSlug, actor)');
+    expect(httpSource).not.toContain('resolvePublicServiceContext');
     expect(httpSource).toContain('groupId: service.serviceId');
     expect(httpSource).not.toContain('groupId: z.');
     expect(httpSource).not.toContain('workspaceId: z.');
