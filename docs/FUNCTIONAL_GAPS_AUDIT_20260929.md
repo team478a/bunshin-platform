@@ -6,7 +6,7 @@
 
 1. **OEM決済CSVの受付期間指定と上限超過検出**。従来はcreatedAt降順の最新10,000件だけを出力し、超過の案内がない。この作業で日本時間の期間指定・10,001件目の検出・部分CSV拒否・画面案内を追加する。同期10,000件上限自体は残る。詳細は`OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`。
 2. **AI研修の無料・手動登録受講の自動期限終了**。`apps/web/src/payments/program-purchase-lifecycle.ts`の既存期限終了はPAID購入の受講が対象。学習の期間ガードと管理画面の期限終了表示は実装済みだが、購入に紐づかないACTIVE受講をEXPIREDへ冪等に確定し、評価待ちを停止する共通処理が不足。別PRで受講ロック・所有境界・監査・保持期限起算日の確定を設計する。本番Cron有効化は別途扱う。
-3. **占いAI生成の非同期化と再試行**。`packages/capability-fortune/src/fortune-reading.ts`はAI生成を直接awaitする。既存の停滞回復は標準結果への復帰であり、AI生成のQueue/Worker再試行ではない。既存のclaim、冪等性、本人/Bunshin境界、課金/使用量記録を保持する別PRが必要。
+3. **占いAI生成の非同期化と再試行**。本作業でD-145に従うQueue/Worker、最大3回の一時障害再試行、lease/本人/Service/Bunshin境界、試行別Quota/使用量記録、標準結果の即時表示をコード実装した。既定無効の`FORTUNE_ASYNC_GENERATION_ENABLED`で既存同期方式を維持する。CI検証は対象PR、本番有効化・実AI検証は別作業。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。
 4. **AI研修の過去終了日不明データの管理者確定手段**。既存Preflightは終了日不明を判定保留にし、自動推定しない。必要な場合はPreview・理由・確認・監査付きの確定操作を設計する。終了日の決定方法は業務判断を要するため、一括補完や実削除を先行しない。
 
 ## 実装済みと確認した項目

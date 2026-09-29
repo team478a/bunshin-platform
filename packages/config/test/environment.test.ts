@@ -12,6 +12,16 @@ const valid = {
 };
 
 describe('environment validation', () => {
+  it('keeps asynchronous fortune disabled unless explicitly enabled', () => {
+    expect(parseServerEnvironment(valid).FORTUNE_ASYNC_GENERATION_ENABLED).toBe('false');
+    expect(
+      parseServerEnvironment({ ...valid, FORTUNE_ASYNC_GENERATION_ENABLED: 'true' })
+        .FORTUNE_ASYNC_GENERATION_ENABLED,
+    ).toBe('true');
+    expect(() =>
+      parseServerEnvironment({ ...valid, FORTUNE_ASYNC_GENERATION_ENABLED: 'yes' }),
+    ).toThrow('FORTUNE_ASYNC_GENERATION_ENABLED');
+  });
   it('accepts separated runtime and direct database URLs', () => {
     expect(parseServerEnvironment(valid)).toMatchObject({
       APP_ENV: 'development',

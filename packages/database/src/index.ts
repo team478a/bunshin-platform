@@ -67,6 +67,10 @@ export {
 export { PrismaPointExpirationRepository } from './point-expiration';
 export { PrismaFortuneRepository, purgeExpiredFortuneReadings } from './fortune';
 export { recoverStaleFortuneReadings } from './fortune-generation-recovery';
+export {
+  PrismaFortuneGenerationQueue,
+  verifyFortuneGenerationJob,
+} from './fortune-generation-jobs';
 export { PrismaResaleItemRepository } from './resale';
 export { addProgramCalendarDays, PrismaAiResaleRuntimeRepository } from './resale-runtime';
 export { PrismaAiResaleParticipantRepository } from './resale-participant';

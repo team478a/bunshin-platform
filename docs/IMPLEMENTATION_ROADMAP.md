@@ -118,6 +118,8 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 
 占いの中断生成復旧はD-129に従い、最終更新から10分以上の`GENERATING`を保存済み標準結果へ戻す認証済みCronをコード実装した。カード再抽選・AI再実行・LINE再送はしない。検証結果は対象PRのCI、本番反映・Cron実行は別確認とする。詳細は`FORTUNE_GENERATION_RECOVERY_IMPLEMENTATION_REPORT.md`を参照。
 
+占いAIの非同期Job/最大3回再試行をD-145に従ってコード実装した。標準結果を先に返し、本人/Service/Bunshin・lease・更新Revisionを検証してAI結果を確定する。試行別Quota/使用量を記録し、有効なJobがあるReadingを中断復旧から除く。`FORTUNE_ASYNC_GENERATION_ENABLED`は既定無効で本番設定は変更していない。検証結果は対象PRのCI、本番稼働は別確認。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。
+
 ## AI研修
 
 状態: 個別化コアループ、実務利用結果、Barrier理由、1分版、Practice / Work表示、非同期回答評価、失敗回復、Service管理画面の評価運用指標までコード実装済み。詳細は`docs/ai-training/AI_TRAINING_CURRENT_STATE_AUDIT.md`と最新の同ディレクトリ内実装報告を正本とする。
