@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## D-158: 参加者専用画面のMetadataも本人のMember Serviceから解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-155後に残った非公開Serviceの汎用タイトル）
+- 参加者専用9画面のページタイトルは認証済み本人のMember Serviceから表示名を取得する。匿名・所属外・停止中にはサービス名を返さず汎用タイトルとする。公開登録入口だけPublic ServiceのMetadataを維持する。
+- 本文の認可は既存のMember判定を維持し、Metadataをアクセス許可として用いない。所属不存在だけ汎用タイトルへ戻し、DB等の未知障害は隠さない。User IDを含む認可結果をSlugだけでcacheしない。
+- 本作業でサービスのVisibility、参加・同意フロー、Provider、DB schema、本番データを変更しない。
+
 ## D-157: Service法務文書の再同意を参加申請から分離する
 
 - 日付: 2026-09-30

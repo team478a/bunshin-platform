@@ -4,7 +4,7 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { resolveAuthenticatedMemberServicePage } from '../../../../src/services/member-service-page';
-import { resolvePublicServiceContext } from '../../../../src/services/public-service';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
@@ -15,8 +15,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return { title: service ? `${service.configuration.displayName}｜SNS集客診断` : 'SNS集客診断' };
+  return memberServiceMetadata((await params).serviceSlug, 'SNS集客診断');
 }
 
 const platformLabels: Record<string, string> = {

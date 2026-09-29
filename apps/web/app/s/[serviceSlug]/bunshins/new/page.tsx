@@ -3,11 +3,9 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
+import { memberServiceMetadata } from '../../../../../src/services/member-service-metadata';
 import { isRouteNotFound } from '../../../../../src/navigation/route-not-found';
-import {
-  resolveMemberServiceContext,
-  resolvePublicServiceContext,
-} from '../../../../../src/services/public-service';
+import { resolveMemberServiceContext } from '../../../../../src/services/public-service';
 import { PublicShell } from '../../../../ui/public-shell';
 import { ServiceBunshinForm } from './service-bunshin-form';
 import { ServiceBunshinProposals } from './service-bunshin-proposals';
@@ -28,12 +26,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return {
-    title: service
-      ? `${service.configuration.displayName}｜投稿パートナーを作る`
-      : '投稿パートナーを作る',
-  };
+  return memberServiceMetadata((await params).serviceSlug, '投稿パートナーを作る');
 }
 
 export default async function NewServiceBunshinPage({

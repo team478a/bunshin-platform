@@ -9,13 +9,11 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
 import { currentActivityContinuityRule } from '../../../../src/activity-continuity-rule';
 import { localDateInTimezone, weekRange, weeklyCalendar } from '../../../../src/activity-progress';
-import {
-  resolveMemberServiceContext,
-  resolvePublicServiceContext,
-} from '../../../../src/services/public-service';
+import { resolveMemberServiceContext } from '../../../../src/services/public-service';
 import {
   isServiceAnnouncementVisible,
   readServiceAnnouncement,
@@ -58,8 +56,7 @@ export async function generateMetadata({
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
-  const service = await resolvePublicServiceContext(serviceSlug).catch(() => null);
-  return { title: service ? `${service.configuration.displayName}｜ホーム` : 'サービスホーム' };
+  return memberServiceMetadata(serviceSlug, 'ホーム', 'サービスホーム');
 }
 
 export default async function ServiceMemberHome({

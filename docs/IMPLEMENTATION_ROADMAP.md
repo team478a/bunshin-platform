@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開サービスの参加者画面Metadataは`docs/PRIVATE_SERVICE_MEMBER_METADATA_IMPLEMENTATION_REPORT.md`を参照。9画面の表示名を本人Member Serviceから取得し、公開登録入口のPublic判定は維持する。匿名/所属外への名前漏えいと未知障害の握りつぶしを避ける。本番反映・実端末確認は別作業。
+
 Service法務文書の再同意は`docs/SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`を参照。既存参加者の最新版同意を初回参加から分離し、非公開Serviceを含む本人導線と、公開3文書がある場合の参加同意を揃える。本番データ監査・実端末確認・リリースは別作業。
 
 Service法務文書の最新有効版統一は`docs/SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`を参照。公開表示/参加Transaction/既存参加者利用/通知Preferenceの4経路で、同じWorkspace/ServiceのPUBLISHED・有効日時以前の文書をtypeごと最大versionへ揃える。旧版だけへの同意で新版を満たさず、古い画面からの申請は拒否する。旧同意データの自動付替え・本番データ/設定/DB schema/Providerは変更しない。隔離DBと全体CI、本番の旧版同意件数/再同意導線は別々に確認する。
