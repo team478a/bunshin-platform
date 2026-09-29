@@ -189,7 +189,7 @@ integration('database ownership boundaries', () => {
     const endsAt = new Date(at.getTime() - 1000);
     const setup = async (account: typeof owner) => {
       const group = await client.group.create({
-        data: { workspaceId: account.workspace.id, name: 'Expiry fixture' },
+        data: { workspaceId: account.workspace.id, name: `Expiry fixture ${randomUUID()}` },
       });
       const scope = { workspaceId: account.workspace.id, groupId: group.id };
       const template = await client.programTemplate.create({
