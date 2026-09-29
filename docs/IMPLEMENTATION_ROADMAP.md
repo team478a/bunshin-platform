@@ -2,6 +2,10 @@
 
 AI研修の無料・手動登録受講の期限終了バッチは`docs/ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`を参照。購入に紐づかない受講をService限定・期間/所有/Module/CAS再確認で終了し、評価待ちを停止する。最小システム監査を保持し、確定終了日記録は既存Triggerを使う。内部実行口はdevelopment/stagingのみで、本番停止・Cron未登録・保持期限消去停止を維持する。
 
+複数Service同時ログインの復帰分離は`docs/AUTH_RETURN_ATTEMPTS_IMPLEMENTATION_REPORT.md`を参照。試行別proof・PKCE flowId・単回DB記録・本人に束ねた同意を実装する。初期値は無効で、本番有効化にはSupabase Redirect URL/メールテンプレートと実端末の確認が必要。マージだけで本番稼働済みとは扱わない。
+
+サービス認証・LINE再連携の混在防止は`docs/SERVICE_AUTH_FLOW_ISOLATION_REPORT.md`を参照。認証/同意後にサービスへ復帰し、共通業種登録は挟まない。サービス固有の参加・事業プロフィール・研修・占いの判定は維持する。管理入口/操作・画像閲覧の類似ケースも修正し、既存ページ一覧の回帰テストで許可リストの漏れを確認する。本番実端末/リッチメニュー確認と複数同時認証の復帰情報は未確認・後続作業。
+
 機能不足の再監査は`docs/FUNCTIONAL_GAPS_AUDIT_20260929.md`を参照。第一作業単位のOEM決済CSV期間指定・上限超過時の欠落防止は`docs/OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`を参照。日本時間の受付日で絞り、10,000件を超えた場合は部分CSVを返さない。入金/返金日の会計期間集計、上限撤廃、本番設定変更は含めない。
 
 AI研修の管理画面の受講期間表示は`docs/ai-training/AI_TRAINING_ADMIN_PERIOD_STATUS_IMPLEMENTATION_REPORT.md`を参照。期限後ACTIVEは状態未更新の期限終了として表示し、開始前/開始日時不明とともに受講中・継続率・声かけ集計から除く。利用状況と登録状態を分け、LifecycleのCASや確定終了日・保持期限起算日を表示から書き換えない。
@@ -115,6 +119,8 @@ MS-1とMS-2を完了する前に、第一号サービスを一般公開しない
 ## 占い
 
 占いの中断生成復旧はD-129に従い、最終更新から10分以上の`GENERATING`を保存済み標準結果へ戻す認証済みCronをコード実装した。カード再抽選・AI再実行・LINE再送はしない。検証結果は対象PRのCI、本番反映・Cron実行は別確認とする。詳細は`FORTUNE_GENERATION_RECOVERY_IMPLEMENTATION_REPORT.md`を参照。
+
+占いAIの非同期Job/最大3回再試行をD-145に従ってコード実装した。標準結果を先に返し、本人/Service/Bunshin・lease・更新Revisionを検証してAI結果を確定する。試行別Quota/使用量を記録し、有効なJobがあるReadingを中断復旧から除く。`FORTUNE_ASYNC_GENERATION_ENABLED`は既定無効で本番設定は変更していない。検証結果は対象PRのCI、本番稼働は別確認。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。
 
 ## AI研修
 

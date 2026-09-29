@@ -38,6 +38,14 @@ export default async function LoginPage({
             </span>
           </div>
         )}
+        {query.error === 'auth-context' && (
+          <div className="notice notice--danger" role="alert">
+            <strong>元のログイン手続きを確認できませんでした</strong>
+            <span>
+              別のブラウザ・期限切れ・同時のログインが考えられます。元のプロジェクトの画面から、同じブラウザでやり直してください。複数の手続きが開いている場合は、先に完了してください。
+            </span>
+          </div>
+        )}
         {query.error === 'email' && (
           <div className="notice notice--danger" role="alert">
             <strong>メールを送れませんでした</strong>

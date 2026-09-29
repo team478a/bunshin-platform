@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { ApplicationError } from '@bunshin/shared';
 
 export function authConfiguration(): { url: string; key: string } {
@@ -31,15 +31,38 @@ export function authConfiguration(): { url: string; key: string } {
   return { url, key };
 }
 
-export async function createSupabaseServerClient() {
+interface CookieWrite {
+  name: string;
+  value: string;
+  options?: CookieOptions;
+}
+
+export async function createSupabaseServerClient(pendingCookies?: CookieWrite[]) {
   const { url, key } = authConfiguration();
   const store = await cookies();
   return createServerClient(url, key, {
     cookies: {
       getAll: () => store.getAll(),
       setAll: (values) => {
+        const writes = values.map(({ name, value, options }) => ({
+          name,
+          value,
+          options: /-code-verifier(?:\.\d+)?$/.test(name)
+            ? {
+                ...options,
+                maxAge: value ? 600 : 0,
+                httpOnly: true,
+                sameSite: 'lax' as const,
+                secure: new URL(process.env['APP_URL'] ?? url).protocol === 'https:',
+              }
+            : options,
+        }));
+        if (pendingCookies) {
+          pendingCookies.push(...writes);
+          return;
+        }
         try {
-          for (const { name, value, options } of values) store.set(name, value, options);
+          for (const { name, value, options } of writes) store.set(name, value, options);
         } catch {
           // Server Components cannot write cookies. The refreshed credentials remain
           // valid for this request; Route Handlers can still persist them normally.
@@ -47,4 +70,18 @@ export async function createSupabaseServerClient() {
       },
     },
   });
+}
+
+/** Do not persist a new session until the attempt and intended identity are verified. */
+export async function createSupabaseAttemptClient() {
+  const pending: CookieWrite[] = [];
+  const client = await createSupabaseServerClient(pending);
+  return {
+    client,
+    commitCookies: async () => {
+      const store = await cookies();
+      for (const { name, value, options } of pending) store.set(name, value, options ?? {});
+      pending.length = 0;
+    },
+  };
 }

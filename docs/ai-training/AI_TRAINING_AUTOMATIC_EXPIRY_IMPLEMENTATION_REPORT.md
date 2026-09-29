@@ -32,6 +32,7 @@ Serializable競合（P2034/SQLSTATE 40001）はconflicts件数で明示する。
 - Webルート境界2件、Database型検査、git diff --check成功。
 - Web型検査と変更ファイルLintも成功。初回CI実DB検証では新規Fixtureが同じWorkspaceに同名Serviceを作り、一意制約に違反した。Fixture名を分離し、実DB統合46件が成功。DB制約は変更しない。空POSTストリームと入力Bodyを区別する追加テストも最終差分で検証する。
 - Web型検査・変更ファイルLint・全体format/typecheck/lint/test/buildと実DB統合の最終結果は、対象HEADのCIとPR検証欄を正とする。
+- PR #1007までのmain `5d4a32d1`を取り込む競合解消では、機能不足監査・ロードマップ・実DB結合テストの追加位置を統合した。研修の期限終了テストと占い非同期生成テスト、D-142〜D-145と認証分離の文書を両方保持する。研修処理本体・所有境界・本番停止条件は変更せず、統合後HEADのCIを再確認する。
 
 実DBでは2 Workspaceと別Service/Module、有料購入、期限なし/未来/開始不明/招待/終了済みを用意し、並行バッチで一度だけ終了すること、確定終了日、評価待ち停止、本文/仕事情報/点数/Toolkit維持、再実行と遅延評価拒否を確認する。テストFixtureだけを使う既存保持期限・本人削除の検証で、最小終了監査が維持されることも確認する。
 

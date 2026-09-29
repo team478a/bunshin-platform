@@ -1,5 +1,34 @@
 # BUNSHIN Platform Decision Log
 
+## D-145: 占いAIは標準結果を維持した非同期Jobと試行単位の再試行へ分離する
+
+- 日付: 2026-09-29
+- 状態: Accepted（不足機能の実装依頼）
+- 同じService/本人/日付のカードと承認済み標準結果を維持し、AIだけを共通Jobへ投入する。JobとGENERATINGへの変更は同じTransactionで確定し、Reading固有の冪等キーで重複投入・最終失敗後の自動再生成を防ぐ。Jobへ本文・Memoryを複製しない。
+- WorkerはWorkspace/Service/本人/Bunshin/能力、参加同意、未削除、現在のJob leaseと試行番号を再検証する。完了・fallbackにもJob行ロックとReading更新Revisionを用い、期限切れ実行・削除・復旧後の上書きを拒否する。
+- timeout/network、429、5xxのみ最大3回・既存Backoffで再試行する。設定/権限不備、その他HTTPエラー、空・不正・危険な出力は再試行せず標準結果へ戻す。各実試行で使用量・原価・Quotaのキーを分ける。Provider response本文や例外・秘密値を診断へ保存しない。
+- 既存10分中断復旧は有効な待機/再試行/lease付きJobを優先する。Jobが終了・消失して中断したReadingだけを安全に復旧する。Worker停止時も標準本文を表示できる。
+- `FORTUNE_ASYNC_GENERATION_ENABLED=true`で新規投入を有効化する。無効化後も既存Jobは安全に処理する。既存同期方式を維持し、本番設定、実AI呼出、LINE送信、過去失敗の一括再投入は本作業では行わない。既存Job schemaを利用し、DB schema変更は不要。
+
+## D-144: 認証復帰を試行単位の本人確認・単回記録へ分離する
+
+- 日付: 2026-09-29
+- 状態: Accepted（複数Service同時ログインの混在防止依頼）
+- 認証試行ごとにランダムID、10分のHttpOnly browser proof、RLS有効なサーバー記録を作る。戻り先・origin・LINE/EMAIL・段階を対応付け、Callbackのclaimと復帰のconsumeはCASで一度だけ許可する。法務同意は認証済みUserに束ね、別Userのセッションへ変わった場合は拒否する。
+- LINEのPKCEは既存SDKのflowId指定で自試行のverifierだけを使う。メールは送信先の短期hashと検証済みemailを照合する。検証中のSupabase Cookieはbufferし、成功・本人照合後にのみcommitする。既存の共有User sessionをService別Identityへ分割しない。
+- Cookie/URLで試行が確認できない場合に、別試行や共通戻り先Cookieを借りない。期限切れ・別ブラウザ・重複Callback・本人変更は再ログインを案内する。戻り先は認可ではなく、遷移先のWorkspace/Group/本人/役割の既存検証を維持する。
+- 既存ログインを壊さないため開始の有効化は`AUTH_RETURN_ATTEMPTS_ENABLED=true`の明示設定を必要とする。Supabase Redirect URL allowlistとemail templateで試行IDを伝達する確認後に有効化する。設定変更・認証メール送信・本番OAuth操作は今回行わない。既に始めた試行の復帰は停止設定後も厳密に検証する。
+- 試行記録は認証前の一時情報でありテナント業務データを保存しない。短期に期限切れ行を削除する。認証token、code、verifier、proof、email、戻り先のsigned tokenをログに出さない。
+
+## D-143: サービス認証復帰は共通登録から分離し、遷移先でサービス認可を検証する
+
+- 日付: 2026-09-29
+- 状態: Accepted（LINE再連携と類似ケースの分離依頼）
+- サービスの入口・参加・ホーム・LINE・初期設定・参加者/管理画面・サービス別アカウントへ認証復帰するとき、User共通の業種プロフィールを要求しない。共通法務同意は維持し、遷移先で既存Workspace/Group/本人/役割の認可とサービス固有の初期設定を検証する。URLの許可はデータアクセス権を付与しない。
+- 戻り先は既存ページの厳密な許可リストで保持する。外部URL、正規化で別サービスへ変わるパス、任意query、未知の末尾を拒否する。認証開始で戻り先がない場合は古いCookieを消し、別プロジェクトへ誤復帰しない。
+- 共通登録へサービスの戻り先を渡した旧リンクは当該サービスへ戻す。サービス経由のプロフィールを共通Userへ書き込ませない。ハッシーのServiceMemberBusinessProfileなど既存サービス固有の設定は変更しない。画像閲覧も動画と同様、共通業種登録を要求しない。
+- 設定変更、LINE送信、本番OAuth操作、既存データの移行・削除は行わない。
+
 重要な設計判断を時系列で記録します。詳細な検討が必要な場合は `docs/adr/` に個別ADRを作成し、ここからリンクしてください。
 
 ## D-142: 購入に紐づかないAI研修の期限終了はService限定の冪等バッチで確定する

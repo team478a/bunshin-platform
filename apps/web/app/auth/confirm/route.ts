@@ -3,11 +3,25 @@ import { NextResponse } from 'next/server';
 import { currentUserProvider } from '../../../src/auth/current-user';
 import { requireSameOrigin } from '../../../src/auth/request-security';
 import {
-  LINE_AUTH_RETURN_COOKIE,
-  lineAuthReturnFromCookie,
-  videoAuthReturnProjectId,
-} from '../../../src/auth/line-return';
-import { createSupabaseServerClient } from '../../../src/auth/supabase';
+  createSupabaseServerClient,
+  createSupabaseAttemptClient,
+} from '../../../src/auth/supabase';
+import { loginErrorResponse } from '../../../src/auth/login-error';
+import {
+  singleAuthAttemptId,
+  emailAuthAttemptId,
+  readAuthReturnContext,
+  claimAuthReturnAttempt,
+  authenticateAuthReturnAttempt,
+  consumeAuthReturnAttempt,
+  cancelAuthReturnAttempt,
+  clearAuthReturnCookie,
+  authConsentPath,
+  authReturnDestination,
+  authEmailHash,
+  AuthReturnContextError,
+  type AuthReturnContext,
+} from '../../../src/auth/auth-return-attempt';
 
 export function GET(request: Request): Response {
   const url = new URL(request.url);
@@ -19,46 +33,82 @@ export function GET(request: Request): Response {
   const confirmation = new URL('/login/confirm', request.url);
   confirmation.searchParams.set('token_hash', tokenHash);
   confirmation.searchParams.set('type', type);
-  return NextResponse.redirect(confirmation, 303);
+  try {
+    const id = emailAuthAttemptId(url);
+    if (id) confirmation.searchParams.set('authAttempt', id);
+  } catch {
+    return loginErrorResponse(request, 'auth-context', null);
+  }
+  const response = NextResponse.redirect(confirmation, 303);
+  response.headers.set('cache-control', 'no-store');
+  response.headers.set('referrer-policy', 'no-referrer');
+  return response;
 }
 
 export async function POST(request: Request): Promise<Response> {
+  let context: AuthReturnContext | null = null;
+  let ownedStage: 'CLAIMED' | 'AUTHENTICATED' = 'CLAIMED';
+  let claimed = false;
   try {
     requireSameOrigin(request);
     const data = await request.formData();
+    context = await readAuthReturnContext(
+      request,
+      singleAuthAttemptId(data.getAll('authAttempt')),
+      { method: 'EMAIL' },
+    );
     const tokenHash = data.get('token_hash');
     const type = data.get('type');
     if (typeof tokenHash !== 'string' || !/^[A-Za-z0-9_-]+$/.test(tokenHash) || type !== 'email')
       throw new Error('invalid callback');
-    const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.verifyOtp({
+    await claimAuthReturnAttempt(context);
+    claimed = true;
+    const buffered = context.attempt ? await createSupabaseAttemptClient() : null;
+    const supabase = buffered?.client ?? (await createSupabaseServerClient());
+    const verified = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
       type: type as EmailOtpType,
     });
-    if (error !== null) throw error;
+    if (verified.error !== null) throw verified.error;
+    if (
+      context.attempt &&
+      (!verified.data.user?.email ||
+        authEmailHash(verified.data.user.email, context.attempt.proofHash) !==
+          context.attempt.loginIdentityHash)
+    )
+      throw new AuthReturnContextError();
+    if (buffered) await buffered.commitCookies();
     const currentUser = await (await currentUserProvider()).getCurrentUser();
     if (currentUser === null) throw new Error('user unavailable');
     const db = await import('@bunshin/database');
+    await authenticateAuthReturnAttempt(context, currentUser.userId);
+    ownedStage = 'AUTHENTICATED';
     const required = await new db.PrismaLegalConsentRepository().findRequiredForUser(
       currentUser.userId,
     );
     if (required.some((item) => !item.consentedAt))
-      return NextResponse.redirect(new URL('/consent', request.url), 303);
-    const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
+      return NextResponse.redirect(new URL(authConsentPath(context), request.url), 303);
     const registration = await db.prisma.userRegistrationProfile.findUnique({
       where: { userId: currentUser.userId },
       select: { status: true },
     });
-    const needsOnboarding =
-      registration?.status !== 'COMPLETED' && !videoAuthReturnProjectId(returnTo);
-    const destination = !needsOnboarding
-      ? new URL(returnTo ?? '/bunshins', request.url)
-      : new URL('/onboarding', request.url);
-    if (needsOnboarding && returnTo) destination.searchParams.set('returnTo', returnTo);
-    const response = NextResponse.redirect(destination, 303);
-    response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
-    return response;
-  } catch {
-    return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
+    await consumeAuthReturnAttempt(context, currentUser.userId);
+    return clearAuthReturnCookie(
+      NextResponse.redirect(
+        new URL(authReturnDestination(context, registration?.status), request.url),
+        303,
+      ),
+      context,
+    );
+  } catch (error) {
+    if (claimed) await cancelAuthReturnAttempt(context, ownedStage);
+    return clearAuthReturnCookie(
+      loginErrorResponse(
+        request,
+        error instanceof AuthReturnContextError ? 'auth-context' : '1',
+        context?.returnTo ?? null,
+      ),
+      claimed ? context : null,
+    );
   }
 }

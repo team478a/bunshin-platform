@@ -20,9 +20,9 @@ export default async function ServiceLinePage({
   params: Promise<{ serviceSlug: string }>;
   searchParams: Promise<{ template?: string; week?: string }>;
 }) {
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
   const { serviceSlug } = await params;
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor) redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/line`)}`);
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const db = await import('@bunshin/database');

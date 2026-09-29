@@ -3,6 +3,7 @@ import type {
   FortuneAiReadingGenerator,
   FortuneAiReadingResult,
 } from '@bunshin/capability-fortune';
+import { validateFortuneReadingOutput } from '@bunshin/capability-fortune';
 import { ApplicationError } from '@bunshin/shared';
 import { z } from 'zod';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
@@ -55,15 +56,19 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
   async generate(input: Parameters<FortuneAiReadingGenerator['generate']>[0]) {
     const runtime = await resolveOpenAiRuntimeConfiguration();
     const started = Date.now();
-    const operationKey = `fortune-reading:${input.claim.reading.id}`;
+    const attempt = input.claim.jobAttempt;
+    const operationKey = `fortune-reading:${input.claim.reading.id}${attempt ? `:${attempt.jobId}:attempt:${attempt.attemptCount}` : ''}`;
     let usagePending = true;
     let providerAttempted = false;
+    let observedInputTokens: number | null = null;
+    let observedOutputTokens: number | null = null;
     try {
       const result = await withOrganizationAiGenerationQuota({
         workspaceId: input.claim.workspaceId,
         groupId: input.claim.groupId,
         operationKey,
         generate: async (): Promise<FortuneAiReadingResult> => {
+          await input.assertAllowed?.();
           providerAttempted = true;
           let response: Response;
           try {
@@ -98,18 +103,30 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
                 },
               }),
             });
-          } catch (error) {
+          } catch {
             throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'fortune provider timeout', {
               category: 'TIMEOUT_OR_NETWORK',
-              error,
             });
           }
-          const value = (await response.json()) as ResponseValue;
           if (!response.ok)
             throw new ApplicationError('AI_PROVIDER_UNAVAILABLE', 'fortune provider failed', {
               status: response.status,
-              error: value.error,
             });
+          const value = (await response.json().catch(() => {
+            throw new ApplicationError('CONTENT_REJECTED', 'invalid fortune response');
+          })) as ResponseValue;
+          const inputTokens = value.usage?.input_tokens;
+          const outputTokens = value.usage?.output_tokens;
+          observedInputTokens =
+            typeof inputTokens === 'number' && Number.isSafeInteger(inputTokens) && inputTokens >= 0
+              ? inputTokens
+              : null;
+          observedOutputTokens =
+            typeof outputTokens === 'number' &&
+            Number.isSafeInteger(outputTokens) &&
+            outputTokens >= 0
+              ? outputTokens
+              : null;
           const text = value.output
             ?.flatMap((item) => item.content ?? [])
             .find((item) => item.type === 'output_text')?.text;
@@ -118,13 +135,18 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
               'AI_PROVIDER_UNAVAILABLE',
               'fortune provider returned no output',
             );
-          const parsed = outputSchema.parse(JSON.parse(text));
+          let parsed: { body: string; actionStep: string };
+          try {
+            parsed = validateFortuneReadingOutput(outputSchema.parse(JSON.parse(text)));
+          } catch {
+            throw new ApplicationError('CONTENT_REJECTED', 'invalid fortune output');
+          }
           return {
             ...parsed,
             model: value.model ?? runtime.model,
             promptVersion: FORTUNE_AI_PROMPT_VERSION,
-            inputTokens: value.usage?.input_tokens ?? null,
-            outputTokens: value.usage?.output_tokens ?? null,
+            inputTokens: observedInputTokens,
+            outputTokens: observedOutputTokens,
             latencyMs: Date.now() - started,
           };
         },
@@ -158,8 +180,8 @@ export class OpenAiFortuneReadingGenerator implements FortuneAiReadingGenerator 
           model: runtime.model,
           promptVersion: FORTUNE_AI_PROMPT_VERSION,
           status: 'FAILED',
-          inputTokens: null,
-          outputTokens: null,
+          inputTokens: observedInputTokens,
+          outputTokens: observedOutputTokens,
           latencyMs: Date.now() - started,
           estimatedCostUsdMicros:
             providerAttempted && runtime.requestCostUsdMicros ? runtime.requestCostUsdMicros : null,

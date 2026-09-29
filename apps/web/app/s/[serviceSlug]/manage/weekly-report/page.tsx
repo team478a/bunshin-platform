@@ -44,9 +44,10 @@ export default async function ManagedWeeklyReportPage({
   params: Promise<{ serviceSlug: string }>;
   searchParams: Promise<{ week?: string }>;
 }) {
-  const actor = await (await currentUserProvider()).getCurrentUser();
-  if (!actor) redirect('/login');
   const { serviceSlug } = await params;
+  const actor = await (await currentUserProvider()).getCurrentUser();
+  if (!actor)
+    redirect(`/login?returnTo=${encodeURIComponent(`/s/${serviceSlug}/manage/weekly-report`)}`);
   const service = await resolveManagedServiceContext(serviceSlug, actor.userId).catch(() => null);
   if (!service) notFound();
   const window = resolveWeeklyReportWindow((await searchParams).week);

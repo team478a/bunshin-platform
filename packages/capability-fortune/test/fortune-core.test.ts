@@ -114,6 +114,38 @@ describe('daily fortune flow', () => {
     createdAt: new Date('2026-09-17T00:00:00.000Z'),
   };
 
+  it('queues AI without waiting on a provider and preserves the saved daily draw', async () => {
+    const queued = { ...basicReading, status: 'GENERATING' as const };
+    const enqueue = vi.fn().mockResolvedValue(queued);
+    const generate = vi.fn().mockRejectedValue(new Error('must not run synchronously'));
+    const random = { nextInt: vi.fn().mockReturnValue(0) };
+    const findReadingForDate = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(basicReading);
+    const createBasicReading = vi.fn().mockResolvedValue({ kind: 'READY', reading: basicReading });
+    const repository = { findReadingForDate, createBasicReading } as unknown as FortuneRepository;
+    const service = new FortuneDailyReadingService(repository, random, { generate }, { enqueue });
+    const input = {
+      serviceSlug: 'fortune-a',
+      actorUserId: 'user-a',
+      theme: 'LOVE',
+      now: new Date('2026-09-17T01:00:00Z'),
+    };
+    await expect(service.draw(input)).resolves.toEqual(queued);
+    await expect(service.draw(input)).resolves.toEqual(queued);
+    expect(createBasicReading).toHaveBeenCalledTimes(1);
+    expect(random.nextInt).toHaveBeenCalledTimes(2);
+    expect(generate).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceSlug: 'fortune-a',
+        actorUserId: 'user-a',
+        readingId: basicReading.id,
+      }),
+    );
+  });
+
   it('returns the existing result without drawing again', async () => {
     const reading = {
       id: 'reading-1',
