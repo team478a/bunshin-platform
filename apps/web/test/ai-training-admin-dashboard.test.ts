@@ -22,6 +22,8 @@ function participant(
   return {
     enrollmentId: 'enrollment-1',
     enrollmentStatus: 'ACTIVE',
+    startsAt: new Date('2026-09-01T00:00:00Z'),
+    endsAt: null,
     programName: 'AI研修30日',
     participantName: '山田さん',
     participantEmail: 'yamada@example.com',
@@ -52,12 +54,69 @@ function participant(
 }
 
 describe('AI training admin dashboard', () => {
+  it('excludes past expiry, future start, unknown start and invitation from active/support/continuation while keeping history', () => {
+    const rows = [
+      participant(),
+      participant({
+        enrollmentId: 'expired-active',
+        endsAt: now,
+        profile: {
+          role: 'SALES',
+          aiLevel: 'BEGINNER',
+          currentTopic: null,
+          needsReview: true,
+          recentFailures: 3,
+        },
+      }),
+      participant({ enrollmentId: 'future', startsAt: new Date(now.getTime() + 1) }),
+      participant({ enrollmentId: 'unknown', startsAt: null }),
+      participant({ enrollmentId: 'invited', enrollmentStatus: 'INVITED' }),
+      participant({ enrollmentId: 'expired-record', enrollmentStatus: 'EXPIRED' }),
+      participant({ enrollmentId: 'completed', enrollmentStatus: 'COMPLETED' }),
+      participant({ enrollmentId: 'cancelled', enrollmentStatus: 'CANCELLED' }),
+    ];
+    const dashboard = buildAiTrainingAdminDashboard(rows, now);
+    expect(dashboard.totals).toMatchObject({
+      active: 1,
+      expired: 2,
+      pendingExpiryUpdate: 1,
+      beforeStart: 1,
+      startUnresolved: 1,
+      continuedWithinSevenDays: 1,
+      continuationPercent: 100,
+      needsSupport: 0,
+      completedMissions: 24,
+    });
+    expect(
+      dashboard.participants.find((row) => row.enrollmentId === 'expired-active'),
+    ).toMatchObject({ engagement: 'ENDED', displayStatus: 'PERIOD_ENDED' });
+    expect(dashboard.participants.find((row) => row.enrollmentId === 'future')?.engagement).toBe(
+      'BEFORE_START',
+    );
+    expect(dashboard.participants.find((row) => row.enrollmentId === 'unknown')?.engagement).toBe(
+      'PERIOD_UNRESOLVED',
+    );
+    expect(rows[1]?.enrollmentStatus).toBe('ACTIVE');
+  });
+  it('uses zero rather than a misleading continuation rate when no enrollment is in period', () => {
+    const dashboard = buildAiTrainingAdminDashboard([participant({ endsAt: now })], now);
+    expect(dashboard.totals).toMatchObject({
+      active: 0,
+      continuedWithinSevenDays: 0,
+      continuationPercent: 0,
+      needsSupport: 0,
+    });
+  });
   it('summarizes active participation without exposing answer text', () => {
     const dashboard = buildAiTrainingAdminDashboard([participant()], now);
 
     expect(dashboard.totals).toEqual({
       participants: 1,
       active: 1,
+      expired: 0,
+      pendingExpiryUpdate: 0,
+      beforeStart: 0,
+      startUnresolved: 0,
       continuedWithinSevenDays: 1,
       continuationPercent: 100,
       needsSupport: 0,

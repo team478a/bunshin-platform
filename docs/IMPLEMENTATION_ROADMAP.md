@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+AI研修の管理画面の受講期間表示は`docs/ai-training/AI_TRAINING_ADMIN_PERIOD_STATUS_IMPLEMENTATION_REPORT.md`を参照。期限後ACTIVEは状態未更新の期限終了として表示し、開始前/開始日時不明とともに受講中・継続率・声かけ集計から除く。利用状況と登録状態を分け、LifecycleのCASや確定終了日・保持期限起算日を表示から書き換えない。
+
 AI研修の受講期間ガードは`docs/ai-training/AI_TRAINING_PERIOD_GUARDS_IMPLEMENTATION_REPORT.md`を参照。ACTIVEでも開始前/期限後は新しい学習操作・課題生成・評価を拒否し、ロック後/Provider直前/評価保存前に再確認する。Toolkit/本人Exportは維持し、自動終了状態更新や保持期限起算日の補完、課金・削除・本番設定変更は含めない。
 
 AI研修の読み取り専用保持期限管理画面は`docs/ai-training/AI_TRAINING_RETENTION_ADMIN_PREVIEW_IMPLEMENTATION_REPORT.md`を参照。自Serviceの件数と終了日・所有境界の判定保留だけを集計し、DBでも管理者を再検証する。削除操作・終了日補完・定期実行・本番有効化は追加しない。

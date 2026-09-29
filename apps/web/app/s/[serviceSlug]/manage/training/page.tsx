@@ -6,6 +6,7 @@ import {
 } from '@bunshin/capability-training';
 import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { buildAiTrainingAdminDashboard } from '../../../../../src/services/ai-training-admin-dashboard';
+import { trainingEnrollmentDisplayStatus } from '../../../../../src/services/ai-training-enrollment-display';
 import { buildAiTrainingEvaluationOperations } from '../../../../../src/services/ai-training-evaluation-operations';
 import { buildAiTrainingPilotAnalytics } from '../../../../../src/services/ai-training-pilot-analytics';
 import { resolveManagedServiceContext } from '../../../../../src/services/public-service';
@@ -144,6 +145,7 @@ export default async function AiTrainingAdminPage({
             groupMembershipId: true,
             status: true,
             updatedAt: true,
+            startsAt: true,
             endsAt: true,
             trainingRetention: { select: { endedAt: true } },
           },
@@ -151,7 +153,8 @@ export default async function AiTrainingAdminPage({
         });
   const enrollmentIds = enrollments.map(({ id }) => id);
   const membershipIds = enrollments.map(({ groupMembershipId }) => groupMembershipId);
-  const evaluationPeriodStart = new Date(Date.now() - 7 * 86_400_000);
+  const checkedAt = new Date();
+  const evaluationPeriodStart = new Date(checkedAt.getTime() - 7 * 86_400_000);
   const [
     memberships,
     profiles,
@@ -343,6 +346,8 @@ export default async function AiTrainingAdminPage({
         {
           enrollmentId: enrollment.id,
           enrollmentStatus: enrollment.status,
+          startsAt: enrollment.startsAt,
+          endsAt: enrollment.endsAt,
           programName: program.displayName,
           participantName: member.user.displayName || member.user.email || '参加者',
           participantEmail: member.user.email,
@@ -356,7 +361,7 @@ export default async function AiTrainingAdminPage({
         },
       ];
     }),
-    new Date(),
+    checkedAt,
   );
   const analytics = buildAiTrainingPilotAnalytics({
     enrollmentIds,
@@ -375,7 +380,7 @@ export default async function AiTrainingAdminPage({
   const evaluationOperations = buildAiTrainingEvaluationOperations({
     jobs: evaluationJobs,
     answerStatuses: evaluationAnswerStatuses.map(({ evaluationStatus }) => evaluationStatus),
-    now: new Date(),
+    now: checkedAt,
   });
   const helpEvents =
     enrollmentIds.length === 0
@@ -420,13 +425,18 @@ export default async function AiTrainingAdminPage({
       lifecycleRows={enrollments.map((row) => ({
         enrollmentId: row.id,
         status: row.status,
+        displayStatus: trainingEnrollmentDisplayStatus(row, checkedAt),
+        startsAt: row.startsAt?.toISOString() ?? null,
+        endsAt: row.endsAt?.toISOString() ?? null,
         updatedAt: row.updatedAt.toISOString(),
         endedAt:
           (
-            row.trainingRetention?.endedAt ?? (row.status === 'EXPIRED' ? row.endsAt : null)
+            row.trainingRetention?.endedAt ??
+            (row.status === 'EXPIRED' && row.endsAt && row.endsAt <= checkedAt ? row.endsAt : null)
           )?.toISOString() ?? null,
       }))}
       serviceSlug={serviceSlug}
+      checkedAt={checkedAt}
       programs={programs}
       dashboard={dashboard}
       analytics={analytics}
