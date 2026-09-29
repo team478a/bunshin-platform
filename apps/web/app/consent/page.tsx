@@ -10,6 +10,7 @@ import {
   authReturnPageRequest,
   consumeAuthReturnAttempt,
   authReturnDestination,
+  AuthReturnContextError,
 } from '../../src/auth/auth-return-attempt';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,12 @@ export default async function ConsentPage({
       where: { userId: user.userId },
       select: { status: true },
     });
-    await consumeAuthReturnAttempt(context, user.userId);
+    try {
+      await consumeAuthReturnAttempt(context, user.userId);
+    } catch (error) {
+      if (error instanceof AuthReturnContextError) redirect('/login?error=auth-context');
+      throw error;
+    }
     redirect(authReturnDestination(context, profile?.status));
   }
   return (

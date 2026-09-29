@@ -221,6 +221,7 @@ describe('attempt-scoped authentication return records', () => {
       readAuthReturnContext(callback([context]), context.attempt.id, { method: 'LINE' }),
     ).resolves.toMatchObject({ returnTo: '/s/media/line' });
     await expect(readAuthReturnContext(callback([]), context.attempt.id)).rejects.toThrow();
+    await expect(readAuthReturnContext(callback([context]), null)).rejects.toThrow();
     await expect(
       readAuthReturnContext(
         new Request(`${origin}/auth/line/callback`, {

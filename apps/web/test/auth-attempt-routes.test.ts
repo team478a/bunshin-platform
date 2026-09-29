@@ -289,4 +289,25 @@ describe('attempt-scoped route contracts', () => {
     ).rejects.toThrow('REDIRECT:/s/media/line');
     expect(attemptRows.get(a.id)?.stage).toBe('CONSUMED');
   });
+
+  it('shows a restart for a consent-page consume race but does not hide database errors', async () => {
+    const a = proof(
+      await startEmail(
+        post('/auth/email', { email: 'member@example.com', returnTo: '/s/media/line' }),
+      ),
+    );
+    state.required = true;
+    await finishEmail(
+      post('/auth/confirm', { token_hash: 'token', type: 'email', authAttempt: a.id }, a.cookie),
+    );
+    state.cookie = a.cookie;
+    attemptTable.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expect(
+      ConsentPage({ searchParams: Promise.resolve({ authAttempt: a.id }) }),
+    ).rejects.toThrow('REDIRECT:/login?error=auth-context');
+    attemptTable.updateMany.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(
+      ConsentPage({ searchParams: Promise.resolve({ authAttempt: a.id }) }),
+    ).rejects.toThrow('database unavailable');
+  });
 });

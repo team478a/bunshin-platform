@@ -27,6 +27,7 @@ describe('Supabase server cookie adapter', () => {
     state.set.mockReset();
     state.adapter = null;
     vi.stubEnv('APP_ENV', 'production');
+    vi.stubEnv('APP_URL', 'https://bunshin.example');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'publishable-key-with-safe-length');
   });
@@ -67,6 +68,20 @@ describe('Supabase server cookie adapter', () => {
     expect(state.set).toHaveBeenCalledTimes(1);
     await buffered.commitCookies();
     expect(state.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps development HTTP PKCE cookies usable without weakening HTTPS cookies', async () => {
+    vi.stubEnv('APP_ENV', 'development');
+    vi.stubEnv('APP_URL', 'http://localhost:3000');
+    await createSupabaseServerClient();
+    state.adapter?.setAll([
+      { name: 'sb-project-auth-token-flow-12345678-code-verifier', value: 'proof' },
+    ]);
+    expect(state.set).toHaveBeenCalledWith(
+      'sb-project-auth-token-flow-12345678-code-verifier',
+      'proof',
+      expect.objectContaining({ maxAge: 600, httpOnly: true, secure: false }),
+    );
   });
 
   it('does not hide commit failures in route handlers', async () => {

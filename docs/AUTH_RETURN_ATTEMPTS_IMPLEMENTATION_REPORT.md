@@ -13,7 +13,7 @@
 - `apps/web/src/auth/auth-return-attempt.ts`: ランダムID、browser proof、期限・origin・Provider・本人照合、claim/consume CAS、厳密な復帰判定。
 - `apps/web/src/auth/supabase.ts`: PKCE Cookieの10分期限と、本人照合前のsession Cookie書込buffer。
 - `apps/web/app/auth/{line,email,confirm}`、`app/consent`、`app/login`: 試行IDの引継ぎ、同意本人の検証、確認不能時の再試行案内。
-- Prisma schema / `20260929070000_auth_return_attempts`: 一時記録・制約・期限index・RLS。公開policyは作らない。
+- Prisma schema / `20260929070000_auth_return_attempts` / `packages/database/src/schema-readiness.ts`: 一時記録・制約・期限index・RLS・新migrationの稼働前確認。公開policyは作らない。
 - 関連unit/route/SDK契約/DB integrationテスト、`.env.example`、Decision Log、Roadmap、本報告。
 
 ## 3. 主要な設計判断
@@ -26,7 +26,7 @@
 
 ## 4. 実行した検証
 
-- 最終関連6ファイル46件成功。使用済み/期限切れCookieが後の共通同意を妨げず古い復帰先も供給しない回帰テスト、2プロジェクト逆順、重複Callback、missing proof/selector、別origin/Provider、期限切れ、別User同意、メール本人不一致、試行ごとのCookie除去、session commit保留、同意済み画面の復帰を含む。
+- 最終関連6ファイル48件成功（CI同様のAPP_URLがHTTPの環境でも確認）。使用済み/期限切れCookieが後の共通同意を妨げず古い復帰先も供給しない回帰テスト、2プロジェクト逆順、重複Callback、missing proof/selector、別origin/Provider、期限切れ、別User同意、メール本人不一致、試行ごとのCookie除去、session commit保留、同意済み画面の復帰・consume競合の再試行案内・DB障害の伝播を含む。
 - Web全体383ファイル1,840件成功（最後の同意済み画面テスト追加前）。
 - 実Supabase SDKの偽HTTP契約テスト成功。逆順の独立flow交換、消費済み/未知flowの拒否、最新verifierの借用がないことを確認。実Providerへ通信していない。
 - Prisma format/generate成功。DB統合テストにCAS/本人照合/RLSの検証を追加。実DB migration・全package lint/typecheck/test/buildはPR CIで確認する。
@@ -57,6 +57,6 @@
    `.RedirectTo` はアプリが渡す同一origin `/auth/confirm?authAttempt=UUID`。旧方式のqueryなしURLにも対応する。OEM custom domain利用では、送信側と受信側のoriginが一致するテンプレート方式を別途確認する。固定APP originに戻すだけでは別originのproofを利用できない。
 
 4. 承認されたstagingで `AUTH_RETURN_ATTEMPTS_ENABLED=true` にし、同一browserで2サービスを逆順に完了、LINE/メール/初回同意/同意済み/認証取消/期限切れ/別browserを確認する。千ノ国で共通業種画面が出ず、SNS支援の必要なサービス業種設定は残ることも確認する。
-5. 本番で同じ外部設定確認後に明示フラグを有効化する。ロールバックはfalseで新規開始を旧方式へ戻す。既に開始済みでIDを持つCallbackはフラグ停止後も厳密に検証する。migrationは残し、稼働中の試行を壊すDB rollbackはしない。
+5. 本番で同じ外部設定確認後に明示フラグを有効化する。ロールバックはfalseで新規開始を旧方式へ戻す。既に開始済みでIDを持つCallbackはフラグ停止後も厳密に検証する。進行中の試行Cookieがある間はIDなしの旧Callbackへfallbackせず、先に完了するか10分の期限を待って旧方式を再試行する。migrationは残し、稼働中の試行を壊すDB rollbackはしない。
 
 設定変更・実メール/LINE送信・本番OAuth確認はこの実装依頼で実行したものとして扱わない。
