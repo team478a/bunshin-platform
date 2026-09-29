@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## D-154: Program目標の管理操作と本人操作は独立したService権限で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1017のマージ確認）
+- 支援方針/目標候補の管理操作は既存ADMINISTRATION Resolverだけを使い、公開Service/参加者Resolverを前提にしない。本人の希望/目標はMember Serviceだけを使い、管理者権限へのfallbackを追加しない。非公開Serviceの既存参加者を対象にし、利用期間・ACTIVE Workspace/Group/本人所属を維持する。
+- Enrollment/Program/候補/方針/監査/保存はサーバー解決したWorkspace/Serviceへ限定する。本人Membership/ACTIVE Enrollment、受講ロック後の再確認、AI研修だけの期間条件、支援方法選択の許可、方針版管理と過去目標の保持を維持する。
+- 入力型と許可フィールドは広げず、Schema不一致/壊れたJSONは400へ明示変換する。未知キーは従来通り無視し、所有Scopeとして利用しない。既存管理ResolverのSERVICE_NOT_FOUNDだけ404へ変換し、未知障害500を握りつぶさない。
+- 管理/本人フローの実行テストを追加する。公開入口/画面、DB schema/migration、設定、本番データ、実AI/LINE、期限処理の本番有効化を変更しない。既存の版競合や方針/候補変更の新しい排他保証は追加しない。
+
 ## D-153: 動画配信の参加者操作はMember Serviceと利用可能状態を先に確認する
 
 - 日付: 2026-09-30

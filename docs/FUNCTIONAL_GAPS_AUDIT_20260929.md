@@ -13,9 +13,10 @@ main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は�
 3. **投稿の採否・完了・実行結果の保存/振り返りAPI: PR #1014で実装済み**。共通Mission Scope、業務成果、SNS数字保存/読取と日々のメモ/写真を認証後のMember Service解決へ合わせ、Service固有の機能設定・本人所有・同意・SOCIAL能力を維持する。詳細は`PRIVATE_SERVICE_POSTING_OUTCOMES_IMPLEMENTATION_REPORT.md`。本番反映は別途必要。
 4. **初回回答・紹介コード・本人専用URLの操作API: PR #1015で実装済み**。認証後のMember Service解決へ合わせ、Service固有の質問/事業プロフィール、所属・紹介設定、許可ドメイン/本人限定DRAFTを維持する。Schema不一致の400と未知Resolver障害の500を区別する。匿名紹介先の公開条件は維持する。詳細は`PRIVATE_SERVICE_ONBOARDING_REFERRALS_IMPLEMENTATION_REPORT.md`。
 5. **本人商品紹介の保存/非表示・コピー/投稿完了・紹介文生成API: PR #1016で実装済み**。認証後のMember Service解決と厳格Schemaの400変換、生成Quotaへの自Service ID接続を追加。本人/Service/分身/承認URLと公式商品、生成安全条件・ログ・冪等性を維持する。詳細は`PRIVATE_SERVICE_PRODUCT_CONTENT_IMPLEMENTATION_REPORT.md`。
-6. **動画配信の閲覧/採用/辞退/投稿完了・ダウンロード: 今回修正**。Member Service解決、期限/取消の副作用前拒否、本人Project/Render/Storage Keyの照合、準備成功後の履歴記録、APIエラー/Cache Policyを追加。詳細は`PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`。
+6. **動画配信の閲覧/採用/辞退/投稿完了・ダウンロード: PR #1017で実装済み**。Member Service解決、期限/取消の副作用前拒否、本人Project/Render/Storage Keyの照合、準備成功後の履歴記録、APIエラー/Cache Policyを追加。詳細は`PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`。
+7. **Program支援方針/目標候補・本人希望/目標の権限分離: 今回修正**。公開限定の前段Resolverを除き、管理ResolverとMember Resolverを操作別に分離。本人Enrollment/受講ロック/研修専用期間条件、方針/候補のService照合と版/監査を維持する。詳細は`PRIVATE_SERVICE_PROGRAM_GOALS_IMPLEMENTATION_REPORT.md`。
 
-Program目標の管理者/参加者fallbackや画面にも公開Resolverが残る。匿名公開入口を維持すべき箇所と既存参加者操作を個別監査する。上記6件の修正だけで全非公開Service対応完了とは扱わない。
+画面にも公開Resolverが残る。匿名公開入口を維持すべき箇所と既存参加者操作を個別監査する。上記7件の修正だけで全非公開Service対応完了とは扱わない。
 
 千ノ国・ハッシー・OEM等で該当する共通機能の修正。公開登録やService固有の業種/質問フローを共通化しない。本作業では設定・Provider実呼出・本番データを変更しない。
 
