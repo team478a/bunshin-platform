@@ -1,5 +1,15 @@
 # BUNSHIN Platform Decision Log
 
+## D-144: 認証復帰を試行単位の本人確認・単回記録へ分離する
+
+- 日付: 2026-09-29
+- 状態: Accepted（複数Service同時ログインの混在防止依頼）
+- 認証試行ごとにランダムID、10分のHttpOnly browser proof、RLS有効なサーバー記録を作る。戻り先・origin・LINE/EMAIL・段階を対応付け、Callbackのclaimと復帰のconsumeはCASで一度だけ許可する。法務同意は認証済みUserに束ね、別Userのセッションへ変わった場合は拒否する。
+- LINEのPKCEは既存SDKのflowId指定で自試行のverifierだけを使う。メールは送信先の短期hashと検証済みemailを照合する。検証中のSupabase Cookieはbufferし、成功・本人照合後にのみcommitする。既存の共有User sessionをService別Identityへ分割しない。
+- Cookie/URLで試行が確認できない場合に、別試行や共通戻り先Cookieを借りない。期限切れ・別ブラウザ・重複Callback・本人変更は再ログインを案内する。戻り先は認可ではなく、遷移先のWorkspace/Group/本人/役割の既存検証を維持する。
+- 既存ログインを壊さないため開始の有効化は`AUTH_RETURN_ATTEMPTS_ENABLED=true`の明示設定を必要とする。Supabase Redirect URL allowlistとemail templateで試行IDを伝達する確認後に有効化する。設定変更・認証メール送信・本番OAuth操作は今回行わない。既に始めた試行の復帰は停止設定後も厳密に検証する。
+- 試行記録は認証前の一時情報でありテナント業務データを保存しない。短期に期限切れ行を削除する。認証token、code、verifier、proof、email、戻り先のsigned tokenをログに出さない。
+
 ## D-143: サービス認証復帰は共通登録から分離し、遷移先でサービス認可を検証する
 
 - 日付: 2026-09-29

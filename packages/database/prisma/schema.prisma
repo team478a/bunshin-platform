@@ -2,6 +2,35 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum AuthReturnAttemptMethod {
+  LINE
+  EMAIL
+}
+
+enum AuthReturnAttemptStage {
+  PENDING
+  CLAIMED
+  AUTHENTICATED
+  CONSUMED
+}
+
+model AuthReturnAttempt {
+  id                String                  @id @db.Uuid
+  proofHash         String                  @map("proof_hash") @db.Char(64)
+  method            AuthReturnAttemptMethod
+  stage             AuthReturnAttemptStage  @default(PENDING)
+  origin            String                  @db.VarChar(255)
+  returnPath        String?                 @map("return_path") @db.VarChar(2048)
+  pkceFlowId        String?                 @map("pkce_flow_id") @db.VarChar(64)
+  loginIdentityHash String?                 @map("login_identity_hash") @db.Char(64)
+  actorUserId       String?                 @map("actor_user_id") @db.Uuid
+  expiresAt         DateTime                @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("auth_return_attempts")
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
