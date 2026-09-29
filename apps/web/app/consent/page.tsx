@@ -1,6 +1,5 @@
 import { GetRequiredLegalConsents } from '@bunshin/application';
 import { redirect } from 'next/navigation';
-import type { Route } from 'next';
 import { headers } from 'next/headers';
 import { currentUserProvider } from '../../src/auth/current-user';
 import { PublicShell } from '../ui/public-shell';
@@ -51,7 +50,7 @@ export default async function ConsentPage({
       select: { status: true },
     });
     await consumeAuthReturnAttempt(context, user.userId);
-    redirect(authReturnDestination(context, profile?.status) as Route);
+    redirect(authReturnDestination(context, profile?.status));
   }
   return (
     <PublicShell>
