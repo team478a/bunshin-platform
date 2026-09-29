@@ -6,7 +6,7 @@ import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 function referralCodeFor(input: { workspaceId: string; groupId: string; membershipId: string }) {
   return createHash('sha256')
@@ -22,8 +22,7 @@ export async function ensureServiceReferralCodeResponse(request: Request, servic
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const service = await resolvePublicServiceContext(serviceSlug).catch(() => null);
-    if (!service) throw new ApplicationError('NOT_FOUND', 'service not found');
+    const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
     const db = await import('@bunshin/database');
     const code = await db.prisma.$transaction(async (tx) => {
       const membership = await tx.groupMembership.findFirst({

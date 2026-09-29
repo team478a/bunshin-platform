@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+非公開サービスの初回回答・紹介コード・本人専用URL API対応は`docs/PRIVATE_SERVICE_ONBOARDING_REFERRALS_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決を使い、Service固有の質問/事業プロフィール・紹介設定・本人所属・許可ドメインとDRAFT保存を維持する。Schema不一致は400、未知Resolver障害は500として区別する。匿名の紹介先登録・公開入口、設定、本番データは変更しない。商品紹介・動画通知と画面の追加監査、本番反映は別作業。
+
 非公開サービスの投稿操作・成果・日々の記録API対応は`docs/PRIVATE_SERVICE_POSTING_OUTCOMES_IMPLEMENTATION_REPORT.md`を参照。共通Mission Scope、業務成果、SNS数字保存/画像読取、メモ/写真を認証後のMember Service解決へ合わせる。業務成果設定は同じContextから解決し、Service固有の機能制限・本人所有・参加同意・SOCIAL能力を維持する。実Provider呼出、本番設定/データ、匿名登録は変更しない。商品紹介・紹介リンク・初回設定・動画通知等の別機能判定は後続監査、本番反映は別作業。
 
 非公開サービスのSNS設定・発信方針・投稿テーマ・週間計画API対応は`docs/PRIVATE_SERVICE_SOCIAL_PLANNING_IMPLEMENTATION_REPORT.md`を参照。認証後のMember Service解決へ合わせ、本人所有・SOCIAL能力・入力/Origin検証と生成時の自Service知識/用語/Quota等を維持する。投稿採否/完了/成果・振り返りは次の独立PR。本番反映・実端末確認は別作業。
