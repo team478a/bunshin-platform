@@ -44,8 +44,8 @@ describe('private service rich menu destinations', () => {
 
   it('lets authenticated members open help for a private service', () => {
     const page = source('app/s/[serviceSlug]/help/page.tsx');
-    expect(page).toContain('resolveMemberServiceContext(slug, actorUserId)');
-    expect(page).toContain('serviceContext(serviceSlug, user?.userId)');
+    expect(page).toContain('resolveVisitorServiceContext(slug, actorUserId)');
+    expect(page).toContain('serviceContext(serviceSlug, user?.userId ?? null)');
   });
 
   it('opens a private service mission from the points screen', () => {

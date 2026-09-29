@@ -3,8 +3,9 @@ import type { CSSProperties } from 'react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { currentUserProvider } from '../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../src/navigation/route-not-found';
-import { resolvePublicServiceContext } from '../../../src/services/public-service';
+import { resolveVisitorServiceContext } from '../../../src/services/public-service';
 import { PublicShell } from '../../ui/public-shell';
 import { ServiceLegalDocumentContent } from './service-legal-document';
 
@@ -16,12 +17,27 @@ export async function ServiceLegalPage({
   type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE';
 }) {
   try {
-    const service = await resolvePublicServiceContext(serviceSlug);
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    const service = await resolveVisitorServiceContext(serviceSlug, actor?.userId ?? null);
     const db = await import('@bunshin/database');
-    const participation = await new ServiceParticipationService(
-      new db.PrismaServiceParticipationRepository(),
-    ).findView({ slug: serviceSlug, actorUserId: null });
-    const document = participation.legalDocuments.find((item) => item.type === type) ?? null;
+    const document =
+      service.configuration.visibility === 'PUBLIC'
+        ? ((
+            await new ServiceParticipationService(
+              new db.PrismaServiceParticipationRepository(),
+            ).findView({ slug: serviceSlug, actorUserId: null })
+          ).legalDocuments.find((item) => item.type === type) ?? null)
+        : await db.prisma.serviceLegalDocument.findFirst({
+            where: {
+              workspaceId: service.workspaceId,
+              groupId: service.serviceId,
+              type,
+              status: 'PUBLISHED',
+              effectiveAt: { lte: new Date() },
+            },
+            orderBy: { version: 'desc' },
+            select: { title: true, version: true, content: true },
+          });
     const label =
       type === 'TERMS'
         ? '利用規約'
