@@ -7,8 +7,10 @@ import {
   safeLineAuthReturnPath,
 } from '../../../src/auth/line-return';
 import { createSupabaseServerClient } from '../../../src/auth/supabase';
+import { loginErrorResponse } from '../../../src/auth/login-error';
 
 export async function POST(request: Request): Promise<Response> {
+  let returnTo: string | null = null;
   try {
     requireSameOrigin(request);
     const environment = getServerEnvironment();
@@ -17,7 +19,7 @@ export async function POST(request: Request): Promise<Response> {
       ? await request.formData()
       : null;
     const returnValue = form?.get('returnTo');
-    const returnTo = safeLineAuthReturnPath(typeof returnValue === 'string' ? returnValue : null);
+    returnTo = safeLineAuthReturnPath(typeof returnValue === 'string' ? returnValue : null);
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'custom:line',
@@ -37,9 +39,11 @@ export async function POST(request: Request): Promise<Response> {
         maxAge: LINE_AUTH_RETURN_MAX_AGE_SECONDS,
         path: '/',
       });
+    } else {
+      response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
     }
     return response;
   } catch {
-    return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
+    return loginErrorResponse(request, '1', returnTo);
   }
 }

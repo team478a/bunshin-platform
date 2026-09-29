@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+サービス認証・LINE再連携の混在防止は`docs/SERVICE_AUTH_FLOW_ISOLATION_REPORT.md`を参照。認証/同意後にサービスへ復帰し、共通業種登録は挟まない。サービス固有の参加・事業プロフィール・研修・占いの判定は維持する。管理入口/操作・画像閲覧の類似ケースも修正し、既存ページ一覧の回帰テストで許可リストの漏れを確認する。本番実端末/リッチメニュー確認と複数同時認証の復帰情報は未確認・後続作業。
+
 機能不足の再監査は`docs/FUNCTIONAL_GAPS_AUDIT_20260929.md`を参照。第一作業単位のOEM決済CSV期間指定・上限超過時の欠落防止は`docs/OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`を参照。日本時間の受付日で絞り、10,000件を超えた場合は部分CSVを返さない。入金/返金日の会計期間集計、上限撤廃、本番設定変更は含めない。
 
 AI研修の管理画面の受講期間表示は`docs/ai-training/AI_TRAINING_ADMIN_PERIOD_STATUS_IMPLEMENTATION_REPORT.md`を参照。期限後ACTIVEは状態未更新の期限終了として表示し、開始前/開始日時不明とともに受講中・継続率・声かけ集計から除く。利用状況と登録状態を分け、LifecycleのCASや確定終了日・保持期限起算日を表示から書き換えない。

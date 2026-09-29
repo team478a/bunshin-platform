@@ -5,9 +5,10 @@ import { requireSameOrigin } from '../../../src/auth/request-security';
 import {
   LINE_AUTH_RETURN_COOKIE,
   lineAuthReturnFromCookie,
-  videoAuthReturnProjectId,
+  requiresPlatformOnboarding,
 } from '../../../src/auth/line-return';
 import { createSupabaseServerClient } from '../../../src/auth/supabase';
+import { loginErrorResponse } from '../../../src/auth/login-error';
 
 export function GET(request: Request): Response {
   const url = new URL(request.url);
@@ -23,6 +24,7 @@ export function GET(request: Request): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
   try {
     requireSameOrigin(request);
     const data = await request.formData();
@@ -44,13 +46,11 @@ export async function POST(request: Request): Promise<Response> {
     );
     if (required.some((item) => !item.consentedAt))
       return NextResponse.redirect(new URL('/consent', request.url), 303);
-    const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
     const registration = await db.prisma.userRegistrationProfile.findUnique({
       where: { userId: currentUser.userId },
       select: { status: true },
     });
-    const needsOnboarding =
-      registration?.status !== 'COMPLETED' && !videoAuthReturnProjectId(returnTo);
+    const needsOnboarding = requiresPlatformOnboarding(registration?.status, returnTo);
     const destination = !needsOnboarding
       ? new URL(returnTo ?? '/bunshins', request.url)
       : new URL('/onboarding', request.url);
@@ -59,6 +59,6 @@ export async function POST(request: Request): Promise<Response> {
     response.cookies.set(LINE_AUTH_RETURN_COOKIE, '', { maxAge: 0, path: '/' });
     return response;
   } catch {
-    return NextResponse.redirect(new URL('/login?error=1', request.url), 303);
+    return loginErrorResponse(request, '1', returnTo);
   }
 }

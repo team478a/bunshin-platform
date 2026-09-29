@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { createSupabaseServerClient } from '../../../../src/auth/supabase';
+import { loginErrorResponse } from '../../../../src/auth/login-error';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
 import { recordAuthenticatedRegistrationEvent } from '../../../../src/registration/funnel';
 import {
   LINE_AUTH_RETURN_COOKIE,
   lineAuthReturnFromCookie,
-  videoAuthReturnProjectId,
+  requiresPlatformOnboarding,
 } from '../../../../src/auth/line-return';
 
 function clearReturnCookie(response: NextResponse): NextResponse {
@@ -49,9 +50,9 @@ async function lineFriendshipStatus(providerToken: string | null | undefined) {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
   try {
     const url = new URL(request.url);
-    const returnTo = lineAuthReturnFromCookie(request.headers.get('cookie'));
     const code = url.searchParams.get('code');
     if (url.searchParams.has('error') || code === null || code.length > 2048)
       throw new Error('LINE callback rejected');
@@ -120,13 +121,11 @@ export async function GET(request: Request): Promise<Response> {
     );
     if (required.some((item) => !item.consentedAt))
       return NextResponse.redirect(new URL('/consent', request.url), 303);
-    if (videoAuthReturnProjectId(returnTo))
-      return clearReturnCookie(NextResponse.redirect(new URL(returnTo!, request.url), 303));
     const registration = await db.prisma.userRegistrationProfile.findUnique({
       where: { userId: currentUser.userId },
       select: { status: true },
     });
-    if (registration?.status !== 'COMPLETED') {
+    if (requiresPlatformOnboarding(registration?.status, returnTo)) {
       const onboarding = new URL('/onboarding', request.url);
       if (returnTo) onboarding.searchParams.set('returnTo', returnTo);
       return clearReturnCookie(NextResponse.redirect(onboarding, 303));
@@ -135,6 +134,6 @@ export async function GET(request: Request): Promise<Response> {
       NextResponse.redirect(new URL(returnTo ?? '/bunshins', request.url), 303),
     );
   } catch {
-    return clearReturnCookie(NextResponse.redirect(new URL('/login?error=1', request.url), 303));
+    return loginErrorResponse(request, '1', returnTo);
   }
 }
