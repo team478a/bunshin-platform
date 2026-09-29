@@ -4002,13 +4002,13 @@ integration('database ownership boundaries', () => {
     });
     await client.groupMembership.update({
       where: { groupId_userId: { groupId: group.id, userId: member.user.id } },
-      data: { status: 'REVOKED' },
+      data: { status: 'REVOKED', revokedAt: new Date() },
     });
     expect(await repository.update({ ...reference, name: 'revoked' })).toBeNull();
     expect(await repository.archive(reference)).toBeNull();
     await client.groupMembership.update({
       where: { groupId_userId: { groupId: group.id, userId: member.user.id } },
-      data: { status: 'ACTIVE' },
+      data: { status: 'ACTIVE', revokedAt: null },
     });
     expect(await repository.archive(reference)).toMatchObject({ status: 'ARCHIVED' });
     expect(await repository.find(reference)).toBeNull();
