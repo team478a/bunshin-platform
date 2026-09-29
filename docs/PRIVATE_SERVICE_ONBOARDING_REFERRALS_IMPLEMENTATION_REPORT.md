@@ -29,7 +29,7 @@
 ## 4. 実行した検証
 
 - 関連6ファイル79テスト成功。新規HTTP実行52テスト、既存追加質問休止、紹介/URL静的境界、Service設定/共通登録分離を含む。
-- アーキテクチャ境界とその否定テスト10件、変更ファイルのformat、`git diff --check`成功。型/lint、全WebとCIの最終成否はPR/作業報告へ記録する。
+- Web型検査、変更コードlint、アーキテクチャ境界とその否定テスト10件、`git diff --check`成功。初回CIのformat検査で代理店URLの長い条件行の整形漏れを検出し、整形後に変更全ファイルのformatとCIを再実行する。全WebとCIの最終成否はPR/作業報告へ記録する。
 - 本番DB、LINE、AI、Storage、実QR Providerへ接続しない。DB schema/migration変更なし。
 
 ## 5. 未解決事項

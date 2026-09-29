@@ -27,7 +27,8 @@ export async function saveServiceMemberTrackingLink(request: Request, serviceSlu
       resolveMemberServiceContext(serviceSlug, actor.userId),
       inputSchema.safeParseAsync(await request.json()),
     ]);
-    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid tracking link body');
+    if (!parsed.success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid tracking link body');
     const input = parsed.data;
     const db = await import('@bunshin/database');
     const saved = await new ExternalTrackingMemberLinkService(
