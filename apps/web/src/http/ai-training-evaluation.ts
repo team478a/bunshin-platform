@@ -51,6 +51,7 @@ async function resolveScopedAnswer(
       groupId: service.serviceId,
       groupMembershipId: membership.id,
       status: 'ACTIVE',
+      AND: [db.trainingEnrollmentPeriodWhere(new Date())],
     },
     select: { id: true },
   });

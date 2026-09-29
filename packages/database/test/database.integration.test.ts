@@ -4,6 +4,7 @@ import {
   PrismaTrainingLifecycleRepository,
   listTrainingAdminEvaluationMetrics,
   PrismaTrainingRetentionAdminPreviewRepository,
+  trainingEnrollmentPeriodWhere,
 } from '../src';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -980,6 +981,50 @@ integration('database ownership boundaries', () => {
     expect(await maintenance.preview({ ...retentionScope, operatorUserId: other.user.id })).toEqual(
       { outcome: 'FORBIDDEN' },
     );
+    const liveEnrollment = await client.programEnrollment.findUniqueOrThrow({
+      where: { id: enrollment.id },
+    });
+    const periodLookup = (at: Date, workspaceId = base.workspaceId) =>
+      client.programEnrollment.findFirst({
+        where: {
+          ...base,
+          workspaceId,
+          id: enrollment.id,
+          groupMembershipId: membership.id,
+          status: 'ACTIVE',
+          AND: [trainingEnrollmentPeriodWhere(at)],
+        },
+        select: { id: true },
+      });
+    expect(await periodLookup(liveEnrollment.startsAt!)).toEqual({ id: enrollment.id });
+    expect(await periodLookup(new Date(liveEnrollment.startsAt!.getTime() - 1))).toBeNull();
+    expect(await periodLookup(new Date(liveEnrollment.endsAt!.getTime() - 1))).toEqual({
+      id: enrollment.id,
+    });
+    expect(await periodLookup(liveEnrollment.endsAt!)).toBeNull();
+    expect(await periodLookup(new Date(), other.workspace.id)).toBeNull();
+    await client.programEnrollment.update({ where: { id: enrollment.id }, data: { endsAt: null } });
+    expect(await periodLookup(new Date('2099-01-01'))).toEqual({ id: enrollment.id });
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { startsAt: null },
+    });
+    expect(await periodLookup(new Date())).toBeNull();
+    await client.programEnrollment.update({
+      where: { id: enrollment.id },
+      data: { startsAt: liveEnrollment.startsAt, endsAt: liveEnrollment.endsAt },
+    });
+    // Period checks never transition status or fabricate a retention origin.
+    expect(
+      (await client.programEnrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status,
+    ).toBe('ACTIVE');
+    expect(
+      (
+        await client.trainingDataRetentionState.findUniqueOrThrow({
+          where: { programEnrollmentId: enrollment.id },
+        })
+      ).endedAt,
+    ).toBeNull();
     await client.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'REVOKED', revokedAt: new Date() },

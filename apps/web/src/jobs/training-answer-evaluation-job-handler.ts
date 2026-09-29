@@ -43,6 +43,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           groupMembershipId: membership.id,
           status: 'ACTIVE',
           startsAt: { not: null },
+          AND: [db.trainingEnrollmentPeriodWhere(new Date())],
         },
         select: { id: true, serviceProgramId: true },
       });
@@ -101,7 +102,24 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           workspaceId: input.workspaceId,
           groupId: input.groupId,
           operationKey,
-          generate: () => {
+          generate: async () => {
+            const allowed = await db.prisma.programEnrollment.findFirst({
+              where: {
+                id: enrollment.id,
+                workspaceId: input.workspaceId,
+                groupId: input.groupId,
+                groupMembershipId: membership.id,
+                status: 'ACTIVE',
+                AND: [db.trainingEnrollmentPeriodWhere(new Date())],
+              },
+              select: { id: true },
+            });
+            if (!allowed) {
+              throw new TrainingAnswerEvaluationJobError(
+                'TRAINING_EVALUATION_SCOPE_REVOKED',
+                false,
+              );
+            }
             providerAttempted = true;
             return new OpenAiTrainingAnswerEvaluator({
               apiKey: runtime.apiKey,
@@ -131,6 +149,7 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
           idempotencyKey: usageKey,
         });
       } catch (error) {
+        if (error instanceof TrainingAnswerEvaluationJobError) throw error;
         await recordAiUsageSafely({
           workspaceId: input.workspaceId,
           bunshinId: null,
@@ -174,10 +193,13 @@ export function createTrainingAnswerEvaluationJobHandler(): TrainingAnswerEvalua
             groupId: input.groupId,
             groupMembershipId: membership.id,
             status: 'ACTIVE',
+            AND: [db.trainingEnrollmentPeriodWhere(evaluatedAt)],
           },
           select: { id: true },
         });
-        if (!stillActive) return;
+        if (!stillActive) {
+          throw new TrainingAnswerEvaluationJobError('TRAINING_EVALUATION_SCOPE_REVOKED', false);
+        }
         const updated = await tx.trainingMissionAnswer.updateMany({
           where: {
             id: answer.id,

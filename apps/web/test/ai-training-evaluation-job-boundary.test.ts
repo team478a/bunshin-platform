@@ -21,7 +21,8 @@ describe('AI training evaluation job boundary', () => {
     const save = handler.indexOf('tx.trainingMissionAnswer.updateMany', lock);
     expect(active).toBeGreaterThan(lock);
     expect(save).toBeGreaterThan(active);
-    expect(handler).toContain('if (!stillActive) return;');
+    expect(handler).toContain('if (!stillActive) {');
+    expect(handler).toContain('db.trainingEnrollmentPeriodWhere(evaluatedAt)');
   });
   it('revalidates workspace, service, participant, enrollment and answer before provider use', () => {
     expect(handler).toContain('workspaceId: input.workspaceId');
