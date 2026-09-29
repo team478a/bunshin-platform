@@ -224,6 +224,7 @@ integration('database ownership boundaries', () => {
         ownerUserId: owner.user.id,
         name: 'Fortune async',
         slug: `fortune-${randomUUID()}`,
+        status: 'ACTIVE',
         type: 'COPY',
         objectiveSummary: 'Daily guidance',
         audienceSummary: 'Owner',
