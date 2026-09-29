@@ -5,7 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 const inputSchema = z
   .object({
@@ -23,10 +23,12 @@ export async function recordMemberProductActivityResponse(request: Request, serv
       throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const [service, input] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      inputSchema.parseAsync(await request.json()),
+    const [service, parsed] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      inputSchema.safeParseAsync(await request.json()),
     ]);
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid activity body');
+    const input = parsed.data;
     const db = await import('@bunshin/database');
     const result = await new MemberProductActivityService(
       new db.PrismaMemberProductActivityRepository(),
