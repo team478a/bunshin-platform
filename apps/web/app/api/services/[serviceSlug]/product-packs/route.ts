@@ -2,24 +2,19 @@ import { ProductPackService } from '@bunshin/application';
 import { requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
-import { currentUserProvider } from '../../../../../src/auth/current-user';
 import { requireSameOrigin } from '../../../../../src/auth/request-security';
-import { resolvePublicServiceContext } from '../../../../../src/services/public-service';
+import { resolveServiceContentContext } from '../../../../../src/http/service-content-context';
 
 const createSchema = z.object({ groupId: z.uuid(), name: z.string().min(1).max(160) }).strict();
 
 async function context(serviceSlug: string) {
-  const [actor, service] = await Promise.all([
-    (await currentUserProvider()).getCurrentUser(),
-    resolvePublicServiceContext(serviceSlug),
-  ]);
-  if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+  const { actorUserId, service } = await resolveServiceContentContext(serviceSlug);
   const db = await import('@bunshin/database');
   return {
     scope: {
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
-      actorUserId: actor.userId,
+      actorUserId,
     },
     value: new ProductPackService(new db.PrismaProductPackRepository()),
   };
@@ -28,10 +23,16 @@ async function context(serviceSlug: string) {
 async function respond(request: Request, operation: () => Promise<unknown>, status = 200) {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   try {
-    return Response.json({ data: await operation(), requestId }, { status });
+    return Response.json(
+      { data: await operation(), requestId },
+      { status, headers: { 'cache-control': 'private, no-store' } },
+    );
   } catch (error) {
     const mapped = toApiError(error, requestId);
-    return Response.json(mapped.body, { status: mapped.status });
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
   }
 }
 
