@@ -10,19 +10,21 @@ import type { ServiceDailyMissionController } from './service-daily-mission-cont
 
 export function ServiceDailyMissionImageGuide({
   mission,
+  serviceSlug,
   imageCreationHref,
   controller,
 }: {
   mission: DailyMissionView;
+  serviceSlug: string;
   imageCreationHref: string | null;
   controller: ServiceDailyMissionController;
 }) {
-  const preparedCopyOptions = copyOptions(missionWithSelectedVariant(mission));
+  const preparedCopyOptions = copyOptions(missionWithSelectedVariant(mission), serviceSlug);
   const imageInstruction = preparedCopyOptions.find(
     (option) => option.type === 'COPIED_IMAGE_INSTRUCTION',
   );
   const postCaption = preparedCopyOptions.find((option) => option.type === 'COPIED_TEXT');
-  const imageHeadline = imagePostHeadline(missionWithSelectedVariant(mission));
+  const imageHeadline = imagePostHeadline(missionWithSelectedVariant(mission), serviceSlug);
 
   if (imageCreationHref) {
     return (

@@ -24,10 +24,12 @@ const businessOutcomeOptions = [
 
 export function ServiceDailyMissionAccepted({
   mission,
+  serviceSlug,
   controller,
   businessFree,
 }: {
   mission: DailyMissionView;
+  serviceSlug: string;
   controller: ServiceDailyMissionController;
   businessFree: boolean;
 }) {
@@ -36,7 +38,7 @@ export function ServiceDailyMissionAccepted({
   return (
     <div className="mission-accepted">
       <p className="mission-step-complete">✓ 採用しました</p>
-      {copyOptions(missionWithSelectedVariant(mission)).map((option, index) => (
+      {copyOptions(missionWithSelectedVariant(mission), serviceSlug).map((option, index) => (
         <button
           key={`${option.type}:${index}`}
           type="button"
