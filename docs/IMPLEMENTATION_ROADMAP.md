@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+千ノ国メディアのスキームなしDiscord招待URL除去は`docs/SENNOKUNI_SCHEMELESS_INVITE_FILTER_IMPLEMENTATION_REPORT.md`を参照。PR #994の参加先補正を補強し、禁止ホストだけを除去して偽のLINEドメインを作らない。実画像生成・本番反映の確認は別作業。
+
 非公開Serviceの専用URL・外部計測管理APIは`docs/PRIVATE_SERVICE_EXTERNAL_TRACKING_IMPLEMENTATION_REPORT.md`を参照。管理画面と同じ本人の`ADMINISTRATION`権限でServiceを解決し、公開状態には依存しない。成果受信Webhookは別経路として維持する。本番反映・実端末確認は別作業。
 
 非公開Serviceの商品パック・Campaign管理APIは`docs/PRIVATE_SERVICE_CONTENT_OPERATIONS_IMPLEMENTATION_REPORT.md`を参照。管理画面と同じ認証済み`CONTENT`権限でServiceを解決し、公開状態に依存しない。既存Workspace/Group所有・内容編集・同意境界を維持する。本番反映・実端末確認は別作業。

@@ -7,6 +7,7 @@ export interface ServiceContentTerminologyPolicy {
   rules: ServiceContentTerminologyRule[];
   allowedExamples?: string[];
   forbiddenUrlFragments?: string[];
+  forbiddenHostnames?: string[];
   participationInstructions?: string[];
 }
 
@@ -33,6 +34,7 @@ const SERVICE_CONTENT_TERMINOLOGY_POLICIES: Readonly<
       'discord.com',
       'discordapp.com',
     ],
+    forbiddenHostnames: ['discord.gg', 'discord.com', 'discordapp.com'],
     participationInstructions: [
       '千ノ国メディアへの参加窓口は公式LINEです。参加案内は公式LINEの友だち追加・参加登録として説明してください。',
       'Discord・ディスコードへの参加や招待はありません。Discordのロゴ、画面、サーバー一覧、チャンネル一覧を画像に描かないでください。',
@@ -84,19 +86,44 @@ function replaceTerminology(value: string, rules: ServiceContentTerminologyRule[
       `(^|[^A-Za-z0-9])${escapeRegExp(forbidden)}(?=$|[^A-Za-z0-9])`,
       'gi',
     );
-    return current.replace(pattern, (_match, prefix: string) => `${prefix}${replacement}`);
+    return current.replace(pattern, (match, prefix: string, offset: number, source: string) => {
+      const start = offset + prefix.length;
+      const before = source.slice(0, start);
+      const after = source.slice(start + forbidden.length);
+      if (/[A-Za-z0-9-]+\.$/u.test(before) || /^\.[A-Za-z0-9-]+(?:[./:?#]|$)/u.test(after))
+        return match;
+      return `${prefix}${replacement}`;
+    });
   }, value);
 }
 
-function removeForbiddenUrls(value: string, fragments: string[]) {
-  if (fragments.length === 0) return value;
+function removeForbiddenUrls(value: string, fragments: string[], hostnames: string[]) {
+  if (fragments.length === 0 && hostnames.length === 0) return value;
+  const forbiddenHost = (hostname: string) =>
+    hostnames.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`));
+  const otherFragments = fragments.filter((fragment) => !hostnames.includes(fragment));
   return value
-    .replace(/https?:\/\/[^\s<>"'）)]+/giu, (url) =>
-      fragments.some((fragment) =>
-        url.toLocaleLowerCase('en-US').includes(fragment.toLocaleLowerCase('en-US')),
-      )
+    .replace(/(?:https?:)?\/\/[^\s<>"'）)]+/giu, (url) => {
+      const normalized = url.toLocaleLowerCase('en-US');
+      let hostname = '';
+      try {
+        hostname = new URL(url.startsWith('//') ? `https:${url}` : url).hostname
+          .toLowerCase()
+          .replace(/\.$/u, '');
+      } catch {
+        return hostnames.some((blocked) => normalized.includes(blocked)) ||
+          otherFragments.some((fragment) => normalized.includes(fragment.toLowerCase()))
+          ? ''
+          : url;
+      }
+      return forbiddenHost(hostname) ||
+        otherFragments.some((fragment) => normalized.includes(fragment.toLowerCase()))
         ? ''
-        : url,
+        : url;
+    })
+    .replace(
+      /(?<![A-Za-z0-9@._/-])(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d{1,5})?(?:[/?#][A-Za-z0-9._~:/?#@!$&'()*+,;=%-]*)?/giu,
+      (url) => (forbiddenHost(url.split(/[/:?#]/u)[0]!.toLowerCase()) ? '' : url),
     )
     .replace(/[ \t]+\n/gu, '\n')
     .replace(/[ \t]{2,}/gu, ' ')
@@ -110,7 +137,11 @@ function applyTerminologyToValue(
   if (!policy) return value;
   if (typeof value === 'string') {
     return replaceTerminology(
-      removeForbiddenUrls(value, policy.forbiddenUrlFragments ?? []),
+      removeForbiddenUrls(
+        value,
+        policy.forbiddenUrlFragments ?? [],
+        policy.forbiddenHostnames ?? [],
+      ),
       policy.rules,
     );
   }
