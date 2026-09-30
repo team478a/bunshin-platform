@@ -2,7 +2,13 @@ import { ApplicationError } from '@bunshin/shared';
 import type { VideoSceneRecord } from './video-core';
 
 export type VideoSceneGenerationStatus =
-  'QUEUED' | 'SUBMITTED' | 'GENERATING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+  | 'QUEUED'
+  | 'SUBMISSION_UNKNOWN'
+  | 'SUBMITTED'
+  | 'GENERATING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'CANCELLED';
 
 export type VideoAiProvider = 'FAL' | 'RUNWAY';
 
@@ -70,6 +76,10 @@ export interface VideoSceneGenerationRepository {
     workspaceId: string;
     generationId: string;
   }): Promise<VideoSceneGenerationExecutionContext | null>;
+  claimFalSubmission(input: {
+    workspaceId: string;
+    generationId: string;
+  }): Promise<VideoSceneGenerationRecord | null>;
   markSubmitted(input: {
     workspaceId: string;
     generationId: string;
@@ -132,6 +142,7 @@ export interface VideoSceneGenerationOutputStoragePort {
 
 export type VideoSceneGenerationExecutionResult =
   | { status: 'PENDING'; generation: VideoSceneGenerationRecord }
+  | { status: 'RECONCILIATION_REQUIRED'; generation: VideoSceneGenerationRecord }
   | { status: 'SUCCEEDED'; generation: VideoSceneGenerationRecord }
   | { status: 'FAILED'; generation: VideoSceneGenerationRecord };
 
@@ -252,12 +263,21 @@ export class ExecuteVideoSceneGenerationStep {
     if (generation.status === 'SUCCEEDED') return { status: 'SUCCEEDED', generation };
     if (generation.status === 'FAILED' || generation.status === 'CANCELLED')
       return { status: 'FAILED', generation };
+    if (generation.status === 'SUBMISSION_UNKNOWN')
+      return { status: 'RECONCILIATION_REQUIRED', generation };
     if (generation.status === 'QUEUED') {
       if (context.referenceStorageKeys.length === 0)
         throw new ApplicationError('VALIDATION_ERROR', 'character reference image is required');
       const referenceImageUrls = await this.references.createTemporaryReadUrls({
         storageKeys: context.referenceStorageKeys,
       });
+      // fal has no confirmed lookup/deduplication contract when the request ID is lost.
+      // Claim before POST so a crash, timeout or failed ID write cannot silently re-POST.
+      if (generation.provider === 'FAL') {
+        const claimed = await this.repository.claimFalSubmission(input);
+        if (!claimed)
+          throw new ApplicationError('CONFLICT', 'video scene submission claim conflict');
+      }
       const submitted = await this.provider.submit({
         generationId: generation.id,
         model: generation.model,

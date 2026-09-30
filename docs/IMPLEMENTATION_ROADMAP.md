@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+fal/Klingの発注成否不明の保留は`docs/VIDEO_FAL_SUBMISSION_UNKNOWN_IMPLEMENTATION_REPORT.md`を参照。POST前の永続claim、ID喪失時の再送停止、旧QUEUEDかつIDなし行の保守的な要照合移行、fal管理者再試行の停止を同一作業単位とする。実fal注文・費用・本番旧行件数・照合手順を確認するまで本番運用可能とみなさない。
+
 千ノ国メディアのスキームなしDiscord招待URL除去は`docs/SENNOKUNI_SCHEMELESS_INVITE_FILTER_IMPLEMENTATION_REPORT.md`を参照。PR #994の参加先補正を補強し、禁止ホストだけを除去して偽のLINEドメインを作らない。実画像生成・本番反映の確認は別作業。
 
 非公開Serviceの専用URL・外部計測管理APIは`docs/PRIVATE_SERVICE_EXTERNAL_TRACKING_IMPLEMENTATION_REPORT.md`を参照。管理画面と同じ本人の`ADMINISTRATION`権限でServiceを解決し、公開状態には依存しない。成果受信Webhookは別経路として維持する。本番反映・実端末確認は別作業。

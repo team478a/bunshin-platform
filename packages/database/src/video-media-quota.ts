@@ -124,7 +124,12 @@ export async function settleVideoSceneBatch(tx: Prisma.TransactionClient, input:
     projectRevision: input.projectRevision,
   };
   const scenes = await tx.videoSceneGeneration.findMany({ where, select: { status: true } });
-  if (scenes.some((scene) => ['QUEUED', 'SUBMITTED', 'GENERATING'].includes(scene.status))) return;
+  if (
+    scenes.some((scene) =>
+      ['QUEUED', 'SUBMISSION_UNKNOWN', 'SUBMITTED', 'GENERATING'].includes(scene.status),
+    )
+  )
+    return;
   if (!scenes.some((scene) => ['FAILED', 'CANCELLED'].includes(scene.status))) {
     if (scenes.length > 0)
       await tx.videoProject.updateMany({

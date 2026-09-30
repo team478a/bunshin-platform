@@ -163,12 +163,43 @@ export class PrismaVideoSceneGenerationRepository implements VideoSceneGeneratio
 
   async markSubmitted(input: Parameters<VideoSceneGenerationRepository['markSubmitted']>[0]) {
     const changed = await this.client.videoSceneGeneration.updateMany({
-      where: { id: input.generationId, workspaceId: input.workspaceId, status: 'QUEUED' },
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        OR: [
+          { provider: 'FAL', status: 'SUBMISSION_UNKNOWN' },
+          { provider: { not: 'FAL' }, status: 'QUEUED' },
+        ],
+      },
       data: {
         status: 'SUBMITTED',
         externalJobId: input.externalJobId,
         startedAt: new Date(),
         errorCode: null,
+      },
+    });
+    if (changed.count !== 1) return null;
+    const row = await this.client.videoSceneGeneration.findUniqueOrThrow({
+      where: { id: input.generationId },
+    });
+    return videoSceneGenerationRecord(row);
+  }
+
+  async claimFalSubmission(
+    input: Parameters<VideoSceneGenerationRepository['claimFalSubmission']>[0],
+  ) {
+    const changed = await this.client.videoSceneGeneration.updateMany({
+      where: {
+        id: input.generationId,
+        workspaceId: input.workspaceId,
+        provider: 'FAL',
+        status: 'QUEUED',
+        externalJobId: null,
+      },
+      data: {
+        status: 'SUBMISSION_UNKNOWN',
+        startedAt: new Date(),
+        errorCode: 'FAL_SUBMISSION_UNCONFIRMED',
       },
     });
     if (changed.count !== 1) return null;
