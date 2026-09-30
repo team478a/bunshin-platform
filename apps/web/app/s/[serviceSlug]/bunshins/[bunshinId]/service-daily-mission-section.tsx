@@ -1,13 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { RewardsActionFeedback } from '../../../../ui/rewards-action-feedback';
 import type { DailyMissionView } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
 import { useServiceDailyMissionController } from './service-daily-mission-controller';
 import { ServiceDailyMissionList } from './service-daily-mission-list';
+import { splitServiceMissionsByDate } from './service-mission-date-filter';
 
 export function ServiceDailyMissionSection({
   endpoint,
   missions,
+  today,
   variantPointCost,
   pointWorkspaceId,
   serviceSlug,
@@ -20,6 +23,7 @@ export function ServiceDailyMissionSection({
 }: {
   endpoint: string;
   missions: DailyMissionView[];
+  today: string;
   variantPointCost: number | null;
   pointWorkspaceId: string;
   serviceSlug: string;
@@ -30,6 +34,12 @@ export function ServiceDailyMissionSection({
   imageCreationBaseHref?: string;
   businessFree?: boolean;
 }) {
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
+  const { todayMissions, pastMissions } = splitServiceMissionsByDate(missions, today);
+  const pastDates = pastMissions.map(({ missionDate }) => missionDate);
+  const selectedHistoryMissions = pastMissions.filter(
+    ({ missionDate }) => missionDate === selectedHistoryDate,
+  );
   const controller = useServiceDailyMissionController({
     endpoint,
     missions,
@@ -122,9 +132,9 @@ export function ServiceDailyMissionSection({
           />
         </section>
       ) : null}
-      {missions.length === 0 ? (
+      {todayMissions.length === 0 ? (
         <div>
-          <p>届いた投稿案はまだありません。自動のお届けを設定すると、投稿予定の日に届きます。</p>
+          <p>今日の投稿案はまだありません。自動のお届けを設定すると、投稿予定の日に届きます。</p>
           {active && generation ? (
             <button
               type="button"
@@ -139,7 +149,7 @@ export function ServiceDailyMissionSection({
         </div>
       ) : null}
       <ServiceDailyMissionList
-        missions={missions}
+        missions={todayMissions}
         controller={controller}
         variantPointCost={variantPointCost}
         pointWorkspaceId={pointWorkspaceId}
@@ -149,6 +159,43 @@ export function ServiceDailyMissionSection({
         {...(imageCreationBaseHref === undefined ? {} : { imageCreationBaseHref })}
         businessFree={businessFree}
       />
+      <details className="mission-history">
+        <summary>過去の投稿をカレンダーから見る</summary>
+        {pastMissions.length === 0 ? (
+          <p>過去の投稿案はまだありません。</p>
+        ) : (
+          <div className="mission-history__content">
+            <label htmlFor="service-mission-history-date">見たい日付を選択</label>
+            <input
+              id="service-mission-history-date"
+              type="date"
+              min={pastDates.reduce((earliest, date) => (date < earliest ? date : earliest))}
+              max={pastDates.reduce((latest, date) => (date > latest ? date : latest))}
+              value={selectedHistoryDate}
+              onChange={(event) => setSelectedHistoryDate(event.currentTarget.value)}
+            />
+            {selectedHistoryDate ? (
+              selectedHistoryMissions.length > 0 ? (
+                <ServiceDailyMissionList
+                  missions={selectedHistoryMissions}
+                  controller={controller}
+                  variantPointCost={variantPointCost}
+                  pointWorkspaceId={pointWorkspaceId}
+                  serviceSlug={serviceSlug}
+                  active={active}
+                  videos={videos}
+                  {...(imageCreationBaseHref === undefined ? {} : { imageCreationBaseHref })}
+                  businessFree={businessFree}
+                />
+              ) : (
+                <p>選んだ日付の投稿案はありません。別の日付を選んでください。</p>
+              )
+            ) : (
+              <p>カレンダーで日付を選ぶと、その日の投稿案を表示します。</p>
+            )}
+          </div>
+        )}
+      </details>
     </section>
   );
 }
