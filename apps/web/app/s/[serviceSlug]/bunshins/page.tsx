@@ -4,11 +4,9 @@ import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
+import { memberServiceMetadata } from '../../../../src/services/member-service-metadata';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
-import {
-  resolveMemberServiceContext,
-  resolvePublicServiceContext,
-} from '../../../../src/services/public-service';
+import { resolveMemberServiceContext } from '../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { PublicShell } from '../../../ui/public-shell';
 
@@ -28,10 +26,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
-  const service = await resolvePublicServiceContext((await params).serviceSlug).catch(() => null);
-  return {
-    title: service ? `${service.configuration.displayName}｜投稿パートナー` : '投稿パートナー',
-  };
+  return memberServiceMetadata((await params).serviceSlug, '投稿パートナー');
 }
 
 export default async function ServiceBunshinsPage({

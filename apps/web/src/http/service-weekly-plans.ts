@@ -10,7 +10,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import { createWeeklyPlanGenerationService } from '../services/weekly-plan-generation';
 import { loadServiceGenerationKnowledge } from '../services/service-generation-knowledge';
 import { applyServiceContentTerminology } from '../services/service-content-terminology';
@@ -46,10 +46,8 @@ function resourceId(value: string) {
 }
 
 async function scope(serviceSlug: string, bunshinId: string) {
-  const [service, actor] = await Promise.all([
-    resolvePublicServiceContext(serviceSlug),
-    actorUserId(),
-  ]);
+  const actor = await actorUserId();
+  const service = await resolveMemberServiceContext(serviceSlug, actor);
   return {
     workspaceId: service.workspaceId,
     groupId: service.serviceId,

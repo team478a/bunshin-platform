@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   copyOptions,
+  imageCreationPrompt,
+  imagePostHeadline,
   missionAssistanceOptions,
   missionGuide,
   missionWithSelectedVariant,
@@ -36,6 +38,70 @@ function mission(
 }
 
 describe('Daily Mission copy UX', () => {
+  it.each(['SLIDE', 'IMAGE'] as const)(
+    'corrects saved Sennokuni %s prompts and adds explicit LINE visual rules',
+    (format) => {
+      const original = mission(format, {
+        overlayText: '加入：Discord参加',
+        imageInstruction: 'Discordサーバーを開くスマートフォン',
+        slides: [
+          {
+            headline: 'Discord参加',
+            body: 'Discord招待リンク https://discord.gg/abc',
+            visualScene: 'Discordチャンネルを開く',
+          },
+        ],
+        caption: 'ディスコード参加 https://lin.ee/approved',
+      });
+      original.topic = 'Discord参加の案内';
+      const options = copyOptions(original, 'sennokuni-media');
+      const prompt = options.find(({ type }) => type === 'COPIED_IMAGE_INSTRUCTION')?.value ?? '';
+      expect(prompt).toContain('投稿のテーマ：公式LINEから参加の案内');
+      expect(prompt).toContain('見出し「公式LINEから参加」');
+      expect(prompt).toContain('このページの場面「公式LINEを開く」');
+      expect(prompt).toContain('参加窓口は公式LINE');
+      expect(prompt).toContain('Discordのロゴ、画面、サーバー一覧、チャンネル一覧を画像に描かない');
+      expect(prompt).not.toContain('https://discord');
+      expect(prompt).not.toContain('Discord参加');
+      expect(options.find(({ type }) => type === 'COPIED_TEXT')?.value).toBe(
+        '公式LINEから参加 https://lin.ee/approved',
+      );
+      expect(imagePostHeadline(original, 'sennokuni-media')).toBe('加入：公式LINEから参加');
+      expect(imageCreationPrompt(original, 'sennokuni-media')).toBe(prompt);
+      expect(original.content['overlayText']).toBe('加入：Discord参加');
+    },
+  );
+
+  it('adds the participation rule even when a saved prompt has no mention of any platform', () => {
+    const input = mission('IMAGE', { caption: '千ノ国メディアに参加しよう' });
+    expect(imageCreationPrompt(input, 'sennokuni-media')).toContain('参加窓口は公式LINE');
+    expect(imageCreationPrompt(input)).not.toContain('参加窓口は公式LINE');
+    expect(imageCreationPrompt(input, 'other-service')).toBe(imageCreationPrompt(input));
+  });
+
+  it('leaves personal and other-service Discord content unchanged', () => {
+    const input = mission('TEXT', { body: 'Discord参加 https://discord.gg/other' });
+    expect(copyOptions(input, 'other-service')).toEqual(copyOptions(input));
+    expect(copyOptions(input)[0]?.value).toContain('Discord参加 https://discord.gg/other');
+  });
+
+  it('corrects selected variant content without modifying the variant', () => {
+    const input = mission('TEXT', { body: '原案' });
+    input.variants = [
+      {
+        id: 'variant',
+        sequence: 1,
+        content: { body: 'Discord参加' },
+        qualityScore: 90,
+        selectedAt: '2026-09-28T00:00:00.000Z',
+      },
+    ];
+    expect(copyOptions(missionWithSelectedVariant(input), 'sennokuni-media')[0]?.value).toBe(
+      '公式LINEから参加',
+    );
+    expect(input.variants[0]?.content['body']).toBe('Discord参加');
+  });
+
   it('shows three plain Japanese assistance choices in increasing order', () => {
     expect(missionAssistanceOptions.map(({ label }) => label)).toEqual([
       '企画を見る',

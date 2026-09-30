@@ -7,7 +7,7 @@ import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
 import {
   resolveManagedServiceContext,
-  resolvePublicServiceContext,
+  resolveMemberServiceContext,
 } from '../services/public-service';
 
 const uuid = z.string().uuid();
@@ -60,8 +60,18 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const value = input.parse(await request.json());
-    const publicService = await resolvePublicServiceContext(serviceSlug);
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid JSON');
+      throw error;
+    }
+    const parsed = input.safeParse(body);
+    if (!parsed.success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid program goals body');
+    const value = parsed.data;
     const db = await import('@bunshin/database');
 
     if (value.action === 'SET_SUPPORT_POLICY' || value.action === 'CREATE_GOAL_DEFINITION') {
@@ -142,10 +152,11 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       return reply(row, requestId, 201);
     }
 
+    const memberService = await resolveMemberServiceContext(serviceSlug, actor.userId);
     const membership = await db.prisma.groupMembership.findFirst({
       where: {
-        workspaceId: publicService.workspaceId,
-        groupId: publicService.serviceId,
+        workspaceId: memberService.workspaceId,
+        groupId: memberService.serviceId,
         userId: actor.userId,
         status: 'ACTIVE',
       },
@@ -155,16 +166,16 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
     const enrollment = await db.prisma.programEnrollment.findFirst({
       where: {
         id: value.programEnrollmentId,
-        workspaceId: publicService.workspaceId,
-        groupId: publicService.serviceId,
+        workspaceId: memberService.workspaceId,
+        groupId: memberService.serviceId,
         groupMembershipId: membership.id,
         status: 'ACTIVE',
       },
     });
     if (!enrollment) throw new ApplicationError('NOT_FOUND', 'enrollment not found');
     const writeScope = {
-      workspaceId: publicService.workspaceId,
-      groupId: publicService.serviceId,
+      workspaceId: memberService.workspaceId,
+      groupId: memberService.serviceId,
       programEnrollmentId: enrollment.id,
       actorUserId: actor.userId,
     };
@@ -183,8 +194,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
         const program = await tx.serviceProgram.findFirst({
           where: {
             id: writeProgramId,
-            workspaceId: publicService.workspaceId,
-            groupId: publicService.serviceId,
+            workspaceId: memberService.workspaceId,
+            groupId: memberService.serviceId,
           },
           select: { settings: true },
         });
@@ -197,8 +208,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
         const active = await tx.programEnrollment.findFirst({
           where: {
             id: writeScope.programEnrollmentId,
-            workspaceId: publicService.workspaceId,
-            groupId: publicService.serviceId,
+            workspaceId: memberService.workspaceId,
+            groupId: memberService.serviceId,
             groupMembershipId: writeMembershipId,
             status: 'ACTIVE',
             ...(isTraining ? { AND: [db.trainingEnrollmentPeriodWhere(new Date())] } : {}),
@@ -212,8 +223,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
     if (value.action === 'SAVE_PREFERENCE') {
       const policy = await db.prisma.serviceProgramSupportPolicy.findFirst({
         where: {
-          workspaceId: publicService.workspaceId,
-          groupId: publicService.serviceId,
+          workspaceId: memberService.workspaceId,
+          groupId: memberService.serviceId,
           serviceProgramId: enrollment.serviceProgramId,
           status: 'ACTIVE',
         },
@@ -225,8 +236,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
         tx.programMemberPreference.upsert({
           where: { programEnrollmentId: enrollment.id },
           create: {
-            workspaceId: publicService.workspaceId,
-            groupId: publicService.serviceId,
+            workspaceId: memberService.workspaceId,
+            groupId: memberService.serviceId,
             programEnrollmentId: enrollment.id,
             groupMembershipId: membership.id,
             preferredSupportMode: value.preferredSupportMode,
@@ -246,8 +257,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       ? await db.prisma.programGoalDefinition.findFirst({
           where: {
             id: value.goalDefinitionId,
-            workspaceId: publicService.workspaceId,
-            groupId: publicService.serviceId,
+            workspaceId: memberService.workspaceId,
+            groupId: memberService.serviceId,
             serviceProgramId: enrollment.serviceProgramId,
             status: 'ACTIVE',
           },
@@ -262,8 +273,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
     const row = await writeWithEnrollmentLock(async (tx) => {
       await tx.programMemberGoal.updateMany({
         where: {
-          workspaceId: publicService.workspaceId,
-          groupId: publicService.serviceId,
+          workspaceId: memberService.workspaceId,
+          groupId: memberService.serviceId,
           programEnrollmentId: enrollment.id,
           status: 'ACTIVE',
         },
@@ -271,8 +282,8 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
       });
       return tx.programMemberGoal.create({
         data: {
-          workspaceId: publicService.workspaceId,
-          groupId: publicService.serviceId,
+          workspaceId: memberService.workspaceId,
+          groupId: memberService.serviceId,
           programEnrollmentId: enrollment.id,
           groupMembershipId: membership.id,
           goalDefinitionId: definition?.id ?? null,
@@ -289,7 +300,11 @@ export async function programGoalsResponse(request: Request, serviceSlug: string
     });
     return reply(row, requestId, 201);
   } catch (error) {
-    const mapped = toApiError(error, requestId);
+    const failure =
+      error instanceof Error && error.message === 'SERVICE_NOT_FOUND'
+        ? new ApplicationError('NOT_FOUND', 'service not found')
+        : error;
+    const mapped = toApiError(failure, requestId);
     return Response.json(mapped.body, {
       status: mapped.status,
       headers: { 'cache-control': 'private, no-store' },

@@ -20,6 +20,16 @@ export interface ServiceParticipationRepository {
     actorUserId: string | null;
     now: Date;
   }): Promise<ServiceParticipationView | null>;
+  findLegalConsentView(input: { slug: string; actorUserId: string; now: Date }): Promise<{
+    legalDocuments: ServiceParticipationView['legalDocuments'];
+    acceptedDocumentIds: string[];
+  } | null>;
+  acceptLegalDocuments(input: {
+    slug: string;
+    actorUserId: string;
+    legalDocumentIds: string[];
+    now: Date;
+  }): Promise<boolean>;
   request(input: {
     slug: string;
     actorUserId: string;
@@ -77,7 +87,7 @@ export class ServiceParticipationService {
   }) {
     serviceSlug(input.slug);
     if (
-      input.legalDocumentIds.length > 2 ||
+      input.legalDocumentIds.length > 3 ||
       new Set(input.legalDocumentIds).size !== input.legalDocumentIds.length
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid service legal consents');
@@ -100,6 +110,36 @@ export class ServiceParticipationService {
     if (result === null)
       throw new ApplicationError('NOT_FOUND', 'service registration unavailable');
     return result;
+  }
+
+  async findLegalConsentView(input: { slug: string; actorUserId: string; now?: Date }) {
+    const result = await this.repository.findLegalConsentView({
+      ...input,
+      slug: serviceSlug(input.slug),
+      now: input.now ?? new Date(),
+    });
+    if (result === null) throw new ApplicationError('NOT_FOUND', 'service membership unavailable');
+    return result;
+  }
+
+  async acceptLegalDocuments(input: {
+    slug: string;
+    actorUserId: string;
+    legalDocumentIds: string[];
+    now?: Date;
+  }) {
+    const slug = serviceSlug(input.slug);
+    if (
+      input.legalDocumentIds.length > 3 ||
+      new Set(input.legalDocumentIds).size !== input.legalDocumentIds.length
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid service legal consents');
+    const accepted = await this.repository.acceptLegalDocuments({
+      ...input,
+      slug,
+      now: input.now ?? new Date(),
+    });
+    if (!accepted) throw new ApplicationError('FORBIDDEN', 'service legal consent unavailable');
   }
 
   async approve(input: {

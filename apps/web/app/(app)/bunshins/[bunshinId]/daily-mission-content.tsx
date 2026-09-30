@@ -1,3 +1,8 @@
+import {
+  applyServiceContentTerminology,
+  serviceContentTerminologyPolicy,
+} from '../../../../src/services/service-content-terminology';
+
 export type DailyMissionView = {
   id: string;
   missionDate: string;
@@ -293,7 +298,19 @@ export const rejectionReasons = [
   ['NOT_TODAY', '今日は違う'],
 ] as const;
 
-export function imagePostHeadline(mission: DailyMissionView) {
+function serviceCopyMission(mission: DailyMissionView, serviceSlug?: string): DailyMissionView {
+  const policy = serviceSlug ? serviceContentTerminologyPolicy(serviceSlug) : null;
+  return {
+    ...mission,
+    ...applyServiceContentTerminology(
+      { topic: mission.topic, angle: mission.angle, content: mission.content },
+      policy,
+    ),
+  };
+}
+
+export function imagePostHeadline(mission: DailyMissionView, serviceSlug?: string) {
+  mission = serviceCopyMission(mission, serviceSlug);
   const firstSlide = records(mission.content['slides'])[0];
   return (
     text(mission.content['overlayText']) ??
@@ -302,7 +319,8 @@ export function imagePostHeadline(mission: DailyMissionView) {
   );
 }
 
-export function imageCreationPrompt(mission: DailyMissionView) {
+export function imageCreationPrompt(mission: DailyMissionView, serviceSlug?: string) {
+  mission = serviceCopyMission(mission, serviceSlug);
   const instruction = text(mission.content['imageInstruction']);
   const headline = imagePostHeadline(mission);
   const caption = text(mission.content['caption']);
@@ -357,11 +375,15 @@ export function imageCreationPrompt(mission: DailyMissionView) {
     '人物や写真だけで終わらせず、見出し・本文と写真やイラストを組み合わせたSNS投稿デザインに仕上げてください。',
     'ロゴ、透かし、意味不明な文字は入れないでください。',
     '一度に1枚しか生成できない場合は、まず1枚目を作り、私が「次」と送るたびに同じデザインで2枚目から順番に作ってください。',
+    ...(serviceSlug
+      ? (serviceContentTerminologyPolicy(serviceSlug)?.participationInstructions ?? [])
+      : []),
   ];
   return lines.filter((line): line is string => line !== null).join('\n');
 }
 
-export function copyOptions(mission: DailyMissionView) {
+export function copyOptions(mission: DailyMissionView, serviceSlug?: string) {
+  mission = serviceCopyMission(mission, serviceSlug);
   const content = mission.content;
   const caption = text(content['caption']);
   if (mission.format === 'TEXT') {
@@ -390,7 +412,7 @@ export function copyOptions(mission: DailyMissionView) {
     return [
       {
         label: '5枚の画像を作る文章をコピー',
-        value: imageCreationPrompt(mission),
+        value: imageCreationPrompt(mission, serviceSlug),
         type: 'COPIED_IMAGE_INSTRUCTION' as const,
       },
       ...(caption
@@ -422,7 +444,7 @@ export function copyOptions(mission: DailyMissionView) {
   return [
     {
       label: '画像を作るための説明をコピー',
-      value: imageCreationPrompt(mission),
+      value: imageCreationPrompt(mission, serviceSlug),
       type: 'COPIED_IMAGE_INSTRUCTION' as const,
     },
     { label: '投稿文をコピー', value: caption, type: 'COPIED_TEXT' as const },

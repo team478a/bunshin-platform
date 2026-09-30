@@ -8,10 +8,13 @@ import { requireSameOrigin } from '../auth/request-security';
 
 const requestSchema = z
   .object({
-    legalDocumentIds: z.array(z.string().uuid()).max(2),
+    legalDocumentIds: z.array(z.string().uuid()).max(3),
     referralCode: z.string().max(80).nullable().optional(),
     referralClickId: z.string().uuid().nullable().optional(),
   })
+  .strict();
+const legalConsentSchema = z
+  .object({ legalDocumentIds: z.array(z.string().uuid()).max(3) })
   .strict();
 const approvalSchema = z.object({ reason: z.string().min(5).max(1000) }).strict();
 const slugSchema = z
@@ -46,6 +49,44 @@ export async function requestServiceParticipationResponse(request: Request, slug
     return Response.json(
       { data: membership, requestId },
       { status: 201, headers: { 'cache-control': 'private, no-store' } },
+    );
+  } catch (error) {
+    const mapped = toApiError(error, requestId);
+    return Response.json(mapped.body, {
+      status: mapped.status,
+      headers: { 'cache-control': 'private, no-store' },
+    });
+  }
+}
+
+export async function acceptServiceLegalDocumentsResponse(request: Request, slug: string) {
+  const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
+  try {
+    requireSameOrigin(request);
+    if (!request.headers.get('content-type')?.startsWith('application/json'))
+      throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
+    const actor = await (await currentUserProvider()).getCurrentUser();
+    if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid JSON body');
+    }
+    const parsed = legalConsentSchema.safeParse(body);
+    const parsedSlug = slugSchema.safeParse(slug);
+    if (!parsed.success || !parsedSlug.success)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid service legal consent');
+    await (
+      await service()
+    ).acceptLegalDocuments({
+      slug: parsedSlug.data,
+      actorUserId: actor.userId,
+      legalDocumentIds: parsed.data.legalDocumentIds,
+    });
+    return Response.json(
+      { data: { accepted: true }, requestId },
+      { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error) {
     const mapped = toApiError(error, requestId);

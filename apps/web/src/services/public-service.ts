@@ -1,6 +1,7 @@
 import 'server-only';
 import { ServiceFoundationService, type ServiceFoundationRecord } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
+import { isRouteNotFound } from '../navigation/route-not-found';
 import { enforceBusinessFreeRegistrationSettings } from './business-daily-service-settings';
 import { readServiceOnboardingSettings } from './service-onboarding-settings';
 
@@ -83,6 +84,18 @@ export async function resolveMemberServiceContext(
     serviceId: configuration.groupId,
     configuration,
   };
+}
+
+/** 公開閲覧は維持しつつ、非公開サービスは既存参加者だけに表示する。 */
+export async function resolveVisitorServiceContext(slug: string, actorUserId: string | null) {
+  if (actorUserId !== null) {
+    try {
+      return await resolveMemberServiceContext(slug, actorUserId);
+    } catch (error) {
+      if (!isRouteNotFound(error)) throw error;
+    }
+  }
+  return resolvePublicServiceContext(slug);
 }
 
 export async function resolveManagedServiceContext(

@@ -9,7 +9,7 @@ import {
   DAILY_ACTION_PHOTO_MAX_BYTES,
   DailyActionStorage,
 } from '../daily-actions/daily-action-storage';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 export const DAILY_ACTION_TYPES = [
   'PHOTO',
@@ -60,11 +60,9 @@ const typeDetails: Record<
 };
 
 async function actionScope(serviceSlug: string, bunshinId: string) {
-  const [service, actor] = await Promise.all([
-    resolvePublicServiceContext(serviceSlug),
-    (await currentUserProvider()).getCurrentUser(),
-  ]);
+  const actor = await (await currentUserProvider()).getCurrentUser();
   if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
+  const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
   const db = await import('@bunshin/database');
   const bunshin = await db.prisma.bunshin.findFirst({
     where: {

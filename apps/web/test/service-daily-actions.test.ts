@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@bunshin/shared';
 
 const state = vi.hoisted(() => ({
   actor: null as { userId: string } | null,
@@ -8,6 +9,8 @@ const state = vi.hoisted(() => ({
   update: vi.fn(),
   updateMany: vi.fn(),
   remove: vi.fn(),
+  member: vi.fn(),
+  bunshin: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -16,12 +19,7 @@ vi.mock('../src/auth/current-user', () => ({
 }));
 
 vi.mock('../src/services/public-service', () => ({
-  resolvePublicServiceContext: () =>
-    Promise.resolve({
-      workspaceId: '22222222-2222-4222-8222-222222222222',
-      serviceId: '33333333-3333-4333-8333-333333333333',
-      configuration: {},
-    }),
+  resolveMemberServiceContext: state.member,
 }));
 
 vi.mock('../src/daily-actions/daily-action-storage', () => ({
@@ -42,7 +40,7 @@ vi.mock('../src/daily-actions/daily-action-storage', () => ({
 
 vi.mock('@bunshin/database', () => ({
   prisma: {
-    bunshin: { findFirst: () => Promise.resolve(state.bunshinFound ? { id: 'bunshin' } : null) },
+    bunshin: { findFirst: state.bunshin },
     bunshinMemory: {
       findMany: () => Promise.resolve(state.memories),
       findFirst: (input: { where: { sourceId?: string; id?: string } }) => {
@@ -112,6 +110,14 @@ describe('service Daily Action HTTP', () => {
     state.actor = { userId: '11111111-1111-4111-8111-111111111111' };
     state.bunshinFound = true;
     state.memories = [];
+    state.member.mockResolvedValue({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      serviceId: '33333333-3333-4333-8333-333333333333',
+      configuration: {},
+    });
+    state.bunshin.mockImplementation(() =>
+      Promise.resolve(state.bunshinFound ? { id: 'bunshin' } : null),
+    );
     state.create.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
       Promise.resolve(memory(data)),
     );
@@ -135,6 +141,7 @@ describe('service Daily Action HTTP', () => {
       bunshinId,
     );
     expect(response.status).toBe(201);
+    expect(state.member).toHaveBeenCalledWith(serviceSlug, state.actor?.userId);
     expect(state.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         workspaceId: '22222222-2222-4222-8222-222222222222',
@@ -145,6 +152,53 @@ describe('service Daily Action HTTP', () => {
     });
     const body = (await response.json()) as { data: { action: { type: string } } };
     expect(body.data.action.type).toBe('CUSTOMER_QUESTION');
+  });
+
+  it('does not resolve a private service for anonymous readers', async () => {
+    state.actor = null;
+    expect(
+      (await listServiceDailyActionsResponse(request('/daily-actions'), serviceSlug, bunshinId))
+        .status,
+    ).toBe(401);
+    expect(state.member).not.toHaveBeenCalled();
+    expect(state.bunshin).not.toHaveBeenCalled();
+  });
+
+  it('rejects unavailable or nonmember services before record access', async () => {
+    state.member.mockRejectedValue(new ApplicationError('NOT_FOUND', 'service not found'));
+    expect(
+      (await listServiceDailyActionsResponse(request('/daily-actions'), serviceSlug, bunshinId))
+        .status,
+    ).toBe(404);
+    expect(state.bunshin).not.toHaveBeenCalled();
+    expect(state.create).not.toHaveBeenCalled();
+  });
+
+  it('does not reuse another service scope for daily records', async () => {
+    state.member.mockResolvedValue({
+      workspaceId: 'workspace-b',
+      serviceId: 'service-b',
+      configuration: {},
+    });
+    expect(
+      (await listServiceDailyActionsResponse(request('/daily-actions'), 'private-b', bunshinId))
+        .status,
+    ).toBe(200);
+    expect(state.bunshin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: 'workspace-b',
+          groupId: 'service-b',
+          ownerUserId: state.actor?.userId,
+          id: bunshinId,
+          group: expect.objectContaining({
+            memberships: {
+              some: { userId: state.actor?.userId, status: 'ACTIVE', consentedAt: { not: null } },
+            },
+          }),
+        }),
+      }),
+    );
   });
 
   it('does not reveal records when the requested Bunshin is not owned in the service', async () => {

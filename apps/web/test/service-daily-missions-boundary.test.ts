@@ -49,7 +49,8 @@ const imageWorkspace = ['social-image-workspace.tsx', 'social-image-workspace-vi
 
 describe('service daily mission boundary', () => {
   it('derives service authority on the server', () => {
-    expect(source).toContain('resolvePublicServiceContext(serviceSlug)');
+    expect(source).toContain('resolveMemberServiceContext(serviceSlug, actor)');
+    expect(source).not.toContain('resolvePublicServiceContext');
     expect(source).toContain('groupId: service.serviceId');
     expect(source).not.toContain('groupId: z.');
     expect(source).not.toContain('workspaceId: z.');
@@ -73,6 +74,15 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('useServiceDailyMissionController');
     expect(experience).toContain('<ServiceDailyMissionList');
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
+  });
+
+  it('keeps the today section current and opens past posts by calendar date', () => {
+    expect(detailPage).toContain('today={today}');
+    expect(experience).toContain('splitServiceMissionsByDate(missions, today)');
+    expect(experience).toContain('missions={todayMissions}');
+    expect(experience).toContain('過去の投稿をカレンダーから見る');
+    expect(experience).toContain('type="date"');
+    expect(experience).toContain('missions={selectedHistoryMissions}');
   });
 
   it('gives image users one clear mobile action and hides technical directions by default', () => {
@@ -135,7 +145,7 @@ describe('service daily mission boundary', () => {
     expect(source).toContain('authorizeServiceDailyMissionCopyResponse');
     expect(experience).toContain('採用する');
     expect(experience).toContain('今回は使わない');
-    expect(experience).toContain('copyOptions(missionWithSelectedVariant(mission))');
+    expect(experience).toContain('copyOptions(missionWithSelectedVariant(mission), serviceSlug)');
     expect(experience).toContain('投稿しました');
     expect(experience).toContain('投稿したかどうかは自動では確認されず、自己申告で記録されます。');
     expect(experience).toContain('この投稿は、あなたらしかったですか？');

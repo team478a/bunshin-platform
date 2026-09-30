@@ -1,5 +1,129 @@
 # BUNSHIN Platform Decision Log
 
+## D-161: 千ノ国メディアの禁止招待URLはスキーム有無に関係なくホスト単位で除去する
+
+- 日付: 2026-09-30
+- 状態: Accepted（PR #994マージ後のURL表記監査）
+- 千ノ国メディアのDiscord招待先は`https://`付き、プロトコル相対、スキームなしのいずれも、禁止ホスト自身とそのサブドメインに限って除去する。似た名前の別ドメインや承認済みLINE URLは書き換えない。
+- 用語置換はドメイン名中で行わず、`公式LINE.gg`のような偽のアドレスを作らない。壊れたURL文字列でも処理を失敗させず、禁止ホストの断片があれば除去する。
+- ルールの適用は千ノ国メディアに限定し、他ServiceのDiscordコミュニティ、保存済み原稿、DB、Provider、実LINE送信は変更しない。
+
+## D-160: 専用URL・外部計測のService管理APIは管理権限で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-159後の残存Public Resolver監査）
+- Service配下の専用URL/外部計測管理APIは、管理画面と同じ認証済み本人のACTIVEな`ADMINISTRATION`権限からWorkspace/Serviceを解決する。非公開Serviceの管理者も操作でき、匿名・他Service・権限不足を拒否する。
+- 下層のGroup ID照合、RepositoryのService限定とMANAGER権限、同一Origin、URL/CSV/結果Tokenの既存検証を維持する。Service外の成果受信Webhookと公開登録入口は変更しない。
+- 不存在・権限不足と予期せぬDB障害を区別し、API失敗応答をprivate/no-storeとする。設定、DB schema、本番データ、Provider呼出は変更しない。
+
+## D-159: Serviceの商品パックとCampaign操作は公開状態でなく内容編集権限で判定する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-158後の残存Public Resolver監査）
+- 管理画面で扱う商品パックとCampaignの5 APIは、認証済み本人のACTIVEなService所属と`CONTENT`権限からWorkspace/Groupを解決する。非公開Serviceの権限者も操作でき、匿名・他Service・権限不足は拒否する。
+- Request内のGroup IDやPack/Campaign IDは既存のService/Repository境界で再検証する。管理画面の役割、参加者向け公開入口、商品/参加同意、Provider、DB schema、本番設定は変更しない。
+- 不存在・権限不足と予期せぬDB障害を区別し、APIエラーをprivate/no-storeで返す。
+
+## D-158: 参加者専用画面のMetadataも本人のMember Serviceから解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-155後に残った非公開Serviceの汎用タイトル）
+- 参加者専用9画面のページタイトルは認証済み本人のMember Serviceから表示名を取得する。匿名・所属外・停止中にはサービス名を返さず汎用タイトルとする。公開登録入口だけPublic ServiceのMetadataを維持する。
+- 本文の認可は既存のMember判定を維持し、Metadataをアクセス許可として用いない。所属不存在だけ汎用タイトルへ戻し、DB等の未知障害は隠さない。User IDを含む認可結果をSlugだけでcacheしない。
+- 本作業でサービスのVisibility、参加・同意フロー、Provider、DB schema、本番データを変更しない。
+
+## D-157: Service法務文書の再同意を参加申請から分離する
+
+- 日付: 2026-09-30
+- 状態: Accepted（D-156の利用停止からの本人復帰導線）
+- 既存参加者の最新公開版への再同意は、本人のACTIVE Membershipを維持したまま、Service/Workspace/本人をDBで再検証して追記する。参加申請を再実行せず、承認状態・紹介・登録メール・商品自動登録を変更しない。
+- 送信時に有効なtype別最大versionの文書ID集合と完全一致した場合だけ保存する。旧版同意は監査履歴として保持し、他Serviceへ流用しない。非公開Serviceの既存参加者も同じ本人用導線を使う。
+- 現行の利用/通知判定が要求する公開文書はTERMS、PRIVACY、COMMERCE_DISCLOSUREを含むため、参加画面と再同意画面も同じ集合を提示する。法務本文・公開条件を変更しない。法務上の同意対象の再定義は別判断とする。
+- 本番データの移行、本人への一斉送信、デプロイは含めない。リリース前に旧版同意者の件数・再同意導線を読み取り専用で確認する。
+
+## D-156: Service法務文書の表示・参加・利用・通知同意は同じ最新有効版を判定する
+
+- 日付: 2026-09-30
+- 状態: Accepted（PR #1019マージ後に確認した版選択不一致の修正）
+- Service内でPUBLISHEDかつ有効日時以前の文書だけを対象とし、文書typeごとに最大versionを選ぶ。DB返却順序やMapの後勝ちへ依存しない。公開表示、参加時の同意ID、利用開始記録、通知設定の同意確認の4経路を同じ選択処理に合わせる。
+- 新版が有効になった後は旧版だけの同意で参加/利用/通知設定の条件を満たさない。申請時はTransaction内で最新IDを再確認し、古い画面からの同意IDを拒否する。旧同意記録を消さず、既存の再同意・運用導線を維持する。
+- Workspace/Group/本人/所属・公開登録条件と既存の法務文書status/有効日時を維持する。非公開Serviceの既存参加者向け文書閲覧も最大versionと一致させる。法務本文、公開/廃止運用、Provider、DB schema/migration、本番データは変更しない。実DBの複数版/境界とmockテストで検証する。
+
+## D-155: 閲覧用のヘルプ・マニュアル・法務文書は公開訪問者と既存参加者を分ける
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の画面監査とPR #1018のマージ確認）
+- 公開Serviceは匿名/未参加のログイン済みUserにも既存の閲覧入口を維持する。非公開ServiceはACTIVEな既存参加者だけがヘルプ・対応するマニュアル・公開済み法務文書を閲覧できる。まず本人のMember Serviceを確認し、所属拒否に限りPublic Serviceへ解決し直す。予期しない障害やProvider障害は公開fallbackで隠さない。
+- マニュアルのService取得はUserごとに分離し、同じSlugの異なるUserへcache結果を暗黙共有しない。匿名の非公開閲覧は許可しない。
+- 非公開Serviceの法務文書はService解決のWorkspace/Groupと文書type、PUBLISHED/有効日時に限定して取得する。公開Serviceの既存参加同意・法務閲覧ロジックは変更しない。DRAFT/将来版や他Service文書を返さない。
+- 公開登録・参加申請・法務同意の承認条件、管理権限、設定、DB schema/migration、本番データ、実LINE/AIを変更しない。その他画面のMetadataの公開名解決は今回のアクセス権修正から分けて監査する。
+
+## D-154: Program目標の管理操作と本人操作は独立したService権限で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1017のマージ確認）
+- 支援方針/目標候補の管理操作は既存ADMINISTRATION Resolverだけを使い、公開Service/参加者Resolverを前提にしない。本人の希望/目標はMember Serviceだけを使い、管理者権限へのfallbackを追加しない。非公開Serviceの既存参加者を対象にし、利用期間・ACTIVE Workspace/Group/本人所属を維持する。
+- Enrollment/Program/候補/方針/監査/保存はサーバー解決したWorkspace/Serviceへ限定する。本人Membership/ACTIVE Enrollment、受講ロック後の再確認、AI研修だけの期間条件、支援方法選択の許可、方針版管理と過去目標の保持を維持する。
+- 入力型と許可フィールドは広げず、Schema不一致/壊れたJSONは400へ明示変換する。未知キーは従来通り無視し、所有Scopeとして利用しない。既存管理ResolverのSERVICE_NOT_FOUNDだけ404へ変換し、未知障害500を握りつぶさない。
+- 管理/本人フローの実行テストを追加する。公開入口/画面、DB schema/migration、設定、本番データ、実AI/LINE、期限処理の本番有効化を変更しない。既存の版競合や方針/候補変更の新しい排他保証は追加しない。
+
+## D-153: 動画配信の参加者操作はMember Serviceと利用可能状態を先に確認する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1016のマージ確認）
+- 閲覧/採用/辞退/自己申告投稿とダウンロードは認証後のMember Service解決へ合わせ、利用期間・ACTIVE Workspace/Group/本人所属と既存Repositoryの受信者/状態条件を維持する。不正Delivery IDは400へ明示変換する。
+- 自己申告投稿/ダウンロードでは取得済みDeliveryの期限切れ・EXPIRED/REVOKEDを関連投稿/Storage操作より先に拒否する。本人の未取消Project取得失敗も投稿記録前に拒否する。POSTED再送、採用必須、SOCIAL能力、元Missionと紹介Milestone、元Missionなし手動動画を維持する。新しい排他保証は追加しない。
+- ダウンロードは同じWorkspace/Service/本人/Project/Renderの未削除・期限内SUCCEEDED行と正本形式のStorage Keyを照合し、署名URL準備後にDOWNLOADEDを記録する。準備失敗や拒否時にURLを返さず、失敗を成功履歴にしない。履歴は実端末保存の確認ではなく引渡し準備を表す。
+- 全例外を404にするdownload catchを既存APIエラー変換へ合わせ、拒否/不存在/未知障害を区別する。本人用成功/失敗/署名URL redirectはprivate no-store、redirectはno-referrerとする。
+- 公開入口・専用LINE OAuth/送信・通知Snapshot/再試行・DB schema/migration・設定・本番データを変更しない。Storageはテストでmockし実署名URLを発行しない。
+
+## D-152: 本人の商品紹介操作もMember Service境界で解決する
+
+- 日付: 2026-09-30
+- 状態: Accepted（推奨順の継続実装とPR #1015のマージ確認）
+- 本人の商品プロフィール保存/非表示、コピー/自己申告投稿、紹介文生成は認証後のMember Service解決へ統一する。非公開Serviceの既存参加者を許可し、利用期間・ACTIVE Workspace/Group/本人所属は維持する。
+- 入力Schemaは広げず不一致/不正な非表示IDを400へ明示変換する。Workspace/Group/操作者はサーバーで解決し、本人の商品・分身・活動・ACTIVE MEMBER URLと公式商品の自Service再照合/同意/公開期間を維持する。
+- 生成入力の本人設定・公式商品、URLのProvider非送信、承認URL/#PR/必須表記/禁止表現/媒体上限、組織Quota、モデル/Prompt版/Token/原価/時間/成否の記録、活動の重複防止は維持する。生成Quotaへ自ServiceのgroupIdも渡し、既存Service上限を迂回しない。設定値やQuota実装は変更せず、実Providerは呼ばずテストでmockする。
+- 動画通知、画面の公開判定追加監査、DB schema/migration、設定、本番データ、匿名公開入口と実AI/LINE/Storage呼出は本作業に含めない。
+
+## D-151: 初回回答・紹介コード・本人専用URLは参加者のServiceで解決する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装とPR #1014のマージ確認）
+- 初回回答保存、紹介コード発行、本人の代理店URL保存は認証後にMember Serviceを解決する。利用期間・ACTIVE Workspace/Group/本人所属を維持し、非公開Serviceの既存参加者を対象にする。
+- 初回質問、businessProfileEnabledとFULL/MINIMAL、業種検証、自Service所属への保存、既存投稿パートナー作成と紹介Milestoneを維持する。千ノ国へ共通業種入力を追加せず、ハッシー等の事業プロフィール要件を外さない。
+- 紹介コードの設定・所属・停止状態・安定キー・重複防止、代理店URLの自Service Repository/許可ドメイン検証とDRAFT保存を維持する。紹介先の匿名登録は公開条件のままにし、非公開Serviceへの新規参加を許可したとは扱わない。
+- 紹介コード解決で全例外をNOT_FOUNDへ変換するcatchを除去し、Member ResolverのApplicationErrorと未知障害を既存APIエラー変換へ渡す。障害を参加不可と誤報しない。
+- 初回回答/代理店URLの厳格Schema不一致をVALIDATION_ERROR（400）へ明示変換する。旧parseAsyncの例外が500になっていたため、許可フィールドや型を広げずsafeParseAsyncで拒否を保持する。
+- 商品紹介・動画通知・画面の追加監査は別作業。DB変更、公開登録、設定、本番データ、Provider/通知呼出は行わない。
+
+## D-150: 投稿操作・成果・日々の記録は本人のMember Service境界で認可する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装と前段PRのマージ確認）
+- 投稿採否/活動/自己申告投稿/評価、共通Daily Mission操作Scope、業務成果、SNS数字保存/画像読取、日々のメモ/写真記録は認証済みUserを先に取得し、既存Member Service解決を使う。非公開Serviceの既存ACTIVE参加者を許可し、利用期間・Workspace/Group/所属・本人所有・既存参加同意条件を維持する。
+- 業務成果の設定と操作Scopeは同じMember Service解決結果から作り、別の匿名公開判定や再取得した操作者を混ぜない。businessProfileEnabledの機能制限は維持し、千ノ国等へ業種/成果項目を強制しない。
+- 既存SOCIAL能力、Mission/投稿者照合、Schema/同一Origin、再送キー、使用量・紹介Milestone、写真権利/Storage条件と自Service知識・生成/VariantのPolicyは変更しない。実AI/Storage/LINE呼出はせずテストではPortをmockする。
+- 商品紹介・紹介リンク・初回登録・動画通知など別機能の残る公開判定は本PRに混ぜない。個人用API、公開登録/Metadata、DB schema/migration、設定、本番データを変更しない。
+
+## D-149: SNS設定・発信方針・投稿テーマ・週間計画は参加者本人のサービスで解決する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の継続実装と前段PRのマージ確認）
+- SNS設定、アカウント発信方針、投稿テーマ、週間計画の各HTTP APIは認証済みUserを先に確認し、既存Member Service解決を使う。非公開Serviceの既存ACTIVE参加者を許可し、利用期間・Workspace/Group/所属の判定は維持する。
+- Workspace/Group/操作者はサーバーで解決し、既存RepositoryのService/Bunshin本人所有条件とSOCIAL能力確認、入力Schema、同一Origin判定を維持する。Service固有の業種・初回回答を共通化しない。
+- 生成時の自Service公式知識、参加Campaign、用語変換、業務投稿配分、Quota/使用量/冪等キーと確定済み計画のテーマ保護を変更しない。実Provider呼出はせず、テストでは生成Portをmockする。
+- 投稿採否・完了・成果/振り返りのAPIは別PRとする。公開登録・Metadata、個人用操作、DB schema/migration、設定、本番データ、LINE送信は変更しない。
+
+## D-148: 投稿パートナー操作は公開状態ではなく参加者本人のサービス境界で認可する
+
+- 日付: 2026-09-29
+- 状態: Accepted（推奨順の機能不足修正をユーザーが承認）
+- サービス所属投稿パートナーの一覧・作成・取得・編集・停止と初回回答からの候補提案は、認証後に既存Member Service解決を使う。非公開サービスの既存ACTIVE参加者も操作できるようにし、利用期間とWorkspace/Group/所属の検証を維持する。公開入口・匿名登録・Metadataの公開判定は変更しない。
+- 候補提案は本人の当該Service所属から初回回答・事業プロフィールを再取得し、他Serviceや共通プロフィールへ切り替えない。Providerの呼出・fallback仕様は変更しない。
+- 一覧/取得の既存本人所有条件に合わせ、サービス所属Bunshinの編集/停止にも本人所有条件を追加する。Workspace OWNER/ADMINでも参加者向け操作で他人のサービス所属Bunshinを変更できない。個人用Bunshinの既存管理権限は維持する。
+- SNS設定・週間計画・投稿採否/完了/成果APIは別PRとする。DB schema/migration、設定、本番データ、実AI呼出、LINE送信は変更しない。
+
 ## D-147: 専用LINE再連携は試行別proofと既存参加者のサービス境界を使う
 
 - 日付: 2026-09-29

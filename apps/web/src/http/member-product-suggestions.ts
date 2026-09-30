@@ -18,7 +18,7 @@ import {
   MEMBER_PRODUCT_SUGGESTION_PROMPT_VERSION,
   OpenAIMemberProductSuggestionGenerator,
 } from '../providers/openai-member-product-suggestion-generator';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 const logger = createLogger();
 const inputSchema = z
@@ -50,10 +50,12 @@ export async function generateMemberProductSuggestionsResponse(
       throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const [service, input] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      inputSchema.parseAsync(await request.json()),
+    const [service, parsed] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      inputSchema.safeParseAsync(await request.json()),
     ]);
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid suggestion body');
+    const input = parsed.data;
     const db = await import('@bunshin/database');
     const scope = {
       workspaceId: service.workspaceId,
@@ -88,6 +90,7 @@ export async function generateMemberProductSuggestionsResponse(
     };
     const result = await withOrganizationAiGenerationQuota({
       workspaceId: scope.workspaceId,
+      groupId: scope.groupId,
       operationKey: `${requestId}:member-product-suggestions`,
       generate: () =>
         new OpenAIMemberProductSuggestionGenerator({

@@ -4,21 +4,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { currentUserProvider } from '../../../../src/auth/current-user';
 import { isRouteNotFound } from '../../../../src/navigation/route-not-found';
-import {
-  resolveMemberServiceContext,
-  resolvePublicServiceContext,
-} from '../../../../src/services/public-service';
+import { resolveVisitorServiceContext } from '../../../../src/services/public-service';
 import { readServiceOnboardingSettings } from '../../../../src/services/service-onboarding-settings';
 import { isPromptOnlyImageService } from '../../../../src/services/service-image-policy';
 import { PublicShell } from '../../../ui/public-shell';
 
 export const dynamic = 'force-dynamic';
 
-async function serviceContext(slug: string, actorUserId?: string) {
+async function serviceContext(slug: string, actorUserId: string | null) {
   try {
-    return actorUserId
-      ? await resolveMemberServiceContext(slug, actorUserId)
-      : await resolvePublicServiceContext(slug);
+    return await resolveVisitorServiceContext(slug, actorUserId);
   } catch (error) {
     if (isRouteNotFound(error)) notFound();
     throw error;
@@ -31,7 +26,8 @@ export async function generateMetadata({
   params: Promise<{ serviceSlug: string }>;
 }): Promise<Metadata> {
   const { serviceSlug } = await params;
-  const service = await resolvePublicServiceContext(serviceSlug).catch(() => null);
+  const user = await (await currentUserProvider()).getCurrentUser();
+  const service = await serviceContext(serviceSlug, user?.userId ?? null);
   return { title: service ? `${service.configuration.displayName}｜ヘルプ` : 'サービスヘルプ' };
 }
 
@@ -55,7 +51,7 @@ export default async function ServiceHelpPage({
 }) {
   const { serviceSlug } = await params;
   const user = await (await currentUserProvider()).getCurrentUser();
-  const service = await serviceContext(serviceSlug, user?.userId);
+  const service = await serviceContext(serviceSlug, user?.userId ?? null);
   const db = await import('@bunshin/database');
   const membership = user
     ? await db.prisma.groupMembership.findFirst({

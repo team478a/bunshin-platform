@@ -8,6 +8,8 @@ const source = readFileSync(
 
 describe('service Bunshin proposal boundary', () => {
   it('loads onboarding answers from the active actor membership only', () => {
+    expect(source).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(source).not.toContain('resolvePublicServiceContext');
     expect(source).toContain('workspaceId: service.workspaceId');
     expect(source).toContain('groupId: service.serviceId');
     expect(source).toContain('userId: actor.userId');

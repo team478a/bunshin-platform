@@ -9,7 +9,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 import {
   buildServiceOnboardingAnswers,
   nextOnboardingRefinementAt,
@@ -61,10 +61,12 @@ export async function saveServiceOnboardingResponse(request: Request, serviceSlu
     }
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const [service, value] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      answersSchema.parseAsync(await request.json()),
+    const [service, parsed] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      answersSchema.safeParseAsync(await request.json()),
     ]);
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid onboarding body');
+    const value = parsed.data;
     const settings = readServiceOnboardingSettings(
       service.configuration.registration.onboardingConfig,
       service.configuration.registration.surveyConfig,

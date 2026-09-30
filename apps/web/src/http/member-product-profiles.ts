@@ -5,7 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
-import { resolvePublicServiceContext } from '../services/public-service';
+import { resolveMemberServiceContext } from '../services/public-service';
 
 const inputSchema = z
   .object({
@@ -26,10 +26,12 @@ export async function saveMemberProductProfileResponse(request: Request, service
       throw new ApplicationError('VALIDATION_ERROR', 'application/json required');
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const [service, input] = await Promise.all([
-      resolvePublicServiceContext(serviceSlug),
-      inputSchema.parseAsync(await request.json()),
+    const [service, parsed] = await Promise.all([
+      resolveMemberServiceContext(serviceSlug, actor.userId),
+      inputSchema.safeParseAsync(await request.json()),
     ]);
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid product body');
+    const input = parsed.data;
     const db = await import('@bunshin/database');
     const saved = await new MemberProductProfileService(
       new db.PrismaMemberProductProfileRepository(),
@@ -62,7 +64,9 @@ export async function archiveMemberProductProfileResponse(
     requireSameOrigin(request);
     const actor = await (await currentUserProvider()).getCurrentUser();
     if (!actor) throw new ApplicationError('UNAUTHENTICATED', 'session required');
-    const service = await resolvePublicServiceContext(serviceSlug);
+    const service = await resolveMemberServiceContext(serviceSlug, actor.userId);
+    const parsedId = z.string().uuid().safeParse(profileId);
+    if (!parsedId.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid profile id');
     const db = await import('@bunshin/database');
     const result = await new MemberProductProfileService(
       new db.PrismaMemberProductProfileRepository(),
@@ -70,7 +74,7 @@ export async function archiveMemberProductProfileResponse(
       workspaceId: service.workspaceId,
       groupId: service.serviceId,
       actorUserId: actor.userId,
-      profileId: z.string().uuid().parse(profileId),
+      profileId: parsedId.data,
     });
     return Response.json(
       { data: result, requestId },

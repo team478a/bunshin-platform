@@ -104,6 +104,8 @@ import {
   PrismaTrainingRetentionPreviewRepository,
   PrismaTrainingRetentionExecutionRepository,
   PrismaTrainingToolkitRepository,
+  PrismaServiceParticipationRepository,
+  PrismaServiceNotificationPreferenceRepository,
   lockTrainingEnrollmentData,
 } from '../src';
 
@@ -3946,6 +3948,74 @@ integration('database ownership boundaries', () => {
     ).not.toContain(memberBunshin.id);
   });
 
+  it('keeps service partner writes owner-only even for workspace administrators', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Service partner owner' });
+    const member = await accounts.execute({ displayName: 'Service partner member' });
+    const admin = await accounts.execute({ displayName: 'Service partner admin' });
+    await client.workspaceMembership.createMany({
+      data: [
+        { workspaceId: owner.workspace.id, userId: member.user.id, role: 'MEMBER' },
+        { workspaceId: owner.workspace.id, userId: admin.user.id, role: 'ADMIN' },
+      ],
+    });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Partner service' },
+    });
+    const otherGroup = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Other partner service' },
+    });
+    for (const groupId of [group.id, otherGroup.id]) {
+      await client.groupMembership.createMany({
+        data: [owner.user.id, member.user.id, admin.user.id].map((userId) => ({
+          workspaceId: owner.workspace.id,
+          groupId,
+          userId,
+          role: 'PARTICIPANT' as const,
+          status: 'ACTIVE' as const,
+          consentedAt: new Date(),
+        })),
+      });
+    }
+    const repository = new PrismaBunshinRepository(client);
+    const own = { workspaceId: owner.workspace.id, groupId: group.id, actorUserId: member.user.id };
+    const created = await repository.create({
+      ...own,
+      name: 'Partner',
+      slug: `service-${randomUUID()}`,
+      type: 'EXPERT',
+      objectiveSummary: 'Purpose',
+      audienceSummary: 'Audience',
+      personalitySummary: 'Tone',
+    });
+    const reference = { ...own, bunshinId: created.id };
+    for (const actorUserId of [owner.user.id, admin.user.id]) {
+      const foreign = { ...reference, actorUserId };
+      expect(await repository.find(foreign)).toBeNull();
+      expect(await repository.update({ ...foreign, name: 'stolen' })).toBeNull();
+      expect(await repository.archive(foreign)).toBeNull();
+    }
+    expect(
+      await repository.update({ ...reference, groupId: otherGroup.id, name: 'wrong service' }),
+    ).toBeNull();
+    expect(await repository.archive({ ...reference, groupId: otherGroup.id })).toBeNull();
+    expect(await repository.update({ ...reference, name: 'edited' })).toMatchObject({
+      name: 'edited',
+    });
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: member.user.id } },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    expect(await repository.update({ ...reference, name: 'revoked' })).toBeNull();
+    expect(await repository.archive(reference)).toBeNull();
+    await client.groupMembership.update({
+      where: { groupId_userId: { groupId: group.id, userId: member.user.id } },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    expect(await repository.archive(reference)).toMatchObject({ status: 'ARCHIVED' });
+    expect(await repository.find(reference)).toBeNull();
+  });
+
   it('isolates Capability Assignment and enforces idempotent state transitions', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
     const owner = await accounts.execute({ displayName: 'Capability Owner' });
@@ -6176,6 +6246,158 @@ integration('authentication return attempt isolation', () => {
     } finally {
       await client.authReturnAttempt.deleteMany({ where: { id: { in: ids } } });
     }
+  });
+  it('selects the latest effective service legal versions for display, consent, use and notification access', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Service legal owner' });
+    const participant = await accounts.execute({ displayName: 'Service legal participant' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: `Legal ${randomUUID()}` },
+    });
+    const scope = { workspaceId: owner.workspace.id, groupId: group.id };
+    const slug = `legal-${randomUUID()}`;
+    const configuration = await client.serviceConfiguration.create({
+      data: {
+        ...scope,
+        slug,
+        displayName: 'Legal fixture',
+        description: 'Test',
+        operatorName: 'Operator',
+        visibility: 'PUBLIC',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    await client.serviceRegistrationPolicy.create({
+      data: { ...scope, configurationId: configuration.id, mode: 'PUBLIC' },
+    });
+    const now = new Date();
+    const effectiveAt = new Date(now.getTime() - 60_000);
+    const createDocument = (
+      type: 'TERMS' | 'PRIVACY' | 'COMMERCE_DISCLOSURE',
+      version: number,
+      status: 'PUBLISHED' | 'DRAFT',
+      when: Date | null,
+    ) =>
+      client.serviceLegalDocument.create({
+        data: {
+          ...scope,
+          configurationId: configuration.id,
+          type,
+          version,
+          title: `${type} v${version}`,
+          content: `Text v${version}`,
+          status,
+          effectiveAt: when,
+          publishedAt: status === 'PUBLISHED' ? now : null,
+          createdByUserId: owner.user.id,
+        },
+      });
+    const oldTerms = await createDocument('TERMS', 1, 'PUBLISHED', effectiveAt);
+    const latestTerms = await createDocument('TERMS', 2, 'PUBLISHED', effectiveAt);
+    const latestPrivacy = await createDocument('PRIVACY', 1, 'PUBLISHED', effectiveAt);
+    const commerce = await createDocument('COMMERCE_DISCLOSURE', 1, 'PUBLISHED', effectiveAt);
+    await createDocument('TERMS', 3, 'PUBLISHED', new Date(now.getTime() + 60_000));
+    await createDocument('PRIVACY', 2, 'DRAFT', null);
+
+    const participation = new PrismaServiceParticipationRepository(client);
+    const shown = await participation.findView({ slug, actorUserId: null, now });
+    expect(shown?.legalDocuments).toHaveLength(3);
+    expect(shown?.legalDocuments.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([latestPrivacy.id, latestTerms.id, commerce.id]),
+    );
+    expect(
+      await participation.request({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [oldTerms.id, latestPrivacy.id, commerce.id],
+        referralCode: null,
+        referralClickId: null,
+        now,
+      }),
+    ).toBeNull();
+    expect(
+      await client.groupMembership.count({ where: { ...scope, userId: participant.user.id } }),
+    ).toBe(0);
+    const joined = await participation.request({
+      slug,
+      actorUserId: participant.user.id,
+      legalDocumentIds: [latestTerms.id, latestPrivacy.id, commerce.id],
+      referralCode: null,
+      referralClickId: null,
+      now,
+    });
+    expect(joined?.status).toBe('ACTIVE');
+    expect(
+      await client.serviceLegalConsent.findMany({
+        where: { ...scope, groupMembershipId: joined!.id },
+        select: { legalDocumentId: true },
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        { legalDocumentId: latestTerms.id },
+        { legalDocumentId: latestPrivacy.id },
+        { legalDocumentId: commerce.id },
+      ]),
+    );
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).not.toBeNull();
+    const notifications = new PrismaServiceNotificationPreferenceRepository(client);
+    const preferenceInput = {
+      slug,
+      actorUserId: participant.user.id,
+      topic: 'DAILY_MISSION',
+      channel: 'LINE' as const,
+      now,
+    };
+    expect((await notifications.get(preferenceInput)).accessible).toBe(true);
+
+    await client.serviceLegalConsent.deleteMany({
+      where: { ...scope, groupMembershipId: joined!.id, legalDocumentId: latestTerms.id },
+    });
+    await client.serviceLegalConsent.create({
+      data: {
+        ...scope,
+        groupMembershipId: joined!.id,
+        userId: participant.user.id,
+        legalDocumentId: oldTerms.id,
+        consentedAt: now,
+      },
+    });
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).toBeNull();
+    expect((await notifications.get(preferenceInput)).accessible).toBe(false);
+    const consentView = await participation.findLegalConsentView({
+      slug,
+      actorUserId: participant.user.id,
+      now,
+    });
+    expect(consentView?.legalDocuments.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([latestTerms.id, latestPrivacy.id, commerce.id]),
+    );
+    expect(consentView?.acceptedDocumentIds).not.toContain(latestTerms.id);
+    expect(
+      await participation.acceptLegalDocuments({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [oldTerms.id, latestPrivacy.id, commerce.id],
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      await participation.acceptLegalDocuments({
+        slug,
+        actorUserId: participant.user.id,
+        legalDocumentIds: [latestTerms.id, latestPrivacy.id, commerce.id],
+        now,
+      }),
+    ).toBe(true);
+    expect(
+      await participation.recordUse({ slug, actorUserId: participant.user.id, now }),
+    ).not.toBeNull();
+    expect((await notifications.get(preferenceInput)).accessible).toBe(true);
   });
 });
 

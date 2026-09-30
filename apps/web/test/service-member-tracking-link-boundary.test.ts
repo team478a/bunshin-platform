@@ -14,6 +14,8 @@ describe('service member tracking link boundary', () => {
   it('keeps writes on the current user and current service boundary', () => {
     const http = source('src/http/service-member-tracking-link.ts');
     expect(http).toContain('actorUserId: actor.userId');
+    expect(http).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(http).not.toContain('resolvePublicServiceContext');
     expect(http).toContain(
       'new db.PrismaExternalTrackingLinkRepository(undefined, service.serviceId)',
     );

@@ -119,6 +119,7 @@ export function ServiceDailyMissionCard({
       ) : null}
       {isImageMission ? (
         <ServiceDailyMissionImageGuide
+          serviceSlug={serviceSlug}
           mission={mission}
           imageCreationHref={imageCreationHref}
           controller={controller}

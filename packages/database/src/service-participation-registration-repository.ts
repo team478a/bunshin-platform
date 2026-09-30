@@ -4,6 +4,7 @@ import { autoEnrollAiResaleForRegistration } from './resale-runtime';
 import { Prisma, type PrismaClient, prisma } from './client';
 import { enqueueRegistrationCompleteEmail } from './service-registration-email';
 import { groupMembershipRecord } from './service-records';
+import { latestServiceLegalDocuments } from './service-legal-latest';
 
 export class PrismaServiceParticipationRegistrationRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
@@ -31,9 +32,9 @@ export class PrismaServiceParticipationRegistrationRepository {
       },
       orderBy: [{ type: 'asc' }, { version: 'desc' }],
     });
-    const legalDocuments = [
-      ...new Map(documents.map((document) => [document.type, document])).values(),
-    ].map(({ id, type, version, title, content }) => ({ id, type, version, title, content }));
+    const legalDocuments = latestServiceLegalDocuments(documents).map(
+      ({ id, type, version, title, content }) => ({ id, type, version, title, content }),
+    );
     const membership =
       input.actorUserId === null
         ? null
@@ -78,15 +79,12 @@ export class PrismaServiceParticipationRegistrationRepository {
           where: {
             workspaceId: configuration.workspaceId,
             groupId: configuration.groupId,
-            type: { in: ['TERMS', 'PRIVACY'] },
             status: 'PUBLISHED',
             effectiveAt: { lte: input.now },
           },
           orderBy: [{ type: 'asc' }, { version: 'desc' }],
         });
-        const latest = [
-          ...new Map(published.map((document) => [document.type, document])).values(),
-        ];
+        const latest = latestServiceLegalDocuments(published);
         const requiredIds = latest.map(({ id }) => id).sort();
         if (requiredIds.join(':') !== [...input.legalDocumentIds].sort().join(':')) return null;
 

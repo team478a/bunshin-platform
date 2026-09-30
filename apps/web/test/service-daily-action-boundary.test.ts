@@ -33,7 +33,8 @@ const automaticImage = readFileSync(
 
 describe('service Daily Action boundary', () => {
   it('derives owner, workspace, group and Bunshin scope on the server', () => {
-    expect(http).toContain('resolvePublicServiceContext(serviceSlug)');
+    expect(http).toContain('resolveMemberServiceContext(serviceSlug, actor.userId)');
+    expect(http).not.toContain('resolvePublicServiceContext');
     expect(http).toContain('ownerUserId: actor.userId');
     expect(http).toContain('groupId: service.serviceId');
     expect(http).toContain("sourceId: { startsWith: 'daily-action:' }");

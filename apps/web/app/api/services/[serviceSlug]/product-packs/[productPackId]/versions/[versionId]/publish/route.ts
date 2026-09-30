@@ -1,5 +1,5 @@
 import { publishProductPackVersionResponse } from '../../../../../../../../../src/http/product-packs';
-import { resolvePublicServiceContext } from '../../../../../../../../../src/services/public-service';
+import { withServiceContentContext } from '../../../../../../../../../src/http/service-content-context';
 
 export async function POST(
   request: Request,
@@ -8,12 +8,13 @@ export async function POST(
   }: { params: Promise<{ serviceSlug: string; productPackId: string; versionId: string }> },
 ) {
   const { serviceSlug, productPackId, versionId } = await params;
-  const service = await resolvePublicServiceContext(serviceSlug);
-  return publishProductPackVersionResponse(
-    request,
-    service.workspaceId,
-    productPackId,
-    versionId,
-    service.serviceId,
+  return withServiceContentContext(request, serviceSlug, (service) =>
+    publishProductPackVersionResponse(
+      request,
+      service.workspaceId,
+      productPackId,
+      versionId,
+      service.serviceId,
+    ),
   );
 }

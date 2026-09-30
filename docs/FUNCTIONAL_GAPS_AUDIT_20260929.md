@@ -4,6 +4,30 @@
 
 ## 確認できた機能不足と推奨順
 
+### 追加監査: 非公開サービスの参加者操作API
+
+main `3e57e72b`で画面とAPIの公開判定の差を確認した。下記は初回監査4件の実装後に発見した機能不具合であり、本番で不正参照が起きた証拠ではない。
+
+1. **投稿パートナーの一覧・作成・取得・編集・停止と初回回答からの候補提案: PR #1012で実装済み**。認証後の本人Member Service解決を使用し、非公開Serviceの既存参加者も操作できる。Service所属の編集/停止にも本人所有を必須とし、個人用管理権限は維持する。詳細は`PRIVATE_SERVICE_BUNSHIN_OPERATIONS_IMPLEMENTATION_REPORT.md`。
+2. **SNS設定・発信方針・投稿テーマ・週間計画の操作API: PR #1013で実装済み**。4種類19操作を認証後のMember Service解決へ合わせ、本人所有・SOCIAL能力・入力/Origin検証と生成時の自Service公式知識/用語/Quota等を維持する。詳細は`PRIVATE_SERVICE_SOCIAL_PLANNING_IMPLEMENTATION_REPORT.md`。
+3. **投稿の採否・完了・実行結果の保存/振り返りAPI: PR #1014で実装済み**。共通Mission Scope、業務成果、SNS数字保存/読取と日々のメモ/写真を認証後のMember Service解決へ合わせ、Service固有の機能設定・本人所有・同意・SOCIAL能力を維持する。詳細は`PRIVATE_SERVICE_POSTING_OUTCOMES_IMPLEMENTATION_REPORT.md`。本番反映は別途必要。
+4. **初回回答・紹介コード・本人専用URLの操作API: PR #1015で実装済み**。認証後のMember Service解決へ合わせ、Service固有の質問/事業プロフィール、所属・紹介設定、許可ドメイン/本人限定DRAFTを維持する。Schema不一致の400と未知Resolver障害の500を区別する。匿名紹介先の公開条件は維持する。詳細は`PRIVATE_SERVICE_ONBOARDING_REFERRALS_IMPLEMENTATION_REPORT.md`。
+5. **本人商品紹介の保存/非表示・コピー/投稿完了・紹介文生成API: PR #1016で実装済み**。認証後のMember Service解決と厳格Schemaの400変換、生成Quotaへの自Service ID接続を追加。本人/Service/分身/承認URLと公式商品、生成安全条件・ログ・冪等性を維持する。詳細は`PRIVATE_SERVICE_PRODUCT_CONTENT_IMPLEMENTATION_REPORT.md`。
+6. **動画配信の閲覧/採用/辞退/投稿完了・ダウンロード: PR #1017で実装済み**。Member Service解決、期限/取消の副作用前拒否、本人Project/Render/Storage Keyの照合、準備成功後の履歴記録、APIエラー/Cache Policyを追加。詳細は`PRIVATE_SERVICE_VIDEO_ACTIONS_IMPLEMENTATION_REPORT.md`。
+7. **Program支援方針/目標候補・本人希望/目標の権限分離: PR #1018で実装済み**。公開限定の前段Resolverを除き、管理ResolverとMember Resolverを操作別に分離。本人Enrollment/受講ロック/研修専用期間条件、方針/候補のService照合と版/監査を維持する。詳細は`PRIVATE_SERVICE_PROGRAM_GOALS_IMPLEMENTATION_REPORT.md`。
+8. **ヘルプ・マニュアル・法務文書の閲覧分離: PR #1019で実装済み**。非公開Serviceの既存参加者へ案内と公開済み文書を表示し、公開Serviceの匿名/未参加者案内を維持する。本文の所有境界/有効版とUser別マニュアルcacheを確認。詳細は`PRIVATE_SERVICE_VISITOR_PAGES_IMPLEMENTATION_REPORT.md`。
+9. **法務文書のtype別最新有効版: 今回修正**。公開表示・参加同意・既存参加者利用・通知同意判定が複数版で旧版を選び得たため、最大versionへ統一。過去の旧同意を自動付替えず、実データ/再同意導線の本番確認は別作業。詳細は`SERVICE_LEGAL_LATEST_VERSION_IMPLEMENTATION_REPORT.md`。
+10. **既存参加者の最新版への再同意導線: 今回実装**。初回登録とは別に本人の現在版を確認・追記し、非公開の既存参加者にも提供する。公開参加の最大2文書制限も現行利用判定に合わせて3種へ修正。詳細は`SERVICE_LEGAL_RECONSENT_IMPLEMENTATION_REPORT.md`。
+11. **非公開サービスの参加者画面Metadata: 今回修正**。9画面のタイトル表示を本人Member Serviceから解決し、匿名/所属外には汎用タイトル、未知障害は再送出する。公開登録入口はPublic Resolverを維持。詳細は`PRIVATE_SERVICE_MEMBER_METADATA_IMPLEMENTATION_REPORT.md`。
+12. **非公開サービスの商品パック・Campaign管理API: 今回修正**。管理画面はCONTENT権限を使用する一方、5 API入口だけPublic Resolverで非公開Serviceを拒否していた。認証済み管理者/内容編集者のService権限へ統一し、匿名・他Service/権限不足と予期せぬ障害を区別する。詳細は`PRIVATE_SERVICE_CONTENT_OPERATIONS_IMPLEMENTATION_REPORT.md`。
+13. **非公開サービスの専用URL・外部計測管理API: 今回修正**。管理画面はADMINISTRATION権限を使用する一方、サービス配下API入口はPublic Resolverで非公開Serviceを拒否していた。本人管理権限へ統一し、匿名/他Serviceを拒否してWorkspace/Groupを固定する。外部成果受信Webhookは変更しない。詳細は`PRIVATE_SERVICE_EXTERNAL_TRACKING_IMPLEMENTATION_REPORT.md`。
+
+参加者専用画面のMetadataと管理者向け商品パック・Campaign・外部計測APIのPublic Resolverは用途別に分離した。Service登録の匿名公開入口は維持する。今回の確認範囲だけで全非公開Service対応完了とは扱わない。
+
+千ノ国・ハッシー・OEM等で該当する共通機能の修正。公開登録やService固有の業種/質問フローを共通化しない。本作業では設定・Provider実呼出・本番データを変更しない。
+
+### 初回監査の4件
+
 1. **OEM決済CSVの受付期間指定と上限超過検出: PR #1003で実装済み**。日本時間の期間指定・10,001件目の検出・部分CSV拒否・画面案内を追加。同期10,000件上限自体は残る。詳細は`OEM_PAYMENT_EXPORT_PERIOD_IMPLEMENTATION_REPORT.md`。
 2. **AI研修の無料・手動登録受講の自動期限終了: 今回バッチを実装**。購入に紐づかないACTIVE受講を明示Service限定でEXPIREDへ冪等に確定し、評価待ちを停止する。ロック・所有/Module再確認・CAS・最小システム監査・既存終了日Triggerを使用。development/stagingの内部実行口だけを追加し、本番停止・定期実行未登録を維持する。詳細は`ai-training/AI_TRAINING_AUTOMATIC_EXPIRY_IMPLEMENTATION_REPORT.md`。有料期限処理は変更しない。
 3. **占いAI生成の非同期化と再試行: PR #1007で実装済み**。D-145に従うQueue/Worker、最大3回の一時障害再試行、lease/本人/Service/Bunshin境界、試行別Quota/使用量記録、標準結果の即時表示をコード実装した。既定無効の`FORTUNE_ASYNC_GENERATION_ENABLED`で既存同期方式を維持する。CI検証は対象PR、本番有効化・実AI検証は別作業。詳細は`FORTUNE_ASYNC_GENERATION_IMPLEMENTATION_REPORT.md`。
