@@ -2044,6 +2044,7 @@ enum VideoDeliveryNotificationStatus {
 
 enum VideoSceneGenerationStatus {
   QUEUED
+  SUBMISSION_UNKNOWN
   SUBMITTED
   GENERATING
   SUCCEEDED

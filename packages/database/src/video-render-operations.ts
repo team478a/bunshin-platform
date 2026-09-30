@@ -18,6 +18,7 @@ const emptyVideoRenderCounts = () => ({
 
 const emptyVideoSceneGenerationCounts = () => ({
   QUEUED: 0,
+  SUBMISSION_UNKNOWN: 0,
   SUBMITTED: 0,
   GENERATING: 0,
   SUCCEEDED: 0,
@@ -126,6 +127,7 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
         estimatedCostUsdMicros: row.estimatedCostUsdMicros,
         actualCostUsdMicros: row.actualCostUsdMicros,
         retryable:
+          row.provider !== 'FAL' &&
           row.status === 'FAILED' &&
           VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES.includes(
             row.errorCode as (typeof VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES)[number],
@@ -260,6 +262,7 @@ export class PrismaVideoRenderOperationsRepository implements VideoRenderOperati
         const generation = await tx.videoSceneGeneration.findFirst({
           where: {
             id: input.generationId,
+            provider: { not: 'FAL' },
             status: 'FAILED',
             errorCode: { in: [...VIDEO_AI_SCENE_ADMIN_RETRYABLE_FAILURES] },
             completedAt: { not: null },
