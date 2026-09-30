@@ -1,0 +1,40 @@
+# OpenMontage判断後の最小バックログ（今回実装なし）
+
+固定点：bunshin `29f0f92b056870ccb895692ac8c33873d2d818f2`、OpenMontage `08e2151fa02de28a5d6a312b3d575692bf147ad7`、2026-09-30 JST。推奨は[差分調査](OPENMONTAGE_GAP_ANALYSIS.md)の**A：導入せず既存動画基盤を改善**。以下は承認前の将来の実装PR候補であり、本調査ではコード・DB・設定を変更しない。調査4文書の共有PRは別扱いとする。大きな判断は将来 `docs/DECISION_LOG.md` またはADRへ記録する。
+
+## 優先順位と切替ゲート
+
+| 順  | 独立した最小作業単位（将来PR候補）                    | 目的・依存条件                                            | 変更候補/再利用・schema                                                                                                                                 | テスト/完了条件                                                                                                                                                                                                    | ロールバック                                         |
+| --- | ----------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 1   | **fal/Kling障害窓・請求経路のcharacterizationテスト** | 現行Providerの公式冪等key/照会仕様を確認                  | `video-ai-scene-generation.ts` とfal Adapter、管理者再試行Repositoryを実際に呼ぶ。既存Job/Quotaを確認。schema変更なし                                   | 現行挙動を再現可能に確定し、安全条件の達否を記録する。リスク再現でもテスト作成は完了し得るが、安全化は別PR                                                                                                         | テストPRをrevert可能。実挙動には影響なし             |
+| 2   | 既存経路の発注照合・保留状態設計/実装                 | 1で実際の欠落が確認され、Provider照会/冪等APIを把握した後 | `VideoSceneGeneration`/`VideoRender`、Job status、外部注文台帳等の最小拡張を検討。必要ならmigrationあり。Providerを新設しない                           | 二重Worker/lease/逆順callback/再試行の契約テスト、既発生原価保持、未知発注は保留・照合                                                                                                                             | feature flag停止、旧Job互換を保つmigrationと復帰手順 |
+| 3   | 現行動画の個別化・品質評価fixture                     | 1と独立。実顧客素材は使わない                             | `video-planning-context.ts`、OpenAI企画Adapter、字幕/表示契約を既存境界で評価。schema変更なし                                                           | 同じ商品×異なるユーザー/顧客/話し方、同一ユーザー×日付/履歴/反応で根拠ある差。同一承認済みRevision再試行では不変。他ユーザーのMemory/素材混入ゼロ。商品名/ロゴ/CTA/必須表示/日本語字幕/読み上げ/スマホ可読性を記録 | fixture/評価のみを除去可。生成動作変更は後続別PR     |
+| 4   | 原価・保存/通知の照合監査                             | 1の結果後                                                 | 既存 `video-media-quota.ts`、scene原価、Render/LINE/Storageを再利用。工程別実原価・期限・削除に不足があれば設計し、実装は別PR。schema要否は監査結果待ち | 利用枠返却後も発生済み原価保持、通知だけの失敗では再合成しない、署名URL再発行・期限切れ、キャンセル/退会/削除、文章/画像配信非阻害                                                                                 | 監査は文書/テストのみ。実装時は段階flagで戻す        |
+
+1〜4はOpenMontageを導入しない場合でも価値があり、既存機能の信頼性を優先する。**1の今回の完了条件は、現行挙動を再現可能に確定し、安全条件の達否を正直に記録すること。** リスクを再現してテスト作成が完了しても安全対策は未完了であり、2の修正PRで安全条件の回帰テストへ置き換える。Job試行番号、同じ発注を指す論理キー、Provider request IDは別物で、内部キーだけでProvider側の重複抑止を保証しない。1では管理者再試行が `actualCostUsdMicros` を `null` に戻す現行挙動（`packages/database/src/video-render-operations.ts:309-324`）と、Provider請求実額の書込経路が今回の検索で見つからない点も可視化する。見積・確定・未確定原価を分け、未確定を0円や最終総原価に混ぜない。1のテストで既存実装が安全と判明すれば2は不要・縮小できる。症状を決めつけて実装しない。実Provider/本番E2Eは別承認が必要で、テスト成功だけで本番利用可能とは判定しない。
+
+## OpenMontageを再検討する場合だけ追加するゲート
+
+今回のテスト専用PRは1のうち**fal/Kling経路だけ**を対象にし、Runway・Creatomate・LINE・動画品質には広げない。問題が再現してもテストの成功は現行挙動の記録を意味するだけで、安全条件達成を意味しない。次の修正PRでは不明発注の保留・照合、旧発注IDと原価の履歴保持を安全条件としてassertする。
+
+| 条件付き順 | 小さなPR/作業単位                       | 依存・変更候補・schema                                                                                                                                                               | テスト/完了/切り戻し                                                                                               |
+| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| G1         | 法務/権利/Provider契約レビューと採用ADR | [ライセンス・リスク](OPENMONTAGE_LICENSE_AND_RISK_REVIEW.md)のAGPL、Remotion、FFmpeg構成、フォント/素材/モデル/OEM再配布、利用者へのソース提供範囲を確定。コード・schemaなし         | 書面判断と代替A/B/C/D再比較。不可ならここで停止。文書判断は更新可能                                                |
+| G2         | PoC 1の最小isolated harness             | G1・セキュリティ承認後。合成だけ、合成データ、現行Jobの外側の隔離試験。顧客DB/LINE/課金なし。最初はschemaなし                                                                        | [PoC計画](OPENMONTAGE_POC_PLAN.md)の同時2ジョブ/失敗復帰/成果物検査/一時ファイル削除。失敗時は全除去しA維持        |
+| G3         | PoC 2の限定実API比較                    | G2合格、Provider/モデル/予算/素材/送信先の個別承認後。既存ルートと同条件比較。新Provider導入はまだしない                                                                             | 品質・手直し・時間・実原価・個別化/安定性を実測。測定可能な優位なしならA継続、PoC環境撤去                          |
+| G4         | C案の最小工程連携の設計PR               | G1〜G3を通過し、Creatomate等で満たせない具体要件が出た時のみ。bunshinが所有権・認可・Quota・Cost・Revision・通知の正本。既存Job優先。I/O契約と状態/原価台帳に不足ならmigrationを明示 | 重複発注・逆順callback・成功済み素材再利用・越境・コスト上限の契約テスト、feature flagで即座に現行経路へ戻せること |
+| G5         | 独立Worker化の判断（D案）               | G4ではCPU/メモリ/ディスク/実行時間/同時数を満たせない実測証拠がある場合だけ                                                                                                          | 別キュー/Workerの責務・運用・費用・障害対応をADR化。独立してもAGPL/OEM条件は再確認。必要性がなければ実装しない     |
+
+G2/G3はPoCの**計画**でありこの調査ターンでは実行しない。OpenMontage本体やskill/templateのコピー、独立Worker、新Provider追加を先行させない。B（本部社内の有人制作補助）の場合もG1と素材統制が先で、顧客向けSaaS/日次自動処理への横滑りを禁止する。
+
+## 変更管理・受入の共通条件
+
+- 各PRは目的、差分、依存条件、schema/migration要否、試験結果と未実行のProvider/本番項目、ロールバック、未解決事項、次ゲートを記す。無関係な機能を混ぜない。
+- Workspace/Group/Owner/Bunshin/Revisionの明示スコープを維持する。共通商品パックを個人Memoryとして共有しない。承認済みRevisionを再試行で書き換えない。
+- 外部注文を発生させる変更は一意キー、応答喪失時の照合/保留、実原価の不可逆記録、利用枠の独立処理、上限/停止条件を先に持つ。
+- 作業領域/キャッシュはjob単位。Workerへ広い本番DB資格情報や他ユーザー素材を渡さない。SSRF、path traversal、command/prompt injection、巨大入力、ログ機密漏洩を契約テストに含む。
+- 動画のみの失敗が既存文章・画像配信を止めない。LINE通知の再送のために素材/動画を再発注しない。ロールバック時も発生済み外部費用の履歴を消さない。
+
+前回の94件成功は、application `test/video-render-execution.test.ts test/video-ai-scene-generation.test.ts test/video-render-completion.test.ts test/video-core.test.ts`（36件）、database `test/video-media-quota.test.ts test/video-planning-context.test.ts test/video-project-entitlement.test.ts`（15件）、web `test/automatic-daily-video.test.ts test/creatomate-video-render.test.ts test/runway-video-provider.test.ts test/video-render-webhook.test.ts`（43件）をそれぞれ `pnpm --filter @bunshin/application exec vitest run …`、`pnpm --filter @bunshin/database exec vitest run …`、`pnpm --filter web exec vitest run …` で実行した記録である。**この補足作業の新規テスト結果ではない。**
+
+次に着手する**最小の1タスク**は「fal/Klingのsubmit応答喪失・DB保存失敗・管理者再試行を、副作用のないcharacterizationテストで実行・記録し、公式fal資料の保証範囲を確認すること」。本番ロジックの安全化は結果確認後の別PRとする。
