@@ -76,6 +76,15 @@ describe('service daily mission boundary', () => {
     expect(experience).toContain('<MissionTrendContext mission={mission} />');
   });
 
+  it('keeps the today section current and opens past posts by calendar date', () => {
+    expect(detailPage).toContain('today={today}');
+    expect(experience).toContain('splitServiceMissionsByDate(missions, today)');
+    expect(experience).toContain('missions={todayMissions}');
+    expect(experience).toContain('過去の投稿をカレンダーから見る');
+    expect(experience).toContain('type="date"');
+    expect(experience).toContain('missions={selectedHistoryMissions}');
+  });
+
   it('gives image users one clear mobile action and hides technical directions by default', () => {
     expect(detailPage).toContain('imageCreationBaseHref');
     expect(detailPage).toContain("featureKey: 'SOCIAL.IMAGE_GENERATION'");
