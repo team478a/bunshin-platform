@@ -24,6 +24,7 @@ const statusText: Record<string, string> = {
 
 const sceneStatusText: Record<string, string> = {
   QUEUED: '順番待ち',
+  SUBMISSION_UNKNOWN: '外部発注の成否未確認・要照合',
   SUBMITTED: '外部サービスへ依頼済み',
   GENERATING: '場面を作成中',
   SUCCEEDED: '完成',
@@ -93,8 +94,9 @@ export default async function VideoRenderOperationsPage() {
         </p>
         <p>
           場面の生成：待機 {snapshot.sceneCounts.QUEUED + snapshot.sceneCounts.SUBMITTED}件 ／
-          作成中 {snapshot.sceneCounts.GENERATING}件 ／ 完成 {snapshot.sceneCounts.SUCCEEDED}件 ／
-          失敗 {snapshot.sceneCounts.FAILED}件
+          要照合 {snapshot.sceneCounts.SUBMISSION_UNKNOWN}件 ／ 作成中{' '}
+          {snapshot.sceneCounts.GENERATING}件 ／ 完成 {snapshot.sceneCounts.SUCCEEDED}件 ／ 失敗{' '}
+          {snapshot.sceneCounts.FAILED}件
         </p>
       </section>
       <section className="settings-card">

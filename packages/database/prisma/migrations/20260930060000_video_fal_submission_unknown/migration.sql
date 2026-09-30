@@ -1,0 +1,1 @@
+ALTER TYPE "VideoSceneGenerationStatus" ADD VALUE 'SUBMISSION_UNKNOWN';

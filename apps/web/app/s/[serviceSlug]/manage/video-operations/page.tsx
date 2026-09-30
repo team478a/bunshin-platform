@@ -16,6 +16,7 @@ const renderStatusText: Record<string, string> = {
 
 const sceneStatusText: Record<string, string> = {
   QUEUED: '順番待ち',
+  SUBMISSION_UNKNOWN: '外部発注の成否未確認・要照合',
   SUBMITTED: '外部サービスへ依頼済み',
   GENERATING: '場面を作成中',
   SUCCEEDED: '完成',
@@ -132,8 +133,8 @@ export default async function ServiceVideoOperationsPage({
           </p>
           <p>
             AIで作る場面：待機 {(sceneCounts.QUEUED ?? 0) + (sceneCounts.SUBMITTED ?? 0)}件 ／
-            作成中 {sceneCounts.GENERATING ?? 0}件 ／ 完成 {sceneCounts.SUCCEEDED ?? 0}件 ／ 失敗{' '}
-            {sceneCounts.FAILED ?? 0}件
+            要照合 {sceneCounts.SUBMISSION_UNKNOWN ?? 0}件 ／ 作成中 {sceneCounts.GENERATING ?? 0}件
+            ／ 完成 {sceneCounts.SUCCEEDED ?? 0}件 ／ 失敗 {sceneCounts.FAILED ?? 0}件
           </p>
           <p>動画本文、生成指示、完成ファイルのURLはこの画面に表示しません。</p>
         </section>

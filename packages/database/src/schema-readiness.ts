@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260929070000_auth_return_attempts';
+export const LATEST_DATABASE_MIGRATION = '20260930060100_hold_legacy_fal_queued_submissions';

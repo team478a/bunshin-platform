@@ -61,7 +61,10 @@ export async function purgeAccountMedia(
       data: { status: 'CANCELLED' },
     }),
     client.videoSceneGeneration.updateMany({
-      where: { ...owner, status: { in: ['QUEUED', 'SUBMITTED', 'GENERATING'] } },
+      where: {
+        ...owner,
+        status: { in: ['QUEUED', 'SUBMISSION_UNKNOWN', 'SUBMITTED', 'GENERATING'] },
+      },
       data: { status: 'CANCELLED' },
     }),
     client.socialImageGenerationRequest.updateMany({ where: owner, data: { status: 'CANCELLED' } }),

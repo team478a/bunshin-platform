@@ -114,6 +114,15 @@ describe('transactional service video allowance', () => {
     await settleVideoSceneBatch(tx, scope);
     expect(m.serviceMediaGenerationReservation.updateMany).not.toHaveBeenCalled();
   });
+  it('keeps the video slot reserved while a fal submission requires reconciliation', async () => {
+    m.videoSceneGeneration.findMany.mockResolvedValue([
+      { status: 'FAILED' },
+      { status: 'SUBMISSION_UNKNOWN' },
+    ]);
+    await settleVideoSceneBatch(tx, scope);
+    expect(m.serviceMediaGenerationReservation.updateMany).not.toHaveBeenCalled();
+    expect(m.videoProject.updateMany).not.toHaveBeenCalled();
+  });
   it('makes a successfully retried scene batch ready for final composition without consuming its slot', async () => {
     m.videoSceneGeneration.findMany.mockResolvedValue([
       { status: 'SUCCEEDED' },

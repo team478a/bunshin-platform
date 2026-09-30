@@ -21,6 +21,8 @@ type SaveMode = 'normal' | 'throw-before-write' | 'throw-after-write' | 'conflic
 type Store = {
   generation: VideoSceneGenerationRecord;
   saveMode: SaveMode;
+  claimConflict: boolean;
+  claimCalls: number;
   markSubmittedCalls: number;
   markSucceededCalls: number;
   storageCalls: number;
@@ -54,6 +56,8 @@ const newStore = (): Store => ({
     updatedAt: new Date('2026-09-30T00:00:00Z'),
   },
   saveMode: 'normal',
+  claimConflict: false,
+  claimCalls: 0,
   markSubmittedCalls: 0,
   markSucceededCalls: 0,
   storageCalls: 0,
@@ -74,12 +78,23 @@ const persistedRepository = (store: Store): VideoSceneGenerationRepository => ({
           }
         : null,
     ),
+  claimFalSubmission: () => {
+    store.claimCalls += 1;
+    if (store.claimConflict || store.generation.status !== 'QUEUED') return Promise.resolve(null);
+    store.generation = {
+      ...store.generation,
+      status: 'SUBMISSION_UNKNOWN',
+      errorCode: 'FAL_SUBMISSION_UNCONFIRMED',
+    };
+    return Promise.resolve({ ...store.generation });
+  },
   markSubmitted: async ({ externalJobId }) => {
     store.markSubmittedCalls += 1;
     await store.beforeSave?.();
     if (store.saveMode === 'throw-before-write') throw new Error('simulated DB write failure');
-    if (store.saveMode === 'conflict' || store.generation.status !== 'QUEUED') return null;
-    store.generation = { ...store.generation, status: 'SUBMITTED', externalJobId };
+    if (store.saveMode === 'conflict' || store.generation.status !== 'SUBMISSION_UNKNOWN')
+      return null;
+    store.generation = { ...store.generation, status: 'SUBMITTED', externalJobId, errorCode: null };
     if (store.saveMode === 'throw-after-write')
       throw new Error('simulated lost DB acknowledgement');
     return { ...store.generation };
@@ -107,6 +122,7 @@ class FakeFalQueue {
   failBeforeAcceptance = false;
   loseResponseAfterAcceptance = false;
   failInspection = false;
+  onPost: (() => void) | undefined;
 
   request: typeof fetch = async (input, init) => {
     await Promise.resolve();
@@ -114,6 +130,7 @@ class FakeFalQueue {
     if (url.hostname !== 'queue.fal.run' || !url.pathname.startsWith(`/${model}`))
       throw new Error(`unmocked external request: ${url.origin}`);
     if (init?.method === 'POST') {
+      this.onPost?.();
       this.postAttempts += 1;
       if (this.failBeforeAcceptance) {
         this.failBeforeAcceptance = false;
@@ -178,6 +195,12 @@ describe('fal/Kling submission characterization (fake provider, no external netw
   it('F0 characterization: submits, persists the ID, inspects and stores success', async () => {
     const store = newStore();
     const queue = new FakeFalQueue();
+    queue.onPost = () => {
+      expect(store.generation).toMatchObject({
+        status: 'SUBMISSION_UNKNOWN',
+        externalJobId: null,
+      });
+    };
     await expect(runStep(store, queue)).resolves.toMatchObject({ status: 'PENDING' });
     await expect(runStep(store, queue)).resolves.toMatchObject({ status: 'SUCCEEDED' });
     expect({
@@ -192,44 +215,49 @@ describe('fal/Kling submission characterization (fake provider, no external netw
       actualCostUsdMicros: null,
     });
     expect(store.markSucceededCalls).toBe(1);
+    expect(store.claimCalls).toBe(1);
   });
 
-  it('F1 characterization: pre-accept failure leaves no ID; a separate run sends again', async () => {
+  it('F1 safety regression: even a fake pre-accept failure stays on hold because the client cannot know', async () => {
     const store = newStore();
     const queue = new FakeFalQueue();
     queue.failBeforeAcceptance = true;
     await expect(runStep(store, queue)).rejects.toMatchObject({ category: 'TIMEOUT_OR_NETWORK' });
-    expect(store.generation).toMatchObject({ status: 'QUEUED', externalJobId: null });
-    await expect(runStep(store, queue)).resolves.toMatchObject({ status: 'PENDING' });
+    expect(store.generation).toMatchObject({ status: 'SUBMISSION_UNKNOWN', externalJobId: null });
+    await expect(runStep(store, queue)).resolves.toMatchObject({
+      status: 'RECONCILIATION_REQUIRED',
+    });
     expect({
       posts: queue.postAttempts,
       orders: queue.acceptedOrders.length,
       gets: queue.getAttempts,
-    }).toEqual({ posts: 2, orders: 1, gets: 0 });
+    }).toEqual({ posts: 1, orders: 0, gets: 0 });
   });
 
-  it('F2 characterization: response loss after fake acceptance leads to a new POST on a separate run', async () => {
+  it('F2 safety regression: response loss after fake acceptance is held without a second POST', async () => {
     const store = newStore();
     const queue = new FakeFalQueue();
     queue.loseResponseAfterAcceptance = true;
     await expect(runStep(store, queue)).rejects.toMatchObject({ category: 'TIMEOUT_OR_NETWORK' });
     expect(store.generation).toMatchObject({
-      status: 'QUEUED',
+      status: 'SUBMISSION_UNKNOWN',
       externalJobId: null,
       actualCostUsdMicros: null,
     });
-    await expect(runStep(store, queue)).resolves.toMatchObject({ status: 'PENDING' });
+    await expect(runStep(store, queue)).resolves.toMatchObject({
+      status: 'RECONCILIATION_REQUIRED',
+    });
     expect({
       posts: queue.postAttempts,
       fakeOrders: queue.acceptedOrders.length,
       gets: queue.getAttempts,
-    }).toEqual({ posts: 2, fakeOrders: 2, gets: 0 });
-    expect(store.generation.externalJobId).toBe('fake_request_2');
+    }).toEqual({ posts: 1, fakeOrders: 1, gets: 0 });
+    expect(store.generation.externalJobId).toBeNull();
     expect(store.generation.inputSnapshot).toEqual(inputSnapshot);
     expect(store.generation.model).toBe(model);
   });
 
-  it('F2 Job characterization: retryable failure schedules the real Job executor and re-POSTs on the next delivery', async () => {
+  it('F2 Job safety regression: next delivery ends non-retryably for reconciliation without re-POST', async () => {
     const store = newStore();
     const queue = new FakeFalQueue();
     queue.loseResponseAfterAcceptance = true;
@@ -268,17 +296,23 @@ describe('fal/Kling submission characterization (fake provider, no external netw
         failCalls.push(failure);
         return Promise.resolve({
           ...job,
-          status: 'RETRY_SCHEDULED',
+          status: failure.retryable ? 'RETRY_SCHEDULED' : 'DEAD',
           attemptCount: failCalls.length,
         });
       },
     } as unknown as FailJob;
-    const complete = { execute: vi.fn() } as unknown as CompleteJob;
+    const completeExecute = vi.fn().mockResolvedValue({ ...job, status: 'SUCCEEDED' });
+    const complete = { execute: completeExecute } as unknown as CompleteJob;
     const handler = {
       execute: async () => {
         const result = await runStep(store, queue);
         return {
-          status: result.status === 'PENDING' ? ('SUBMITTED' as const) : ('SUCCEEDED' as const),
+          status:
+            result.status === 'RECONCILIATION_REQUIRED'
+              ? ('RECONCILIATION_REQUIRED' as const)
+              : result.status === 'PENDING'
+                ? ('SUBMITTED' as const)
+                : ('SUCCEEDED' as const),
         };
       },
       markFailed: () => Promise.resolve(),
@@ -286,40 +320,43 @@ describe('fal/Kling submission characterization (fake provider, no external netw
     await expect(
       new ExecuteVideoAiSceneGenerationJob(handler, complete, fail).execute(job, 'worker-1'),
     ).resolves.toMatchObject({ status: 'RETRY_SCHEDULED' });
-    expect(store.generation).toMatchObject({ status: 'QUEUED', externalJobId: null });
+    expect(store.generation).toMatchObject({ status: 'SUBMISSION_UNKNOWN', externalJobId: null });
     expect(failCalls).toEqual([{ errorCategory: 'VIDEO_AI_SCENE_UNEXPECTED', retryable: true }]);
     await expect(
       new ExecuteVideoAiSceneGenerationJob(handler, complete, fail).execute(
         { ...job, attemptCount: 2 },
         'worker-2',
       ),
-    ).resolves.toMatchObject({ status: 'RETRY_SCHEDULED' });
-    expect(failCalls[1]).toMatchObject({
-      errorCategory: 'VIDEO_AI_SCENE_PENDING',
-      retryable: true,
+    ).resolves.toMatchObject({ status: 'DEAD' });
+    expect(failCalls).toEqual([
+      { errorCategory: 'VIDEO_AI_SCENE_UNEXPECTED', retryable: true },
+      { errorCategory: 'VIDEO_AI_SCENE_RECONCILIATION_REQUIRED', retryable: false },
+    ]);
+    expect(completeExecute).not.toHaveBeenCalled();
+    expect({
+      posts: queue.postAttempts,
+      fakeOrders: queue.acceptedOrders.length,
+      gets: queue.getAttempts,
+    }).toEqual({ posts: 1, fakeOrders: 1, gets: 0 });
+  });
+
+  it('F3 safety regression: lost ID write stays on hold without a second POST', async () => {
+    const store = newStore();
+    const queue = new FakeFalQueue();
+    store.saveMode = 'throw-before-write';
+    await expect(runStep(store, queue)).rejects.toThrow('simulated DB write failure');
+    expect(store.generation).toMatchObject({ status: 'SUBMISSION_UNKNOWN', externalJobId: null });
+    store.saveMode = 'normal';
+    await expect(runStep(store, queue)).resolves.toMatchObject({
+      status: 'RECONCILIATION_REQUIRED',
     });
     expect({
       posts: queue.postAttempts,
       fakeOrders: queue.acceptedOrders.length,
       gets: queue.getAttempts,
-    }).toEqual({ posts: 2, fakeOrders: 2, gets: 0 });
-  });
-
-  it('F3 characterization: lost DB write after receiving ID leads to a new POST', async () => {
-    const store = newStore();
-    const queue = new FakeFalQueue();
-    store.saveMode = 'throw-before-write';
-    await expect(runStep(store, queue)).rejects.toThrow('simulated DB write failure');
-    expect(store.generation).toMatchObject({ status: 'QUEUED', externalJobId: null });
-    store.saveMode = 'normal';
-    await expect(runStep(store, queue)).resolves.toMatchObject({ status: 'PENDING' });
-    expect({
-      posts: queue.postAttempts,
-      fakeOrders: queue.acceptedOrders.length,
-      gets: queue.getAttempts,
       saves: store.markSubmittedCalls,
-    }).toEqual({ posts: 2, fakeOrders: 2, gets: 0, saves: 2 });
-    expect(store.generation.externalJobId).toBe('fake_request_2');
+    }).toEqual({ posts: 1, fakeOrders: 1, gets: 0, saves: 1 });
+    expect(store.generation.externalJobId).toBeNull();
   });
 
   it('F4 characterization: persisted ID with lost acknowledgement resumes by inspection, not POST', async () => {
@@ -340,20 +377,32 @@ describe('fal/Kling submission characterization (fake provider, no external netw
     }).toEqual({ posts: 1, fakeOrders: 1, gets: 2 });
   });
 
-  it('F5 characterization: markSubmitted conflict without persisted winner leaves a queued row', async () => {
+  it('F5 safety regression: markSubmitted conflict without a winner remains on hold', async () => {
     const store = newStore();
     const queue = new FakeFalQueue();
     store.saveMode = 'conflict';
     await expect(runStep(store, queue)).rejects.toMatchObject({ code: 'CONFLICT' });
-    expect(store.generation).toMatchObject({ status: 'QUEUED', externalJobId: null });
+    expect(store.generation).toMatchObject({ status: 'SUBMISSION_UNKNOWN', externalJobId: null });
     expect({
       posts: queue.postAttempts,
       fakeOrders: queue.acceptedOrders.length,
       gets: queue.getAttempts,
     }).toEqual({ posts: 1, fakeOrders: 1, gets: 0 });
     store.saveMode = 'normal';
-    await expect(runStep(store, queue)).resolves.toMatchObject({ status: 'PENDING' });
-    expect(queue.postAttempts).toBe(2);
+    await expect(runStep(store, queue)).resolves.toMatchObject({
+      status: 'RECONCILIATION_REQUIRED',
+    });
+    expect(queue.postAttempts).toBe(1);
+  });
+
+  it('F5 safety regression: losing the pre-POST claim never contacts fal', async () => {
+    const store = newStore();
+    const queue = new FakeFalQueue();
+    store.claimConflict = true;
+    await expect(runStep(store, queue)).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(store.claimCalls).toBe(1);
+    expect(store.generation).toMatchObject({ status: 'QUEUED', externalJobId: null });
+    expect(queue.postAttempts).toBe(0);
   });
 
   it('F5 characterization: deterministic competing save makes later run inspect the winner', async () => {
