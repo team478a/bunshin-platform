@@ -21,7 +21,8 @@ type VideoWorkOrder = {
   projectId: string;
   projectRevision: number;
   sceneIds?: string[];
-  operationKey: string; // project/revision/stage/attemptを固定。外部発注は別の一意キー
+  jobAttemptNumber: number; // Job配信・実行の試行番号。発注の同一性ではない
+  logicalOrderKey: string; // project/revision/stage/scene/明示的作り直し版で固定
   approvedInputHash: string;
   approvalId: string;
   approvedAt: string;
@@ -54,12 +55,14 @@ type VideoWorkOrder = {
   temporaryRootId: string;
 };
 type VideoWorkResult = {
-  operationKey: string;
+  logicalOrderKey: string;
   approvedInputHash: string;
   configurationVersion: string;
   stages: Array<{
     stageId: string;
     sceneId?: string;
+    jobAttemptNumber: number;
+    logicalOrderKey: string;
     status:
       | 'PENDING'
       | 'SUBMITTED'
@@ -68,10 +71,12 @@ type VideoWorkResult = {
       | 'FAILED'
       | 'UNKNOWN_SUBMISSION'
       | 'CANCELLED';
-    externalOrderId?: string;
+    providerRequestId?: string; // Providerが返した識別子。失われた場合は未確認
+    estimatedCostUsdMicros?: number;
+    confirmedCostUsdMicros?: number;
+    costStatus: 'ESTIMATED' | 'CONFIRMED' | 'UNDETERMINED';
     startedAt?: string;
     endedAt?: string;
-    actualCostUsdMicros?: number;
     errorCode?: string;
     retryable?: boolean;
   }>;
@@ -84,26 +89,28 @@ type VideoWorkResult = {
     durationSeconds: number;
     ownerScope: string;
   }>;
-  totalActualCostUsdMicros: number; // 利用枠とは独立した実請求記録
+  confirmedCostTotalUsdMicros: number; // 確定分だけの合計
+  undeterminedCostCount: number;
+  costAggregationComplete: boolean; // falseなら確定分合計を最終総原価と呼ばない
 };
 ```
 
-WorkOrderはbunshin認可後に固定し、Workerには匿名化された必要最小の承認済み素材のみ渡す。人格/個人Memoryの生データを共有商品パックや別ユーザーに混ぜない。同一Revision再試行は入力hash、persona/pack/history/config版、演出決定と生成済み素材を固定し、失敗場面以外の内容を変えない。bunshinが所有権、認可、利用枠、原価台帳、Revision、通知、採用判断の正本。候補実行器は素材生成/合成の限定した結果を返すだけで、独自の顧客DB/通知/請求を持たない。単純な`renderProvider`追加では発注・状態・隔離・成果物検査まで解決しないため、先に契約テストで責務境界を確認する。現行Jobを優先し、独立キュー/Workerは長時間処理の実測で不可避な場合に限る。
+WorkOrderはbunshin認可後に固定し、Workerには匿名化された必要最小の承認済み素材のみ渡す。人格/個人Memoryの生データを共有商品パックや別ユーザーに混ぜない。同一Revision再試行は入力hash、persona/pack/history/config版、演出決定と生成済み素材を固定し、失敗場面以外の内容を変えない。**Jobの再配信で `jobAttemptNumber` は増えても同じ外部発注の通信再試行なら `logicalOrderKey` を維持する。明示的な作り直しだけ新しい論理発注キーと履歴を作る。** `providerRequestId` はProvider応答で初めて得られ、失われた場合は内部キーだけではProvider側の重複抑止を保証しない。発注成否不明のままattemptを変えて新規発注してはならない。bunshinが所有権、認可、利用枠、原価台帳、Revision、通知、採用判断の正本。候補実行器は素材生成/合成の限定した結果を返すだけで、独自の顧客DB/通知/請求を持たない。単純な`renderProvider`追加では発注・状態・隔離・成果物検査まで解決しないため、先に契約テストで責務境界を確認する。現行Jobを優先し、独立キュー/Workerは長時間処理の実測で不可避な場合に限る。
 
 ## 障害注入と不変条件
 
-| ケース                                              | 期待される回復・検査                                                                                      |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| submit送信後、応答が消えた                          | `UNKNOWN_SUBMISSION`として保留。Providerの冪等キー/照会で照合するまで再発注しない。照会不能なら人の判断へ |
-| 同時二重実行、重複callback、逆順callback、lease切れ | operation keyと外部IDを一意に照合し、単調遷移、古い結果を棄却。二重請求を検出                             |
-| 1場面のみ失敗                                       | 同じRevisionの成功済み素材とhashを再利用し、失敗場面だけ再開                                              |
-| Provider成功後にStorage失敗                         | 外部ID・実原価を残し成果物の再取得/保存を先行、再生成しない                                               |
-| 通知だけ失敗                                        | 完成Renderを保持し通知のみ再試行。再合成/再生成しない                                                     |
-| キャンセル/契約停止/退会/削除要求                   | 新規発注停止、進行中の取消可否確認、出力/一時ファイル/署名URLの失効、実請求の保持                         |
-| 署名URL期限切れ                                     | owner scopeを再認可してURLのみ再発行、素材生成は再実行しない                                              |
-| 動画処理失敗                                        | 文章・画像の配信を阻害しない                                                                              |
+| ケース                                              | 期待される回復・検査                                                                                       |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| submit送信後、応答が消えた                          | `UNKNOWN_SUBMISSION`として保留。Providerの冪等キー/照会で照合するまで再発注しない。照会不能なら人の判断へ  |
+| 同時二重実行、重複callback、逆順callback、lease切れ | 論理発注キーとProvider request IDを照合し、Job試行番号と混同しない。単調遷移、古い結果の棄却、重複費用検出 |
+| 1場面のみ失敗                                       | 同じRevisionの成功済み素材とhashを再利用し、失敗場面だけ再開                                               |
+| Provider成功後にStorage失敗                         | 外部ID・実原価を残し成果物の再取得/保存を先行、再生成しない                                                |
+| 通知だけ失敗                                        | 完成Renderを保持し通知のみ再試行。再合成/再生成しない                                                      |
+| キャンセル/契約停止/退会/削除要求                   | 新規発注停止、進行中の取消可否確認、出力/一時ファイル/署名URLの失効、実請求の保持                          |
+| 署名URL期限切れ                                     | owner scopeを再認可してURLのみ再発行、素材生成は再実行しない                                               |
+| 動画処理失敗                                        | 文章・画像の配信を阻害しない                                                                               |
 
-顧客の月間動画利用枠は予約/確定/解放を既存方式で扱う。外部に発生した原価は利用枠を解放しても消さない。予算上限はstageごと・注文ごと・月間で判定し、無限再試行を禁止する。
+顧客の月間動画利用枠は予約/確定/解放を既存方式で扱う。外部に発生した原価は利用枠を解放しても消さない。見積・確定・未確定を別々に記録し、`undeterminedCostCount > 0` なら `costAggregationComplete = false` として確定分合計を最終総原価と表示しない。未確定を0円に変換しない。予算上限はstageごと・注文ごと・月間で判定し、無限再試行を禁止する。
 
 ## PoC 1：固定素材による接続可能性（実行は別承認）
 
