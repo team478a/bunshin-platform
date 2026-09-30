@@ -3257,3 +3257,12 @@
 - falのみ、`QUEUED`から`SUBMISSION_UNKNOWN`へWorkspace・generation・Providerを条件としたCASを永続化してからPOSTする。Job delivery番号とこの論理的な発注状態を混同しない。IDを受け取れたときだけ同状態から`SUBMITTED`へ進める。`SUBMISSION_UNKNOWN`でIDがなければ再POST・原価0確定・動画枠解放を行わず、Jobを再試行不可の`DEAD`、generationを要照合として残す。Runwayの経路は維持する。
 - 旧fal `QUEUED`行のうちID保存済みは`SUBMITTED`へ移して既存照会を使う。IDなしは既に受付された発注と真の未発注を区別する証拠がないため、migrationで保守的に要照合へ移す。運営者の通常再試行はfalに限り止める。保留行の原価・実Provider注文の有無・取消可否は自動推定せず、別途運営確認する。
 - これだけでProvider側の重複抑止、ID喪失時の自動照合、外部原価履歴、手動の安全な再開は完成しない。原価は未確定でありゼロと表示しない。既存の文章・画像配信へ影響させず、実API・本番データでの検証は別承認とする。
+
+## D-138: AI研修の自動期限終了は本番の読み取り専用Preflightを先行する
+
+- 日付: 2026-10-01
+- 状態: Accepted（本番有効化前の安全確認）
+- 無料・手動登録受講の期限終了をproductionで有効化する前に、Cron Secret認証と明示Workspace/Service Scopeを必須とする読み取り専用Preflightを用意する。
+- Preflightは実行処理と同じAI_TRAINING_V1、Participant、ACTIVE、開始/終了日時、期限到達、有料購入除外条件を共通化し、対象件数・100件上限・必要バッチ数・判定時刻だけを返す。受講ID、User、回答、評価、仕事情報は取得・応答・ログへ含めない。
+- PreflightではTransaction、状態更新、評価停止、監査Event、Provider、LINEを実行しない。productionで利用可能でも、期限終了のproduction停止とCron未登録は維持する。
+- 本番有効化はPreflight結果、Migration適用、停止/復旧手順、運営承認を別作業で確認する。Preflight成功を自動期限終了の稼働済み証拠として扱わない。
