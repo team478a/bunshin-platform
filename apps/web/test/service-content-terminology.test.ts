@@ -77,6 +77,7 @@ describe('service content terminology', () => {
       body: 'ORIを使わず、ORIではなくORIと表記します。LOVEは別の単語です。',
       slides: [{ headline: 'ORI のご案内', body: '正しい名称はORI' }],
     });
+    expect(applyServiceContentTerminology('OVE. Discord.', policy)).toBe('ORI. 公式LINE.');
   });
 
   it('does not alter content when the service has no terminology policy', () => {
@@ -119,6 +120,38 @@ describe('service content terminology', () => {
     expect(JSON.stringify(result)).not.toContain('公式LINE.com');
   });
 
+  it('removes scheme-less Discord invitations without corrupting unrelated domains', () => {
+    const result = applyServiceContentTerminology(
+      {
+        links: [
+          'discord.gg/invite',
+          'WWW.DISCORD.COM/invite/abc',
+          '//discordapp.com/channels/abc',
+          'discord.gg',
+          'discord.gg:443/invite',
+          'cdn.discord.gg/invite',
+          'discord.gg.evil.example/path',
+          'https://discord.gg.evil.example/path',
+          'https://%discord.gg',
+          'https://lin.ee/approved',
+        ],
+      },
+      serviceContentTerminologyPolicy('sennokuni-media'),
+    );
+    expect(result.links).toEqual([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'discord.gg.evil.example/path',
+      'https://discord.gg.evil.example/path',
+      '',
+      'https://lin.ee/approved',
+    ]);
+  });
+
   it('supplies participation and visual constraints to generation knowledge', () => {
     const knowledge = serviceContentTerminologyKnowledge(
       serviceContentTerminologyPolicy('sennokuni-media'),
@@ -129,7 +162,7 @@ describe('service content terminology', () => {
   });
 
   it('preserves another service’s Discord community and links', () => {
-    const input = { body: 'Discord参加 https://discord.gg/other' };
+    const input = { body: 'Discord参加 https://discord.gg/other discord.gg/invite' };
     expect(
       applyServiceContentTerminology(input, serviceContentTerminologyPolicy('other-service')),
     ).toBe(input);
