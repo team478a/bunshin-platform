@@ -64,21 +64,37 @@ export async function sendRegistrationCompletionLine(input: {
         : input.cadence === 'WEEKDAYS'
           ? `平日の${input.localTime}ごろ`
           : `投稿予定日の${input.localTime}ごろ`;
+    const message =
+      input.serviceSlug === 'watashi-works-official'
+        ? [
+            `${input.serviceName}へのご登録ありがとうございます！`,
+            `あなたの会社のSNS担当、${input.serviceName}です。`,
+            '',
+            `ご登録いただいた事業や商品をもとに、${deliveryTiming}、そのまま使えるSNS投稿文をLINEでお届けします。`,
+            '届いた文章を確認し、必要に応じて調整してから投稿してください。',
+            '',
+            '初回の配信は次回の配信予定日から始まります。',
+            '届かない場合は、LINEの連携状態と通知設定をご確認ください。',
+            '',
+            '今日の内容や設定はこちら',
+            homeUrl,
+          ]
+        : [
+            '登録が完了しました。',
+            '',
+            `${input.serviceName}へようこそ。`,
+            `${deliveryTiming}、あなた向けの投稿案をLINEでお届けします。`,
+            '届いた文章は、内容を確認してからSNSへコピーして使えます。',
+            '',
+            '今日の画面を見る',
+            homeUrl,
+          ];
     const result = await new LineMessagingApiAdapter().pushText({
       accessToken: new AesGcmLineSecretCrypto().decrypt(
         connection.configuration.encryptedAccessToken,
       ),
       recipientId: connection.providerUserId,
-      text: [
-        '登録が完了しました。',
-        '',
-        `${input.serviceName}へようこそ。`,
-        `${deliveryTiming}、あなた向けの投稿案をLINEでお届けします。`,
-        '届いた文章は、内容を確認してからSNSへコピーして使えます。',
-        '',
-        '今日の画面を見る',
-        homeUrl,
-      ].join('\n'),
+      text: message.join('\n'),
     });
     if (!result.ok) {
       logger.warn('registration completion LINE was not delivered', {
