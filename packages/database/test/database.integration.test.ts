@@ -7,6 +7,7 @@ import {
   PrismaTrainingRetentionAdminPreviewRepository,
   trainingEnrollmentPeriodWhere,
   expireUnpurchasedTrainingEnrollments,
+  previewUnpurchasedTrainingEnrollmentExpiry,
 } from '../src';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -435,6 +436,15 @@ integration('database ownership boundaries', () => {
           idempotencyKey: randomUUID(),
           correlationId: randomUUID(),
         },
+      });
+      expect(
+        await previewUnpurchasedTrainingEnrollmentExpiry(client, { ...a.scope, now: at }),
+      ).toMatchObject({
+        eligible: 2,
+        batchLimit: 100,
+        requiredBatches: 1,
+        hasMore: false,
+        cutoffAt: at.toISOString(),
       });
       expect(
         await expireUnpurchasedTrainingEnrollments(client, {

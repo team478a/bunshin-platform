@@ -7,6 +7,13 @@ import { TRAINING_ENROLLMENT_EXPIRED_EVENT } from './training-audit-events';
 
 export const TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT = 100;
 export type TrainingEnrollmentExpiryInput = { workspaceId: string; groupId: string; now: Date };
+export type TrainingEnrollmentExpiryPreview = {
+  eligible: number;
+  batchLimit: number;
+  requiredBatches: number;
+  hasMore: boolean;
+  cutoffAt: string;
+};
 type Candidate = {
   id: string;
   groupMembershipId: string;
@@ -16,12 +23,52 @@ type Candidate = {
   endsAt: Date;
 };
 
+function assertValidExpiryClock(now: Date) {
+  if (!Number.isFinite(now.getTime()))
+    throw new ApplicationError('VALIDATION_ERROR', 'valid expiry clock required');
+}
+
+const expiryScopePredicate = (input: TrainingEnrollmentExpiryInput) => Prisma.sql`
+  e.workspace_id = ${input.workspaceId}::uuid AND e.group_id = ${input.groupId}::uuid
+    AND p.settings->>'moduleKey' = ${AI_TRAINING_V1_MODULE_KEY}
+    AND m.service_role = 'PARTICIPANT'
+    AND e.status = 'ACTIVE' AND e.starts_at IS NOT NULL
+    AND e.starts_at <= e.ends_at AND e.ends_at <= ${input.now}
+    AND NOT EXISTS (SELECT 1 FROM program_purchases purchase
+      WHERE purchase.workspace_id = e.workspace_id AND purchase.group_id = e.group_id
+        AND purchase.paid_enrollment_id = e.id)
+`;
+
+export async function previewUnpurchasedTrainingEnrollmentExpiry(
+  client: PrismaClient,
+  input: TrainingEnrollmentExpiryInput,
+): Promise<TrainingEnrollmentExpiryPreview> {
+  assertValidExpiryClock(input.now);
+  const rows = await client.$queryRaw<Array<{ eligible: number }>>(Prisma.sql`
+    SELECT COUNT(*)::integer AS "eligible"
+    FROM program_enrollments e
+    JOIN service_programs p ON p.id = e.service_program_id
+      AND p.workspace_id = e.workspace_id AND p.group_id = e.group_id
+    JOIN group_memberships m ON m.id = e.group_membership_id
+      AND m.workspace_id = e.workspace_id AND m.group_id = e.group_id
+    JOIN groups g ON g.id = e.group_id AND g.workspace_id = e.workspace_id
+    WHERE ${expiryScopePredicate(input)}
+  `);
+  const eligible = rows[0]?.eligible ?? 0;
+  return {
+    eligible,
+    batchLimit: TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
+    requiredBatches: Math.ceil(eligible / TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT),
+    hasMore: eligible > TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
+    cutoffAt: input.now.toISOString(),
+  };
+}
+
 export async function expireUnpurchasedTrainingEnrollments(
   client: PrismaClient,
   input: TrainingEnrollmentExpiryInput,
 ) {
-  if (!Number.isFinite(input.now.getTime()))
-    throw new ApplicationError('VALIDATION_ERROR', 'valid expiry clock required');
+  assertValidExpiryClock(input.now);
   const scope = { workspaceId: input.workspaceId, groupId: input.groupId };
   // Filter the module/ownership before the limit so unrelated programs cannot
   // repeatedly occupy a batch. No profile, answer or evaluation text is read.
@@ -35,14 +82,7 @@ export async function expireUnpurchasedTrainingEnrollments(
     JOIN group_memberships m ON m.id = e.group_membership_id
       AND m.workspace_id = e.workspace_id AND m.group_id = e.group_id
     JOIN groups g ON g.id = e.group_id AND g.workspace_id = e.workspace_id
-    WHERE e.workspace_id = ${input.workspaceId}::uuid AND e.group_id = ${input.groupId}::uuid
-      AND p.settings->>'moduleKey' = ${AI_TRAINING_V1_MODULE_KEY}
-      AND m.service_role = 'PARTICIPANT'
-      AND e.status = 'ACTIVE' AND e.starts_at IS NOT NULL
-      AND e.starts_at <= e.ends_at AND e.ends_at <= ${input.now}
-      AND NOT EXISTS (SELECT 1 FROM program_purchases purchase
-        WHERE purchase.workspace_id = e.workspace_id AND purchase.group_id = e.group_id
-          AND purchase.paid_enrollment_id = e.id)
+    WHERE ${expiryScopePredicate(input)}
     ORDER BY e.ends_at ASC, e.id ASC LIMIT ${TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT + 1}
   `);
   const candidates = rows.slice(0, TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT);

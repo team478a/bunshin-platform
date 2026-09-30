@@ -51,6 +51,8 @@ export function createVideoAiSceneGenerationJobHandler(): VideoAiSceneGeneration
           new PrivateCharacterReferenceUrls(),
           new SupabaseFalVideoSceneOutputStorage(),
         ).execute(input);
+        if (result.status === 'RECONCILIATION_REQUIRED')
+          return { status: 'RECONCILIATION_REQUIRED' };
         if (result.status === 'PENDING')
           return {
             status: result.generation.status === 'SUBMITTED' ? 'SUBMITTED' : 'GENERATING',

@@ -18,6 +18,7 @@ describe('QueueVideoSceneGenerations', () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn().mockResolvedValue([{ id: 'scene-generation-1' }]),
       findForExecution: vi.fn(),
+      claimFalSubmission: vi.fn(),
       markSubmitted: vi.fn(),
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
@@ -44,6 +45,7 @@ describe('QueueVideoSceneGenerations', () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn().mockResolvedValue([]),
       findForExecution: vi.fn(),
+      claimFalSubmission: vi.fn(),
       markSubmitted: vi.fn(),
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
@@ -108,6 +110,71 @@ describe('AuthorizeVideoAiGenerationCost', () => {
 });
 
 describe('ExecuteVideoSceneGenerationStep', () => {
+  it('keeps the existing Runway submit path without a fal claim', async () => {
+    const generation = {
+      id: 'scene-generation-1',
+      workspaceId,
+      groupId,
+      groupMembershipId: 'membership-1',
+      ownerUserId: userId,
+      videoProjectId: projectId,
+      videoSceneId: 'scene-1',
+      projectRevision: 3,
+      sceneRevision: 1,
+      provider: 'RUNWAY',
+      model: 'runway-test-model',
+      status: 'QUEUED' as const,
+      inputSnapshot: {},
+      estimatedCostUsdMicros: 112_000,
+      actualCostUsdMicros: null,
+      externalJobId: null,
+      outputStorageKey: null,
+      errorCode: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const claimFalSubmission = vi.fn();
+    const markSubmitted = vi.fn().mockResolvedValue({
+      ...generation,
+      status: 'SUBMITTED',
+      externalJobId: 'runway-request-1',
+    });
+    const repository: VideoSceneGenerationRepository = {
+      enqueueAiScenes: vi.fn(),
+      findForExecution: vi.fn().mockResolvedValue({
+        generation,
+        prompt: 'fictional scene',
+        durationSeconds: 5,
+        referenceStorageKeys: ['fictional/reference.png'],
+      }),
+      claimFalSubmission,
+      markSubmitted,
+      markGenerating: vi.fn(),
+      markSucceeded: vi.fn(),
+      markFailed: vi.fn(),
+    };
+    const submit = vi.fn().mockResolvedValue({ externalJobId: 'runway-request-1' });
+    await expect(
+      new ExecuteVideoSceneGenerationStep(
+        repository,
+        { submit, inspect: vi.fn() },
+        {
+          createTemporaryReadUrls: vi.fn().mockResolvedValue(['https://example.invalid/reference']),
+        },
+        { store: vi.fn() },
+      ).execute({ workspaceId, generationId: generation.id }),
+    ).resolves.toMatchObject({ status: 'PENDING' });
+    expect(claimFalSubmission).not.toHaveBeenCalled();
+    expect(submit).toHaveBeenCalledOnce();
+    expect(markSubmitted).toHaveBeenCalledWith({
+      workspaceId,
+      generationId: generation.id,
+      externalJobId: 'runway-request-1',
+    });
+  });
+
   it('does not submit a paid provider request without a private character reference', async () => {
     const repository: VideoSceneGenerationRepository = {
       enqueueAiScenes: vi.fn(),
@@ -141,6 +208,7 @@ describe('ExecuteVideoSceneGenerationStep', () => {
         referenceStorageKeys: [],
       }),
       markSubmitted: vi.fn(),
+      claimFalSubmission: vi.fn(),
       markGenerating: vi.fn(),
       markSucceeded: vi.fn(),
       markFailed: vi.fn(),
