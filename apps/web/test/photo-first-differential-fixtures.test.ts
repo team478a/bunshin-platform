@@ -43,6 +43,25 @@ const outputs = {
       photoInstruction: 'チェックリストとペンを持つ手元を、机の正面から用紙全体が入るように撮る',
     },
   },
+  trustExpertiseSalon: {
+    planning: {
+      theme: '希望と髪の状態を照合する施術前確認の手順',
+      angle: '同じチェックリストを、専門的な判断を支える3段階のプロセスとして紹介する',
+      recommendationReason: '施術前に何を見て、なぜ確認するかという判断根拠が伝わるため',
+      photoUsage: '確認項目と判断の順番が分かるプロセス写真として使う',
+      imageEditPrompt: null,
+      confirmationQuestion: null,
+    },
+    content: {
+      body: '施術前には、希望、これまでの施術履歴、現在の髪の状態を順番に照合します。希望だけで決めず、できることと注意点を説明してから施術方法を選ぶのが私たちの確認プロセスです。',
+      threadParts: [],
+      cta: '施術前に確認したい判断手順を、あとで見返せるよう保存してください。',
+      caption: null,
+      hashtags: ['#美容室', '#施術プロセス'],
+      photoInstruction:
+        '個人情報のないカウンセリングシートで、希望・施術履歴・現在の状態の3項目を順番に指す手元を真上から撮る',
+    },
+  },
   recruitmentSalon: {
     planning: {
       theme: '新人スタッフがカウンセリングを学ぶ準備',
@@ -103,9 +122,10 @@ type ScenarioKey = keyof typeof outputs;
 
 function analyzerInput(key: ScenarioKey): AnalyzerInput {
   const recruitment = key === 'recruitmentSalon';
+  const trustExpertise = key === 'trustExpertiseSalon';
   const bakery = key === 'awarenessBakery';
   const changedHistory = key === 'awarenessSalonAfterHistory';
-  const goal = recruitment ? 'RECRUIT' : 'BRAND_AWARENESS';
+  const goal = recruitment ? 'RECRUIT' : trustExpertise ? 'TRUST_EXPERTISE' : 'BRAND_AWARENESS';
   return {
     bytes: samePhoto,
     mimeType: 'image/jpeg',
@@ -159,6 +179,7 @@ function response(value: unknown) {
 
 function scenarioMarker(key: ScenarioKey) {
   if (key === 'recruitmentSalon') return 'RECRUIT';
+  if (key === 'trustExpertiseSalon') return 'TRUST_EXPERTISE';
   if (key === 'awarenessBakery') return 'まちの朝ベーカリー';
   if (key === 'awarenessSalonAfterHistory') return '初回来店前のカウンセリング';
   return 'よりそう美容室';
@@ -304,6 +325,30 @@ describe('Photo First differential fixtures', () => {
     expect(recruitment.planning.theme).toContain('新人スタッフ');
     expect(recruitment.content.body).toContain('仕事');
     expect(recruitment.content.cta).toContain('採用情報');
+  });
+
+  it('changes awareness into evidence-backed expertise when only the SNS Goal changes', async () => {
+    const awarenessInput = analyzerInput('awarenessSalon');
+    const trustInput = analyzerInput('trustExpertiseSalon');
+    expect({
+      ...awarenessInput,
+      strategy: {
+        ...awarenessInput.strategy,
+        goal: trustInput.strategy.goal,
+        goalPlanning: trustInput.strategy.goalPlanning,
+      },
+    }).toEqual(trustInput);
+
+    const awareness = await runScenario('awarenessSalon');
+    const trust = await runScenario('trustExpertiseSalon');
+
+    expect(awareness.imageUrl).toBe(trust.imageUrl);
+    expectEveryProposalFieldToDiffer(awareness, trust);
+    expect(trust.planning.theme).toContain('手順');
+    expect(trust.planning.recommendationReason).toContain('判断根拠');
+    expect(trust.content.body).toContain('確認プロセス');
+    expect(trust.content.photoInstruction).toContain('施術履歴');
+    expect(trust.content.cta).toContain('保存');
   });
 
   it('changes the whole proposal when only the company profile changes', async () => {
