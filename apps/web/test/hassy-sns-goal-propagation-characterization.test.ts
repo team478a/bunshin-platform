@@ -1,8 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import type { SocialAccountStrategy, SocialAccountStrategyGoal } from '@bunshin/capability-social';
+import {
+  weeklySocialGoalPlanningProfile,
+  type SocialAccountStrategy,
+  type SocialAccountStrategyGoal,
+} from '@bunshin/capability-social';
 import { describe, expect, it, vi } from 'vitest';
-import { buildMissionPersonalizationContext } from '../src/services/daily-mission-personalization';
+import { buildDailyMissionPersonalizationBase } from '../src/services/daily-mission-personalization';
 import { WeeklyPlanGenerationService } from '../src/services/weekly-plan-generation';
 
 const now = new Date('2026-10-01T00:00:00.000Z');
@@ -67,7 +71,7 @@ function strategy(goal: SocialAccountStrategyGoal): SocialAccountStrategy {
 }
 
 describe('Hassy SNS goal propagation characterization', () => {
-  it('records that the simple service setup currently fixes every initial strategy to brand awareness', async () => {
+  it('records that the simple service setup derives the initial strategy from the business purpose', async () => {
     const sourcePath = fileURLToPath(
       new URL(
         '../app/s/[serviceSlug]/bunshins/[bunshinId]/simple-first-post-setup.tsx',
@@ -76,11 +80,12 @@ describe('Hassy SNS goal propagation characterization', () => {
     );
     const source = await readFile(sourcePath, 'utf8');
 
-    expect(source).toContain("goal: 'BRAND_AWARENESS'");
-    expect(source).not.toMatch(/goal:\s*businessProfile\.primaryPurpose/u);
+    expect(source).toContain('initialSocialAccountStrategyGoal(primaryPurpose)');
+    expect(source).toContain("initialGoal?.status === 'RESOLVED' ? initialGoal.goal : ''");
+    expect(source).toContain('SNSで最も増やしたい成果を選んでください。');
   });
 
-  it('records that a goal-only change does not reach the weekly planner input', async () => {
+  it('records that a goal-only change reaches the weekly planner as a distinct typed policy', async () => {
     const goals: SocialAccountStrategyGoal[] = [
       'BRAND_AWARENESS',
       'INQUIRY',
@@ -153,14 +158,21 @@ describe('Hassy SNS goal propagation characterization', () => {
       });
     }
 
-    const normalized = captured.map((input) => JSON.stringify(input));
-    expect(new Set(normalized)).toHaveLength(1);
-    for (const input of captured as Array<{ approvedStrategy: Record<string, unknown> }>) {
-      expect(input.approvedStrategy).not.toHaveProperty('goal');
-    }
+    const inputs = captured as Array<{
+      approvedStrategy: { goal: SocialAccountStrategyGoal; goalPlanning: unknown };
+    }>;
+    expect(
+      new Set(inputs.map(({ approvedStrategy }) => JSON.stringify(approvedStrategy))),
+    ).toHaveLength(goals.length);
+    inputs.forEach(({ approvedStrategy }, index) => {
+      expect(approvedStrategy).toMatchObject({
+        goal: goals[index],
+        goalPlanning: weeklySocialGoalPlanningProfile(goals[index]!),
+      });
+    });
   });
 
-  it('records that daily/content personalization carries the account goal only as a generic signal', () => {
+  it('records that daily planning carries the same typed goal policy in addition to personal context', () => {
     const goals: SocialAccountStrategyGoal[] = [
       'BRAND_AWARENESS',
       'INQUIRY',
@@ -170,33 +182,45 @@ describe('Hassy SNS goal propagation characterization', () => {
     ];
 
     const contexts = goals.map((goal) =>
-      buildMissionPersonalizationContext({
+      buildDailyMissionPersonalizationBase({
         bunshin: {
+          name: '美容室SNS担当',
           objectiveSummary: '美容室のSNS支援',
           audienceSummary: '地域の20〜40代',
           personalitySummary: '親しみやすく丁寧',
         },
+        personality: null,
         socialProfile: profile,
         strategy: strategy(goal),
-        businessProfile: {
-          industry: '美容室',
-          businessName: 'サンプル美容室',
-          region: '東京都',
-          productService: 'カット・カラー',
-          primaryPurpose: 'AWARENESS',
-          targetAudience: '地域の20〜40代',
+        history: {
+          businessProfile: {
+            industry: '美容室',
+            businessName: 'サンプル美容室',
+            region: '東京都',
+            productService: 'カット・カラー',
+            primaryPurpose: 'AWARENESS',
+            targetAudience: '地域の20〜40代',
+          },
+          onboardingContext: null,
+          behaviorSummary: null,
+          feedbackSummary: null,
+          performanceSummary: null,
         },
+        officialKnowledge: null,
+        grantedKnowledge: [],
+        personalMaterials: [],
       }),
     );
 
-    contexts.forEach((context, index) => {
-      const accountStrategy = context.signals.find(
+    contexts.forEach(({ strategyContext, plannerPersonalization }, index) => {
+      expect(strategyContext).toMatchObject({
+        goal: goals[index],
+        goalPlanning: weeklySocialGoalPlanningProfile(goals[index]!),
+      });
+      const accountStrategy = plannerPersonalization.signals.find(
         ({ type }: { type: string }) => type === 'ACCOUNT_STRATEGY',
       );
       expect(accountStrategy?.value).toContain(`目標: ${goals[index]}`);
-      expect(context.instruction).not.toContain('職場環境');
-      expect(context.instruction).not.toContain('問い合わせを促す');
-      expect(context.instruction).not.toContain('再来店');
     });
   });
 });

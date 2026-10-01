@@ -4,438 +4,368 @@
 
 調査ブランチ: `codex/hassy-sns-goal-audit`
 
-調査基準: `origin/main` / `581bb1a2e57482c77cf943b6119b020ff732a9df`
+再監査基準: `origin/main` / `67ff4deb7618f7fca06e2c21aea7ee42d88dcf51`
 
-対象: `team478a/bunshin-platform` の実コード、schema、既存テスト、新規characterization test
+対象: `team478a/bunshin-platform` の実コード、schema、migration、テスト
 
-非対象: 本番DB、本番のハッシーService設定、実ユーザー、外部AI実生成、LINE実送信
+非対象: 本番DB、本番Service設定、実ユーザー、OpenAI実生成、LINE実送信、実SNS投稿
 
 ## 1. Executive Summary
 
-**結論: 現状を「主要GoalについてLEVEL 4対応済み」とは判定できない。主要Goalは概ねLEVEL 2、信頼形成・専門性は明示GoalとしてLEVEL 0である。**
+**結論: #1039〜#1046の実装後、主要7 Goalはコード上のGoal → Strategy → Weekly → Daily → Theme → Content/visual → CTAまで明示的につながり、V1のLEVEL 4を満たす構造になった。**
 
-目的情報を保持する場所が複数あり、正本と同期規則がない。
+初回設定の固定`BRAND_AWARENESS`、Weekly/Dailyへのtyped Goal欠落、Goal別方針欠落、結果を全Goalで混ぜる問題、Goal変更時に新旧Strategyが混在する問題は解消された。
 
-1. `ServiceMemberBusinessProfile.primaryPurpose`: `ATTRACT / RESERVATION / SALES / RECRUITING / AWARENESS / RETENTION`
-2. `SocialAccountStrategy.goal`: `FOLLOWERS / LINE_REGISTRATION / INQUIRY / SALES / RECRUIT / BRAND_AWARENESS / BLOG_TRAFFIC / OTHER`
-3. `SocialProfile.purpose`: 自由文
-4. `Bunshin.objectiveSummary` と `BunshinObjective.primaryGoal`: Bunshin全体の目的
-5. `WeeklyPlanItem.goal`: 生成された各投稿の自由文Goal
+- 正規Goal 8値と既存語彙の明示mappingがSOCIAL capabilityにある。
+- Account Strategyは来店・予約、再来店、信頼・専門性を含む11値をUI/API/DBで扱う。
+- 初回設定は事業目的からStrategy Goalを導出する。曖昧な`ATTRACT`は黙って変換せず利用者選択を要求する。
+- Weekly、Daily、投稿本文、写真・動画案、CTAへ同じtyped Goalとversioned planning policyを渡す。
+- 生成SnapshotとWeekly PlanがGoal/Strategyを保持し、履歴と現在Goalを混同しない。
+- 目的別の簡易結果を利用者が入力でき、同じGoalの次週計画だけへ反映する。
+- Goal変更は次に生成するWeekly Planから有効になり、確定済みの今週と過去履歴は書き換えない。
 
-事業プロフィールの目的とSNS戦略Goalは名称も対象範囲も異なり、相互変換・同期が実装されていない。特にServiceの簡易初回設定は、事業プロフィールの`primaryPurpose`に関係なく、新規戦略を常に`BRAND_AWARENESS`で生成する。
-
-`SocialAccountStrategy.goal`はStrategy生成Promptには明示的に渡る。一方、Weekly Plannerの入力にはGoalがなく、Strategyが生成した自由文（concept、CTA等）に目的差が残ることを暗黙に期待している。Daily/Contentでは、Goalは承認戦略の型付きフィールドではなくgenericなpersonalization signalとして渡り、別系統の`businessProfile.primaryPurpose`も渡る。目的別のテーマ、CTA、KPIを保証する規則や検証はない。
-
-今回追加した外部通信なしのcharacterization testでは、同じ美容室・同じ生成済み戦略文で`SocialAccountStrategy.goal`だけを5種類変更しても、Weekly Plannerへ渡る入力が完全に同一になることを再現した。Daily/Content向けpersonalizationにはGoal文字列が残るが、目的別ルールはない。これは「Goalが保存されPromptの一部へ入る」ことの証拠であり、「戦略そのものが目的別に変わる」証拠ではない。
-
-V1の最小修正方針は、SOCIAL capability内に正規化したSNS Goal snapshotと目的別方針を置き、既存2語彙を境界Adapterで変換し、Weekly/Daily/Content/CTAへ明示伝播することである。共通User、AI研修、占い、千ノ国メディアへハッシー固有ロジックを入れない。結果評価のGoal対応（LEVEL 5）は、LEVEL 4確立後に段階導入する。
+ただし、実Provider出力を同一条件で比較した品質証跡は未取得である。したがって「契約・Prompt・保存・回帰テスト上のLEVEL 4」と「実生成品質の運用確認」は分ける。LEVEL 5は簡易自己申告と一部手入力KPIまでで、外部SNS・予約・採用・販売システムとの自動照合は未実装である。
 
 ## 2. 現在のSNS Goal実装
 
-| 概念                    | 実フィールド・型                                              | 役割                                                              | 現状の問題                                                         |
-| ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Service参加者の発信目的 | `ServiceMemberBusinessProfile.primaryPurpose: String`         | ハッシーの事業プロフィール。Daily/Contentのbusiness contextへ入る | DBは自由文字列だがAPI/UIは6値。Strategy Goalと同期しない           |
-| SNSアカウント戦略Goal   | `SocialAccountStrategy.goal: SocialAccountStrategyGoal`       | Strategy生成・承認版に保存                                        | 予約・来店・リピート・信頼形成がない。簡易初回設定では常に認知     |
-| SNSプロフィール目的     | `SocialProfile.purpose: String`                               | SNS設定・personalization signal                                   | 自由文で上記2系統との正本関係なし                                  |
-| Bunshin目的             | `Bunshin.objectiveSummary`、`BunshinObjective.primaryGoal`    | Bunshin全体の長期目的                                             | current SNS goalとの区別がない                                     |
-| Weekly投稿Goal          | `WeeklyPlanItem.goal: String`                                 | 週内の各投稿の生成結果                                            | アカウントGoalのsnapshotではなくAI出力自由文                       |
-| 登録プロフィール目的    | `UserRegistrationProfile.primaryPurpose`、`secondaryPurposes` | 共通登録                                                          | Service固有のハッシー目的正本には使えない。Service分離を維持すべき |
+### 2.1 正規Goal
 
-主なシンボル:
+`packages/capability-social/src/social-goal.ts`:
 
-- `SOCIAL_ACCOUNT_STRATEGY_GOALS` / `SocialAccountStrategyGoal`
-- `StrategyGeneratorInput.goal`
-- `MissionBusinessProfileContext.primaryPurpose`
-- `WeeklyPlannerInput.approvedStrategy`
-- `DailyMissionPlannerProviderInput.approvedStrategy`
-- `buildMissionPersonalizationContext`
-- `BUSINESS_OUTCOME_KEYS`
-- `POST_PERFORMANCE_METRIC_KEYS`
+- `AWARENESS`
+- `VISIT_RESERVATION`
+- `INQUIRY`
+- `REPEAT`
+- `RECRUITMENT`
+- `SALES`
+- `TRUST_EXPERTISE`
+- `OTHER`
+
+`CanonicalSocialGoal`はSNS施策の事業成果を表す。フォロワー、LINE登録、ブログ遷移は中間指標・導線として区別し、事業成果へ黙って変換しない。
+
+### 2.2 保存・生成に使うStrategy Goal
+
+`SOCIAL_ACCOUNT_STRATEGY_GOALS` / `SocialAccountStrategyGoal`:
+
+- `FOLLOWERS`
+- `LINE_REGISTRATION`
+- `INQUIRY`
+- `VISIT_RESERVATION`
+- `SALES`
+- `RECRUIT`
+- `REPEAT`
+- `BRAND_AWARENESS`
+- `TRUST_EXPERTISE`
+- `BLOG_TRAFFIC`
+- `OTHER`
+
+主な実フィールド・シンボル:
+
+| 概念                 | 実フィールド・シンボル                               | 役割                             |
+| -------------------- | ---------------------------------------------------- | -------------------------------- |
+| 事業プロフィール目的 | `ServiceMemberBusinessProfile.primaryPurpose`        | Service参加時の現在の事業目的    |
+| SNS戦略Goal          | `SocialAccountStrategy.goal`                         | 承認・版管理されるSNSの現在Goal  |
+| 目的別方針           | `WeeklySocialGoalPlanningProfile`                    | focus、topic、CTAを明示          |
+| Weekly Snapshot      | `WeeklyPlan.strategyId/strategyGoal/socialProfileId` | 週の途中で新旧Goalを混ぜない     |
+| 生成Snapshot         | `GenerationContextSnapshot.payload.strategy.goal`    | 投稿結果を生成時Goalへ結び付ける |
+| Goal結果             | `PostRecord.manualMetrics.socialGoalOutcome`         | 目的への簡易自己申告             |
+| 事業成果             | `PostRecord.manualMetrics.businessOutcomes`          | 問い合わせ、予約、来店、購入等   |
+
+`Bunshin.objectiveSummary`は長期的な会社/Bunshin目的、`SocialAccountStrategy.goal`は現在SNSで優先する目的として別経路のまま維持される。
 
 ## 3. 現在選択可能なGoal
 
-### 3.1 Service onboarding（ハッシー事業プロフィール系）
+### 3.1 Service onboarding
 
-`service-onboarding-form.tsx` と `service-onboarding.ts` が受け付ける値:
-
-| 値            | UI表示                 | A UI | B DB | 備考                                     |
-| ------------- | ---------------------- | ---: | ---: | ---------------------------------------- |
-| `ATTRACT`     | 集客                   |  Yes |  Yes | 来店・問い合わせのどちらかは特定しない   |
-| `RESERVATION` | 予約                   |  Yes |  Yes | Strategy enumに対応値なし                |
-| `SALES`       | 販売                   |  Yes |  Yes | Strategy側にも同名値はあるが自動同期なし |
-| `RECRUITING`  | 採用                   |  Yes |  Yes | Strategy側は`RECRUIT`で値が異なる        |
-| `AWARENESS`   | 認知                   |  Yes |  Yes | Strategy側は`BRAND_AWARENESS`            |
-| `RETENTION`   | 既存顧客との関係づくり |  Yes |  Yes | Strategy enumに対応値なし                |
-
-問い合わせ、信頼形成・専門性、その他自由目的はこのUIから明示選択できない。
+| 値            | UI表示                 | 初回Strategyへの変換                       |
+| ------------- | ---------------------- | ------------------------------------------ |
+| `ATTRACT`     | 集客                   | 来店予約・問い合わせ・販売から利用者が選択 |
+| `RESERVATION` | 予約                   | `VISIT_RESERVATION`                        |
+| `SALES`       | 販売                   | `SALES`                                    |
+| `RECRUITING`  | 採用                   | `RECRUIT`                                  |
+| `AWARENESS`   | 認知                   | `BRAND_AWARENESS`                          |
+| `RETENTION`   | 既存顧客との関係づくり | `REPEAT`                                   |
 
 ### 3.2 Account Strategy UI
 
-`account-strategy-section.tsx` が表示する値:
+11値すべてを選択・保存できる。V1主要Goalの認知、来店・予約、問い合わせ、再来店、採用、販売、信頼・専門性を個別に設定できる。
 
-| 値                  | UI表示                   | A UI | B DB |
-| ------------------- | ------------------------ | ---: | ---: |
-| `FOLLOWERS`         | 見てくれる人を増やす     |  Yes |  Yes |
-| `LINE_REGISTRATION` | LINEに登録してもらう     |  Yes |  Yes |
-| `INQUIRY`           | 問い合わせを増やす       |  Yes |  Yes |
-| `SALES`             | 商品を買ってもらう       |  Yes |  Yes |
-| `RECRUIT`           | いっしょに働く人を探す   |  Yes |  Yes |
-| `BRAND_AWARENESS`   | 名前や活動を知ってもらう |  Yes |  Yes |
-| `BLOG_TRAFFIC`      | ブログを読んでもらう     |  Yes |  Yes |
-| `OTHER`             | その他                   |  Yes |  Yes |
+### 3.3 A〜H対応
 
-来店、予約、リピーター、信頼形成・専門性は独立した型付きGoalとして存在しない。`OTHER`には自由目的名や目的別方針を保存する別フィールドがない。
+記号: `○` 明示対応、`△` 部分対応、`×` 未対応、`未確認` 実Provider/本番で未確認。
 
-### 3.3 A〜H対応表
+| Goal             | A UI | B DB | C Context | D Weekly | E Daily | F CTA |                    G 結果評価 |   H 次回提案 |
+| ---------------- | ---: | ---: | --------: | -------: | ------: | ----: | ----------------------------: | -----------: |
+| 認知             |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ |                    △ 自己申告 | ○ 同Goalのみ |
+| 来店・予約       |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ |  ○ 手入力予約/来店 + 自己申告 |            ○ |
+| 問い合わせ       |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ | ○ 手入力問い合わせ + 自己申告 |            ○ |
+| リピーター       |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ |                    △ 自己申告 |            ○ |
+| 採用             |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ |                    △ 自己申告 |            ○ |
+| 販売             |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ |       ○ 手入力購入 + 自己申告 |            ○ |
+| 信頼形成・専門性 |    ○ |    ○ |         ○ |        ○ |       ○ |     ○ |                    △ 自己申告 |            ○ |
 
-記号: `○` 明示対応、`△` 間接・generic Promptのみ、`×` 未対応、`?` 実生成未確認。
-
-| 利用者が意図するGoal |                 A UI | B DB | C Context | D Weekly | E Daily | F CTA | G 結果評価 | H 次回提案 |
-| -------------------- | -------------------: | ---: | --------: | -------: | ------: | ----: | ---------: | ---------: |
-| 認知                 |           ○（2語彙） |    ○ |         ○ |        △ |       △ |     △ |          × |          △ |
-| 来店                 |       △（`ATTRACT`） |    ○ |         ○ |        × |       △ |     △ |          × |          △ |
-| 予約                 |   ○（`RESERVATION`） |    ○ |         ○ |        × |       △ |     △ |          × |          △ |
-| 問い合わせ           |    ○（Strategyのみ） |    ○ |         ○ |        △ |       △ |     △ |          × |          △ |
-| リピーター           |     ○（`RETENTION`） |    ○ |         ○ |        × |       △ |     △ |          × |          △ |
-| 採用                 |           ○（2語彙） |    ○ |         ○ |        △ |       △ |     △ |          × |          △ |
-| 販売                 |           ○（2語彙） |    ○ |         ○ |        △ |       △ |     △ |          × |          △ |
-| 信頼形成・専門性     | ×（`OTHER`代用のみ） |    △ |         △ |        × |       △ |     △ |          × |          △ |
-
-`H`の△は、最近のGOOD/BAD、事業成果、投稿指標が次週入力へ入るため。ただし「現在Goalに対する成果」として評価・選択されない。
+自動取得できない成果を取得済みとは扱わない。自己申告は`SELF_REPORTED`、対応する手入力事業成果がある場合は`MEASURED`として区別する。
 
 ## 4. DB / Schema
 
-### 4.1 現在の保存構造
+- `SocialAccountStrategy.goal`はPrisma enumで保存し、`APPROVED / SUPERSEDED`とversionを持つ。
+- `WeeklyPlan`は生成時の`socialProfileId / strategyId / strategyGoal`を保存する。
+- `GenerationContextSnapshot.payload.strategy`はStrategy ID、version、Goalを保存する。
+- `PostRecord.manualMetrics`は既存構造を維持し、`socialGoalOutcome`と`businessOutcomes`をJSONとして保存する。
+- Workspace/User/Bunshin/SocialProfileの所有範囲はRepositoryで再検証される。
 
-- `ServiceMemberBusinessProfile.primaryPurpose`: `String @db.VarChar(80)`。Service Membership単位でWorkspace/Group/Userを含む複合境界を持つ。
-- `SocialAccountStrategy.goal`: Prisma enum。`socialProfileId + version`で版管理し、`APPROVED / SUPERSEDED`を持つ。
-- `SocialProfile.purpose`: 自由文。
-- `WeeklyPlanItem.goal`: 自由文。
-- `GenerationContextSnapshot.payload.strategy`: strategyの`id`と`version`は保存するが、Goal値自体のsnapshotはない。
-- `MissionFeedback.rating`: `GOOD / NEUTRAL / BAD`のみ。Goal、KPI、評価理由を持たない。
-- `PostRecord.manualMetrics`: 投稿反応と事業成果をJSONで保持できるが、Goal snapshotとの関連を持たない。
+既存Weekly PlanはGoal Snapshotがnullのため、現在の承認済みStrategyへ後方互換fallbackする。過去データを推測でbackfillしない。
 
-### 4.2 Primary / Secondary / Weight / 期間
+未実装:
 
-ハッシーServiceの正本候補である`ServiceMemberBusinessProfile`と`SocialAccountStrategy`はいずれも単一Goalのみ。secondary goals、weight、`effectiveFrom/effectiveUntil`はない。共通登録の`secondaryPurposes`は存在するが、Service境界と目的語彙が異なるため流用不可。
+- Primary + Secondary Goals
+- Goal weight
+- `effectiveFrom/effectiveUntil`
+- 独自Goal説明の型付き保存
 
-V1で数値設定UIを先行させる必要はない。最小案はStrategy versionに次をsnapshotすること:
-
-```ts
-type SocialGoalSnapshotV1 = {
-  primary: SocialGoalKey;
-  secondary: Array<{ goal: SocialGoalKey; weight: number }>;
-  sourceBusinessPurpose: string | null;
-  policyVersion: string;
-};
-```
-
-初期V1は`primary`必須、`secondary=[]`でもよい。weightは内部既定値とし、合計100をvalidationする。期間指定はキャンペーン・求人期間の実要件が出るまで、Strategy versionの`approvedAt/supersededAt`を有効期間として再利用する方が過剰設計を避けられる。
+V1では単一Primary GoalとStrategy versionで十分であり、複数Goalや期間UIを先行実装しない。
 
 ## 5. Onboarding
 
-Service onboardingは事業プロフィールをService Membership内へ保存し、User共通プロフィールへ混在させない点は適切である。しかし初回投稿設定への接続に欠落がある。
-
 ```text
-Service onboarding primaryPurpose
+Service Onboarding primaryPurpose
   └─ ServiceMemberBusinessProfileへ保存
-      ├─ Bunshin objectiveSummary生成へ利用
-      ├─ Daily/Content businessProfileへ利用
-      └─ × SimpleFirstPostSetupのSocialAccountStrategy.goalへ変換されない
-           └─ 常に BRAND_AWARENESS
+      ├─ Bunshin / business contextへ利用
+      └─ initialSocialAccountStrategyGoal()
+          ├─ RESOLVED: 初回Strategy Goalとdestinationを設定
+          └─ REVIEW_REQUIRED: 利用者が具体的な成果を選択
 ```
 
-このため、採用・予約・販売を選んでも、最初に承認されるSNS戦略Goalは認知になる。後段には事業プロフィール目的と戦略Goalの矛盾した2 signalが渡り得る。
+`ATTRACT`を任意の1 Goalへ決めつけず、来店予約・問い合わせ・販売の選択を要求する。business purpose機能を使わない他Serviceでは従来の認知初期値を維持し、ハッシー固有設定を共通基盤へ強制しない。
 
 ## 6. Goal Propagation Map
 
 ```text
-Service Onboarding UI
-  primaryPurpose (6値)
-       │
-       ├──────────────→ ServiceMemberBusinessProfile
-       │                         │
-       │                         ├─→ Daily planner businessProfile.primaryPurpose
-       │                         ├─→ Content generator businessProfile.primaryPurpose
-       │                         └─→ Quality checker businessProfile.primaryPurpose
-       │
-       └─×→ Simple first-post strategy mapping
-               └─ fixed BRAND_AWARENESS
-
-Account Strategy UI / API
-  goal (8値)
-       │
-       ├─→ SocialAccountStrategy.goal + version/status
-       ├─→ StrategyGeneratorInput.goal
-       │     └─→ generated concept/positioning/ctaStrategy/postingPolicy
-       │
-       ├─×→ WeeklyPlannerInput.approvedStrategy.goal
-       │     └─ only generated strategy text reaches Weekly
-       │
-       └─→ personalization ACCOUNT_STRATEGY signal as text
-             ├─→ Daily planner
-             ├─→ Content generator
-             └─→ Quality checker
-
-Weekly output free-text goal
-  └─→ Daily weeklyItem.goal
-       └─→ Content brief/theme/reason
-
-Feedback / Result
-  GOOD/NEUTRAL/BAD + manual metrics + business outcomes
-       └─→ next Weekly recentPerformance
-             └─× goal-specific KPI interpretation
+Onboarding / Account Strategy UI
+  Goal
+   ├─→ SocialAccountStrategy.goal + version/status
+   ├─→ Strategy Provider input
+   └─→ weeklySocialGoalPlanningProfile(goal)
+          ├─ strategyFocus
+          ├─ topicDirections
+          └─ ctaDirections
+               │
+               ├─→ WeeklyPlannerInput.approvedStrategy
+               │      └─→ WeeklyPlan.strategyId/strategyGoal snapshot
+               │
+               ├─→ DailyMissionPlannerProviderInput.approvedStrategy
+               │      └─→ topic / angle / reason / format
+               │
+               ├─→ Content + Quality strategyContext
+               │      └─→ body / visual / CTA
+               │
+               └─→ GenerationContextSnapshot.strategy.goal
+                        └─→ Goal-specific outcome input
+                              └─→ same-goal next Weekly recentPerformance
 ```
-
-現在は1本のGoal propagationではなく、`primaryPurpose`、typed strategy goal、generated weekly goalの3本が後段で合流する構造である。
 
 ## 7. Strategyへの反映
 
-`OpenAIStrategyGenerator`は`StrategyGeneratorInput`全体をJSONで渡すため、typed goalはProviderへ届く。これはLEVEL 2の根拠になる。
+`OpenAIStrategyGenerator`へtyped Goal、企業情報、対象顧客、利用可能時間、導線を渡す。生成したconcept、positioning、target、CTA、posting policyは版管理・承認される。
 
-ただしsystem instructionは目的別テーマ・CTA・禁止事項を定義していない。出力schemaもgenericな6項目のみで、Goal snapshotやKPIは出力しない。今回、有料Providerでの同条件比較を実行していないため、実生成結果の目的差は未確認。Goal文字列を渡しているだけでLEVEL 3とはしない。
+実OpenAI出力で7 Goalの戦略差を比較していないため、Provider品質は未確認。コード上はGoalが欠落せず、後段は生成自由文だけに依存しない。
 
 ## 8. Weekly Planへの反映
 
-`WeeklyPlanGenerationService`は承認戦略から次だけをPlannerへ渡す。
+`WeeklyPlanGenerationService`は次をPlannerへ渡す。
 
-- `concept`
-- `positioning`
-- `targetSummary`
-- `ctaStrategy`
-- `postingPolicy`
+- `approvedStrategy.goal`
+- `approvedStrategy.goalPlanning`
+- concept / positioning / target / CTA / posting policy
+- Company/Bunshin context
+- recent topics / feedback / result
 
-`strategy.goal`、`businessProfile.primaryPurpose`、Goal別KPIは渡さない。したがってStrategy生成文が同一または差が弱い場合、Weekly Planは目的を識別できない。
+Goal policyは目的別にテーマ軸とCTA候補を持つ。Goalのみ変更した監査テストでWeekly Planner inputが目的別に異なることを確認する。
 
-characterization testでは、同じ美容室情報・同じ戦略生成文を固定し、Goalだけを`BRAND_AWARENESS / INQUIRY / SALES / RECRUIT / FOLLOWERS`へ変更した。5回のWeekly Planner inputはbyte-equivalentで、`approvedStrategy.goal`が存在しないことを確認した。
+## 9. Daily・Themeへの反映
 
-## 9. Dailyへの反映
+Daily PlannerはWeeklyのStrategy Snapshotを正本とし、typed Goalと同じplanning profileを受け取る。新Strategy承認後も、確定済みWeekly PlanのDailyは旧Strategyで完走する。
 
-Dailyのtyped `approvedStrategy`入力からもGoalは除外される。一方、`buildMissionPersonalizationContext`が`ACCOUNT_STRATEGY` signalへ`目標: ${strategy.goal}`を入れる。またService利用時は`businessProfile.primaryPurpose`も別signal・専用fieldとして渡す。
+目的別の主なテーマ差:
 
-Daily promptは`primaryPurpose`へ役立つtopic/reasonを要求するためLEVEL 2のPrompt接続はある。しかし、2系統が矛盾した場合の優先規則、目的別テーマpolicy、差分合格条件はない。
+| Goal              | テーマ例                                         |
+| ----------------- | ------------------------------------------------ |
+| Awareness         | 店舗の特徴、スタッフ、考え方、ブランドストーリー |
+| Visit/Reservation | 初回来店、メニュー、利用場面、店舗情報           |
+| Inquiry           | 課題、FAQ、解決方法、相談テーマ                  |
+| Repeat            | アフターケア、季節提案、新メニュー、再利用理由   |
+| Recruitment       | 働く人、職場、仕事内容、価値観、キャリア         |
+| Sales             | 商品価値、使用場面、比較、利用事例、購入理由     |
+| Trust/Expertise   | 実績、専門知識、プロセス、誤解、顧客の疑問       |
 
-## 10. Themeへの反映
+## 10. Content・Photo/Video Idea・CTAへの反映
 
-Weeklyの`WeeklyPlanItem.goal/angle`とDailyの`topic/angle/reason`は生成結果として存在する。業種、対象顧客、履歴、目的を使う一般指示もある。ただしGoal別のテーマ軸（採用なら職場・仕事内容、リピートならアフターケア等）をコードまたはversioned policyとして定義していない。
-
-したがって「末尾CTAだけ違い、テーマは同じ」を自動的に不合格にする検査はない。現在のQuality checkerも事業プロフィールとの関連は見るが、Goal Differentialそのものは評価しない。
-
-## 11. Contentへの反映
-
-Content generatorにはDaily brief、戦略自由文、business profile、personalization、履歴等が渡る。`primaryPurpose`との関連、過去の低評価回避、反応の良かった読者価値の別角度展開は指示される。
-
-一方、typed Goal別の内容構造はない。よって投稿本文に目的差が出る可能性はあるが、実コードで保証されず、外部AI実生成なしではLEVEL 3を確認できない。
-
-## 12. Photo / Video Ideaへの反映
-
-形式別出力は実装済み。
+Content/variant/quality contextへGoalとplanning profileを渡す。本文だけでなく以下へ同じ方針が到達する。
 
 - TEXT: `photoInstruction`
 - SLIDE / IMAGE: 各slideの`visualScene`
 - LIVE_ACTION: `shootingInstruction`とscript
 - AI_VIDEO_PROMPT: Provider非依存の動画Prompt
+- CTA: `ctaDirections`と承認Strategyの`ctaStrategy`
 
-ただしこれらはBriefと本文に従うgeneric生成であり、Goal別の撮影方針はない。たとえば採用なら「働く人・職場・1日の仕事」、予約なら「入口・施術工程・メニュー」のような差を検査する仕組みは未実装。
+目的別方針がPromptに明示されるため、末尾だけを変える実装ではない。ただし実Providerが常にrubricを満たす保証ではなく、本番品質はサンプル監査が必要である。
 
-## 13. CTAへの反映
+## 11. Resultと次回提案
 
-Strategyには`destinationType/detail`と生成済み`ctaStrategy`があり、ContentはCTAを生成する。このためCTAへ影響する経路は存在する。
+投稿の好みを表す`GOOD / NEUTRAL / BAD`と、目的達成を表す回答を分離した。
 
-しかしGoalとdestinationの整合validationはない。簡易初回設定はGoal=`BRAND_AWARENESS`、destination=`PROFILE`に固定する。事業プロフィールで予約・採用・販売を選んでも自動変更されない。目的別CTA辞書や、生成CTAが承認Goalへ合致するかのQuality ruleもないため、現状は間接対応である。
+目的回答:
 
-## 14. Resultへの反映
+- `ACHIEVED`: 目的につながった
+- `SOME_PROGRESS`: 手応えがあった
+- `NO_CHANGE`: 変化はなかった
+- `UNKNOWN`: まだ分からない
 
-### 14.1 現在取得できる結果
+クライアントはGoalを送信せず、サーバーがGeneration SnapshotのGoalを使用する。Snapshotがない過去MissionへGoalを推測補完しない。
 
-- 感覚評価: `GOOD / NEUTRAL / BAD`
-- 事業成果: `inquiries / reservations / visits / orders / other`
-- 投稿指標: `reach / impressions / likes / comments / saves / shares / profileViews / follows`
-- 投稿済み記録、採用・不採用理由、最近の投稿・形式
+次週計画は現在Goalと同じGoalの結果だけを使用する。問い合わせは`inquiries`、来店予約は`reservations/visits`、販売は`orders`を一次指標として扱う。他Goalは現在自己申告中心である。利用者の回答は因果関係や外部KPI実績として断定しない。
 
-これらは次週の`recentPerformance`へ渡されるため、一般的な改善loopは存在する。
+## 12. Goal変更時の挙動
 
-### 14.2 Goal別評価の欠落
+確定規則:
 
-- 結果記録時点のGoal snapshotがない。
-- GoalごとのKPI選択がない。
-- `GOOD`はUI上「自分らしい」であり、目的達成を意味しない。
-- 問い合わせGoalでreachだけが増えた場合などを区別しない。
-- 次週Plannerは全事業成果を受け取るが、現在Goalに対する優先指標を知らない。
+1. 新Goal承認で新Strategy versionを作る。
+2. 確定済みWeekly Planと残りのDailyは生成時Strategyで完走する。
+3. 新Goalは次に生成するWeekly Planから適用する。
+4. 過去Strategy、Weekly、Daily、結果を変更しない。
+5. Strategy/Profile/Goal Snapshotが矛盾する場合は生成を停止する。
 
-したがってLEVEL 5ではない。V1の最小拡張は「この投稿は今回の目的に役立ったか」を`YES / NO / UNKNOWN`で任意取得し、generation時のGoal snapshotへ紐付けること。自動取得できない来店・採用結果を取得済みと扱わない。
+週途中の即時再計画はV1対象外。画面には反映時期を明示する。
 
-## 15. Goal Differential Test
+## 13. Goal Differential Test
 
-### 15.1 実行条件
+`apps/web/test/hassy-sns-goal-propagation-characterization.test.ts`は外部通信なしで次を確認する。
 
-固定fixture: 同一の美容室、Instagram、同一対象顧客、同一商品、同一Pillar、同一戦略生成済み自由文。変数はGoalのみ。外部通信・有料AI・DBは不使用。
+1. 初回Strategyが事業目的から導出され、曖昧目的は利用者選択になる。
+2. 同じ美容室・同じStrategy文でGoalだけを変えるとWeekly inputのtyped Goal/policyが変わる。
+3. Daily inputも同じtyped Goal/policyを受け取り、個人Contextを別途保持する。
 
-実行テスト:
+既存のpackage/webテストはGoal別policy、Weekly、Daily、Content context、結果保存、次週集計、Goal変更時Snapshotを個別に検証する。
 
-`apps/web/test/hassy-sns-goal-propagation-characterization.test.ts`
+このテストは配線とpolicy差を証明するが、OpenAI実出力の品質優位性は証明しない。
 
-### 15.2 比較結果
+## 14. Goal対応レベル
 
-| 比較対象                    | Awareness                       | Visit/Reservation     | Inquiry        | Repeat      | Recruitment    | 判定                    |
-| --------------------------- | ------------------------------- | --------------------- | -------------- | ----------- | -------------- | ----------------------- |
-| Onboarding保存              | `AWARENESS`                     | `ATTRACT/RESERVATION` | 選択肢なし     | `RETENTION` | `RECRUITING`   | 語彙が不均一            |
-| 初回Strategy Goal           | `BRAND_AWARENESS`固定           | 同左                  | 同左           | 同左        | 同左           | 差なし・不合格          |
-| Strategy Prompt             | typed goalあり                  | typed値なし           | typed goalあり | typed値なし | typed goalあり | 一部のみ                |
-| Weekly Plan入力             | Goalなし                        | Goalなし              | Goalなし       | Goalなし    | Goalなし       | Goal-only差なし・不合格 |
-| Daily theme/reason入力      | generic signal + primaryPurpose | 同構造                | 同構造         | 同構造      | 同構造         | Prompt接続のみ          |
-| Content / photo-video / CTA | generic signal依存              | 同構造                | 同構造         | 同構造      | 同構造         | 実出力差未確認          |
-| recommendation reason       | Daily `reason`あり              | 同構造                | 同構造         | 同構造      | 同構造         | 目的別品質未確認        |
+| Goal                |        現在Level | 根拠                                              | 未確認              |
+| ------------------- | ---------------: | ------------------------------------------------- | ------------------- |
+| Awareness           | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 実reach自動取得     |
+| Visit / Reservation | 4 + 結果loop一部 | Strategy〜CTA、予約/来店手入力を同Goal次週へ反映  | 予約システム照合    |
+| Inquiry             | 4 + 結果loop一部 | Strategy〜CTA、問い合わせ手入力を同Goal次週へ反映 | LINE/form自動照合   |
+| Repeat              | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 新規/再来店の識別   |
+| Recruitment         | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 応募/見学の自動照合 |
+| Sales               | 4 + 結果loop一部 | Strategy〜CTA、購入手入力を同Goal次週へ反映       | 売上/商品閲覧照合   |
+| Trust / Expertise   | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 信頼指標の定義      |
 
-このテストは「現在の配線」を検証するcharacterizationであり、AI出力品質をfakeで作って合格扱いしていない。実ProviderによるStrategy、Weekly、Daily、本文、写真案、CTAの比較は未実行である。現在の配線に明示的な断絶があるため、先に契約を修正してから、固定seed相当の評価fixtureと人手rubricでLEVEL 4を検証すべきである。
+LEVEL 5完全達成とは判定しない。現在は取得可能な手入力と自己申告による段階実装である。
 
-## 16. Goal対応レベル
+## 15. Goal × 履歴 / Barrier / KPI
 
-| Goal                | 現在Level | 根拠                                          | V1目標との差                                 |
-| ------------------- | --------: | --------------------------------------------- | -------------------------------------------- |
-| Awareness           |         2 | 2系統のUI/DB、Strategy・Daily Promptへ入る    | Weekly明示伝播、差分検証、CTA整合が不足      |
-| Visit / Reservation |         2 | business primaryPurposeはDaily/Contentへ入る  | Strategy enumとWeeklyにない                  |
-| Inquiry             |         2 | Strategy enum/Prompt、事業成果記録あり        | onboarding選択肢、Weekly、Goal-KPI評価がない |
-| Repeat              |         2 | `RETENTION`がDaily/Contentへ入る              | Strategy enum、Weekly、repeat KPIがない      |
-| Recruitment         |         2 | 2語彙で保存・Prompt接続                       | 値同期、テーマpolicy、CTA検査がない          |
-| Sales               |         2 | 2語彙で保存・Prompt接続、orders記録           | 同期、Weekly、購入CTA検査がない              |
-| Trust / Expertise   |         0 | 明示Goalなし。`OTHER`や自由文で代用可能なだけ | 正規Goal、policy、KPIが必要                  |
+### 履歴
 
-LEVEL 3（生成内容に目的差）も、今回の非課金テストでは確認できない。LEVEL 4達成の宣言にはStrategy→Weekly→Daily→Theme→Content→CTAを同一fixtureで比較する合格証跡が必要。
+Company Profile、Target、Goal、Weekly、Recent Posts、Accepted/Rejected、Posted、Feedback、Business Outcomesを統合する。生成時Goalと同じ履歴を成果学習へ使い、他Goalの成果を混ぜない。
 
-## 17. Goal変更時の挙動
+### Barrier
 
-新Strategyを作成・承認すると版履歴は維持され、過去を削除しない設計は良い。一方で、既に存在するWeekly Planはjob modeでそのまま返され、manual modeではconflictになる。既存Daily Missionも同様に再利用される。このためGoal変更が「次回生成」へ入っても、確定済みWeekly/Dailyを自動再生成しない。
+障壁分類はService/User/Bunshin単位で分離されるが、`Barrier × Goal`の教育policyは未実装。大規模教育機能は今回の対象外である。
 
-望ましいV1規則:
+### KPI
 
-1. 過去のStrategy、Weekly、Daily、結果は変更しない。
-2. Goal変更時に新Strategy versionを作り、適用開始日時を記録する。
-3. 未生成の次週から新Goalを使う。
-4. 既に確認済み・採用済みの投稿を勝手に差し替えない。
-5. 今週途中の再計画は利用者の明示操作で新revisionとして行う。
+| Goal              | 現在の一次指標       | 補助・未取得                     |
+| ----------------- | -------------------- | -------------------------------- |
+| Awareness         | 自己申告             | reach, impressions, profile view |
+| Visit/Reservation | reservations, visits | 予約経路・来店照合               |
+| Inquiry           | inquiries            | LINE/form別照合                  |
+| Repeat            | 自己申告             | repeat reservation/revisit識別   |
+| Recruitment       | 自己申告             | 求人閲覧、見学、応募             |
+| Sales             | orders               | product view、売上額             |
+| Trust/Expertise   | 自己申告             | saves、shares、相談理由          |
 
-## 18. Goal × 履歴
+## 16. SNSプラットフォーム差
 
-現状はCompany Profile、Target、Strategy自由文、Weekly、Recent Posts、Accepted/Rejected、Posted、Feedback、Post Performance、Business Outcomesを広く収集する。Workspace/Service/User/Bunshin境界もRepositoryで維持されている。
+正式型は`INSTAGRAM / TIKTOK / X / THREADS / YOUTUBE_SHORTS / OTHER`。Facebookは`OTHER`扱い。
 
-不足は、履歴を「どのGoalのもとで作った投稿・結果か」と解釈するsnapshotである。Goal変更後も過去履歴は利用価値があるが、新Goalの成功例として無条件にランキングしてはいけない。`generationContext`にcanonical Goal snapshotとpolicy versionを残し、同Goalの履歴を優先しつつ、他Goal履歴は表現嗜好・禁止事項など目的非依存の学習に限定する。
+format選択はplatform別で、Instagramはslide/image、TikTok・YouTube Shortsはlive action/video、X・Threadsはtextを優先する。Goal policyはplatform非依存の成果方針として組み合わせる。高度なアルゴリズム最適化は未実装。
 
-## 19. Goal × Barrier
+## 17. Goal別テストマトリクス
 
-障壁発見は`SETUP / HOW_TO / TIME / EFFORT / CONTENT / MEDIA / CONFIDENCE / EFFECT / RESPONSE / LEAD / UNKNOWN`を持ち、Service/User/Bunshin単位で分離される。一方、支援内容は現在Goalを入力に取らない。
+| Case | Industry | Platform  | Goal              | 期待テーマ               | 期待CTA         |
+| ---- | -------- | --------- | ----------------- | ------------------------ | --------------- |
+| M1   | 美容室   | Instagram | Awareness         | 特徴・考え方             | フォロー/保存   |
+| M2   | 美容室   | Instagram | Visit/Reservation | 初回来店・不安解消       | 予約/空き確認   |
+| M3   | 美容室   | Instagram | Repeat            | 自宅ケア・次回来店       | 再予約          |
+| M4   | 美容室   | Instagram | Recruitment       | スタッフ・仕事・職場     | 見学/採用情報   |
+| M5   | 士業     | X         | Inquiry           | 課題・FAQ・相談条件      | 問い合わせ      |
+| M6   | 士業     | Threads   | Trust/Expertise   | プロセス・誤解・専門知識 | 保存/相談       |
+| M7   | EC小売   | TikTok    | Sales             | 使用場面・比較・購入理由 | 商品を見る/購入 |
 
-例として`EFFECT`は数字を一つ確認し、`LEAD`は予約・問い合わせ・購入から一つ選ぶgeneric案である。将来は`barrier + canonical goal`を支援policyへ渡せる境界を追加すべきだが、今回、大規模教育システムは追加しない。
+全組合せの外部AI生成は未実行。代表サンプルを運用中に確認し、テーマ、本文、visual、CTAが単語置換ではなく構造的に異なるかを評価する。
 
-## 20. Goal × KPI
+## 18. Primary / Secondary / Weight / 期間
 
-現在取得できる範囲に限定した暫定対応候補:
+現在は単一Primary Goal。Secondary Goals、weight、期間指定は未実装である。
 
-| Goal              | 利用可能な一次指標候補                    | 現在未取得・手入力候補         |
-| ----------------- | ----------------------------------------- | ------------------------------ |
-| Awareness         | reach, impressions, profileViews, follows | ブランド想起                   |
-| Visit/Reservation | reservations, visits                      | 予約経路・来店照合             |
-| Inquiry           | inquiries                                 | LINE/form別問い合わせ          |
-| Repeat            | reservations, visits                      | 再来店か新規かの区別           |
-| Recruitment       | profileViews（弱いproxy）                 | 求人ページ閲覧、見学、応募     |
-| Sales             | orders                                    | productViews、売上額、購入経路 |
-| Trust/Expertise   | saves, shares, profileViews               | 相談理由、信頼度               |
+将来追加する場合も、Company/Bunshinの長期目的とcurrent SNS goalを分離し、Strategy versionへsnapshotする。V1では数値weight UIやGoal CMSを先行実装しない。
 
-proxyを成果として断定しない。KPI policyはGoalごとに`primary / supporting / unavailable`を区別する。
+## 19. OEMとプロジェクト分離
 
-## 21. 「良かった」の意味
+Goal contractとpolicyはSOCIAL capabilityにあり、AI研修、占い、千ノ国メディアへ混在させない。OEM別候補制限やラベル変更は将来Service configurationで扱い、共通enumや画面へ企業名をハードコードしない。
 
-現UIの`GOOD`表示は「👍 自分らしい」である。これは文章・提案の適合評価で、認知・採用・予約などの成果評価ではない。`NEUTRAL`は「普通」、`BAD`は「違う」。現在の次週計画はこれを形式別の好悪として利用する。
+現時点でOEM別Goal allowlist/CMSは未実装。V1必須ではない。
 
-V1では既存ratingを維持し、別の任意質問として「今回の目的に役立ったか」を追加する方が意味を壊さない。未投稿・結果待ちには`UNKNOWN`を許容する。
+## 20. 残課題と推奨順
 
-## 22. SNSプラットフォーム差
+1. **実Provider Goal Differential品質確認**: M1〜M7から小さな承認済みサンプルを選び、同一入力でテーマ・本文・visual・CTAを人手rubric評価する。
+2. **Repeat KPI分離**: 新規予約/来店と再予約/再来店を区別できる手入力契約を小さく追加するか判断する。
+3. **採用・認知・信頼の指標設計**: 自動取得を前提にせず、必要な簡易入力だけを決める。
+4. **Goal × Barrier**: 実運用で必要性を確認後、SOCIAL package側へ小さなpolicyを追加する。
+5. **Secondary Goals**: 単一Goal運用の不足が確認された後に設計する。
 
-正式な型は`INSTAGRAM / TIKTOK / X / THREADS / YOUTUBE_SHORTS / OTHER`。Facebookは独立enumではなく`OTHER`扱いになる。
+次の最小タスクは、課金・本番送信を伴わない**固定fixtureによるGoal Differential output rubricテスト**である。Providerの出力を捏造せず、まずPrompt contractと決定的fixtureの合否基準を固定する。
 
-format選択はplatform別に実装され、Instagramはslide/image、TikTok・YouTube Shortsはlive action/video、X・Threadsはtextを優先する。したがって形式差はある。しかしGoal × PlatformのCTA・長さ・導線policyはない。今回、高度アルゴリズム最適化は提案しない。
-
-## 23. Goal別テストマトリクス
-
-全組合せ生成は不要。次の代表ケースでLEVEL 4を確認する。
-
-| Case | Industry | Platform  | Goal               | 期待するテーマ差                       | 期待CTA          |
-| ---- | -------- | --------- | ------------------ | -------------------------------------- | ---------------- |
-| M1   | 美容室   | Instagram | Awareness          | カウンセリングの考え方・特徴           | フォロー/保存    |
-| M2   | 美容室   | Instagram | Visit/Reservation  | 初回来店の流れ・不安解消               | 予約/空き確認    |
-| M3   | 美容室   | Instagram | Repeat             | 自宅ケア・次回来店時期                 | 再予約           |
-| M4   | 美容室   | Instagram | Recruitment        | スタッフの1日・職場・仕事              | 見学/採用情報    |
-| M5   | 士業     | X         | Inquiry            | 課題・FAQ・相談条件                    | 問い合わせ/相談  |
-| M6   | 士業     | Threads   | Trust/Expertise    | 実務プロセス・誤解・専門知識           | 保存/詳細/相談   |
-| M7   | EC小売   | TikTok    | Sales              | 使用場面・比較・購入理由               | 商品を見る/購入  |
-| M8   | 飲食店   | Instagram | Awareness vs Visit | ブランドストーリーと来店案内が分かれる | フォロー vs 来店 |
-
-各caseでStrategy、Weekly、Daily topic/reason、本文、visual、CTAをsnapshotし、テーマカテゴリ・読者課題・行動がGoal policyと一致するかをrubricで判定する。単語置換だけは不合格。
-
-## 24. Primary / Secondary / Business Goal / Current SNS Goal
-
-- Company/Bunshinの長期目的とcurrent SNS goalは分離すべき。
-- 正本はService + Bunshin + SocialProfile境界のStrategy versionに置く。
-- Primaryは1つ。SecondaryはV1では最大2つ、内部既定weightでもよい。
-- Weekly配分でPrimaryを中心にしつつSecondaryを混ぜる。
-- OEMごとの候補追加・制限はService configurationでallowlist/label overrideを持たせ、enumそのものや共通UIへ会社名をハードコードしない。
-- 任意Goalを許す場合も、未知GoalをそのままPromptへ投げるだけでLEVEL 4扱いしない。`OTHER`は説明文とCTA/KPI方針が必要。
-
-## 25. 推奨する最小実装順
-
-大規模変更を始める前提ではなく、レビュー可能な小さいPR単位とする。
-
-1. **Canonical Goal contractとlegacy mappingの追加**: SOCIAL capability内に7主要Goal + OTHERを定義し、`primaryPurpose`と既存Strategy enumから明示変換する。DB変更はまだ行わず純粋関数と契約テストから開始。
-2. **初回設定の固定Goal解消**: onboarding purposeからcanonical goal/destinationを導出し、矛盾を作らない。未知値は安全にレビュー要求。
-3. **Goal snapshotの明示伝播**: Weekly/Daily/Content/Quality入力へprimary/secondary/policyVersionを追加。既存自由文戦略は維持。
-4. **Goal policy v1**: テーマ軸、避ける単語置換、CTA候補、KPI候補をSOCIAL packageへ置く。
-5. **Differential regression test**: M1〜M8のうち少なくとも美容室4件、士業2件、EC1件をProvider fakeではなく評価可能なfixtureで検証。外部AI品質試験は別途予算承認後。
-6. **Goal-aware result**: generation snapshotへGoalを保存し、任意の目的達成feedbackを追加。既存GOOD/NEUTRAL/BADは意味を変えない。
-
-次の最小タスクは **1のCanonical Goal contractとlegacy mappingだけを実装するPR**。DB、Prompt、UIは同PRで変更しない。
-
-## 26. 実行した検証
+## 21. 実行した検証
 
 成功:
 
 ```text
-Node v24.19.0 / pnpm 10.10.0
-pnpm --filter @bunshin/database db:generate
-pnpm --filter web exec vitest run \
+pnpm --dir apps/web exec vitest run \
   test/hassy-sns-goal-propagation-characterization.test.ts \
   test/weekly-plan-generation.test.ts \
-  test/daily-mission-personalization.test.ts
-Test Files 3 passed (3)
-Tests 15 passed (15)
-pnpm --filter web typecheck
-pnpm --filter web exec eslint test/hassy-sns-goal-propagation-characterization.test.ts
+  test/daily-mission-strategy-effective.test.ts \
+  test/service-posting-outcomes-http.test.ts
+Test Files 4 passed / Tests 112 passed
+
+pnpm --filter @bunshin/capability-social exec vitest run \
+  test/social-goal.test.ts test/daily-mission-planner.test.ts
+Test Files 2 passed / Tests 29 passed
+
+pnpm --dir apps/web typecheck
+pnpm --filter @bunshin/capability-social typecheck
+pnpm --dir apps/web exec eslint test/hassy-sns-goal-propagation-characterization.test.ts
 pnpm exec prettier --check docs/hassy/HASSY_SNS_GOAL_AUDIT.md \
   apps/web/test/hassy-sns-goal-propagation-characterization.test.ts
+git diff --check
 ```
-
-検証内容:
-
-1. 簡易初回設定が`BRAND_AWARENESS`固定であること。
-2. Strategy Goalだけを5種類変えてもWeekly Planner入力が同一で、Goal fieldを持たないこと。
-3. Daily/Content personalizationにはGoalがgeneric signalとして入るが、目的別policyは含まれないこと。
 
 未実行:
 
-- OpenAI実APIによる生成（課金・非決定性を伴うため）。
-- 本番DBのハッシー設定・既存参加者データ確認。
-- 実LINE配信、本番E2E、実SNS投稿。
-- Goal変更後の実運用スケジュールE2E。
+- OpenAI実API生成
+- 本番DB・本番Service設定確認
+- 実LINE配信・SNS投稿
+- 外部SNS/予約/採用/販売システム連携
 
-## 27. 未確認事項と判定を変える条件
+## 22. 未確認事項
 
-- 本番ハッシーServiceで`businessProfileEnabled`、MINIMAL/FULL、content mode等がどう設定されているか。
-- 本番利用者がAccount Strategy UIを直接使う導線があるか。
-- 現行Promptで偶発的にどの程度Goal差が出るか。差が観測されても明示伝播と回帰保証がなければLEVEL 4にはしない。
-- Instagram等から取得する実指標の範囲。現在コード上は手入力/スクリーンショット由来が中心。
-- OEM別Goal候補の具体要件。
+- 本番ハッシー参加者に設定済みのGoal分布と旧Weekly Planの割合。
+- 実ProviderがM1〜M7のrubricをどの程度満たすか。
+- 実SNS指標の取得可能範囲と利用規約。
+- OEMごとのGoal候補制限要件。
+- Secondary Goalを必要とする具体的な運用頻度。
 
-LEVEL判定を上げる条件は、同一企業fixtureでGoalだけを変え、Strategy、Weekly、Daily、Theme、Content、visual、CTAのすべてが目的別rubricを満たす自動・人手評価証跡があること。保存またはPrompt文字列の存在だけでは上げない。
+## 23. 変更範囲
 
-## 28. 変更範囲
-
-今回の変更は本監査文書とcharacterization testのみ。本番アプリ、API、Provider、DB schema、migration、依存関係、lockfile、設定、LINE、デプロイは変更していない。
+本PRの再更新は監査文書と外部通信なしのcharacterization testのみ。本番アプリ、API、Provider、DB schema、migration、依存関係、lockfile、設定、LINE、デプロイは変更しない。
