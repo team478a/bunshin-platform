@@ -406,7 +406,11 @@ export function generateServicePhotoFirstResponse(
       return {
         variant: missionContentVariantDto(result.variant),
         photoFirst: result.photoFirst
-          ? { analysis: result.photoFirst.analysis, planning: result.photoFirst.planning }
+          ? {
+              photoMemoryId: result.photoFirst.photoMemoryId,
+              analysis: result.photoFirst.analysis,
+              planning: result.photoFirst.planning,
+            }
           : null,
       };
     },

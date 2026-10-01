@@ -6359,7 +6359,9 @@ model BunshinMemory {
   updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin     Bunshin                 @relation(fields: [bunshinId], references: [id], onDelete: Restrict)
+  photoFirstVariantMetadata MissionContentVariantPhotoFirstMetadata[]
 
+  @@unique([workspaceId, bunshinId, id], map: "bunshin_memories_scope_id_key")
   @@index([workspaceId, bunshinId, active, deletedAt, updatedAt])
   @@index([workspaceId, bunshinId, sourceType, sourceId])
   @@map("bunshin_memories")
@@ -6838,11 +6840,35 @@ model MissionContentVariant {
   dailyMission        DailyMission                     @relation(fields: [workspaceId, bunshinId, dailyMissionId, format], references: [workspaceId, bunshinId, id, format], onDelete: Cascade, map: "mission_content_variants_mission_fkey")
   generation          MissionContentVariantGeneration?
   selections          MissionContentVariantSelection[]
+  photoFirstMetadata  MissionContentVariantPhotoFirstMetadata?
 
   @@unique([workspaceId, bunshinId, dailyMissionId, sequence], map: "mission_content_variants_sequence_key")
   @@unique([workspaceId, bunshinId, dailyMissionId, id], map: "mission_content_variants_scope_id_key")
   @@index([workspaceId, bunshinId, dailyMissionId, createdAt], map: "mission_content_variants_mission_created_idx")
   @@map("mission_content_variants")
+}
+
+/// Photo Firstで使用した本人写真と構造化解析・企画を投稿案へ追記可能な形で保持する。
+model MissionContentVariantPhotoFirstMetadata {
+  id                    String                @id @default(uuid()) @db.Uuid
+  workspaceId           String                @map("workspace_id") @db.Uuid
+  bunshinId             String                @map("bunshin_id") @db.Uuid
+  dailyMissionId        String                @map("daily_mission_id") @db.Uuid
+  variantId             String                @unique @map("variant_id") @db.Uuid
+  photoMemoryId         String                @map("photo_memory_id") @db.Uuid
+  actorUserId           String                @map("actor_user_id") @db.Uuid
+  analysisJson          Json                  @map("analysis_json")
+  planningJson          Json                  @map("planning_json")
+  analyzerModel         String                @map("analyzer_model") @db.VarChar(120)
+  analyzerPromptVersion String                @map("analyzer_prompt_version") @db.VarChar(120)
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  variant               MissionContentVariant @relation(fields: [workspaceId, bunshinId, dailyMissionId, variantId], references: [workspaceId, bunshinId, dailyMissionId, id], onDelete: Cascade, map: "mission_variant_photo_first_variant_fkey")
+  photoMemory           BunshinMemory         @relation(fields: [workspaceId, bunshinId, photoMemoryId], references: [workspaceId, bunshinId, id], onDelete: Restrict, map: "mission_variant_photo_first_memory_fkey")
+
+  @@unique([workspaceId, bunshinId, dailyMissionId, variantId], map: "mission_variant_photo_first_scope_key")
+  @@index([workspaceId, bunshinId, photoMemoryId], map: "mission_variant_photo_first_memory_idx")
+  @@index([workspaceId, bunshinId, dailyMissionId, createdAt], map: "mission_variant_photo_first_mission_idx")
+  @@map("mission_content_variant_photo_first_metadata")
 }
 
 /// 別案生成のclaim/成功/失敗を冪等に記録する。失敗時にもAI観測値を残す。

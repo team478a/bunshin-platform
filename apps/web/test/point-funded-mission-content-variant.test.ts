@@ -57,6 +57,7 @@ const variant: MissionContentVariant = {
   latencyMs: 10,
   createdAt: new Date('2026-09-08T00:00:10Z'),
   selectedAt: null,
+  photoFirst: null,
 };
 
 function repository(): PointRedemptionRepository {

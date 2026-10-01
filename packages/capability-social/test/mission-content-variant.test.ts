@@ -29,6 +29,32 @@ const variant = {
   latencyMs: 100,
   createdAt: new Date('2026-09-07T00:00:00Z'),
   selectedAt: null,
+  photoFirst: null,
+};
+
+const photoFirst = {
+  photoMemoryId: 'photo-1',
+  analysis: {
+    imageType: ' product ',
+    subjects: [' 商品 '],
+    objects: [],
+    scene: ' 店内 ',
+    visibleText: [],
+    possibleContentAngles: [' 使い方 '],
+    qualityNotes: [],
+    uncertainElements: [],
+    safetyFlags: [],
+  },
+  planning: {
+    theme: ' 商品の使い方 ',
+    angle: ' 初めての方向け ',
+    recommendationReason: ' 目的と写真が合うため ',
+    photoUsage: ' 主役として使う ',
+    imageEditPrompt: ' 明るさを整える ',
+    confirmationQuestion: null,
+  },
+  analyzerModel: ' test-model ',
+  analyzerPromptVersion: ' photo-first-analysis-v1 ',
 };
 
 function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
@@ -96,6 +122,57 @@ describe('mission content variants', () => {
     expect(repo.select).toHaveBeenCalledWith(
       expect.objectContaining({ variantId: variant.id, idempotencyKey: 'selection-1' }),
     );
+  });
+
+  it('normalizes bounded Photo First metadata before atomic completion', async () => {
+    const repo = repository();
+    await new CompleteMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      generationId: 'generation-1',
+      format: 'TEXT',
+      content: variant.content,
+      qualityScore: 90,
+      model: 'test-model',
+      promptVersion: 'variant-v1',
+      inputTokens: 10,
+      outputTokens: 20,
+      estimatedCostMicros: 30n,
+      latencyMs: 100,
+      photoFirst,
+    });
+    expect(repo.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoFirst: expect.objectContaining({
+          analyzerModel: 'test-model',
+          analysis: expect.objectContaining({ imageType: 'product', subjects: ['商品'] }),
+          planning: expect.objectContaining({ theme: '商品の使い方' }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects oversized Photo First metadata before repository writes', async () => {
+    const repo = repository();
+    await expect(
+      new CompleteMissionContentVariantGeneration(repo).execute({
+        ...scope,
+        generationId: 'generation-1',
+        format: 'TEXT',
+        content: variant.content,
+        qualityScore: 90,
+        model: 'test-model',
+        promptVersion: 'variant-v1',
+        inputTokens: 10,
+        outputTokens: 20,
+        estimatedCostMicros: 30n,
+        latencyMs: 100,
+        photoFirst: {
+          ...photoFirst,
+          analysis: { ...photoFirst.analysis, subjects: Array.from({ length: 13 }, () => '商品') },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(repo.complete).not.toHaveBeenCalled();
   });
 
   it('does not turn an inaccessible mission into an empty list', async () => {

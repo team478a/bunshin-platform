@@ -1,5 +1,16 @@
 # BUNSHIN Platform Decision Log
 
+## D-163: Photo Firstの解析・企画は投稿案と同一Transactionの専用Metadataに保存する
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-162の再読込・履歴対応）
+
+- Photo Firstの元写真ID、構造化解析、企画、解析モデル、Prompt Versionは、完成本文の`contentJson`へ混在させず、`MissionContentVariant`に対する1対1の専用Metadataとして保存する。通常の投稿本文処理やSNS投稿先へ内部Metadataを流さない。
+- Metadata作成は投稿案の完成処理と同じDB Transactionで行う。Metadataだけ、または投稿案だけを成功扱いにしない。同じ生成冪等キーの再送は、保存済み投稿案とMetadataを返し、Vision解析を再実行しない。
+- 元写真との関係はWorkspace・Bunshin・Memory IDの複合外部キー、投稿案との関係はWorkspace・Bunshin・Daily Mission・Variant IDの複合外部キーで制約する。他Workspace・他Bunshinの写真を関連付けられないようDBでも保証する。
+- 投稿案削除時はMetadataを連動削除する。参照中の元写真は物理削除を制限するが、既存の利用者削除はsoft deleteのため画面から除外できる。履歴Metadataから秘密のStorage URLや画像bytesを返さない。
+- Service画面の再読込では、認可済みRepositoryが返す最新のPhoto First投稿案と企画だけを復元する。LINE画像直接受信、Photo First単独Mission、自動画像編集、実Provider E2Eは本変更に含めない。
+
 ## D-162: ハッシー Photo First V1は既存の非公開写真と投稿案生成経路を再利用する
 
 - 日付: 2026-10-01

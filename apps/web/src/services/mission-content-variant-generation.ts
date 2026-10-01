@@ -131,7 +131,7 @@ export class MissionContentVariantGenerationService {
           const completed = existing.find(({ id }) => id === claim.generation.variantId);
           if (!completed)
             throw new ApplicationError('CONFLICT', 'completed mission variant is unavailable');
-          return { variant: completed, photoFirst: null };
+          return { variant: completed, photoFirst: completed.photoFirst };
         }
         throw new ApplicationError('CONFLICT', 'mission content variant generation already used');
       }
@@ -226,8 +226,19 @@ export class MissionContentVariantGenerationService {
             ? BigInt(usageState.estimatedCostMicros)
             : null,
         latencyMs: Date.now() - started,
+        ...('photoActionId' in input && photoFirst
+          ? {
+              photoFirst: {
+                photoMemoryId: input.photoActionId,
+                analysis: photoFirst.analysis,
+                planning: photoFirst.planning,
+                analyzerModel: photoFirst.model,
+                analyzerPromptVersion: photoFirst.promptVersion,
+              },
+            }
+          : {}),
       });
-      return { variant, photoFirst };
+      return { variant, photoFirst: variant.photoFirst };
     } catch (error) {
       if (generationId) {
         await recordAiUsageSafely({
