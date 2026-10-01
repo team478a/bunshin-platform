@@ -9,6 +9,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { BUSINESS_OUTCOME_KEYS } from '../services/business-outcomes';
+import { SOCIAL_GOAL_OUTCOME_RESULTS } from '../services/social-goal-outcomes';
 import { resolveMemberServiceContext } from '../services/public-service';
 import { dailyMissionGenerationError } from './daily-mission-generation-error';
 
@@ -66,6 +67,9 @@ export const businessOutcomeSchema = z
       BUSINESS_OUTCOME_KEYS.map((key) => [key, z.number().int().min(0).max(999)]),
     ) as Record<(typeof BUSINESS_OUTCOME_KEYS)[number], z.ZodNumber>,
   )
+  .strict();
+export const socialGoalOutcomeSchema = z
+  .object({ result: z.enum(SOCIAL_GOAL_OUTCOME_RESULTS) })
   .strict();
 export const variantGenerationSchema = z
   .object({

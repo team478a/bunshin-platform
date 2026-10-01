@@ -76,7 +76,7 @@ export function persistDailyMissionGenerationResult(input: {
       knowledgeIds: granted.map(({ id }) => id),
       groupKnowledgeIds: input.finalizedContent.groupKnowledgeIds,
       socialProfileId: profile.id,
-      strategy: { id: strategy.id, version: strategy.version },
+      strategy: { id: strategy.id, version: strategy.version, goal: strategy.goal },
       weeklyPlanId: weeklyPlan.id,
       contentPillarId: input.pillar.id,
       productPack: campaign

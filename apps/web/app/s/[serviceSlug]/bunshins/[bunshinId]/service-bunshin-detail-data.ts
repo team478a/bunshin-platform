@@ -17,6 +17,8 @@ import {
   type SocialActivityBarrierQuestion,
   type SocialActivitySupportProgress,
   type SocialProfile,
+  type ServiceBusinessPurpose,
+  isServiceBusinessPurpose,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
@@ -29,6 +31,10 @@ import { localDateInTimezone } from '../../../../../src/activity-progress';
 import { resolveDeliveryScheduleStatus } from '../../../../../src/services/delivery-schedule-status';
 import { missionDecisionOrPending } from '../../../../../src/mission-decision-fallback';
 import { readBusinessOutcomes } from '../../../../../src/services/business-outcomes';
+import {
+  readSnapshotStrategyGoal,
+  readSocialGoalOutcome,
+} from '../../../../../src/services/social-goal-outcomes';
 import {
   readPostPerformance,
   type PostPerformanceView,
@@ -73,6 +79,7 @@ export async function loadServiceBunshinDetail({
   let variantPointCost: number | null = null;
   let rewardsPilotActive = false;
   let businessProgramStartedAt: Date | null = null;
+  let businessPrimaryPurpose: ServiceBusinessPurpose | null = null;
   let postPerformances: PostPerformanceView[] = [];
   let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
   let activityBarrierSupport: SocialActivitySupportProgress | null = null;
@@ -92,10 +99,14 @@ export async function loadServiceBunshinDetail({
             userId: actor.userId,
             groupMembership: { status: 'ACTIVE' },
           },
-          select: { createdAt: true },
+          select: { createdAt: true, primaryPurpose: true },
         })
       : null;
     businessProgramStartedAt = businessProgramProfile?.createdAt ?? null;
+    businessPrimaryPurpose =
+      businessProgramProfile && isServiceBusinessPurpose(businessProgramProfile.primaryPurpose)
+        ? businessProgramProfile.primaryPurpose
+        : null;
     bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
     const membership = await db.prisma.groupMembership.findFirst({
       where: {
@@ -181,6 +192,17 @@ export async function loadServiceBunshinDetail({
         videos[mission.id] = { href: `/s/${serviceSlug}/videos/${video.id}`, status: video.status };
     }
     const outcomeRepository = new db.PrismaMissionOutcomeRepository();
+    const generationContexts = await db.prisma.generationContextSnapshot.findMany({
+      where: {
+        workspaceId: service.workspaceId,
+        bunshinId,
+        dailyMissionId: { in: missionRecords.map(({ id }) => id) },
+      },
+      select: { dailyMissionId: true, payload: true },
+    });
+    const generationContextByMission = new Map(
+      generationContexts.map(({ dailyMissionId, payload }) => [dailyMissionId, payload]),
+    );
     const missionStates = await Promise.all(
       missionRecords.map(async (mission) => ({
         decision: await missionDecisionOrPending(() =>
@@ -292,7 +314,11 @@ export async function loadServiceBunshinDetail({
           }
         : {}),
       ...(isBusinessDailyService
-        ? { businessOutcomes: readBusinessOutcomes(missionStates[index]!.post?.manualMetrics) }
+        ? {
+            businessOutcomes: readBusinessOutcomes(missionStates[index]!.post?.manualMetrics),
+            strategyGoal: readSnapshotStrategyGoal(generationContextByMission.get(mission.id)),
+            goalOutcome: readSocialGoalOutcome(missionStates[index]!.post?.manualMetrics),
+          }
         : {}),
       copyAuthorization: missionStates[index]!.copyAuthorization,
       trendContext: mission.trendContext
@@ -422,6 +448,7 @@ export async function loadServiceBunshinDetail({
     approvedBusinessStrategy,
     activityBarrierQuestion,
     activityBarrierSupport,
+    businessPrimaryPurpose,
   };
 }
 

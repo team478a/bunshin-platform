@@ -29,10 +29,25 @@ describe('simple service first-post setup', () => {
       '/automatic-delivery',
     ];
     endpoints.forEach((endpoint) => expect(setup).toContain(endpoint));
-    expect(setup).toContain("goal: 'BRAND_AWARENESS'");
+    expect(setup).toContain('initialSocialAccountStrategyGoal(primaryPurpose)');
+    expect(setup).toContain('goal: selectedGoal');
+    expect(setup).toContain('value.goal === selectedGoal');
+    expect(setup.match(/goal: 'BRAND_AWARENESS'/g)).toHaveLength(1);
     expect(setup).not.toContain('post-record');
     expect(setup).not.toContain('/daily-missions/generate');
     expect(setup).not.toContain('/weekly-plans/generate');
+  });
+
+  it('asks for an explicit conversion outcome when the saved purpose is broad', () => {
+    expect(page).toContain('primaryPurpose={businessPrimaryPurpose}');
+    expect(page).toContain('businessPurposeEnabled={isBusinessDailyService}');
+    expect(setup).toContain("initialGoal.status === 'REVIEW_REQUIRED'");
+    expect(setup).toContain('SNSで最も増やしたい成果');
+    expect(setup).toContain('来店・予約を増やしたい');
+    expect(setup).toContain('問い合わせを増やしたい');
+    expect(setup).toContain('商品・サービスの販売につなげたい');
+    expect(setup).toContain("initialGoal.destinationType : 'NONE'");
+    expect(setup).toContain('事業の発信目的が未設定です。');
   });
 
   it('keeps detailed controls available without making them the primary path', () => {

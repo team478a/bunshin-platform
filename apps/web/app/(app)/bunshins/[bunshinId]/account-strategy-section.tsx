@@ -23,9 +23,12 @@ const goalLabels: Record<SocialAccountStrategyGoal, string> = {
   FOLLOWERS: '見てくれる人を増やす',
   LINE_REGISTRATION: 'LINEに登録してもらう',
   INQUIRY: '問い合わせを増やす',
+  VISIT_RESERVATION: '来店・予約を増やす',
   SALES: '商品を買ってもらう',
   RECRUIT: 'いっしょに働く人を探す',
+  REPEAT: '再来店・リピートを増やす',
   BRAND_AWARENESS: '名前や活動を知ってもらう',
+  TRUST_EXPERTISE: '信頼や専門性を伝える',
   BLOG_TRAFFIC: 'ブログを読んでもらう',
   OTHER: 'その他',
 };
@@ -119,7 +122,11 @@ export function AccountStrategySection({
       body: '{}',
     });
     setPending(false);
-    setMessage(response.ok ? '戦略を承認しました。' : '承認できませんでした。');
+    setMessage(
+      response.ok
+        ? '戦略を承認しました。確定済みの今週の計画は変えず、今後作る週間計画から反映します。'
+        : '承認できませんでした。',
+    );
     if (response.ok) router.refresh();
   }
   return (

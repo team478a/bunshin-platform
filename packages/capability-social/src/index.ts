@@ -1,5 +1,6 @@
 export * from './social-profile';
 export * from './social-account-strategy';
+export * from './social-goal';
 export * from './content-pillars';
 export * from './weekly-plan';
 export * from './mission-generation';

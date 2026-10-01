@@ -113,6 +113,9 @@ const input: DailyMissionPlannerInput = {
     id: 'plan-trusted',
     workspaceId: 'workspace-trusted',
     bunshinId: 'bunshin-trusted',
+    socialProfileId: 'profile-trusted',
+    strategyId: 'strategy-trusted',
+    strategyGoal: 'FOLLOWERS',
     weekStartDate: '2026-08-17',
     timezone: 'Asia/Tokyo',
     strategySummary: '今週は実践例を伝える',
@@ -197,6 +200,13 @@ describe('GenerateDailyMissionBrief', () => {
     });
     expect(planner.generate).toHaveBeenCalledWith(
       expect.objectContaining({
+        approvedStrategy: expect.objectContaining({
+          goal: 'FOLLOWERS',
+          goalPlanning: expect.objectContaining({
+            goalKind: 'INTERMEDIATE_METRIC',
+            canonicalGoal: null,
+          }),
+        }),
         weeklyItem: expect.objectContaining({ recommendedFormat: 'TEXT' }),
         contentPillar: { title: '実践知', description: '実践から得た学び' },
         grantedKnowledge: input.grantedKnowledge,
@@ -205,6 +215,27 @@ describe('GenerateDailyMissionBrief', () => {
     const providerInput = planner.generate.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(JSON.stringify(providerInput)).not.toContain('workspace-trusted');
     expect(JSON.stringify(providerInput)).not.toContain('item-trusted');
+  });
+
+  it('changes the typed daily planning policy when only the approved goal changes', async () => {
+    const awarenessPlanner = provider();
+    const recruitPlanner = provider();
+
+    await new GenerateDailyMissionBrief(awarenessPlanner).execute({
+      ...input,
+      approvedStrategy: { ...input.approvedStrategy, goal: 'BRAND_AWARENESS' },
+    });
+    await new GenerateDailyMissionBrief(recruitPlanner).execute({
+      ...input,
+      approvedStrategy: { ...input.approvedStrategy, goal: 'RECRUIT' },
+    });
+
+    const awareness = awarenessPlanner.generate.mock.calls[0]?.[0].approvedStrategy.goalPlanning;
+    const recruitment = recruitPlanner.generate.mock.calls[0]?.[0].approvedStrategy.goalPlanning;
+    expect(awareness.topicDirections).toContain('ブランドストーリー');
+    expect(recruitment.topicDirections).toContain('職場環境');
+    expect(recruitment.ctaDirections).toContain('応募する');
+    expect(recruitment.strategyFocus).not.toBe(awareness.strategyFocus);
   });
 
   it.each([

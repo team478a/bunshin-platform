@@ -3266,3 +3266,67 @@
 - Preflightは実行処理と同じAI_TRAINING_V1、Participant、ACTIVE、開始/終了日時、期限到達、有料購入除外条件を共通化し、対象件数・100件上限・必要バッチ数・判定時刻だけを返す。受講ID、User、回答、評価、仕事情報は取得・応答・ログへ含めない。
 - PreflightではTransaction、状態更新、評価停止、監査Event、Provider、LINEを実行しない。productionで利用可能でも、期限終了のproduction停止とCron未登録は維持する。
 - 本番有効化はPreflight結果、Migration適用、停止/復旧手順、運営承認を別作業で確認する。Preflight成功を自動期限終了の稼働済み証拠として扱わない。
+
+## D-139: SNSの事業目的を導線・中間指標から分離する
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal伝播監査の最小Foundation）
+- SOCIAL capabilityの正規Goalは、認知、来店・予約、問い合わせ、リピート、採用、販売、信頼・専門性、その他の8種類とする。フォロワー、LINE登録、ブログ流入は事業目的そのものではなく、中間指標または導線として分離する。
+- 既存の`ServiceMemberBusinessProfile.primaryPurpose`と`SocialAccountStrategy.goal`は直ちに削除・書換えず、純粋な変換境界を追加する。一意に変換できる値だけを`RESOLVED`とし、広い「集客」やフォロワー、LINE登録、ブログ流入は候補と理由を持つ`REVIEW_REQUIRED`にする。
+- 曖昧値へ既定Goalを暗黙適用しない。次のUI・初回設定接続では、Service設定または利用者確認により解決し、異なるService、User、Bunshin、SocialProfileの目的を共有しない。
+- 本判断は契約と既存語彙の変換までとする。DB、onboarding、Strategy、Weekly、Daily、Prompt、CTA、KPI、本番設定は別の小さな変更で接続し、ハッシー名やOEM名を共通基盤へハードコードしない。
+
+## D-140: 初回SNS Strategyは事業目的から決定し、広い「集客」は利用者が成果を選ぶ
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-139の初回Strategy接続）
+- Service会員の初回SNS Strategyは`ServiceMemberBusinessProfile.primaryPurpose`から決定し、固定の`BRAND_AWARENESS`を使わない。認知、来店・予約、販売、採用、リピートは対応するGoalを保存し、明示されていない遷移先URLは推測しない。
+- 広い`ATTRACT`は来店・予約、問い合わせ、販売のどれかへ暗黙変換せず、初回設定で利用者に最優先成果を確認する。事業目的を使用するServiceで目的が欠損・未知の場合は、認知へフォールバックせず初回Strategy作成を停止する。
+- 既存Strategyとの互換性を保つため既存Goalは削除せず、`VISIT_RESERVATION`、`REPEAT`、`TRUST_EXPERTISE`を追加する。正規Goalと中間指標・導線の区別はD-139を維持する。
+- この変更は初回Strategyまでとし、Weekly Plan、Daily、投稿本文、CTA、結果評価、次回提案への目的差は後続PRで段階的に接続する。ハッシー名や特定OEM名を共通SOCIAL capabilityへハードコードしない。
+
+## D-141: Weekly Planは承認済みSNS Goalと目的別の企画方針を型付きで受け取る
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-140のWeekly Plan接続）
+- Weekly Plannerへ承認済みStrategyのGoalを明示的に渡し、SOCIAL capability内の純粋な変換で、週全体の重点、題材候補、CTA候補を導出する。認知、来店・予約、問い合わせ、リピート、採用、販売、信頼・専門性は互いに異なる企画方針を持つ。
+- Goal変更時はCTAの末尾だけでなく、週間要約、各日の目的、テーマ、切り口を変えるようProvider契約へ明記する。フォロワー、LINE登録、ブログ流入は事業成果へ昇格させず、中間指標または導線として扱う。
+- 目的別定義は特定サービス名・OEM名を共通基盤へ直書きせず、SOCIAL capabilityに閉じる。所有権、承認済みStrategy、Bunshin、Serviceの既存境界は維持する。
+- 自動テストはGoalと目的別方針がWeekly Planner入力へ届くこと、7つの主要目的で方針が異なることを保証する。実Providerによる生成品質、Daily、投稿本文、写真・動画案、結果評価、次回提案への差は本変更では確認済みとせず、後続の小さな変更と承認済み検証で確認する。
+
+## D-142: Daily Missionと投稿生成は承認済みSNS Goalの企画方針を継承する
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-141のDaily・Content接続）
+- Daily Planner、投稿本文・写真/動画案Generator、品質Checkerへ、承認済みStrategyのGoalとD-141で定義した型付き企画方針を渡す。Goal差はCTA末尾だけでなく、当日のtopic、angle、reason、本文、視覚案、読者価値へ反映する。
+- 投稿の作り直しでも新しいStrategyへ暗黙に差し替えず、元の生成Snapshotが指す承認済みStrategyを読み直し、そのGoalの企画方針を維持する。異なるWorkspace、User、Bunshin、SocialProfileのGoalは共有しない。
+- 品質Checkerは、題材や読者価値が別GoalのままCTAだけを変えた候補、または承認済みの具体的なCTA方針と矛盾する候補を`GOAL_MISMATCH`として修正対象にする。
+- 自動テストは型付きGoal方針がDaily・Content・Qualityへ届くことと、Goalだけを認知から採用へ変えたとき企画方針が変わることを保証する。実Provider出力の品質優位性、結果のGoal別評価、次回提案への学習は未確認であり、実績として扱わない。
+
+## D-143: SNS成果は生成時Goalへ帰属し、取得できないGoal達成を推測しない
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal別結果評価と次週反映の最小実装）
+- 新しく生成するDaily MissionのGeneration Context Snapshotへ、承認済みStrategyのGoalを保存する。通常AI生成と安全フォールバックの双方を対象とし、Goal変更後も過去投稿の成果を新しいGoalへ暗黙に付け替えない。既存Snapshotは書き換えず、Goalを持たない過去記録はGoal別集計から除外する。
+- 次週計画へ渡す手入力成果は、同じGoalで生成された投稿だけに限定する。問い合わせは問い合わせ件数、来店・予約は予約・来店件数、販売は注文件数を主要成果として扱い、それ以外の成果項目を当該Goalの成功へ混ぜない。
+- 認知、採用、リピート、信頼・専門性等は、現在取得している手入力成果だけでは達成判定できないため`UNAVAILABLE`とする。成果未入力は`NO_DATA`であり失敗と判定しない。投稿との因果関係も推定しない。
+- `GOOD`、`NEUTRAL`、`BAD`は投稿内容に対する本人の好み・使いやすさのFeedbackであり、Goal達成の証拠ではない。Weekly Plannerへこの意味と測定制約を型付きで渡し、測定不能な成果を作らせない。
+- 本変更はGoal帰属と次週入力の安全化までとする。認知・採用・リピート等のKPI入力UI、外部SNS分析連携、因果推定、本番データ補完は含めない。
+
+## D-144: 目的別成果は生成時Goalに結び付けた自己申告として次週へ渡す
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-143で未取得だった目的別成果のV1入力）
+- 投稿済みのサービス会員は、今回の目的に対して「目的につながった」「手応えがあった」「変化はなかった」「まだ分からない」を回答できる。`GOOD`・`NEUTRAL`・`BAD`は投稿内容の本人らしさであり、本回答と分離する。
+- クライアントからGoalを受け取らず、Daily Mission生成時SnapshotのGoalを正本としてPostRecordの既存`manualMetrics`へ結果と回答時刻を保存する。SnapshotにGoalがない過去Missionには暗黙のGoalを補完せず、入力を止める。DB schemaは追加しない。
+- 次週計画は現在のGoalと、生成時Goal・保存時Goalが一致する自己申告だけを参照する。自己申告しかない場合は`SELF_REPORTED`とし、外部KPI達成、投稿との因果関係、採用・認知等の実績として断定しない。問い合わせ・来店予約・販売の既存件数がある場合は`MEASURED`を優先する。
+- 本変更はV1の簡易入力と同一Goalへの次週反映までとする。外部SNS分析、予約・応募・売上システム連携、複数Goalの重み付け、因果推定、過去Snapshotの補完は含めない。
+
+## D-145: SNS Goal変更は次に作るWeekly Planから有効にする
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal変更時のWeekly・Daily混在防止）
+- AI生成Weekly Planは、生成に使用したSocial Profile、Strategy ID、Strategy GoalをSnapshotとして保持する。新しいStrategyを承認して旧Strategyが`SUPERSEDED`になっても、確定済みWeekly Planとその残りのDaily Missionは生成時Strategyで完走する。
+- 新しいGoalは、承認後に新しく生成するWeekly Planから有効にする。同じ週の確定済み計画を暗黙に書き換えたり、過去Mission・成果のGoalを付け替えたりしない。画面にも反映時期を明示する。
+- Daily Mission生成はWeekly Planに保存されたStrategyを読み、現在の承認済みStrategyと混在させない。保存したStrategyが欠損、別Profile、Goal不一致の場合は生成を停止する。Goalを持たない既存Weekly Planだけは互換性のため現在の承認済みStrategyを使用し、過去データを推測更新しない。
+- Workspace、Service、User、Bunshin、Social Profileの既存境界を維持し、Weekly Plan作成時にStrategyの所有範囲・Profile・Goal・承認状態をDBで再検証する。本変更は即時の週途中切替、複数Goal、期間指定、既存Planの一括補完を含めない。

@@ -1788,9 +1788,12 @@ enum SocialAccountStrategyGoal {
   FOLLOWERS
   LINE_REGISTRATION
   INQUIRY
+  VISIT_RESERVATION
   SALES
   RECRUIT
+  REPEAT
   BRAND_AWARENESS
+  TRUST_EXPERTISE
   BLOG_TRAFFIC
   OTHER
 }
@@ -6471,8 +6474,10 @@ model SocialAccountStrategy {
   workspace         Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin           Bunshin                          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   socialProfile     SocialProfile                    @relation(fields: [workspaceId, bunshinId, socialProfileId, platform], references: [workspaceId, bunshinId, id, platform], onDelete: Restrict)
+  weeklyPlans       WeeklyPlan[]
 
   @@unique([socialProfileId, version])
+  @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, socialProfileId, status, version])
   @@map("social_account_strategies")
 }
@@ -6596,24 +6601,29 @@ model ContentPillar {
 }
 
 model WeeklyPlan {
-  id              String           @id @default(uuid()) @db.Uuid
-  workspaceId     String           @map("workspace_id") @db.Uuid
-  bunshinId       String           @map("bunshin_id") @db.Uuid
-  weekStartDate   DateTime         @map("week_start_date") @db.Date
-  timezone        String           @db.VarChar(64)
-  strategySummary String?          @map("strategy_summary") @db.VarChar(1000)
-  status          WeeklyPlanStatus @default(DRAFT)
-  confirmedAt     DateTime?        @map("confirmed_at") @db.Timestamptz(6)
-  expiredAt       DateTime?        @map("expired_at") @db.Timestamptz(6)
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin         Bunshin          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  id              String                     @id @default(uuid()) @db.Uuid
+  workspaceId     String                     @map("workspace_id") @db.Uuid
+  bunshinId       String                     @map("bunshin_id") @db.Uuid
+  socialProfileId String?                    @map("social_profile_id") @db.Uuid
+  strategyId      String?                    @map("strategy_id") @db.Uuid
+  strategyGoal    SocialAccountStrategyGoal? @map("strategy_goal")
+  weekStartDate   DateTime                   @map("week_start_date") @db.Date
+  timezone        String                     @db.VarChar(64)
+  strategySummary String?                    @map("strategy_summary") @db.VarChar(1000)
+  status          WeeklyPlanStatus           @default(DRAFT)
+  confirmedAt     DateTime?                  @map("confirmed_at") @db.Timestamptz(6)
+  expiredAt       DateTime?                  @map("expired_at") @db.Timestamptz(6)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin         Bunshin                    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  strategy        SocialAccountStrategy?     @relation(fields: [workspaceId, bunshinId, strategyId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   items           WeeklyPlanItem[]
 
   @@unique([workspaceId, bunshinId, weekStartDate])
   @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, status, weekStartDate])
+  @@index([workspaceId, bunshinId, strategyId])
   @@map("weekly_plans")
 }
 

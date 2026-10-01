@@ -56,6 +56,24 @@ export type DailyMissionView = {
     orders: number;
     other: number;
   };
+  strategyGoal?:
+    | 'FOLLOWERS'
+    | 'LINE_REGISTRATION'
+    | 'INQUIRY'
+    | 'VISIT_RESERVATION'
+    | 'SALES'
+    | 'RECRUIT'
+    | 'REPEAT'
+    | 'BRAND_AWARENESS'
+    | 'TRUST_EXPERTISE'
+    | 'BLOG_TRAFFIC'
+    | 'OTHER'
+    | null;
+  goalOutcome?: {
+    strategyGoal: NonNullable<DailyMissionView['strategyGoal']>;
+    result: 'ACHIEVED' | 'SOME_PROGRESS' | 'NO_CHANGE' | 'UNKNOWN';
+    reportedAt: string;
+  } | null;
   trendContext: {
     whyNow: string;
     fitReason: string;

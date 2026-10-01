@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20260930060100_hold_legacy_fal_queued_submissions';
+export const LATEST_DATABASE_MIGRATION = '20261001060000_add_weekly_plan_strategy_snapshot';

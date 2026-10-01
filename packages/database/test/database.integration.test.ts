@@ -4443,6 +4443,9 @@ integration('database ownership boundaries', () => {
     const memberPlans = new PrismaWeeklyPlanRepository(client);
     const memberPlan = await new CreateGeneratedWeeklyPlan(memberPlans, assignments).execute({
       ...memberScope,
+      socialProfileId: memberProfile.id,
+      strategyId: memberStrategy.id,
+      strategyGoal: memberStrategy.goal,
       weekStartDate: '2026-08-31',
       timezone: 'Asia/Tokyo',
       strategySummary: '本人の予定',
@@ -4894,9 +4897,43 @@ integration('database ownership boundaries', () => {
       title: '教育',
       weight: 50,
     });
+    const profile = await new CreateSocialProfile(
+      new PrismaSocialProfileRepository(client),
+      assignments,
+    ).execute({
+      ...ownerScope(owner, bunshin.id),
+      platform: 'X',
+      purpose: '週間計画',
+      postingFrequency: 'WEEKLY',
+      preferredFormats: ['TEXT'],
+    });
+    const strategyRepository = new PrismaSocialAccountStrategyRepository(client);
+    const strategy = await new CreateSocialAccountStrategy(strategyRepository, assignments).execute(
+      {
+        ...ownerScope(owner, bunshin.id),
+        socialProfileId: profile.id,
+        platform: 'X',
+        goal: 'BRAND_AWARENESS',
+        availableMinutes: 5,
+        destinationType: 'PROFILE',
+        concept: '認知を広げる',
+        positioning: '専門家',
+        targetSummary: '初めて知る人',
+        profileDraft: 'プロフィール',
+        ctaStrategy: '詳細を見る',
+        postingPolicy: '週次',
+      },
+    );
+    const approvedStrategy = await new ApproveSocialAccountStrategy(
+      strategyRepository,
+      assignments,
+    ).execute({ ...ownerScope(owner, bunshin.id), strategyId: strategy.id });
     const repository = new PrismaWeeklyPlanRepository(client);
     const generated = await new CreateGeneratedWeeklyPlan(repository, assignments).execute({
       ...ownerScope(owner, bunshin.id),
+      socialProfileId: profile.id,
+      strategyId: approvedStrategy.id,
+      strategyGoal: approvedStrategy.goal,
       weekStartDate: '2026-08-10',
       timezone: 'Asia/Tokyo',
       strategySummary: 'AI生成戦略',
@@ -4915,6 +4952,9 @@ integration('database ownership boundaries', () => {
     });
     expect(generated).toMatchObject({
       status: 'DRAFT',
+      socialProfileId: profile.id,
+      strategyId: approvedStrategy.id,
+      strategyGoal: approvedStrategy.goal,
       strategySummary: 'AI生成戦略',
       items: [{ scheduledDate: '2026-08-11', contentPillarId: pillar.id }],
     });
@@ -4924,6 +4964,9 @@ integration('database ownership boundaries', () => {
         workspaceId: owner.workspace.id,
         actorUserId: outsider.user.id,
         bunshinId: bunshin.id,
+        socialProfileId: profile.id,
+        strategyId: approvedStrategy.id,
+        strategyGoal: approvedStrategy.goal,
         weekStartDate: '2026-08-03',
         timezone: 'Asia/Tokyo',
         strategySummary: 'scope外',
