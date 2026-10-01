@@ -18,6 +18,7 @@ export type DailyActionView = {
 type PhotoFirstResult = {
   variant: {
     id: string;
+    dailyMissionId: string;
     content: Record<string, unknown>;
   };
   photoFirst: null | {
@@ -150,11 +151,16 @@ export function DailyActionSection({
   initialActions,
   suggestedReuseTopic,
   todayMissionId,
+  photoFirstMissionSeed,
 }: {
   endpoint: string;
   initialActions: DailyActionView[];
   suggestedReuseTopic?: string | null;
   todayMissionId?: string | null;
+  photoFirstMissionSeed?: {
+    missionDate: string;
+    socialProfileId: string;
+  } | null;
 }) {
   const [actions, setActions] = useState(initialActions);
   const [selected, setSelected] = useState<DailyActionType | null>(null);
@@ -165,6 +171,7 @@ export function DailyActionSection({
   const [updatingPhotoId, setUpdatingPhotoId] = useState<string | null>(null);
   const [photoFirstActionId, setPhotoFirstActionId] = useState<string | null>(null);
   const [photoFirstResult, setPhotoFirstResult] = useState<PhotoFirstResult | null>(null);
+  const [resolvedTodayMissionId, setResolvedTodayMissionId] = useState(todayMissionId ?? null);
   const formRef = useRef<HTMLFormElement>(null);
   const choice = choices.find((item) => item.type === selected) ?? null;
   const question = useMemo(() => {
@@ -299,7 +306,7 @@ export function DailyActionSection({
   }
 
   async function createFromPhoto(action: DailyActionView) {
-    if (!todayMissionId || photoFirstActionId) return;
+    if ((!resolvedTodayMissionId && !photoFirstMissionSeed) || photoFirstActionId) return;
     setPhotoFirstActionId(action.id);
     setPhotoFirstResult(null);
     setMessage('写真と今日の発信目的から、投稿案を考えています…');
@@ -308,7 +315,9 @@ export function DailyActionSection({
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-request-id': createClientRequestId() },
         body: JSON.stringify({
-          dailyMissionId: todayMissionId,
+          ...(resolvedTodayMissionId
+            ? { dailyMissionId: resolvedTodayMissionId }
+            : photoFirstMissionSeed),
           idempotencyKey: createClientRequestId(),
         }),
       });
@@ -318,6 +327,7 @@ export function DailyActionSection({
       };
       if (!response.ok || !payload.data)
         throw new Error(payload.error?.message ?? '写真から投稿案を作れませんでした。');
+      setResolvedTodayMissionId(payload.data.variant.dailyMissionId);
       setPhotoFirstResult(payload.data);
       setMessage('写真に合わせた投稿案ができました。');
     } catch (error) {
@@ -557,7 +567,7 @@ export function DailyActionSection({
                             ? '毎日の画像に使用中（やめる）'
                             : '毎日の画像に使う'}
                       </button>
-                      {todayMissionId ? (
+                      {resolvedTodayMissionId || photoFirstMissionSeed ? (
                         <button
                           type="button"
                           className="button button--primary"

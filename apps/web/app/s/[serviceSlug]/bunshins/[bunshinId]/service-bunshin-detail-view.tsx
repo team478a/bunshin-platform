@@ -71,6 +71,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
     today,
     deliverySchedule,
     generationProfile,
+    photoFirstMissionSeed,
     imageCreationAvailable,
     dedicatedLine,
     dedicatedLineConnection,
@@ -209,6 +210,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
                   todayMissionId={
                     dailyMissions.find(({ missionDate }) => missionDate === today)?.id ?? null
                   }
+                  photoFirstMissionSeed={photoFirstMissionSeed}
                 />
               </section>
             </MemberHomeDrawer>
