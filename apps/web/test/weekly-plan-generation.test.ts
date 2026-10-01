@@ -168,6 +168,13 @@ describe('WeeklyPlanGenerationService', () => {
           feedback: { good: 2, neutral: 0, bad: 1 },
           formats: [{ format: 'TEXT', postedCount: 3, goodFeedbackCount: 2, badFeedbackCount: 1 }],
         },
+        approvedStrategy: expect.objectContaining({
+          goal: 'FOLLOWERS',
+          goalPlanning: expect.objectContaining({
+            goalKind: 'INTERMEDIATE_METRIC',
+            canonicalGoal: null,
+          }),
+        }),
       }),
     );
     expect(createGeneratedPlan).toHaveBeenCalledWith(

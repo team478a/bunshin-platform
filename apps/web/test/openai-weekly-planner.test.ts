@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { weeklySocialGoalPlanningProfile } from '@bunshin/capability-social';
 import { OpenAIWeeklyPlanner } from '../src/providers/openai-weekly-planner';
 
 const input = {
@@ -13,6 +14,8 @@ const input = {
     personalitySummary: '丁寧',
   },
   approvedStrategy: {
+    goal: 'INQUIRY' as const,
+    goalPlanning: weeklySocialGoalPlanningProfile('INQUIRY'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '初心者',
@@ -78,7 +81,7 @@ describe('OpenAIWeeklyPlanner', () => {
     );
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'weekly-planner-v6-recent-topics',
+      promptVersion: 'weekly-planner-v7-goal-planning',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -99,7 +102,10 @@ describe('OpenAIWeeklyPlanner', () => {
     });
     expect(request.input[1]?.content).toContain('10年の経験');
     expect(request.input[1]?.content).toContain('初回相談の流れ');
+    expect(request.input[1]?.content).toContain('対象顧客の課題を具体化し');
+    expect(request.input[1]?.content).toContain('問い合わせる');
     expect(request.input[0]?.content).toContain('成果数字は内部の企画判断だけに使い');
+    expect(request.input[0]?.content).toContain('CTAの末尾だけでなく');
     expect(Object.keys(request.text.format.schema.properties.items.items.properties)).toContain(
       'businessContentCategory',
     );
