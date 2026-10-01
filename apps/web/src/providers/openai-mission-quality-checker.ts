@@ -10,7 +10,8 @@ import {
   readMissionProviderResponse,
 } from './mission-provider-response';
 
-export const MISSION_QUALITY_CHECKER_PROMPT_VERSION = 'mission-quality-checker-v11-goal-alignment';
+export const MISSION_QUALITY_CHECKER_PROMPT_VERSION =
+  'mission-quality-checker-v12-sales-goal-alignment';
 
 const schema = {
   type: 'object',
@@ -68,7 +69,7 @@ export class OpenAIMissionQualityChecker implements MissionQualityCheckerPort {
             {
               role: 'system',
               content:
-                'approvedStrategy.goalPlanningのstrategyFocus、topicDirections、ctaDirectionsと、Missionのtopic、本文、写真・動画案、CTAが実質的に整合するか確認します。CTAの末尾だけを目的別に変え、テーマや読者価値が別GoalのままならGOAL_MISMATCHとしてREVISEにします。承認済みの具体的なctaStrategyと矛盾するCTAを追加した場合もGOAL_MISMATCHとします。',
+                'approvedStrategy.goalPlanningのstrategyFocus、topicDirections、ctaDirectionsと、Missionのtopic、本文、写真・動画案、CTAが実質的に整合するか確認します。CTAの末尾だけを目的別に変え、テーマや読者価値が別GoalのままならGOAL_MISMATCHとしてREVISEにします。承認済みの具体的なctaStrategyと矛盾するCTAを追加した場合もGOAL_MISMATCHとします。canonicalGoalがSALESの場合は、具体的な商品・サービスが題材であり、商品・サービス価値、使用場面、比較、利用事例、購入理由のうち少なくとも一つが本文と写真・動画案に現れ、CTAが商品を見る、購入する、またはその具体的な商品・サービスについて購入前に問い合わせる行動か確認します。初回来店の一般的な不安解消、一般FAQ、対象を示さないDM・LINE相談だけなら、CTAに問い合わせがあってもINQUIRY寄りのためGOAL_MISMATCHとしてREVISEにします。',
             },
             {
               role: 'system',

@@ -144,4 +144,13 @@ Provider requests 6
 
 ## 7. 次の最小タスク
 
-販売Goalについて、本文とCTAが商品・サービス価値、購入理由、商品閲覧・購入等へ分岐せず問い合わせGoalへ寄った場合に`GOAL_MISMATCH`とする非課金の契約テストを先に追加する。その後、Promptとquality checkerの最小修正を別PRで行う。再度の実Provider検証は修正後に別承認を得てから行い、本PRでは本番ロジックを変更しない。
+販売Goalについて、本文とCTAが商品・サービス価値、購入理由、商品閲覧・購入等へ分岐せず問い合わせGoalへ寄った場合に`GOAL_MISMATCH`とする非課金の契約テストを先に追加する。その後、Promptとquality checkerの最小修正を別PRで行う。再度の実Provider検証は修正後に別承認を得てから行う。
+
+### 後続実装状況（2026-10-02 JST）
+
+- 問い合わせ型の本文・写真案へ販売CTAだけを付けた出力を不合格にする非課金の回帰テストを追加した
+- 本文生成Promptを`mission-content-generator-v16-sales-goal-alignment`へ更新し、販売では具体的な商品・サービス価値、使用場面、比較、利用事例、購入理由のいずれかを本文と写真・動画案へ反映するよう明示した
+- quality checkerを`mission-quality-checker-v12-sales-goal-alignment`へ更新し、一般的な初回来店不安、一般FAQ、対象を示さない相談だけの内容を販売として合格させない境界を明示した
+- 実Providerによる販売Goalの再検証は未実施であり、上記の`INCONCLUSIVE`および`RISK_REPRODUCED`判定は実測で更新していない
+
+次の最小タスクは、別途課金承認を得たうえで、前回と同一の合成入力を使い、問い合わせと販売の2 Goalだけを実Providerで再比較することである。

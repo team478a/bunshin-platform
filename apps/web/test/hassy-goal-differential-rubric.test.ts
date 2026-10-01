@@ -203,6 +203,21 @@ describe('Hassy Goal Differential output rubric', () => {
     },
   );
 
+  it('rejects inquiry-shaped content even when its CTA is changed to a sales inquiry', () => {
+    const inquiry = fixtures.find(({ goal }) => goal === 'INQUIRY')!;
+    const result = evaluate({
+      ...inquiry,
+      goal: 'SALES',
+      cta: '購入前に問い合わせてください。',
+    });
+
+    expect(result.cta).toBe(true);
+    expect(result.weeklyTheme).toBe(false);
+    expect(result.topic).toBe(false);
+    expect(result.body).toBe(false);
+    expect(result.visualIdea).toBe(false);
+  });
+
   it('locks the no-CTA-only rule into every generation and quality prompt', async () => {
     const paths = [
       '../src/providers/openai-weekly-planner.ts',
@@ -219,5 +234,9 @@ describe('Hassy Goal Differential output rubric', () => {
       expect(source).toContain('CTAの末尾だけ');
     }
     expect(sources[3]).toContain('GOAL_MISMATCH');
+    expect(sources[2]).toContain('canonicalGoalがSALESの場合');
+    expect(sources[2]).toContain('初回来店の一般的な不安解消');
+    expect(sources[3]).toContain('canonicalGoalがSALESの場合');
+    expect(sources[3]).toContain('INQUIRY寄り');
   });
 });

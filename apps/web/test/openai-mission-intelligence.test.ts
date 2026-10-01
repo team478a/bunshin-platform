@@ -128,7 +128,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v15-goal-planning',
+      promptVersion: 'mission-content-generator-v16-sales-goal-alignment',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -367,7 +367,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v11-goal-alignment',
+      promptVersion: 'mission-quality-checker-v12-sales-goal-alignment',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
@@ -380,6 +380,9 @@ describe('OpenAIMissionQualityChecker', () => {
     expect(JSON.stringify(request)).toContain('CAROUSEL_HARD_TO_UNDERSTAND');
     expect(JSON.stringify(request)).toContain('GOAL_MISMATCH');
     expect(JSON.stringify(request)).toContain('対象顧客の課題を具体化し');
+    expect(JSON.stringify(request)).toContain('具体的な商品・サービス');
+    expect(JSON.stringify(request)).toContain('購入前に問い合わせる');
+    expect(JSON.stringify(request)).toContain('INQUIRY寄り');
     expect(request).toMatchObject({
       text: {
         format: {
