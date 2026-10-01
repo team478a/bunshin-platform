@@ -29,6 +29,7 @@ describe('LINE authentication return path', () => {
         `/s/${slug}/onboarding`,
         `/s/${slug}/bunshins/${id}/line`,
         `/s/${slug}/programs/${id}/toolkit`,
+        `/s/${slug}/manage/training/expiry`,
         `/s/${slug}/manage/training/retention`,
         `/account?service=${slug}`,
       ]) {

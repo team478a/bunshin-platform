@@ -3266,3 +3266,12 @@
 - Preflightは実行処理と同じAI_TRAINING_V1、Participant、ACTIVE、開始/終了日時、期限到達、有料購入除外条件を共通化し、対象件数・100件上限・必要バッチ数・判定時刻だけを返す。受講ID、User、回答、評価、仕事情報は取得・応答・ログへ含めない。
 - PreflightではTransaction、状態更新、評価停止、監査Event、Provider、LINEを実行しない。productionで利用可能でも、期限終了のproduction停止とCron未登録は維持する。
 - 本番有効化はPreflight結果、Migration適用、停止/復旧手順、運営承認を別作業で確認する。Preflight成功を自動期限終了の稼働済み証拠として扱わない。
+
+## D-139: AI研修の期限終了Preflightを自Serviceの管理画面から確認する
+
+- 日付: 2026-10-01
+- 状態: Accepted（本番運用前の対象件数確認）
+- 既存の期限終了Preflightと同じAI_TRAINING_V1、Participant、ACTIVE、開始/終了日時、期限到達、有料購入除外の条件を再利用する。件数、1回上限、必要処理回数、確認時刻以外の個人情報を取得・表示しない。
+- Service Slugとログイン本人からScopeを解決し、DBの同一RepeatableRead Transaction内でACTIVEなSERVICE_OWNER/ADMIN、User、Group、Workspaceを再検証する。CONTENT_EDITOR、一般参加者、所属失効、別Scopeは拒否する。
+- Cron Secretをブラウザーや管理者Sessionへ渡さず、既存の内部API認証契約も変更しない。DB障害は0件とせず、詳細を表示・ログせず取得不可と表示する。
+- 受講状態変更、評価停止、Provider、LINE、Cron登録、保持期限削除、production実行停止の解除は含めない。
