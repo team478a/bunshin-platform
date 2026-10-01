@@ -12,6 +12,9 @@ const state = vi.hoisted(() => ({
   member: vi.fn(),
   bunshin: vi.fn(),
   executePhotoFirst: vi.fn(),
+  executeDailyMission: vi.fn(),
+  usage: vi.fn(),
+  notification: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -45,7 +48,18 @@ vi.mock('../src/services/mission-content-variant-generation', () => ({
   }),
 }));
 
+vi.mock('../src/services/daily-mission-generation', () => ({
+  createDailyMissionGenerationService: () => ({ execute: state.executeDailyMission }),
+}));
+
+vi.mock('../src/services/commercial-usage', () => ({
+  recordCommercialUsageSafely: state.usage,
+}));
+
 vi.mock('@bunshin/database', () => ({
+  PrismaLineNotificationPreferenceRepository: class {
+    getScoped = state.notification;
+  },
   prisma: {
     bunshin: { findFirst: state.bunshin },
     bunshinMemory: {
@@ -165,6 +179,11 @@ describe('service Daily Action HTTP', () => {
         },
       },
     });
+    state.executeDailyMission.mockResolvedValue({
+      id: '88888888-8888-4888-8888-888888888888',
+    });
+    state.usage.mockResolvedValue(undefined);
+    state.notification.mockResolvedValue({ preference: { timezone: 'Asia/Tokyo' } });
   });
 
   it('creates an owner-scoped question as a Bunshin memory', async () => {
@@ -325,6 +344,82 @@ describe('service Daily Action HTTP', () => {
       data: { photoFirst: { planning: { theme: string } } };
     };
     expect(body.data.photoFirst.planning.theme).toBe('商品の使い方');
+  });
+
+  it('creates todays planned mission before Photo First when automatic delivery has not created it', async () => {
+    const missionDate = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const socialProfileId = '99999999-9999-4999-8999-999999999999';
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          missionDate,
+          socialProfileId,
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(201);
+    expect(state.notification).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      bunshinId,
+      actorUserId: state.actor?.userId,
+    });
+    expect(state.executeDailyMission).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      groupId: '33333333-3333-4333-8333-333333333333',
+      bunshinId,
+      actorUserId: state.actor?.userId,
+      missionDate,
+      timezone: 'Asia/Tokyo',
+      socialProfileId,
+      generationIdempotencyKey: key,
+      usageIdempotencyPrefix: key,
+      existingPolicy: 'RETURN',
+      serviceSafeMode: true,
+      allowServiceOwnerMemories: true,
+    });
+    expect(state.executePhotoFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ dailyMissionId: '88888888-8888-4888-8888-888888888888' }),
+    );
+    expect(state.usage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'service_photo_first_mission',
+        idempotencyKey: 'POST_GENERATE:mission:88888888-8888-4888-8888-888888888888',
+      }),
+    );
+  });
+
+  it('rejects a mission bootstrap date that is not today', async () => {
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          missionDate: '2020-01-01',
+          socialProfileId: '99999999-9999-4999-8999-999999999999',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(400);
+    expect(state.executeDailyMission).not.toHaveBeenCalled();
+    expect(state.executePhotoFirst).not.toHaveBeenCalled();
+    expect(state.usage).not.toHaveBeenCalled();
   });
 
   it('requires same-origin before creating or deleting material', async () => {

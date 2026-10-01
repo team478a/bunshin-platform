@@ -5,6 +5,7 @@ import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
 import { requireSameOrigin } from '../auth/request-security';
+import { localDateInTimezone } from '../activity-progress';
 import {
   DAILY_ACTION_PHOTO_MAX_BYTES,
   DailyActionStorage,
@@ -44,7 +45,16 @@ const createSchema = z.discriminatedUnion('type', [
   ),
 ]);
 const preferenceSchema = z.object({ useForAutomaticImages: z.boolean() }).strict();
-const photoFirstSchema = z.object({ dailyMissionId: uuid, idempotencyKey: uuid }).strict();
+const photoFirstSchema = z.union([
+  z.object({ dailyMissionId: uuid, idempotencyKey: uuid }).strict(),
+  z
+    .object({
+      missionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      socialProfileId: uuid,
+      idempotencyKey: uuid,
+    })
+    .strict(),
+]);
 
 const typeDetails: Record<
   DailyActionType,
@@ -389,6 +399,48 @@ export function generateServicePhotoFirstResponse(
       if (!parsed.success)
         throw new ApplicationError('VALIDATION_ERROR', '写真と投稿案を確認できません');
       const scope = await actionScope(serviceSlug, bunshinId);
+      let dailyMissionId: string;
+      if ('dailyMissionId' in parsed.data) {
+        dailyMissionId = parsed.data.dailyMissionId;
+      } else {
+        const notification =
+          await new scope.db.PrismaLineNotificationPreferenceRepository().getScoped({
+            workspaceId: scope.workspaceId,
+            bunshinId,
+            actorUserId: scope.actorUserId,
+          });
+        const timezone = notification.preference?.timezone ?? 'Asia/Tokyo';
+        const today = localDateInTimezone(new Date(), timezone);
+        if (parsed.data.missionDate !== today)
+          throw new ApplicationError('VALIDATION_ERROR', '今日の写真から投稿案を作成してください');
+        const { createDailyMissionGenerationService } =
+          await import('../services/daily-mission-generation');
+        const mission = await createDailyMissionGenerationService().execute({
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          bunshinId,
+          actorUserId: scope.actorUserId,
+          missionDate: parsed.data.missionDate,
+          timezone,
+          socialProfileId: parsed.data.socialProfileId,
+          generationIdempotencyKey: parsed.data.idempotencyKey,
+          usageIdempotencyPrefix: requestIdFromHeader(request.headers.get('x-request-id')),
+          existingPolicy: 'RETURN',
+          serviceSafeMode: true,
+          allowServiceOwnerMemories: true,
+        });
+        dailyMissionId = mission.id;
+        const { recordCommercialUsageSafely } = await import('../services/commercial-usage');
+        await recordCommercialUsageSafely({
+          workspaceId: scope.workspaceId,
+          groupId: scope.groupId,
+          userId: scope.actorUserId,
+          eventType: 'POST_GENERATE',
+          source: 'service_photo_first_mission',
+          idempotencyKey: `POST_GENERATE:mission:${mission.id}`,
+          metadata: { dailyMissionId: mission.id },
+        });
+      }
       const { createMissionContentVariantGenerationService } =
         await import('../services/mission-content-variant-generation');
       const result = await createMissionContentVariantGenerationService().executePhotoFirst({
@@ -396,7 +448,7 @@ export function generateServicePhotoFirstResponse(
         groupId: scope.groupId,
         bunshinId,
         actorUserId: scope.actorUserId,
-        dailyMissionId: parsed.data.dailyMissionId,
+        dailyMissionId,
         photoActionId: uuid.parse(actionId),
         generationIdempotencyKey: parsed.data.idempotencyKey,
         usageIdempotencyPrefix: requestIdFromHeader(request.headers.get('x-request-id')),
