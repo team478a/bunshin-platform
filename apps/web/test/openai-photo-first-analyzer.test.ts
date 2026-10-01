@@ -34,7 +34,7 @@ const response = () =>
     { status: 200 },
   );
 
-function input(goal: 'BRAND_AWARENESS' | 'RECRUIT') {
+function input(goal: 'BRAND_AWARENESS' | 'RECRUIT' | 'INQUIRY' | 'SALES') {
   return {
     bytes: new Uint8Array([1, 2, 3]),
     mimeType: 'image/jpeg' as const,
@@ -44,7 +44,11 @@ function input(goal: 'BRAND_AWARENESS' | 'RECRUIT') {
       objectiveSummary: '地域のお客様へ丁寧な施術を提供',
       audienceSummary: '初めての美容室に不安がある方',
       personalitySummary: '落ち着いた口調',
-      businessProfile: { industry: '美容室', strength: 'カウンセリング' },
+      businessProfile: {
+        industry: '美容室',
+        productService: 'カウンセリング付きヘアカット',
+        strength: 'カウンセリング',
+      },
     },
     strategy: {
       goal,
@@ -52,7 +56,14 @@ function input(goal: 'BRAND_AWARENESS' | 'RECRUIT') {
       concept: '不安を解消する',
       positioning: '地域密着',
       targetSummary: '初回客',
-      ctaStrategy: goal === 'RECRUIT' ? '見学相談' : 'フォロー',
+      ctaStrategy:
+        goal === 'RECRUIT'
+          ? '見学相談'
+          : goal === 'SALES'
+            ? 'ヘアカットの詳細を見て予約する'
+            : goal === 'INQUIRY'
+              ? 'LINEで施術について質問する'
+              : 'フォロー',
     },
     platform: 'INSTAGRAM',
     mission: { topic: '店内紹介', angle: 'はじめての方へ', reason: '不安解消' },
@@ -71,6 +82,7 @@ describe('OpenAiPhotoFirstAnalyzer', () => {
 
     expect(result.analysis.uncertainElements).toContain('人物名は不明');
     expect(result.planning.recommendationReason).toContain('採用目的');
+    expect(result.promptVersion).toBe('photo-first-analysis-v2-sales-goal-alignment');
     const init = fetcher.mock.calls[0]?.[1] as RequestInit;
     if (typeof init.body !== 'string') throw new Error('expected JSON body');
     const sent = JSON.parse(init.body) as {
@@ -120,5 +132,45 @@ describe('OpenAiPhotoFirstAnalyzer', () => {
     expect(body).toContain('売上');
     expect(body).toContain('人物名');
     expect(body).toContain('断定をしません');
+  });
+
+  it('requires sales planning to center a concrete approved product or service', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response());
+    await new OpenAiPhotoFirstAnalyzer({
+      apiKey: 'test',
+      model: 'gpt-5.2',
+      fetch: fetcher,
+    }).analyze(input('SALES'));
+
+    const requestBody = fetcher.mock.calls[0]?.[1]?.body;
+    const body = typeof requestBody === 'string' ? requestBody : '';
+    expect(body).toContain('canonicalGoalがSALESの場合');
+    expect(body).toContain('具体的な商品・サービス');
+    expect(body).toContain('一般的な初回来店の不安解消');
+    expect(body).toContain('SALESとして扱いません');
+    expect(body).toContain('confirmationQuestion');
+    expect(body).toContain('カウンセリング付きヘアカット');
+  });
+
+  it('sends different planning profiles when only inquiry and sales goals differ', async () => {
+    const requests: string[] = [];
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, init) => {
+      requests.push(typeof init?.body === 'string' ? init.body : '');
+      return Promise.resolve(response());
+    });
+    const analyzer = new OpenAiPhotoFirstAnalyzer({
+      apiKey: 'test',
+      model: 'gpt-5.2',
+      fetch: fetcher,
+    });
+
+    await analyzer.analyze(input('INQUIRY'));
+    await analyzer.analyze(input('SALES'));
+
+    expect(requests[0]).toContain('対象顧客の課題を具体化し');
+    expect(requests[0]).toContain('LINEで施術について質問する');
+    expect(requests[1]).toContain('商品・サービスの価値と購入判断に必要な情報');
+    expect(requests[1]).toContain('ヘアカットの詳細を見て予約する');
+    expect(requests[0]).not.toBe(requests[1]);
   });
 });
