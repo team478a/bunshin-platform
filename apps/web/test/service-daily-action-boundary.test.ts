@@ -52,6 +52,15 @@ describe('service Daily Action boundary', () => {
     expect(ui).toContain('迷ったら、これを教えてください');
     expect(ui).toContain('iPhoneキーボード右下のマイク');
     expect(page).toContain('<DailyActionSection');
+    expect(page).toContain('photoFirstMissionSeed={photoFirstMissionSeed}');
+    expect(page).toContain("status === 'CONFIRMED'");
+    expect(page).toContain('scheduledDate === today');
+    expect(page).toContain('photoFirstWeeklyPlan.socialProfileId');
+    expect(ui).toContain('resolvedTodayMissionId || photoFirstMissionSeed');
+    expect(ui).toContain('setResolvedTodayMissionId(payload.data.variant.dailyMissionId)');
+    expect(http).toContain("existingPolicy: 'RETURN'");
+    expect(http).toContain('PrismaLineNotificationPreferenceRepository().getScoped');
+    expect(http).toContain("notification.preference?.timezone ?? 'Asia/Tokyo'");
   });
 
   it('lets iPhone users choose an existing photo instead of forcing the camera', () => {
@@ -78,6 +87,7 @@ describe('service Daily Action boundary', () => {
 
   it('restores the latest persisted Photo First plan after a page reload', () => {
     expect(page).toContain('variant.photoFirst');
+    expect(page).toContain('dailyMissionId: variant.dailyMissionId');
     expect(page).toContain('latestPhotoFirstResult');
     expect(page).toContain('initialPhotoFirstResult={latestPhotoFirstResult}');
     expect(ui).toContain('initialPhotoFirstResult ?? null');

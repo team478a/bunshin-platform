@@ -256,6 +256,7 @@ export async function loadServiceBunshinDetail({
                 {
                   variant: {
                     id: variant.id,
+                    dailyMissionId: variant.dailyMissionId,
                     content: applyServiceContentTerminology(
                       variant.content,
                       contentTerminologyPolicy,
@@ -405,6 +406,22 @@ export async function loadServiceBunshinDetail({
     missionDates: dailyMissions.map(({ missionDate }) => missionDate),
   });
   const generationProfile = socialProfiles.find(({ status }) => status === 'ACTIVE');
+  const photoFirstWeeklyPlan = weeklyPlans.find(
+    ({ status, items }) =>
+      status === 'CONFIRMED' && items.some(({ scheduledDate }) => scheduledDate === today),
+  );
+  const photoFirstProfile = photoFirstWeeklyPlan?.socialProfileId
+    ? socialProfiles.find(
+        ({ id, status }) => id === photoFirstWeeklyPlan.socialProfileId && status === 'ACTIVE',
+      )
+    : generationProfile;
+  const photoFirstMissionSeed =
+    photoFirstWeeklyPlan && photoFirstProfile
+      ? {
+          missionDate: today,
+          socialProfileId: photoFirstProfile.id,
+        }
+      : null;
   const imageCreationAvailable = await loadServiceImageCreationAvailability({
     db,
     serviceSlug: service.configuration.slug,
@@ -465,6 +482,7 @@ export async function loadServiceBunshinDetail({
     today,
     deliverySchedule,
     generationProfile,
+    photoFirstMissionSeed,
     imageCreationAvailable,
     dedicatedLine,
     dedicatedLineConnection,
