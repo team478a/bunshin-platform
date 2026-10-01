@@ -3266,3 +3266,12 @@
 - Preflightは実行処理と同じAI_TRAINING_V1、Participant、ACTIVE、開始/終了日時、期限到達、有料購入除外条件を共通化し、対象件数・100件上限・必要バッチ数・判定時刻だけを返す。受講ID、User、回答、評価、仕事情報は取得・応答・ログへ含めない。
 - PreflightではTransaction、状態更新、評価停止、監査Event、Provider、LINEを実行しない。productionで利用可能でも、期限終了のproduction停止とCron未登録は維持する。
 - 本番有効化はPreflight結果、Migration適用、停止/復旧手順、運営承認を別作業で確認する。Preflight成功を自動期限終了の稼働済み証拠として扱わない。
+
+## D-139: SNSの事業目的を導線・中間指標から分離する
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal伝播監査の最小Foundation）
+- SOCIAL capabilityの正規Goalは、認知、来店・予約、問い合わせ、リピート、採用、販売、信頼・専門性、その他の8種類とする。フォロワー、LINE登録、ブログ流入は事業目的そのものではなく、中間指標または導線として分離する。
+- 既存の`ServiceMemberBusinessProfile.primaryPurpose`と`SocialAccountStrategy.goal`は直ちに削除・書換えず、純粋な変換境界を追加する。一意に変換できる値だけを`RESOLVED`とし、広い「集客」やフォロワー、LINE登録、ブログ流入は候補と理由を持つ`REVIEW_REQUIRED`にする。
+- 曖昧値へ既定Goalを暗黙適用しない。次のUI・初回設定接続では、Service設定または利用者確認により解決し、異なるService、User、Bunshin、SocialProfileの目的を共有しない。
+- 本判断は契約と既存語彙の変換までとする。DB、onboarding、Strategy、Weekly、Daily、Prompt、CTA、KPI、本番設定は別の小さな変更で接続し、ハッシー名やOEM名を共通基盤へハードコードしない。
