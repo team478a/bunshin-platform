@@ -5,7 +5,7 @@ export const VIDEO_AI_SCENE_GENERATION_JOB_TYPE = 'VIDEO_AI_SCENE_GENERATION_PRO
 
 export interface VideoAiSceneGenerationJobHandler {
   execute(input: { workspaceId: string; generationId: string }): Promise<{
-    status: 'SUBMITTED' | 'GENERATING' | 'SUCCEEDED' | 'FAILED';
+    status: 'SUBMITTED' | 'GENERATING' | 'RECONCILIATION_REQUIRED' | 'SUCCEEDED' | 'FAILED';
     errorCode?: string;
   }>;
   markFailed(input: {
@@ -47,6 +47,11 @@ export class ExecuteVideoAiSceneGenerationJob {
         workspaceId: job.workspaceId,
         generationId: reference[1]!,
       });
+      if (result.status === 'RECONCILIATION_REQUIRED')
+        return this.fail.execute(job, workerId, {
+          errorCategory: 'VIDEO_AI_SCENE_RECONCILIATION_REQUIRED',
+          retryable: false,
+        });
       if (result.status === 'SUBMITTED' || result.status === 'GENERATING')
         return this.fail.execute(job, workerId, {
           errorCategory: 'VIDEO_AI_SCENE_PENDING',

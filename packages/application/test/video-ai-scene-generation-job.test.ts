@@ -19,6 +19,27 @@ const job = (overrides: Partial<Job> = {}) =>
   }) as Job;
 
 describe('individual AI video scene job', () => {
+  it('marks a held fal submission as non-retryable without modifying the generation', async () => {
+    const execute = vi.fn().mockResolvedValue({ status: 'RECONCILIATION_REQUIRED' });
+    const completeExecute = vi.fn();
+    const failExecute = vi.fn().mockResolvedValue({ status: 'DEAD' });
+    const markFailed = vi.fn();
+    await new ExecuteVideoAiSceneGenerationJob(
+      { execute, markFailed },
+      { execute: completeExecute } as unknown as CompleteJob,
+      { execute: failExecute } as unknown as FailJob,
+    ).execute(job(), 'worker');
+    expect(completeExecute).not.toHaveBeenCalled();
+    expect(failExecute).toHaveBeenCalledWith(
+      expect.anything(),
+      'worker',
+      expect.objectContaining({
+        errorCategory: 'VIDEO_AI_SCENE_RECONCILIATION_REQUIRED',
+        retryable: false,
+      }),
+    );
+    expect(markFailed).not.toHaveBeenCalled();
+  });
   it('retries a provider request that is still generating without creating another request', async () => {
     const execute = vi.fn().mockResolvedValue({ status: 'GENERATING' });
     const markFailed = vi.fn();

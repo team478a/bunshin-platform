@@ -152,8 +152,10 @@ export { PrismaTrainingLifecycleRepository } from './training-enrollment-lifecyc
 export { PrismaTrainingEndDateRepository } from './training-end-date-confirmation';
 export {
   expireUnpurchasedTrainingEnrollments,
+  previewUnpurchasedTrainingEnrollmentExpiry,
   TRAINING_ENROLLMENT_EXPIRY_BATCH_LIMIT,
   type TrainingEnrollmentExpiryInput,
+  type TrainingEnrollmentExpiryPreview,
 } from './training-enrollment-expiry';
 export {
   listTrainingAdminEvaluationMetrics,

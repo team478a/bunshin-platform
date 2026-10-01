@@ -1,6 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { expireUnpurchasedTrainingEnrollments } from '../src';
+import {
+  expireUnpurchasedTrainingEnrollments,
+  previewUnpurchasedTrainingEnrollmentExpiry,
+} from '../src';
 
 const now = new Date('2026-09-29T00:00:00Z');
 const input = { workspaceId: 'workspace', groupId: 'group', now };
@@ -34,6 +37,34 @@ function fixture() {
 }
 
 describe('unpurchased training expiry', () => {
+  it('previews the exact eligible count without starting a write transaction', async () => {
+    const { db } = fixture();
+    db.$queryRaw.mockResolvedValue([{ eligible: 201 }]);
+    expect(await previewUnpurchasedTrainingEnrollmentExpiry(db as never, input)).toEqual({
+      eligible: 201,
+      batchLimit: 100,
+      requiredBatches: 3,
+      hasMore: true,
+      cutoffAt: now.toISOString(),
+    });
+    expect(db.$transaction).not.toHaveBeenCalled();
+    const sql = db.$queryRaw.mock.calls[0]?.[0] as Prisma.Sql;
+    expect(sql.values).toEqual(['workspace', 'group', 'AI_TRAINING_V1', now]);
+    expect(sql.text).toContain('COUNT(*)::integer');
+    expect(sql.text).toContain('purchase.paid_enrollment_id = e.id');
+    expect(sql.text).not.toContain('UPDATE');
+  });
+
+  it('returns a zero-count preview when the scoped query has no aggregate row', async () => {
+    const { db } = fixture();
+    db.$queryRaw.mockResolvedValue([]);
+    expect(await previewUnpurchasedTrainingEnrollmentExpiry(db as never, input)).toMatchObject({
+      eligible: 0,
+      requiredBatches: 0,
+      hasMore: false,
+    });
+  });
+
   it('limits the initial scan by service, module, ownership, date and purchase boundary', async () => {
     const { db, expire } = fixture();
     await expire();
@@ -205,6 +236,17 @@ describe('unpurchased training expiry', () => {
     const { db } = fixture();
     await expect(
       expireUnpurchasedTrainingEnrollments(db as never, { ...input, now: new Date('invalid') }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid preview cutoff before any query', async () => {
+    const { db } = fixture();
+    await expect(
+      previewUnpurchasedTrainingEnrollmentExpiry(db as never, {
+        ...input,
+        now: new Date('invalid'),
+      }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(db.$queryRaw).not.toHaveBeenCalled();
   });
