@@ -157,6 +157,8 @@ export interface WeeklySocialGoalPlanningProfile {
   ctaDirections: readonly string[];
 }
 
+export type SocialGoalPlanningProfile = WeeklySocialGoalPlanningProfile;
+
 const weeklyPlanningProfiles = {
   FOLLOWERS: {
     goalKind: 'INTERMEDIATE_METRIC',
@@ -242,3 +244,5 @@ export function weeklySocialGoalPlanningProfile(
 ): WeeklySocialGoalPlanningProfile {
   return weeklyPlanningProfiles[goal];
 }
+
+export const socialGoalPlanningProfile = weeklySocialGoalPlanningProfile;

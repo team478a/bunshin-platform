@@ -5,9 +5,11 @@ import type {
   MissionBusinessProfileContext,
   MissionPersonalizationContext,
   MissionPersonalizationSignal,
+  DailyMissionPlannerProviderInput,
   SocialAccountStrategy,
   SocialProfile,
 } from '@bunshin/capability-social';
+import { socialGoalPlanningProfile } from '@bunshin/capability-social';
 import {
   SelectBunshinMemories,
   type BunshinMemoryRepository,
@@ -127,10 +129,7 @@ export function buildDailyMissionPersonalizationBase(input: {
   personalMaterials: PromptKnowledge[];
 }): {
   bunshinContext: DailyMissionPlannerInput['bunshin'];
-  strategyContext: Pick<
-    SocialAccountStrategy,
-    'concept' | 'positioning' | 'targetSummary' | 'ctaStrategy' | 'postingPolicy'
-  >;
+  strategyContext: DailyMissionPlannerProviderInput['approvedStrategy'];
   plannerPersonalization: MissionPersonalizationContext;
   knowledge: PromptKnowledge[];
 } {
@@ -157,6 +156,8 @@ export function buildDailyMissionPersonalizationBase(input: {
       : null,
   };
   const strategyContext = {
+    goal: input.strategy.goal,
+    goalPlanning: socialGoalPlanningProfile(input.strategy.goal),
     concept: input.strategy.concept,
     positioning: input.strategy.positioning,
     targetSummary: input.strategy.targetSummary,

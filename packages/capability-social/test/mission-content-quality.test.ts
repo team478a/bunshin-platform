@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CheckMissionQuality,
   GenerateMissionContent,
+  socialGoalPlanningProfile,
   type DailyMissionBrief,
   type MissionContent,
   type SocialPreferredFormat,
@@ -30,6 +31,8 @@ const context = {
     personality: null,
   },
   approvedStrategy: {
+    goal: 'INQUIRY' as const,
+    goalPlanning: socialGoalPlanningProfile('INQUIRY'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '初心者',

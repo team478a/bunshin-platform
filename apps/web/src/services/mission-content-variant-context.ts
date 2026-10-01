@@ -14,6 +14,7 @@ import {
   ListSocialAccountStrategies,
   ListSocialProfiles,
   ListWeeklyPlans,
+  socialGoalPlanningProfile,
   type DailyMission,
   type DailyMissionScope,
   type MissionContentGeneratorInput,
@@ -218,6 +219,8 @@ export async function loadMissionContentVariantContext(input: {
         : null,
     },
     strategyContext: {
+      goal: strategy.goal,
+      goalPlanning: socialGoalPlanningProfile(strategy.goal),
       concept: strategy.concept,
       positioning: strategy.positioning,
       targetSummary: strategy.targetSummary,
