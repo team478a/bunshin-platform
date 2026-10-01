@@ -142,14 +142,10 @@ export function buildGoalOutcomePlanningContext(
     goalReports.map(({ manualMetrics }) => manualMetrics),
   );
   const reportedPositiveTopics = goalReports
-    .filter(({ manualMetrics }) => {
+    .flatMap(({ topic, manualMetrics }) => {
       const result = readSocialGoalOutcome(manualMetrics)?.result;
-      return result === 'ACHIEVED' || result === 'SOME_PROGRESS';
+      return result === 'ACHIEVED' || result === 'SOME_PROGRESS' ? [{ topic, result }] : [];
     })
-    .map(({ topic, manualMetrics }) => ({
-      topic,
-      result: readSocialGoalOutcome(manualMetrics)!.result,
-    }))
     .slice(0, 3);
   const recorded = records.filter(
     (record) =>

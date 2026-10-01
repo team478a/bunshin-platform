@@ -79,7 +79,14 @@ export function writeSocialGoalOutcome(
   current: unknown,
   outcome: SocialGoalOutcome,
 ): { [key: string]: JsonValue } {
-  return { ...jsonObject(current), socialGoalOutcome: outcome };
+  return {
+    ...jsonObject(current),
+    socialGoalOutcome: {
+      strategyGoal: outcome.strategyGoal,
+      result: outcome.result,
+      reportedAt: outcome.reportedAt,
+    },
+  };
 }
 
 export function summarizeSocialGoalOutcomes(values: unknown[]) {
