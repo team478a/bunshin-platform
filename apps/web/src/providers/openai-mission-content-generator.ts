@@ -12,7 +12,7 @@ import {
 } from './mission-provider-response';
 
 export const MISSION_CONTENT_GENERATOR_PROMPT_VERSION =
-  'mission-content-generator-v15-goal-planning';
+  'mission-content-generator-v16-sales-goal-alignment';
 
 const stringArray = (maxItems: number) => ({
   type: 'array',
@@ -128,7 +128,7 @@ export class OpenAIMissionContentGenerator implements MissionContentGeneratorPor
             {
               role: 'system',
               content:
-                'approvedStrategy.goalPlanningは現在のSNS事業目的に対応する型付き方針です。strategyFocus、topicDirections、ctaDirectionsに本文、写真・動画案、CTAを整合させます。Goal差をCTAの末尾だけで作らず、扱う疑問、利用場面、具体例、読者へ伝える価値そのものを変えます。ctaStrategyとctaDirectionsが矛盾する場合は、承認済みの具体的なctaStrategyを維持しつつ、目的外の行動を新たに足しません。goalKindがINTERMEDIATE_METRICまたはDESTINATIONの場合、それ自体を事業成果と断定しません。',
+                'approvedStrategy.goalPlanningは現在のSNS事業目的に対応する型付き方針です。strategyFocus、topicDirections、ctaDirectionsに本文、写真・動画案、CTAを整合させます。Goal差をCTAの末尾だけで作らず、扱う疑問、利用場面、具体例、読者へ伝える価値そのものを変えます。ctaStrategyとctaDirectionsが矛盾する場合は、承認済みの具体的なctaStrategyを維持しつつ、目的外の行動を新たに足しません。goalKindがINTERMEDIATE_METRICまたはDESTINATIONの場合、それ自体を事業成果と断定しません。canonicalGoalがSALESの場合は、承認済みcontextにある具体的な商品・サービスを題材にし、商品・サービス価値、使用場面、比較、利用事例、購入理由のうち少なくとも一つを本文と写真・動画案で具体化します。CTAは商品を見る、購入する、またはその具体的な商品・サービスについて購入前に問い合わせる行動にします。初回来店の一般的な不安解消、一般FAQ、対象を示さないDM・LINE相談だけで構成する内容はINQUIRYであり、SALESとして作りません。商品・サービスの事実が不足する場合は捏造せず、確認済み情報だけで購入判断に役立つ内容を作ります。',
             },
             {
               role: 'system',
