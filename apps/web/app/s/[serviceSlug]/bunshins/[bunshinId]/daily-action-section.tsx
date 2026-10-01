@@ -177,6 +177,7 @@ export function DailyActionSection({
     initialPhotoFirstResult ?? null,
   );
   const [resolvedTodayMissionId, setResolvedTodayMissionId] = useState(todayMissionId ?? null);
+  const photoFirstAvailable = Boolean(resolvedTodayMissionId || photoFirstMissionSeed);
   const formRef = useRef<HTMLFormElement>(null);
   const choice = choices.find((item) => item.type === selected) ?? null;
   const question = useMemo(() => {
@@ -583,7 +584,7 @@ export function DailyActionSection({
                             ? '毎日の画像に使用中（やめる）'
                             : '毎日の画像に使う'}
                       </button>
-                      {resolvedTodayMissionId || photoFirstMissionSeed ? (
+                      {photoFirstAvailable ? (
                         <button
                           type="button"
                           className="button button--primary"
@@ -594,7 +595,11 @@ export function DailyActionSection({
                             ? '考えています…'
                             : 'この写真から投稿を考える'}
                         </button>
-                      ) : null}
+                      ) : (
+                        <p className="daily-action__photo-first-waiting">
+                          今日の投稿予定ができると、この写真から投稿を考えられます。
+                        </p>
+                      )}
                     </>
                   ) : null}
                   <button type="button" onClick={() => void remove(action)}>
