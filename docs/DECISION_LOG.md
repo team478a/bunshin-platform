@@ -3321,3 +3321,12 @@
 - クライアントからGoalを受け取らず、Daily Mission生成時SnapshotのGoalを正本としてPostRecordの既存`manualMetrics`へ結果と回答時刻を保存する。SnapshotにGoalがない過去Missionには暗黙のGoalを補完せず、入力を止める。DB schemaは追加しない。
 - 次週計画は現在のGoalと、生成時Goal・保存時Goalが一致する自己申告だけを参照する。自己申告しかない場合は`SELF_REPORTED`とし、外部KPI達成、投稿との因果関係、採用・認知等の実績として断定しない。問い合わせ・来店予約・販売の既存件数がある場合は`MEASURED`を優先する。
 - 本変更はV1の簡易入力と同一Goalへの次週反映までとする。外部SNS分析、予約・応募・売上システム連携、複数Goalの重み付け、因果推定、過去Snapshotの補完は含めない。
+
+## D-145: SNS Goal変更は次に作るWeekly Planから有効にする
+
+- 日付: 2026-10-01
+- 状態: Accepted（Goal変更時のWeekly・Daily混在防止）
+- AI生成Weekly Planは、生成に使用したSocial Profile、Strategy ID、Strategy GoalをSnapshotとして保持する。新しいStrategyを承認して旧Strategyが`SUPERSEDED`になっても、確定済みWeekly Planとその残りのDaily Missionは生成時Strategyで完走する。
+- 新しいGoalは、承認後に新しく生成するWeekly Planから有効にする。同じ週の確定済み計画を暗黙に書き換えたり、過去Mission・成果のGoalを付け替えたりしない。画面にも反映時期を明示する。
+- Daily Mission生成はWeekly Planに保存されたStrategyを読み、現在の承認済みStrategyと混在させない。保存したStrategyが欠損、別Profile、Goal不一致の場合は生成を停止する。Goalを持たない既存Weekly Planだけは互換性のため現在の承認済みStrategyを使用し、過去データを推測更新しない。
+- Workspace、Service、User、Bunshin、Social Profileの既存境界を維持し、Weekly Plan作成時にStrategyの所有範囲・Profile・Goal・承認状態をDBで再検証する。本変更は即時の週途中切替、複数Goal、期間指定、既存Planの一括補完を含めない。

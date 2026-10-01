@@ -65,6 +65,9 @@ const generatedPlan = {
   id: 'plan-1',
   workspaceId: scope.workspaceId,
   bunshinId: scope.bunshinId,
+  socialProfileId: profile.id,
+  strategyId: strategy.id,
+  strategyGoal: strategy.goal,
   weekStartDate: '2026-08-24',
   timezone: 'Asia/Tokyo',
   strategySummary: '今週の方針',
@@ -182,7 +185,14 @@ describe('WeeklyPlanGenerationService', () => {
       }),
     );
     expect(createGeneratedPlan).toHaveBeenCalledWith(
-      expect.objectContaining({ ...scope, weekStartDate: '2026-08-24', timezone: 'Asia/Tokyo' }),
+      expect.objectContaining({
+        ...scope,
+        socialProfileId: profile.id,
+        strategyId: strategy.id,
+        strategyGoal: strategy.goal,
+        weekStartDate: '2026-08-24',
+        timezone: 'Asia/Tokyo',
+      }),
     );
     expect(loadRecentPerformance).toHaveBeenCalledWith(
       expect.objectContaining({ ...scope, goal: 'FOLLOWERS' }),
