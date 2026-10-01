@@ -133,6 +133,7 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 | 解析・企画Metadataの永続化               | IMPLEMENTED             | 元写真・投稿案へtenant制約付きで保存し、再読込時に復元   |
 | Mission未作成日のPhoto First開始         | IMPLEMENTED             | 今日の確定済みPlanとACTIVEプロフィールが必要             |
 | 障壁サポートからの案内                   | IMPLEMENTED             | ハッシーのCONTENT・MEDIA・CONFIDENCE支援から既存欄へ接続 |
+| Goal・企業・履歴の差分契約               | FIXTURE_VERIFIED        | 同一写真・外部通信なしの決定的fixtureで一軸ずつ検証      |
 | 受理・不採用・結果の解析工程への直接入力 | PARTIAL                 | 既存Snapshot/本文生成Context経由。解析単体へ明細は未接続 |
 | Goal/業種別の実生成品質                  | PRODUCTION_E2E_REQUIRED | 実API生成は未実施                                        |
 | 実Storage・スマートフォン表示            | PRODUCTION_E2E_REQUIRED | 本番資格情報は未使用                                     |
@@ -171,9 +172,14 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 - `apps/web/test/activity-barrier-photo-first-guidance.test.tsx`
   - CONTENT、MEDIA、CONFIDENCEの受理済み支援から既存Photo First欄へ進めること
   - ハッシー以外と無関係な障壁支援には導線を表示しないこと
+- `apps/web/test/photo-first-differential-fixtures.test.ts`
+  - 同一の写真bytesを維持し、Goal、企業情報、直近履歴だけを一つずつ変更すること
+  - テーマ、切り口、推奨理由、本文、写真案、CTAが一体として変わること
+  - Photo First企画が既存本文生成Provider入力へ渡り、CTAだけの差し替えを禁止すること
+  - fake Providerによる決定的contractテストであり、実Provider品質の証明ではないこと
 
 実行結果、型検査、lintはPRの最新検証結果を正本とする。実OpenAI、実Storage、LINE、SNS投稿、本番DB、本番デプロイは実行していない。
 
 ## 11. 未解決事項と次の最小タスク
 
-次の最小タスクは、同一写真のままGoal、企業情報、直近履歴だけを変えたPhoto First差分fixtureを追加し、テーマ、切り口、本文、CTA、recommendationReasonが一体として変わることを既存Goal Differential rubricで検証することである。実Provider品質は本番E2Eと混同しない。
+次の最小タスクは、合成写真・テスト専用企業情報・主要2 Goalに限定した実Providerの手動品質確認である。実行前に課金、送信素材、試行上限、保存先の承認を得て、同じrubricでテーマ、切り口、本文、写真案、CTAを人手評価する。fixture成功を実Provider品質や事業成果の証明として扱わない。
