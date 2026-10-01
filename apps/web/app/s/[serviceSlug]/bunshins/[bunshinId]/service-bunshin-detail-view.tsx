@@ -76,6 +76,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
     dedicatedLine,
     dedicatedLineConnection,
     dailyActions,
+    latestPhotoFirstResult,
     socialInsightSnapshots,
     successfulBusinessTopic,
     businessProgram,
@@ -206,6 +207,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
                 <DailyActionSection
                   endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-actions`}
                   initialActions={dailyActions}
+                  initialPhotoFirstResult={latestPhotoFirstResult}
                   suggestedReuseTopic={successfulBusinessTopic}
                   todayMissionId={
                     dailyMissions.find(({ missionDate }) => missionDate === today)?.id ?? null

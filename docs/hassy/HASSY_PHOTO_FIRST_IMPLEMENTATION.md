@@ -1,7 +1,8 @@
 # ハッシー Photo First V1 実装報告
 
 更新日: 2026-10-01（Asia/Tokyo）
-基準: `main` commit `abb9d82d78e66325b8b962524d0709035c71dca5`
+初回実装基準: `main` commit `abb9d82d78e66325b8b962524d0709035c71dca5`
+Metadata永続化基準: `main` commit `d1629db0f3a6233a5e2649fc321169160ec72a5d`
 
 ## 1. Executive Summary
 
@@ -9,7 +10,7 @@
 
 今回の経路は、既存の本人・Workspace・Service・Bunshin境界で保存された非公開写真を読み、解析用に縮小・JPEG再符号化したうえで、Vision対応AIへ送る。写真の構造化分析と、企業情報・対象顧客・SNS Goal・確定済みStrategy・今日のMission・直近Missionを統合した企画を作り、その企画を既存の投稿本文生成・品質検査・利用枠・AI利用記録・投稿案履歴へ接続する。
 
-コードと自動テストの範囲では **IMPLEMENTED**。実OpenAI、実Storage、本番データ、スマートフォン表示を用いたE2Eは **PRODUCTION_E2E_REQUIRED** であり、本番稼働確認済みとは扱わない。
+コードと自動テストの範囲では **IMPLEMENTED**。後続PRで元写真ID・構造化解析・企画Metadataを投稿案と同一Transactionで永続化し、再読込後に最新のPhoto First結果を復元する経路も追加した。実OpenAI、実Storage、本番データ、スマートフォン表示を用いたE2Eは **PRODUCTION_E2E_REQUIRED** であり、本番稼働確認済みとは扱わない。
 
 ## 2. 実装範囲
 
@@ -20,7 +21,8 @@
 3. 今日のDaily Missionを企画の軸としてPhoto First生成を開始する。
 4. 写真を構造化分析し、Goalと企業文脈を踏まえてテーマ、切り口、推奨理由、写真の使い方、必要時の確認質問と画像編集Promptを作る。
 5. 既存の投稿本文生成と品質検査を通し、`MissionContentVariant`として保存する。
-6. 画面に企画と投稿本文を表示し、本文または画像編集Promptをコピーできる。
+6. 元写真ID・構造化解析・企画・解析モデル/Prompt Versionを専用Metadataとして同じTransactionで保存する。
+7. 画面に企画と投稿本文を表示し、本文または画像編集Promptをコピーできる。画面再読込後も最新結果を復元する。
 
 ### Plan Firstとの関係
 
@@ -41,6 +43,7 @@
 | 投稿本文生成          | 再利用・拡張 | 既存AI Runtime、品質評価、内容検証、MissionContentVariant保存を再利用                          |
 | 利用枠・原価記録      | 再利用・拡張 | 既存Organization AI quotaとAI Usageへ `PHOTO_FIRST_ANALYSIS` を追加                            |
 | UI                    | 新規         | Photo First起動、企画表示、本文・画像編集Promptのコピー                                        |
+| Photo First履歴       | 新規         | 投稿案と元写真へDB制約で紐づく専用Metadata。最新結果を再読込時に復元                           |
 | LINE画像受信          | DEFERRED     | V1はWeb画面への導線を前提とし、LINEへ送った画像の直接処理は行わない                            |
 
 ## 4. データフローと所有境界
@@ -55,8 +58,9 @@
   -> 回転補正・縮小・JPEG再符号化
   -> Photo First構造化解析（store=false）
   -> 既存Mission本文生成・品質検査
-  -> MissionContentVariant保存
+  -> MissionContentVariant + Photo First Metadataを同一Transactionで保存
   -> 同一レスポンスで企画と本文を表示
+  -> 再読込時は認可済みRepositoryから最新Metadataを復元
 ```
 
 写真検索は `id` だけで行わず、`workspaceId`、`bunshinId`、`ownerUserId`、`groupId`、`sourceType=USER_INPUT`、Photo用`sourceId`、`attachmentStatus=READY`、未削除を同時に照合する。他Workspace、他Service、他User、他Bunshinの写真は解析入力にできない。
@@ -98,6 +102,7 @@ Photo First解析には、企業名、事業目的、対象顧客、人格要約
 
 - 既存の `ClaimMissionContentVariantGeneration` を写真読取とProvider呼出より先に取得する。
 - 同じ生成冪等キーの同時・再送は、成功済み投稿案の再利用または競合応答となり、同じキーで解析を重複実行しない。
+- 成功済み生成の再送では、保存済み投稿案だけでなく同じPhoto First Metadataを返す。
 - 解析、本文生成、品質検査、保存に失敗した場合は既存の失敗記録とAI利用記録を使用する。
 - Photo Firstの失敗で、既存Mission、Weekly Plan、保存写真、Plan First本文を削除しない。
 - 同じ写真でも新しい冪等キーによる明示的な作り直しでは再解析・再生成が起きる。写真内容hashによる解析cacheは未実装である。
@@ -125,7 +130,7 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 | Goal/企業/履歴を含む企画                 | IMPLEMENTED             | Context伝播テスト済み                                    |
 | 投稿本文・CTA生成                        | IMPLEMENTED             | 既存投稿案Pipelineへ接続                                 |
 | 投稿案の履歴保存                         | IMPLEMENTED             | MissionContentVariantへ保存                              |
-| 解析・企画Metadataの永続化               | PARTIAL                 | レスポンス表示のみ。再読込時に復元しない                 |
+| 解析・企画Metadataの永続化               | IMPLEMENTED             | 元写真・投稿案へtenant制約付きで保存し、再読込時に復元   |
 | Photo First単独入口                      | PARTIAL                 | 今日のMissionが必要                                      |
 | 受理・不採用・結果の解析工程への直接入力 | PARTIAL                 | 既存Snapshot/本文生成Context経由。解析単体へ明細は未接続 |
 | Goal/業種別の実生成品質                  | PRODUCTION_E2E_REQUIRED | 実API生成は未実施                                        |
@@ -152,11 +157,16 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
   - JPEG再符号化とOrientation Metadata除去
 - `apps/web/test/mission-content-variant-ai-runtime-boundary.test.ts`
   - Photo First解析がAI Runtime境界内にあること
+- `packages/capability-social/test/mission-content-variant.test.ts`
+  - Metadataの正規化と上限超過拒否
+- `packages/database/test/photo-first-metadata-repository.test.ts`
+  - 投稿案との同一Transaction保存
+  - 投稿案と元写真のWorkspace/Bunshin複合外部キー
+- `apps/web/test/service-daily-action-boundary.test.ts`
+  - 最新の保存済みPhoto First結果を再読込時に画面へ渡すこと
 
 実行結果、型検査、lintはPRの最新検証結果を正本とする。実OpenAI、実Storage、LINE、SNS投稿、本番DB、本番デプロイは実行していない。
 
 ## 11. 未解決事項と次の最小タスク
 
-最優先の次タスクは、Photo Firstの解析・企画Metadataと元写真IDを投稿案へ追記可能な履歴として永続化し、再読込後も同じ企画、写真、Prompt、確認事項を表示できるようにすることである。既存 `MissionContentVariant` の意味を壊さず、専用のnullable relationまたはappend-only metadata記録の最小schemaを比較し、tenant境界と削除連動を先にテストする。
-
-その後、今日のMissionがない利用者も写真から始められるよう、Weekly Planと承認済みStrategyに紐づくPhoto First用Mission作成を別PRで検討する。履歴・冪等性の正本を決める前に、独立した並行生成経路は増やさない。
+次の最小タスクは、今日のMissionがない利用者も写真から始められるよう、Weekly Planと承認済みStrategyに紐づくPhoto First用Mission作成を別PRで検討することである。既存Missionの重複防止、Goal変更の有効時期、利用枠、履歴の正本を維持し、独立した並行生成経路を増やさない。

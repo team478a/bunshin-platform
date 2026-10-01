@@ -156,8 +156,33 @@ describe('service Daily Action HTTP', () => {
         qualityScore: 91,
         createdAt: new Date('2026-10-01T00:00:00.000Z'),
         selectedAt: null,
+        photoFirst: {
+          photoMemoryId: actionId,
+          analysis: {
+            imageType: 'product',
+            subjects: ['商品'],
+            objects: [],
+            scene: '店内',
+            visibleText: [],
+            possibleContentAngles: ['使い方'],
+            qualityNotes: [],
+            uncertainElements: [],
+            safetyFlags: [],
+          },
+          planning: {
+            theme: '商品の使い方',
+            angle: '初めての方向け',
+            recommendationReason: '今日の認知目的に合うため',
+            photoUsage: '主役として使う',
+            imageEditPrompt: '明るさだけを自然に整える',
+            confirmationQuestion: null,
+          },
+          analyzerModel: 'test-model',
+          analyzerPromptVersion: 'photo-first-analysis-v1',
+        },
       },
       photoFirst: {
+        photoMemoryId: actionId,
         analysis: {
           imageType: 'product',
           subjects: ['商品'],
@@ -177,6 +202,8 @@ describe('service Daily Action HTTP', () => {
           imageEditPrompt: '明るさだけを自然に整える',
           confirmationQuestion: null,
         },
+        analyzerModel: 'test-model',
+        analyzerPromptVersion: 'photo-first-analysis-v1',
       },
     });
     state.executeDailyMission.mockResolvedValue({
@@ -341,8 +368,9 @@ describe('service Daily Action HTTP', () => {
       allowServiceOwnerMemories: true,
     });
     const body = (await response.json()) as {
-      data: { photoFirst: { planning: { theme: string } } };
+      data: { photoFirst: { photoMemoryId: string; planning: { theme: string } } };
     };
+    expect(body.data.photoFirst.photoMemoryId).toBe(actionId);
     expect(body.data.photoFirst.planning.theme).toBe('商品の使い方');
   });
 

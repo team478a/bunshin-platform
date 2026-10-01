@@ -78,16 +78,37 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
     latencyMs: number;
     createdAt: Date;
     selections: Array<{ selectedAt: Date }>;
+    photoFirstMetadata: null | {
+      photoMemoryId: string;
+      analysisJson: Prisma.JsonValue;
+      planningJson: Prisma.JsonValue;
+      analyzerModel: string;
+      analyzerPromptVersion: string;
+    };
   }): MissionContentVariant {
     return {
       ...row,
       content: row.contentJson as Record<string, unknown>,
       selectedAt: row.selections[0]?.selectedAt ?? null,
+      photoFirst: row.photoFirstMetadata
+        ? {
+            photoMemoryId: row.photoFirstMetadata.photoMemoryId,
+            analysis: row.photoFirstMetadata.analysisJson as unknown as NonNullable<
+              MissionContentVariant['photoFirst']
+            >['analysis'],
+            planning: row.photoFirstMetadata.planningJson as unknown as NonNullable<
+              MissionContentVariant['photoFirst']
+            >['planning'],
+            analyzerModel: row.photoFirstMetadata.analyzerModel,
+            analyzerPromptVersion: row.photoFirstMetadata.analyzerPromptVersion,
+          }
+        : null,
     };
   }
 
   private variantInclude = {
     selections: { orderBy: { selectedAt: 'desc' as const }, take: 1 },
+    photoFirstMetadata: true,
   } as const;
 
   async claim(input: Parameters<MissionContentVariantRepository['claim']>[0]) {
@@ -182,6 +203,21 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         },
         include: this.variantInclude,
       });
+      if (input.photoFirst)
+        await tx.missionContentVariantPhotoFirstMetadata.create({
+          data: {
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            dailyMissionId: input.dailyMissionId,
+            variantId: variant.id,
+            photoMemoryId: input.photoFirst.photoMemoryId,
+            actorUserId: input.actorUserId,
+            analysisJson: input.photoFirst.analysis as unknown as Prisma.InputJsonValue,
+            planningJson: input.photoFirst.planning as unknown as Prisma.InputJsonValue,
+            analyzerModel: input.photoFirst.analyzerModel,
+            analyzerPromptVersion: input.photoFirst.analyzerPromptVersion,
+          },
+        });
       await tx.missionContentVariantGeneration.update({
         where: { id: generation.id },
         data: {
@@ -196,7 +232,11 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           errorCategory: null,
         },
       });
-      return this.variant(variant);
+      const completed = await tx.missionContentVariant.findUnique({
+        where: { id: variant.id },
+        include: this.variantInclude,
+      });
+      return completed ? this.variant(completed) : null;
     });
   }
 

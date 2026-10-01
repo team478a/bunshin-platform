@@ -15,13 +15,14 @@ export type DailyActionView = {
   createdAt: string;
 };
 
-type PhotoFirstResult = {
+export type PhotoFirstResult = {
   variant: {
     id: string;
     dailyMissionId: string;
     content: Record<string, unknown>;
   };
   photoFirst: null | {
+    photoMemoryId: string;
     analysis: {
       imageType: string;
       qualityNotes: string[];
@@ -149,12 +150,14 @@ const extraQuestions: Record<DailyActionType, string> = {
 export function DailyActionSection({
   endpoint,
   initialActions,
+  initialPhotoFirstResult,
   suggestedReuseTopic,
   todayMissionId,
   photoFirstMissionSeed,
 }: {
   endpoint: string;
   initialActions: DailyActionView[];
+  initialPhotoFirstResult?: PhotoFirstResult | null;
   suggestedReuseTopic?: string | null;
   todayMissionId?: string | null;
   photoFirstMissionSeed?: {
@@ -170,7 +173,9 @@ export function DailyActionSection({
   const [saving, setSaving] = useState(false);
   const [updatingPhotoId, setUpdatingPhotoId] = useState<string | null>(null);
   const [photoFirstActionId, setPhotoFirstActionId] = useState<string | null>(null);
-  const [photoFirstResult, setPhotoFirstResult] = useState<PhotoFirstResult | null>(null);
+  const [photoFirstResult, setPhotoFirstResult] = useState<PhotoFirstResult | null>(
+    initialPhotoFirstResult ?? null,
+  );
   const [resolvedTodayMissionId, setResolvedTodayMissionId] = useState(todayMissionId ?? null);
   const formRef = useRef<HTMLFormElement>(null);
   const choice = choices.find((item) => item.type === selected) ?? null;
@@ -308,7 +313,6 @@ export function DailyActionSection({
   async function createFromPhoto(action: DailyActionView) {
     if ((!resolvedTodayMissionId && !photoFirstMissionSeed) || photoFirstActionId) return;
     setPhotoFirstActionId(action.id);
-    setPhotoFirstResult(null);
     setMessage('写真と今日の発信目的から、投稿案を考えています…');
     try {
       const response = await fetch(`${endpoint}/${encodeURIComponent(action.id)}/photo-first`, {
@@ -489,6 +493,18 @@ export function DailyActionSection({
                   <dd>{photoFirstResult.photoFirst.planning.angle}</dd>
                 </div>
               </dl>
+              {actions.some(
+                (action) =>
+                  action.id === photoFirstResult.photoFirst?.photoMemoryId && action.hasPhoto,
+              ) ? (
+                <a
+                  href={`${endpoint}/${encodeURIComponent(photoFirstResult.photoFirst.photoMemoryId)}/photo`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  元の写真を確認する
+                </a>
+              ) : null}
               {photoFirstResult.photoFirst.planning.confirmationQuestion ? (
                 <p className="notice">
                   投稿前の確認：{photoFirstResult.photoFirst.planning.confirmationQuestion}

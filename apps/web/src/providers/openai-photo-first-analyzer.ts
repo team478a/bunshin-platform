@@ -1,29 +1,12 @@
 import 'server-only';
 
-import type { SocialGoalPlanningProfile } from '@bunshin/capability-social';
+import type {
+  PhotoFirstAnalysis,
+  PhotoFirstPlanning,
+  SocialGoalPlanningProfile,
+} from '@bunshin/capability-social';
 
 export const PHOTO_FIRST_ANALYSIS_PROMPT_VERSION = 'photo-first-analysis-v1';
-
-export type PhotoFirstAnalysis = {
-  imageType: string;
-  subjects: string[];
-  objects: string[];
-  scene: string;
-  visibleText: string[];
-  possibleContentAngles: string[];
-  qualityNotes: string[];
-  uncertainElements: string[];
-  safetyFlags: string[];
-};
-
-export type PhotoFirstPlanning = {
-  theme: string;
-  angle: string;
-  recommendationReason: string;
-  photoUsage: string;
-  imageEditPrompt: string | null;
-  confirmationQuestion: string | null;
-};
 
 export type PhotoFirstAnalysisResult = {
   analysis: PhotoFirstAnalysis;
@@ -131,8 +114,8 @@ function validate(value: unknown): Pick<PhotoFirstAnalysisResult, 'analysis' | '
   )
     throw new PhotoFirstAnalysisError('INVALID_OUTPUT', false);
   return {
-    analysis: analysis as PhotoFirstAnalysis,
-    planning: planning as PhotoFirstPlanning,
+    analysis: analysis as unknown as PhotoFirstAnalysis,
+    planning: planning as unknown as PhotoFirstPlanning,
   };
 }
 

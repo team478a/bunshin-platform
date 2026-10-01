@@ -84,4 +84,13 @@ describe('service Daily Action boundary', () => {
     expect(automaticImage).toContain('referenceImage: reference?.referenceImage ?? null');
     expect(automaticImage).toContain('storeReference');
   });
+
+  it('restores the latest persisted Photo First plan after a page reload', () => {
+    expect(page).toContain('variant.photoFirst');
+    expect(page).toContain('dailyMissionId: variant.dailyMissionId');
+    expect(page).toContain('latestPhotoFirstResult');
+    expect(page).toContain('initialPhotoFirstResult={latestPhotoFirstResult}');
+    expect(ui).toContain('initialPhotoFirstResult ?? null');
+    expect(ui).toContain('元の写真を確認する');
+  });
 });

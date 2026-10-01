@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261001060000_add_weekly_plan_strategy_snapshot';
+export const LATEST_DATABASE_MIGRATION = '20261001103000_add_photo_first_variant_metadata';

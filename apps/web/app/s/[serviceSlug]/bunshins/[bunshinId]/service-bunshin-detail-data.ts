@@ -49,6 +49,7 @@ import { resolveServiceBunshinBusinessDetail } from './service-bunshin-detail-bu
 import { loadServiceImageCreationAvailability } from './service-bunshin-detail-image-access';
 import { loadServiceDedicatedLineConnection } from './service-bunshin-detail-line';
 import { loadServiceBunshinSocialInsights } from './service-bunshin-detail-social-insights';
+import type { PhotoFirstResult } from './daily-action-section';
 
 export async function loadServiceBunshinDetail({
   serviceSlug,
@@ -83,6 +84,7 @@ export async function loadServiceBunshinDetail({
   let postPerformances: PostPerformanceView[] = [];
   let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
   let activityBarrierSupport: SocialActivitySupportProgress | null = null;
+  let latestPhotoFirstResult: PhotoFirstResult | null = null;
   const videos: Record<string, { href: string; status: string }> = {};
   try {
     const scope = {
@@ -245,6 +247,33 @@ export async function loadServiceBunshinDetail({
         }),
       ),
     );
+    latestPhotoFirstResult =
+      missionVariants
+        .flat()
+        .flatMap((variant) =>
+          variant.photoFirst
+            ? [
+                {
+                  variant: {
+                    id: variant.id,
+                    dailyMissionId: variant.dailyMissionId,
+                    content: applyServiceContentTerminology(
+                      variant.content,
+                      contentTerminologyPolicy,
+                    ),
+                  },
+                  photoFirst: {
+                    photoMemoryId: variant.photoFirst.photoMemoryId,
+                    analysis: variant.photoFirst.analysis,
+                    planning: variant.photoFirst.planning,
+                  },
+                  createdAt: variant.createdAt,
+                },
+              ]
+            : [],
+        )
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+        .map(({ variant, photoFirst }) => ({ variant, photoFirst }))[0] ?? null;
     variantPointCost = isBusinessDailyService
       ? null
       : await new ListPointRewardCatalog(new db.PrismaPointRedemptionRepository())
@@ -458,6 +487,7 @@ export async function loadServiceBunshinDetail({
     dedicatedLine,
     dedicatedLineConnection,
     dailyActions,
+    latestPhotoFirstResult,
     socialInsightSnapshots,
     successfulBusinessTopic,
     businessProgram,
