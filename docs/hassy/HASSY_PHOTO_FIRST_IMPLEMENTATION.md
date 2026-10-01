@@ -132,6 +132,7 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 | 投稿案の履歴保存                         | IMPLEMENTED             | MissionContentVariantへ保存                              |
 | 解析・企画Metadataの永続化               | IMPLEMENTED             | 元写真・投稿案へtenant制約付きで保存し、再読込時に復元   |
 | Mission未作成日のPhoto First開始         | IMPLEMENTED             | 今日の確定済みPlanとACTIVEプロフィールが必要             |
+| 障壁サポートからの案内                   | IMPLEMENTED             | ハッシーのCONTENT・MEDIA・CONFIDENCE支援から既存欄へ接続 |
 | 受理・不採用・結果の解析工程への直接入力 | PARTIAL                 | 既存Snapshot/本文生成Context経由。解析単体へ明細は未接続 |
 | Goal/業種別の実生成品質                  | PRODUCTION_E2E_REQUIRED | 実API生成は未実施                                        |
 | 実Storage・スマートフォン表示            | PRODUCTION_E2E_REQUIRED | 本番資格情報は未使用                                     |
@@ -167,9 +168,12 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 - `apps/web/test/photo-first-entry-states.test.tsx`
   - Missionあり、Missionなし・Planあり、Missionなし・Planなしの3状態を外部通信なしで描画
   - Planなしでは開始操作を出さず、スマートフォン画面に待機理由を表示
+- `apps/web/test/activity-barrier-photo-first-guidance.test.tsx`
+  - CONTENT、MEDIA、CONFIDENCEの受理済み支援から既存Photo First欄へ進めること
+  - ハッシー以外と無関係な障壁支援には導線を表示しないこと
 
 実行結果、型検査、lintはPRの最新検証結果を正本とする。実OpenAI、実Storage、LINE、SNS投稿、本番DB、本番デプロイは実行していない。
 
 ## 11. 未解決事項と次の最小タスク
 
-次の最小タスクは、既存の障壁サポートのうち`CONTENT`、`MEDIA`、`CONFIDENCE`から、既存Photo Firstまたは素材準備へ迷わず進める案内を接続することである。生成経路や障壁分類を増やさず、既存画面内の導線だけを小さく接続する。
+次の最小タスクは、同一写真のままGoal、企業情報、直近履歴だけを変えたPhoto First差分fixtureを追加し、テーマ、切り口、本文、CTA、recommendationReasonが一体として変わることを既存Goal Differential rubricで検証することである。実Provider品質は本番E2Eと混同しない。

@@ -112,6 +112,9 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/activity-barrier`}
             initialQuestion={activityBarrierQuestion}
             initialSupport={activityBarrierSupport}
+            {...(isBusinessDailyService && bunshin.ownerUserId === actor.userId
+              ? { photoFirstHref: '#daily-action' }
+              : {})}
           />
         ) : null}
         <SimpleFirstPostSetup
