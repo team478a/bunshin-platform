@@ -12,6 +12,11 @@ import { withOrganizationAiGenerationQuota } from '../organization-ai-generation
 import { OpenAIMissionContentGenerator } from '../providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../providers/openai-mission-quality-checker';
 import {
+  OpenAiPhotoFirstAnalyzer,
+  PhotoFirstAnalysisError,
+  type PhotoFirstAnalysisResult,
+} from '../providers/openai-photo-first-analyzer';
+import {
   recentMissionQualityContext,
   type RecentDailyMissionContent,
 } from './daily-mission-content-quality';
@@ -46,6 +51,11 @@ export async function generateMissionContentVariantWithAi(input: {
   context: MissionContentVariantContext;
   usageIdempotencyPrefix: string;
   variantInstructions?: string[];
+  photoFirst?: {
+    bytes: Uint8Array;
+    mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+    sourceNote: string;
+  };
   usageState: MissionContentVariantUsageState;
 }) {
   const runtime = await resolveOpenAiRuntimeConfiguration();
@@ -95,6 +105,45 @@ export async function generateMissionContentVariantWithAi(input: {
       generate,
     });
   const { context, mission } = input;
+  let photoFirst: PhotoFirstAnalysisResult | null = null;
+  if (input.photoFirst) {
+    try {
+      photoFirst = await generateWithQuota('photo-first-analysis', () =>
+        new OpenAiPhotoFirstAnalyzer({ apiKey: runtime.apiKey, model: runtime.model }).analyze({
+          ...input.photoFirst!,
+          company: {
+            name: context.bunshinContext.name,
+            objectiveSummary: context.bunshinContext.objectiveSummary,
+            audienceSummary: context.bunshinContext.audienceSummary,
+            personalitySummary: context.bunshinContext.personalitySummary,
+            businessProfile: context.businessProfile,
+          },
+          strategy: {
+            goal: context.strategyContext.goal,
+            goalPlanning: context.strategyContext.goalPlanning,
+            concept: context.strategyContext.concept,
+            positioning: context.strategyContext.positioning,
+            targetSummary: context.strategyContext.targetSummary,
+            ctaStrategy: context.strategyContext.ctaStrategy,
+          },
+          platform: context.profile.platform,
+          mission: { topic: mission.topic, angle: mission.angle, reason: mission.reason },
+          recentPosts: input.recentMissions
+            .slice(-12)
+            .map(({ topic, angle }) => ({ topic, angle })),
+        }),
+      );
+    } catch (error) {
+      if (error instanceof PhotoFirstAnalysisError)
+        throw new ApplicationError(
+          error.retryable ? 'AI_PROVIDER_UNAVAILABLE' : 'CONTENT_REJECTED',
+          '写真を読み取れませんでした',
+          error,
+        );
+      throw error;
+    }
+    await usage('photo-first-analysis', 'PHOTO_FIRST_ANALYSIS', photoFirst);
+  }
   const brief = {
     missionDate: mission.missionDate,
     socialProfileId: context.profile.id,
@@ -124,6 +173,19 @@ export async function generateMissionContentVariantWithAi(input: {
       '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
       '導入のフック、文章構成、具体例、言葉選びを明確に変える',
       '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
+      ...(photoFirst
+        ? [
+            '利用者がアップロードした写真を実際に使う投稿にする。写真にない事実を追加しない',
+            `写真解析: ${JSON.stringify(photoFirst.analysis)}`,
+            `投稿設計: ${JSON.stringify(photoFirst.planning)}`,
+            'テーマ、導入、読者価値、写真の使い方、CTAを投稿設計とSNS Goalに一貫させる。CTAだけを差し替えない',
+            ...(photoFirst.planning.confirmationQuestion
+              ? [
+                  `未確定事実は断定せず、本文では使わない: ${photoFirst.planning.confirmationQuestion}`,
+                ]
+              : []),
+          ]
+        : []),
       ...(input.variantInstructions ?? []),
     ],
   };
@@ -169,5 +231,5 @@ export async function generateMissionContentVariantWithAi(input: {
   if (quality.output.verdict !== 'PASS')
     throw new ApplicationError('CONTENT_REJECTED', 'generated variant failed quality check');
 
-  return { content, quality };
+  return { content, quality, photoFirst };
 }

@@ -10,6 +10,7 @@ import {
   DailyActionStorage,
 } from '../daily-actions/daily-action-storage';
 import { resolveMemberServiceContext } from '../services/public-service';
+import { missionContentVariantDto } from './daily-missions';
 
 export const DAILY_ACTION_TYPES = [
   'PHOTO',
@@ -43,6 +44,7 @@ const createSchema = z.discriminatedUnion('type', [
   ),
 ]);
 const preferenceSchema = z.object({ useForAutomaticImages: z.boolean() }).strict();
+const photoFirstSchema = z.object({ dailyMissionId: uuid, idempotencyKey: uuid }).strict();
 
 const typeDetails: Record<
   DailyActionType,
@@ -371,6 +373,45 @@ export function updateServiceDailyActionPhotoPreferenceResponse(
     });
     return actionDto(updated);
   });
+}
+
+export function generateServicePhotoFirstResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+  actionId: string,
+) {
+  return respond(
+    request,
+    async () => {
+      requireSameOrigin(request);
+      const parsed = photoFirstSchema.safeParse(await json(request));
+      if (!parsed.success)
+        throw new ApplicationError('VALIDATION_ERROR', '写真と投稿案を確認できません');
+      const scope = await actionScope(serviceSlug, bunshinId);
+      const { createMissionContentVariantGenerationService } =
+        await import('../services/mission-content-variant-generation');
+      const result = await createMissionContentVariantGenerationService().executePhotoFirst({
+        workspaceId: scope.workspaceId,
+        groupId: scope.groupId,
+        bunshinId,
+        actorUserId: scope.actorUserId,
+        dailyMissionId: parsed.data.dailyMissionId,
+        photoActionId: uuid.parse(actionId),
+        generationIdempotencyKey: parsed.data.idempotencyKey,
+        usageIdempotencyPrefix: requestIdFromHeader(request.headers.get('x-request-id')),
+        serviceSafeMode: true,
+        allowServiceOwnerMemories: true,
+      });
+      return {
+        variant: missionContentVariantDto(result.variant),
+        photoFirst: result.photoFirst
+          ? { analysis: result.photoFirst.analysis, planning: result.photoFirst.planning }
+          : null,
+      };
+    },
+    201,
+  );
 }
 
 export function deleteServiceDailyActionResponse(

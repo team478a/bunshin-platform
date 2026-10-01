@@ -12,6 +12,7 @@ import {
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { DailyActionStorage } from '../daily-actions/daily-action-storage';
 import {
   createMissionContentVariantUsageState,
   generateMissionContentVariantWithAi,
@@ -35,6 +36,10 @@ interface Input {
   variantInstructions?: string[];
 }
 
+interface PhotoFirstInput extends Input {
+  photoActionId: string;
+}
+
 const daysBefore = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() - days);
@@ -55,6 +60,14 @@ function errorCategory(error: unknown) {
 
 export class MissionContentVariantGenerationService {
   async execute(input: Input) {
+    return (await this.executeInternal(input)).variant;
+  }
+
+  async executePhotoFirst(input: PhotoFirstInput) {
+    return this.executeInternal(input);
+  }
+
+  private async executeInternal(input: Input | PhotoFirstInput) {
     const started = Date.now();
     const scope = {
       workspaceId: input.workspaceId,
@@ -118,7 +131,7 @@ export class MissionContentVariantGenerationService {
           const completed = existing.find(({ id }) => id === claim.generation.variantId);
           if (!completed)
             throw new ApplicationError('CONFLICT', 'completed mission variant is unavailable');
-          return completed;
+          return { variant: completed, photoFirst: null };
         }
         throw new ApplicationError('CONFLICT', 'mission content variant generation already used');
       }
@@ -133,7 +146,37 @@ export class MissionContentVariantGenerationService {
           ? {}
           : { allowServiceOwnerMemories: input.allowServiceOwnerMemories }),
       });
-      const { content, quality } = await generateMissionContentVariantWithAi({
+      let photoFirstSource:
+        | {
+            bytes: Uint8Array;
+            mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+            sourceNote: string;
+          }
+        | undefined;
+      if ('photoActionId' in input) {
+        const photo = await db.prisma.bunshinMemory.findFirst({
+          where: {
+            id: input.photoActionId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            sourceType: 'USER_INPUT',
+            sourceId: { startsWith: 'daily-action:PHOTO:' },
+            attachmentStatus: 'READY',
+            active: true,
+            deletedAt: null,
+            bunshin: {
+              ownerUserId: input.actorUserId,
+              ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
+            },
+          },
+          select: { content: true, attachmentStorageKey: true },
+        });
+        if (!photo?.attachmentStorageKey)
+          throw new ApplicationError('NOT_FOUND', '写真が見つかりません');
+        const prepared = await new DailyActionStorage().readForVision(photo.attachmentStorageKey);
+        photoFirstSource = { ...prepared, sourceNote: photo.content };
+      }
+      const { content, quality, photoFirst } = await generateMissionContentVariantWithAi({
         scope,
         mission,
         recentMissions,
@@ -142,6 +185,7 @@ export class MissionContentVariantGenerationService {
         ...(input.variantInstructions === undefined
           ? {}
           : { variantInstructions: input.variantInstructions }),
+        ...(photoFirstSource ? { photoFirst: photoFirstSource } : {}),
         usageState,
       });
 
@@ -183,7 +227,7 @@ export class MissionContentVariantGenerationService {
             : null,
         latencyMs: Date.now() - started,
       });
-      return variant;
+      return { variant, photoFirst };
     } catch (error) {
       if (generationId) {
         await recordAiUsageSafely({

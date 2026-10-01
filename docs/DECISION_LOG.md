@@ -1,5 +1,16 @@
 # BUNSHIN Platform Decision Log
 
+## D-162: ハッシー Photo First V1は既存の非公開写真と投稿案生成経路を再利用する
+
+- 日付: 2026-10-01
+- 状態: Accepted（Photo First V1の最小縦断実装）
+
+- Photo FirstはPlan Firstを置き換えず、既存のDaily Action写真、確定済みDaily Mission、MissionContentVariant生成・品質検査・利用枠・AI利用記録へ接続する。別の公開Storage、独立Job、別履歴基盤はV1で追加しない。
+- 写真は本人・Workspace・Service・Bunshin・READY状態を再検証してprivate Storageから読み、回転補正・長辺1600px以内への縮小・JPEG再符号化後だけVision解析へ渡す。画像内文字は命令として扱わず、人物特定・センシティブ属性推定・画像だけでは分からない事実の断定を禁止する。
+- 写真分析にはSNS Goal、Goal Planning、企業・対象顧客・承認済みStrategy、今日と直近のMissionを渡し、CTAだけではなくテーマ・切り口・写真の使い方を変える。完成本文は既存の品質検査付き生成工程で作る。
+- 投稿本文は既存MissionContentVariantとして履歴に残す。解析・企画MetadataはV1ではレスポンス表示だけで、再読込時の復元は部分対応とする。Metadata永続化とPhoto First単独入口は、所有境界・削除・冪等性を設計した別PRとする。
+- V1はWeb写真Uploadから利用し、LINEへ送った写真の直接受信、自動画像編集、SNS自動投稿は行わない。実Provider、実Storage、スマートフォン、本番環境のE2Eを完了するまで本番利用確認済みとは扱わない。
+
 ## D-161: 千ノ国メディアの禁止招待URLはスキーム有無に関係なくホスト単位で除去する
 
 - 日付: 2026-09-30
