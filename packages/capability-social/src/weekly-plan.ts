@@ -7,6 +7,8 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 
 import type { SocialPlatform, SocialPreferredFormat } from './social-profile';
+import type { SocialAccountStrategyGoal } from './social-account-strategy';
+import type { WeeklySocialGoalPlanningProfile } from './social-goal';
 import { validateEnum } from './social-validation';
 import {
   localDate,
@@ -136,6 +138,8 @@ export interface WeeklyPlannerInput {
     personalitySummary: string;
   };
   approvedStrategy: {
+    goal: SocialAccountStrategyGoal;
+    goalPlanning: WeeklySocialGoalPlanningProfile;
     concept: string;
     positioning: string;
     targetSummary: string;

@@ -7,6 +7,7 @@ import {
   canonicalGoalFromBusinessPurpose,
   initialSocialAccountStrategyGoal,
   isServiceBusinessPurpose,
+  weeklySocialGoalPlanningProfile,
 } from '../src';
 
 describe('canonical SOCIAL goals', () => {
@@ -119,5 +120,47 @@ describe('canonical SOCIAL goals', () => {
   it('validates persisted service purpose strings at the boundary', () => {
     expect(isServiceBusinessPurpose('RETENTION')).toBe(true);
     expect(isServiceBusinessPurpose('UNKNOWN')).toBe(false);
+  });
+
+  it('defines materially different weekly planning directions for the seven V1 outcomes', () => {
+    const goals = [
+      'BRAND_AWARENESS',
+      'VISIT_RESERVATION',
+      'INQUIRY',
+      'REPEAT',
+      'RECRUIT',
+      'SALES',
+      'TRUST_EXPERTISE',
+    ] as const;
+    const profiles = goals.map(weeklySocialGoalPlanningProfile);
+
+    expect(new Set(profiles.map(({ strategyFocus }) => strategyFocus)).size).toBe(goals.length);
+    expect(new Set(profiles.map(({ topicDirections }) => topicDirections.join('|'))).size).toBe(
+      goals.length,
+    );
+    expect(weeklySocialGoalPlanningProfile('BRAND_AWARENESS').topicDirections).toContain(
+      'ブランドストーリー',
+    );
+    expect(weeklySocialGoalPlanningProfile('VISIT_RESERVATION').topicDirections).toContain(
+      '初回来店の流れ',
+    );
+    expect(weeklySocialGoalPlanningProfile('REPEAT').topicDirections).toContain('アフターケア');
+    expect(weeklySocialGoalPlanningProfile('RECRUIT').topicDirections).toContain('職場環境');
+    expect(weeklySocialGoalPlanningProfile('SALES').topicDirections).toContain('購入理由');
+  });
+
+  it('keeps intermediate metrics and destinations distinct from business outcomes', () => {
+    expect(weeklySocialGoalPlanningProfile('FOLLOWERS')).toMatchObject({
+      goalKind: 'INTERMEDIATE_METRIC',
+      canonicalGoal: null,
+    });
+    expect(weeklySocialGoalPlanningProfile('LINE_REGISTRATION')).toMatchObject({
+      goalKind: 'DESTINATION',
+      canonicalGoal: null,
+    });
+    expect(weeklySocialGoalPlanningProfile('BLOG_TRAFFIC')).toMatchObject({
+      goalKind: 'DESTINATION',
+      canonicalGoal: null,
+    });
   });
 });
