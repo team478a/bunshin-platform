@@ -16,16 +16,21 @@ const apiKey = process.env['OPENAI_API_KEY'] ?? '';
 const model = process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
 const requestLimit = 6;
 
-type Goal = 'BRAND_AWARENESS' | 'RECRUIT' | 'VISIT_RESERVATION' | 'INQUIRY';
-type GoalPair = 'baseline' | 'conversion';
+type Goal = 'BRAND_AWARENESS' | 'RECRUIT' | 'VISIT_RESERVATION' | 'INQUIRY' | 'REPEAT' | 'SALES';
+type GoalPair = 'baseline' | 'conversion' | 'retention-sales';
 
 const goalPairs = {
   baseline: ['BRAND_AWARENESS', 'RECRUIT'],
   conversion: ['VISIT_RESERVATION', 'INQUIRY'],
+  'retention-sales': ['REPEAT', 'SALES'],
 } as const satisfies Record<GoalPair, readonly Goal[]>;
 
 const requestedGoalPair = process.env['PHOTO_FIRST_QUALITY_GOAL_PAIR'] ?? 'baseline';
-if (requestedGoalPair !== 'baseline' && requestedGoalPair !== 'conversion') {
+if (
+  requestedGoalPair !== 'baseline' &&
+  requestedGoalPair !== 'conversion' &&
+  requestedGoalPair !== 'retention-sales'
+) {
   throw new Error(`Unsupported PHOTO_FIRST_QUALITY_GOAL_PAIR: ${requestedGoalPair}`);
 }
 const goalPair: GoalPair = requestedGoalPair;
@@ -246,9 +251,12 @@ describe.runIf(runLive)('Photo First actual provider quality (manual, synthetic 
     if (goalPair === 'baseline') {
       expect(JSON.stringify(second)).toMatch(/採用|応募|働|職場|スタッフ/);
       expect(JSON.stringify(first)).toMatch(/認知|知って|フォロー|保存|特徴|考え方/);
-    } else {
+    } else if (goalPair === 'conversion') {
       expect(JSON.stringify(first)).toMatch(/予約|来店|空き|初回|メニュー/);
       expect(JSON.stringify(second)).toMatch(/問い合わせ|相談|LINE|質問|FAQ/);
+    } else {
+      expect(JSON.stringify(first)).toMatch(/再来店|再予約|リピート|次回|アフターケア/);
+      expect(JSON.stringify(second)).toMatch(/購入|商品|販売|注文|メニュー/);
     }
 
     console.info(
