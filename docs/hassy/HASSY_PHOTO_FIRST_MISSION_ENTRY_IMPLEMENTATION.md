@@ -66,4 +66,10 @@ DB schema、migration、依存関係、Provider設定は変更しない。
 
 ## 8. 次の最小タスク
 
-本PRとPhoto First履歴永続化PRの両方がマージされた後、スマートフォン幅で「Missionあり」「MissionなしだがPlanあり」「Planなし」の3状態を、課金Providerを使わないE2E fixtureで確認する。
+Photo First履歴永続化とMissionなし開始の両方がmainへマージされた後、課金Providerや外部通信を使わない描画fixtureで次の3状態を確認した。
+
+- Missionあり: Photo First開始操作を表示する。
+- Missionなし・Planあり: Photo First開始操作を表示し、既存Mission生成経路へ接続できる状態を維持する。
+- Missionなし・Planなし: 開始操作を表示せず、「今日の投稿予定ができると、この写真から投稿を考えられます」と待機理由を表示する。
+
+420px以下ではPhoto First操作と待機案内を横幅いっぱいにし、狭い画面で操作や理由が分断されないようにした。実ブラウザー、本番Storage、実Providerを用いた操作確認は引き続き`PRODUCTION_E2E_REQUIRED`である。

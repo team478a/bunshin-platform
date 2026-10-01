@@ -28,7 +28,7 @@ Metadata永続化基準: `main` commit `d1629db0f3a6233a5e2649fc321169160ec72a5d
 
 - 既存のWeekly PlanとDaily Mission生成は変更しない。
 - Photo Firstに失敗しても既存MissionとPlan Firstの投稿案は失わない。
-- V1は今日の確定済みMissionを投稿履歴・承認済み企画のアンカーとして使う。このため、今日のMissionがない状態から写真だけで独立生成する入口は未実装である。
+- V1は今日の確定済みMissionを投稿履歴・承認済み企画のアンカーとして使う。Missionが未作成でも、今日を含む確定済みWeekly PlanとACTIVEなSNSプロフィールがあれば、既存Mission生成サービスでMissionを作成してからPhoto Firstへ進む。Planまで存在しない日は独立した企画を作らず、画面に待機理由を表示する。
 
 ## 3. 再利用・拡張・新規実装
 
@@ -131,7 +131,7 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 | 投稿本文・CTA生成                        | IMPLEMENTED             | 既存投稿案Pipelineへ接続                                 |
 | 投稿案の履歴保存                         | IMPLEMENTED             | MissionContentVariantへ保存                              |
 | 解析・企画Metadataの永続化               | IMPLEMENTED             | 元写真・投稿案へtenant制約付きで保存し、再読込時に復元   |
-| Photo First単独入口                      | PARTIAL                 | 今日のMissionが必要                                      |
+| Mission未作成日のPhoto First開始         | IMPLEMENTED             | 今日の確定済みPlanとACTIVEプロフィールが必要             |
 | 受理・不採用・結果の解析工程への直接入力 | PARTIAL                 | 既存Snapshot/本文生成Context経由。解析単体へ明細は未接続 |
 | Goal/業種別の実生成品質                  | PRODUCTION_E2E_REQUIRED | 実API生成は未実施                                        |
 | 実Storage・スマートフォン表示            | PRODUCTION_E2E_REQUIRED | 本番資格情報は未使用                                     |
@@ -164,9 +164,12 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
   - 投稿案と元写真のWorkspace/Bunshin複合外部キー
 - `apps/web/test/service-daily-action-boundary.test.ts`
   - 最新の保存済みPhoto First結果を再読込時に画面へ渡すこと
+- `apps/web/test/photo-first-entry-states.test.tsx`
+  - Missionあり、Missionなし・Planあり、Missionなし・Planなしの3状態を外部通信なしで描画
+  - Planなしでは開始操作を出さず、スマートフォン画面に待機理由を表示
 
 実行結果、型検査、lintはPRの最新検証結果を正本とする。実OpenAI、実Storage、LINE、SNS投稿、本番DB、本番デプロイは実行していない。
 
 ## 11. 未解決事項と次の最小タスク
 
-次の最小タスクは、今日のMissionがない利用者も写真から始められるよう、Weekly Planと承認済みStrategyに紐づくPhoto First用Mission作成を別PRで検討することである。既存Missionの重複防止、Goal変更の有効時期、利用枠、履歴の正本を維持し、独立した並行生成経路を増やさない。
+次の最小タスクは、既存の障壁サポートのうち`CONTENT`、`MEDIA`、`CONFIDENCE`から、既存Photo Firstまたは素材準備へ迷わず進める案内を接続することである。生成経路や障壁分類を増やさず、既存画面内の導線だけを小さく接続する。
