@@ -18,12 +18,14 @@ import {
   ListWeeklyPlans,
   type ContentPillarRepository,
   type SocialAccountStrategyRepository,
+  type SocialAccountStrategyGoal,
   type SocialProfileRepository,
   type WeeklyPlannerInput,
   type WeeklyPlannerOutput,
   type WeeklyPlannerPort,
   type WeeklyPlanRepository,
   weeklySocialGoalPlanningProfile,
+  SOCIAL_ACCOUNT_STRATEGY_GOALS,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { createLogger } from '@bunshin/observability';
@@ -73,6 +75,38 @@ interface UsageEvent {
 interface RecentOutcomeRecord {
   topic: string;
   manualMetrics: unknown;
+  strategyGoal?: string | null;
+}
+
+const primaryOutcomeKeysByGoal = {
+  FOLLOWERS: [],
+  LINE_REGISTRATION: [],
+  INQUIRY: ['inquiries'],
+  VISIT_RESERVATION: ['reservations', 'visits'],
+  SALES: ['orders'],
+  RECRUIT: [],
+  REPEAT: [],
+  BRAND_AWARENESS: [],
+  TRUST_EXPERTISE: [],
+  BLOG_TRAFFIC: [],
+  OTHER: [],
+} as const satisfies Record<SocialAccountStrategyGoal, readonly (keyof BusinessOutcomes)[]>;
+
+function hasRecordedBusinessOutcomes(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const nested = (value as Record<string, unknown>)['businessOutcomes'];
+  return Boolean(nested && typeof nested === 'object' && !Array.isArray(nested));
+}
+
+export function readSnapshotStrategyGoal(value: unknown): SocialAccountStrategyGoal | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const strategy = (value as Record<string, unknown>)['strategy'];
+  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) return null;
+  const goal = (strategy as Record<string, unknown>)['goal'];
+  return typeof goal === 'string' &&
+    (SOCIAL_ACCOUNT_STRATEGY_GOALS as readonly string[]).includes(goal)
+    ? (goal as SocialAccountStrategyGoal)
+    : null;
 }
 
 export function buildBusinessOutcomePlanningContext(records: RecentOutcomeRecord[]) {
@@ -101,6 +135,58 @@ export function buildBusinessOutcomePlanningContext(records: RecentOutcomeRecord
   };
 }
 
+export function buildGoalOutcomePlanningContext(
+  goal: SocialAccountStrategyGoal,
+  records: RecentOutcomeRecord[],
+) {
+  const primaryOutcomeKeys = [...primaryOutcomeKeysByGoal[goal]];
+  if (primaryOutcomeKeys.length === 0) {
+    return {
+      ...buildBusinessOutcomePlanningContext([]),
+      goalEvaluation: {
+        goal,
+        status: 'UNAVAILABLE' as const,
+        primaryOutcomeKeys,
+        recordedPostCount: 0,
+        primaryOutcomeTotal: 0,
+        feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT' as const,
+        limitations: [
+          '現在取得している手入力成果だけでは、このGoalの達成を判定できません。',
+          'GOOD・NEUTRAL・BADは内容の好みであり、Goal達成の証拠ではありません。',
+        ],
+      },
+    };
+  }
+  const recorded = records.filter(
+    (record) => record.strategyGoal === goal && hasRecordedBusinessOutcomes(record.manualMetrics),
+  );
+  const selected = recorded.map((record) => {
+    const outcomes = readBusinessOutcomes(record.manualMetrics);
+    const relevant = emptyBusinessOutcomes();
+    for (const key of primaryOutcomeKeys) relevant[key] = outcomes[key];
+    return { topic: record.topic, manualMetrics: { businessOutcomes: relevant } };
+  });
+  const planning = buildBusinessOutcomePlanningContext(selected);
+  return {
+    ...planning,
+    goalEvaluation: {
+      goal,
+      status: recorded.length > 0 ? ('MEASURED' as const) : ('NO_DATA' as const),
+      primaryOutcomeKeys,
+      recordedPostCount: recorded.length,
+      primaryOutcomeTotal: primaryOutcomeKeys.reduce(
+        (total, key) => total + planning.businessOutcomes[key],
+        0,
+      ),
+      feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT' as const,
+      limitations: [
+        '同じGoalで生成され、本人が記録した投稿成果だけを集計します。',
+        '記録された件数は投稿との因果関係を証明しません。',
+      ],
+    },
+  };
+}
+
 export interface WeeklyPlanGenerationDependencies {
   assignments: BunshinCapabilityAssignmentRepository;
   plans: WeeklyPlanRepository;
@@ -114,7 +200,7 @@ export interface WeeklyPlanGenerationDependencies {
   providerModel: string;
   resolveTimezone(scope: Scope): Promise<string | null>;
   loadRecentPerformance?(
-    scope: Scope,
+    scope: Scope & { goal: SocialAccountStrategyGoal },
   ): Promise<NonNullable<WeeklyPlannerInput['recentPerformance']>>;
   recordUsage(event: UsageEvent): Promise<void>;
   runWithQuota<T>(input: {
@@ -197,7 +283,10 @@ export class WeeklyPlanGenerationService {
             })
           : [];
       stage = 'RECENT_PERFORMANCE';
-      const recentPerformance = await this.dependencies.loadRecentPerformance?.(input);
+      const recentPerformance = await this.dependencies.loadRecentPerformance?.({
+        ...input,
+        goal: strategy.goal,
+      });
       stage = 'AI_GENERATION';
       providerAttempted = true;
       const result = await this.dependencies.runWithQuota({
@@ -343,6 +432,7 @@ export async function createWeeklyPlanGenerationService() {
           topic: true,
           feedback: { select: { rating: true } },
           postRecord: { select: { manualMetrics: true, postedAt: true } },
+          generationContext: { select: { payload: true } },
         },
       });
       const formats = [...new Set(missions.map(({ format }) => format))].sort().map((format) => {
@@ -378,10 +468,12 @@ export async function createWeeklyPlanGenerationService() {
           bad: missions.filter(({ feedback }) => feedback?.rating === 'BAD').length,
         },
         formats,
-        ...buildBusinessOutcomePlanningContext(
-          missions.map(({ topic, postRecord }) => ({
+        ...buildGoalOutcomePlanningContext(
+          scope.goal,
+          missions.map(({ topic, postRecord, generationContext }) => ({
             topic,
             manualMetrics: postRecord?.manualMetrics,
+            strategyGoal: readSnapshotStrategyGoal(generationContext?.payload),
           })),
         ),
         postPerformance,

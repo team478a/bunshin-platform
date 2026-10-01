@@ -21,6 +21,10 @@ interface VersionedReference extends Reference {
   version: number;
 }
 
+interface StrategyReference extends VersionedReference {
+  goal: string;
+}
+
 interface SelectedMemoryReference extends Reference {
   summary: string;
   selectionReason: string;
@@ -47,7 +51,7 @@ interface GenerationEvidence {
   knowledgeIds: string[];
   groupKnowledgeIds: string[];
   socialProfileId: string;
-  strategy: VersionedReference;
+  strategy: StrategyReference;
   weeklyPlanId: string;
   contentPillarId: string;
   productPack: VersionedReference | null;

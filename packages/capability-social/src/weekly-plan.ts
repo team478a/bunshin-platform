@@ -160,6 +160,15 @@ export interface WeeklyPlannerInput {
       goodFeedbackCount: number;
       badFeedbackCount: number;
     }>;
+    goalEvaluation?: {
+      goal: SocialAccountStrategyGoal;
+      status: 'MEASURED' | 'NO_DATA' | 'UNAVAILABLE';
+      primaryOutcomeKeys: Array<'inquiries' | 'reservations' | 'visits' | 'orders' | 'other'>;
+      recordedPostCount: number;
+      primaryOutcomeTotal: number;
+      feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT';
+      limitations: string[];
+    };
     businessOutcomes?: {
       inquiries: number;
       reservations: number;

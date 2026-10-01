@@ -18,7 +18,7 @@ export interface GenerationContextSnapshotPayload {
   knowledge: GenerationContextReference[];
   groupKnowledge?: GenerationContextReference[];
   socialProfile: GenerationContextReference;
-  strategy: GenerationContextReference;
+  strategy: GenerationContextReference & { goal?: string };
   weeklyPlan: GenerationContextReference;
   contentPillar: GenerationContextReference;
   productPack: GenerationContextReference | null;
@@ -97,6 +97,7 @@ function requireUniqueReferences(values: GenerationContextReference[], field: st
 export function validateGenerationContextSnapshot(payload: GenerationContextSnapshotPayload) {
   requireText(payload.socialProfile.id, 'socialProfile.id');
   requireText(payload.strategy.id, 'strategy.id');
+  if (payload.strategy.goal !== undefined) requireText(payload.strategy.goal, 'strategy.goal');
   requireText(payload.weeklyPlan.id, 'weeklyPlan.id');
   requireText(payload.contentPillar.id, 'contentPillar.id');
   requireText(payload.promptVersion, 'promptVersion');

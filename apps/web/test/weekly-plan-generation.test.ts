@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   WeeklyPlanGenerationService,
   buildBusinessOutcomePlanningContext,
+  buildGoalOutcomePlanningContext,
+  readSnapshotStrategyGoal,
 } from '../src/services/weekly-plan-generation';
 
 const now = new Date('2026-08-22T00:00:00.000Z');
@@ -80,6 +82,7 @@ describe('WeeklyPlanGenerationService', () => {
   const recordUsage = vi.fn();
   const listPlans = vi.fn();
   const listPlanningContexts = vi.fn();
+  const loadRecentPerformance = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,6 +110,12 @@ describe('WeeklyPlanGenerationService', () => {
       inputTokens: 10,
       outputTokens: 20,
       latencyMs: 30,
+    });
+    loadRecentPerformance.mockResolvedValue({
+      periodDays: 28,
+      postedCount: 3,
+      feedback: { good: 2, neutral: 0, bad: 1 },
+      formats: [{ format: 'TEXT', postedCount: 3, goodFeedbackCount: 2, badFeedbackCount: 1 }],
     });
   });
 
@@ -136,12 +145,7 @@ describe('WeeklyPlanGenerationService', () => {
       campaigns: { listPlanningContexts } as never,
       providerModel: 'gpt-test',
       resolveTimezone: vi.fn().mockResolvedValue('Asia/Tokyo'),
-      loadRecentPerformance: vi.fn().mockResolvedValue({
-        periodDays: 28,
-        postedCount: 3,
-        feedback: { good: 2, neutral: 0, bad: 1 },
-        formats: [{ format: 'TEXT', postedCount: 3, goodFeedbackCount: 2, badFeedbackCount: 1 }],
-      }),
+      loadRecentPerformance,
       recordUsage,
       runWithQuota: (input) => input.generate(),
       now: () => now.valueOf(),
@@ -179,6 +183,9 @@ describe('WeeklyPlanGenerationService', () => {
     );
     expect(createGeneratedPlan).toHaveBeenCalledWith(
       expect.objectContaining({ ...scope, weekStartDate: '2026-08-24', timezone: 'Asia/Tokyo' }),
+    );
+    expect(loadRecentPerformance).toHaveBeenCalledWith(
+      expect.objectContaining({ ...scope, goal: 'FOLLOWERS' }),
     );
     expect(recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'SUCCESS', idempotencyKey: 'job:job-1:weekly-plan' }),
@@ -313,5 +320,63 @@ describe('buildBusinessOutcomePlanningContext', () => {
         businessOutcomes: { inquiries: 0, reservations: 0, visits: 1, orders: 0, other: 0 },
       },
     ]);
+  });
+});
+
+describe('goal-specific outcome planning context', () => {
+  const records = [
+    {
+      topic: '問い合わせ前のFAQ',
+      strategyGoal: 'INQUIRY',
+      manualMetrics: {
+        businessOutcomes: { inquiries: 2, reservations: 1, visits: 0, orders: 0, other: 0 },
+      },
+    },
+    {
+      topic: '初回来店の流れ',
+      strategyGoal: 'VISIT_RESERVATION',
+      manualMetrics: {
+        businessOutcomes: { inquiries: 3, reservations: 1, visits: 2, orders: 0, other: 0 },
+      },
+    },
+    {
+      topic: '旧投稿',
+      strategyGoal: null,
+      manualMetrics: { businessOutcomes: { inquiries: 9 } },
+    },
+  ];
+
+  it('uses only records from the same goal and only that goal primary outcomes', () => {
+    expect(buildGoalOutcomePlanningContext('INQUIRY', records)).toMatchObject({
+      businessOutcomes: { inquiries: 2, reservations: 0, visits: 0, orders: 0, other: 0 },
+      goalEvaluation: {
+        goal: 'INQUIRY',
+        status: 'MEASURED',
+        primaryOutcomeKeys: ['inquiries'],
+        recordedPostCount: 1,
+        primaryOutcomeTotal: 2,
+        feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT',
+      },
+      successfulTopics: [{ topic: '問い合わせ前のFAQ', outcomeTotal: 2 }],
+    });
+  });
+
+  it('does not invent achievement for a goal without an available KPI', () => {
+    expect(buildGoalOutcomePlanningContext('RECRUIT', records)).toMatchObject({
+      businessOutcomes: { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 },
+      successfulTopics: [],
+      goalEvaluation: {
+        goal: 'RECRUIT',
+        status: 'UNAVAILABLE',
+        primaryOutcomeKeys: [],
+        primaryOutcomeTotal: 0,
+      },
+    });
+  });
+
+  it('treats legacy snapshots without a goal as un-attributed', () => {
+    expect(readSnapshotStrategyGoal({ strategy: { id: 'strategy-1' } })).toBeNull();
+    expect(readSnapshotStrategyGoal({ strategy: { goal: 'INQUIRY' } })).toBe('INQUIRY');
+    expect(readSnapshotStrategyGoal({ strategy: { goal: 'UNKNOWN' } })).toBeNull();
   });
 });
