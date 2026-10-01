@@ -23,6 +23,7 @@ import {
   type WeeklyPlannerOutput,
   type WeeklyPlannerPort,
   type WeeklyPlanRepository,
+  weeklySocialGoalPlanningProfile,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { createLogger } from '@bunshin/observability';
@@ -216,6 +217,8 @@ export class WeeklyPlanGenerationService {
               personalitySummary: bunshin.personalitySummary,
             },
             approvedStrategy: {
+              goal: strategy.goal,
+              goalPlanning: weeklySocialGoalPlanningProfile(strategy.goal),
               concept: strategy.concept,
               positioning: strategy.positioning,
               targetSummary: strategy.targetSummary,

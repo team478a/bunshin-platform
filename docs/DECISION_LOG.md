@@ -3275,3 +3275,21 @@
 - 既存の`ServiceMemberBusinessProfile.primaryPurpose`と`SocialAccountStrategy.goal`は直ちに削除・書換えず、純粋な変換境界を追加する。一意に変換できる値だけを`RESOLVED`とし、広い「集客」やフォロワー、LINE登録、ブログ流入は候補と理由を持つ`REVIEW_REQUIRED`にする。
 - 曖昧値へ既定Goalを暗黙適用しない。次のUI・初回設定接続では、Service設定または利用者確認により解決し、異なるService、User、Bunshin、SocialProfileの目的を共有しない。
 - 本判断は契約と既存語彙の変換までとする。DB、onboarding、Strategy、Weekly、Daily、Prompt、CTA、KPI、本番設定は別の小さな変更で接続し、ハッシー名やOEM名を共通基盤へハードコードしない。
+
+## D-140: 初回SNS Strategyは事業目的から決定し、広い「集客」は利用者が成果を選ぶ
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-139の初回Strategy接続）
+- Service会員の初回SNS Strategyは`ServiceMemberBusinessProfile.primaryPurpose`から決定し、固定の`BRAND_AWARENESS`を使わない。認知、来店・予約、販売、採用、リピートは対応するGoalを保存し、明示されていない遷移先URLは推測しない。
+- 広い`ATTRACT`は来店・予約、問い合わせ、販売のどれかへ暗黙変換せず、初回設定で利用者に最優先成果を確認する。事業目的を使用するServiceで目的が欠損・未知の場合は、認知へフォールバックせず初回Strategy作成を停止する。
+- 既存Strategyとの互換性を保つため既存Goalは削除せず、`VISIT_RESERVATION`、`REPEAT`、`TRUST_EXPERTISE`を追加する。正規Goalと中間指標・導線の区別はD-139を維持する。
+- この変更は初回Strategyまでとし、Weekly Plan、Daily、投稿本文、CTA、結果評価、次回提案への目的差は後続PRで段階的に接続する。ハッシー名や特定OEM名を共通SOCIAL capabilityへハードコードしない。
+
+## D-141: Weekly Planは承認済みSNS Goalと目的別の企画方針を型付きで受け取る
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-140のWeekly Plan接続）
+- Weekly Plannerへ承認済みStrategyのGoalを明示的に渡し、SOCIAL capability内の純粋な変換で、週全体の重点、題材候補、CTA候補を導出する。認知、来店・予約、問い合わせ、リピート、採用、販売、信頼・専門性は互いに異なる企画方針を持つ。
+- Goal変更時はCTAの末尾だけでなく、週間要約、各日の目的、テーマ、切り口を変えるようProvider契約へ明記する。フォロワー、LINE登録、ブログ流入は事業成果へ昇格させず、中間指標または導線として扱う。
+- 目的別定義は特定サービス名・OEM名を共通基盤へ直書きせず、SOCIAL capabilityに閉じる。所有権、承認済みStrategy、Bunshin、Serviceの既存境界は維持する。
+- 自動テストはGoalと目的別方針がWeekly Planner入力へ届くこと、7つの主要目的で方針が異なることを保証する。実Providerによる生成品質、Daily、投稿本文、写真・動画案、結果評価、次回提案への差は本変更では確認済みとせず、後続の小さな変更と承認済み検証で確認する。

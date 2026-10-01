@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GenerateWeeklyPlan, type WeeklyPlannerInput, type WeeklyPlannerOutput } from '../src';
+import {
+  GenerateWeeklyPlan,
+  weeklySocialGoalPlanningProfile,
+  type WeeklyPlannerInput,
+  type WeeklyPlannerOutput,
+} from '../src';
 
 const input: WeeklyPlannerInput = {
   weekStartDate: '2026-08-17',
@@ -13,6 +18,8 @@ const input: WeeklyPlannerInput = {
     personalitySummary: '丁寧',
   },
   approvedStrategy: {
+    goal: 'BRAND_AWARENESS',
+    goalPlanning: weeklySocialGoalPlanningProfile('BRAND_AWARENESS'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '副業初心者',

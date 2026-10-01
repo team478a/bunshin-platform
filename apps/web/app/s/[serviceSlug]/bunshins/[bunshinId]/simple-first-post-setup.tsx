@@ -1,6 +1,12 @@
 'use client';
 
-import type { SocialPlatform, SocialPostingFrequency } from '@bunshin/capability-social';
+import {
+  initialSocialAccountStrategyGoal,
+  type ServiceBusinessPurpose,
+  type SocialAccountStrategyGoal,
+  type SocialPlatform,
+  type SocialPostingFrequency,
+} from '@bunshin/capability-social';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClientRequestId } from '../../../../ui/client-request-id';
@@ -23,6 +29,12 @@ const frequencyOptions: Array<{ value: SocialPostingFrequency; label: string }> 
   { value: 'FLEXIBLE', label: '決めずに続ける' },
 ];
 
+const conversionGoalLabels: Partial<Record<SocialAccountStrategyGoal, string>> = {
+  VISIT_RESERVATION: '来店・予約を増やしたい',
+  INQUIRY: '問い合わせを増やしたい',
+  SALES: '商品・サービスの販売につなげたい',
+};
+
 type Profile = {
   id: string;
   platform: SocialPlatform;
@@ -32,6 +44,7 @@ type Profile = {
 type Strategy = {
   id: string;
   socialProfileId: string;
+  goal: SocialAccountStrategyGoal;
   status: 'DRAFT' | 'PROPOSED' | 'APPROVED' | 'SUPERSEDED';
 };
 
@@ -56,6 +69,8 @@ export function SimpleFirstPostSetup({
   deliveryPolicy,
   serviceLineRequired,
   serviceLineConnected,
+  businessPurposeEnabled,
+  primaryPurpose,
 }: {
   serviceSlug: string;
   serviceName: string;
@@ -80,6 +95,8 @@ export function SimpleFirstPostSetup({
   };
   serviceLineRequired: boolean;
   serviceLineConnected: boolean;
+  businessPurposeEnabled: boolean;
+  primaryPurpose: ServiceBusinessPurpose | null;
 }) {
   const router = useRouter();
   const [platform, setPlatform] = useState<SocialPlatform>('INSTAGRAM');
@@ -90,6 +107,18 @@ export function SimpleFirstPostSetup({
   const [pending, setPending] = useState(false);
   const [step, setStep] = useState('');
   const [message, setMessage] = useState('');
+  const initialGoal = primaryPurpose
+    ? initialSocialAccountStrategyGoal(primaryPurpose)
+    : businessPurposeEnabled
+      ? null
+      : {
+          status: 'RESOLVED' as const,
+          goal: 'BRAND_AWARENESS' as const,
+          destinationType: 'PROFILE' as const,
+        };
+  const [selectedGoal, setSelectedGoal] = useState<SocialAccountStrategyGoal | ''>(
+    initialGoal?.status === 'RESOLVED' ? initialGoal.goal : '',
+  );
   const encodedService = encodeURIComponent(serviceSlug);
   const encodedBunshin = encodeURIComponent(bunshinId);
   const base = `/api/services/${encodedService}/bunshins/${encodedBunshin}`;
@@ -135,6 +164,14 @@ export function SimpleFirstPostSetup({
   }
 
   async function prepare() {
+    if (!initialGoal) {
+      setMessage('事業の発信目的が未設定です。初期設定を確認してください。');
+      return;
+    }
+    if (!selectedGoal) {
+      setMessage('SNSで最も増やしたい成果を選んでください。');
+      return;
+    }
     let currentStep = '初回設定';
     const updateStep = (value: string) => {
       currentStep = value;
@@ -169,16 +206,20 @@ export function SimpleFirstPostSetup({
       );
       if (!strategy) {
         strategy = strategies.find(
-          (value) => value.socialProfileId === profile.id && value.status === 'PROPOSED',
+          (value) =>
+            value.socialProfileId === profile.id &&
+            value.status === 'PROPOSED' &&
+            value.goal === selectedGoal,
         );
         if (!strategy) {
           updateStep('あなた向けの発信方法を考えています');
           strategy = await request<Strategy>('/social-account-strategies/generate', {
             socialProfileId: profile.id,
             platform: profile.platform,
-            goal: 'BRAND_AWARENESS',
+            goal: selectedGoal,
             availableMinutes: 5,
-            destinationType: 'PROFILE',
+            destinationType:
+              initialGoal.status === 'RESOLVED' ? initialGoal.destinationType : 'NONE',
             destinationDetail: null,
             wizardTopic: topic,
             wizardAudience: audience,
@@ -272,6 +313,30 @@ export function SimpleFirstPostSetup({
         <h2 id="simple-setup-title">投稿するSNSと受信時刻を選んでください</h2>
         <p>発信方法と毎日の投稿案はこちらで準備します。</p>
       </header>
+      {!initialGoal ? (
+        <p className="notice" role="alert">
+          事業の発信目的が未設定です。初期設定を確認してから、もう一度お試しください。
+        </p>
+      ) : initialGoal.status === 'REVIEW_REQUIRED' ? (
+        <fieldset>
+          <legend>SNSで最も増やしたい成果</legend>
+          <p>「集客」には複数の意味があるため、今いちばん近いものを選んでください。</p>
+          <div className="simple-first-post__choices">
+            {initialGoal.candidates.map((goal) => (
+              <label key={goal} className={selectedGoal === goal ? 'is-selected' : ''}>
+                <input
+                  type="radio"
+                  name="simple-goal"
+                  value={goal}
+                  checked={selectedGoal === goal}
+                  onChange={() => setSelectedGoal(goal)}
+                />
+                {conversionGoalLabels[goal]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
       {profiles.some(({ status }) => status === 'ACTIVE') ? null : (
         <fieldset>
           <legend>投稿するSNS</legend>
@@ -327,7 +392,7 @@ export function SimpleFirstPostSetup({
       <button
         className="button button--primary button--full"
         type="button"
-        disabled={pending}
+        disabled={pending || !initialGoal}
         onClick={() => void prepare()}
       >
         {pending ? step || '準備しています…' : 'LINE配信を始める'}
