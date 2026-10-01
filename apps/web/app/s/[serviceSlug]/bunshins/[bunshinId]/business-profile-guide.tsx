@@ -178,7 +178,9 @@ export function BusinessProfileGuide({
           `${result?.error?.message ?? '案内文を決定できませんでした。'}（受付番号: ${result?.error?.requestId ?? requestId}）`,
         );
       }
-      setMessage('案内先を保存しました。新しい自己紹介文と案内文を表示します。');
+      setMessage(
+        '案内先を保存しました。新しい自己紹介文を表示し、投稿方針は今後作る週間計画から反映します。',
+      );
       router.refresh();
     } catch (error) {
       setMessage(

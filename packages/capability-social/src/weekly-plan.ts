@@ -49,6 +49,9 @@ export interface WeeklyPlan {
   id: string;
   workspaceId: string;
   bunshinId: string;
+  socialProfileId: string | null;
+  strategyId: string | null;
+  strategyGoal: SocialAccountStrategyGoal | null;
   weekStartDate: string;
   timezone: string;
   strategySummary: string | null;
@@ -75,6 +78,9 @@ export interface WeeklyPlanRepository {
   ): Promise<WeeklyPlan | null>;
   createGeneratedPlan(
     input: WeeklyPlanScope & {
+      socialProfileId: string;
+      strategyId: string;
+      strategyGoal: SocialAccountStrategyGoal;
       weekStartDate: string;
       timezone: string;
       strategySummary: string;

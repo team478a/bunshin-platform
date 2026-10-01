@@ -122,7 +122,11 @@ export function AccountStrategySection({
       body: '{}',
     });
     setPending(false);
-    setMessage(response.ok ? '戦略を承認しました。' : '承認できませんでした。');
+    setMessage(
+      response.ok
+        ? '戦略を承認しました。確定済みの今週の計画は変えず、今後作る週間計画から反映します。'
+        : '承認できませんでした。',
+    );
     if (response.ok) router.refresh();
   }
   return (

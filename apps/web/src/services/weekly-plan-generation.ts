@@ -358,6 +358,9 @@ export class WeeklyPlanGenerationService {
         this.dependencies.assignments,
       ).execute({
         ...input,
+        socialProfileId: profile.id,
+        strategyId: strategy.id,
+        strategyGoal: strategy.goal,
         weekStartDate: input.weekStartDate,
         timezone,
         ...generatedOutput,
