@@ -151,6 +151,71 @@ Provider requests 6
 - 問い合わせ型の本文・写真案へ販売CTAだけを付けた出力を不合格にする非課金の回帰テストを追加した
 - 本文生成Promptを`mission-content-generator-v16-sales-goal-alignment`へ更新し、販売では具体的な商品・サービス価値、使用場面、比較、利用事例、購入理由のいずれかを本文と写真・動画案へ反映するよう明示した
 - quality checkerを`mission-quality-checker-v12-sales-goal-alignment`へ更新し、一般的な初回来店不安、一般FAQ、対象を示さない相談だけの内容を販売として合格させない境界を明示した
-- 実Providerによる販売Goalの再検証は未実施であり、上記の`INCONCLUSIVE`および`RISK_REPRODUCED`判定は実測で更新していない
+- この時点では実Providerによる販売Goalの再検証は未実施であり、上記の`INCONCLUSIVE`および`RISK_REPRODUCED`判定は実測で更新していない
 
 次の最小タスクは、別途課金承認を得たうえで、前回と同一の合成入力を使い、問い合わせと販売の2 Goalだけを実Providerで再比較することである。
+
+## 8. Sales境界の実Provider再検証（2026-10-02 JST）
+
+### 実行条件
+
+- 対象branch: `codex/hassy-sales-provider-revalidation`
+- 基準main: `8ea2c4eeb20cc3595a391878c872bb41242efc81`
+- 実行日時: `2026-10-02 07:09 JST`（Provider結果のUTC: `2026-10-01T22:10:00.521Z`）
+- Goal: `INQUIRY`、`SALES`
+- モデル指定: `gpt-5.2`（Provider応答: `gpt-5.2-2025-12-11`）
+- 入力: 前回と同一hashの合成JPEG、同一架空企業、同一対象顧客、同一Mission、同一直近履歴
+- 写真SHA-256: `a1ea5282660ec7fa278aec26b11994b8a4fb1b9446be54558f4ad4d09e11f2b1`
+- 外部通信: Goalごとに写真解析、本文生成、品質判定を各1回、合計6回
+- 再試行: なし
+- 実ユーザー情報、本番DB、Storage、LINE、SNS: 使用なし
+
+### 実行結果
+
+| 項目          | 問い合わせ（`INQUIRY`）                      | 販売（`SALES`）                                            |
+| ------------- | -------------------------------------------- | ---------------------------------------------------------- |
+| 主題          | 施術前確認を見える化し、相談ハードルを下げる | 施術前確認を判断材料として提示                             |
+| CTA           | LINEで質問内容を整理                         | Instagram DMで初回相談                                     |
+| checker       | `PASS` / 92点                                | `REVISE` / 78点                                            |
+| checker issue | なし                                         | `GOAL_MISMATCH`                                            |
+| Goal差        | 問い合わせとして一貫                         | CTA・本文とも一般相談寄りで、販売としては不十分            |
+| 判定          | `SAFE_WITHIN_TESTED_SCOPE`                   | 生成: `RISK_REPRODUCED` / 検出: `SAFE_WITHIN_TESTED_SCOPE` |
+
+販売の本文は、サービスの判断材料を含むよう改善した一方、テーマとCTAが「初回来店の不安解消」「DMで初回相談」に留まり、問い合わせGoalとの差が十分ではなかった。したがって、販売Goalの生成品質を合格とは判定しない。
+
+quality checkerは、販売内容を以前の`PASS / 92点`から`REVISE / 78点`へ変更し、`GOAL_MISMATCH`として検出した。今回修正した「問い合わせ型Salesを誤合格させない」安全条件は、この1サンプルの範囲で達成した。ただしcheckerによる検出は、最初から販売向け内容を生成できることや、修正後の再生成が合格することを証明しない。
+
+### Telemetry
+
+| Goal       | 工程      | input tokens | output tokens |   latency |
+| ---------- | --------- | -----------: | ------------: | --------: |
+| 問い合わせ | 写真解析  |        2,127 |           685 | 11,191 ms |
+| 問い合わせ | 本文生成  |        2,955 |           533 |  8,110 ms |
+| 問い合わせ | 品質判定  |        2,430 |            22 |    853 ms |
+| 販売       | 写真解析  |        2,118 |           843 | 12,420 ms |
+| 販売       | 本文生成  |        3,145 |           594 |  8,613 ms |
+| 販売       | 品質判定  |        2,525 |           343 |  5,005 ms |
+| 合計       | 6 request |       15,300 |         3,020 | 46,192 ms |
+
+### 実行コマンドと検証
+
+```powershell
+$env:RUN_OPENAI_PHOTO_FIRST_QUALITY='1'
+$env:PHOTO_FIRST_QUALITY_GOAL_PAIR='sales-boundary'
+pnpm --filter web exec vitest run test/photo-first-provider-quality.live.test.ts --reporter=verbose
+```
+
+結果:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed (1)
+Duration    48.20s
+Provider requests 6
+```
+
+テスト成功は、6リクエスト上限とGoal間の差分assertion、およびcheckerがSalesの不整合を検出したことを示す。販売コンテンツ自体の品質合格を示さない。
+
+### 次の最小タスク
+
+Sales用の写真解析・投稿設計で、一般的な初回来店不安や相談ではなく、承認済みの商品・サービス価値、利用場面、比較、購入理由のいずれかを主題にし、商品閲覧・購入・具体的な購入前質問へ接続する非課金契約テストを追加する。その後、写真解析PromptのSales境界を最小修正する。実Provider再試行は、その修正を別PRで確認し、改めて課金承認を得るまで行わない。
