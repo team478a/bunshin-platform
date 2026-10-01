@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { socialGoalPlanningProfile } from '@bunshin/capability-social';
 import { OpenAIMissionContentGenerator } from '../src/providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../src/providers/openai-mission-quality-checker';
 
@@ -34,6 +35,8 @@ const base = {
     },
   },
   approvedStrategy: {
+    goal: 'INQUIRY' as const,
+    goalPlanning: socialGoalPlanningProfile('INQUIRY'),
     concept: '専門家型',
     positioning: '実践者',
     targetSummary: '初心者',
@@ -125,7 +128,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v14-bounded-reasoning',
+      promptVersion: 'mission-content-generator-v15-goal-planning',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -201,11 +204,14 @@ describe('OpenAIMissionContentGenerator', () => {
     expect(request.text.format.schema.properties.slides.items.properties).toHaveProperty(
       'visualScene',
     );
-    expect(request.input[0]?.content).toContain('①HOOK:具体的な題材と読む利益');
-    expect(request.input[0]?.content).toContain('⑤CTA:要点のまとめと今すぐする一つの行動');
-    expect(request.input[0]?.content).toContain('同じ写真やほぼ同じ構図を繰り返さず');
-    expect(request.input[0]?.content).toContain('初心者や年配の人が一読で分かる');
-    expect(request.input[0]?.content).toContain('headlineは20文字以内');
+    expect(request.input[0]?.content).toContain('CTAの末尾だけで作らず');
+    expect(request.input[2]?.content).toContain('対象顧客の課題を具体化し');
+    expect(request.input[2]?.content).toContain('問い合わせる');
+    expect(request.input[1]?.content).toContain('①HOOK:具体的な題材と読む利益');
+    expect(request.input[1]?.content).toContain('⑤CTA:要点のまとめと今すぐする一つの行動');
+    expect(request.input[1]?.content).toContain('同じ写真やほぼ同じ構図を繰り返さず');
+    expect(request.input[1]?.content).toContain('初心者や年配の人が一読で分かる');
+    expect(request.input[1]?.content).toContain('headlineは20文字以内');
   });
 
   it('sends the original content and rewrite constraints when generating a variant', async () => {
@@ -361,7 +367,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v10-output-contract',
+      promptVersion: 'mission-quality-checker-v11-goal-alignment',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
@@ -372,6 +378,8 @@ describe('OpenAIMissionQualityChecker', () => {
     expect(JSON.stringify(request)).toContain('REPEATED_VISUAL_SCENE');
     expect(JSON.stringify(request)).toContain('CAROUSEL_NO_SOLUTION');
     expect(JSON.stringify(request)).toContain('CAROUSEL_HARD_TO_UNDERSTAND');
+    expect(JSON.stringify(request)).toContain('GOAL_MISMATCH');
+    expect(JSON.stringify(request)).toContain('対象顧客の課題を具体化し');
     expect(request).toMatchObject({
       text: {
         format: {

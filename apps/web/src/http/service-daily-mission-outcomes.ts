@@ -4,6 +4,7 @@ import { RecordManualPost, RecordMissionFeedback } from '@bunshin/capability-soc
 import { ApplicationError } from '@bunshin/shared';
 import { requireSameOrigin } from '../auth/request-security';
 import { readBusinessOutcomes, writeBusinessOutcomes } from '../services/business-outcomes';
+import { readSnapshotStrategyGoal, writeSocialGoalOutcome } from '../services/social-goal-outcomes';
 import { readServiceOnboardingSettings } from '../services/service-onboarding-settings';
 import { missionActivityDto } from './mission-engagement';
 import { missionFeedbackDto, postRecordDto } from './mission-outcome';
@@ -16,6 +17,7 @@ import {
   serviceDailyMissionMemberContext,
   serviceDailyMissionScope,
   uuidSchema,
+  socialGoalOutcomeSchema,
 } from './service-daily-mission-http-core';
 
 export function recordServicePostResponse(
@@ -114,5 +116,49 @@ export function recordServiceBusinessOutcomeResponse(
       data: { manualMetrics: writeBusinessOutcomes(post.manualMetrics, outcomes) },
     });
     return { outcomes };
+  });
+}
+
+export function recordServiceSocialGoalOutcomeResponse(
+  request: Request,
+  serviceSlug: string,
+  bunshinId: string,
+  dailyMissionId: string,
+) {
+  return respond(request, async () => {
+    requireSameOrigin(request);
+    const parsed = socialGoalOutcomeSchema.safeParse(await body(request));
+    if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid body');
+    const { service, actor } = await serviceDailyMissionMemberContext(serviceSlug);
+    const onboarding = readServiceOnboardingSettings(
+      service.configuration.registration.onboardingConfig,
+      service.configuration.registration.surveyConfig,
+    );
+    if (!onboarding.businessProfileEnabled)
+      throw new ApplicationError('FORBIDDEN', 'goal outcome reporting is not enabled');
+    const value = {
+      workspaceId: service.workspaceId,
+      groupId: service.serviceId,
+      bunshinId,
+      actorUserId: actor,
+      dailyMissionId: uuidSchema.parse(dailyMissionId),
+    };
+    const db = await import('@bunshin/database');
+    const post = await new db.PrismaMissionOutcomeRepository().getPost(value);
+    if (!post) throw new ApplicationError('CONFLICT', 'post must be recorded first');
+    const snapshot = await new db.PrismaGenerationContextSnapshotRepository().find(value);
+    const strategyGoal = readSnapshotStrategyGoal(snapshot?.payload);
+    if (!strategyGoal)
+      throw new ApplicationError('CONFLICT', 'mission goal is not available for reporting');
+    const outcome = {
+      strategyGoal,
+      result: parsed.data.result,
+      reportedAt: new Date().toISOString(),
+    } as const;
+    await db.prisma.postRecord.update({
+      where: { id: post.id },
+      data: { manualMetrics: writeSocialGoalOutcome(post.manualMetrics, outcome) },
+    });
+    return { outcome };
   });
 }

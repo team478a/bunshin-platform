@@ -29,12 +29,21 @@ const input = {
     postedCount: 2,
     feedback: { good: 1, neutral: 1, bad: 0 },
     formats: [],
-    businessOutcomes: { inquiries: 2, reservations: 1, visits: 0, orders: 0, other: 0 },
+    goalEvaluation: {
+      goal: 'INQUIRY' as const,
+      status: 'MEASURED' as const,
+      primaryOutcomeKeys: ['inquiries' as const],
+      recordedPostCount: 2,
+      primaryOutcomeTotal: 2,
+      feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT' as const,
+      limitations: ['因果関係は未確認'],
+    },
+    businessOutcomes: { inquiries: 2, reservations: 0, visits: 0, orders: 0, other: 0 },
     successfulTopics: [
       {
         topic: '初回相談の流れ',
-        outcomeTotal: 3,
-        businessOutcomes: { inquiries: 2, reservations: 1, visits: 0, orders: 0, other: 0 },
+        outcomeTotal: 2,
+        businessOutcomes: { inquiries: 2, reservations: 0, visits: 0, orders: 0, other: 0 },
       },
     ],
   },
@@ -81,7 +90,7 @@ describe('OpenAIWeeklyPlanner', () => {
     );
     expect(result).toMatchObject({
       model: 'gpt-5.2',
-      promptVersion: 'weekly-planner-v7-goal-planning',
+      promptVersion: 'weekly-planner-v8-goal-outcomes',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -100,12 +109,14 @@ describe('OpenAIWeeklyPlanner', () => {
       store: false,
       text: { format: { type: 'json_schema', strict: true } },
     });
-    expect(request.input[1]?.content).toContain('10年の経験');
-    expect(request.input[1]?.content).toContain('初回相談の流れ');
-    expect(request.input[1]?.content).toContain('対象顧客の課題を具体化し');
-    expect(request.input[1]?.content).toContain('問い合わせる');
+    expect(request.input[2]?.content).toContain('10年の経験');
+    expect(request.input[2]?.content).toContain('初回相談の流れ');
+    expect(request.input[2]?.content).toContain('対象顧客の課題を具体化し');
+    expect(request.input[2]?.content).toContain('問い合わせる');
+    expect(request.input[2]?.content).toContain('CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT');
     expect(request.input[0]?.content).toContain('成果数字は内部の企画判断だけに使い');
     expect(request.input[0]?.content).toContain('CTAの末尾だけでなく');
+    expect(request.input[1]?.content).toContain('GOOD・NEUTRAL・BADは内容の好み');
     expect(Object.keys(request.text.format.schema.properties.items.items.properties)).toContain(
       'businessContentCategory',
     );

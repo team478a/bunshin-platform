@@ -9,6 +9,7 @@ import {
 } from '../../../../../src/services/business-outcomes';
 import type { RewardsAction } from '../../../../ui/rewards-action-feedback';
 import type { DailyMissionView } from '../../../../(app)/bunshins/[bunshinId]/daily-mission-section';
+import type { SocialGoalOutcomeResult } from '../../../../../src/services/social-goal-outcomes';
 
 export const serviceExecutionResultOptions = [
   ['EXECUTION_COMPLETED', 'できた'],
@@ -49,6 +50,12 @@ export function useServiceDailyMissionController({
     Object.fromEntries(
       missions.map((mission) => [mission.id, mission.businessOutcomes ?? emptyBusinessOutcomes()]),
     ),
+  );
+  const [goalOutcomes, setGoalOutcomes] = useState<Record<string, SocialGoalOutcomeResult | null>>(
+    () =>
+      Object.fromEntries(
+        missions.map((mission) => [mission.id, mission.goalOutcome?.result ?? null]),
+      ),
   );
 
   const key = () => createClientRequestId();
@@ -243,6 +250,14 @@ export function useServiceDailyMissionController({
     }
   }
 
+  async function saveGoalOutcome(id: string, result: SocialGoalOutcomeResult) {
+    if (await record(id, 'goal-outcome', { result })) {
+      setGoalOutcomes((current) => ({ ...current, [id]: result }));
+      setMessage('今回の目的に対する結果を保存しました。次の提案を考える参考にします。');
+      router.refresh();
+    }
+  }
+
   function requestVariant(missionId: string, instruction?: string) {
     if (pendingAction) return;
     if (variantPointCost === null) {
@@ -315,6 +330,7 @@ export function useServiceDailyMissionController({
     variantInstructions,
     variantConfirmation,
     businessOutcomes,
+    goalOutcomes,
     setManualCopy,
     setMessage,
     setRejecting,
@@ -330,6 +346,7 @@ export function useServiceDailyMissionController({
     openMission,
     feedback,
     saveBusinessOutcomes,
+    saveGoalOutcome,
     requestVariant,
     generateVariant,
     selectVariant,

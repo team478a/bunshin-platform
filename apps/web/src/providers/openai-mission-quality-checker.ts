@@ -10,7 +10,7 @@ import {
   readMissionProviderResponse,
 } from './mission-provider-response';
 
-export const MISSION_QUALITY_CHECKER_PROMPT_VERSION = 'mission-quality-checker-v10-output-contract';
+export const MISSION_QUALITY_CHECKER_PROMPT_VERSION = 'mission-quality-checker-v11-goal-alignment';
 
 const schema = {
   type: 'object',
@@ -65,6 +65,11 @@ export class OpenAIMissionQualityChecker implements MissionQualityCheckerPort {
           ...missionReasoningOptions(model),
           store: false,
           input: [
+            {
+              role: 'system',
+              content:
+                'approvedStrategy.goalPlanningのstrategyFocus、topicDirections、ctaDirectionsと、Missionのtopic、本文、写真・動画案、CTAが実質的に整合するか確認します。CTAの末尾だけを目的別に変え、テーマや読者価値が別GoalのままならGOAL_MISMATCHとしてREVISEにします。承認済みの具体的なctaStrategyと矛盾するCTAを追加した場合もGOAL_MISMATCHとします。',
+            },
             {
               role: 'system',
               content:

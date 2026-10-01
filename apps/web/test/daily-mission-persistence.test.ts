@@ -16,7 +16,7 @@ describe('daily mission persistence', () => {
       knowledgeIds: ['knowledge-1'],
       groupKnowledgeIds: ['group-knowledge-1'],
       socialProfileId: 'profile-1',
-      strategy: { id: 'strategy-1', version: 3 },
+      strategy: { id: 'strategy-1', version: 3, goal: 'INQUIRY' },
       weeklyPlanId: 'weekly-plan-1',
       contentPillarId: 'pillar-1',
       productPack: { id: 'product-pack-version-1', version: 4 },
@@ -51,6 +51,7 @@ describe('daily mission persistence', () => {
       },
     ]);
     expect(context.groupKnowledge).toEqual([{ id: 'group-knowledge-1' }]);
+    expect(context.strategy).toEqual({ id: 'strategy-1', version: 3, goal: 'INQUIRY' });
     expect(context.personalization).toMatchObject({
       sourceTypes: ['MEMORY', 'RECENT_FEEDBACK'],
       availableSourceTypes: ['MEMORY', 'RECENT_FEEDBACK', 'SOCIAL_INSIGHT'],

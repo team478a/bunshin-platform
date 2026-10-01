@@ -22,6 +22,27 @@ const businessOutcomeOptions = [
   ['other', 'その他の反応'],
 ] as const;
 
+const goalOutcomeOptions = [
+  ['ACHIEVED', '目的につながった'],
+  ['SOME_PROGRESS', '手応えがあった'],
+  ['NO_CHANGE', '変化はなかった'],
+  ['UNKNOWN', 'まだ分からない'],
+] as const;
+
+const strategyGoalLabels = {
+  FOLLOWERS: 'フォロワー',
+  LINE_REGISTRATION: 'LINE登録',
+  INQUIRY: '問い合わせ',
+  VISIT_RESERVATION: '来店・予約',
+  SALES: '販売',
+  RECRUIT: '採用',
+  REPEAT: '再来店・リピート',
+  BRAND_AWARENESS: '認知',
+  TRUST_EXPERTISE: '信頼・専門性',
+  BLOG_TRAFFIC: 'ブログ閲覧',
+  OTHER: '設定した目的',
+} as const;
+
 export function ServiceDailyMissionAccepted({
   mission,
   serviceSlug,
@@ -88,42 +109,66 @@ export function ServiceDailyMissionAccepted({
             </button>
           ))}
           {businessFree ? (
-            <section className="mission-business-outcomes">
-              <h4>この投稿から、お客様の反応はありましたか？</h4>
-              <p>なければ0のままで大丈夫です。お客様の名前は入力しません。</p>
-              {businessOutcomeOptions.map(([key, label]) => (
-                <label key={key}>
-                  {label}の件数
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={999}
-                    value={outcomes[key]}
-                    onChange={(event) => {
-                      const count = Math.max(
-                        0,
-                        Math.min(999, Number.parseInt(event.target.value || '0', 10) || 0),
-                      );
-                      controller.setBusinessOutcomes((current) => ({
-                        ...current,
-                        [mission.id]: {
-                          ...(current[mission.id] ?? emptyBusinessOutcomes()),
-                          [key]: count,
-                        },
-                      }));
-                    }}
-                  />
-                </label>
-              ))}
-              <button
-                type="button"
-                disabled={controller.pendingAction !== null}
-                onClick={() => void controller.saveBusinessOutcomes(mission.id)}
-              >
-                お客様の反応を保存する
-              </button>
-            </section>
+            <>
+              {mission.strategyGoal ? (
+                <section className="mission-business-outcomes mission-goal-outcome">
+                  <h4>
+                    今回の目的「{strategyGoalLabels[mission.strategyGoal]}」にはつながりましたか？
+                  </h4>
+                  <p>投稿の好みとは別の回答です。分かる範囲で選んでください。</p>
+                  {goalOutcomeOptions.map(([result, label]) => (
+                    <button
+                      key={result}
+                      type="button"
+                      aria-pressed={controller.goalOutcomes[mission.id] === result}
+                      disabled={
+                        controller.pendingAction !== null ||
+                        controller.goalOutcomes[mission.id] === result
+                      }
+                      onClick={() => void controller.saveGoalOutcome(mission.id, result)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </section>
+              ) : null}
+              <section className="mission-business-outcomes">
+                <h4>この投稿から、お客様の反応はありましたか？</h4>
+                <p>なければ0のままで大丈夫です。お客様の名前は入力しません。</p>
+                {businessOutcomeOptions.map(([key, label]) => (
+                  <label key={key}>
+                    {label}の件数
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={999}
+                      value={outcomes[key]}
+                      onChange={(event) => {
+                        const count = Math.max(
+                          0,
+                          Math.min(999, Number.parseInt(event.target.value || '0', 10) || 0),
+                        );
+                        controller.setBusinessOutcomes((current) => ({
+                          ...current,
+                          [mission.id]: {
+                            ...(current[mission.id] ?? emptyBusinessOutcomes()),
+                            [key]: count,
+                          },
+                        }));
+                      }}
+                    />
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  disabled={controller.pendingAction !== null}
+                  onClick={() => void controller.saveBusinessOutcomes(mission.id)}
+                >
+                  お客様の反応を保存する
+                </button>
+              </section>
+            </>
           ) : null}
         </div>
       )}
