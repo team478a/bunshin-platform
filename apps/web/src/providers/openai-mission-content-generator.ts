@@ -12,7 +12,7 @@ import {
 } from './mission-provider-response';
 
 export const MISSION_CONTENT_GENERATOR_PROMPT_VERSION =
-  'mission-content-generator-v14-bounded-reasoning';
+  'mission-content-generator-v15-goal-planning';
 
 const stringArray = (maxItems: number) => ({
   type: 'array',
@@ -125,6 +125,11 @@ export class OpenAIMissionContentGenerator implements MissionContentGeneratorPor
           ...missionReasoningOptions(model),
           store: false,
           input: [
+            {
+              role: 'system',
+              content:
+                'approvedStrategy.goalPlanningは現在のSNS事業目的に対応する型付き方針です。strategyFocus、topicDirections、ctaDirectionsに本文、写真・動画案、CTAを整合させます。Goal差をCTAの末尾だけで作らず、扱う疑問、利用場面、具体例、読者へ伝える価値そのものを変えます。ctaStrategyとctaDirectionsが矛盾する場合は、承認済みの具体的なctaStrategyを維持しつつ、目的外の行動を新たに足しません。goalKindがINTERMEDIATE_METRICまたはDESTINATIONの場合、それ自体を事業成果と断定しません。',
+            },
             {
               role: 'system',
               content:

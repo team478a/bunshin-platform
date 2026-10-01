@@ -3293,3 +3293,12 @@
 - Goal変更時はCTAの末尾だけでなく、週間要約、各日の目的、テーマ、切り口を変えるようProvider契約へ明記する。フォロワー、LINE登録、ブログ流入は事業成果へ昇格させず、中間指標または導線として扱う。
 - 目的別定義は特定サービス名・OEM名を共通基盤へ直書きせず、SOCIAL capabilityに閉じる。所有権、承認済みStrategy、Bunshin、Serviceの既存境界は維持する。
 - 自動テストはGoalと目的別方針がWeekly Planner入力へ届くこと、7つの主要目的で方針が異なることを保証する。実Providerによる生成品質、Daily、投稿本文、写真・動画案、結果評価、次回提案への差は本変更では確認済みとせず、後続の小さな変更と承認済み検証で確認する。
+
+## D-142: Daily Missionと投稿生成は承認済みSNS Goalの企画方針を継承する
+
+- 日付: 2026-10-01
+- 状態: Accepted（D-141のDaily・Content接続）
+- Daily Planner、投稿本文・写真/動画案Generator、品質Checkerへ、承認済みStrategyのGoalとD-141で定義した型付き企画方針を渡す。Goal差はCTA末尾だけでなく、当日のtopic、angle、reason、本文、視覚案、読者価値へ反映する。
+- 投稿の作り直しでも新しいStrategyへ暗黙に差し替えず、元の生成Snapshotが指す承認済みStrategyを読み直し、そのGoalの企画方針を維持する。異なるWorkspace、User、Bunshin、SocialProfileのGoalは共有しない。
+- 品質Checkerは、題材や読者価値が別GoalのままCTAだけを変えた候補、または承認済みの具体的なCTA方針と矛盾する候補を`GOAL_MISMATCH`として修正対象にする。
+- 自動テストは型付きGoal方針がDaily・Content・Qualityへ届くことと、Goalだけを認知から採用へ変えたとき企画方針が変わることを保証する。実Provider出力の品質優位性、結果のGoal別評価、次回提案への学習は未確認であり、実績として扱わない。

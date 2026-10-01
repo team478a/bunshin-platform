@@ -6,7 +6,7 @@ import type {
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 
-export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v10-feedback-loop';
+export const DAILY_MISSION_PLANNER_PROMPT_VERSION = 'daily-mission-planner-v11-goal-planning';
 
 const schema = {
   type: 'object',
@@ -101,6 +101,11 @@ export class OpenAIDailyMissionPlanner implements DailyMissionPlannerPort {
           model,
           store: false,
           input: [
+            {
+              role: 'system',
+              content:
+                'approvedStrategy.goalPlanningは現在のSNS事業目的に対応する型付き方針です。strategyFocusと今日のweeklyItemを中心に、topicDirectionsから本人の事業・対象顧客に合うテーマと切り口を選び、ctaDirectionsにつながる投稿目的をreasonへ明記します。Goal差をCTAの末尾だけで作らず、topic、angle、reasonそのものを変えます。採用目的なら働く人・仕事内容・職場等、来店予約目的なら利用場面・来店前の不安・店舗情報等、目的に対応する題材を選びます。goalKindがINTERMEDIATE_METRICまたはDESTINATIONの場合、それ自体を事業成果と断定しません。',
+            },
             {
               role: 'system',
               content:
