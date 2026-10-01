@@ -16,6 +16,13 @@ const http = readFileSync(
   new URL('../src/http/service-social-activity-barrier.ts', import.meta.url),
   'utf8',
 );
+const view = readFileSync(
+  new URL(
+    '../app/s/[serviceSlug]/bunshins/[bunshinId]/service-bunshin-detail-view.tsx',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
 describe('social activity barrier participant UI', () => {
   it('shows one plain-language question and a small support action', () => {
@@ -44,5 +51,15 @@ describe('social activity barrier participant UI', () => {
     expect(detail).toContain('getActiveSupport');
     expect(http).toContain('ownerUserId: actor.userId');
     expect(http).toContain('groupMembershipId: membership.id');
+  });
+
+  it('opens the existing material drawer for Hassy Photo First guidance only', () => {
+    expect(card).toContain('CONTENT_REVIEW');
+    expect(card).toContain('MEDIA_PREPARATION');
+    expect(card).toContain('LOW_RISK_PUBLISHING');
+    expect(card).toContain("target?.closest('details')");
+    expect(card).toContain('drawer.open = true');
+    expect(view).toContain('isBusinessDailyService && bunshin.ownerUserId === actor.userId');
+    expect(view).toContain("photoFirstHref: '#daily-action'");
   });
 });
