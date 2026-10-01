@@ -82,6 +82,7 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
     approvedBusinessStrategy,
     activityBarrierQuestion,
     activityBarrierSupport,
+    businessPrimaryPurpose,
   } = model;
 
   return (
@@ -126,6 +127,8 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
           deliveryPolicy={deliveryPolicy}
           serviceLineRequired={Boolean(dedicatedLine)}
           serviceLineConnected={Boolean(dedicatedLineConnection)}
+          businessPurposeEnabled={isBusinessDailyService}
+          primaryPurpose={businessPrimaryPurpose}
         />
         <section className="service-entry__card" id="today-post">
           <ServiceDailyMissionSection

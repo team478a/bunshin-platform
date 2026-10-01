@@ -17,6 +17,8 @@ import {
   type SocialActivityBarrierQuestion,
   type SocialActivitySupportProgress,
   type SocialProfile,
+  type ServiceBusinessPurpose,
+  isServiceBusinessPurpose,
 } from '@bunshin/capability-social';
 import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
@@ -73,6 +75,7 @@ export async function loadServiceBunshinDetail({
   let variantPointCost: number | null = null;
   let rewardsPilotActive = false;
   let businessProgramStartedAt: Date | null = null;
+  let businessPrimaryPurpose: ServiceBusinessPurpose | null = null;
   let postPerformances: PostPerformanceView[] = [];
   let activityBarrierQuestion: SocialActivityBarrierQuestion | null = null;
   let activityBarrierSupport: SocialActivitySupportProgress | null = null;
@@ -92,10 +95,14 @@ export async function loadServiceBunshinDetail({
             userId: actor.userId,
             groupMembership: { status: 'ACTIVE' },
           },
-          select: { createdAt: true },
+          select: { createdAt: true, primaryPurpose: true },
         })
       : null;
     businessProgramStartedAt = businessProgramProfile?.createdAt ?? null;
+    businessPrimaryPurpose =
+      businessProgramProfile && isServiceBusinessPurpose(businessProgramProfile.primaryPurpose)
+        ? businessProgramProfile.primaryPurpose
+        : null;
     bunshin = await new GetBunshin(new db.PrismaBunshinRepository()).execute(scope);
     const membership = await db.prisma.groupMembership.findFirst({
       where: {
@@ -422,6 +429,7 @@ export async function loadServiceBunshinDetail({
     approvedBusinessStrategy,
     activityBarrierQuestion,
     activityBarrierSupport,
+    businessPrimaryPurpose,
   };
 }
 

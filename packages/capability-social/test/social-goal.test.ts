@@ -5,6 +5,8 @@ import {
   SOCIAL_ACCOUNT_STRATEGY_GOALS,
   canonicalGoalFromAccountStrategy,
   canonicalGoalFromBusinessPurpose,
+  initialSocialAccountStrategyGoal,
+  isServiceBusinessPurpose,
 } from '../src';
 
 describe('canonical SOCIAL goals', () => {
@@ -63,9 +65,12 @@ describe('canonical SOCIAL goals', () => {
         reason: 'DESTINATION_IS_NOT_BUSINESS_GOAL',
       },
       INQUIRY: { status: 'RESOLVED', goal: 'INQUIRY' },
+      VISIT_RESERVATION: { status: 'RESOLVED', goal: 'VISIT_RESERVATION' },
       SALES: { status: 'RESOLVED', goal: 'SALES' },
       RECRUIT: { status: 'RESOLVED', goal: 'RECRUITMENT' },
+      REPEAT: { status: 'RESOLVED', goal: 'REPEAT' },
       BRAND_AWARENESS: { status: 'RESOLVED', goal: 'AWARENESS' },
+      TRUST_EXPERTISE: { status: 'RESOLVED', goal: 'TRUST_EXPERTISE' },
       BLOG_TRAFFIC: {
         status: 'REVIEW_REQUIRED',
         candidates: ['AWARENESS', 'TRUST_EXPERTISE', 'INQUIRY'],
@@ -73,5 +78,46 @@ describe('canonical SOCIAL goals', () => {
       },
       OTHER: { status: 'RESOLVED', goal: 'OTHER' },
     });
+  });
+
+  it('derives the initial account strategy from each precise onboarding purpose', () => {
+    expect(initialSocialAccountStrategyGoal('AWARENESS')).toEqual({
+      status: 'RESOLVED',
+      goal: 'BRAND_AWARENESS',
+      destinationType: 'PROFILE',
+    });
+    expect(initialSocialAccountStrategyGoal('RESERVATION')).toEqual({
+      status: 'RESOLVED',
+      goal: 'VISIT_RESERVATION',
+      destinationType: 'NONE',
+    });
+    expect(initialSocialAccountStrategyGoal('SALES')).toEqual({
+      status: 'RESOLVED',
+      goal: 'SALES',
+      destinationType: 'NONE',
+    });
+    expect(initialSocialAccountStrategyGoal('RECRUITING')).toEqual({
+      status: 'RESOLVED',
+      goal: 'RECRUIT',
+      destinationType: 'NONE',
+    });
+    expect(initialSocialAccountStrategyGoal('RETENTION')).toEqual({
+      status: 'RESOLVED',
+      goal: 'REPEAT',
+      destinationType: 'NONE',
+    });
+  });
+
+  it('requires a conversion choice for the broad ATTRACT purpose', () => {
+    expect(initialSocialAccountStrategyGoal('ATTRACT')).toEqual({
+      status: 'REVIEW_REQUIRED',
+      candidates: ['VISIT_RESERVATION', 'INQUIRY', 'SALES'],
+      reason: 'BUSINESS_PURPOSE_TOO_BROAD',
+    });
+  });
+
+  it('validates persisted service purpose strings at the boundary', () => {
+    expect(isServiceBusinessPurpose('RETENTION')).toBe(true);
+    expect(isServiceBusinessPurpose('UNKNOWN')).toBe(false);
   });
 });
