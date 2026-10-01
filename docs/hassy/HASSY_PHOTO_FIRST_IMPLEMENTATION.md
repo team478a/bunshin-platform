@@ -96,7 +96,7 @@ Photo First解析には、企業名、事業目的、対象顧客、人格要約
 
 既存の本文生成工程では、さらに既存Generation Context Snapshot、選択されたMemory、Campaign等の既存許可済みContextを利用する。受理・不採用・投稿結果がどの程度Snapshotへ反映されているかは既存Goal実装に従うが、Photo First解析単体へ全Feedback・KPI明細を直接渡してはいない。
 
-今回の自動テストはContextと指示の伝播を確認するものであり、実Provider出力が全Goal・全業種で十分な差を生む品質E2Eの証明ではない。
+今回の自動テストはContextと指示の伝播を確認するものであり、実Provider出力が全Goal・全業種で十分な差を生む品質E2Eの証明ではない。2026-10-01に合成写真と架空企業で主要2 Goalの実Provider確認を開始したが、最初の写真解析がHTTP 429となり再試行せず停止した。詳細は`docs/hassy/HASSY_PHOTO_FIRST_PROVIDER_QUALITY_REPORT.md`を参照する。
 
 ## 7. 冪等性・失敗時の扱い
 
@@ -133,8 +133,9 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 | 解析・企画Metadataの永続化               | IMPLEMENTED             | 元写真・投稿案へtenant制約付きで保存し、再読込時に復元   |
 | Mission未作成日のPhoto First開始         | IMPLEMENTED             | 今日の確定済みPlanとACTIVEプロフィールが必要             |
 | 障壁サポートからの案内                   | IMPLEMENTED             | ハッシーのCONTENT・MEDIA・CONFIDENCE支援から既存欄へ接続 |
+| Goal・企業・履歴の差分契約               | FIXTURE_VERIFIED        | 同一写真・外部通信なしの決定的fixtureで一軸ずつ検証      |
 | 受理・不採用・結果の解析工程への直接入力 | PARTIAL                 | 既存Snapshot/本文生成Context経由。解析単体へ明細は未接続 |
-| Goal/業種別の実生成品質                  | PRODUCTION_E2E_REQUIRED | 実API生成は未実施                                        |
+| Goal/業種別の実生成品質                  | INCONCLUSIVE            | 実APIは1回試行したが、最初の写真解析がHTTP 429で停止     |
 | 実Storage・スマートフォン表示            | PRODUCTION_E2E_REQUIRED | 本番資格情報は未使用                                     |
 | LINEへの写真送信で直接生成               | DEFERRED                | Web導線を採用                                            |
 | 自動画像編集                             | DEFERRED                | Promptコピーのみ                                         |
@@ -171,9 +172,18 @@ Provider側の保持、契約上の取扱い、本番データ処理条件は運
 - `apps/web/test/activity-barrier-photo-first-guidance.test.tsx`
   - CONTENT、MEDIA、CONFIDENCEの受理済み支援から既存Photo First欄へ進めること
   - ハッシー以外と無関係な障壁支援には導線を表示しないこと
+- `apps/web/test/photo-first-differential-fixtures.test.ts`
+  - 同一の写真bytesを維持し、Goal、企業情報、直近履歴だけを一つずつ変更すること
+  - テーマ、切り口、推奨理由、本文、写真案、CTAが一体として変わること
+  - Photo First企画が既存本文生成Provider入力へ渡り、CTAだけの差し替えを禁止すること
+  - fake Providerによる決定的contractテストであり、実Provider品質の証明ではないこと
+- `apps/web/test/photo-first-provider-quality.live.test.ts`
+  - 合成写真、架空企業、認知・採用の2 Goalだけを対象にする明示実行型の実Provider検証
+  - Goalごとに写真解析、本文生成、品質判定を1回ずつ実行し、合計6リクエストを上限にする
+  - 通常テストではskipし、2026-10-01の手動実行は1回目のHTTP 429で再試行せず停止
 
-実行結果、型検査、lintはPRの最新検証結果を正本とする。実OpenAI、実Storage、LINE、SNS投稿、本番DB、本番デプロイは実行していない。
+実行結果、型検査、lintはPRの最新検証結果を正本とする。実OpenAIは合成データで1リクエストだけ試行した。実Storage、LINE、SNS投稿、本番DB、本番デプロイは実行していない。
 
 ## 11. 未解決事項と次の最小タスク
 
-次の最小タスクは、同一写真のままGoal、企業情報、直近履歴だけを変えたPhoto First差分fixtureを追加し、テーマ、切り口、本文、CTA、recommendationReasonが一体として変わることを既存Goal Differential rubricで検証することである。実Provider品質は本番E2Eと混同しない。
+次の最小タスクは、API PlatformでHTTP 429の詳細原因（rate limit、credit、spend limit、権限）を確認することである。解消後、合成写真・架空企業・主要2 Goal・最大6リクエストの同じ条件で一度だけ再実行し、テーマ、切り口、本文、写真案、CTAを同じrubricで評価する。fixture成功を実Provider品質や事業成果の証明として扱わない。
