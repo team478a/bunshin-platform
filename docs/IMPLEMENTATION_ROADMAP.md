@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+ハッシー Photo First V1は`docs/hassy/HASSY_PHOTO_FIRST_IMPLEMENTATION.md`を参照。既存の非公開Daily Action写真を、本人・Service・Bunshin境界で再検証し、縮小・再符号化して構造化Vision解析へ渡す。SNS Goal、企業、対象顧客、Strategy、今日と直近のMissionを使った企画を既存の投稿案生成・品質検査・履歴へ接続する。Plan Firstは維持し、LINE画像直接受信、自動画像編集、SNS自動投稿、解析Metadataの永続化、Photo First単独入口は含めない。実Provider・実Storage・スマートフォン・本番E2Eは別途必要。
+
 fal/Klingの発注成否不明の保留は`docs/VIDEO_FAL_SUBMISSION_UNKNOWN_IMPLEMENTATION_REPORT.md`を参照。POST前の永続claim、ID喪失時の再送停止、旧QUEUEDかつIDなし行の保守的な要照合移行、fal管理者再試行の停止を同一作業単位とする。実fal注文・費用・本番旧行件数・照合手順を確認するまで本番運用可能とみなさない。
 
 千ノ国メディアのスキームなしDiscord招待URL除去は`docs/SENNOKUNI_SCHEMELESS_INVITE_FILTER_IMPLEMENTATION_REPORT.md`を参照。PR #994の参加先補正を補強し、禁止ホストだけを除去して偽のLINEドメインを作らない。実画像生成・本番反映の確認は別作業。

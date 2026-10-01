@@ -25,5 +25,18 @@ describe('mission content variant AI runtime boundary', () => {
     expect(runtimeSource).toContain("'CONTENT_REJECTED'");
     expect(runtimeSource).toContain("'variant-content:1'");
     expect(runtimeSource).not.toContain("'variant-content:2'");
+    expect(runtimeSource).toContain("'photo-first-analysis'");
+    expect(runtimeSource).toContain("'PHOTO_FIRST_ANALYSIS'");
+  });
+
+  it('claims the generation before reading a tenant-scoped Photo First source', () => {
+    expect(generationSource.indexOf('ClaimMissionContentVariantGeneration')).toBeLessThan(
+      generationSource.indexOf('readForVision'),
+    );
+    expect(generationSource).toContain('workspaceId: input.workspaceId');
+    expect(generationSource).toContain('bunshinId: input.bunshinId');
+    expect(generationSource).toContain('ownerUserId: input.actorUserId');
+    expect(generationSource).toContain('{ groupId: input.groupId }');
+    expect(generationSource).toContain("attachmentStatus: 'READY'");
   });
 });

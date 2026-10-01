@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   remove: vi.fn(),
   member: vi.fn(),
   bunshin: vi.fn(),
+  executePhotoFirst: vi.fn(),
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -36,6 +37,12 @@ vi.mock('../src/daily-actions/daily-action-storage', () => ({
     }
     remove = state.remove;
   },
+}));
+
+vi.mock('../src/services/mission-content-variant-generation', () => ({
+  createMissionContentVariantGenerationService: () => ({
+    executePhotoFirst: state.executePhotoFirst,
+  }),
 }));
 
 vi.mock('@bunshin/database', () => ({
@@ -64,6 +71,7 @@ vi.mock('@bunshin/database', () => ({
 import {
   createServiceDailyActionResponse,
   deleteServiceDailyActionResponse,
+  generateServicePhotoFirstResponse,
   listServiceDailyActionsResponse,
   updateServiceDailyActionPhotoPreferenceResponse,
 } from '../src/http/service-daily-actions';
@@ -124,6 +132,39 @@ describe('service Daily Action HTTP', () => {
     state.update.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
       Promise.resolve(memory(data)),
     );
+    state.executePhotoFirst.mockResolvedValue({
+      variant: {
+        id: '77777777-7777-4777-8777-777777777777',
+        dailyMissionId: '88888888-8888-4888-8888-888888888888',
+        sequence: 1,
+        format: 'TEXT',
+        content: { body: '写真から考えた投稿です', cta: '保存してご覧ください' },
+        qualityScore: 91,
+        createdAt: new Date('2026-10-01T00:00:00.000Z'),
+        selectedAt: null,
+      },
+      photoFirst: {
+        analysis: {
+          imageType: 'product',
+          subjects: ['商品'],
+          objects: [],
+          scene: '店内',
+          visibleText: [],
+          possibleContentAngles: ['使い方'],
+          qualityNotes: [],
+          uncertainElements: [],
+          safetyFlags: [],
+        },
+        planning: {
+          theme: '商品の使い方',
+          angle: '初めての方向け',
+          recommendationReason: '今日の認知目的に合うため',
+          photoUsage: '主役として使う',
+          imageEditPrompt: '明るさだけを自然に整える',
+          confirmationQuestion: null,
+        },
+      },
+    });
   });
 
   it('creates an owner-scoped question as a Bunshin memory', async () => {
@@ -253,6 +294,39 @@ describe('service Daily Action HTTP', () => {
     expect(body.data.useForAutomaticImages).toBe(true);
   });
 
+  it('starts Photo First generation with the authenticated service scope', async () => {
+    const dailyMissionId = '88888888-8888-4888-8888-888888888888';
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({ dailyMissionId, idempotencyKey: key }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(201);
+    expect(state.member).toHaveBeenCalledWith(serviceSlug, state.actor?.userId);
+    expect(state.executePhotoFirst).toHaveBeenCalledWith({
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      groupId: '33333333-3333-4333-8333-333333333333',
+      bunshinId,
+      actorUserId: state.actor?.userId,
+      dailyMissionId,
+      photoActionId: actionId,
+      generationIdempotencyKey: key,
+      usageIdempotencyPrefix: key,
+      serviceSafeMode: true,
+      allowServiceOwnerMemories: true,
+    });
+    const body = (await response.json()) as {
+      data: { photoFirst: { planning: { theme: string } } };
+    };
+    expect(body.data.photoFirst.planning.theme).toBe('商品の使い方');
+  });
+
   it('requires same-origin before creating or deleting material', async () => {
     const create = await createServiceDailyActionResponse(
       new Request('http://localhost:3000/daily-actions', {
@@ -286,10 +360,25 @@ describe('service Daily Action HTTP', () => {
       bunshinId,
       actionId,
     );
+    const photoFirst = await generateServicePhotoFirstResponse(
+      new Request(`http://localhost:3000/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { origin: 'https://attacker.test', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          dailyMissionId: '88888888-8888-4888-8888-888888888888',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
     expect(create.status).toBe(403);
     expect(remove.status).toBe(403);
     expect(updatePhoto.status).toBe(403);
+    expect(photoFirst.status).toBe(403);
     expect(state.create).not.toHaveBeenCalled();
     expect(state.update).not.toHaveBeenCalled();
+    expect(state.executePhotoFirst).not.toHaveBeenCalled();
   });
 });

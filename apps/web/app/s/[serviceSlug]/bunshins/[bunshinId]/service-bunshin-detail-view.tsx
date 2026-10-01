@@ -206,6 +206,9 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
                   endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/daily-actions`}
                   initialActions={dailyActions}
                   suggestedReuseTopic={successfulBusinessTopic}
+                  todayMissionId={
+                    dailyMissions.find(({ missionDate }) => missionDate === today)?.id ?? null
+                  }
                 />
               </section>
             </MemberHomeDrawer>
