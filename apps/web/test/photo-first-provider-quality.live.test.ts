@@ -16,7 +16,20 @@ const apiKey = process.env['OPENAI_API_KEY'] ?? '';
 const model = process.env['OPENAI_MODEL'] ?? 'gpt-5.2';
 const requestLimit = 6;
 
-type Goal = 'BRAND_AWARENESS' | 'RECRUIT';
+type Goal = 'BRAND_AWARENESS' | 'RECRUIT' | 'VISIT_RESERVATION' | 'INQUIRY';
+type GoalPair = 'baseline' | 'conversion';
+
+const goalPairs = {
+  baseline: ['BRAND_AWARENESS', 'RECRUIT'],
+  conversion: ['VISIT_RESERVATION', 'INQUIRY'],
+} as const satisfies Record<GoalPair, readonly Goal[]>;
+
+const requestedGoalPair = process.env['PHOTO_FIRST_QUALITY_GOAL_PAIR'] ?? 'baseline';
+if (requestedGoalPair !== 'baseline' && requestedGoalPair !== 'conversion') {
+  throw new Error(`Unsupported PHOTO_FIRST_QUALITY_GOAL_PAIR: ${requestedGoalPair}`);
+}
+const goalPair: GoalPair = requestedGoalPair;
+const goals = goalPairs[goalPair];
 
 function sharedInput(goal: Goal) {
   return {
@@ -128,7 +141,7 @@ function contentInput(goal: Goal, planning: PhotoFirstPlanning, analysis: unknow
 }
 
 describe.runIf(runLive)('Photo First actual provider quality (manual, synthetic data only)', () => {
-  it('compares awareness and recruitment with a six-request hard cap and no retry', async () => {
+  it(`compares the ${goalPair} goal pair with a six-request hard cap and no retry`, async () => {
     expect(apiKey, 'OPENAI_API_KEY must be present only in the execution environment').not.toBe('');
     const photo = await syntheticPhoto();
     let requestCount = 0;
@@ -161,7 +174,7 @@ describe.runIf(runLive)('Photo First actual provider quality (manual, synthetic 
     const checker = new OpenAIMissionQualityChecker({ apiKey, model, fetch: cappedFetch });
     const results = [];
 
-    for (const goal of ['BRAND_AWARENESS', 'RECRUIT'] as const) {
+    for (const goal of goals) {
       const initial = sharedInput(goal);
       const planned = await analyzer.analyze({
         ...initial,
@@ -217,27 +230,32 @@ describe.runIf(runLive)('Photo First actual provider quality (manual, synthetic 
       });
     }
 
-    const awareness = results[0];
-    const recruitment = results[1];
-    expect(awareness).toBeDefined();
-    expect(recruitment).toBeDefined();
+    const first = results[0];
+    const second = results[1];
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
     expect(requestCount).toBe(requestLimit);
     expect(createHash('sha256').update(photo).digest('hex')).toHaveLength(64);
-    expect(awareness?.planning.theme).not.toBe(recruitment?.planning.theme);
-    expect(awareness?.planning.angle).not.toBe(recruitment?.planning.angle);
-    expect(awareness?.planning.recommendationReason).not.toBe(
-      recruitment?.planning.recommendationReason,
-    );
-    expect(awareness?.content.body).not.toBe(recruitment?.content.body);
-    expect(awareness?.content.photoInstruction).not.toBe(recruitment?.content.photoInstruction);
-    expect(awareness?.content.cta).not.toBe(recruitment?.content.cta);
-    expect(JSON.stringify(recruitment)).toMatch(/採用|応募|働|職場|スタッフ/);
-    expect(JSON.stringify(awareness)).toMatch(/認知|知って|フォロー|保存|特徴|考え方/);
+    expect(first?.planning.theme).not.toBe(second?.planning.theme);
+    expect(first?.planning.angle).not.toBe(second?.planning.angle);
+    expect(first?.planning.recommendationReason).not.toBe(second?.planning.recommendationReason);
+    expect(first?.content.body).not.toBe(second?.content.body);
+    expect(first?.content.photoInstruction).not.toBe(second?.content.photoInstruction);
+    expect(first?.content.cta).not.toBe(second?.content.cta);
+
+    if (goalPair === 'baseline') {
+      expect(JSON.stringify(second)).toMatch(/採用|応募|働|職場|スタッフ/);
+      expect(JSON.stringify(first)).toMatch(/認知|知って|フォロー|保存|特徴|考え方/);
+    } else {
+      expect(JSON.stringify(first)).toMatch(/予約|来店|空き|初回|メニュー/);
+      expect(JSON.stringify(second)).toMatch(/問い合わせ|相談|LINE|質問|FAQ/);
+    }
 
     console.info(
       `PHOTO_FIRST_PROVIDER_QUALITY_RESULT=${JSON.stringify({
         executedAt: new Date().toISOString(),
         model,
+        goalPair,
         requestCount,
         photoSha256: createHash('sha256').update(photo).digest('hex'),
         results,
