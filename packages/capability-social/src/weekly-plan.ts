@@ -162,10 +162,20 @@ export interface WeeklyPlannerInput {
     }>;
     goalEvaluation?: {
       goal: SocialAccountStrategyGoal;
-      status: 'MEASURED' | 'NO_DATA' | 'UNAVAILABLE';
+      status: 'MEASURED' | 'SELF_REPORTED' | 'NO_DATA' | 'UNAVAILABLE';
       primaryOutcomeKeys: Array<'inquiries' | 'reservations' | 'visits' | 'orders' | 'other'>;
       recordedPostCount: number;
       primaryOutcomeTotal: number;
+      reportedProgress?: {
+        achieved: number;
+        someProgress: number;
+        noChange: number;
+        unknown: number;
+      };
+      reportedPositiveTopics?: Array<{
+        topic: string;
+        result: 'ACHIEVED' | 'SOME_PROGRESS';
+      }>;
       feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT';
       limitations: string[];
     };

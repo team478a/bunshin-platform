@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   post: vi.fn(),
   feedback: vi.fn(),
   getPost: vi.fn(),
+  snapshot: vi.fn(),
   update: vi.fn(),
   milestone: vi.fn(),
   usage: vi.fn(),
@@ -45,6 +46,9 @@ vi.mock('@bunshin/database', () => ({
     recordFeedback = m.feedback;
     getPost = m.getPost;
   },
+  PrismaGenerationContextSnapshotRepository: class {
+    find = m.snapshot;
+  },
   PrismaServiceReferralRewardRepository: class {
     completeMilestone = m.milestone;
   },
@@ -60,6 +64,7 @@ import {
   recordServicePostResponse,
   recordServiceMissionFeedbackResponse,
   recordServiceBusinessOutcomeResponse,
+  recordServiceSocialGoalOutcomeResponse,
 } from '../src/http/service-daily-mission-outcomes';
 import { serviceDailyMissionScope } from '../src/http/service-daily-mission-http-core';
 
@@ -141,6 +146,12 @@ const operations: Array<{
     repo: m.getPost,
     run: (r, s, b) => recordServiceBusinessOutcomeResponse(r, s, b, id),
   },
+  {
+    name: 'goal outcome',
+    body: { result: 'SOME_PROGRESS' },
+    repo: m.getPost,
+    run: (r, s, b) => recordServiceSocialGoalOutcomeResponse(r, s, b, id),
+  },
 ];
 const writes = () => [m.decide, m.activity, m.post, m.feedback, m.update, m.milestone, m.usage];
 beforeEach(() => {
@@ -159,6 +170,7 @@ beforeEach(() => {
   m.post.mockResolvedValue({ post, activity });
   m.feedback.mockResolvedValue({ feedback: { id: 'feedback-a', ...dates }, activity });
   m.getPost.mockResolvedValue(post);
+  m.snapshot.mockResolvedValue({ payload: { strategy: { goal: 'RECRUIT' } } });
   m.update.mockResolvedValue(post);
   m.milestone.mockResolvedValue([]);
 });
@@ -231,7 +243,7 @@ describe('private service posting and outcomes', () => {
   it.each(operations)('preserves owner/mission denial from repositories for $name', async (op) => {
     op.repo.mockResolvedValue(null);
     expect((await op.run(request(op.body), 'private-a', 'foreign-bunshin')).status).toBe(
-      op.name === 'business outcome' ? 409 : 404,
+      op.name === 'business outcome' || op.name === 'goal outcome' ? 409 : 404,
     );
     expect(m.update).not.toHaveBeenCalled();
     expect(m.milestone).not.toHaveBeenCalled();
@@ -244,6 +256,50 @@ describe('private service posting and outcomes', () => {
         .status,
     ).toBe(403);
     expect(m.getPost).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+  it('records goal progress against the server-side generation goal', async () => {
+    const response = await recordServiceSocialGoalOutcomeResponse(
+      request({ result: 'ACHIEVED' }),
+      'private-a',
+      'bunshin-a',
+      id,
+    );
+    expect(response.status).toBe(200);
+    expect(m.snapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-a',
+        groupId: 'service-a',
+        actorUserId: 'member-a',
+        bunshinId: 'bunshin-a',
+        dailyMissionId: id,
+      }),
+    );
+    expect(m.update).toHaveBeenCalledWith({
+      where: { id: 'post-a' },
+      data: {
+        manualMetrics: expect.objectContaining({
+          existing: 1,
+          socialGoalOutcome: expect.objectContaining({
+            strategyGoal: 'RECRUIT',
+            result: 'ACHIEVED',
+          }),
+        }),
+      },
+    });
+  });
+  it('does not accept goal progress when the generation goal is unavailable', async () => {
+    m.snapshot.mockResolvedValue({ payload: { strategy: { id: 'strategy-a' } } });
+    expect(
+      (
+        await recordServiceSocialGoalOutcomeResponse(
+          request({ result: 'ACHIEVED' }),
+          'private-a',
+          'bunshin-a',
+          id,
+        )
+      ).status,
+    ).toBe(409);
     expect(m.update).not.toHaveBeenCalled();
   });
   it('keeps milestone and usage attribution inside the service', async () => {

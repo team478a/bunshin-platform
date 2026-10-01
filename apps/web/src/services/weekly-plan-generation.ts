@@ -25,7 +25,6 @@ import {
   type WeeklyPlannerPort,
   type WeeklyPlanRepository,
   weeklySocialGoalPlanningProfile,
-  SOCIAL_ACCOUNT_STRATEGY_GOALS,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { createLogger } from '@bunshin/observability';
@@ -44,6 +43,12 @@ import {
   readPostPerformance,
   type PostPerformanceView,
 } from './post-performance';
+import {
+  readSnapshotStrategyGoal,
+  readSocialGoalOutcome,
+  summarizeSocialGoalOutcomes,
+} from './social-goal-outcomes';
+export { readSnapshotStrategyGoal } from './social-goal-outcomes';
 import {
   OpenAIWeeklyPlanner,
   WEEKLY_PLANNER_PROMPT_VERSION,
@@ -98,17 +103,6 @@ function hasRecordedBusinessOutcomes(value: unknown) {
   return Boolean(nested && typeof nested === 'object' && !Array.isArray(nested));
 }
 
-export function readSnapshotStrategyGoal(value: unknown): SocialAccountStrategyGoal | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const strategy = (value as Record<string, unknown>)['strategy'];
-  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) return null;
-  const goal = (strategy as Record<string, unknown>)['goal'];
-  return typeof goal === 'string' &&
-    (SOCIAL_ACCOUNT_STRATEGY_GOALS as readonly string[]).includes(goal)
-    ? (goal as SocialAccountStrategyGoal)
-    : null;
-}
-
 export function buildBusinessOutcomePlanningContext(records: RecentOutcomeRecord[]) {
   const topics = new Map<string, BusinessOutcomes>();
   for (const record of records) {
@@ -140,25 +134,28 @@ export function buildGoalOutcomePlanningContext(
   records: RecentOutcomeRecord[],
 ) {
   const primaryOutcomeKeys = [...primaryOutcomeKeysByGoal[goal]];
-  if (primaryOutcomeKeys.length === 0) {
-    return {
-      ...buildBusinessOutcomePlanningContext([]),
-      goalEvaluation: {
-        goal,
-        status: 'UNAVAILABLE' as const,
-        primaryOutcomeKeys,
-        recordedPostCount: 0,
-        primaryOutcomeTotal: 0,
-        feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT' as const,
-        limitations: [
-          '現在取得している手入力成果だけでは、このGoalの達成を判定できません。',
-          'GOOD・NEUTRAL・BADは内容の好みであり、Goal達成の証拠ではありません。',
-        ],
-      },
-    };
-  }
+  const goalReports = records.filter((record) => {
+    const outcome = readSocialGoalOutcome(record.manualMetrics);
+    return record.strategyGoal === goal && outcome?.strategyGoal === goal;
+  });
+  const reportedProgress = summarizeSocialGoalOutcomes(
+    goalReports.map(({ manualMetrics }) => manualMetrics),
+  );
+  const reportedPositiveTopics = goalReports
+    .filter(({ manualMetrics }) => {
+      const result = readSocialGoalOutcome(manualMetrics)?.result;
+      return result === 'ACHIEVED' || result === 'SOME_PROGRESS';
+    })
+    .map(({ topic, manualMetrics }) => ({
+      topic,
+      result: readSocialGoalOutcome(manualMetrics)!.result,
+    }))
+    .slice(0, 3);
   const recorded = records.filter(
-    (record) => record.strategyGoal === goal && hasRecordedBusinessOutcomes(record.manualMetrics),
+    (record) =>
+      primaryOutcomeKeys.length > 0 &&
+      record.strategyGoal === goal &&
+      hasRecordedBusinessOutcomes(record.manualMetrics),
   );
   const selected = recorded.map((record) => {
     const outcomes = readBusinessOutcomes(record.manualMetrics);
@@ -167,20 +164,38 @@ export function buildGoalOutcomePlanningContext(
     return { topic: record.topic, manualMetrics: { businessOutcomes: relevant } };
   });
   const planning = buildBusinessOutcomePlanningContext(selected);
+  const recordedPostCount = records.filter((record) => {
+    const outcome = readSocialGoalOutcome(record.manualMetrics);
+    return (
+      record.strategyGoal === goal &&
+      (hasRecordedBusinessOutcomes(record.manualMetrics) || outcome?.strategyGoal === goal)
+    );
+  }).length;
   return {
     ...planning,
     goalEvaluation: {
       goal,
-      status: recorded.length > 0 ? ('MEASURED' as const) : ('NO_DATA' as const),
+      status:
+        recorded.length > 0
+          ? ('MEASURED' as const)
+          : goalReports.length > 0
+            ? ('SELF_REPORTED' as const)
+            : ('NO_DATA' as const),
       primaryOutcomeKeys,
-      recordedPostCount: recorded.length,
+      recordedPostCount,
       primaryOutcomeTotal: primaryOutcomeKeys.reduce(
         (total, key) => total + planning.businessOutcomes[key],
         0,
       ),
+      reportedProgress,
+      reportedPositiveTopics,
       feedbackMeaning: 'CONTENT_PREFERENCE_NOT_GOAL_ACHIEVEMENT' as const,
       limitations: [
         '同じGoalで生成され、本人が記録した投稿成果だけを集計します。',
+        '目的への手応えは本人の自己申告であり、外部KPIや投稿との因果関係を証明しません。',
+        ...(primaryOutcomeKeys.length === 0
+          ? ['このGoalを直接確認する外部KPIは現在取得していません。']
+          : []),
         '記録された件数は投稿との因果関係を証明しません。',
       ],
     },

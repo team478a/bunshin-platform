@@ -361,15 +361,54 @@ describe('goal-specific outcome planning context', () => {
     });
   });
 
-  it('does not invent achievement for a goal without an available KPI', () => {
+  it('reports no data without inventing achievement for a goal without an external KPI', () => {
     expect(buildGoalOutcomePlanningContext('RECRUIT', records)).toMatchObject({
       businessOutcomes: { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 },
       successfulTopics: [],
       goalEvaluation: {
         goal: 'RECRUIT',
-        status: 'UNAVAILABLE',
+        status: 'NO_DATA',
         primaryOutcomeKeys: [],
         primaryOutcomeTotal: 0,
+      },
+    });
+  });
+
+  it('uses same-goal self-reported progress without presenting it as a measured KPI', () => {
+    expect(
+      buildGoalOutcomePlanningContext('RECRUIT', [
+        {
+          topic: 'スタッフの一日',
+          strategyGoal: 'RECRUIT',
+          manualMetrics: {
+            socialGoalOutcome: {
+              strategyGoal: 'RECRUIT',
+              result: 'SOME_PROGRESS',
+              reportedAt: '2026-10-01T00:00:00.000Z',
+            },
+          },
+        },
+        {
+          topic: '別目的の投稿',
+          strategyGoal: 'BRAND_AWARENESS',
+          manualMetrics: {
+            socialGoalOutcome: {
+              strategyGoal: 'BRAND_AWARENESS',
+              result: 'ACHIEVED',
+              reportedAt: '2026-10-01T00:00:00.000Z',
+            },
+          },
+        },
+      ]),
+    ).toMatchObject({
+      businessOutcomes: { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 },
+      goalEvaluation: {
+        goal: 'RECRUIT',
+        status: 'SELF_REPORTED',
+        primaryOutcomeKeys: [],
+        primaryOutcomeTotal: 0,
+        reportedProgress: { achieved: 0, someProgress: 1, noChange: 0, unknown: 0 },
+        reportedPositiveTopics: [{ topic: 'スタッフの一日', result: 'SOME_PROGRESS' }],
       },
     });
   });

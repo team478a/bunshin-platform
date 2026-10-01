@@ -89,7 +89,7 @@ export class OpenAIWeeklyPlanner implements WeeklyPlannerPort {
           {
             role: 'system',
             content:
-              'recentPerformance.goalEvaluationは現在のGoalと同じGoalで生成された投稿だけの評価条件です。status=MEASUREDの場合だけprimaryOutcomeKeys、businessOutcomes、successfulTopicsを次週判断へ使います。NO_DATAは成果未入力であり失敗を意味しません。UNAVAILABLEは現状の取得データではGoal達成を判定できないため、成果を推測せず検証可能な題材を提案します。GOOD・NEUTRAL・BADは内容の好みでありGoal達成ではありません。投稿反応、手入力成果、因果関係を混同しません。',
+              'recentPerformance.goalEvaluationは現在のGoalと同じGoalで生成された投稿だけの評価条件です。status=MEASUREDの場合だけprimaryOutcomeKeys、businessOutcomes、successfulTopicsを件数実績として使います。SELF_REPORTEDの場合、reportedProgressとreportedPositiveTopicsは本人の手応えとして参考にできますが、外部KPI達成や因果関係として断定しません。NO_DATAは成果未入力であり失敗を意味しません。UNAVAILABLEは現状の取得データではGoal達成を判定できないため、成果を推測せず検証可能な題材を提案します。GOOD・NEUTRAL・BADは内容の好みでありGoal達成ではありません。投稿反応、手入力成果、自己申告、因果関係を混同しません。',
           },
           { role: 'user', content: JSON.stringify(input) },
         ],
