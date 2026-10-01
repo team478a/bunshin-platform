@@ -284,3 +284,16 @@ Retry       0
 ```
 
 次の最小タスクは、今回の実測証跡をマージした後、Sales以外の未検証Goalである`TRUST_EXPERTISE`を、既存の認知Goalと同じ合成条件で非課金fixture・契約テストから確認することである。追加の実Provider検証は別途承認を得るまで行わない。
+
+## 11. Trust / Expertiseの非課金差分テスト（2026-10-02 JST）
+
+- 認知Goalと会社、対象顧客、写真bytes、Mission、直近履歴を同一にし、Goalとgoal planningだけを`TRUST_EXPERTISE`へ変更するfixtureを追加した
+- 認知は「店舗の丁寧な考え方を知る」、Trust / Expertiseは「施術前に何を見て、なぜ確認するかという判断根拠と仕事のプロセスを伝える」へ分岐させた
+- theme、angle、recommendation reason、本文、写真案、CTAの全項目が異なることをassertした
+- Trust / ExpertiseのCTAは、一般的な認知獲得ではなく判断手順の保存へ接続した
+- 同一画像bytesが両Goalで維持され、Goal以外の条件が変わっていないことを確認した
+- 将来の実Provider検証用に`trust-awareness`ペアを追加した。通常テストでは明示フラグがないためskipされ、外部通信しない
+
+非課金fixtureは期待する構造とProvider requestへのGoal伝播を固定するが、実モデルがその品質で生成することは証明しない。Trust / Expertiseの実Provider品質は`INCONCLUSIVE`のままである。
+
+次の最小タスクは、この非課金テストのCI完了とマージ後に、別途課金承認を得た場合に限り、同一合成入力の`BRAND_AWARENESS` / `TRUST_EXPERTISE`を6リクエスト上限・再試行なしで実Provider比較することである。
