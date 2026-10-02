@@ -3,6 +3,7 @@ import {
   ClaimMissionContentVariantGeneration,
   CompleteMissionContentVariantGeneration,
   FailMissionContentVariantGeneration,
+  ListMissionContentVariantQualityAudits,
   ListMissionContentVariants,
   SelectMissionContentVariant,
   type MissionContentVariantRepository,
@@ -87,6 +88,21 @@ function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
     complete: vi.fn().mockResolvedValue(variant),
     fail: vi.fn().mockResolvedValue(true),
     list: vi.fn().mockResolvedValue([variant]),
+    listQualityAudits: vi.fn().mockResolvedValue([
+      {
+        generationId: 'generation-1',
+        status: 'SUCCEEDED',
+        variantId: variant.id,
+        errorCategory: null,
+        promptVersion: variant.promptVersion,
+        qualityVerdict: 'PASS',
+        qualityScore: 90,
+        qualityIssueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+        qualityRepairCount: 1,
+        createdAt: variant.createdAt,
+        updatedAt: variant.createdAt,
+      },
+    ]),
     select: vi.fn().mockResolvedValue({ ...variant, selectedAt: variant.createdAt }),
     ...overrides,
   } satisfies MissionContentVariantRepository;
@@ -285,6 +301,32 @@ describe('mission content variants', () => {
       new ListMissionContentVariants(repository({ list: vi.fn().mockResolvedValue(null) })).execute(
         scope,
       ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('queries bounded quality issue codes without exposing another mission as empty', async () => {
+    const repo = repository();
+    await expect(
+      new ListMissionContentVariantQualityAudits(repo).execute({
+        ...scope,
+        issueCode: ' PHOTO_FIRST_UNCONFIRMED_FACT ',
+      }),
+    ).resolves.toMatchObject([
+      {
+        generationId: 'generation-1',
+        qualityVerdict: 'PASS',
+        qualityRepairCount: 1,
+      },
+    ]);
+    expect(repo.listQualityAudits).toHaveBeenCalledWith({
+      ...scope,
+      issueCode: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+    });
+
+    await expect(
+      new ListMissionContentVariantQualityAudits(
+        repository({ listQualityAudits: vi.fn().mockResolvedValue(null) }),
+      ).execute(scope),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

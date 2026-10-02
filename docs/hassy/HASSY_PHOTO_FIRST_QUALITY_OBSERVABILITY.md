@@ -71,3 +71,18 @@ Provider呼び出しや再試行回数は変更しない。品質履歴の保存
 ## 8. 次の最小タスク
 
 本変更をマージ・デプロイした後、架空データまたは許可済み運用データだけを使い、`PHOTO_FIRST_UNCONFIRMED_FACT`を含むGenerationと修正後PASSのGenerationがテナント境界付きで取得できることを確認する。本番データの内容や確認回答本文は表示しない。
+
+## 9. テナント境界付き照会の確認
+
+2026-10-02、架空データだけを使うRepositoryテストを追加した。照会はWorkspace、Bunshin、Daily Mission、操作Userの既存認可を先に確認し、認可後にだけGenerationを検索する。
+
+- issue codeを完全一致で指定できる。
+- `PHOTO_FIRST_UNCONFIRMED_FACT`を含み、修正1回後に最終`PASS`となったGenerationを取得できる。
+- 別Workspaceなど認可外のMissionではGeneration検索自体を実行せず、空配列ではなく非公開として扱う。
+- 返却対象はGeneration ID、状態、Variant ID、一般エラー分類、Prompt Version、品質判定・点数・issue code・修正回数、時刻だけに限定する。
+- 投稿本文、写真解析、確認質問・回答、User ID、idempotency keyは返却しない。
+- 最大100件、作成日時の新しい順に限定する。
+
+この段階では管理画面や外部HTTP APIを追加しない。運用上の表示要件と閲覧権限が決まるまでは、認可済みRepository契約と自動テストを正本とする。
+
+次の最小タスクは、デプロイ後の発生状況を確認し、管理画面に表示する必要がある場合だけ、既存のサービス運用権限へ接続した読み取り専用の集計APIを追加することである。
