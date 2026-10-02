@@ -13,12 +13,10 @@ function claims(existing: object | null = null) {
   const tx = {
     $executeRaw: vi.fn(),
     dailyMission: {
-      findFirst: vi
-        .fn()
-        .mockResolvedValue({
-          id: 'mission',
-          bunshin: { ownerUserId: 'owner', workspace: { memberships: [{ role: 'MEMBER' }] } },
-        }),
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'mission',
+        bunshin: { ownerUserId: 'owner', workspace: { memberships: [{ role: 'MEMBER' }] } },
+      }),
     },
     missionContentVariant: { findFirst: vi.fn().mockResolvedValue(null) },
     missionContentVariantGeneration: {

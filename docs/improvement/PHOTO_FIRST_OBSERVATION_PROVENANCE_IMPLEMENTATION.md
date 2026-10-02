@@ -63,7 +63,13 @@ pnpm format:check
 git diff --check
 ```
 
-結果はPRの最新head CIと最終報告で確定する。初回serviceテストはmockに既存application exportが不足して起動失敗し、partial mockへ修正して再実行する。失敗を安全対策完了や本番障害と混同しない。
+実行結果（2026-10-03 JST）:
+
+- DB全体: 179ファイル739件成功（外部通信/実DBなし）。再実行は`pnpm --filter @bunshin/database exec vitest run --exclude '**/*.integration.test.ts' --maxWorkers 2`。初回はschema全体整形による無関係な差分、migration準備チェック更新漏れ、RLS検査の時間切れで7件失敗。対象外整形を元に戻し準備チェックを更新し、期待値/timeout/skipは変更せず並列数のみ減らして再実行した。
+- SOCIAL全体: 24ファイル210件成功。application AI利用: 1ファイル3件成功。web関連: 6ファイル29件成功。architecture:checkとtest:architecture（10件）、web単独型チェック、git diff --check成功。
+- 初回serviceテストはmockに既存application exportが不足して起動失敗。partial mockへ修正し、上記web関連再実行で成功した。
+- 初回head `302c677596ca13bed8eb6115feefa3b2aff430c3`の[CI](https://github.com/team478a/bunshin-platform/actions/runs/37078169176)では隔離PostgreSQLのmigration・準備確認・integration 51件成功。verifyはテストファイル1件のPrettier整形で停止した。該当整形を修正し、最新headのverify/databaseは改めて確認する（古いheadの成功を流用しない）。
+- 全体型チェック/lint/format/buildの最終状態はPRの最新head CIと最終報告で確定する。失敗を安全対策完了や本番障害と混同しない。ローカル本番DBと実Provider/Storage/LINE/実端末E2Eは未実行。
 
 ## Migration・切り戻し・次タスク
 
