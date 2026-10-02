@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261001103000_add_photo_first_variant_metadata';
+export const LATEST_DATABASE_MIGRATION = '20261002070000_add_mission_variant_quality_audit';
