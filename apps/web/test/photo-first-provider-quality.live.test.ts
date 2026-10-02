@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import {
+  GenerateMissionContent,
   weeklySocialGoalPlanningProfile,
   type MissionBusinessProfileContext,
+  type PhotoFirstAnalysis,
   type PhotoFirstPlanning,
   type SocialAccountStrategyGoal,
 } from '@bunshin/capability-social';
@@ -10,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { OpenAIMissionContentGenerator } from '../src/providers/openai-mission-content-generator';
 import { OpenAIMissionQualityChecker } from '../src/providers/openai-mission-quality-checker';
 import { OpenAiPhotoFirstAnalyzer } from '../src/providers/openai-photo-first-analyzer';
+import { photoFirstVariantInstructions } from '../src/services/photo-first-variant-instructions';
 
 const runLive = process.env['RUN_OPENAI_PHOTO_FIRST_QUALITY'] === '1';
 const apiKey = process.env['OPENAI_API_KEY'] ?? '';
@@ -104,17 +107,21 @@ async function syntheticPhoto() {
   return new Uint8Array(await sharp(Buffer.from(svg)).jpeg({ quality: 88 }).toBuffer());
 }
 
-function contentInput(goal: Goal, planning: PhotoFirstPlanning, analysis: unknown) {
+function contentInput(goal: Goal, planning: PhotoFirstPlanning, analysis: PhotoFirstAnalysis) {
   const input = sharedInput(goal);
   return {
     platform: 'INSTAGRAM' as const,
     brief: {
       missionDate: '2026-10-01',
+      socialProfileId: 'synthetic-social-profile',
+      weeklyPlanItemId: 'synthetic-weekly-plan-item',
       format: 'TEXT' as const,
       topic: planning.theme,
       angle: planning.angle,
       reason: planning.recommendationReason,
       estimatedMinutes: 5,
+      campaignId: null,
+      classification: 'ORGANIC' as const,
     },
     bunshin: {
       name: input.company.name,
@@ -150,9 +157,13 @@ function contentInput(goal: Goal, planning: PhotoFirstPlanning, analysis: unknow
       photoInstruction: null,
     },
     variantInstructions: [
-      `写真解析: ${JSON.stringify(analysis)}`,
-      `投稿設計: ${JSON.stringify(planning)}`,
-      'テーマ、導入、読者価値、写真の使い方、CTAを投稿設計とSNS Goalに一貫させる。CTAだけを差し替えない',
+      '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
+      '導入のフック、文章構成、具体例、言葉選びを明確に変える',
+      '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
+      ...photoFirstVariantInstructions({
+        analysis,
+        planning,
+      }),
     ],
   };
 }
@@ -187,7 +198,9 @@ describe.runIf(runLive)('Photo First actual provider quality (manual, synthetic 
       return response;
     };
     const analyzer = new OpenAiPhotoFirstAnalyzer({ apiKey, model, fetch: cappedFetch });
-    const generator = new OpenAIMissionContentGenerator({ apiKey, model, fetch: cappedFetch });
+    const generator = new GenerateMissionContent(
+      new OpenAIMissionContentGenerator({ apiKey, model, fetch: cappedFetch }),
+    );
     const checker = new OpenAIMissionQualityChecker({ apiKey, model, fetch: cappedFetch });
     const results = [];
 
@@ -199,7 +212,7 @@ describe.runIf(runLive)('Photo First actual provider quality (manual, synthetic 
         mimeType: 'image/jpeg',
       });
       const generationInput = contentInput(goal, planned.planning, planned.analysis);
-      const generated = await generator.generate(generationInput);
+      const generated = await generator.execute(generationInput);
       const checked = await checker.check({
         platform: generationInput.platform,
         brief: generationInput.brief,
