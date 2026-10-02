@@ -322,14 +322,16 @@ Goal contractとpolicyはSOCIAL capabilityにあり、AI研修、占い、千ノ
 ## 20. 残課題と推奨順
 
 1. **実Provider Goal Differential品質確認**: M1〜M7から小さな承認済みサンプルを選び、同一入力でテーマ・本文・visual・CTAを人手rubric評価する。
-2. **Goal × Barrier**: 実運用で必要性を確認後、SOCIAL package側へ小さなpolicyを追加する。
+2. **Goal × Barrier attribution**: Mission生成時Goalを障壁観測のEvidenceへ帰属させ、Goal変更をまたぐ28日集計を混在させない。
 3. **Secondary Goals**: 単一Goal運用の不足が確認された後に設計する。
 
 Repeat KPI分離は実装済み。REPEATの画面では曖昧な`予約/来店`ではなく`再予約/再来店`を記録し、次週評価も明示的な2項目だけを一次指標として使う。保存先は既存の`manualMetrics` JSONを拡張したためmigrationは不要で、旧クライアント入力は新項目を0として受理する。
 
 採用・認知・信頼の簡易成果入力も実装済み。DB/APIの4段階契約を維持しながら、Goalごとに利用者が判断できる具体的な質問と選択肢を表示する。外部KPIや投稿との因果関係は引き続き未確認である。
 
-次の最小タスクは、**Goal × Barrierの既存データ経路を監査し、目的別の教育・支援文面が必要な実例を固定すること**である。実運用上の必要性を確認する前に新しい教育システムは追加しない。
+Goal × Barrierの現行経路と必要な代表例は`docs/hassy/HASSY_GOAL_BARRIER_AUDIT.md`へ記録した。現状の障壁Evidenceと支援SnapshotにはGoalがなく、28日集計もGoalを区分しないため、Goal別支援は未実装と判定する。
+
+次の最小タスクは、**Mission生成時Goalを障壁観測のEvidenceへ安全に帰属させること**である。Goal不明の旧Missionを推測補完せず、帰属が固定されるまでGoal別の教育・支援文面を追加しない。
 
 ## 21. 実行した検証
 
