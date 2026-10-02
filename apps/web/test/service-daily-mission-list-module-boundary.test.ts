@@ -28,9 +28,8 @@ describe('service daily mission list module boundary', () => {
     expect(detail).toContain('<ServiceDailyMissionAccepted');
     expect(imageGuide).toContain('mission-manual-image-flow');
     expect(accepted).toContain('mission-business-outcomes');
-    expect(accepted).toContain('今回の目的');
-    expect(accepted).toContain('投稿の好みとは別');
-    expect(accepted).toContain('目的につながった');
-    expect(accepted).toContain('まだ分からない');
+    expect(accepted).toContain('socialGoalOutcomeCopy');
+    expect(accepted).toContain('goalOutcomeCopy.question');
+    expect(accepted).toContain('goalOutcomeCopy.description');
   });
 });

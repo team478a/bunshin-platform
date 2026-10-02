@@ -1,6 +1,7 @@
 'use client';
 
 import { emptyBusinessOutcomes } from '../../../../../src/services/business-outcomes';
+import { socialGoalOutcomeCopy } from '../../../../../src/services/social-goal-outcome-copy';
 import {
   copyOptions,
   missionWithSelectedVariant,
@@ -28,13 +29,6 @@ const repeatBusinessOutcomeOptions = [
   ['repeatVisits', '再来店'],
   ['orders', '購入・申込'],
   ['other', 'その他の反応'],
-] as const;
-
-const goalOutcomeOptions = [
-  ['ACHIEVED', '目的につながった'],
-  ['SOME_PROGRESS', '手応えがあった'],
-  ['NO_CHANGE', '変化はなかった'],
-  ['UNKNOWN', 'まだ分からない'],
 ] as const;
 
 const strategyGoalLabels = {
@@ -65,6 +59,9 @@ export function ServiceDailyMissionAccepted({
   const outcomes = controller.businessOutcomes[mission.id] ?? emptyBusinessOutcomes();
   const outcomeOptions =
     mission.strategyGoal === 'REPEAT' ? repeatBusinessOutcomeOptions : businessOutcomeOptions;
+  const goalOutcomeCopy = mission.strategyGoal
+    ? socialGoalOutcomeCopy(mission.strategyGoal, strategyGoalLabels[mission.strategyGoal])
+    : null;
 
   return (
     <div className="mission-accepted">
@@ -120,13 +117,11 @@ export function ServiceDailyMissionAccepted({
           ))}
           {businessFree ? (
             <>
-              {mission.strategyGoal ? (
+              {goalOutcomeCopy ? (
                 <section className="mission-business-outcomes mission-goal-outcome">
-                  <h4>
-                    今回の目的「{strategyGoalLabels[mission.strategyGoal]}」にはつながりましたか？
-                  </h4>
-                  <p>投稿の好みとは別の回答です。分かる範囲で選んでください。</p>
-                  {goalOutcomeOptions.map(([result, label]) => (
+                  <h4>{goalOutcomeCopy.question}</h4>
+                  <p>{goalOutcomeCopy.description}</p>
+                  {goalOutcomeCopy.options.map(({ result, label }) => (
                     <button
                       key={result}
                       type="button"
