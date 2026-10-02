@@ -128,7 +128,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v16-sales-goal-alignment',
+      promptVersion: 'mission-content-generator-v17-photo-first-grounding',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -214,7 +214,7 @@ describe('OpenAIMissionContentGenerator', () => {
     expect(request.input[1]?.content).toContain('headlineは20文字以内');
   });
 
-  it('sends the original content and rewrite constraints when generating a variant', async () => {
+  it('grounds a Photo First variant in the uploaded photo instead of requesting a retake', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -250,12 +250,19 @@ describe('OpenAIMissionContentGenerator', () => {
         caption: null,
         hashtags: [],
       },
-      variantInstructions: ['導入と構成を変える'],
+      variantInstructions: [
+        '写真解析: {"objects":["チェックリスト","ペン"]}',
+        '投稿設計: {"photoUsage":"アップロード済み写真を表紙に使う"}',
+        '導入と構成を変える',
+      ],
     });
     const requestBody = fetcher.mock.calls[0]?.[1]?.body as string;
     expect(requestBody).toContain('原案本文');
     expect(requestBody).toContain('導入と構成を変える');
     expect(requestBody).toContain('原案の言い換えだけにしません');
+    expect(requestBody).toContain('アップロード済み写真を使います');
+    expect(requestBody).toContain('新しく撮り直す指示にはしません');
+    expect(requestBody).toContain('確認できない文字、個数、人物、動作を追加しません');
   });
 
   it('surfaces provider failures without returning partial content', async () => {
