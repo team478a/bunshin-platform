@@ -13,6 +13,11 @@ import {
   type MissionContent,
 } from './mission-content';
 import {
+  MISSION_QUALITY_VERDICTS,
+  type MissionContentVariantQualityAudit,
+  type MissionQualityVerdict,
+} from './mission-quality';
+import {
   DEFAULT_CONTENT_ASSISTANCE_LEVEL,
   parseContentAssistanceLevel,
   type ContentAssistanceLevel,
@@ -217,6 +222,10 @@ export interface MissionContentVariantGeneration {
   status: MissionContentVariantGenerationStatus;
   variantId: string | null;
   errorCategory: string | null;
+  qualityVerdict: MissionQualityVerdict | null;
+  qualityScore: number | null;
+  qualityIssueCodes: string[];
+  qualityRepairCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -242,6 +251,7 @@ export interface MissionContentVariantRepository {
       outputTokens: number | null;
       estimatedCostMicros: bigint | null;
       latencyMs: number;
+      qualityAudit: MissionContentVariantQualityAudit;
       photoFirst?: MissionContentVariantPhotoFirstMetadata;
       sourceVariantId?: string;
     },
@@ -257,6 +267,7 @@ export interface MissionContentVariantRepository {
       outputTokens?: number | null;
       estimatedCostMicros?: bigint | null;
       latencyMs?: number;
+      qualityAudit: MissionContentVariantQualityAudit;
     },
   ): Promise<boolean | null>;
   list(
@@ -298,6 +309,29 @@ export class ClaimMissionContentVariantGeneration {
     if (!result) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return result;
   }
+}
+
+function normalizeMissionContentVariantQualityAudit(
+  value: MissionContentVariantQualityAudit,
+): MissionContentVariantQualityAudit {
+  const verdict =
+    value.verdict === null
+      ? null
+      : (missionString(value.verdict, 20, 'quality verdict') as MissionQualityVerdict);
+  if (verdict !== null && !MISSION_QUALITY_VERDICTS.includes(verdict))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid quality verdict');
+  const score = value.score === null ? null : missionInteger(value.score, 0, 100, 'quality score');
+  if ((verdict === null) !== (score === null))
+    throw new ApplicationError('VALIDATION_ERROR', 'incomplete quality audit');
+  if (
+    !Array.isArray(value.issueCodes) ||
+    value.issueCodes.length > 20 ||
+    new Set(value.issueCodes).size !== value.issueCodes.length
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid quality issue codes');
+  const issueCodes = value.issueCodes.map((code) => missionString(code, 80, 'quality issue code'));
+  const repairCount = missionInteger(value.repairCount, 0, 1, 'quality repair count');
+  return { verdict, score, issueCodes, repairCount };
 }
 
 export class CompleteMissionContentVariantGeneration {
@@ -398,6 +432,9 @@ export class CompleteMissionContentVariantGeneration {
           ),
         }
       : undefined;
+    const qualityAudit = normalizeMissionContentVariantQualityAudit(input.qualityAudit);
+    if (qualityAudit.verdict !== 'PASS' || qualityAudit.score !== input.qualityScore)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid completed quality audit');
     if (input.estimatedCostMicros !== null && input.estimatedCostMicros < 0n)
       throw new ApplicationError('VALIDATION_ERROR', 'invalid estimated cost');
     const variant = await this.repository.complete({
@@ -409,6 +446,7 @@ export class CompleteMissionContentVariantGeneration {
       inputTokens: nullableCount(input.inputTokens, 'input tokens'),
       outputTokens: nullableCount(input.outputTokens, 'output tokens'),
       latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency'),
+      qualityAudit,
       ...(input.sourceVariantId
         ? { sourceVariantId: missionString(input.sourceVariantId, 120, 'source variant id') }
         : {}),
@@ -423,6 +461,7 @@ export class FailMissionContentVariantGeneration {
   constructor(private readonly repository: MissionContentVariantRepository) {}
 
   async execute(input: Parameters<MissionContentVariantRepository['fail']>[0]) {
+    const qualityAudit = normalizeMissionContentVariantQualityAudit(input.qualityAudit);
     const failed = await this.repository.fail({
       ...input,
       errorCategory: missionString(input.errorCategory, 80, 'error category'),
@@ -441,6 +480,7 @@ export class FailMissionContentVariantGeneration {
       ...(input.latencyMs === undefined
         ? {}
         : { latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency') }),
+      qualityAudit,
     });
     if (failed === null) throw new ApplicationError('NOT_FOUND', 'variant generation not found');
     return failed;

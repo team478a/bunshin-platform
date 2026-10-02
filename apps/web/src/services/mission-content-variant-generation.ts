@@ -8,6 +8,7 @@ import {
   GetDailyMission,
   ListDailyMissions,
   ListMissionContentVariants,
+  missionContentVariantQualityAudit,
 } from '@bunshin/capability-social';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -234,6 +235,10 @@ export class MissionContentVariantGenerationService {
             ? BigInt(usageState.estimatedCostMicros)
             : null,
         latencyMs: Date.now() - started,
+        qualityAudit: missionContentVariantQualityAudit(
+          usageState.qualityAttempts,
+          usageState.qualityRepairCount,
+        ),
         ...('sourceVariantId' in input && input.sourceVariantId
           ? { sourceVariantId: input.sourceVariantId }
           : {}),
@@ -289,6 +294,10 @@ export class MissionContentVariantGenerationService {
               ? BigInt(usageState.estimatedCostMicros)
               : null,
             latencyMs: Date.now() - started,
+            qualityAudit: missionContentVariantQualityAudit(
+              usageState.qualityAttempts,
+              usageState.qualityRepairCount,
+            ),
           });
         } catch (observationError) {
           logger.error('mission variant failure state update failed', {

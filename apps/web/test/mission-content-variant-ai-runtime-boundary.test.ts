@@ -31,6 +31,9 @@ describe('mission content variant AI runtime boundary', () => {
     expect(runtimeSource).toContain('uncertainElements: photoFirst.analysis.uncertainElements');
     expect(runtimeSource).toContain('pendingQuestion: photoFirst.planning.confirmationQuestion');
     expect(runtimeSource).toContain('answeredConfirmation: input.photoFirstConfirmation ?? null');
+    expect(runtimeSource).toContain('qualityAttempts.push(quality.output)');
+    expect(runtimeSource).toContain('qualityRepairCount += 1');
+    expect(generationSource).toContain('missionContentVariantQualityAudit(');
   });
 
   it('claims the generation before reading a tenant-scoped Photo First source', () => {

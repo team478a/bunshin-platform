@@ -4,6 +4,7 @@ import {
   GenerateMissionContent,
   type DailyMission,
   type DailyMissionScope,
+  type MissionQualityCheckerOutput,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import { resolveOpenAiRuntimeConfiguration } from '../ai/runtime-provider-configuration';
@@ -33,6 +34,8 @@ export interface MissionContentVariantUsageState {
   hasOutputTokens: boolean;
   estimatedCostMicros: number;
   requestCount: number;
+  qualityAttempts: MissionQualityCheckerOutput[];
+  qualityRepairCount: number;
 }
 
 export const createMissionContentVariantUsageState = (): MissionContentVariantUsageState => ({
@@ -43,6 +46,8 @@ export const createMissionContentVariantUsageState = (): MissionContentVariantUs
   hasOutputTokens: false,
   estimatedCostMicros: 0,
   requestCount: 0,
+  qualityAttempts: [],
+  qualityRepairCount: 0,
 });
 
 export async function generateMissionContentVariantWithAi(input: {
@@ -217,8 +222,10 @@ export async function generateMissionContentVariantWithAi(input: {
       : {}),
   });
   let quality = await generateWithQuota('variant-quality:0', () => checker.execute(qualityInput()));
+  input.usageState.qualityAttempts.push(quality.output);
   await usage('variant-quality:0', 'QUALITY_CHECKER', quality);
   if (quality.output.verdict === 'REVISE') {
+    input.usageState.qualityRepairCount += 1;
     content = await generateWithQuota('variant-content:1', () =>
       generator.execute({
         ...contentInput,
@@ -231,6 +238,7 @@ export async function generateMissionContentVariantWithAi(input: {
     };
     await usage('variant-content:1', 'MISSION_CONTENT_VARIANT_REPAIR', content);
     quality = await generateWithQuota('variant-quality:1', () => checker.execute(qualityInput()));
+    input.usageState.qualityAttempts.push(quality.output);
     await usage('variant-quality:1', 'QUALITY_CHECKER', quality);
   }
   if (quality.output.verdict !== 'PASS')
