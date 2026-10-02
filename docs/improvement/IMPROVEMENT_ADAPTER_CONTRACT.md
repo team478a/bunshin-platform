@@ -1,6 +1,29 @@
 # Improvement Adapter Contract 設計案
 
-状態: Phase 0設計。実装済みのAPI/schemaではない。基準は`cda2bf87bb741fa510e5f655569e3790a3af03ea`、2026-10-02 JST。
+状態: Phase 1の非永続domain/収集契約を実装。HTTP API、DB schema、実Adapterは未実装。実装基準は`19f942b622df744f3c1141810a3fdabc39a94cef`（PR #1081 merge）、2026-10-02 JST。以下の擬似契約は設計案であり、実コードの型は各package公開入口を正本とする。
+
+## Phase 1の実装
+
+- `packages/platform-domain/src/improvement-engine.ts`: 共通分類・目的・scope・観測Envelope・Adapter定義・metric完全性・原価欠損・状態遷移・承認Revision照合。
+- `packages/application/src/improvement-engine.ts`: `ImprovementScopeAuthorizationPort`、`ImprovementObservationAdapter`、`CollectImprovementObservations`。
+- 認可Portが拒否するとAdapterを呼ばない。出力もtenant/Workspace/Service/Package/Adapter/環境を照合し、指定されたUser/Bunshinに限定する。
+- source kind/IDで重複排除。同じ原本の内容が矛盾すると失敗。半開期間外、上限超過、未知subtype、矛盾する完全性は拒否する。
+- metadataはAdapterが宣言したcode候補、非負整数上限、booleanだけ。未知keyは落とし、allowlist内でも型/値が違えば拒否する。返却は明示projectionで、追加のraw fieldsも落とす。
+- 集計がPARTIAL/UNKNOWNまたは分母未取得/0ならrateはnull。確定費用と未確定件数を別保持し、費用のnullを0へ変換しない。
+- 承認適格性は状態・scope・Candidate/Evidence revision一致だけの純粋関数。実管理者の権限、承認取消、永続履歴、Codex指示案生成は後続Use Caseで検証する。
+- 初回は最大1,000件/90日間のbounded batch。cursorとページ間重複排除は実Adapterの読取PRで追加する。raw dataのprivacy分類はAdapterの責務で、allowlistだけでは匿名化や全秘密値の検出を保証しない。
+
+架空Hassy品質と架空研修難易度のfixtureで契約を確認した。実サービスAdapterや本番DBの接続証拠ではない。
+
+検証（2026-10-02 JST、Node v24.21.0）:
+
+- platform-domain: 全5ファイル11テスト成功、typecheck/対象ESLint/build成功。
+- application: 全120ファイル581テスト成功、typecheck/対象ESLint/build成功。
+- 新規の契約テストはdomain 4件、application 23件。
+- `pnpm architecture:check`成功、`pnpm test:architecture`10件成功。
+- 対象Prettier、`git diff --check`成功。全体検証は通常PR CIへ接続する。
+- 初回ルート検証は既定Node v22のengine条件で実行できず、既存Node v24へPATHを設定して再実行した。依存関係やlockfileは変更していない。
+- 実Adapter、本番DB、実Provider、LINE、管理UI、実際のIssue承認と指示案生成は未実行。
 
 ## 責務と配置候補
 
