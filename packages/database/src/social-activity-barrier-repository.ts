@@ -1,6 +1,7 @@
 import {
   SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
   buildSocialActivityBarrierGoalAttribution,
+  buildSocialActivityBarrierGoalMetrics,
   readSocialActivityBarrierMissionGoal,
   socialActivityBarrierEvidenceKey,
   type SocialActivityBarrierCase,
@@ -239,18 +240,26 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
     );
     const activityTypes = (mission: (typeof eligibleMissions)[number]) =>
       new Set(mission.activities.map((activity) => activity.type));
+    const missionSignals = eligibleMissions.map((mission) => ({
+      goal: readSocialActivityBarrierMissionGoal(mission.generationContext?.payload),
+      postCompleted: mission.postRecord !== null || activityTypes(mission).has('POSTED'),
+      positiveResponseRecorded: hasPositiveResponse(mission.postRecord?.manualMetrics ?? null),
+      conversionActionRecorded: hasConversionAction(mission.postRecord?.manualMetrics ?? null),
+    }));
     const goalAttribution = buildSocialActivityBarrierGoalAttribution(
-      eligibleMissions.map((mission) =>
-        readSocialActivityBarrierMissionGoal(mission.generationContext?.payload),
-      ),
+      missionSignals.map((mission) => mission.goal),
     );
-
-    const positivePostResponses = eligibleMissions.filter((mission) =>
-      hasPositiveResponse(mission.postRecord?.manualMetrics ?? null),
+    const positiveInsightResponses = insightSnapshots.filter(
+      (snapshot) => (snapshot.interactions ?? 0) > 0,
     ).length;
-    const conversions = eligibleMissions.filter((mission) =>
-      hasConversionAction(mission.postRecord?.manualMetrics ?? null),
+    const goalMetrics = buildSocialActivityBarrierGoalMetrics(missionSignals, {
+      insightRecorded: insightSnapshots.length,
+      positiveResponseRecorded: positiveInsightResponses,
+    });
+    const positivePostResponses = missionSignals.filter(
+      (mission) => mission.positiveResponseRecorded,
     ).length;
+    const conversions = missionSignals.filter((mission) => mission.conversionActionRecorded).length;
 
     return {
       scope: input.scope,
@@ -278,12 +287,11 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
           (mission) => mission.postRecord !== null || activityTypes(mission).has('POSTED'),
         ).length,
         insightRecorded: insightSnapshots.length,
-        positiveResponseRecorded:
-          positivePostResponses +
-          insightSnapshots.filter((snapshot) => (snapshot.interactions ?? 0) > 0).length,
+        positiveResponseRecorded: positivePostResponses + positiveInsightResponses,
         conversionActionRecorded: conversions,
       },
       goalAttribution,
+      goalMetrics,
     };
   }
 }
@@ -396,6 +404,7 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
                   metrics: {
                     ...candidate.evidence.metrics,
                     goalAttribution: candidate.evidence.goalAttribution,
+                    goalMetrics: candidate.evidence.goalMetrics,
                   },
                   thresholds: candidate.evidence.thresholds,
                   ruleVersion: candidate.evidence.ruleVersion,

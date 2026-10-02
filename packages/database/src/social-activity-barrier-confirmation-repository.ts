@@ -3,6 +3,7 @@ import {
   SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
   buildSocialActivityBarrierQuestion,
   readSocialActivityBarrierGoalAttribution,
+  readSocialActivityBarrierGoalMetrics,
   selectSocialActivitySupport,
   socialActivitySupportFor,
   type SocialActivityBarrierCase,
@@ -28,7 +29,11 @@ function evidence(row: {
     row.metrics !== null && typeof row.metrics === 'object' && !Array.isArray(row.metrics)
       ? (row.metrics as Record<string, Prisma.JsonValue>)
       : {};
-  const { goalAttribution: storedGoalAttribution, ...metrics } = storedMetrics;
+  const {
+    goalAttribution: storedGoalAttribution,
+    goalMetrics: storedGoalMetrics,
+    ...metrics
+  } = storedMetrics;
   return {
     evidenceCode: row.evidenceCode as SocialActivityBarrierEvidence['evidenceCode'],
     observationWindow: {
@@ -39,6 +44,7 @@ function evidence(row: {
     },
     metrics,
     goalAttribution: readSocialActivityBarrierGoalAttribution(storedGoalAttribution),
+    goalMetrics: readSocialActivityBarrierGoalMetrics(storedGoalMetrics),
     thresholds: row.thresholds as SocialActivityBarrierEvidence['thresholds'],
     ruleVersion: row.ruleVersion as SocialActivityBarrierEvidence['ruleVersion'],
   };

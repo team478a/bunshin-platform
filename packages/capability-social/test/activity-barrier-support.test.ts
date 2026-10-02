@@ -5,7 +5,10 @@ import {
   selectSocialActivitySupport,
   socialActivitySupportFor,
 } from '../src/activity-barrier-support';
-import { buildSocialActivityBarrierGoalAttribution } from '../src/activity-barrier';
+import {
+  buildSocialActivityBarrierGoalAttribution,
+  buildSocialActivityBarrierGoalMetrics,
+} from '../src/activity-barrier';
 import type { SocialActivityBarrierCase } from '../src/activity-barrier-persistence';
 
 function barrierCase(
@@ -38,6 +41,7 @@ function barrierCase(
       },
       metrics: { lineDelivered: 7, missionViewed: 0 },
       goalAttribution: null,
+      goalMetrics: null,
       thresholds: { minimumDelivered: 5, maximumViewed: 1 },
       ruleVersion: 'social-activity-barrier-v1',
     },
@@ -125,6 +129,17 @@ describe('social activity barrier confirmation', () => {
       'INQUIRY',
       'INQUIRY',
     ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'INQUIRY',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
 
     expect(
       selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
@@ -133,6 +148,30 @@ describe('social activity barrier confirmation', () => {
       mode: 'COMMON',
       eligibleGoal: 'INQUIRY',
       fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+    });
+  });
+
+  it('keeps common support when account-level insights cannot be assigned to a goal', () => {
+    const value = barrierCase('case_1', 'EFFECT');
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution(['INQUIRY']);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'INQUIRY',
+          postCompleted: true,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 1, positiveResponseRecorded: 1 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'UNATTRIBUTED_ACCOUNT_METRICS',
     });
   });
 });

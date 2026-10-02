@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { socialActivityBarrierEvidenceKey } from '../src/activity-barrier-persistence';
 import {
   buildSocialActivityBarrierGoalAttribution,
+  buildSocialActivityBarrierGoalMetrics,
   inferSocialActivityBarriers,
   readSocialActivityBarrierGoalAttribution,
+  readSocialActivityBarrierGoalMetrics,
   readSocialActivityBarrierMissionGoal,
   type InferSocialActivityBarriersInput,
 } from '../src/activity-barrier';
@@ -38,6 +40,23 @@ function input(
       ...metrics,
     },
     goalAttribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', null]),
+    goalMetrics: buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'INQUIRY',
+          postCompleted: false,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: null,
+          postCompleted: false,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    ),
   };
 }
 
@@ -52,7 +71,7 @@ describe('inferSocialActivityBarriers', () => {
       evidence: {
         evidenceCode: 'DELIVERED_WITHOUT_VIEW',
         observationWindow: { eligibleDays: 6, excludedSystemIncidentDays: 1 },
-        ruleVersion: 'social-activity-barrier-v2',
+        ruleVersion: 'social-activity-barrier-v3',
         goalAttribution: expect.objectContaining({
           observedMissionCount: 2,
           attributedMissionCount: 1,
@@ -111,7 +130,7 @@ describe('inferSocialActivityBarriers', () => {
     const candidate = inferSocialActivityBarriers(input({ missionViewed: 4 }))[0]!;
 
     expect(socialActivityBarrierEvidenceKey(candidate)).toBe(
-      'social-activity-barrier-v2:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
+      'social-activity-barrier-v3:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
     );
   });
 
@@ -141,6 +160,47 @@ describe('inferSocialActivityBarriers', () => {
     expect(readSocialActivityBarrierMissionGoal(null)).toBeNull();
   });
 
+  it('segments mission outcome metrics by generation goal without assigning account insights', () => {
+    const metrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'INQUIRY',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: false,
+          conversionActionRecorded: true,
+        },
+        {
+          goal: null,
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: true,
+        },
+      ],
+      { insightRecorded: 2, positiveResponseRecorded: 1 },
+    );
+
+    expect(metrics.missionMetrics).toMatchObject({
+      INQUIRY: { postCompleted: 1, positiveResponseRecorded: 1, conversionActionRecorded: 0 },
+      RECRUIT: { postCompleted: 1, positiveResponseRecorded: 0, conversionActionRecorded: 1 },
+      UNATTRIBUTED: {
+        postCompleted: 1,
+        positiveResponseRecorded: 1,
+        conversionActionRecorded: 1,
+      },
+    });
+    expect(metrics.unattributedAccountMetrics).toEqual({
+      insightRecorded: 2,
+      positiveResponseRecorded: 1,
+    });
+    expect(readSocialActivityBarrierGoalMetrics(metrics)).toEqual(metrics);
+  });
+
   it('rejects invalid metrics and observation windows', () => {
     expect(() => inferSocialActivityBarriers(input({ missionViewed: -1 }))).toThrowError(
       expect.objectContaining({ code: 'VALIDATION_ERROR' }),
@@ -149,6 +209,12 @@ describe('inferSocialActivityBarriers', () => {
     const invalidWindow = input();
     invalidWindow.observationWindow.to = invalidWindow.observationWindow.from;
     expect(() => inferSocialActivityBarriers(invalidWindow)).toThrowError(
+      expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+    );
+
+    const inconsistentGoalMetrics = input();
+    inconsistentGoalMetrics.goalMetrics.missionMetrics.INQUIRY.postCompleted = 2;
+    expect(() => inferSocialActivityBarriers(inconsistentGoalMetrics)).toThrowError(
       expect.objectContaining({ code: 'VALIDATION_ERROR' }),
     );
   });
