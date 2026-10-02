@@ -331,6 +331,51 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
     ).map((row) => this.variant(row));
   }
 
+  async listQualityAudits(
+    input: Parameters<MissionContentVariantRepository['listQualityAudits']>[0],
+  ) {
+    if (!(await this.authorizedMission(this.client, input))) return null;
+    return this.client.missionContentVariantGeneration
+      .findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+          ...(input.issueCode ? { qualityIssueCodes: { has: input.issueCode } } : {}),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          status: true,
+          variantId: true,
+          errorCategory: true,
+          promptVersion: true,
+          qualityVerdict: true,
+          qualityScore: true,
+          qualityIssueCodes: true,
+          qualityRepairCount: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          generationId: row.id,
+          status: row.status,
+          variantId: row.variantId,
+          errorCategory: row.errorCategory,
+          promptVersion: row.promptVersion,
+          qualityVerdict: row.qualityVerdict as 'PASS' | 'REVISE' | 'REJECT' | null,
+          qualityScore: row.qualityScore,
+          qualityIssueCodes: row.qualityIssueCodes,
+          qualityRepairCount: row.qualityRepairCount,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+      );
+  }
+
   async select(input: Parameters<MissionContentVariantRepository['select']>[0]) {
     return this.client.$transaction(async (tx) => {
       if (!(await this.authorizedMission(tx, input))) return null;

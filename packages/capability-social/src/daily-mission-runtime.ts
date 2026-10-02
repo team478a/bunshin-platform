@@ -230,6 +230,20 @@ export interface MissionContentVariantGeneration {
   updatedAt: Date;
 }
 
+export interface MissionContentVariantQualityAuditRecord {
+  generationId: string;
+  status: MissionContentVariantGenerationStatus;
+  variantId: string | null;
+  errorCategory: string | null;
+  promptVersion: string | null;
+  qualityVerdict: MissionQualityVerdict | null;
+  qualityScore: number | null;
+  qualityIssueCodes: string[];
+  qualityRepairCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MissionContentVariantRepository {
   claim(
     input: DailyMissionScope & {
@@ -273,6 +287,9 @@ export interface MissionContentVariantRepository {
   list(
     input: DailyMissionScope & { dailyMissionId: string },
   ): Promise<MissionContentVariant[] | null>;
+  listQualityAudits(
+    input: DailyMissionScope & { dailyMissionId: string; issueCode?: string },
+  ): Promise<MissionContentVariantQualityAuditRecord[] | null>;
   select(
     input: DailyMissionScope & {
       dailyMissionId: string;
@@ -494,6 +511,22 @@ export class ListMissionContentVariants {
     const variants = await this.repository.list(input);
     if (!variants) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return variants;
+  }
+}
+
+export class ListMissionContentVariantQualityAudits {
+  constructor(private readonly repository: MissionContentVariantRepository) {}
+
+  async execute(input: DailyMissionScope & { dailyMissionId: string; issueCode?: string }) {
+    const issueCode = input.issueCode
+      ? missionString(input.issueCode, 80, 'quality issue code')
+      : undefined;
+    const audits = await this.repository.listQualityAudits({
+      ...input,
+      ...(issueCode ? { issueCode } : {}),
+    });
+    if (!audits) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
+    return audits;
   }
 }
 
