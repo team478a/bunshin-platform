@@ -25,3 +25,8 @@ export {
   supportGoalAtOffer,
   summarizeHassySupportOutcomes,
 } from './improvement-support-outcomes';
+export {
+  HASSY_PHOTO_QUALITY_DEFINITION,
+  projectHassyPhotoQuality,
+  summarizeHassyPhotoQuality,
+} from './improvement-photo-quality';

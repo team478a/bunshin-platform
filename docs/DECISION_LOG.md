@@ -1,5 +1,16 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Engine: Photo First品質は確定素材Relationと未帰属を分けて観測する
+
+- 日付: 2026-10-03
+- 状態: Accepted（PR #1083マージ後の独立読取作業）
+- 既存本人Mission単位のlistQualityAuditsの認可を緩めず、別のService管理者読取Adapterを追加する。固定scope照合とDBでのACTIVE owner/admin再認可を行い、原写真・本文・解析JSON・回答・秘密値を取得しない。
+- 専用Photo First Metadataとの明示RelationはPHOTO_METADATA、既知品質codeだけはPHOTO_ISSUE_SIGNAL、その他はUNATTRIBUTED。Metadataなしを通常生成と断定しない。idempotency keyや時刻の近さから失敗の発生経路を推測しない。
+- 生成開始時刻の期間cohortを読み、PASS/修正後PASS/最終REVISE/REJECTと検査未実行/処理中/不正監査/期間後更新を分ける。検査未実行をchecked分母に含めず、欠損がある群の率はnull。品質PASSと動画/投稿案の保存成功は別。
+- limit+1で取得打切りを検知し、完全な母集団と見なさない。全Photo First開始試行の帰属と欠測が未解決なので、全Photo First成功率は常にnull/UNKNOWN。成功Metadataだけで全試行の成功率を作らない。
+- 保存Prompt Versionはusage()の最後の工程版であり、生成版や品質ruleの完全な履歴ではない。既知版のcode分類と未知版を保持する。複数版混合の集計を修正前後の因果評価へ転用しない。
+- schema・既存生成/品質検査/Job/Provider・HTTP/UI・設定は変更しない。次は未帰属・工程間相関の不足を実証し、必要な最小記録補完の候補を別PRで検討する。
+
 ## Improvement Engine: Hassy支援結果は提供期間cohortと提供時Goalから読む
 
 - 日付: 2026-10-03
