@@ -11,34 +11,36 @@ const generationId = '00000000-0000-4000-8000-000000000001';
 vi.mock('@bunshin/application', async (original) => ({
   ...(await original<object>()),
   RequireActiveBunshinCapability: class {
-    async execute() {}
+    execute() {
+      return Promise.resolve();
+    }
   },
   GetGenerationContextSnapshot: class {
-    async execute() {
-      return { payload: { classification: 'EVERGREEN' } };
+    execute() {
+      return Promise.resolve({ payload: { classification: 'EVERGREEN' } });
     }
   },
 }));
 vi.mock('@bunshin/capability-social', async (original) => ({
   ...(await original<object>()),
   GetDailyMission: class {
-    async execute() {
-      return {
+    execute() {
+      return Promise.resolve({
         id: 'mission',
         missionDate: '2026-10-03',
         classification: 'EVERGREEN',
         campaignId: null,
-      };
+      });
     }
   },
   ListDailyMissions: class {
-    async execute() {
-      return [];
+    execute() {
+      return Promise.resolve([]);
     }
   },
   AuthorizeDailyMissionCopy: class {
-    async execute() {
-      return { allowed: true };
+    execute() {
+      return Promise.resolve({ allowed: true });
     }
   },
   ClaimMissionContentVariantGeneration: class {

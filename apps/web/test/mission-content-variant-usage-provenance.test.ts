@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RecordAiUsageInput } from '@bunshin/application';
 const fake = vi.hoisted(() => ({
-  record: vi.fn(),
+  record: vi.fn<(input: RecordAiUsageInput) => Promise<void>>(),
   content: vi.fn(),
   quality: vi.fn(),
   analyze: vi.fn(),
 }));
 vi.mock('../src/ai/runtime-provider-configuration', () => ({
-  resolveOpenAiRuntimeConfiguration: async () => ({
-    apiKey: 'dummy',
-    model: 'fake',
-    requestCostUsdMicros: 10,
-  }),
+  resolveOpenAiRuntimeConfiguration: () =>
+    Promise.resolve({
+      apiKey: 'dummy',
+      model: 'fake',
+      requestCostUsdMicros: 10,
+    }),
 }));
 vi.mock('../src/observability/ai-usage', () => ({ recordAiUsageSafely: fake.record }));
 vi.mock('../src/organization-ai-generation-quota', () => ({

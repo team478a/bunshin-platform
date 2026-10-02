@@ -22,7 +22,7 @@
 
 - sourceは`STANDARD / PHOTO_FIRST / null`。STANDARDは通常の投稿別案経路であり、ワタシワークス全体の通常生成分類ではない。確認回答からのPhoto First再生成もPHOTO_FIRST。旧行とsource未指定の旧呼出しはnull。既存行のUPDATE/backfillなし。
 - claimは既存Mission認可・advisory lockを維持。同じkeyを別Missionや別の既知sourceで再利用するとCONFLICT。旧null行は推定でラベル付けせず、既存claimとして返す。再発注しない既存成功再読込の挙動を維持。
-- AI利用の任意参照はapplication入力でUUID/Bunshin有無を検証。DB Repositoryは既存ACTIVE membershipに加え、GenerationのWorkspace/Bunshin/actorとMissionのBunshin所有者を照合する。同一keyの既存イベントは上書きせず、参照/Bunshin/工程が異なる場合CONFLICT。旧イベントへ後付けしない。
+- AI利用の任意参照はapplication入力でUUID/Bunshin有無を検証。DB Repositoryは既存ACTIVE membershipに加え、GenerationのWorkspace/Bunshin/actorとMissionのBunshin所有権を照合する。Serviceは本人のみ。個人Workspaceは既存claimの明示OWNER/ADMIN管理権限も維持し、一般MEMBERの他所有者操作を許可しない。参照Generationのactorは常に入力actorと一致させる。同一keyの既存イベントは上書きせず、参照/Bunshin/工程が異なる場合CONFLICT。旧イベントへ後付けしない。
 - FKはGeneration実体の存在をDBで保証する。Workspace/Bunshin/ownerの整合はRepositoryが確認し、**直接SQL書込に対する複合scope制約ではない**。信頼済みのRepository経路を使うこと。DBの広い資格情報を顧客へ渡さない。
 - Generation削除時は参照だけSET NULL。AI利用イベント・費用は連鎖削除しない。参照を失ったイベントから帰属を復元しない。既存の利用イベントの保持/削除方針は変更しない。
 - 原写真・解析JSON・本文・会話・個人メモリー・URL・秘密情報を新しい観測へ追加しない。共通層にHassy固有の生成判断を実装しない。
@@ -69,6 +69,7 @@ git diff --check
 - SOCIAL全体: 24ファイル210件成功。application AI利用: 1ファイル3件成功。web関連: 6ファイル29件成功。architecture:checkとtest:architecture（10件）、web単独型チェック、git diff --check成功。
 - 初回serviceテストはmockに既存application exportが不足して起動失敗。partial mockへ修正し、上記web関連再実行で成功した。
 - 初回head `302c677596ca13bed8eb6115feefa3b2aff430c3`の[CI](https://github.com/team478a/bunshin-platform/actions/runs/37078169176)では隔離PostgreSQLのmigration・準備確認・integration 51件成功。verifyはテストファイル1件のPrettier整形で停止した。該当整形を修正し、最新headのverify/databaseは改めて確認する（古いheadの成功を流用しない）。
+- head `3bce72f914812305c4d164214a9c92a7fbf2a74f`はformat/typecheckとDB CIが成功し、lintでテストhelperの未型付け戻り値/不要asyncが検出された。helperへ型付けとPromise返却を追加し、期待値やCI条件は変更せず再検証する。完了監査では個人Workspaceの明示ADMIN操作の記録互換性も補完し、Serviceで他所有者を許可しない隔離DB試験を追加した。
 - 全体型チェック/lint/format/buildの最終状態はPRの最新head CIと最終報告で確定する。失敗を安全対策完了や本番障害と混同しない。ローカル本番DBと実Provider/Storage/LINE/実端末E2Eは未実行。
 
 ## Migration・切り戻し・次タスク

@@ -290,6 +290,42 @@ integration('database ownership boundaries', () => {
       errorCategory: 'SYNTHETIC_FAILURE',
       qualityAudit: { verdict: null, score: null, issueCodes: [], repairCount: 0 },
     });
+    // The existing personal-workspace admin claim must remain observable, without granting Service access.
+    await client.workspaceMembership.updateMany({
+      where: { workspaceId: owner.workspace.id, userId: other.user.id },
+      data: { role: 'ADMIN' },
+    });
+    const adminClaim = await variants.claim({
+      ...scope,
+      actorUserId: other.user.id,
+      idempotencyKey: randomUUID(),
+      initiatingSource: 'STANDARD',
+    });
+    if (!adminClaim) throw new Error('synthetic admin generation missing');
+    const adminUsage = {
+      ...usage,
+      actorUserId: other.user.id,
+      contentVariantGenerationId: adminClaim.generation.id,
+      idempotencyKey: randomUUID(),
+      taskType: 'MISSION_CONTENT_VARIANT',
+    };
+    await events.record(adminUsage);
+    expect(
+      await client.aiUsageEvent.count({
+        where: { contentVariantGenerationId: adminClaim.generation.id },
+      }),
+    ).toBe(1);
+    const service = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic provenance service' },
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: service.id } });
+    await expect(
+      events.record({ ...adminUsage, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: null } });
+    await client.missionContentVariantGeneration.delete({
+      where: { id: adminClaim.generation.id },
+    });
     const persisted = await client.missionContentVariantGeneration.findUniqueOrThrow({
       where: { id: claim.generation.id },
       include: { aiUsageEvents: true },

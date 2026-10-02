@@ -21,13 +21,19 @@ function claims(existing: object | null = null) {
     missionContentVariant: { findFirst: vi.fn().mockResolvedValue(null) },
     missionContentVariantGeneration: {
       findFirst: vi.fn().mockResolvedValueOnce(existing).mockResolvedValue(null),
-      create: vi.fn(async ({ data }) => ({ ...data, id: generationId })),
+      create: vi.fn(
+        ({
+          data,
+        }: {
+          data: typeof scope & { idempotencyKey: string; initiatingSource: string | null };
+        }) => Promise.resolve({ ...data, id: generationId }),
+      ),
     },
   };
   return {
     tx,
     repository: new PrismaMissionContentVariantRepository({
-      $transaction: async (fn: (value: typeof tx) => unknown) => fn(tx),
+      $transaction: (fn: (value: typeof tx) => Promise<unknown>) => fn(tx),
     } as never),
   };
 }
@@ -105,7 +111,25 @@ describe('AI usage explicit generation reference', () => {
         workspaceId: scope.workspaceId,
         bunshinId: scope.bunshinId,
         actorUserId: scope.actorUserId,
-        dailyMission: { bunshin: { ownerUserId: scope.actorUserId } },
+        dailyMission: {
+          bunshin: {
+            OR: [
+              { ownerUserId: scope.actorUserId },
+              {
+                groupId: null,
+                workspace: {
+                  memberships: {
+                    some: {
+                      userId: scope.actorUserId,
+                      status: 'ACTIVE',
+                      role: { in: ['OWNER', 'ADMIN'] },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
       },
       select: { id: true },
     });

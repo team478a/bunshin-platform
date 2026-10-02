@@ -38,7 +38,26 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
           workspaceId: input.workspaceId,
           bunshinId: input.bunshinId,
           actorUserId: input.actorUserId,
-          dailyMission: { bunshin: { ownerUserId: input.actorUserId } },
+          dailyMission: {
+            bunshin: {
+              OR: [
+                { ownerUserId: input.actorUserId },
+                // Preserve the existing personal-workspace claim policy; this is not a Service-admin grant.
+                {
+                  groupId: null,
+                  workspace: {
+                    memberships: {
+                      some: {
+                        userId: input.actorUserId,
+                        status: 'ACTIVE',
+                        role: { in: ['OWNER', 'ADMIN'] },
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
         },
         select: { id: true },
       });

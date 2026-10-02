@@ -5,7 +5,7 @@
 - 日付: 2026-10-03
 - 状態: Accepted（調査・最小記録補完・回帰検証を同一ゴールとする）
 - Generationのclaim時にSTANDARD / PHOTO_FIRSTをnullable列へ保存する。既存行・未指定の旧呼出しはnull（不明）のまま。成功Metadataやkeyの文字列から開始経路を補完しない。
-- AiUsageEventには既存Generationへの任意の明示FKを追加する。RepositoryでWorkspace/Bunshin/actorとMission所有者を照合し、同一利用keyの参照付け替えを拒否する。利用原価は既存欄を維持し、欠測を0として補完しない。
+- AiUsageEventには既存Generationへの任意の明示FKを追加する。RepositoryでWorkspace/Bunshin/actorとMission所有権を照合し、同一利用keyの参照付け替えを拒否する。Serviceは本人のみ、個人Workspaceは既存claim同様の明示OWNER/ADMIN管理権限も維持する（単なるMEMBERには許可しない）。利用原価は既存欄を維持し、欠測を0として補完しない。
 - Generation削除時は参照のみnullへ戻し、利用イベントの費用記録を連鎖削除しない。利用記録は従来どおりbest effortで、全工程の完全性は保証しない。claim以前の拒否・失敗は今回の母集団外。
 - 品質読取は開始経路の明示群を追加し、旧Metadata/品質signal/未帰属とは分ける。全Photo First成功率のUNKNOWNは維持する。生の本文・写真・解析・個人メモリーは観測へ追加しない。
 - 新Worker/Provider/Job、管理UI、Feedback、検知・候補生成、本番migration、実生成・送信は含めない。schema追加はnullable2列とFK/index/checkのみで、既存業務判定や課金を変更しない。
