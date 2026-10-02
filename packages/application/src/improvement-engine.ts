@@ -45,7 +45,7 @@ export class CollectImprovementObservations {
   ) {}
 
   async execute(input: ImprovementReadRequest): Promise<ImprovementObservationCollection> {
-    this.validate(input);
+    validateImprovementReadRequest(input);
     if (
       input.scope.adapterKey !== this.adapter.definition.key ||
       input.scope.packageKey !== this.adapter.definition.packageKey
@@ -93,30 +93,31 @@ export class CollectImprovementObservations {
       throw new ApplicationError('VALIDATION_ERROR', 'invalid improvement adapter output');
     }
   }
+}
 
-  private validate(input: ImprovementReadRequest): void {
-    try {
-      validateImprovementScope(input.scope);
-    } catch {
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid improvement scope');
-    }
-    const validRef = (value: string) =>
-      typeof value === 'string' && value.length > 0 && value.length <= 240 && !/\s/u.test(value);
-    if (
-      !validRef(input.actorUserId) ||
-      !(input.fromInclusive instanceof Date) ||
-      !(input.toExclusive instanceof Date) ||
-      !Number.isFinite(input.fromInclusive.getTime()) ||
-      !Number.isFinite(input.toExclusive.getTime()) ||
-      input.fromInclusive >= input.toExclusive ||
-      input.toExclusive.getTime() - input.fromInclusive.getTime() > 90 * 86_400_000 ||
-      !Number.isInteger(input.limit) ||
-      input.limit < 1 ||
-      input.limit > 1_000 ||
-      (input.subject &&
-        (!validRef(input.subject.userRef) ||
-          (input.subject.bunshinRef !== null && !validRef(input.subject.bunshinRef))))
-    )
-      throw new ApplicationError('VALIDATION_ERROR', 'invalid improvement read request');
+/** Shared input validation for collectors and direct adapter reads; does not authorize. */
+export function validateImprovementReadRequest(input: ImprovementReadRequest): void {
+  try {
+    validateImprovementScope(input.scope);
+  } catch {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid improvement scope');
   }
+  const validRef = (value: string) =>
+    typeof value === 'string' && value.length > 0 && value.length <= 240 && !/\s/u.test(value);
+  if (
+    !validRef(input.actorUserId) ||
+    !(input.fromInclusive instanceof Date) ||
+    !(input.toExclusive instanceof Date) ||
+    !Number.isFinite(input.fromInclusive.getTime()) ||
+    !Number.isFinite(input.toExclusive.getTime()) ||
+    input.fromInclusive >= input.toExclusive ||
+    input.toExclusive.getTime() - input.fromInclusive.getTime() > 90 * 86_400_000 ||
+    !Number.isInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > 1_000 ||
+    (input.subject &&
+      (!validRef(input.subject.userRef) ||
+        (input.subject.bunshinRef !== null && !validRef(input.subject.bunshinRef))))
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid improvement read request');
 }

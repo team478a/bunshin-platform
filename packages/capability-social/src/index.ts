@@ -20,3 +20,8 @@ export {
 export * from './trend-research';
 export * from './trend-provider-benchmark';
 export * from './golden-dataset';
+export {
+  HASSY_SUPPORT_IMPROVEMENT_DEFINITION,
+  supportGoalAtOffer,
+  summarizeHassySupportOutcomes,
+} from './improvement-support-outcomes';

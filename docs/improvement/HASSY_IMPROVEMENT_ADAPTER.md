@@ -1,8 +1,8 @@
 # Hassy Improvement Adapter Phase 0監査
 
-基準SHA: `cda2bf87bb741fa510e5f655569e3790a3af03ea`。調査日: 2026-10-02 JST。Adapter実装は未着手。
+監査基準SHA: `cda2bf87bb741fa510e5f655569e3790a3af03ea`。調査日: 2026-10-02 JST。Goal別支援結果読取Adapterは2026-10-03に実装。詳細/限界は`HASSY_SUPPORT_OUTCOMES_IMPLEMENTATION.md`を参照。Photo First品質と管理画面は未実装。
 
-Phase 1では共通収集Portと、Hassy品質/研修難易度の架空Adapter fixtureを追加した。実Hassy Adapterと管理者向け読取経路は引き続き未実装である。次は本書のGoal別支援結果を、提供時Snapshot・期間cohort・欠損表示を維持して読取Adapterへ接続する。
+Phase 1では共通収集Portと、Hassy品質/研修難易度の架空Adapter fixtureを追加した。Goal別支援結果はDB管理者再認可・提供時Snapshot・期間cohort・欠損/打切り保留を維持して読取Adapterへ接続した。HTTP/UI/定期Jobへの公開は未接続。次はPhoto First品質の独立読取作業。
 
 ## 既存記録のmapping
 

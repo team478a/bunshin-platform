@@ -1,5 +1,16 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Engine: Hassy支援結果は提供期間cohortと提供時Goalから読む
+
+- 日付: 2026-10-03
+- 状態: Accepted（Phase 1マージ後の次の最小読取作業）
+- SOCIAL capabilityにSnapshotのGoal分類とcohort集計を置き、databaseに既存支援行の読取Adapterを置く。共通EngineへSNS Goalを追加しない。schema・Provider・Job・HTTP/UIを変更しない。
+- 信頼されたcompositionが固定scopeを渡す。Adapter自身が同じTransaction内でACTIVEのSERVICE_OWNER/SERVICE_ADMINを再検証する。tenant/Service/環境の入力から認可を推定しない。管理UIへの公開と本部横断権限は後続作業。
+- offeredAtの半開期間を母集団にし、toExclusive以前の実acceptedAt/completedAt/skippedAtで集計する。現在のstatusから過去の状態や未記録のACCEPTを再現しない。退会済み参加者を母集団から黙って除外しない。
+- COMMON、MIXED、UNATTRIBUTED、LEGACY、INVALIDはGoal固有支援と別bucket。現在Goal・最新Evidence・再発回数から補完しない。Snapshot全文はDB読取後に破棄し、文面・自由文・原素材をEngineへ渡さない。
+- bounded読取はlimit+1で打切りを検知し、PARTIALなら完了率をnullにする。欠損/矛盾する結果時刻も率を保留する。未取得原価はnull。非再発や事業成果への因果効果は評価しない。
+- 初回はcursorなしの最大1,000件/90日間。ページング、管理画面、少数セル表示抑止、Photo First品質は別PR。取り消しは本Adapterの呼出しを外すだけで、既存支援記録を変更しない。
+
 ## Improvement Engine Phase 1: 共通契約は非永続の収集と純粋domainから始める
 
 - 日付: 2026-10-02
