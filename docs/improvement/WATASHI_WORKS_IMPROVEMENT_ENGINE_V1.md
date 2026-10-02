@@ -6,7 +6,7 @@
 
 現時点で共通Improvement Issue、Candidate、承認からCodex指示案への接続、修正前後比較は調査範囲のコードから確認できない。既存のSupportCaseやOEM支援候補は異なる目的のため、そのまま共通改善Issueとは扱わない。
 
-本PRはPhase 0監査と設計案の3文書のみ。Phase 1以降の契約・コード・永続化・管理画面は未実装である。
+Phase 0はPR #1081で監査と設計案を作成した。Phase 1では共通domain・非永続収集Port・fake入力による契約テストまで実装した。実Adapter、永続化、管理画面、検知・Candidate・Codex指示案は未実装である。
 
 ## 調査基準と制約
 
@@ -83,7 +83,9 @@ OEM管理者には自Workspace/Serviceのみ。本部向け横断表示は個票
 | 9    | 10〜20社モニター               | 閾値の誤検出、管理負担、Candidate有用性を測定                                               | 運用作業                     |
 | 10   | 第2Adapter                     | 研修固有Barrier・成功条件を追加して共通Engine変更量を確認                                   | 必要性を再評価               |
 
-次の最小タスクは順序1の非永続・非Providerの契約実装。既存のGoal支援評価とPhoto First品質観測は順序2へ統合し、別の監視基盤を並行新設しない。本番E2E、複数業種のGoal品質、Secondary Goals、外部KPI照合は継続課題であり、本Engine実装で完了扱いにしない。
+順序1の共通domain/Adapter契約は非永続・非Providerの範囲で実装済み。次の最小タスクは順序2のGoal別支援結果読取Adapterである。提供時Snapshotを使った期間別の支援状態集計から始め、Photo First品質観測はその後の独立PRへ分ける。本番E2E、複数業種のGoal品質、Secondary Goals、外部KPI照合は継続課題であり、本Engine実装で完了扱いにしない。
+
+Phase 1の公開入口、挙動と限界は`IMPROVEMENT_ADAPTER_CONTRACT.md`を参照。実管理者認可と個票の匿名化はPort実装が必要であり、fake契約テストのみで本番Privacy保証済みとは扱わない。
 
 大規模schema変更・新規外部サービスが必要と判明した時点で停止し、選択肢・影響・rollbackを報告する。Phase 0でmigration/rollbackは不要。文書PRの取り消しだけで戻せる。
 

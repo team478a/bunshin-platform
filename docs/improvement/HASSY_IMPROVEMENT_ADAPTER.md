@@ -2,6 +2,8 @@
 
 基準SHA: `cda2bf87bb741fa510e5f655569e3790a3af03ea`。調査日: 2026-10-02 JST。Adapter実装は未着手。
 
+Phase 1では共通収集Portと、Hassy品質/研修難易度の架空Adapter fixtureを追加した。実Hassy Adapterと管理者向け読取経路は引き続き未実装である。次は本書のGoal別支援結果を、提供時Snapshot・期間cohort・欠損表示を維持して読取Adapterへ接続する。
+
 ## 既存記録のmapping
 
 | Signal                     | 既存sourceと実経路                                                                                               | 改善目的・限界                                                          |

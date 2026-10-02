@@ -1,5 +1,15 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Engine Phase 1: 共通契約は非永続の収集と純粋domainから始める
+
+- 日付: 2026-10-02
+- 状態: Accepted（ユーザー承認済みPhase 0の最小実装単位）
+- 共通分類、scope、観測Envelope、集計完全性、原価欠損、状態遷移、承認Revision照合をplatform-domainへ置く。SNS Goal・Photo First・研修難易度は共通型へ追加しない。
+- applicationの認可Portを通過した後だけAdapterを呼び、出力もtenant/Workspace/Service/Package/環境・指定時のUser/Bunshinを再検証する。各Adapterは元記録の認可とprivacy projectionを担当し、共通収集もmetadata allowlistで防御する。
+- 同じsource kind/IDは重複排除する。内容の不整合は失敗とし、時刻の近さや現在Goalから相関を推定しない。欠損・打切りがある集計を完全な母集団として扱わない。未確定原価はnullと件数で残す。
+- 本変更は非永続の型・関数・Portとfake入力テストのみ。実Adapter、DB、HTTP/UI、Candidate永続化、管理者RBAC、実Codex指示案は後続作業。domainの承認適格性関数は認可そのものを保証しない。
+- 次は既存Hassy読取経路へ限定Adapterを追加する。大規模schema・外部サービスの必要性が判明した場合は選択肢と影響を報告する。
+
 ## D-163: Photo Firstの解析・企画は投稿案と同一Transactionの専用Metadataに保存する
 
 - 日付: 2026-10-01
