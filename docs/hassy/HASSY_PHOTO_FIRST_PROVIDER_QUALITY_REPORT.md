@@ -297,3 +297,72 @@ Retry       0
 非課金fixtureは期待する構造とProvider requestへのGoal伝播を固定するが、実モデルがその品質で生成することは証明しない。Trust / Expertiseの実Provider品質は`INCONCLUSIVE`のままである。
 
 次の最小タスクは、この非課金テストのCI完了とマージ後に、別途課金承認を得た場合に限り、同一合成入力の`BRAND_AWARENESS` / `TRUST_EXPERTISE`を6リクエスト上限・再試行なしで実Provider比較することである。
+
+## 12. Trust / Expertiseの実Provider検証（2026-10-02 JST）
+
+### 実行条件
+
+- 対象branch: `codex/hassy-trust-awareness-provider-validation`
+- 基準main: `96766a8cd0261c7d84309ba3a2363c1e40f7ec26`
+- 実行日時: `2026-10-02 08:47 JST`（Provider結果のUTC: `2026-10-01T23:47:57.046Z`）
+- Goal: `BRAND_AWARENESS`、`TRUST_EXPERTISE`
+- モデル指定: `gpt-5.2`（Provider応答: `gpt-5.2-2025-12-11`）
+- 入力: 同一hashの合成JPEG、同一架空企業、同一対象顧客、同一Mission、同一直近履歴
+- 写真SHA-256: `a1ea5282660ec7fa278aec26b11994b8a4fb1b9446be54558f4ad4d09e11f2b1`
+- 外部通信: Goalごとに写真解析、本文生成、品質判定を各1回、合計6回
+- 再試行: なし
+- 実ユーザー情報、本番DB、Storage、LINE、SNS: 使用なし
+
+### 実行結果
+
+| 項目          | 認知（`BRAND_AWARENESS`）                            | 信頼・専門性（`TRUST_EXPERTISE`）                        |
+| ------------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| 主題          | 施術前のすり合わせを大切にする店舗の考え方           | 施術前確認を仕組みにし、仕上がりのズレを減らすプロセス   |
+| 切り口        | 準備の文化を伝え、来店前の安心材料として知ってもらう | 何を・なぜ確認するかを3点に絞り、判断根拠を伝える        |
+| CTA           | 美容室選びのために投稿を保存                         | 来店前に確認手順を整理するために投稿を保存               |
+| checker       | `REVISE` / 78点                                      | `PASS` / 92点                                            |
+| checker issue | ハッシュタグ形式、写真指示の固定的な個数指定         | なし                                                     |
+| Goal差        | 店舗の特徴・考え方を知ってもらう認知設計             | 専門的な確認手順と、その理由を理解してもらう信頼形成設計 |
+| 判定          | Goal差: `SAFE_WITHIN_TESTED_SCOPE` / 品質: 要修正    | `SAFE_WITHIN_TESTED_SCOPE`                               |
+
+同じ企業情報、写真、Mission、履歴でも、認知は店舗の考え方と安心材料の周知、信頼・専門性は確認項目、判断根拠、再現可能な仕事のプロセスへ分岐した。theme、angle、recommendation reason、本文、写真案、CTAの差分assertionもすべて通過したため、CTA末尾だけを差し替えた出力ではない。
+
+信頼・専門性はcheckerで`PASS / 92点`となり、Goalから投稿設計、本文、写真案、CTAまで差が出るLevel 4相当の経路を、この実測条件では確認した。認知はGoal差を満たした一方、生成されたハッシュタグの一部が`##`になり、写真指示も「チェックボックス3つ」と固定的だったため`REVISE / 78点`となった。このテスト成功を、認知出力を含む両Goalの最終品質合格とは扱わない。
+
+### Telemetry
+
+| Goal         | 工程      | input tokens | output tokens |   latency |
+| ------------ | --------- | -----------: | ------------: | --------: |
+| 認知         | 写真解析  |        2,333 |           750 | 12,077 ms |
+| 認知         | 本文生成  |        3,100 |           440 |  6,797 ms |
+| 認知         | 品質判定  |        2,422 |           301 |  5,471 ms |
+| 信頼・専門性 | 写真解析  |        2,343 |           722 | 11,114 ms |
+| 信頼・専門性 | 本文生成  |        3,048 |           600 |  9,819 ms |
+| 信頼・専門性 | 品質判定  |        2,551 |            22 |  1,658 ms |
+| 合計         | 6 request |       15,797 |         2,835 | 46,936 ms |
+
+### 実行コマンドと検証
+
+Node.js 24.19.0と、リポジトリ指定のpnpm 10.10.0で実行した。
+
+```powershell
+$env:RUN_OPENAI_PHOTO_FIRST_QUALITY='1'
+$env:PHOTO_FIRST_QUALITY_GOAL_PAIR='trust-awareness'
+pnpm --filter web exec vitest run test/photo-first-provider-quality.live.test.ts --reporter=verbose
+```
+
+結果:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed (1)
+Duration    49.61s
+Provider requests 6
+Retry       0
+```
+
+今回確認できたのは、架空の美容室1社、合成写真1枚、各Goal 1出力における実Providerの差である。全業種、実写真、実ユーザー入力、複数回の出力安定性、本番E2E、利用枠、課金記録、Storage、LINE通知は未確認である。
+
+### 次の最小タスク
+
+認知Goalで再現した`##`形式のハッシュタグを公開前に正規化できるよう、まず非課金の契約テストで期待形式を固定する。写真指示の過度に固定的な個数指定は別の品質条件として分け、同じ修正へ混在させない。追加の実Provider再検証は、非課金修正の確認後に改めて承認を得るまで行わない。
