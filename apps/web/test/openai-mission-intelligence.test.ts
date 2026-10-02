@@ -379,7 +379,7 @@ describe('OpenAIMissionQualityChecker', () => {
     });
     expect(result).toMatchObject({
       output: { verdict: 'PASS', score: 90, issues: [] },
-      promptVersion: 'mission-quality-checker-v12-sales-goal-alignment',
+      promptVersion: 'mission-quality-checker-v13-photo-first-grounding',
     });
     const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
       store: boolean;
@@ -395,6 +395,9 @@ describe('OpenAIMissionQualityChecker', () => {
     expect(JSON.stringify(request)).toContain('具体的な商品・サービス');
     expect(JSON.stringify(request)).toContain('購入前に問い合わせる');
     expect(JSON.stringify(request)).toContain('INQUIRY寄り');
+    expect(JSON.stringify(request)).toContain('PHOTO_FIRST_UNCONFIRMED_FACT');
+    expect(JSON.stringify(request)).toContain('uncertainElementsとpendingQuestionは未確認');
+    expect(JSON.stringify(request)).toContain('answeredConfirmation');
     expect(request).toMatchObject({
       text: {
         format: {
@@ -417,6 +420,76 @@ describe('OpenAIMissionQualityChecker', () => {
       },
     });
     expect(JSON.stringify(request)).toContain('REJECTでもrepairInstructionを省略せず');
+  });
+
+  it('sends Photo First uncertainty and owner confirmation as separate grounding data', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    verdict: 'REVISE',
+                    score: 82,
+                    issues: [
+                      {
+                        code: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+                        severity: 'ERROR',
+                        field: 'body',
+                        message: '写真だけでは確認できない商品名を断定しています。',
+                        repairInstruction: '商品名を断定せず、確認済みの用途だけを記載する。',
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await new OpenAIMissionQualityChecker({
+      apiKey: 'test-key',
+      fetch: fetcher,
+    }).check({
+      ...base,
+      content: {
+        body: '新商品の美容オイルです。',
+        threadParts: [],
+        cta: null,
+        caption: null,
+        hashtags: [],
+      },
+      photoFirstGrounding: {
+        uncertainElements: ['容器の商品名は判読できない'],
+        pendingQuestion: '商品名を教えてください。',
+        answeredConfirmation: {
+          question: '写真は販売中の商品ですか？',
+          answer: '店内で使用している備品です。',
+        },
+      },
+    });
+    const request = JSON.parse(fetcher.mock.calls[0]?.[1]?.body as string) as {
+      input: Array<{ role: string; content: string }>;
+    };
+    const userInput = JSON.parse(request.input.at(-1)?.content ?? '{}') as {
+      photoFirstGrounding?: unknown;
+    };
+    expect(userInput.photoFirstGrounding).toEqual({
+      uncertainElements: ['容器の商品名は判読できない'],
+      pendingQuestion: '商品名を教えてください。',
+      answeredConfirmation: {
+        question: '写真は販売中の商品ですか？',
+        answer: '店内で使用している備品です。',
+      },
+    });
+    expect(result.output).toMatchObject({
+      verdict: 'REVISE',
+      issues: [{ code: 'PHOTO_FIRST_UNCONFIRMED_FACT' }],
+    });
   });
 
   it('surfaces provider failures without an approval result', async () => {

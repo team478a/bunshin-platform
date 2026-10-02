@@ -206,6 +206,15 @@ export async function generateMissionContentVariantWithAi(input: {
     businessProfile: context.businessProfile,
     selectedMemories: context.selectedMemories,
     groupKnowledge: context.groupKnowledge,
+    ...(photoFirst
+      ? {
+          photoFirstGrounding: {
+            uncertainElements: photoFirst.analysis.uncertainElements,
+            pendingQuestion: photoFirst.planning.confirmationQuestion,
+            answeredConfirmation: input.photoFirstConfirmation ?? null,
+          },
+        }
+      : {}),
   });
   let quality = await generateWithQuota('variant-quality:0', () => checker.execute(qualityInput()));
   await usage('variant-quality:0', 'QUALITY_CHECKER', quality);
