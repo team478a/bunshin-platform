@@ -315,6 +315,8 @@ describe('buildBusinessOutcomePlanningContext', () => {
       inquiries: 3,
       reservations: 1,
       visits: 1,
+      repeatReservations: 0,
+      repeatVisits: 0,
       orders: 1,
       other: 0,
     });
@@ -322,12 +324,28 @@ describe('buildBusinessOutcomePlanningContext', () => {
       {
         topic: '初回相談の流れ',
         outcomeTotal: 5,
-        businessOutcomes: { inquiries: 3, reservations: 1, visits: 0, orders: 1, other: 0 },
+        businessOutcomes: {
+          inquiries: 3,
+          reservations: 1,
+          visits: 0,
+          repeatReservations: 0,
+          repeatVisits: 0,
+          orders: 1,
+          other: 0,
+        },
       },
       {
         topic: '営業時間のお知らせ',
         outcomeTotal: 1,
-        businessOutcomes: { inquiries: 0, reservations: 0, visits: 1, orders: 0, other: 0 },
+        businessOutcomes: {
+          inquiries: 0,
+          reservations: 0,
+          visits: 1,
+          repeatReservations: 0,
+          repeatVisits: 0,
+          orders: 0,
+          other: 0,
+        },
       },
     ]);
   });
@@ -358,7 +376,15 @@ describe('goal-specific outcome planning context', () => {
 
   it('uses only records from the same goal and only that goal primary outcomes', () => {
     expect(buildGoalOutcomePlanningContext('INQUIRY', records)).toMatchObject({
-      businessOutcomes: { inquiries: 2, reservations: 0, visits: 0, orders: 0, other: 0 },
+      businessOutcomes: {
+        inquiries: 2,
+        reservations: 0,
+        visits: 0,
+        repeatReservations: 0,
+        repeatVisits: 0,
+        orders: 0,
+        other: 0,
+      },
       goalEvaluation: {
         goal: 'INQUIRY',
         status: 'MEASURED',
@@ -373,7 +399,15 @@ describe('goal-specific outcome planning context', () => {
 
   it('reports no data without inventing achievement for a goal without an external KPI', () => {
     expect(buildGoalOutcomePlanningContext('RECRUIT', records)).toMatchObject({
-      businessOutcomes: { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 },
+      businessOutcomes: {
+        inquiries: 0,
+        reservations: 0,
+        visits: 0,
+        repeatReservations: 0,
+        repeatVisits: 0,
+        orders: 0,
+        other: 0,
+      },
       successfulTopics: [],
       goalEvaluation: {
         goal: 'RECRUIT',
@@ -411,7 +445,15 @@ describe('goal-specific outcome planning context', () => {
         },
       ]),
     ).toMatchObject({
-      businessOutcomes: { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 },
+      businessOutcomes: {
+        inquiries: 0,
+        reservations: 0,
+        visits: 0,
+        repeatReservations: 0,
+        repeatVisits: 0,
+        orders: 0,
+        other: 0,
+      },
       goalEvaluation: {
         goal: 'RECRUIT',
         status: 'SELF_REPORTED',
@@ -427,5 +469,42 @@ describe('goal-specific outcome planning context', () => {
     expect(readSnapshotStrategyGoal({ strategy: { id: 'strategy-1' } })).toBeNull();
     expect(readSnapshotStrategyGoal({ strategy: { goal: 'INQUIRY' } })).toBe('INQUIRY');
     expect(readSnapshotStrategyGoal({ strategy: { goal: 'UNKNOWN' } })).toBeNull();
+  });
+
+  it('measures repeat goals only from explicit repeat outcomes', () => {
+    expect(
+      buildGoalOutcomePlanningContext('REPEAT', [
+        {
+          topic: '次回来店までのケア',
+          strategyGoal: 'REPEAT',
+          manualMetrics: {
+            businessOutcomes: {
+              reservations: 8,
+              visits: 5,
+              repeatReservations: 2,
+              repeatVisits: 1,
+            },
+          },
+        },
+      ]),
+    ).toMatchObject({
+      businessOutcomes: {
+        inquiries: 0,
+        reservations: 0,
+        visits: 0,
+        repeatReservations: 2,
+        repeatVisits: 1,
+        orders: 0,
+        other: 0,
+      },
+      goalEvaluation: {
+        goal: 'REPEAT',
+        status: 'MEASURED',
+        primaryOutcomeKeys: ['repeatReservations', 'repeatVisits'],
+        recordedPostCount: 1,
+        primaryOutcomeTotal: 3,
+      },
+      successfulTopics: [{ topic: '次回来店までのケア', outcomeTotal: 3 }],
+    });
   });
 });

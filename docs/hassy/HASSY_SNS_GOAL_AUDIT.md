@@ -223,7 +223,7 @@ Content/variant/quality contextへGoalとplanning profileを渡す。本文だ�
 
 クライアントはGoalを送信せず、サーバーがGeneration SnapshotのGoalを使用する。Snapshotがない過去MissionへGoalを推測補完しない。
 
-次週計画は現在Goalと同じGoalの結果だけを使用する。問い合わせは`inquiries`、来店予約は`reservations/visits`、販売は`orders`を一次指標として扱う。他Goalは現在自己申告中心である。利用者の回答は因果関係や外部KPI実績として断定しない。
+次週計画は現在Goalと同じGoalの結果だけを使用する。問い合わせは`inquiries`、来店予約は`reservations/visits`、リピートは`repeatReservations/repeatVisits`、販売は`orders`を一次指標として扱う。他Goalは現在自己申告中心である。利用者の回答は因果関係や外部KPI実績として断定しない。旧データの`reservations/visits`は新規・再来の別を証明できないため、再予約・再来店へ自動変換しない。
 
 ## 12. Goal変更時の挙動
 
@@ -251,15 +251,15 @@ Content/variant/quality contextへGoalとplanning profileを渡す。本文だ�
 
 ## 14. Goal対応レベル
 
-| Goal                |        現在Level | 根拠                                              | 未確認              |
-| ------------------- | ---------------: | ------------------------------------------------- | ------------------- |
-| Awareness           | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 実reach自動取得     |
-| Visit / Reservation | 4 + 結果loop一部 | Strategy〜CTA、予約/来店手入力を同Goal次週へ反映  | 予約システム照合    |
-| Inquiry             | 4 + 結果loop一部 | Strategy〜CTA、問い合わせ手入力を同Goal次週へ反映 | LINE/form自動照合   |
-| Repeat              | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 新規/再来店の識別   |
-| Recruitment         | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 応募/見学の自動照合 |
-| Sales               | 4 + 結果loop一部 | Strategy〜CTA、購入手入力を同Goal次週へ反映       | 売上/商品閲覧照合   |
-| Trust / Expertise   | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映               | 信頼指標の定義      |
+| Goal                |        現在Level | 根拠                                                 | 未確認              |
+| ------------------- | ---------------: | ---------------------------------------------------- | ------------------- |
+| Awareness           | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映                  | 実reach自動取得     |
+| Visit / Reservation | 4 + 結果loop一部 | Strategy〜CTA、予約/来店手入力を同Goal次週へ反映     | 予約システム照合    |
+| Inquiry             | 4 + 結果loop一部 | Strategy〜CTA、問い合わせ手入力を同Goal次週へ反映    | LINE/form自動照合   |
+| Repeat              | 4 + 結果loop一部 | Strategy〜CTA、再予約/再来店手入力を同Goal次週へ反映 | 予約システム照合    |
+| Recruitment         | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映                  | 応募/見学の自動照合 |
+| Sales               | 4 + 結果loop一部 | Strategy〜CTA、購入手入力を同Goal次週へ反映          | 売上/商品閲覧照合   |
+| Trust / Expertise   | 4 + 結果loop一部 | Strategy〜CTA、自己申告を次週へ反映                  | 信頼指標の定義      |
 
 LEVEL 5完全達成とは判定しない。現在は取得可能な手入力と自己申告による段階実装である。
 
@@ -275,15 +275,15 @@ Company Profile、Target、Goal、Weekly、Recent Posts、Accepted/Rejected、Po
 
 ### KPI
 
-| Goal              | 現在の一次指標       | 補助・未取得                     |
-| ----------------- | -------------------- | -------------------------------- |
-| Awareness         | 自己申告             | reach, impressions, profile view |
-| Visit/Reservation | reservations, visits | 予約経路・来店照合               |
-| Inquiry           | inquiries            | LINE/form別照合                  |
-| Repeat            | 自己申告             | repeat reservation/revisit識別   |
-| Recruitment       | 自己申告             | 求人閲覧、見学、応募             |
-| Sales             | orders               | product view、売上額             |
-| Trust/Expertise   | 自己申告             | saves、shares、相談理由          |
+| Goal              | 現在の一次指標                   | 補助・未取得                     |
+| ----------------- | -------------------------------- | -------------------------------- |
+| Awareness         | 自己申告                         | reach, impressions, profile view |
+| Visit/Reservation | reservations, visits             | 予約経路・来店照合               |
+| Inquiry           | inquiries                        | LINE/form別照合                  |
+| Repeat            | repeatReservations, repeatVisits | 予約経路・再来店照合             |
+| Recruitment       | 自己申告                         | 求人閲覧、見学、応募             |
+| Sales             | orders                           | product view、売上額             |
+| Trust/Expertise   | 自己申告                         | saves、shares、相談理由          |
 
 ## 16. SNSプラットフォーム差
 
@@ -320,12 +320,13 @@ Goal contractとpolicyはSOCIAL capabilityにあり、AI研修、占い、千ノ
 ## 20. 残課題と推奨順
 
 1. **実Provider Goal Differential品質確認**: M1〜M7から小さな承認済みサンプルを選び、同一入力でテーマ・本文・visual・CTAを人手rubric評価する。
-2. **Repeat KPI分離**: 新規予約/来店と再予約/再来店を区別できる手入力契約を小さく追加するか判断する。
-3. **採用・認知・信頼の指標設計**: 自動取得を前提にせず、必要な簡易入力だけを決める。
-4. **Goal × Barrier**: 実運用で必要性を確認後、SOCIAL package側へ小さなpolicyを追加する。
-5. **Secondary Goals**: 単一Goal運用の不足が確認された後に設計する。
+2. **採用・認知・信頼の指標設計**: 自動取得を前提にせず、必要な簡易入力だけを決める。
+3. **Goal × Barrier**: 実運用で必要性を確認後、SOCIAL package側へ小さなpolicyを追加する。
+4. **Secondary Goals**: 単一Goal運用の不足が確認された後に設計する。
 
-次の最小タスクは、課金・本番送信を伴わない**固定fixtureによるGoal Differential output rubricテスト**である。Providerの出力を捏造せず、まずPrompt contractと決定的fixtureの合否基準を固定する。
+Repeat KPI分離は実装済み。REPEATの画面では曖昧な`予約/来店`ではなく`再予約/再来店`を記録し、次週評価も明示的な2項目だけを一次指標として使う。保存先は既存の`manualMetrics` JSONを拡張したためmigrationは不要で、旧クライアント入力は新項目を0として受理する。
+
+次の最小タスクは、**採用・認知・信頼について、利用者が無理なく回答できる目的別の簡易成果入力を設計すること**である。外部KPI取得や因果関係を前提にせず、既存の自己申告で不足する情報だけを定義する。
 
 ## 21. 実行した検証
 

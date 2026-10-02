@@ -53,6 +53,8 @@ export type DailyMissionView = {
     inquiries: number;
     reservations: number;
     visits: number;
+    repeatReservations: number;
+    repeatVisits: number;
     orders: number;
     other: number;
   };

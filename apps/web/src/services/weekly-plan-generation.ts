@@ -90,7 +90,7 @@ const primaryOutcomeKeysByGoal = {
   VISIT_RESERVATION: ['reservations', 'visits'],
   SALES: ['orders'],
   RECRUIT: [],
-  REPEAT: [],
+  REPEAT: ['repeatReservations', 'repeatVisits'],
   BRAND_AWARENESS: [],
   TRUST_EXPERTISE: [],
   BLOG_TRAFFIC: [],

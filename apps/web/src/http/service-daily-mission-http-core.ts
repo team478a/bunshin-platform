@@ -8,7 +8,6 @@ import { createLogger, requestIdFromHeader } from '@bunshin/observability';
 import { ApplicationError, toApiError } from '@bunshin/shared';
 import { z } from 'zod';
 import { currentUserProvider } from '../auth/current-user';
-import { BUSINESS_OUTCOME_KEYS } from '../services/business-outcomes';
 import { SOCIAL_GOAL_OUTCOME_RESULTS } from '../services/social-goal-outcomes';
 import { resolveMemberServiceContext } from '../services/public-service';
 import { dailyMissionGenerationError } from './daily-mission-generation-error';
@@ -61,12 +60,17 @@ export const postSchema = z
 export const feedbackSchema = z
   .object({ rating: z.enum(MISSION_FEEDBACK_RATINGS), idempotencyKey: keySchema })
   .strict();
+const outcomeCountSchema = z.number().int().min(0).max(999);
 export const businessOutcomeSchema = z
-  .object(
-    Object.fromEntries(
-      BUSINESS_OUTCOME_KEYS.map((key) => [key, z.number().int().min(0).max(999)]),
-    ) as Record<(typeof BUSINESS_OUTCOME_KEYS)[number], z.ZodNumber>,
-  )
+  .object({
+    inquiries: outcomeCountSchema,
+    reservations: outcomeCountSchema,
+    visits: outcomeCountSchema,
+    repeatReservations: outcomeCountSchema.optional().default(0),
+    repeatVisits: outcomeCountSchema.optional().default(0),
+    orders: outcomeCountSchema,
+    other: outcomeCountSchema,
+  })
   .strict();
 export const socialGoalOutcomeSchema = z
   .object({ result: z.enum(SOCIAL_GOAL_OUTCOME_RESULTS) })

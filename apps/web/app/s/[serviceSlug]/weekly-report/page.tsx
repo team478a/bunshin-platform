@@ -160,6 +160,14 @@ export default async function ServiceWeeklyReportPage({
                 <span>来店</span>
               </article>
               <article>
+                <strong>{report.businessProgress.outcomes.repeatReservations}</strong>
+                <span>再予約</span>
+              </article>
+              <article>
+                <strong>{report.businessProgress.outcomes.repeatVisits}</strong>
+                <span>再来店</span>
+              </article>
+              <article>
                 <strong>{report.businessProgress.outcomes.orders}</strong>
                 <span>購入・申込</span>
               </article>

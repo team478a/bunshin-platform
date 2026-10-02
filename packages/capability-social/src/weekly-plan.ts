@@ -169,7 +169,15 @@ export interface WeeklyPlannerInput {
     goalEvaluation?: {
       goal: SocialAccountStrategyGoal;
       status: 'MEASURED' | 'SELF_REPORTED' | 'NO_DATA' | 'UNAVAILABLE';
-      primaryOutcomeKeys: Array<'inquiries' | 'reservations' | 'visits' | 'orders' | 'other'>;
+      primaryOutcomeKeys: Array<
+        | 'inquiries'
+        | 'reservations'
+        | 'visits'
+        | 'repeatReservations'
+        | 'repeatVisits'
+        | 'orders'
+        | 'other'
+      >;
       recordedPostCount: number;
       primaryOutcomeTotal: number;
       reportedProgress?: {
@@ -189,6 +197,8 @@ export interface WeeklyPlannerInput {
       inquiries: number;
       reservations: number;
       visits: number;
+      repeatReservations: number;
+      repeatVisits: number;
       orders: number;
       other: number;
     };
@@ -199,6 +209,8 @@ export interface WeeklyPlannerInput {
         inquiries: number;
         reservations: number;
         visits: number;
+        repeatReservations: number;
+        repeatVisits: number;
         orders: number;
         other: number;
       };

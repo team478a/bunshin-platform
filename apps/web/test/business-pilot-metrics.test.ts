@@ -42,7 +42,15 @@ describe('business outcomes', () => {
   it('preserves unrelated manual metrics and sums valid counters', () => {
     const written = writeBusinessOutcomes(
       { likes: 4 },
-      { inquiries: 2, reservations: 1, visits: 0, orders: 1, other: 0 },
+      {
+        inquiries: 2,
+        reservations: 1,
+        visits: 0,
+        repeatReservations: 1,
+        repeatVisits: 0,
+        orders: 1,
+        other: 0,
+      },
     );
     expect(written['likes']).toBe(4);
     expect(readBusinessOutcomes(written).orders).toBe(1);
@@ -52,7 +60,25 @@ describe('business outcomes', () => {
       inquiries: 5,
       reservations: 1,
       visits: 2,
+      repeatReservations: 1,
+      repeatVisits: 0,
       orders: 1,
+      other: 0,
+    });
+  });
+
+  it('reads legacy metrics as zero repeat outcomes without reclassifying reservations', () => {
+    expect(
+      readBusinessOutcomes({
+        businessOutcomes: { inquiries: 0, reservations: 2, visits: 1, orders: 0, other: 0 },
+      }),
+    ).toEqual({
+      inquiries: 0,
+      reservations: 2,
+      visits: 1,
+      repeatReservations: 0,
+      repeatVisits: 0,
+      orders: 0,
       other: 0,
     });
   });
