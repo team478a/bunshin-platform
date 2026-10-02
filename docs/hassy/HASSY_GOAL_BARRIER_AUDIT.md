@@ -31,19 +31,20 @@ CONFIRMEDまたはDISMISSED
 
 ## 3. 実装状態
 
-| 項目                          | 状態                 | 根拠                                                             |
-| ----------------------------- | -------------------- | ---------------------------------------------------------------- |
-| テナント・利用者・Bunshin分離 | 実装済み             | `SocialActivityBarrierScope`、各Repositoryのscope照合            |
-| 障害日除外                    | 実装済み             | 生成失敗日・LINE失敗日を観測対象から除外                         |
-| 行動だけで障壁を確定しない    | 実装済み             | 推測結果は`SUSPECTED`のみ、本人回答で`CONFIRMED`                 |
-| 冪等な証拠・回答              | 実装済み             | Evidence key、confirmation idempotency key                       |
-| 無料支援のSnapshot            | 実装済み             | `definitionSnapshot`へ支援内容を保存                             |
-| Goalの観測入力                | 未実装               | `InferSocialActivityBarriersInput`にGoalなし                     |
-| Mission生成時Goalの参照       | 未実装               | 観測Queryは`generationContext.payload.strategy.goal`を取得しない |
-| Goal別の集計                  | 未実装               | 28日間をGoal別に区分せず合算                                     |
-| Goal別の質問・支援            | 未実装               | categoryだけで共通ラベル・支援を選択                             |
-| Goal変更履歴の保持            | Strategy側は実装済み | Barrier Evidence / Support SnapshotにはGoalなし                  |
-| 現行の手入力成果読取          | 本変更で修正         | `manualMetrics.businessOutcomes`を観測対象へ追加                 |
+| 項目                          | 状態         | 根拠                                                     |
+| ----------------------------- | ------------ | -------------------------------------------------------- |
+| テナント・利用者・Bunshin分離 | 実装済み     | `SocialActivityBarrierScope`、各Repositoryのscope照合    |
+| 障害日除外                    | 実装済み     | 生成失敗日・LINE失敗日を観測対象から除外                 |
+| 行動だけで障壁を確定しない    | 実装済み     | 推測結果は`SUSPECTED`のみ、本人回答で`CONFIRMED`         |
+| 冪等な証拠・回答              | 実装済み     | Evidence key、confirmation idempotency key               |
+| 無料支援のSnapshot            | 実装済み     | `definitionSnapshot`へ支援内容を保存                     |
+| Goalの観測入力                | 実装済み     | Barrier rule v2の`goalAttribution`                       |
+| Mission生成時Goalの参照       | 実装済み     | Generation Contextの許可済みGoalだけを読取               |
+| Goal別Mission件数             | 実装済み     | Goal別件数、未帰属件数、混在フラグをEvidence JSONへ保存  |
+| Goal別行動指標                | 未実装       | 行動集計値自体は28日間の全Goal合算                       |
+| Goal別の質問・支援            | 未実装       | categoryだけで共通ラベル・支援を選択                     |
+| Goal変更履歴の保持            | 一部実装済み | Strategy履歴とEvidence件数は保持、Support Snapshotは共通 |
+| 現行の手入力成果読取          | 本変更で修正 | `manualMetrics.businessOutcomes`を観測対象へ追加         |
 
 ## 4. Barrier × Goal 差分
 
@@ -67,7 +68,7 @@ CONFIRMEDまたはDISMISSED
 
 これらは将来の支援文面を検証するfixtureであり、外部KPI取得や投稿との因果関係を証明しない。
 
-## 6. 今回の最小修正
+## 6. 実装済みの最小修正
 
 障壁観測で次の現行成果を読み取る。
 
@@ -75,6 +76,17 @@ CONFIRMEDまたはDISMISSED
 - 次の行動: `businessOutcomes.reservations / visits / repeatReservations / repeatVisits / orders`
 
 過去のtop-level形式も継続して読む。問い合わせは現在の汎用Barrier分類では「肯定反応」とし、無条件に汎用conversionへ変換しない。問い合わせGoalでは問い合わせ自体が一次成果になるため、正しいGoal別分類は次段階で行う。
+
+Barrier rule v2では、障害日を除外した各Missionについて生成時Snapshotの`strategy.goal`を読み、次をEvidenceのJSONへ保存する。
+
+- Goal別Mission件数
+- 観測Mission総数
+- Goal帰属済み件数
+- `UNATTRIBUTED`件数
+- 観測期間内の異なるGoal数
+- 複数Goal混在フラグ
+
+許可済みenum以外、Snapshot欠落、旧Missionは`UNATTRIBUTED`とし、現在Goalから推測補完しない。既存v1 EvidenceはGoal帰属なしとして引き続き読める。Evidenceの冪等キーをv2へ更新し、同じ観測期間でも旧形式と混同しない。
 
 ## 7. 採用しない変更
 
@@ -87,9 +99,9 @@ CONFIRMEDまたはDISMISSED
 
 ## 8. 次の最小タスク
 
-観測Queryで各MissionのGeneration Context Snapshotから`strategy.goal`を安全に読み、Goal別の件数をEvidence JSONへ記録する設計を追加する。既存Caseの正本と支援Snapshotを壊さず、Goal不明の旧Missionは`UNATTRIBUTED`として推測補完しない。
+Goal別支援へ進める安全条件を固定する。少なくとも`UNATTRIBUTED > 0`または`mixedAttributedGoals = true`の場合は単一Goal向け文面を選ばず、既存の共通支援を維持する。
 
-このGoal attributionがテストで固定されるまで、Goal別の支援文面は実装しない。
+その後、Goal別に集計すべき行動指標を定義し、`EFFECT / RESPONSE / LEAD / UNKNOWN`の代表fixtureだけで支援差を検証する。現時点ではGoal別文面を実装しない。
 
 ## 9. 未確認事項
 
@@ -101,4 +113,4 @@ CONFIRMEDまたはDISMISSED
 
 ## 10. 変更範囲
 
-本変更は、既存JSON成果の読取修正、回帰テスト、本監査文書のみ。DB schema、migration、API、Provider、LINE送信、本番設定、依存関係、lockfileは変更しない。
+本変更は、既存JSON成果の読取、Generation ContextからのGoal帰属、Evidence JSON、回帰テスト、本監査文書のみ。DB schema、migration、API、Provider、LINE送信、本番設定、依存関係、lockfileは変更しない。

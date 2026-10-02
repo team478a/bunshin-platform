@@ -35,6 +35,7 @@ function barrierCase(
         excludedSystemIncidentDays: 0,
       },
       metrics: { lineDelivered: 7, missionViewed: 0 },
+      goalAttribution: null,
       thresholds: { minimumDelivered: 5, maximumViewed: 1 },
       ruleVersion: 'social-activity-barrier-v1',
     },

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildSocialActivityBarrierGoalAttribution } from '@bunshin/capability-social';
 import { shouldResolveSocialActivityBarrier } from '../src/social-activity-barrier-resolution';
 
 const observation = {
@@ -26,6 +27,7 @@ const observation = {
     positiveResponseRecorded: 3,
     conversionActionRecorded: 1,
   },
+  goalAttribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY']),
 };
 
 describe('shouldResolveSocialActivityBarrier', () => {

@@ -1,5 +1,7 @@
 import {
   SOCIAL_ACTIVITY_SUPPORT_FEATURE_KEY,
+  buildSocialActivityBarrierGoalAttribution,
+  readSocialActivityBarrierMissionGoal,
   socialActivityBarrierEvidenceKey,
   type SocialActivityBarrierCase,
   type SocialActivityBarrierCaseRepository,
@@ -182,6 +184,7 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
             select: { type: true },
           },
           postRecord: { select: { manualMetrics: true } },
+          generationContext: { select: { payload: true } },
           lineMessageDeliveries: {
             where: {
               userId: input.scope.userId,
@@ -236,6 +239,11 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
     );
     const activityTypes = (mission: (typeof eligibleMissions)[number]) =>
       new Set(mission.activities.map((activity) => activity.type));
+    const goalAttribution = buildSocialActivityBarrierGoalAttribution(
+      eligibleMissions.map((mission) =>
+        readSocialActivityBarrierMissionGoal(mission.generationContext?.payload),
+      ),
+    );
 
     const positivePostResponses = eligibleMissions.filter((mission) =>
       hasPositiveResponse(mission.postRecord?.manualMetrics ?? null),
@@ -275,6 +283,7 @@ export class PrismaSocialActivityBarrierObservationRepository implements SocialA
           insightSnapshots.filter((snapshot) => (snapshot.interactions ?? 0) > 0).length,
         conversionActionRecorded: conversions,
       },
+      goalAttribution,
     };
   }
 }
@@ -384,7 +393,10 @@ export class PrismaSocialActivityBarrierCaseRepository implements SocialActivity
                   eligibleDays: candidate.evidence.observationWindow.eligibleDays,
                   excludedSystemIncidentDays:
                     candidate.evidence.observationWindow.excludedSystemIncidentDays,
-                  metrics: candidate.evidence.metrics,
+                  metrics: {
+                    ...candidate.evidence.metrics,
+                    goalAttribution: candidate.evidence.goalAttribution,
+                  },
                   thresholds: candidate.evidence.thresholds,
                   ruleVersion: candidate.evidence.ruleVersion,
                   detectedAt: input.detectedAt,

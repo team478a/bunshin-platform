@@ -2,6 +2,7 @@ import {
   SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS,
   SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
   buildSocialActivityBarrierQuestion,
+  readSocialActivityBarrierGoalAttribution,
   socialActivitySupportFor,
   type SocialActivityBarrierCase,
   type SocialActivityBarrierConfirmationRepository,
@@ -22,6 +23,11 @@ function evidence(row: {
   thresholds: Prisma.JsonValue;
   ruleVersion: string;
 }): SocialActivityBarrierEvidence {
+  const storedMetrics =
+    row.metrics !== null && typeof row.metrics === 'object' && !Array.isArray(row.metrics)
+      ? (row.metrics as Record<string, Prisma.JsonValue>)
+      : {};
+  const { goalAttribution: storedGoalAttribution, ...metrics } = storedMetrics;
   return {
     evidenceCode: row.evidenceCode as SocialActivityBarrierEvidence['evidenceCode'],
     observationWindow: {
@@ -30,7 +36,8 @@ function evidence(row: {
       eligibleDays: row.eligibleDays,
       excludedSystemIncidentDays: row.excludedSystemIncidentDays,
     },
-    metrics: row.metrics as SocialActivityBarrierEvidence['metrics'],
+    metrics,
+    goalAttribution: readSocialActivityBarrierGoalAttribution(storedGoalAttribution),
     thresholds: row.thresholds as SocialActivityBarrierEvidence['thresholds'],
     ruleVersion: row.ruleVersion as SocialActivityBarrierEvidence['ruleVersion'],
   };
