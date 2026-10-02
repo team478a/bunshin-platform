@@ -31,20 +31,20 @@ CONFIRMEDまたはDISMISSED
 
 ## 3. 実装状態
 
-| 項目                          | 状態                 | 根拠                                                    |
-| ----------------------------- | -------------------- | ------------------------------------------------------- |
-| テナント・利用者・Bunshin分離 | 実装済み             | `SocialActivityBarrierScope`、各Repositoryのscope照合   |
-| 障害日除外                    | 実装済み             | 生成失敗日・LINE失敗日を観測対象から除外                |
-| 行動だけで障壁を確定しない    | 実装済み             | 推測結果は`SUSPECTED`のみ、本人回答で`CONFIRMED`        |
-| 冪等な証拠・回答              | 実装済み             | Evidence key、confirmation idempotency key              |
-| 無料支援のSnapshot            | 実装済み             | `definitionSnapshot`へ支援内容を保存                    |
-| Goalの観測入力                | 実装済み             | Barrier rule v2の`goalAttribution`                      |
-| Mission生成時Goalの参照       | 実装済み             | Generation Contextの許可済みGoalだけを読取              |
-| Goal別Mission件数             | 実装済み             | Goal別件数、未帰属件数、混在フラグをEvidence JSONへ保存 |
-| Goal別行動指標                | 未実装               | 行動集計値自体は28日間の全Goal合算                      |
-| Goal別の質問・支援            | 未実装               | categoryだけで共通ラベル・支援を選択                    |
-| Goal変更履歴の保持            | 一部実装済み         | Strategy履歴とEvidence件数は保持、Support Snapshotは共通 |
-| 現行の手入力成果読取          | 本変更で修正         | `manualMetrics.businessOutcomes`を観測対象へ追加        |
+| 項目                          | 状態         | 根拠                                                     |
+| ----------------------------- | ------------ | -------------------------------------------------------- |
+| テナント・利用者・Bunshin分離 | 実装済み     | `SocialActivityBarrierScope`、各Repositoryのscope照合    |
+| 障害日除外                    | 実装済み     | 生成失敗日・LINE失敗日を観測対象から除外                 |
+| 行動だけで障壁を確定しない    | 実装済み     | 推測結果は`SUSPECTED`のみ、本人回答で`CONFIRMED`         |
+| 冪等な証拠・回答              | 実装済み     | Evidence key、confirmation idempotency key               |
+| 無料支援のSnapshot            | 実装済み     | `definitionSnapshot`へ支援内容を保存                     |
+| Goalの観測入力                | 実装済み     | Barrier rule v2の`goalAttribution`                       |
+| Mission生成時Goalの参照       | 実装済み     | Generation Contextの許可済みGoalだけを読取               |
+| Goal別Mission件数             | 実装済み     | Goal別件数、未帰属件数、混在フラグをEvidence JSONへ保存  |
+| Goal別行動指標                | 未実装       | 行動集計値自体は28日間の全Goal合算                       |
+| Goal別の質問・支援            | 未実装       | categoryだけで共通ラベル・支援を選択                     |
+| Goal変更履歴の保持            | 一部実装済み | Strategy履歴とEvidence件数は保持、Support Snapshotは共通 |
+| 現行の手入力成果読取          | 本変更で修正 | `manualMetrics.businessOutcomes`を観測対象へ追加         |
 
 ## 4. Barrier × Goal 差分
 
