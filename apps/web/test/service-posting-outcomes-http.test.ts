@@ -66,13 +66,24 @@ import {
   recordServiceBusinessOutcomeResponse,
   recordServiceSocialGoalOutcomeResponse,
 } from '../src/http/service-daily-mission-outcomes';
-import { serviceDailyMissionScope } from '../src/http/service-daily-mission-http-core';
+import {
+  businessOutcomeSchema,
+  serviceDailyMissionScope,
+} from '../src/http/service-daily-mission-http-core';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const dates = { createdAt: new Date(), updatedAt: new Date() };
 const activity = { id: 'activity-a', occurredAt: new Date(), ...dates };
 const post = { id: 'post-a', postedAt: new Date(), manualMetrics: { existing: 1 }, ...dates };
-const outcomes = { inquiries: 1, reservations: 0, visits: 0, orders: 0, other: 0 };
+const outcomes = {
+  inquiries: 1,
+  reservations: 0,
+  visits: 0,
+  repeatReservations: 1,
+  repeatVisits: 0,
+  orders: 0,
+  other: 0,
+};
 function context(serviceId = 'service-a', workspaceId = 'workspace-a', enabled = true) {
   return {
     workspaceId,
@@ -175,6 +186,26 @@ beforeEach(() => {
   m.milestone.mockResolvedValue([]);
 });
 describe('private service posting and outcomes', () => {
+  it('defaults repeat outcomes for requests from clients deployed before repeat separation', () => {
+    expect(
+      businessOutcomeSchema.parse({
+        inquiries: 1,
+        reservations: 2,
+        visits: 3,
+        orders: 0,
+        other: 0,
+      }),
+    ).toEqual({
+      inquiries: 1,
+      reservations: 2,
+      visits: 3,
+      repeatReservations: 0,
+      repeatVisits: 0,
+      orders: 0,
+      other: 0,
+    });
+  });
+
   it.each(operations)('allows $name with the authenticated member scope', async (op) => {
     expect((await op.run(request(op.body), 'private-a', 'bunshin-a')).status).toBe(200);
     expect(m.member).toHaveBeenCalledWith('private-a', 'member-a');

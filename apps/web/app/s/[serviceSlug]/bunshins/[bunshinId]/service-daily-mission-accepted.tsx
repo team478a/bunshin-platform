@@ -22,6 +22,14 @@ const businessOutcomeOptions = [
   ['other', 'その他の反応'],
 ] as const;
 
+const repeatBusinessOutcomeOptions = [
+  ['inquiries', '問い合わせ'],
+  ['repeatReservations', '再予約'],
+  ['repeatVisits', '再来店'],
+  ['orders', '購入・申込'],
+  ['other', 'その他の反応'],
+] as const;
+
 const goalOutcomeOptions = [
   ['ACHIEVED', '目的につながった'],
   ['SOME_PROGRESS', '手応えがあった'],
@@ -55,6 +63,8 @@ export function ServiceDailyMissionAccepted({
   businessFree: boolean;
 }) {
   const outcomes = controller.businessOutcomes[mission.id] ?? emptyBusinessOutcomes();
+  const outcomeOptions =
+    mission.strategyGoal === 'REPEAT' ? repeatBusinessOutcomeOptions : businessOutcomeOptions;
 
   return (
     <div className="mission-accepted">
@@ -135,7 +145,7 @@ export function ServiceDailyMissionAccepted({
               <section className="mission-business-outcomes">
                 <h4>この投稿から、お客様の反応はありましたか？</h4>
                 <p>なければ0のままで大丈夫です。お客様の名前は入力しません。</p>
-                {businessOutcomeOptions.map(([key, label]) => (
+                {outcomeOptions.map(([key, label]) => (
                   <label key={key}>
                     {label}の件数
                     <input

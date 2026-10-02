@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildBusinessResponseInsight } from '../app/s/[serviceSlug]/bunshins/[bunshinId]/business-response-insights';
 
-const zero = { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 };
+const zero = {
+  inquiries: 0,
+  reservations: 0,
+  visits: 0,
+  repeatReservations: 0,
+  repeatVisits: 0,
+  orders: 0,
+  other: 0,
+};
 
 describe('business response insights', () => {
   it('guides a posted user to record outcomes when no response is recorded', () => {
@@ -55,5 +63,21 @@ describe('business response insights', () => {
 
     expect(insight.title).toBe('届いた質問を次の投稿にしましょう');
     expect(insight.guidance).toContain('「今日の材料」');
+  });
+
+  it('treats explicit repeat visits as customer actions', () => {
+    const insight = buildBusinessResponseInsight([
+      {
+        id: 'one',
+        missionDate: '2026-09-14',
+        topic: '次回来店までのケア',
+        postedAt: 'now',
+        businessOutcomes: { ...zero, repeatVisits: 1 },
+      },
+    ]);
+
+    expect(insight.title).toBe('反応があった内容をもう一度使いましょう');
+    expect(insight.bestTopic).toBe('次回来店までのケア');
+    expect(insight.total).toBe(1);
   });
 });

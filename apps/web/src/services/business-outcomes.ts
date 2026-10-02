@@ -2,6 +2,8 @@ export const BUSINESS_OUTCOME_KEYS = [
   'inquiries',
   'reservations',
   'visits',
+  'repeatReservations',
+  'repeatVisits',
   'orders',
   'other',
 ] as const;
@@ -32,6 +34,8 @@ export const emptyBusinessOutcomes = (): BusinessOutcomes => ({
   inquiries: 0,
   reservations: 0,
   visits: 0,
+  repeatReservations: 0,
+  repeatVisits: 0,
   orders: 0,
   other: 0,
 });
@@ -50,6 +54,8 @@ export function readBusinessOutcomes(value: unknown): BusinessOutcomes {
     inquiries: boundedCount(record['inquiries']),
     reservations: boundedCount(record['reservations']),
     visits: boundedCount(record['visits']),
+    repeatReservations: boundedCount(record['repeatReservations']),
+    repeatVisits: boundedCount(record['repeatVisits']),
     orders: boundedCount(record['orders']),
     other: boundedCount(record['other']),
   };
