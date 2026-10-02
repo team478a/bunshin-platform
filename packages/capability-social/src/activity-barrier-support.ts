@@ -1,10 +1,11 @@
 import { ApplicationError } from '@bunshin/shared';
 
 import type { SocialActivityBarrierCase } from './activity-barrier-persistence';
-import type {
-  SocialActivityBarrierCategory,
-  SocialActivityBarrierEvidence,
-  SocialActivityBarrierScope,
+import {
+  socialActivityBarrierGoalMetricsMatchAttribution,
+  type SocialActivityBarrierCategory,
+  type SocialActivityBarrierEvidence,
+  type SocialActivityBarrierScope,
 } from './activity-barrier';
 import type { SocialAccountStrategyGoal } from './social-account-strategy';
 
@@ -46,6 +47,9 @@ export const SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS = [
   'UNATTRIBUTED_MISSIONS',
   'MIXED_GOALS',
   'NO_SINGLE_GOAL',
+  'METRICS_UNAVAILABLE',
+  'METRICS_INCONSISTENT',
+  'UNATTRIBUTED_ACCOUNT_METRICS',
   'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
 ] as const;
 export type SocialActivitySupportGoalFallbackReason =
@@ -281,6 +285,34 @@ export function selectSocialActivitySupport(input: {
       mode: 'COMMON',
       eligibleGoal: null,
       fallbackReason: 'MIXED_GOALS',
+    };
+  }
+  const goalMetrics = input.evidence.goalMetrics;
+  if (goalMetrics === null) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'METRICS_UNAVAILABLE',
+    };
+  }
+  if (!socialActivityBarrierGoalMetricsMatchAttribution(goalMetrics, attribution)) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'METRICS_INCONSISTENT',
+    };
+  }
+  if (
+    goalMetrics.unattributedAccountMetrics.insightRecorded > 0 ||
+    goalMetrics.unattributedAccountMetrics.positiveResponseRecorded > 0
+  ) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'UNATTRIBUTED_ACCOUNT_METRICS',
     };
   }
   const goals = Object.entries(attribution.missionCounts)

@@ -111,16 +111,35 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
         mixedAttributedGoals: false,
         missionCounts: { REPEAT: 1, UNATTRIBUTED: 0 },
       },
+      goalMetrics: {
+        missionMetrics: {
+          REPEAT: {
+            postCompleted: 1,
+            positiveResponseRecorded: 1,
+            conversionActionRecorded: 1,
+          },
+          UNATTRIBUTED: {
+            postCompleted: 0,
+            positiveResponseRecorded: 0,
+            conversionActionRecorded: 0,
+          },
+        },
+        unattributedAccountMetrics: { insightRecorded: 1, positiveResponseRecorded: 1 },
+      },
     });
   });
 
   it('attributes eligible missions to their generation goal and preserves unknown legacy missions', async () => {
-    const mission = (id: string, goal: string | null) => ({
+    const mission = (
+      id: string,
+      goal: string | null,
+      manualMetrics: Record<string, unknown> | null,
+    ) => ({
       id,
       missionDate: new Date(`2026-09-0${id}T00:00:00.000Z`),
       decision: null,
-      activities: [{ type: 'VIEWED' }],
-      postRecord: null,
+      activities: [{ type: 'VIEWED' }, ...(manualMetrics === null ? [] : [{ type: 'POSTED' }])],
+      postRecord: manualMetrics === null ? null : { manualMetrics },
       generationContext: goal === null ? null : { payload: { strategy: { goal } } },
       lineMessageDeliveries: [],
     });
@@ -131,9 +150,9 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
         findMany: vi
           .fn()
           .mockResolvedValue([
-            mission('1', 'INQUIRY'),
-            mission('2', 'RECRUIT'),
-            mission('3', null),
+            mission('1', 'INQUIRY', { comments: 1 }),
+            mission('2', 'RECRUIT', { businessOutcomes: { orders: 1 } }),
+            mission('3', null, { comments: 1, businessOutcomes: { reservations: 1 } }),
           ]),
       },
       dailyMissionGeneration: { findMany: vi.fn().mockResolvedValue([]) },
@@ -156,6 +175,26 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
       distinctAttributedGoalCount: 2,
       mixedAttributedGoals: true,
       missionCounts: { INQUIRY: 1, RECRUIT: 1, UNATTRIBUTED: 1 },
+    });
+    expect(result?.goalMetrics).toMatchObject({
+      missionMetrics: {
+        INQUIRY: {
+          postCompleted: 1,
+          positiveResponseRecorded: 1,
+          conversionActionRecorded: 0,
+        },
+        RECRUIT: {
+          postCompleted: 1,
+          positiveResponseRecorded: 0,
+          conversionActionRecorded: 1,
+        },
+        UNATTRIBUTED: {
+          postCompleted: 1,
+          positiveResponseRecorded: 1,
+          conversionActionRecorded: 1,
+        },
+      },
+      unattributedAccountMetrics: { insightRecorded: 0, positiveResponseRecorded: 0 },
     });
   });
 

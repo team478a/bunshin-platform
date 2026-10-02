@@ -4,9 +4,11 @@ import {
   type SocialAccountStrategyGoal,
 } from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_BARRIER_RULE_VERSION = 'social-activity-barrier-v2' as const;
+export const SOCIAL_ACTIVITY_BARRIER_RULE_VERSION = 'social-activity-barrier-v3' as const;
 export type SocialActivityBarrierRuleVersion =
-  'social-activity-barrier-v1' | typeof SOCIAL_ACTIVITY_BARRIER_RULE_VERSION;
+  | 'social-activity-barrier-v1'
+  | 'social-activity-barrier-v2'
+  | typeof SOCIAL_ACTIVITY_BARRIER_RULE_VERSION;
 
 export const SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS = [
   ...SOCIAL_ACCOUNT_STRATEGY_GOALS,
@@ -21,6 +23,20 @@ export type SocialActivityBarrierGoalAttribution = {
   unattributedMissionCount: number;
   distinctAttributedGoalCount: number;
   mixedAttributedGoals: boolean;
+};
+
+export type SocialActivityBarrierGoalMetricCounts = {
+  postCompleted: number;
+  positiveResponseRecorded: number;
+  conversionActionRecorded: number;
+};
+
+export type SocialActivityBarrierGoalMetrics = {
+  missionMetrics: Record<SocialActivityBarrierGoalKey, SocialActivityBarrierGoalMetricCounts>;
+  unattributedAccountMetrics: {
+    insightRecorded: number;
+    positiveResponseRecorded: number;
+  };
 };
 
 export const SOCIAL_ACTIVITY_BARRIER_CATEGORIES = [
@@ -69,6 +85,7 @@ export type InferSocialActivityBarriersInput = {
   };
   metrics: SocialActivityBarrierMetrics;
   goalAttribution: SocialActivityBarrierGoalAttribution;
+  goalMetrics: SocialActivityBarrierGoalMetrics;
 };
 
 export type SocialActivityBarrierEvidence = {
@@ -81,6 +98,7 @@ export type SocialActivityBarrierEvidence = {
   };
   metrics: Partial<SocialActivityBarrierMetrics>;
   goalAttribution: SocialActivityBarrierGoalAttribution | null;
+  goalMetrics: SocialActivityBarrierGoalMetrics | null;
   thresholds: Readonly<Record<string, number>>;
   ruleVersion: SocialActivityBarrierRuleVersion;
 };
@@ -126,6 +144,19 @@ function emptyGoalCounts(): Record<SocialActivityBarrierGoalKey, number> {
   >;
 }
 
+function emptyGoalMetricCounts(): SocialActivityBarrierGoalMetricCounts {
+  return { postCompleted: 0, positiveResponseRecorded: 0, conversionActionRecorded: 0 };
+}
+
+function emptyGoalMetrics(): Record<
+  SocialActivityBarrierGoalKey,
+  SocialActivityBarrierGoalMetricCounts
+> {
+  return Object.fromEntries(
+    SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.map((goal) => [goal, emptyGoalMetricCounts()]),
+  ) as Record<SocialActivityBarrierGoalKey, SocialActivityBarrierGoalMetricCounts>;
+}
+
 function isStrategyGoal(value: unknown): value is SocialAccountStrategyGoal {
   return (
     typeof value === 'string' &&
@@ -158,6 +189,105 @@ export function buildSocialActivityBarrierGoalAttribution(
     distinctAttributedGoalCount: attributedGoals.length,
     mixedAttributedGoals: attributedGoals.length > 1,
   };
+}
+
+export function buildSocialActivityBarrierGoalMetrics(
+  missions: readonly {
+    goal: SocialAccountStrategyGoal | null;
+    postCompleted: boolean;
+    positiveResponseRecorded: boolean;
+    conversionActionRecorded: boolean;
+  }[],
+  accountMetrics: {
+    insightRecorded: number;
+    positiveResponseRecorded: number;
+  },
+): SocialActivityBarrierGoalMetrics {
+  const missionMetrics = emptyGoalMetrics();
+  for (const mission of missions) {
+    const metrics = missionMetrics[mission.goal ?? 'UNATTRIBUTED'];
+    if (mission.postCompleted) metrics.postCompleted += 1;
+    if (mission.positiveResponseRecorded) metrics.positiveResponseRecorded += 1;
+    if (mission.conversionActionRecorded) metrics.conversionActionRecorded += 1;
+  }
+  return {
+    missionMetrics,
+    unattributedAccountMetrics: { ...accountMetrics },
+  };
+}
+
+function readMetricCounts(value: unknown): SocialActivityBarrierGoalMetricCounts | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const keys = ['postCompleted', 'positiveResponseRecorded', 'conversionActionRecorded'] as const;
+  if (keys.some((key) => !Number.isInteger(candidate[key]) || Number(candidate[key]) < 0)) {
+    return null;
+  }
+  return {
+    postCompleted: Number(candidate['postCompleted']),
+    positiveResponseRecorded: Number(candidate['positiveResponseRecorded']),
+    conversionActionRecorded: Number(candidate['conversionActionRecorded']),
+  };
+}
+
+export function readSocialActivityBarrierGoalMetrics(
+  value: unknown,
+): SocialActivityBarrierGoalMetrics | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const storedMissionMetrics = candidate['missionMetrics'];
+  if (
+    !storedMissionMetrics ||
+    typeof storedMissionMetrics !== 'object' ||
+    Array.isArray(storedMissionMetrics)
+  )
+    return null;
+  const metricRecord = storedMissionMetrics as Record<string, unknown>;
+  const entries = SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.map((goal) => {
+    const metrics = readMetricCounts(metricRecord[goal]);
+    return metrics === null ? null : ([goal, metrics] as const);
+  });
+  if (entries.some((entry) => entry === null)) return null;
+  const accountMetrics = candidate['unattributedAccountMetrics'];
+  if (!accountMetrics || typeof accountMetrics !== 'object' || Array.isArray(accountMetrics))
+    return null;
+  const account = accountMetrics as Record<string, unknown>;
+  if (
+    !Number.isInteger(account['insightRecorded']) ||
+    Number(account['insightRecorded']) < 0 ||
+    !Number.isInteger(account['positiveResponseRecorded']) ||
+    Number(account['positiveResponseRecorded']) < 0
+  )
+    return null;
+  return {
+    missionMetrics: Object.fromEntries(
+      entries as Array<
+        readonly [SocialActivityBarrierGoalKey, SocialActivityBarrierGoalMetricCounts]
+      >,
+    ) as Record<SocialActivityBarrierGoalKey, SocialActivityBarrierGoalMetricCounts>,
+    unattributedAccountMetrics: {
+      insightRecorded: Number(account['insightRecorded']),
+      positiveResponseRecorded: Number(account['positiveResponseRecorded']),
+    },
+  };
+}
+
+export function socialActivityBarrierGoalMetricsMatchAttribution(
+  goalMetrics: SocialActivityBarrierGoalMetrics,
+  goalAttribution: SocialActivityBarrierGoalAttribution,
+) {
+  return (
+    SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.every((goal) => {
+      const metrics = goalMetrics.missionMetrics[goal];
+      return (
+        metrics.postCompleted <= goalAttribution.missionCounts[goal] &&
+        metrics.positiveResponseRecorded <= metrics.postCompleted &&
+        metrics.conversionActionRecorded <= metrics.postCompleted
+      );
+    }) &&
+    goalMetrics.unattributedAccountMetrics.positiveResponseRecorded <=
+      goalMetrics.unattributedAccountMetrics.insightRecorded
+  );
 }
 
 export function readSocialActivityBarrierGoalAttribution(
@@ -235,6 +365,12 @@ function validateInput(input: InferSocialActivityBarriersInput) {
   if (readSocialActivityBarrierGoalAttribution(input.goalAttribution) === null) {
     throw new ApplicationError('VALIDATION_ERROR', 'invalid barrier goal attribution');
   }
+  if (readSocialActivityBarrierGoalMetrics(input.goalMetrics) === null) {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid barrier goal metrics');
+  }
+  if (!socialActivityBarrierGoalMetricsMatchAttribution(input.goalMetrics, input.goalAttribution)) {
+    throw new ApplicationError('VALIDATION_ERROR', 'inconsistent barrier goal metrics');
+  }
 }
 
 function createCandidates(
@@ -254,6 +390,7 @@ function createCandidates(
     },
     metrics,
     goalAttribution: input.goalAttribution,
+    goalMetrics: input.goalMetrics,
     thresholds,
     ruleVersion: SOCIAL_ACTIVITY_BARRIER_RULE_VERSION,
   };
