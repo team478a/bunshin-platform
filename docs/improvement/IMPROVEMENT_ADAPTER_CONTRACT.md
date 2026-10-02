@@ -1,6 +1,6 @@
 # Improvement Adapter Contract 設計案
 
-状態: Phase 1の非永続domain/収集契約を実装。HTTP API、DB schema、実Adapterは未実装。実装基準は`19f942b622df744f3c1141810a3fdabc39a94cef`（PR #1081 merge）、2026-10-02 JST。以下の擬似契約は設計案であり、実コードの型は各package公開入口を正本とする。
+状態: Phase 1の非永続domain/収集契約を実装。2026-10-03にHassy Goal別支援結果の実読取Adapterを追加（`HASSY_SUPPORT_OUTCOMES_IMPLEMENTATION.md`）。HTTP API/管理UI/定期Jobは未接続、DB schema追加なし。Phase 1実装基準は`19f942b622df744f3c1141810a3fdabc39a94cef`（PR #1081 merge）、2026-10-02 JST。以下の擬似契約は設計案であり、実コードの型は各package公開入口を正本とする。
 
 ## Phase 1の実装
 
