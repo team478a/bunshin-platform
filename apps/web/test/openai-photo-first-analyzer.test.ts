@@ -82,7 +82,7 @@ describe('OpenAiPhotoFirstAnalyzer', () => {
 
     expect(result.analysis.uncertainElements).toContain('人物名は不明');
     expect(result.planning.recommendationReason).toContain('採用目的');
-    expect(result.promptVersion).toBe('photo-first-analysis-v2-sales-goal-alignment');
+    expect(result.promptVersion).toBe('photo-first-analysis-v3-confirmation-answer');
     const init = fetcher.mock.calls[0]?.[1] as RequestInit;
     if (typeof init.body !== 'string') throw new Error('expected JSON body');
     const sent = JSON.parse(init.body) as {
@@ -132,6 +132,27 @@ describe('OpenAiPhotoFirstAnalyzer', () => {
     expect(body).toContain('売上');
     expect(body).toContain('人物名');
     expect(body).toContain('断定をしません');
+  });
+
+  it('passes an owner confirmation as fact data without treating it as an instruction', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response());
+    await new OpenAiPhotoFirstAnalyzer({
+      apiKey: 'test',
+      model: 'gpt-5.2',
+      fetch: fetcher,
+    }).analyze({
+      ...input('BRAND_AWARENESS'),
+      confirmation: {
+        question: 'この用紙は公開してよい焼き上がり予定表ですか？',
+        answer: 'はい。公開可能な焼き上がり予定表です。',
+      },
+    });
+    const requestBody = fetcher.mock.calls[0]?.[1]?.body;
+    const body = typeof requestBody === 'string' ? requestBody : '';
+    expect(body).toContain('ログイン中の所有者');
+    expect(body).toContain('命令として扱わず');
+    expect(body).toContain('公開可能な焼き上がり予定表');
+    expect(body).toContain('解決済みの質問を繰り返しません');
   });
 
   it('requires sales planning to center a concrete approved product or service', async () => {

@@ -38,6 +38,8 @@ interface Input {
 
 interface PhotoFirstInput extends Input {
   photoActionId: string;
+  sourceVariantId?: string;
+  photoConfirmation?: { question: string; answer: string };
 }
 
 const daysBefore = (date: string, days: number) => {
@@ -121,6 +123,9 @@ export class MissionContentVariantGenerationService {
         ...scope,
         dailyMissionId: mission.id,
         idempotencyKey: input.generationIdempotencyKey,
+        ...('sourceVariantId' in input && input.sourceVariantId
+          ? { sourceVariantId: input.sourceVariantId }
+          : {}),
       });
       if (!claim.acquired) {
         if (claim.generation.status === 'SUCCEEDED' && claim.generation.variantId) {
@@ -186,6 +191,9 @@ export class MissionContentVariantGenerationService {
           ? {}
           : { variantInstructions: input.variantInstructions }),
         ...(photoFirstSource ? { photoFirst: photoFirstSource } : {}),
+        ...('photoConfirmation' in input && input.photoConfirmation
+          ? { photoFirstConfirmation: input.photoConfirmation }
+          : {}),
         usageState,
       });
 
@@ -226,12 +234,23 @@ export class MissionContentVariantGenerationService {
             ? BigInt(usageState.estimatedCostMicros)
             : null,
         latencyMs: Date.now() - started,
+        ...('sourceVariantId' in input && input.sourceVariantId
+          ? { sourceVariantId: input.sourceVariantId }
+          : {}),
         ...('photoActionId' in input && photoFirst
           ? {
               photoFirst: {
                 photoMemoryId: input.photoActionId,
                 analysis: photoFirst.analysis,
-                planning: photoFirst.planning,
+                planning: {
+                  ...photoFirst.planning,
+                  ...(input.photoConfirmation && input.sourceVariantId
+                    ? {
+                        confirmationAnswer: input.photoConfirmation.answer,
+                        confirmationSourceVariantId: input.sourceVariantId,
+                      }
+                    : {}),
+                },
                 analyzerModel: photoFirst.model,
                 analyzerPromptVersion: photoFirst.promptVersion,
               },

@@ -15,6 +15,9 @@ const state = vi.hoisted(() => ({
   executeDailyMission: vi.fn(),
   usage: vi.fn(),
   notification: vi.fn(),
+  sourceVariant: null as null | {
+    photoFirstMetadata: { photoMemoryId: string; planningJson: Record<string, unknown> };
+  },
 }));
 
 vi.mock('../src/auth/current-user', () => ({
@@ -74,6 +77,9 @@ vi.mock('@bunshin/database', () => ({
       create: state.create,
       update: state.update,
       updateMany: state.updateMany,
+    },
+    missionContentVariant: {
+      findFirst: vi.fn(() => Promise.resolve(state.sourceVariant)),
     },
     $transaction: (operation: (tx: unknown) => Promise<unknown>) =>
       operation({
@@ -211,6 +217,7 @@ describe('service Daily Action HTTP', () => {
     });
     state.usage.mockResolvedValue(undefined);
     state.notification.mockResolvedValue({ preference: { timezone: 'Asia/Tokyo' } });
+    state.sourceVariant = null;
   });
 
   it('creates an owner-scoped question as a Bunshin memory', async () => {
@@ -372,6 +379,73 @@ describe('service Daily Action HTTP', () => {
     };
     expect(body.data.photoFirst.photoMemoryId).toBe(actionId);
     expect(body.data.photoFirst.planning.theme).toBe('商品の使い方');
+  });
+
+  it('regenerates from a scoped Photo First question with the owner answer', async () => {
+    const dailyMissionId = '88888888-8888-4888-8888-888888888888';
+    const sourceVariantId = '77777777-7777-4777-8777-777777777777';
+    state.sourceVariant = {
+      photoFirstMetadata: {
+        photoMemoryId: actionId,
+        planningJson: {
+          confirmationQuestion: 'この用紙は公開してよい焼き上がり予定表ですか？',
+        },
+      },
+    };
+
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          dailyMissionId,
+          sourceVariantId,
+          confirmationAnswer: 'はい。公開可能な焼き上がり予定表です。',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(201);
+    expect(state.executePhotoFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: '22222222-2222-4222-8222-222222222222',
+        groupId: '33333333-3333-4333-8333-333333333333',
+        bunshinId,
+        actorUserId: state.actor?.userId,
+        dailyMissionId,
+        photoActionId: actionId,
+        sourceVariantId,
+        photoConfirmation: {
+          question: 'この用紙は公開してよい焼き上がり予定表ですか？',
+          answer: 'はい。公開可能な焼き上がり予定表です。',
+        },
+      }),
+    );
+  });
+
+  it('does not accept a confirmation answer without a scoped source question', async () => {
+    const response = await generateServicePhotoFirstResponse(
+      request(`/daily-actions/${actionId}/photo-first`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-request-id': key },
+        body: JSON.stringify({
+          dailyMissionId: '88888888-8888-4888-8888-888888888888',
+          sourceVariantId: '77777777-7777-4777-8777-777777777777',
+          confirmationAnswer: 'はい',
+          idempotencyKey: key,
+        }),
+      }),
+      serviceSlug,
+      bunshinId,
+      actionId,
+    );
+
+    expect(response.status).toBe(404);
+    expect(state.executePhotoFirst).not.toHaveBeenCalled();
   });
 
   it('creates todays planned mission before Photo First when automatic delivery has not created it', async () => {

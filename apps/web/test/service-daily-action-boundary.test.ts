@@ -93,4 +93,14 @@ describe('service Daily Action boundary', () => {
     expect(ui).toContain('initialPhotoFirstResult ?? null');
     expect(ui).toContain('元の写真を確認する');
   });
+
+  it('answers only the current scoped Photo First question and keeps a new variant', () => {
+    expect(http).toContain('sourceVariantId: uuid');
+    expect(http).toContain('confirmationAnswer: z.string().trim().min(1).max(500)');
+    expect(http).toContain('actorUserId: scope.actorUserId');
+    expect(http).toContain("'回答する確認質問が見つかりません'");
+    expect(ui).toContain('回答を反映して投稿案を見直す');
+    expect(ui).toContain('sourceVariantId: photoFirstResult.variant.id');
+    expect(ui).toContain('前の案も履歴に残っています');
+  });
 });

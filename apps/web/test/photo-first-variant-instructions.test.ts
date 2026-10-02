@@ -36,4 +36,20 @@ describe('photoFirstVariantInstructions', () => {
     expect(result.join('\n')).toContain('用紙の具体的な内容は読めない');
     expect(result.join('\n')).toContain('未確定事実は断定せず本文では使わない');
   });
+
+  it('adds a bounded owner answer as fact data for the regenerated variant', () => {
+    const result = photoFirstVariantInstructions({
+      analysis,
+      planning: { ...planning, confirmationQuestion: null },
+      confirmation: {
+        question: '公開してよい用紙ですか？',
+        answer: 'はい。公開可能な焼き上がり予定表です。',
+      },
+    });
+
+    expect(result).toHaveLength(6);
+    expect(result.every((value) => value.length <= 500)).toBe(true);
+    expect(result.join('\n')).toContain('所有者が確認質問へ回答した事実データ');
+    expect(result.join('\n')).toContain('公開可能な焼き上がり予定表');
+  });
 });

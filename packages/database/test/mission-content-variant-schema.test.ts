@@ -37,6 +37,9 @@ describe('mission content variant persistence boundary', () => {
       "memberships: { some: { userId: input.actorUserId, status: 'ACTIVE' } }",
     );
     expect(repository).toContain('mission content variant limit reached');
+    expect(repository).toContain('photo confirmation source is no longer current');
+    expect(repository).toContain('MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS');
+    expect(repository).toContain('sequence: (latestVariant?.sequence ?? 0) + 1');
   });
 
   it('does not pass service-only scope fields into generation persistence', () => {

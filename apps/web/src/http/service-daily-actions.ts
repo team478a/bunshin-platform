@@ -49,6 +49,14 @@ const photoFirstSchema = z.union([
   z.object({ dailyMissionId: uuid, idempotencyKey: uuid }).strict(),
   z
     .object({
+      dailyMissionId: uuid,
+      idempotencyKey: uuid,
+      sourceVariantId: uuid,
+      confirmationAnswer: z.string().trim().min(1).max(500),
+    })
+    .strict(),
+  z
+    .object({
       missionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       socialProfileId: uuid,
       idempotencyKey: uuid,
@@ -441,6 +449,35 @@ export function generateServicePhotoFirstResponse(
           metadata: { dailyMissionId: mission.id },
         });
       }
+      let photoConfirmation: { question: string; answer: string } | undefined;
+      if ('sourceVariantId' in parsed.data) {
+        const source = await scope.db.prisma.missionContentVariant.findFirst({
+          where: {
+            id: parsed.data.sourceVariantId,
+            workspaceId: scope.workspaceId,
+            bunshinId,
+            dailyMissionId,
+            actorUserId: scope.actorUserId,
+          },
+          select: {
+            photoFirstMetadata: {
+              select: { photoMemoryId: true, planningJson: true },
+            },
+          },
+        });
+        const planning = source?.photoFirstMetadata?.planningJson;
+        const question =
+          planning && typeof planning === 'object' && !Array.isArray(planning)
+            ? (planning as Record<string, unknown>)['confirmationQuestion']
+            : null;
+        if (
+          source?.photoFirstMetadata?.photoMemoryId !== actionId ||
+          typeof question !== 'string' ||
+          !question.trim()
+        )
+          throw new ApplicationError('NOT_FOUND', '回答する確認質問が見つかりません');
+        photoConfirmation = { question: question.trim(), answer: parsed.data.confirmationAnswer };
+      }
       const { createMissionContentVariantGenerationService } =
         await import('../services/mission-content-variant-generation');
       const result = await createMissionContentVariantGenerationService().executePhotoFirst({
@@ -452,6 +489,12 @@ export function generateServicePhotoFirstResponse(
         photoActionId: uuid.parse(actionId),
         generationIdempotencyKey: parsed.data.idempotencyKey,
         usageIdempotencyPrefix: requestIdFromHeader(request.headers.get('x-request-id')),
+        ...('sourceVariantId' in parsed.data
+          ? {
+              sourceVariantId: parsed.data.sourceVariantId,
+              photoConfirmation: photoConfirmation!,
+            }
+          : {}),
         serviceSafeMode: true,
         allowServiceOwnerMemories: true,
       });

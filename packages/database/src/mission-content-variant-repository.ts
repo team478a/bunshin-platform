@@ -7,6 +7,8 @@ import { ApplicationError } from '@bunshin/shared';
 import type { Prisma } from './client';
 import { type PrismaClient, prisma } from './client';
 
+const MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS = 5;
+
 export class PrismaMissionContentVariantRepository implements MissionContentVariantRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -115,16 +117,6 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.workspaceId}:${input.bunshinId}:${input.dailyMissionId}`}::text, 0))`;
       if (!(await this.authorizedMission(tx, input))) return null;
-      const existingVariant = await tx.missionContentVariant.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          bunshinId: input.bunshinId,
-          dailyMissionId: input.dailyMissionId,
-        },
-        select: { id: true },
-      });
-      if (existingVariant)
-        throw new ApplicationError('CONFLICT', 'mission content variant limit reached');
       const existing = await tx.missionContentVariantGeneration.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -134,6 +126,30 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         },
       });
       if (existing) return { acquired: false, generation: existing };
+      const latestVariant = await tx.missionContentVariant.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+        },
+        orderBy: { sequence: 'desc' },
+        select: { id: true, sequence: true, photoFirstMetadata: { select: { id: true } } },
+      });
+      if (!input.sourceVariantId && latestVariant)
+        throw new ApplicationError('CONFLICT', 'mission content variant limit reached');
+      if (
+        input.sourceVariantId &&
+        (!latestVariant ||
+          latestVariant.id !== input.sourceVariantId ||
+          !latestVariant.photoFirstMetadata)
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation source is no longer current');
+      if (
+        input.sourceVariantId &&
+        latestVariant &&
+        latestVariant.sequence >= MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation limit reached');
       const active = await tx.missionContentVariantGeneration.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -173,24 +189,37 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
         },
       });
       if (!generation) return null;
-      if (
-        await tx.missionContentVariant.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            bunshinId: input.bunshinId,
-            dailyMissionId: input.dailyMissionId,
-          },
-          select: { id: true },
-        })
-      )
+      const latestVariant = await tx.missionContentVariant.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          dailyMissionId: input.dailyMissionId,
+        },
+        orderBy: { sequence: 'desc' },
+        select: { id: true, sequence: true, photoFirstMetadata: { select: { id: true } } },
+      });
+      if (!input.sourceVariantId && latestVariant)
         throw new ApplicationError('CONFLICT', 'mission content variant limit reached');
+      if (
+        input.sourceVariantId &&
+        (!latestVariant ||
+          latestVariant.id !== input.sourceVariantId ||
+          !latestVariant.photoFirstMetadata)
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation source is no longer current');
+      if (
+        input.sourceVariantId &&
+        latestVariant &&
+        latestVariant.sequence >= MAX_PHOTO_FIRST_CONFIRMATION_VARIANTS
+      )
+        throw new ApplicationError('CONFLICT', 'photo confirmation limit reached');
       const variant = await tx.missionContentVariant.create({
         data: {
           workspaceId: input.workspaceId,
           bunshinId: input.bunshinId,
           dailyMissionId: input.dailyMissionId,
           actorUserId: input.actorUserId,
-          sequence: 1,
+          sequence: (latestVariant?.sequence ?? 0) + 1,
           format: input.format,
           contentJson: input.content as Prisma.InputJsonValue,
           qualityScore: input.qualityScore,
