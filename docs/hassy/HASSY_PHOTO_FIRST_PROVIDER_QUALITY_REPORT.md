@@ -470,3 +470,77 @@ Retry       0
 ### 次の最小タスク
 
 追加課金を行わず、Photo Firstの確認質問が残る場合に、未確認の店舗固有情報を断定せず「例」としてのみ扱う境界を非課金fixtureで固定する。これにより、今回の1出力で守られた挙動を再現可能な契約にする。
+
+## 15. Photo First Grounding品質検証（2026-10-02 JST）
+
+### 目的と範囲
+
+PR #1069で追加した`mission-quality-checker-v13-photo-first-grounding`について、未確認事項、確認待ち質問、所有者が回答済みの事実を実Providerが区別できるかを確認した。
+
+本文生成、写真解析、画像生成、本番DB、Storage、LINE、SNSは使用していない。固定した架空店舗と合成テキストを品質Checkerへ直接渡した。実ユーザー情報は使用していない。
+
+### 実行条件
+
+- 基準main: `8608a543e2973c5c6d67e538cab68770425bad02`
+- 対象branch: `codex/hassy-photo-first-grounding-provider-validation`
+- 実行日: `2026-10-02 JST`
+- 指定モデル: `gpt-5.2`
+- Provider応答モデル: `gpt-5.2-2025-12-11`
+- Prompt: `mission-quality-checker-v13-photo-first-grounding`
+- 初回: 4 request、再試行なし
+- 補足実行: 利用者承認後に2 request、再試行なし
+- 合計: 6 request
+
+初回は4ケースすべてのProvider応答を取得したが、例示ケースを投稿全体で`PASS`とする強すぎるassertionにより、後半2ケースの結果ログが出力される前にテストが失敗した。例示ケースはPhoto Firstの誤検知ではなく、テーマの掘り下げ、写真とテーマの関連、個別化という別の品質規則で`REVISE`だった。
+
+合格条件を「投稿全体がPASS」から次のPhoto First固有条件へ修正した。
+
+- 未確認事実の断定と回答範囲を超えた推測には`PHOTO_FIRST_UNCONFIRMED_FACT`が付く。
+- 仮定であることが明確な例示と、所有者の回答範囲内の記述には同codeが付かない。
+- 他の品質問題による`REVISE`をPhoto Firstの誤検知と混同しない。
+
+補足実行では、初回に結果ログを保存できなかった確認回答2ケースだけを再実行した。
+
+### 結果
+
+| Case                 | 現行の観測                                                           | Photo First判定            |
+| -------------------- | -------------------------------------------------------------------- | -------------------------- |
+| 未確認事実の断定     | `REVISE`。未確認の商品名、発売日、人気No.1の断定を検出               | 期待どおり検出             |
+| 明示的な例示         | 別の品質規則で`REVISE`。`PHOTO_FIRST_UNCONFIRMED_FACT`は付かなかった | Photo Firstの誤検知なし    |
+| 確認回答の範囲内     | `PASS`、92点、issueなし                                              | `SAFE_WITHIN_TESTED_SCOPE` |
+| 回答範囲を超えた推測 | `REVISE`、45点。`PHOTO_FIRST_UNCONFIRMED_FACT`ほか3 issue            | 期待どおり検出             |
+
+確認済み回答は「店内でカウンセリング時に使うチェックシート」である。範囲内ケースはこの事実だけを使用し、判読できない具体項目を断定しなかったため合格した。
+
+過剰推測ケースは、回答にない「独自」「全スタッフが毎日必ず使う」「顧客満足度No.1」「当店だけのメソッド」を追加した。Providerは、確認済み範囲が用途までであり、利用頻度と効果は未確認であることをissue内で明示した。
+
+### 補足実行のTelemetry
+
+| Case                 | input tokens | output tokens |   latency |
+| -------------------- | -----------: | ------------: | --------: |
+| 確認回答の範囲内     |        2,341 |            22 |  2,072 ms |
+| 回答範囲を超えた推測 |        2,301 |           757 | 11,213 ms |
+| 合計                 |        4,642 |           779 | 13,285 ms |
+
+### 実行コマンド
+
+```powershell
+$env:RUN_OPENAI_PHOTO_FIRST_GROUNDING_QUALITY='1'
+$env:PHOTO_FIRST_GROUNDING_CASE_IDS='CONFIRMED_SCOPE,ANSWER_OVERREACH'
+pnpm --dir apps/web exec vitest run test/photo-first-grounding-quality.live.test.ts --reporter=verbose
+```
+
+結果:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed (1)
+Provider requests 2
+Retry       0
+```
+
+### 制約と次の最小タスク
+
+この結果は架空の美容室1社、固定した4本文、各ケース1応答だけの確認であり、複数回の安定性、実写真、他業種、他形式、本番保存、利用枠、AI Usage記録、スマートフォンE2Eを保証しない。
+
+次の最小タスクは、外部通信なしの通常CIでこの4ケースの入力契約とPhoto First固有の判定基準を維持しつつ、本番運用では`PHOTO_FIRST_UNCONFIRMED_FACT`の発生件数と修正後再判定を観測できるか、既存AI Usage・Generation記録の範囲を監査することである。新しいTelemetryやDB変更は、既存記録で不足すると確認されるまで追加しない。
