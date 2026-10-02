@@ -123,7 +123,7 @@ describe('social activity barrier confirmation', () => {
     });
   });
 
-  it('exposes a single fully attributed goal without selecting unconfigured goal copy', () => {
+  it('selects inquiry-specific LEAD support only for a matching fully attributed signal', () => {
     const value = barrierCase('case_1', 'LEAD');
     value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
     value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
@@ -152,10 +152,10 @@ describe('social activity barrier confirmation', () => {
     expect(
       selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
     ).toMatchObject({
-      support: { key: 'LEAD_FOLLOW_UP' },
-      mode: 'COMMON',
+      support: { key: 'INQUIRY_LEAD_FOLLOW_UP' },
+      mode: 'GOAL_SPECIFIC',
       eligibleGoal: 'INQUIRY',
-      fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+      fallbackReason: null,
     });
   });
 
@@ -188,7 +188,81 @@ describe('social activity barrier confirmation', () => {
     expect(
       selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
     ).toMatchObject({
+      support: { key: 'AWARENESS_MEASUREMENT_SETUP' },
+      mode: 'GOAL_SPECIFIC',
       eligibleGoal: 'BRAND_AWARENESS',
+      fallbackReason: null,
+    });
+  });
+
+  it('selects recruitment-specific RESPONSE support only for a matching signal', () => {
+    const value = barrierCase('case_1', 'RESPONSE');
+    value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
+    value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'RECRUIT',
+      'RECRUIT',
+    ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'RECRUIT_RESPONSE_GUIDE' },
+      mode: 'GOAL_SPECIFIC',
+      eligibleGoal: 'RECRUIT',
+      fallbackReason: null,
+    });
+  });
+
+  it('keeps common support when policy passes but the exact Goal and Barrier pair is not configured', () => {
+    const value = barrierCase('case_1', 'LEAD');
+    value.evidence.evidenceCode = 'RESPONSE_WITHOUT_NEXT_STEP';
+    value.evidence.thresholds = { minimumPositiveResponses: 2, maximumConversionActions: 0 };
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'RECRUIT',
+      'RECRUIT',
+    ]);
+    value.evidence.goalMetrics = buildSocialActivityBarrierGoalMetrics(
+      [
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+        {
+          goal: 'RECRUIT',
+          postCompleted: true,
+          positiveResponseRecorded: true,
+          conversionActionRecorded: false,
+        },
+      ],
+      { insightRecorded: 0, positiveResponseRecorded: 0 },
+    );
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'LEAD_FOLLOW_UP' },
+      mode: 'COMMON',
+      eligibleGoal: 'RECRUIT',
       fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
     });
   });

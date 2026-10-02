@@ -9,7 +9,7 @@ import {
 } from './activity-barrier';
 import type { SocialAccountStrategyGoal } from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v2' as const;
+export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v3' as const;
 export const SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS = 30;
 
 export const SOCIAL_ACTIVITY_SUPPORT_KEYS = [
@@ -23,6 +23,9 @@ export const SOCIAL_ACTIVITY_SUPPORT_KEYS = [
   'RESPONSE_GUIDE',
   'LEAD_FOLLOW_UP',
   'MEASUREMENT_SETUP',
+  'AWARENESS_MEASUREMENT_SETUP',
+  'INQUIRY_LEAD_FOLLOW_UP',
+  'RECRUIT_RESPONSE_GUIDE',
 ] as const;
 export type SocialActivitySupportKey = (typeof SOCIAL_ACTIVITY_SUPPORT_KEYS)[number];
 
@@ -58,12 +61,19 @@ export const SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS = [
 export type SocialActivitySupportGoalFallbackReason =
   (typeof SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS)[number];
 
-export type SocialActivitySupportSelection = {
-  support: SocialActivitySupport;
-  mode: 'COMMON';
-  eligibleGoal: SocialAccountStrategyGoal | null;
-  fallbackReason: SocialActivitySupportGoalFallbackReason;
-};
+export type SocialActivitySupportSelection =
+  | {
+      support: SocialActivitySupport;
+      mode: 'COMMON';
+      eligibleGoal: SocialAccountStrategyGoal | null;
+      fallbackReason: SocialActivitySupportGoalFallbackReason;
+    }
+  | {
+      support: SocialActivitySupport;
+      mode: 'GOAL_SPECIFIC';
+      eligibleGoal: SocialAccountStrategyGoal;
+      fallbackReason: null;
+    };
 
 export const SOCIAL_ACTIVITY_SUPPORT_ACTIONS = ['ACCEPT', 'COMPLETE', 'SKIP'] as const;
 export type SocialActivitySupportAction = (typeof SOCIAL_ACTIVITY_SUPPORT_ACTIONS)[number];
@@ -208,6 +218,50 @@ const supportByCategory: Record<SocialActivityBarrierCategory, SocialActivitySup
       'いいね・閲覧・コメントから一つ確認する',
       '見えた数字を記録する',
     ],
+  },
+};
+
+const goalSpecificSupport: Partial<
+  Record<
+    SocialAccountStrategyGoal,
+    Partial<Record<SocialActivityBarrierCategory, SocialActivitySupport>>
+  >
+> = {
+  BRAND_AWARENESS: {
+    UNKNOWN: {
+      key: 'AWARENESS_MEASUREMENT_SETUP',
+      title: '認知の変化を確認できる数字を一つ記録する',
+      reason: '問い合わせ件数だけで判断せず、知ってもらえた変化を確認できる状態にします。',
+      steps: [
+        '最近の投稿を一つ開く',
+        '閲覧・リーチ・プロフィール閲覧から確認できる数字を一つ選ぶ',
+        '数字と確認日を記録する',
+      ],
+    },
+  },
+  INQUIRY: {
+    LEAD: {
+      key: 'INQUIRY_LEAD_FOLLOW_UP',
+      title: '問い合わせ先を一つに絞って確認する',
+      reason: '反応した方が相談先で迷わないよう、問い合わせまでの案内を明確にします。',
+      steps: [
+        'LINE・フォーム・電話から案内先を一つ選ぶ',
+        '案内先が開けることを確認する',
+        '次の投稿で使う問い合わせ案内を一文にする',
+      ],
+    },
+  },
+  RECRUIT: {
+    RESPONSE: {
+      key: 'RECRUIT_RESPONSE_GUIDE',
+      title: '採用について届いた反応へ1件返信する',
+      reason: '応募を急がせず、仕事や見学について知りたい方が次へ進める返答を作ります。',
+      steps: [
+        '採用に関する未返信の反応を一つ選ぶ',
+        '質問への回答またはお礼を一文書く',
+        '採用情報・見学・問い合わせから合う案内を一つ添える',
+      ],
+    },
   },
 };
 
@@ -393,6 +447,15 @@ export function selectSocialActivitySupport(input: {
       mode: 'COMMON',
       eligibleGoal: null,
       fallbackReason: policy.reason,
+    };
+  }
+  const configuredSupport = goalSpecificSupport[policy.goal]?.[input.category];
+  if (configuredSupport) {
+    return {
+      support: configuredSupport,
+      mode: 'GOAL_SPECIFIC',
+      eligibleGoal: policy.goal,
+      fallbackReason: null,
     };
   }
   return {
