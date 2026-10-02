@@ -128,7 +128,7 @@ describe('OpenAIMissionContentGenerator', () => {
       ],
     });
     expect(result).toMatchObject({
-      promptVersion: 'mission-content-generator-v17-photo-first-grounding',
+      promptVersion: 'mission-content-generator-v18-photo-first-unconfirmed-facts',
       inputTokens: 100,
       outputTokens: 50,
     });
@@ -253,6 +253,7 @@ describe('OpenAIMissionContentGenerator', () => {
       variantInstructions: [
         '写真解析: {"objects":["チェックリスト","ペン"]}',
         '投稿設計: {"photoUsage":"アップロード済み写真を表紙に使う"}',
+        '未確定事実は断定せず本文では使わない: この用紙は公開してよい焼き上がり予定表ですか？',
         '導入と構成を変える',
       ],
     });
@@ -263,6 +264,10 @@ describe('OpenAIMissionContentGenerator', () => {
     expect(requestBody).toContain('アップロード済み写真を使います');
     expect(requestBody).toContain('新しく撮り直す指示にはしません');
     expect(requestBody).toContain('確認できない文字、個数、人物、動作を追加しません');
+    expect(requestBody).toContain('確認質問が残っている場合');
+    expect(requestBody).toContain('確認済みの事実として断定しません');
+    expect(requestBody).toContain('「例」「たとえば」');
+    expect(requestBody).toContain('公開してよい焼き上がり予定表ですか');
   });
 
   it('surfaces provider failures without returning partial content', async () => {

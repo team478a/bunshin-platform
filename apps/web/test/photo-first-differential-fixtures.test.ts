@@ -82,20 +82,21 @@ const outputs = {
   },
   awarenessBakery: {
     planning: {
-      theme: 'ベーカリーが開店前に確認している焼き上がり予定',
-      angle: 'チェックリストの写真から、商品を揃える朝の準備を紹介する',
-      recommendationReason: '店頭にパンが並ぶまでの仕事と店の姿勢を知ってもらえるため',
-      photoUsage: '焼き上がり予定へ印を付ける手元として使う',
+      theme: 'ベーカリーのチェックリストから考える開店前の準備',
+      angle: '用紙の用途は断定せず、開店準備で確認する内容の例を紹介する',
+      recommendationReason: '写真で確認できる手元の準備から、店の姿勢を知ってもらえるため',
+      photoUsage: '用紙の用途を断定せず、確認作業をしている手元の写真として使う',
       imageEditPrompt: null,
       confirmationQuestion: 'この用紙は公開してよい焼き上がり予定表ですか？',
     },
     content: {
-      body: 'ベーカリーの朝は、焼き上がりの順番を確認するところから始まります。チェックリストで時間を揃え、開店時に選びやすい売り場を準備しています。店頭に並ぶ前の小さな仕事をご紹介します。',
+      body: 'この写真のチェックリストが何の用紙かは確認中です。開店準備で確認する内容の例として、焼き上がり予定や売り場の準備があります。店頭に並ぶ前の仕事を、確認できた内容からご紹介します。',
       threadParts: [],
       cta: '朝の店づくりをこれからも紹介するので、続きはフォローしてご覧ください。',
       caption: null,
       hashtags: ['#ベーカリー', '#開店準備'],
-      photoInstruction: '焼き上がり予定表へ印を付ける手元を、文字が読めすぎない距離から机ごと撮る',
+      photoInstruction:
+        'アップロード済みのチェックリスト写真を、用紙の用途を断定する文字を加えず、手元と用紙が入る範囲で使う',
     },
   },
   awarenessSalonAfterHistory: {
@@ -361,8 +362,11 @@ describe('Photo First differential fixtures', () => {
     expect(salon.imageUrl).toBe(bakery.imageUrl);
     expectEveryProposalFieldToDiffer(salon, bakery);
     expect(bakery.planning.theme).toContain('ベーカリー');
+    expect(bakery.planning.angle).toContain('用途は断定せず');
+    expect(bakery.content.body).toContain('確認中');
+    expect(bakery.content.body).toContain('例として');
     expect(bakery.content.body).toContain('焼き上がり');
-    expect(bakery.content.photoInstruction).toContain('焼き上がり予定表');
+    expect(bakery.content.photoInstruction).toContain('用途を断定する文字を加えず');
     expect(JSON.stringify(differentialFields(bakery))).not.toContain('美容室');
   });
 
