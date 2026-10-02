@@ -1,6 +1,6 @@
 # ハッシー Goal × Barrier 監査
 
-更新日: 2026-10-02（Asia/Tokyo）  
+更新日: 2026-10-02（Asia/Tokyo）
 対象基準: `b9f9f52d`（PR #1074 merge後の`origin/main`）
 
 ## 1. Executive Summary
