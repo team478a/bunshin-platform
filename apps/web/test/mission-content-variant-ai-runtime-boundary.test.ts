@@ -27,6 +27,10 @@ describe('mission content variant AI runtime boundary', () => {
     expect(runtimeSource).not.toContain("'variant-content:2'");
     expect(runtimeSource).toContain("'photo-first-analysis'");
     expect(runtimeSource).toContain("'PHOTO_FIRST_ANALYSIS'");
+    expect(runtimeSource).toContain('photoFirstGrounding:');
+    expect(runtimeSource).toContain('uncertainElements: photoFirst.analysis.uncertainElements');
+    expect(runtimeSource).toContain('pendingQuestion: photoFirst.planning.confirmationQuestion');
+    expect(runtimeSource).toContain('answeredConfirmation: input.photoFirstConfirmation ?? null');
   });
 
   it('claims the generation before reading a tenant-scoped Photo First source', () => {

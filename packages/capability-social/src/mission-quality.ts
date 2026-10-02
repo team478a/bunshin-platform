@@ -19,6 +19,12 @@ import type {
 } from './mission-generation';
 import type { SocialPlatform } from './social-profile';
 
+export interface PhotoFirstQualityGrounding {
+  uncertainElements: string[];
+  pendingQuestion: string | null;
+  answeredConfirmation: { question: string; answer: string } | null;
+}
+
 export interface MissionQualityCheckerInput {
   platform: SocialPlatform;
   brief: DailyMissionBrief;
@@ -35,6 +41,7 @@ export interface MissionQualityCheckerInput {
     contentExcerpt: string;
   }>;
   personalization?: MissionPersonalizationContext;
+  photoFirstGrounding?: PhotoFirstQualityGrounding;
 }
 
 export interface MissionQualityCheckerProviderInput extends Omit<
@@ -90,6 +97,40 @@ const carouselComparableText = (value: string) =>
     .normalize('NFKC')
     .replace(/[\s、。！？!?,.・「」『』（）()【】]/gu, '')
     .toLowerCase();
+
+const normalizePhotoFirstGrounding = (
+  value: PhotoFirstQualityGrounding | undefined,
+): PhotoFirstQualityGrounding | undefined => {
+  if (value === undefined) return undefined;
+  const grounding = strict(
+    value,
+    ['uncertainElements', 'pendingQuestion', 'answeredConfirmation'],
+    'photo first grounding',
+  );
+  if (!Array.isArray(grounding['uncertainElements']) || grounding['uncertainElements'].length > 12)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid photo first uncertain elements');
+  const uncertainElements = grounding['uncertainElements'].map((item) =>
+    missionString(item, 500, 'photo first uncertain element'),
+  );
+  const pendingQuestion =
+    grounding['pendingQuestion'] === null
+      ? null
+      : missionString(grounding['pendingQuestion'], 500, 'photo first pending question');
+  const rawConfirmation = grounding['answeredConfirmation'];
+  let answeredConfirmation: PhotoFirstQualityGrounding['answeredConfirmation'] = null;
+  if (rawConfirmation !== null) {
+    const confirmation = strict(
+      rawConfirmation,
+      ['question', 'answer'],
+      'photo first answered confirmation',
+    );
+    answeredConfirmation = {
+      question: missionString(confirmation['question'], 500, 'photo first answered question'),
+      answer: missionString(confirmation['answer'], 500, 'photo first confirmation answer'),
+    };
+  }
+  return { uncertainElements, pendingQuestion, answeredConfirmation };
+};
 
 const deterministicImageCarouselIssues = (content: MissionContent): MissionQualityIssue[] => {
   const slides = content['slides'];
@@ -191,8 +232,11 @@ export class CheckMissionQuality {
         selectionReason,
       }),
     );
+    const photoFirstGrounding = normalizePhotoFirstGrounding(input.photoFirstGrounding);
+    const providerInput = { ...input };
+    delete providerInput.photoFirstGrounding;
     const result = await this.checker.check({
-      ...input,
+      ...providerInput,
       brief: {
         missionDate,
         format,
@@ -206,6 +250,7 @@ export class CheckMissionQuality {
       },
       content,
       selectedMemories,
+      ...(photoFirstGrounding ? { photoFirstGrounding } : {}),
     });
     const score = missionInteger(result.output.score, 0, 100, 'quality score');
     if (!Array.isArray(result.output.issues) || result.output.issues.length > 10)
