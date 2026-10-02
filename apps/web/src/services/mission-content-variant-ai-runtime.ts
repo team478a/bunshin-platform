@@ -21,6 +21,7 @@ import {
   type RecentDailyMissionContent,
 } from './daily-mission-content-quality';
 import type { MissionContentVariantContext } from './mission-content-variant-context';
+import { photoFirstVariantInstructions } from './photo-first-variant-instructions';
 import { applyServiceContentTerminology } from './service-content-terminology';
 
 export interface MissionContentVariantUsageState {
@@ -173,19 +174,7 @@ export async function generateMissionContentVariantWithAi(input: {
       '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
       '導入のフック、文章構成、具体例、言葉選びを明確に変える',
       '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
-      ...(photoFirst
-        ? [
-            '利用者がアップロードした写真を実際に使う投稿にする。写真にない事実を追加しない',
-            `写真解析: ${JSON.stringify(photoFirst.analysis)}`,
-            `投稿設計: ${JSON.stringify(photoFirst.planning)}`,
-            'テーマ、導入、読者価値、写真の使い方、CTAを投稿設計とSNS Goalに一貫させる。CTAだけを差し替えない',
-            ...(photoFirst.planning.confirmationQuestion
-              ? [
-                  `未確定事実は断定せず、本文では使わない: ${photoFirst.planning.confirmationQuestion}`,
-                ]
-              : []),
-          ]
-        : []),
+      ...(photoFirst ? photoFirstVariantInstructions(photoFirst) : []),
       ...(input.variantInstructions ?? []),
     ],
   };
