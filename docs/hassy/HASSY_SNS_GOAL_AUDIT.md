@@ -273,7 +273,7 @@ Company Profile、Target、Goal、Weekly、Recent Posts、Accepted/Rejected、Po
 
 ### Barrier
 
-障壁分類はService/User/Bunshin単位で分離されるが、`Barrier × Goal`の教育policyは未実装。大規模教育機能は今回の対象外である。
+障壁分類はService/User/Bunshin単位で分離される。Goal別の支援選択policyと代表3組（`BRAND_AWARENESS × UNKNOWN`、`INQUIRY × LEAD`、`RECRUIT × RESPONSE`）の支援は実装済みである。未帰属・混在・旧Evidence・未設定の組み合わせは共通支援へ戻す。大規模教育機能とGoal別Barrier判定は未実装である。
 
 ### KPI
 
@@ -322,7 +322,7 @@ Goal contractとpolicyはSOCIAL capabilityにあり、AI研修、占い、千ノ
 ## 20. 残課題と推奨順
 
 1. **実Provider Goal Differential品質確認**: M1〜M7から小さな承認済みサンプルを選び、同一入力でテーマ・本文・visual・CTAを人手rubric評価する。
-2. **Goal × Barrier support fixtures**: policyで安全と判定した代表組み合わせだけGoal別支援文面差を固定する。
+2. **Goal × Barrier support outcome evaluation**: 代表3組の支援完了・見送り・再発をGoal別に安全に評価できるか確認する。
 3. **Secondary Goals**: 単一Goal運用の不足が確認された後に設計する。
 
 Repeat KPI分離は実装済み。REPEATの画面では曖昧な`予約/来店`ではなく`再予約/再来店`を記録し、次週評価も明示的な2項目だけを一次指標として使う。保存先は既存の`manualMetrics` JSONを拡張したためmigrationは不要で、旧クライアント入力は新項目を0として受理する。
@@ -331,9 +331,9 @@ Repeat KPI分離は実装済み。REPEATの画面では曖昧な`予約/来店`�
 
 Goal × Barrierの現行経路と必要な代表例は`docs/hassy/HASSY_GOAL_BARRIER_AUDIT.md`へ記録した。Barrier rule v3でMission生成時Goalの件数に加え、投稿完了・手入力反応・次の行動をGoal別にEvidenceへ保存する。Missionへ紐づかないInsightは特定Goalへ推測配分せず、未帰属アカウント指標として分離する。未帰属・複数Goal・旧Evidence・Missionなし・未帰属Insightありは共通支援へ戻す安全ゲートも実装済みである。
 
-`UNKNOWN / RESPONSE / LEAD`は既存Evidence code、閾値、同一Goal内の成果が一致した場合だけGoal別支援の入力候補にするpolicyを実装した。`EFFECT`はGoalへ帰属したInsightがないため判断不能とし、現行共通支援を維持する。Goal別Barrier判定と支援文面は未実装である。
+`UNKNOWN / RESPONSE / LEAD`は既存Evidence code、閾値、同一Goal内の成果が一致した場合だけGoal別支援の入力候補にするpolicyを実装した。`EFFECT`はGoalへ帰属したInsightがないため判断不能とし、現行共通支援を維持する。安全policyを通る`BRAND_AWARENESS × UNKNOWN`、`INQUIRY × LEAD`、`RECRUIT × RESPONSE`だけGoal別支援を実装し、未設定の組み合わせは共通支援へ戻す。Goal別Barrier判定は未実装である。
 
-次の最小タスクは、**安全policyを通った代表組み合わせだけGoal別支援文面fixtureを追加すること**である。`BRAND_AWARENESS × UNKNOWN`、`INQUIRY × LEAD`、`RECRUIT × RESPONSE`に限定し、`EFFECT`は対象外とする。
+次の最小タスクは、**代表3組の支援完了結果をGoal × Barrier別に評価できるか監査すること**である。支援定義の追加を先行せず、既存の完了・見送り・再発履歴とSnapshotから安全に測定できる範囲を確定する。`EFFECT`は引き続き対象外とする。
 
 ## 21. 実行した検証
 

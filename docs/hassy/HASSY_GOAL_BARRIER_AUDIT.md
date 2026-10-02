@@ -1,7 +1,7 @@
 # ハッシー Goal × Barrier 監査
 
 更新日: 2026-10-02（Asia/Tokyo）
-対象基準: `5ff36439`（PR #1078 merge後の`origin/main`）
+対象基準: `12038678`（PR #1079 merge後の`origin/main`）
 
 ## 1. Executive Summary
 
@@ -11,9 +11,9 @@ Barrier rule v3では、障害日を除外したMissionの生成時GoalをEviden
 
 支援選択では、旧Evidence、Missionなし、未帰属あり、複数Goal混在、未帰属アカウント指標ありを単一Goalとして扱わず、既存の共通支援へフォールバックする。`UNKNOWN`は同一Goalの投稿件数とInsight未記録が既存判定に一致する場合、`RESPONSE / LEAD`は同一Goalの手入力反応と次の行動が既存判定に一致する場合だけ、Goal別支援の入力候補とする。`EFFECT`はGoalへ帰属したInsightがないため判断不能とする。
 
-条件を満たす場合もGoal別支援が未定義の現段階では共通支援を維持し、policy判定と選択理由をSnapshotへ保存する。
+安全policyを満たす代表3組に限り、Goal別支援を追加した。対象は`BRAND_AWARENESS × UNKNOWN`、`INQUIRY × LEAD`、`RECRUIT × RESPONSE`である。該当しないGoal組み合わせ、旧Evidence、未帰属、複数Goal混在、指標不整合は、引き続き共通支援へフォールバックする。
 
-Barrier判定に使う集計値は引き続き28日間の全Goal合算であり、`EFFECT / LEAD / UNKNOWN`等の支援文面も全Goal共通である。そのため、現時点で「問い合わせ目的に合った障壁支援」「採用目的に合った応募導線支援」まで対応済みとは判定しない。
+Barrier判定に使う集計値は引き続き28日間の全Goal合算であり、Goal別支援は全組み合わせを網羅していない。代表3組については同一Goal内の証拠を安全policyで再確認した後に、認知の計測、問い合わせ導線、採用反応への返信へ支援内容を変える。外部成果との因果関係やGoal別Barrier判定まで対応済みとは判定しない。
 
 投稿後成果の現行保存形式`manualMetrics.businessOutcomes`はPR #1075以降、`inquiries / reservations / visits / repeatReservations / repeatVisits / orders`を障壁観測で読み取る。これは既存成果の観測漏れ修正であり、Goal別の因果関係判定ではない。
 
@@ -30,7 +30,7 @@ SUSPECTED候補（行動から断定しない）
   ↓ PrismaSocialActivityBarrierConfirmationRepository.answer
 CONFIRMEDまたはDISMISSED
   ↓ selectSocialActivitySupport(category, evidence)
-安全条件を評価し、共通の無料支援と選択理由をSnapshot保存
+安全条件を評価し、代表3組はGoal別、それ以外は共通の無料支援をSnapshot保存
   ↓ ACCEPT / COMPLETE / SKIP
 再観測・解決判定・条件付きOEM支援候補
 ```
@@ -51,7 +51,7 @@ CONFIRMEDまたはDISMISSED
 | Goal別アカウントInsight       | 未実装       | Mission relationがなく、未帰属アカウント指標として保存  |
 | Goal別Barrier判定             | 未実装       | 現行判定は引き続き28日間の全Goal合算                    |
 | Goal別支援の判定policy        | 一部実装済み | UNKNOWN / RESPONSE / LEADを厳格評価、EFFECTは判断不能   |
-| Goal別の質問・支援            | 未実装       | categoryだけで共通ラベル・支援を選択                    |
+| Goal別の質問・支援            | 一部実装済み | 安全policyを通る代表3組だけGoal別支援を選択             |
 | Goal別支援の安全ゲート        | 実装済み     | 未帰属・混在・旧Evidence等は共通支援へフォールバック    |
 | Goal変更履歴の保持            | 一部実装済み | Strategy履歴、Evidence件数・成果、支援選択理由を保持    |
 | 現行の手入力成果読取          | 実装済み     | `manualMetrics.businessOutcomes`を観測対象へ追加済み    |
@@ -64,9 +64,9 @@ CONFIRMEDまたはDISMISSED
 | CONTENT                        | 内容が合わない本人確認   | Goalに合う題材・対象顧客・CTA                      | Goal Context未接続       |
 | MEDIA / CONFIDENCE             | 写真準備・下書き支援     | Goal別の素材優先度は補助的                         | 現行共通支援を再利用可能 |
 | EFFECT                         | 結果確認の手順           | Goalごとに見るべき成果が異なる                     | Goal Context必須         |
-| RESPONSE                       | 反応への返信             | 採用質問、予約相談、購入質問等で次の案内が異なる   | Goal Context必須         |
-| LEAD                           | 次の導線を一つに絞る     | 問い合わせ、予約、再予約、応募、購入で導線が異なる | Goal Context必須         |
-| UNKNOWN                        | 記録方法の案内           | 認知・採用・信頼等で確認可能な指標が異なる         | Goal Context必須         |
+| RESPONSE                       | 反応への返信             | 採用質問、予約相談、購入質問等で次の案内が異なる   | RECRUIT代表支援を実装    |
+| LEAD                           | 次の導線を一つに絞る     | 問い合わせ、予約、再予約、応募、購入で導線が異なる | INQUIRY代表支援を実装    |
+| UNKNOWN                        | 記録方法の案内           | 認知・採用・信頼等で確認可能な指標が異なる         | AWARENESS代表支援を実装  |
 
 ## 5. 必要性を固定する代表例
 
@@ -111,9 +111,17 @@ Barrier rule v3では、障害日を除外した各Missionについて生成時S
 - Goal成果指標のない旧Evidenceは`METRICS_UNAVAILABLE`
 - Goal別件数と成果件数が矛盾するEvidenceは`METRICS_INCONSISTENT`
 - Missionへ帰属できないInsightありは`UNATTRIBUTED_ACCOUNT_METRICS`
-- 単一Goalへ完全帰属しても、Goal別定義がない間は`GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED`
+- 単一Goalへ完全帰属しても、該当するGoal別定義がなければ`GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED`
 
-すべて現行の共通支援を選び、support rule v2として判定結果を`definitionSnapshot.selection`へ保存する。これにより、将来Goal別支援を追加しても、現在Goalによる過去Missionの推測補完や混在Evidenceへの誤適用を避けられる。
+support rule v3では、安全policyとGoal別定義の両方が一致した場合だけ`GOAL_SPECIFIC`を選び、`eligibleGoal`と支援内容を`definitionSnapshot.selection`へ保存する。それ以外は現行の共通支援を選び、フォールバック理由も保存する。これにより、現在Goalによる過去Missionの推測補完や混在Evidenceへの誤適用を避ける。
+
+実装済みの代表支援は次の3つに限定する。
+
+- `BRAND_AWARENESS × UNKNOWN` → `AWARENESS_MEASUREMENT_SETUP`: 閲覧・リーチ・プロフィール表示等、確認可能な数字を一つ記録する。
+- `INQUIRY × LEAD` → `INQUIRY_LEAD_FOLLOW_UP`: LINE・フォーム・電話等の問い合わせ先を一つに絞り、遷移とCTAを確認する。
+- `RECRUIT × RESPONSE` → `RECRUIT_RESPONSE_GUIDE`: 未返信の採用反応を一つ選び、回答と採用情報・見学・問い合わせへの案内を返す。
+
+これは支援内容の差分であり、外部KPIの取得、投稿成果との因果関係、支援完了後の効果を証明するものではない。
 
 さらにGoal別支援の入力候補は次のpolicyで制限する。
 
@@ -136,7 +144,7 @@ Barrier rule v3では、障害日を除外した各Missionについて生成時S
 
 ## 8. 次の最小タスク
 
-policyで`GOAL_SCOPED`になった`UNKNOWN / RESPONSE / LEAD`の代表組み合わせだけ、Goal別支援文面fixtureを作る。最初は`BRAND_AWARENESS × UNKNOWN`、`INQUIRY × LEAD`、`RECRUIT × RESPONSE`に限定し、既存共通支援と本人確認フローを維持する。`EFFECT`はInsight帰属方法が決まるまで追加しない。
+代表3組について、支援を完了・見送った結果をGoal × Barrier別に監査できるか確認する。新しい支援文面を広げる前に、既存の`ACCEPT / COMPLETE / SKIP`履歴から完了率と再発を安全に集計できるかを調査し、必要なら小さなcharacterization testを追加する。`EFFECT`はInsight帰属方法が決まるまで追加しない。
 
 ## 9. 未確認事項
 
@@ -148,4 +156,4 @@ policyで`GOAL_SCOPED`になった`UNKNOWN / RESPONSE / LEAD`の代表組み合�
 
 ## 10. 変更範囲
 
-本変更は、Goal別支援へ進める判定policy、代表fixture、支援安全ゲート、回帰テスト、本監査文書のみ。DB schema、migration、API、Provider、LINE送信、本番設定、依存関係、lockfileは変更しない。
+本変更は、代表3組のGoal別支援定義、支援安全ゲート、Snapshot保存の回帰テスト、本監査文書のみ。DB schema、migration、API、Provider、LINE送信、本番設定、依存関係、lockfileは変更しない。

@@ -1,5 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
-import { buildSocialActivityBarrierGoalAttribution } from '@bunshin/capability-social';
+import {
+  buildSocialActivityBarrierGoalAttribution,
+  buildSocialActivityBarrierGoalMetrics,
+} from '@bunshin/capability-social';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaSocialActivityBarrierConfirmationRepository } from '../src/social-activity-barrier-confirmation-repository';
 
@@ -22,7 +25,7 @@ const evidence = {
   ruleVersion: 'social-activity-barrier-v1',
 };
 
-function barrierCase(id: string, category: 'TIME' | 'EFFORT') {
+function barrierCase(id: string, category: 'TIME' | 'EFFORT' | 'LEAD') {
   return {
     id,
     category,
@@ -34,6 +37,40 @@ function barrierCase(id: string, category: 'TIME' | 'EFFORT') {
     nextEligibleAt: null,
     evidenceSnapshots: [evidence],
   };
+}
+
+function inquiryLeadCase() {
+  const value = barrierCase('case_lead', 'LEAD');
+  value.ruleVersion = 'social-activity-barrier-v3';
+  value.evidenceSnapshots = [
+    {
+      ...evidence,
+      evidenceCode: 'RESPONSE_WITHOUT_NEXT_STEP',
+      ruleVersion: 'social-activity-barrier-v3',
+      metrics: {
+        goalAttribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', 'INQUIRY']),
+        goalMetrics: buildSocialActivityBarrierGoalMetrics(
+          [
+            {
+              goal: 'INQUIRY',
+              postCompleted: true,
+              positiveResponseRecorded: true,
+              conversionActionRecorded: false,
+            },
+            {
+              goal: 'INQUIRY',
+              postCompleted: true,
+              positiveResponseRecorded: true,
+              conversionActionRecorded: false,
+            },
+          ],
+          { insightRecorded: 0, positiveResponseRecorded: 0 },
+        ),
+      },
+      thresholds: { minimumPositiveResponses: 2, maximumConversionActions: 0 },
+    },
+  ];
+  return value;
 }
 
 function barrierCaseWithMixedGoals(id: string, category: 'TIME' | 'EFFORT') {
@@ -104,7 +141,7 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     expect(supportCreate).toHaveBeenCalledOnce();
     expect(supportCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        ruleVersion: 'social-activity-support-v2',
+        ruleVersion: 'social-activity-support-v3',
         definitionSnapshot: expect.objectContaining({
           selection: {
             mode: 'COMMON',
@@ -140,6 +177,52 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
         answeredAt: new Date('2026-09-09T00:00:00.000Z'),
       }),
     ).resolves.toBeNull();
+  });
+
+  it('snapshots a Goal-specific support selected from the persisted evidence', async () => {
+    const supportCreate = vi.fn().mockResolvedValue({ id: 'support_goal_1' });
+    const tx = {
+      socialActivityBarrierConfirmation: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 'confirmation_goal_1' }),
+      },
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
+      bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
+      socialActivityBarrierCase: {
+        findMany: vi.fn().mockResolvedValue([inquiryLeadCase()]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      socialActivitySupportIntervention: { create: supportCreate },
+    };
+    const client = {
+      $transaction: vi.fn(async (work: (transaction: typeof tx) => Promise<unknown>) => work(tx)),
+    } as unknown as PrismaClient;
+
+    await expect(
+      new PrismaSocialActivityBarrierConfirmationRepository(client).answer({
+        scope,
+        caseIds: ['case_lead'],
+        selectedCaseId: 'case_lead',
+        idempotencyKey: 'barrier-goal-answer-001',
+        answeredAt: new Date('2026-09-09T00:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      response: 'CONFIRMED',
+      support: { key: 'INQUIRY_LEAD_FOLLOW_UP' },
+    });
+    expect(supportCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        supportKey: 'INQUIRY_LEAD_FOLLOW_UP',
+        ruleVersion: 'social-activity-support-v3',
+        definitionSnapshot: expect.objectContaining({
+          selection: {
+            mode: 'GOAL_SPECIFIC',
+            eligibleGoal: 'INQUIRY',
+            fallbackReason: null,
+          },
+        }),
+      }),
+    });
   });
 
   it('restores an active support action only through its complete scope', async () => {
