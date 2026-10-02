@@ -285,6 +285,44 @@ describe('Daily Mission core', () => {
     ).toThrow();
   });
 
+  it.each(['TEXT', 'SLIDE', 'IMAGE'] as const)(
+    'normalizes generated %s hashtags to one leading hash',
+    (format) => {
+      const content =
+        format === 'TEXT'
+          ? {
+              body: '本文',
+              threadParts: [],
+              cta: null,
+              caption: null,
+              hashtags: [],
+              photoInstruction: null,
+            }
+          : format === 'SLIDE'
+            ? slide
+            : {
+                topic: '基礎',
+                angle: '3手',
+                reason: '初心者向け',
+                estimatedMinutes: 5,
+                imageInstruction: '図解',
+                overlayText: null,
+                caption: 'caption',
+                hashtags: [],
+              };
+      const normalized = normalizeMissionContent(format, {
+        ...content,
+        hashtags: ['##美容室選び', 'カウンセリング重視', '  #架空市美容室  '],
+      });
+
+      expect(normalized['hashtags']).toEqual([
+        '#美容室選び',
+        '#カウンセリング重視',
+        '#架空市美容室',
+      ]);
+    },
+  );
+
   it('validates inclusive date ranges up to 90 days', async () => {
     await expect(
       new ListDailyMissions(new Missions()).execute({
