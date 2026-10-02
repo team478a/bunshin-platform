@@ -57,6 +57,7 @@ export async function generateMissionContentVariantWithAi(input: {
     mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
     sourceNote: string;
   };
+  photoFirstConfirmation?: { question: string; answer: string };
   usageState: MissionContentVariantUsageState;
 }) {
   const runtime = await resolveOpenAiRuntimeConfiguration();
@@ -132,6 +133,7 @@ export async function generateMissionContentVariantWithAi(input: {
           recentPosts: input.recentMissions
             .slice(-12)
             .map(({ topic, angle }) => ({ topic, angle })),
+          ...(input.photoFirstConfirmation ? { confirmation: input.photoFirstConfirmation } : {}),
         }),
       );
     } catch (error) {
@@ -174,7 +176,12 @@ export async function generateMissionContentVariantWithAi(input: {
       '原案と同じ目的、確認済み事実、CTA、開示、許可済みURLを維持する',
       '導入のフック、文章構成、具体例、言葉選びを明確に変える',
       '原案の表面的な言い換えにせず、同じユーザーが比較して選べる別案にする',
-      ...(photoFirst ? photoFirstVariantInstructions(photoFirst) : []),
+      ...(photoFirst
+        ? photoFirstVariantInstructions({
+            ...photoFirst,
+            ...(input.photoFirstConfirmation ? { confirmation: input.photoFirstConfirmation } : {}),
+          })
+        : []),
       ...(input.variantInstructions ?? []),
     ],
   };

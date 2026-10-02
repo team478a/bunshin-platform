@@ -151,6 +151,44 @@ describe('mission content variants', () => {
     );
   });
 
+  it('preserves a bounded confirmation answer and source variant for append-only history', async () => {
+    const repo = repository();
+    await new CompleteMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      generationId: 'generation-2',
+      sourceVariantId: ' variant-1 ',
+      format: 'TEXT',
+      content: variant.content,
+      qualityScore: 90,
+      model: 'test-model',
+      promptVersion: 'variant-v2',
+      inputTokens: 10,
+      outputTokens: 20,
+      estimatedCostMicros: 30n,
+      latencyMs: 100,
+      photoFirst: {
+        ...photoFirst,
+        planning: {
+          ...photoFirst.planning,
+          confirmationAnswer: ' 公開可能な予定表です ',
+          confirmationSourceVariantId: ' variant-1 ',
+        },
+      },
+    });
+
+    expect(repo.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceVariantId: 'variant-1',
+        photoFirst: expect.objectContaining({
+          planning: expect.objectContaining({
+            confirmationAnswer: '公開可能な予定表です',
+            confirmationSourceVariantId: 'variant-1',
+          }),
+        }),
+      }),
+    );
+  });
+
   it('rejects oversized Photo First metadata before repository writes', async () => {
     const repo = repository();
     await expect(

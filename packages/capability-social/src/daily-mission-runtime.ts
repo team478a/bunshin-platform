@@ -174,6 +174,8 @@ export interface PhotoFirstPlanning {
   photoUsage: string;
   imageEditPrompt: string | null;
   confirmationQuestion: string | null;
+  confirmationAnswer?: string | null;
+  confirmationSourceVariantId?: string | null;
 }
 
 export interface MissionContentVariantPhotoFirstMetadata {
@@ -221,7 +223,11 @@ export interface MissionContentVariantGeneration {
 
 export interface MissionContentVariantRepository {
   claim(
-    input: DailyMissionScope & { dailyMissionId: string; idempotencyKey: string },
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      idempotencyKey: string;
+      sourceVariantId?: string;
+    },
   ): Promise<{ acquired: boolean; generation: MissionContentVariantGeneration } | null>;
   complete(
     input: DailyMissionScope & {
@@ -237,6 +243,7 @@ export interface MissionContentVariantRepository {
       estimatedCostMicros: bigint | null;
       latencyMs: number;
       photoFirst?: MissionContentVariantPhotoFirstMetadata;
+      sourceVariantId?: string;
     },
   ): Promise<MissionContentVariant | null>;
   fail(
@@ -274,10 +281,19 @@ function variantIdempotencyKey(value: string) {
 export class ClaimMissionContentVariantGeneration {
   constructor(private readonly repository: MissionContentVariantRepository) {}
 
-  async execute(input: DailyMissionScope & { dailyMissionId: string; idempotencyKey: string }) {
+  async execute(
+    input: DailyMissionScope & {
+      dailyMissionId: string;
+      idempotencyKey: string;
+      sourceVariantId?: string;
+    },
+  ) {
     const result = await this.repository.claim({
       ...input,
       idempotencyKey: variantIdempotencyKey(input.idempotencyKey),
+      ...(input.sourceVariantId
+        ? { sourceVariantId: missionString(input.sourceVariantId, 120, 'source variant id') }
+        : {}),
     });
     if (!result) throw new ApplicationError('NOT_FOUND', 'daily mission not found');
     return result;
@@ -349,6 +365,30 @@ export class CompleteMissionContentVariantGeneration {
                     500,
                     'confirmation question',
                   ),
+            ...(input.photoFirst.planning.confirmationAnswer === undefined
+              ? {}
+              : {
+                  confirmationAnswer:
+                    input.photoFirst.planning.confirmationAnswer === null
+                      ? null
+                      : missionString(
+                          input.photoFirst.planning.confirmationAnswer,
+                          500,
+                          'confirmation answer',
+                        ),
+                }),
+            ...(input.photoFirst.planning.confirmationSourceVariantId === undefined
+              ? {}
+              : {
+                  confirmationSourceVariantId:
+                    input.photoFirst.planning.confirmationSourceVariantId === null
+                      ? null
+                      : missionString(
+                          input.photoFirst.planning.confirmationSourceVariantId,
+                          120,
+                          'confirmation source variant id',
+                        ),
+                }),
           },
           analyzerModel: missionString(input.photoFirst.analyzerModel, 120, 'analyzer model'),
           analyzerPromptVersion: missionString(
@@ -369,6 +409,9 @@ export class CompleteMissionContentVariantGeneration {
       inputTokens: nullableCount(input.inputTokens, 'input tokens'),
       outputTokens: nullableCount(input.outputTokens, 'output tokens'),
       latencyMs: missionInteger(input.latencyMs, 0, 2_000_000_000, 'latency'),
+      ...(input.sourceVariantId
+        ? { sourceVariantId: missionString(input.sourceVariantId, 120, 'source variant id') }
+        : {}),
       ...(photoFirst ? { photoFirst } : {}),
     });
     if (!variant) throw new ApplicationError('NOT_FOUND', 'variant generation not found');

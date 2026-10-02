@@ -36,6 +36,8 @@ export type PhotoFirstResult = {
       photoUsage: string;
       imageEditPrompt: string | null;
       confirmationQuestion: string | null;
+      confirmationAnswer?: string | null;
+      confirmationSourceVariantId?: string | null;
     };
   };
 };
@@ -176,6 +178,7 @@ export function DailyActionSection({
   const [photoFirstResult, setPhotoFirstResult] = useState<PhotoFirstResult | null>(
     initialPhotoFirstResult ?? null,
   );
+  const [confirmationAnswer, setConfirmationAnswer] = useState('');
   const [resolvedTodayMissionId, setResolvedTodayMissionId] = useState(todayMissionId ?? null);
   const photoFirstAvailable = Boolean(resolvedTodayMissionId || photoFirstMissionSeed);
   const formRef = useRef<HTMLFormElement>(null);
@@ -346,6 +349,45 @@ export function DailyActionSection({
     }
   }
 
+  async function answerPhotoFirstConfirmation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const photoFirst = photoFirstResult?.photoFirst;
+    const answer = confirmationAnswer.trim();
+    if (!photoFirst || !photoFirst.planning.confirmationQuestion || !answer || photoFirstActionId)
+      return;
+    setPhotoFirstActionId(photoFirst.photoMemoryId);
+    setMessage('回答をもとに、投稿案を見直しています…');
+    try {
+      const requestId = createClientRequestId();
+      const response = await fetch(
+        `${endpoint}/${encodeURIComponent(photoFirst.photoMemoryId)}/photo-first`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-request-id': requestId },
+          body: JSON.stringify({
+            dailyMissionId: photoFirstResult.variant.dailyMissionId,
+            sourceVariantId: photoFirstResult.variant.id,
+            confirmationAnswer: answer,
+            idempotencyKey: createClientRequestId(),
+          }),
+        },
+      );
+      const payload = (await response.json()) as {
+        data?: PhotoFirstResult;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.data)
+        throw new Error(payload.error?.message ?? '回答を反映できませんでした。');
+      setPhotoFirstResult(payload.data);
+      setConfirmationAnswer('');
+      setMessage('回答を反映した投稿案ができました。前の案も履歴に残っています。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '回答を反映できませんでした。');
+    } finally {
+      setPhotoFirstActionId(null);
+    }
+  }
+
   async function copyValue(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -507,9 +549,31 @@ export function DailyActionSection({
                 </a>
               ) : null}
               {photoFirstResult.photoFirst.planning.confirmationQuestion ? (
-                <p className="notice">
-                  投稿前の確認：{photoFirstResult.photoFirst.planning.confirmationQuestion}
-                </p>
+                <form onSubmit={(event) => void answerPhotoFirstConfirmation(event)}>
+                  <label>
+                    <strong>
+                      投稿前の確認：{photoFirstResult.photoFirst.planning.confirmationQuestion}
+                    </strong>
+                    <textarea
+                      name="confirmationAnswer"
+                      rows={3}
+                      maxLength={500}
+                      required
+                      value={confirmationAnswer}
+                      onChange={(event) => setConfirmationAnswer(event.currentTarget.value)}
+                      placeholder="分かる範囲で答えてください"
+                    />
+                  </label>
+                  <button
+                    className="button button--secondary button--full"
+                    type="submit"
+                    disabled={!confirmationAnswer.trim() || photoFirstActionId !== null}
+                  >
+                    {photoFirstActionId === photoFirstResult.photoFirst.photoMemoryId
+                      ? '見直しています…'
+                      : '回答を反映して投稿案を見直す'}
+                  </button>
+                </form>
               ) : null}
             </>
           ) : null}
