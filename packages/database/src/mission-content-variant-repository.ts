@@ -1,5 +1,6 @@
 import type {
   MissionContentVariant,
+  MissionContentVariantGeneration,
   MissionContentVariantRepository,
 } from '@bunshin/capability-social';
 import { canManageBunshin } from '@bunshin/platform-domain';
@@ -113,6 +114,15 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
     photoFirstMetadata: true,
   } as const;
 
+  private generation(
+    row: Prisma.MissionContentVariantGenerationGetPayload<object>,
+  ): MissionContentVariantGeneration {
+    return {
+      ...row,
+      qualityVerdict: row.qualityVerdict as 'PASS' | 'REVISE' | 'REJECT' | null,
+    };
+  }
+
   async claim(input: Parameters<MissionContentVariantRepository['claim']>[0]) {
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.workspaceId}:${input.bunshinId}:${input.dailyMissionId}`}::text, 0))`;
@@ -125,7 +135,7 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           idempotencyKey: input.idempotencyKey,
         },
       });
-      if (existing) return { acquired: false, generation: existing };
+      if (existing) return { acquired: false, generation: this.generation(existing) };
       const latestVariant = await tx.missionContentVariant.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -170,7 +180,7 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           idempotencyKey: input.idempotencyKey,
         },
       });
-      return { acquired: true, generation };
+      return { acquired: true, generation: this.generation(generation) };
     });
   }
 
@@ -259,6 +269,10 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           estimatedCostMicros: input.estimatedCostMicros,
           latencyMs: input.latencyMs,
           errorCategory: null,
+          qualityVerdict: input.qualityAudit.verdict,
+          qualityScore: input.qualityAudit.score,
+          qualityIssueCodes: input.qualityAudit.issueCodes,
+          qualityRepairCount: input.qualityAudit.repairCount,
         },
       });
       const completed = await tx.missionContentVariant.findUnique({
@@ -292,6 +306,10 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
             ? {}
             : { estimatedCostMicros: input.estimatedCostMicros }),
           ...(input.latencyMs === undefined ? {} : { latencyMs: input.latencyMs }),
+          qualityVerdict: input.qualityAudit.verdict,
+          qualityScore: input.qualityAudit.score,
+          qualityIssueCodes: input.qualityAudit.issueCodes,
+          qualityRepairCount: input.qualityAudit.repairCount,
         },
       });
       return result.count === 1;

@@ -79,6 +79,34 @@ export interface MissionQualityCheckerOutput {
   issues: MissionQualityIssue[];
 }
 
+export interface MissionContentVariantQualityAudit {
+  verdict: MissionQualityVerdict | null;
+  score: number | null;
+  issueCodes: string[];
+  repairCount: number;
+}
+
+export const missionContentVariantQualityAudit = (
+  attempts: readonly MissionQualityCheckerOutput[],
+  repairCount: number,
+): MissionContentVariantQualityAudit => {
+  if (!Number.isInteger(repairCount) || repairCount < 0 || repairCount > 1)
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid quality repair count');
+  const final = attempts.at(-1);
+  return {
+    verdict: final?.verdict ?? null,
+    score: final?.score ?? null,
+    issueCodes: [
+      ...new Set(
+        attempts.flatMap(({ issues }) =>
+          issues.map(({ code }) => missionString(code, 80, 'issue code')),
+        ),
+      ),
+    ].slice(0, 20),
+    repairCount,
+  };
+};
+
 export interface MissionQualityCheckerResult {
   output: MissionQualityCheckerOutput;
   model: string;
@@ -289,7 +317,7 @@ export class CheckMissionQuality {
       )
       .slice(0, 10);
     const deterministicVerdict = deterministicIssues.length > 0 ? 'REVISE' : 'PASS';
-    const verdict =
+    const verdict: MissionQualityVerdict =
       score < 70
         ? 'REJECT'
         : result.output.verdict === 'REJECT'

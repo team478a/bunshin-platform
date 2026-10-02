@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ClaimMissionContentVariantGeneration,
   CompleteMissionContentVariantGeneration,
+  FailMissionContentVariantGeneration,
   ListMissionContentVariants,
   SelectMissionContentVariant,
   type MissionContentVariantRepository,
@@ -30,6 +31,13 @@ const variant = {
   createdAt: new Date('2026-09-07T00:00:00Z'),
   selectedAt: null,
   photoFirst: null,
+};
+
+const qualityAudit = {
+  verdict: 'PASS' as const,
+  score: 90,
+  issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+  repairCount: 1,
 };
 
 const photoFirst = {
@@ -68,6 +76,10 @@ function repository(overrides: Partial<MissionContentVariantRepository> = {}) {
         status: 'PROCESSING',
         variantId: null,
         errorCategory: null,
+        qualityVerdict: null,
+        qualityScore: null,
+        qualityIssueCodes: [],
+        qualityRepairCount: 0,
         createdAt: variant.createdAt,
         updatedAt: variant.createdAt,
       },
@@ -98,6 +110,7 @@ describe('mission content variants', () => {
       format: 'TEXT',
       content: { body: ' 別案 ', threadParts: [], cta: null, caption: null, hashtags: [] },
       qualityScore: 90,
+      qualityAudit,
       model: 'test-model',
       promptVersion: 'variant-v1',
       inputTokens: 10,
@@ -132,6 +145,7 @@ describe('mission content variants', () => {
       format: 'TEXT',
       content: variant.content,
       qualityScore: 90,
+      qualityAudit,
       model: 'test-model',
       promptVersion: 'variant-v1',
       inputTokens: 10,
@@ -160,6 +174,7 @@ describe('mission content variants', () => {
       format: 'TEXT',
       content: variant.content,
       qualityScore: 90,
+      qualityAudit,
       model: 'test-model',
       promptVersion: 'variant-v2',
       inputTokens: 10,
@@ -198,6 +213,7 @@ describe('mission content variants', () => {
         format: 'TEXT',
         content: variant.content,
         qualityScore: 90,
+        qualityAudit,
         model: 'test-model',
         promptVersion: 'variant-v1',
         inputTokens: 10,
@@ -211,6 +227,57 @@ describe('mission content variants', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     expect(repo.complete).not.toHaveBeenCalled();
+  });
+
+  it('rejects a completed variant whose final quality audit is not PASS', async () => {
+    const repo = repository();
+    await expect(
+      new CompleteMissionContentVariantGeneration(repo).execute({
+        ...scope,
+        generationId: 'generation-1',
+        format: 'TEXT',
+        content: variant.content,
+        qualityScore: 80,
+        qualityAudit: {
+          verdict: 'REVISE',
+          score: 80,
+          issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+          repairCount: 1,
+        },
+        model: 'test-model',
+        promptVersion: 'variant-v1',
+        inputTokens: 10,
+        outputTokens: 20,
+        estimatedCostMicros: 30n,
+        latencyMs: 100,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(repo.complete).not.toHaveBeenCalled();
+  });
+
+  it('preserves the last quality verdict and observed issue codes when generation fails', async () => {
+    const repo = repository();
+    await new FailMissionContentVariantGeneration(repo).execute({
+      ...scope,
+      generationId: 'generation-1',
+      errorCategory: 'CONTENT_REJECTED',
+      qualityAudit: {
+        verdict: 'REVISE',
+        score: 65,
+        issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+        repairCount: 1,
+      },
+    });
+    expect(repo.fail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        qualityAudit: {
+          verdict: 'REVISE',
+          score: 65,
+          issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+          repairCount: 1,
+        },
+      }),
+    );
   });
 
   it('does not turn an inaccessible mission into an empty list', async () => {

@@ -173,6 +173,12 @@ describe('Photo First confirmation variant claim', () => {
           photoInstruction: '写真を使う',
         },
         qualityScore: 90,
+        qualityAudit: {
+          verdict: 'PASS',
+          score: 90,
+          issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+          repairCount: 1,
+        },
         model: 'test-model',
         promptVersion: 'test-prompt',
         inputTokens: 10,
@@ -192,5 +198,15 @@ describe('Photo First confirmation variant claim', () => {
       expect.objectContaining({ data: expect.objectContaining({ sequence: 2 }) }),
     );
     expect(tx.missionContentVariantPhotoFirstMetadata.create).toHaveBeenCalledOnce();
+    expect(tx.missionContentVariantGeneration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          qualityVerdict: 'PASS',
+          qualityScore: 90,
+          qualityIssueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+          qualityRepairCount: 1,
+        }),
+      }),
+    );
   });
 });

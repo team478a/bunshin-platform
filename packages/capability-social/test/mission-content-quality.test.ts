@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CheckMissionQuality,
   GenerateMissionContent,
+  missionContentVariantQualityAudit,
   socialGoalPlanningProfile,
   type DailyMissionBrief,
   type MissionContent,
@@ -587,5 +588,45 @@ describe('CheckMissionQuality', () => {
       },
     });
     expect(result.output).toEqual({ verdict: 'PASS', score: 91, issues: [] });
+  });
+});
+
+describe('missionContentVariantQualityAudit', () => {
+  it('keeps observed issue codes after a successful repair', () => {
+    expect(
+      missionContentVariantQualityAudit(
+        [
+          {
+            verdict: 'REVISE',
+            score: 72,
+            issues: [
+              {
+                code: 'PHOTO_FIRST_UNCONFIRMED_FACT',
+                severity: 'ERROR',
+                field: 'body',
+                message: '未確認です',
+                repairInstruction: '断定を削除する',
+              },
+            ],
+          },
+          { verdict: 'PASS', score: 92, issues: [] },
+        ],
+        1,
+      ),
+    ).toEqual({
+      verdict: 'PASS',
+      score: 92,
+      issueCodes: ['PHOTO_FIRST_UNCONFIRMED_FACT'],
+      repairCount: 1,
+    });
+  });
+
+  it('returns an empty audit when generation failed before quality checking', () => {
+    expect(missionContentVariantQualityAudit([], 0)).toEqual({
+      verdict: null,
+      score: null,
+      issueCodes: [],
+      repairCount: 0,
+    });
   });
 });
