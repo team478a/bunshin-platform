@@ -13,6 +13,25 @@ const input = {
   promptVersion: 'mission-content-variant-v1',
 };
 describe('Hassy photo quality projection', () => {
+  it('attributes pre-quality failures from the recorded initiating route, never from key guesses', () => {
+    const failed = {
+      ...input,
+      hasPhotoMetadata: false,
+      status: 'FAILED',
+      verdict: null,
+      score: null,
+    };
+    expect(projectHassyPhotoQuality({ ...failed, initiatingSource: 'PHOTO_FIRST' })).toMatchObject({
+      attribution: 'PHOTO_STARTED',
+      qualityState: 'UNCHECKED',
+    });
+    expect(projectHassyPhotoQuality({ ...failed, initiatingSource: 'STANDARD' }).attribution).toBe(
+      'STANDARD_STARTED',
+    );
+    expect(projectHassyPhotoQuality({ ...failed, initiatingSource: null }).attribution).toBe(
+      'UNATTRIBUTED',
+    );
+  });
   it('labels the saved prompt as a recorded last stage, not necessarily the generator version', () => {
     expect(
       projectHassyPhotoQuality({

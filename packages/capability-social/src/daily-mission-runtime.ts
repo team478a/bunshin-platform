@@ -213,6 +213,7 @@ export interface MissionContentVariant {
 }
 
 export interface MissionContentVariantGeneration {
+  initiatingSource?: string | null;
   id: string;
   workspaceId: string;
   bunshinId: string;
@@ -250,6 +251,7 @@ export interface MissionContentVariantRepository {
       dailyMissionId: string;
       idempotencyKey: string;
       sourceVariantId?: string;
+      initiatingSource?: 'STANDARD' | 'PHOTO_FIRST';
     },
   ): Promise<{ acquired: boolean; generation: MissionContentVariantGeneration } | null>;
   complete(
@@ -314,8 +316,14 @@ export class ClaimMissionContentVariantGeneration {
       dailyMissionId: string;
       idempotencyKey: string;
       sourceVariantId?: string;
+      initiatingSource?: 'STANDARD' | 'PHOTO_FIRST';
     },
   ) {
+    if (
+      input.initiatingSource !== undefined &&
+      !['STANDARD', 'PHOTO_FIRST'].includes(input.initiatingSource)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation source');
     const result = await this.repository.claim({
       ...input,
       idempotencyKey: variantIdempotencyKey(input.idempotencyKey),

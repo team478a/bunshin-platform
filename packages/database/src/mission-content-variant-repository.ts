@@ -124,6 +124,11 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
   }
 
   async claim(input: Parameters<MissionContentVariantRepository['claim']>[0]) {
+    if (
+      input.initiatingSource !== undefined &&
+      !['STANDARD', 'PHOTO_FIRST'].includes(input.initiatingSource)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid generation source');
     return this.client.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.workspaceId}:${input.bunshinId}:${input.dailyMissionId}`}::text, 0))`;
       if (!(await this.authorizedMission(tx, input))) return null;
@@ -135,7 +140,16 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           idempotencyKey: input.idempotencyKey,
         },
       });
-      if (existing) return { acquired: false, generation: this.generation(existing) };
+      if (existing) {
+        if (
+          existing.dailyMissionId !== input.dailyMissionId ||
+          (input.initiatingSource !== undefined &&
+            existing.initiatingSource !== null &&
+            existing.initiatingSource !== input.initiatingSource)
+        )
+          throw new ApplicationError('CONFLICT', 'generation key belongs to another request');
+        return { acquired: false, generation: this.generation(existing) };
+      }
       const latestVariant = await tx.missionContentVariant.findFirst({
         where: {
           workspaceId: input.workspaceId,
@@ -178,6 +192,7 @@ export class PrismaMissionContentVariantRepository implements MissionContentVari
           dailyMissionId: input.dailyMissionId,
           actorUserId: input.actorUserId,
           idempotencyKey: input.idempotencyKey,
+          initiatingSource: input.initiatingSource ?? null,
         },
       });
       return { acquired: true, generation: this.generation(generation) };

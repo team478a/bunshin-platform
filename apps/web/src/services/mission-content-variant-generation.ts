@@ -124,6 +124,7 @@ export class MissionContentVariantGenerationService {
         ...scope,
         dailyMissionId: mission.id,
         idempotencyKey: input.generationIdempotencyKey,
+        initiatingSource: 'photoActionId' in input ? 'PHOTO_FIRST' : 'STANDARD',
         ...('sourceVariantId' in input && input.sourceVariantId
           ? { sourceVariantId: input.sourceVariantId }
           : {}),
@@ -183,6 +184,7 @@ export class MissionContentVariantGenerationService {
         photoFirstSource = { ...prepared, sourceNote: photo.content };
       }
       const { content, quality, photoFirst } = await generateMissionContentVariantWithAi({
+        generationId,
         scope,
         mission,
         recentMissions,
@@ -266,6 +268,7 @@ export class MissionContentVariantGenerationService {
     } catch (error) {
       if (generationId) {
         await recordAiUsageSafely({
+          contentVariantGenerationId: generationId,
           ...scope,
           taskType: 'MISSION_CONTENT_VARIANT_PIPELINE',
           provider: 'openai',

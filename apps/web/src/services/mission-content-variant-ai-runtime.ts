@@ -51,6 +51,7 @@ export const createMissionContentVariantUsageState = (): MissionContentVariantUs
 });
 
 export async function generateMissionContentVariantWithAi(input: {
+  generationId: string;
   scope: DailyMissionScope;
   mission: DailyMission;
   recentMissions: RecentDailyMissionContent[];
@@ -90,6 +91,7 @@ export async function generateMissionContentVariantWithAi(input: {
     input.usageState.estimatedCostMicros += runtime.requestCostUsdMicros;
     input.usageState.requestCount += 1;
     await recordAiUsageSafely({
+      contentVariantGenerationId: input.generationId,
       ...input.scope,
       taskType,
       provider: 'openai',
