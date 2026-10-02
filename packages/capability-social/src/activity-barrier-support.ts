@@ -50,6 +50,9 @@ export const SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS = [
   'METRICS_UNAVAILABLE',
   'METRICS_INCONSISTENT',
   'UNATTRIBUTED_ACCOUNT_METRICS',
+  'GOAL_POLICY_COMMON_ONLY',
+  'GOAL_SIGNAL_MISMATCH',
+  'ATTRIBUTED_INSIGHTS_REQUIRED',
   'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
 ] as const;
 export type SocialActivitySupportGoalFallbackReason =
@@ -249,6 +252,59 @@ export function socialActivitySupportFor(category: SocialActivityBarrierCategory
   return supportByCategory[category];
 }
 
+function numericThreshold(evidence: SocialActivityBarrierEvidence, key: string) {
+  const value = evidence.thresholds[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function socialActivityBarrierGoalDecisionPolicy(input: {
+  category: SocialActivityBarrierCategory;
+  evidence: SocialActivityBarrierEvidence;
+  goal: SocialAccountStrategyGoal;
+}):
+  | { mode: 'GOAL_SCOPED'; goal: SocialAccountStrategyGoal }
+  | {
+      mode: 'COMMON_ONLY' | 'INCONCLUSIVE';
+      goal: null;
+      reason: 'GOAL_POLICY_COMMON_ONLY' | 'GOAL_SIGNAL_MISMATCH' | 'ATTRIBUTED_INSIGHTS_REQUIRED';
+    } {
+  const segmentedMetrics = input.evidence.goalMetrics;
+  const goalMetrics = segmentedMetrics?.missionMetrics[input.goal];
+  if (segmentedMetrics === null || goalMetrics === undefined) {
+    return { mode: 'INCONCLUSIVE', goal: null, reason: 'GOAL_SIGNAL_MISMATCH' };
+  }
+
+  if (input.category === 'EFFECT') {
+    return { mode: 'INCONCLUSIVE', goal: null, reason: 'ATTRIBUTED_INSIGHTS_REQUIRED' };
+  }
+
+  if (input.category === 'UNKNOWN') {
+    const minimumPosted = numericThreshold(input.evidence, 'minimumPosted');
+    const maximumInsights = numericThreshold(input.evidence, 'maximumInsights');
+    return input.evidence.evidenceCode === 'POSTED_WITHOUT_MEASUREMENT' &&
+      minimumPosted !== null &&
+      maximumInsights !== null &&
+      goalMetrics.postCompleted >= minimumPosted &&
+      segmentedMetrics.unattributedAccountMetrics.insightRecorded <= maximumInsights
+      ? { mode: 'GOAL_SCOPED', goal: input.goal }
+      : { mode: 'INCONCLUSIVE', goal: null, reason: 'GOAL_SIGNAL_MISMATCH' };
+  }
+
+  if (input.category === 'RESPONSE' || input.category === 'LEAD') {
+    const minimumPositiveResponses = numericThreshold(input.evidence, 'minimumPositiveResponses');
+    const maximumConversionActions = numericThreshold(input.evidence, 'maximumConversionActions');
+    return input.evidence.evidenceCode === 'RESPONSE_WITHOUT_NEXT_STEP' &&
+      minimumPositiveResponses !== null &&
+      maximumConversionActions !== null &&
+      goalMetrics.positiveResponseRecorded >= minimumPositiveResponses &&
+      goalMetrics.conversionActionRecorded <= maximumConversionActions
+      ? { mode: 'GOAL_SCOPED', goal: input.goal }
+      : { mode: 'INCONCLUSIVE', goal: null, reason: 'GOAL_SIGNAL_MISMATCH' };
+  }
+
+  return { mode: 'COMMON_ONLY', goal: null, reason: 'GOAL_POLICY_COMMON_ONLY' };
+}
+
 export function selectSocialActivitySupport(input: {
   category: SocialActivityBarrierCategory;
   evidence: SocialActivityBarrierEvidence;
@@ -326,10 +382,23 @@ export function selectSocialActivitySupport(input: {
       fallbackReason: 'NO_SINGLE_GOAL',
     };
   }
+  const policy = socialActivityBarrierGoalDecisionPolicy({
+    category: input.category,
+    evidence: input.evidence,
+    goal: goals[0]!,
+  });
+  if (policy.mode !== 'GOAL_SCOPED') {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: policy.reason,
+    };
+  }
   return {
     support,
     mode: 'COMMON',
-    eligibleGoal: goals[0]!,
+    eligibleGoal: policy.goal,
     fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
   };
 }

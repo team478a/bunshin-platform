@@ -322,16 +322,18 @@ Goal contractとpolicyはSOCIAL capabilityにあり、AI研修、占い、千ノ
 ## 20. 残課題と推奨順
 
 1. **実Provider Goal Differential品質確認**: M1〜M7から小さな承認済みサンプルを選び、同一入力でテーマ・本文・visual・CTAを人手rubric評価する。
-2. **Goal × Barrier decision policy**: Goal別Mission成果だけで判断できる範囲と、未帰属Insightのため判断できない範囲を固定する。
+2. **Goal × Barrier support fixtures**: policyで安全と判定した代表組み合わせだけGoal別支援文面差を固定する。
 3. **Secondary Goals**: 単一Goal運用の不足が確認された後に設計する。
 
 Repeat KPI分離は実装済み。REPEATの画面では曖昧な`予約/来店`ではなく`再予約/再来店`を記録し、次週評価も明示的な2項目だけを一次指標として使う。保存先は既存の`manualMetrics` JSONを拡張したためmigrationは不要で、旧クライアント入力は新項目を0として受理する。
 
 採用・認知・信頼の簡易成果入力も実装済み。DB/APIの4段階契約を維持しながら、Goalごとに利用者が判断できる具体的な質問と選択肢を表示する。外部KPIや投稿との因果関係は引き続き未確認である。
 
-Goal × Barrierの現行経路と必要な代表例は`docs/hassy/HASSY_GOAL_BARRIER_AUDIT.md`へ記録した。Barrier rule v3でMission生成時Goalの件数に加え、投稿完了・手入力反応・次の行動をGoal別にEvidenceへ保存する。Missionへ紐づかないInsightは特定Goalへ推測配分せず、未帰属アカウント指標として分離する。未帰属・複数Goal・旧Evidence・Missionなし・未帰属Insightありは共通支援へ戻す安全ゲートも実装済みである。Goal別Barrier判定と支援文面は未実装である。
+Goal × Barrierの現行経路と必要な代表例は`docs/hassy/HASSY_GOAL_BARRIER_AUDIT.md`へ記録した。Barrier rule v3でMission生成時Goalの件数に加え、投稿完了・手入力反応・次の行動をGoal別にEvidenceへ保存する。Missionへ紐づかないInsightは特定Goalへ推測配分せず、未帰属アカウント指標として分離する。未帰属・複数Goal・旧Evidence・Missionなし・未帰属Insightありは共通支援へ戻す安全ゲートも実装済みである。
 
-次の最小タスクは、**Goal別Mission成果だけで安全に判断できるBarrier policyを固定すること**である。`EFFECT / RESPONSE / LEAD / UNKNOWN`のうち、未帰属Insightを必要とする判定ではGoal別断定を避ける。
+`UNKNOWN / RESPONSE / LEAD`は既存Evidence code、閾値、同一Goal内の成果が一致した場合だけGoal別支援の入力候補にするpolicyを実装した。`EFFECT`はGoalへ帰属したInsightがないため判断不能とし、現行共通支援を維持する。Goal別Barrier判定と支援文面は未実装である。
+
+次の最小タスクは、**安全policyを通った代表組み合わせだけGoal別支援文面fixtureを追加すること**である。`BRAND_AWARENESS × UNKNOWN`、`INQUIRY × LEAD`、`RECRUIT × RESPONSE`に限定し、`EFFECT`は対象外とする。
 
 ## 21. 実行した検証
 
