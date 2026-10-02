@@ -1,6 +1,27 @@
 import { ApplicationError } from '@bunshin/shared';
+import {
+  SOCIAL_ACCOUNT_STRATEGY_GOALS,
+  type SocialAccountStrategyGoal,
+} from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_BARRIER_RULE_VERSION = 'social-activity-barrier-v1' as const;
+export const SOCIAL_ACTIVITY_BARRIER_RULE_VERSION = 'social-activity-barrier-v2' as const;
+export type SocialActivityBarrierRuleVersion =
+  'social-activity-barrier-v1' | typeof SOCIAL_ACTIVITY_BARRIER_RULE_VERSION;
+
+export const SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS = [
+  ...SOCIAL_ACCOUNT_STRATEGY_GOALS,
+  'UNATTRIBUTED',
+] as const;
+export type SocialActivityBarrierGoalKey = (typeof SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS)[number];
+
+export type SocialActivityBarrierGoalAttribution = {
+  missionCounts: Record<SocialActivityBarrierGoalKey, number>;
+  observedMissionCount: number;
+  attributedMissionCount: number;
+  unattributedMissionCount: number;
+  distinctAttributedGoalCount: number;
+  mixedAttributedGoals: boolean;
+};
 
 export const SOCIAL_ACTIVITY_BARRIER_CATEGORIES = [
   'SETUP',
@@ -47,6 +68,7 @@ export type InferSocialActivityBarriersInput = {
     excludedSystemIncidentDays: number;
   };
   metrics: SocialActivityBarrierMetrics;
+  goalAttribution: SocialActivityBarrierGoalAttribution;
 };
 
 export type SocialActivityBarrierEvidence = {
@@ -58,8 +80,9 @@ export type SocialActivityBarrierEvidence = {
     excludedSystemIncidentDays: number;
   };
   metrics: Partial<SocialActivityBarrierMetrics>;
+  goalAttribution: SocialActivityBarrierGoalAttribution | null;
   thresholds: Readonly<Record<string, number>>;
-  ruleVersion: typeof SOCIAL_ACTIVITY_BARRIER_RULE_VERSION;
+  ruleVersion: SocialActivityBarrierRuleVersion;
 };
 
 export type SocialActivityBarrierCandidate = {
@@ -96,6 +119,93 @@ function validateIdentifier(value: string, field: keyof SocialActivityBarrierSco
   }
 }
 
+function emptyGoalCounts(): Record<SocialActivityBarrierGoalKey, number> {
+  return Object.fromEntries(SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.map((goal) => [goal, 0])) as Record<
+    SocialActivityBarrierGoalKey,
+    number
+  >;
+}
+
+function isStrategyGoal(value: unknown): value is SocialAccountStrategyGoal {
+  return (
+    typeof value === 'string' &&
+    (SOCIAL_ACCOUNT_STRATEGY_GOALS as readonly string[]).includes(value)
+  );
+}
+
+export function readSocialActivityBarrierMissionGoal(
+  value: unknown,
+): SocialAccountStrategyGoal | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const strategy = (value as Record<string, unknown>)['strategy'];
+  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) return null;
+  const goal = (strategy as Record<string, unknown>)['goal'];
+  return isStrategyGoal(goal) ? goal : null;
+}
+
+export function buildSocialActivityBarrierGoalAttribution(
+  goals: readonly (SocialAccountStrategyGoal | null)[],
+): SocialActivityBarrierGoalAttribution {
+  const missionCounts = emptyGoalCounts();
+  for (const goal of goals) missionCounts[goal ?? 'UNATTRIBUTED'] += 1;
+  const attributedGoals = SOCIAL_ACCOUNT_STRATEGY_GOALS.filter((goal) => missionCounts[goal] > 0);
+  const unattributedMissionCount = missionCounts.UNATTRIBUTED;
+  return {
+    missionCounts,
+    observedMissionCount: goals.length,
+    attributedMissionCount: goals.length - unattributedMissionCount,
+    unattributedMissionCount,
+    distinctAttributedGoalCount: attributedGoals.length,
+    mixedAttributedGoals: attributedGoals.length > 1,
+  };
+}
+
+export function readSocialActivityBarrierGoalAttribution(
+  value: unknown,
+): SocialActivityBarrierGoalAttribution | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const missionCounts = candidate['missionCounts'];
+  if (!missionCounts || typeof missionCounts !== 'object' || Array.isArray(missionCounts))
+    return null;
+  const counts = missionCounts as Record<string, unknown>;
+  if (
+    SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.some(
+      (goal) => !Number.isInteger(counts[goal]) || Number(counts[goal]) < 0,
+    )
+  )
+    return null;
+  const parsedCounts = Object.fromEntries(
+    SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.map((goal) => [goal, Number(counts[goal])]),
+  ) as Record<SocialActivityBarrierGoalKey, number>;
+  const observedMissionCount = SOCIAL_ACTIVITY_BARRIER_GOAL_KEYS.reduce(
+    (total, goal) => total + parsedCounts[goal],
+    0,
+  );
+  const unattributedMissionCount = parsedCounts.UNATTRIBUTED;
+  const attributedMissionCount = observedMissionCount - unattributedMissionCount;
+  const distinctAttributedGoalCount = SOCIAL_ACCOUNT_STRATEGY_GOALS.filter(
+    (goal) => parsedCounts[goal] > 0,
+  ).length;
+  const mixedAttributedGoals = distinctAttributedGoalCount > 1;
+  if (
+    candidate['observedMissionCount'] !== observedMissionCount ||
+    candidate['attributedMissionCount'] !== attributedMissionCount ||
+    candidate['unattributedMissionCount'] !== unattributedMissionCount ||
+    candidate['distinctAttributedGoalCount'] !== distinctAttributedGoalCount ||
+    candidate['mixedAttributedGoals'] !== mixedAttributedGoals
+  )
+    return null;
+  return {
+    missionCounts: parsedCounts,
+    observedMissionCount,
+    attributedMissionCount,
+    unattributedMissionCount,
+    distinctAttributedGoalCount,
+    mixedAttributedGoals,
+  };
+}
+
 function validateInput(input: InferSocialActivityBarriersInput) {
   for (const [field, value] of Object.entries(input.scope) as Array<
     [keyof SocialActivityBarrierScope, string]
@@ -122,6 +232,9 @@ function validateInput(input: InferSocialActivityBarriersInput) {
       throw new ApplicationError('VALIDATION_ERROR', `invalid barrier metric: ${field}`);
     }
   }
+  if (readSocialActivityBarrierGoalAttribution(input.goalAttribution) === null) {
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid barrier goal attribution');
+  }
 }
 
 function createCandidates(
@@ -140,6 +253,7 @@ function createCandidates(
       excludedSystemIncidentDays: input.observationWindow.excludedSystemIncidentDays,
     },
     metrics,
+    goalAttribution: input.goalAttribution,
     thresholds,
     ruleVersion: SOCIAL_ACTIVITY_BARRIER_RULE_VERSION,
   };

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { socialActivityBarrierEvidenceKey } from '../src/activity-barrier-persistence';
 import {
+  buildSocialActivityBarrierGoalAttribution,
   inferSocialActivityBarriers,
+  readSocialActivityBarrierGoalAttribution,
+  readSocialActivityBarrierMissionGoal,
   type InferSocialActivityBarriersInput,
 } from '../src/activity-barrier';
 
@@ -34,6 +37,7 @@ function input(
       conversionActionRecorded: 0,
       ...metrics,
     },
+    goalAttribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', null]),
   };
 }
 
@@ -48,7 +52,12 @@ describe('inferSocialActivityBarriers', () => {
       evidence: {
         evidenceCode: 'DELIVERED_WITHOUT_VIEW',
         observationWindow: { eligibleDays: 6, excludedSystemIncidentDays: 1 },
-        ruleVersion: 'social-activity-barrier-v1',
+        ruleVersion: 'social-activity-barrier-v2',
+        goalAttribution: expect.objectContaining({
+          observedMissionCount: 2,
+          attributedMissionCount: 1,
+          unattributedMissionCount: 1,
+        }),
       },
     });
   });
@@ -102,8 +111,34 @@ describe('inferSocialActivityBarriers', () => {
     const candidate = inferSocialActivityBarriers(input({ missionViewed: 4 }))[0]!;
 
     expect(socialActivityBarrierEvidenceKey(candidate)).toBe(
-      'social-activity-barrier-v1:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
+      'social-activity-barrier-v2:VIEWED_WITHOUT_SELECTION:CONTENT:2026-09-01T00:00:00.000Z:2026-09-08T00:00:00.000Z',
     );
+  });
+
+  it('records each generation goal without guessing legacy missions', () => {
+    const attribution = buildSocialActivityBarrierGoalAttribution([
+      'INQUIRY',
+      'RECRUIT',
+      'INQUIRY',
+      null,
+    ]);
+
+    expect(attribution).toMatchObject({
+      observedMissionCount: 4,
+      attributedMissionCount: 3,
+      unattributedMissionCount: 1,
+      distinctAttributedGoalCount: 2,
+      mixedAttributedGoals: true,
+      missionCounts: { INQUIRY: 2, RECRUIT: 1, UNATTRIBUTED: 1 },
+    });
+    expect(readSocialActivityBarrierGoalAttribution(attribution)).toEqual(attribution);
+  });
+
+  it('reads only a valid strategy goal from generation context', () => {
+    expect(readSocialActivityBarrierMissionGoal({ strategy: { goal: 'REPEAT' } })).toBe('REPEAT');
+    expect(readSocialActivityBarrierMissionGoal({ strategy: { goal: 'INVALID' } })).toBeNull();
+    expect(readSocialActivityBarrierMissionGoal({ strategy: {} })).toBeNull();
+    expect(readSocialActivityBarrierMissionGoal(null)).toBeNull();
   });
 
   it('rejects invalid metrics and observation windows', () => {

@@ -36,6 +36,7 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
                 },
               },
             },
+            generationContext: { payload: { strategy: { goal: 'REPEAT' } } },
             lineMessageDeliveries: [{ status: 'SENT' }],
           },
           {
@@ -44,6 +45,7 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
             decision: { decision: 'ACCEPTED' },
             activities: [{ type: 'VIEWED' }, { type: 'POSTED' }],
             postRecord: { manualMetrics: { comments: 10 } },
+            generationContext: { payload: { strategy: { goal: 'INQUIRY' } } },
             lineMessageDeliveries: [{ status: 'FAILED' }],
           },
         ]),
@@ -101,6 +103,59 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
         positiveResponseRecorded: 2,
         conversionActionRecorded: 1,
       },
+      goalAttribution: {
+        observedMissionCount: 1,
+        attributedMissionCount: 1,
+        unattributedMissionCount: 0,
+        distinctAttributedGoalCount: 1,
+        mixedAttributedGoals: false,
+        missionCounts: { REPEAT: 1, UNATTRIBUTED: 0 },
+      },
+    });
+  });
+
+  it('attributes eligible missions to their generation goal and preserves unknown legacy missions', async () => {
+    const mission = (id: string, goal: string | null) => ({
+      id,
+      missionDate: new Date(`2026-09-0${id}T00:00:00.000Z`),
+      decision: null,
+      activities: [{ type: 'VIEWED' }],
+      postRecord: null,
+      generationContext: goal === null ? null : { payload: { strategy: { goal } } },
+      lineMessageDeliveries: [],
+    });
+    const client = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
+      bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
+      dailyMission: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            mission('1', 'INQUIRY'),
+            mission('2', 'RECRUIT'),
+            mission('3', null),
+          ]),
+      },
+      dailyMissionGeneration: { findMany: vi.fn().mockResolvedValue([]) },
+      socialInsightSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
+      serviceMemberBusinessProfile: { findFirst: vi.fn().mockResolvedValue({ id: 'profile_1' }) },
+    };
+
+    const result = await new PrismaSocialActivityBarrierObservationRepository(
+      client as unknown as PrismaClient,
+    ).collect({
+      scope,
+      from: new Date('2026-09-01T00:00:00.000Z'),
+      to: new Date('2026-09-08T00:00:00.000Z'),
+    });
+
+    expect(result?.goalAttribution).toMatchObject({
+      observedMissionCount: 3,
+      attributedMissionCount: 2,
+      unattributedMissionCount: 1,
+      distinctAttributedGoalCount: 2,
+      mixedAttributedGoals: true,
+      missionCounts: { INQUIRY: 1, RECRUIT: 1, UNATTRIBUTED: 1 },
     });
   });
 
