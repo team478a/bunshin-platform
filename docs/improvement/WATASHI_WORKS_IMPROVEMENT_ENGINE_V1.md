@@ -83,7 +83,7 @@ OEM管理者には自Workspace/Serviceのみ。本部向け横断表示は個票
 | 9    | 10〜20社モニター               | 閾値の誤検出、管理負担、Candidate有用性を測定                                               | 運用作業                     |
 | 10   | 第2Adapter                     | 研修固有Barrier・成功条件を追加して共通Engine変更量を確認                                   | 必要性を再評価               |
 
-順序1の共通domain/Adapter契約は非永続・非Providerの範囲で実装済み。順序2のGoal別支援結果読取Adapterを追加した（`HASSY_SUPPORT_OUTCOMES_IMPLEMENTATION.md`）。提供時Snapshotを使った期間別支援cohort・DB管理者再認可・欠損/打切り保留まで。HTTP/UI/定期Jobは未接続。次の最小タスクはPhoto First品質観測の独立読取Adapter。本番E2E、複数業種のGoal品質、Secondary Goals、外部KPI照合は継続課題であり、本Engine実装で完了扱いにしない。
+順序1の共通domain/Adapter契約は非永続・非Providerの範囲で実装済み。順序2のGoal別支援結果読取AdapterとPhoto First品質の独立読取Adapterを追加した（`HASSY_SUPPORT_OUTCOMES_IMPLEMENTATION.md`、`HASSY_PHOTO_QUALITY_IMPLEMENTATION.md`）。期間cohort・DB管理者再認可・欠損/打切り保留まで。品質の全Photo First試行帰属はUNKNOWN。HTTP/UI/定期Jobは未接続。次の最小タスクは順序3の相関不足監査と最小補完の提案。本番E2E、複数業種のGoal品質、Secondary Goals、外部KPI照合は継続課題であり、本Engine実装で完了扱いにしない。
 
 Phase 1の公開入口、挙動と限界は`IMPROVEMENT_ADAPTER_CONTRACT.md`を参照。実管理者認可と個票の匿名化はPort実装が必要であり、fake契約テストのみで本番Privacy保証済みとは扱わない。
 
