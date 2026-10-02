@@ -41,17 +41,31 @@ function record(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue
     : {};
 }
 
+function nestedBusinessOutcomes(value: Prisma.JsonValue | null) {
+  const nested = record(value)['businessOutcomes'];
+  return nested !== undefined ? record(nested) : {};
+}
+
 function hasPositiveResponse(value: Prisma.JsonValue | null) {
   const metrics = record(value);
-  return ['comments', 'replies', 'directMessages', 'inquiries'].some(
-    (key) => numericMetric(metrics[key]) > 0,
+  const outcomes = nestedBusinessOutcomes(value);
+  return (
+    ['comments', 'replies', 'directMessages', 'inquiries'].some(
+      (key) => numericMetric(metrics[key]) > 0,
+    ) || numericMetric(outcomes['inquiries']) > 0
   );
 }
 
 function hasConversionAction(value: Prisma.JsonValue | null) {
   const metrics = record(value);
-  return ['linkClicks', 'leads', 'conversions', 'reservations', 'purchases'].some(
-    (key) => numericMetric(metrics[key]) > 0,
+  const outcomes = nestedBusinessOutcomes(value);
+  return (
+    ['linkClicks', 'leads', 'conversions', 'reservations', 'purchases'].some(
+      (key) => numericMetric(metrics[key]) > 0,
+    ) ||
+    ['reservations', 'visits', 'repeatReservations', 'repeatVisits', 'orders'].some(
+      (key) => numericMetric(outcomes[key]) > 0,
+    )
   );
 }
 

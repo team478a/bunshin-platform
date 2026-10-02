@@ -22,7 +22,20 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
             missionDate: new Date('2026-09-01T00:00:00.000Z'),
             decision: { decision: 'ACCEPTED' },
             activities: [{ type: 'VIEWED' }, { type: 'COPIED_TEXT' }, { type: 'POSTED' }],
-            postRecord: { manualMetrics: { comments: 1, linkClicks: 1 } },
+            postRecord: {
+              manualMetrics: {
+                comments: 1,
+                businessOutcomes: {
+                  inquiries: 1,
+                  reservations: 0,
+                  visits: 0,
+                  repeatReservations: 1,
+                  repeatVisits: 0,
+                  orders: 0,
+                  other: 0,
+                },
+              },
+            },
             lineMessageDeliveries: [{ status: 'SENT' }],
           },
           {
@@ -88,6 +101,79 @@ describe('PrismaSocialActivityBarrierObservationRepository', () => {
         positiveResponseRecorded: 2,
         conversionActionRecorded: 1,
       },
+    });
+  });
+
+  it.each([
+    ['reservations', 1],
+    ['visits', 1],
+    ['repeatReservations', 1],
+    ['repeatVisits', 1],
+    ['orders', 1],
+  ])('counts nested %s as a conversion action', async (key, count) => {
+    const client = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
+      bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
+      dailyMission: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'mission_1',
+            missionDate: new Date('2026-09-01T00:00:00.000Z'),
+            decision: null,
+            activities: [{ type: 'POSTED' }],
+            postRecord: { manualMetrics: { businessOutcomes: { [key]: count } } },
+            lineMessageDeliveries: [],
+          },
+        ]),
+      },
+      dailyMissionGeneration: { findMany: vi.fn().mockResolvedValue([]) },
+      socialInsightSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
+      serviceMemberBusinessProfile: { findFirst: vi.fn().mockResolvedValue({ id: 'profile_1' }) },
+    };
+
+    const result = await new PrismaSocialActivityBarrierObservationRepository(
+      client as unknown as PrismaClient,
+    ).collect({
+      scope,
+      from: new Date('2026-09-01T00:00:00.000Z'),
+      to: new Date('2026-09-08T00:00:00.000Z'),
+    });
+
+    expect(result?.metrics.conversionActionRecorded).toBe(1);
+  });
+
+  it('counts a nested inquiry as a positive response without treating it as a generic conversion', async () => {
+    const client = {
+      groupMembership: { findFirst: vi.fn().mockResolvedValue({ id: scope.groupMembershipId }) },
+      bunshin: { findFirst: vi.fn().mockResolvedValue({ id: scope.bunshinId }) },
+      dailyMission: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'mission_1',
+            missionDate: new Date('2026-09-01T00:00:00.000Z'),
+            decision: null,
+            activities: [{ type: 'POSTED' }],
+            postRecord: { manualMetrics: { businessOutcomes: { inquiries: 1 } } },
+            lineMessageDeliveries: [],
+          },
+        ]),
+      },
+      dailyMissionGeneration: { findMany: vi.fn().mockResolvedValue([]) },
+      socialInsightSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
+      serviceMemberBusinessProfile: { findFirst: vi.fn().mockResolvedValue({ id: 'profile_1' }) },
+    };
+
+    const result = await new PrismaSocialActivityBarrierObservationRepository(
+      client as unknown as PrismaClient,
+    ).collect({
+      scope,
+      from: new Date('2026-09-01T00:00:00.000Z'),
+      to: new Date('2026-09-08T00:00:00.000Z'),
+    });
+
+    expect(result?.metrics).toMatchObject({
+      positiveResponseRecorded: 1,
+      conversionActionRecorded: 0,
     });
   });
 
