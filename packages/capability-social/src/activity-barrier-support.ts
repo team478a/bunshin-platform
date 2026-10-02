@@ -1,9 +1,14 @@
 import { ApplicationError } from '@bunshin/shared';
 
 import type { SocialActivityBarrierCase } from './activity-barrier-persistence';
-import type { SocialActivityBarrierCategory, SocialActivityBarrierScope } from './activity-barrier';
+import type {
+  SocialActivityBarrierCategory,
+  SocialActivityBarrierEvidence,
+  SocialActivityBarrierScope,
+} from './activity-barrier';
+import type { SocialAccountStrategyGoal } from './social-account-strategy';
 
-export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v1' as const;
+export const SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION = 'social-activity-support-v2' as const;
 export const SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS = 30;
 
 export const SOCIAL_ACTIVITY_SUPPORT_KEYS = [
@@ -33,6 +38,24 @@ export type SocialActivitySupport = {
   title: string;
   reason: string;
   steps: readonly string[];
+};
+
+export const SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS = [
+  'ATTRIBUTION_UNAVAILABLE',
+  'NO_OBSERVED_MISSIONS',
+  'UNATTRIBUTED_MISSIONS',
+  'MIXED_GOALS',
+  'NO_SINGLE_GOAL',
+  'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+] as const;
+export type SocialActivitySupportGoalFallbackReason =
+  (typeof SOCIAL_ACTIVITY_SUPPORT_GOAL_FALLBACK_REASONS)[number];
+
+export type SocialActivitySupportSelection = {
+  support: SocialActivitySupport;
+  mode: 'COMMON';
+  eligibleGoal: SocialAccountStrategyGoal | null;
+  fallbackReason: SocialActivitySupportGoalFallbackReason;
 };
 
 export const SOCIAL_ACTIVITY_SUPPORT_ACTIONS = ['ACCEPT', 'COMPLETE', 'SKIP'] as const;
@@ -220,4 +243,61 @@ export function buildSocialActivityBarrierQuestion(
 
 export function socialActivitySupportFor(category: SocialActivityBarrierCategory) {
   return supportByCategory[category];
+}
+
+export function selectSocialActivitySupport(input: {
+  category: SocialActivityBarrierCategory;
+  evidence: SocialActivityBarrierEvidence;
+}): SocialActivitySupportSelection {
+  const support = socialActivitySupportFor(input.category);
+  const attribution = input.evidence.goalAttribution;
+  if (attribution === null) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'ATTRIBUTION_UNAVAILABLE',
+    };
+  }
+  if (attribution.observedMissionCount === 0) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'NO_OBSERVED_MISSIONS',
+    };
+  }
+  if (attribution.unattributedMissionCount > 0) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'UNATTRIBUTED_MISSIONS',
+    };
+  }
+  if (attribution.mixedAttributedGoals) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'MIXED_GOALS',
+    };
+  }
+  const goals = Object.entries(attribution.missionCounts)
+    .filter(([goal, count]) => goal !== 'UNATTRIBUTED' && count > 0)
+    .map(([goal]) => goal as SocialAccountStrategyGoal);
+  if (goals.length !== 1) {
+    return {
+      support,
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: 'NO_SINGLE_GOAL',
+    };
+  }
+  return {
+    support,
+    mode: 'COMMON',
+    eligibleGoal: goals[0]!,
+    fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+  };
 }

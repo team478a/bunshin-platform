@@ -3,6 +3,7 @@ import {
   SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
   buildSocialActivityBarrierQuestion,
   readSocialActivityBarrierGoalAttribution,
+  selectSocialActivitySupport,
   socialActivitySupportFor,
   type SocialActivityBarrierCase,
   type SocialActivityBarrierConfirmationRepository,
@@ -255,13 +256,24 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         },
       });
 
-      const support = selected ? socialActivitySupportFor(selected.category) : null;
-      if (selected && support) {
+      const selection = selected
+        ? selectSocialActivitySupport({ category: selected.category, evidence: selected.evidence })
+        : null;
+      const support = selection?.support ?? null;
+      if (selected && selection) {
         await tx.socialActivitySupportIntervention.create({
           data: {
             caseId: selected.id,
-            supportKey: support.key,
-            definitionSnapshot: { ...support, steps: [...support.steps] },
+            supportKey: selection.support.key,
+            definitionSnapshot: {
+              ...selection.support,
+              steps: [...selection.support.steps],
+              selection: {
+                mode: selection.mode,
+                eligibleGoal: selection.eligibleGoal,
+                fallbackReason: selection.fallbackReason,
+              },
+            },
             ruleVersion: SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
             idempotencyKey: `${input.idempotencyKey}:support`,
             offeredAt: input.answeredAt,

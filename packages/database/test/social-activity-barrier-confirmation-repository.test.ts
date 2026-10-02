@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { buildSocialActivityBarrierGoalAttribution } from '@bunshin/capability-social';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaSocialActivityBarrierConfirmationRepository } from '../src/social-activity-barrier-confirmation-repository';
 
@@ -35,6 +36,21 @@ function barrierCase(id: string, category: 'TIME' | 'EFFORT') {
   };
 }
 
+function barrierCaseWithMixedGoals(id: string, category: 'TIME' | 'EFFORT') {
+  const value = barrierCase(id, category);
+  value.ruleVersion = 'social-activity-barrier-v2';
+  value.evidenceSnapshots = [
+    {
+      ...evidence,
+      ruleVersion: 'social-activity-barrier-v2',
+      metrics: {
+        goalAttribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', 'RECRUIT']),
+      },
+    },
+  ];
+  return value;
+}
+
 describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
   it('confirms only the selected case, dismisses siblings, and offers one support action', async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -51,8 +67,8 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
         findMany: vi
           .fn()
           .mockResolvedValue([
-            barrierCase('case_time', 'TIME'),
-            barrierCase('case_effort', 'EFFORT'),
+            barrierCaseWithMixedGoals('case_time', 'TIME'),
+            barrierCaseWithMixedGoals('case_effort', 'EFFORT'),
           ]),
         updateMany,
       },
@@ -86,6 +102,18 @@ describe('PrismaSocialActivityBarrierConfirmationRepository', () => {
     );
     expect(confirmationCreate).toHaveBeenCalledOnce();
     expect(supportCreate).toHaveBeenCalledOnce();
+    expect(supportCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        ruleVersion: 'social-activity-support-v2',
+        definitionSnapshot: expect.objectContaining({
+          selection: {
+            mode: 'COMMON',
+            eligibleGoal: null,
+            fallbackReason: 'MIXED_GOALS',
+          },
+        }),
+      }),
+    });
   });
 
   it('rejects an idempotency record owned by another scope', async () => {

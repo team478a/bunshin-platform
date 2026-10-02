@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSocialActivityBarrierLineMessage,
   buildSocialActivityBarrierQuestion,
+  selectSocialActivitySupport,
   socialActivitySupportFor,
 } from '../src/activity-barrier-support';
+import { buildSocialActivityBarrierGoalAttribution } from '../src/activity-barrier';
 import type { SocialActivityBarrierCase } from '../src/activity-barrier-persistence';
 
 function barrierCase(
@@ -80,5 +82,57 @@ describe('social activity barrier confirmation', () => {
   it('maps every confirmed category to free support', () => {
     expect(socialActivitySupportFor('TIME')).toMatchObject({ key: 'FIVE_MINUTE_ACTION' });
     expect(socialActivitySupportFor('UNKNOWN')).toMatchObject({ key: 'MEASUREMENT_SETUP' });
+  });
+
+  it.each([
+    {
+      name: 'legacy evidence',
+      attribution: null,
+      reason: 'ATTRIBUTION_UNAVAILABLE',
+    },
+    {
+      name: 'no observed missions',
+      attribution: buildSocialActivityBarrierGoalAttribution([]),
+      reason: 'NO_OBSERVED_MISSIONS',
+    },
+    {
+      name: 'unattributed missions',
+      attribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', null]),
+      reason: 'UNATTRIBUTED_MISSIONS',
+    },
+    {
+      name: 'mixed goals',
+      attribution: buildSocialActivityBarrierGoalAttribution(['INQUIRY', 'RECRUIT']),
+      reason: 'MIXED_GOALS',
+    },
+  ])('keeps common support for $name', ({ attribution, reason }) => {
+    const value = barrierCase('case_1', 'TIME');
+    value.evidence.goalAttribution = attribution;
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'FIVE_MINUTE_ACTION' },
+      mode: 'COMMON',
+      eligibleGoal: null,
+      fallbackReason: reason,
+    });
+  });
+
+  it('exposes a single fully attributed goal without selecting unconfigured goal copy', () => {
+    const value = barrierCase('case_1', 'LEAD');
+    value.evidence.goalAttribution = buildSocialActivityBarrierGoalAttribution([
+      'INQUIRY',
+      'INQUIRY',
+    ]);
+
+    expect(
+      selectSocialActivitySupport({ category: value.category, evidence: value.evidence }),
+    ).toMatchObject({
+      support: { key: 'LEAD_FOLLOW_UP' },
+      mode: 'COMMON',
+      eligibleGoal: 'INQUIRY',
+      fallbackReason: 'GOAL_SPECIFIC_SUPPORT_NOT_CONFIGURED',
+    });
   });
 });
