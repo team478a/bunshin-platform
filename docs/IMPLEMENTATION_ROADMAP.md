@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Improvement Feedbackの読み取り専用管理画面は`docs/improvement/IMPROVEMENT_FEEDBACK_ADMIN_PREVIEW_IMPLEMENTATION.md`を参照。同Service/SOCIALの管理認可を維持し、完了済みJST週だけを確認する。5人未満のbucketまたは不完全読取は件数/詳細をサーバー側で伏せ、原本参照・RevisionをUIへ渡さない。永続Candidate/承認/自動修正・本番適用は含めない。次は人手トリアージCandidateの最小契約・認可/Revision・保持/削除方針の設計。
+
 Improvement Engine順序5の最初の限定実装は`docs/improvement/IMPROVEMENT_FEEDBACK_REVIEW_EVIDENCE_IMPLEMENTATION.md`を参照。本人報告の限定読取からcode別・根拠付き要確認Evidenceを非永続で組み立て、少数/不完全は保留する。決定的Revision・原本参照を持つが、BUG確定・外部障害除外・永続Candidate/承認・UI/HTTP/Jobは含めない。次はprivacy/管理認可を維持した読み取り専用の確認導線。
 
 Improvement Engineの順序4の読取補完は`docs/improvement/IMPROVEMENT_FEEDBACK_OBSERVATIONS_IMPLEMENTATION.md`を参照。同Workspace/Service/SOCIALの管理権限をDBで再確認し、本人Feedback原本の限定コードを既存観測契約へ渡す。報告件数と人数を分け、母集団/率/原価不明を維持する。管理UI・HTTP・定期Job・BUG確定・本番接続は含めない。次は読み取り専用の要確認Evidence候補の規則と回帰を小さなゴールにする。

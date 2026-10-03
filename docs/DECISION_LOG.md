@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Feedback確認画面: 少人数と原本参照をサーバー側で伏せる
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- PR #1088のEvidenceを同ServiceのADMINISTRATION管理Resolver＋既存AdapterのDB再認可で読み取り専用表示する。Content Editor/参加者/本部の暗黙横断権限を許可しない。公開状態には依存せず、SOCIAL能力のあるBunshinまたは既存SOCIAL報告がある自Serviceだけに接続する。
+- 表示窓は日本時間の完了済み月曜〜日曜、直近12週から選ぶ。任意期間・User/Bunshin/Package/上限の指定は拒否する。固定非重複窓は細分化を減らすが差分攻撃/再識別防止の完全な保証ではない。
+- 表示の仮の少数セル基準は各bucketで5報告者以上。1つでも未達なら全bucketのラベル・件数と全体件数を一括で伏せ、部分合計からの逆算を避ける。読取不完全も詳細/件数を表示しない。5は匿名化保証ではなく運用前レビュー対象。Engineの3報告/2人の人手確認ルールは変更しない。
+- UI向けmodelをサーバー側で明示projectionし、sourceRefs、scope ID、User/Bunshin、clusterRef、Evidence revision、選択digestを除く。CSS非表示やClient componentへraw Evidenceを渡す方式にしない。CSV/コピー/個票/承認/自動修正は追加しない。
+- DB障害/原本不一致は取得不能として扱い、0件にしない。認可失効は404。原因/母集団/率/原価が未確認であることを表示する。Schema/原本書込/依存/本番/配信は変更しない。
+
 ## Improvement Feedback Evidence: 決定的な要確認候補を確定Issueから分離する
 
 - 日付: 2026-10-03、状態: 実装PRで検証。

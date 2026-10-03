@@ -37,6 +37,7 @@ export async function loadServiceManagementHome(serviceSlug: string) {
   if (!records) notFound();
   const {
     group,
+    socialFeedback,
     line,
     linePolicy,
     now,
@@ -201,6 +202,7 @@ export async function loadServiceManagementHome(serviceSlug: string) {
     businessDaily: isBusinessDailyService,
     fortune: isFortuneService,
     promptOnlyImages: isPromptOnlyImageService(configuration.slug),
+    socialFeedback,
   });
 
   return {

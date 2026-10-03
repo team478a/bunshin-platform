@@ -1,5 +1,10 @@
 export const serviceManagementSections = [
   {
+    title: 'SNSの困った報告',
+    description: '本人の報告を読み取り専用で確認します。少人数・不完全な集計は保留します。',
+    href: 'improvement-feedback',
+  },
+  {
     title: '90日集客レポート',
     description: '参加者ごとの投稿、ポイント、集客成果、SNSの変化を確認します。',
     href: '90-day-report',
