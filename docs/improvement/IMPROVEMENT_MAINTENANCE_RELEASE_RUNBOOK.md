@@ -39,6 +39,8 @@
 
 ## Gate 1: 停止・drain（将来の承認済み作業）
 
+2026-10-04の非本番characterizationは[停止/drain条件再現](IMPROVEMENT_MAINTENANCE_DRAIN_REHEARSAL.md)を参照。現行`RunJobWorkerBatch`の`drained=true`は当該claimがnullだった意味で、他request/executor/claim前のretention処理を確認しない。HTTP200やlease期限経過も単独の停止証拠にしない。テスト成功はVercel/旧deploymentを含む停止gateの合格ではない。
+
 1. 自動/手動の新規deployを止める。jobs/scheduleとjobs/runの両方への新規起動を停止する。runだけがretention登録/履歴削除を含むため、schedule停止だけでは不十分。
 2. 旧deploymentを含むすべての起動元と、進行中request/workerの完了を確認する。新規Job登録をする関連操作もメンテナンス対象として特定する。
 3. 全Job種のLEASED状態、lease期限、実行中request/DB transactionを権限制限した運用手段で確認する。5分待つだけ、LEASED=0だけ、ログが静かなだけのいずれか一つで完了としない。

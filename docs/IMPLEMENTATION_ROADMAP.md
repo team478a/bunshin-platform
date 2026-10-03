@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback maintenanceの停止/drain条件再現は`docs/improvement/IMPROVEMENT_MAINTENANCE_DRAIN_REHEARSAL.md`。PR #1105 merge基準の実run HTTP＋実Application workerで、別executor/retentionが実行中でもempty batchのdrained=true、lease期限を過ぎても待機処理未終了、例外＋HTTP200/drained=trueをcharacterizationする。テスト用Portと本番停止方式の保証を分け、fakeに停止guardを実装して合格させない。使い捨てDBの既存migration/preflight回帰を確認し、本番コード/schema/設定は変更しない。本番の全到達経路停止・drain/backup復元後再削除は未完。次はownerによる停止方式と全起動元の確定。現行機能で証明できない場合だけ、最小停止guardを先行別PRとして設計・承認する。
+
 Feedback実Authのブラウザ通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`内の2026-10-04追記。PR #1104 merge基準の新しい隔離runで全HTTP assertionsと、指定Chrome profileの実画面PREPARE→判断確定→記録済みを確認。保存後応答喪失→同一body再送でも監査は増えず、合成原本120件は不変。従来test proxyのNext16.3.3開発用HMR upgrade未転送をテスト専用helperで補完、Postgres初期化のready raceもtest setup内で修正した。本番コード/schema変更なし。通常PKCE/実端末/cookie完全cleanup、本番停止・drain・backup復元後再削除は未完、本番NO-GO維持。次の最小タスクはFeedback maintenanceの停止→drain→preflightを非本番で再現し証跡を確認すること。
 
 Feedback人手確認の実Auth・Next・DB HTTP通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`。合成セッションでGET無保存、正常判断3種類、保存後HTTP応答喪失と同操作再送、actor/Service/Workspace/非管理者/未認証/権限取消、Auth本人削除後拒否を確認。変更はテスト専用helper/文書のみ。ブラウザ接続timeout/unavailableで実画面操作・mobile・通常PKCEは未確認、本番NO-GOを維持。次はbrowser接続/隔離条件の確認後、新runで実画面の終端表示と応答喪失再送をDB証跡へつなぐ。
