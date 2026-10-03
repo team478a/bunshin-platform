@@ -5,8 +5,14 @@ export const IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE = 'IMPROVEMENT_FEEDBACK_PUR
 export const improvementFeedbackPurgePayload = (serviceId: string) =>
   `feedback-purge:feedback-retention-v1:${serviceId}`;
 
+export interface ImprovementFeedbackRetentionSchedulingSummary {
+  scheduled: number;
+  /** Presence only: no scope, actor, source IDs or counts leave the repository. */
+  orphanedScopesDetected: boolean;
+}
+
 export interface ImprovementFeedbackRetentionJobRepository {
-  schedule(environment: JobEnvironment): Promise<{ scheduled: number }>;
+  schedule(environment: JobEnvironment): Promise<ImprovementFeedbackRetentionSchedulingSummary>;
   /** Atomically purge a bounded batch and complete/reschedule the persisted leased Job. */
   execute(job: Job, workerId: string): Promise<Job>;
 }

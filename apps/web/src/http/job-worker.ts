@@ -19,6 +19,7 @@ import {
   RunJobWorkerBatch,
   type JobEnvironment,
   type JobWorkerSummary,
+  type ImprovementFeedbackRetentionSchedulingSummary,
 } from '@bunshin/application';
 import { getServerEnvironment } from '@bunshin/config';
 import { createLogger, requestIdFromHeader } from '@bunshin/observability';
@@ -46,7 +47,7 @@ export interface ServiceCreditExpirationPort {
 }
 
 export interface FeedbackRetentionSchedulingPort {
-  schedule(environment: JobEnvironment): Promise<{ scheduled: number }>;
+  schedule(environment: JobEnvironment): Promise<ImprovementFeedbackRetentionSchedulingSummary>;
 }
 
 async function configuredFeedbackRetention(): Promise<FeedbackRetentionSchedulingPort> {
@@ -193,12 +194,20 @@ export async function jobWorkerResponse(
   try {
     const environment = getServerEnvironment();
     authorizeCronRequest(request, environment.CRON_SECRET);
-    let feedbackRetention = { scheduled: 0 };
+    let feedbackRetention: { scheduled: number | null; orphanedScopesDetected: boolean | null } = {
+      scheduled: null,
+      orphanedScopesDetected: null,
+    };
     let feedbackRetentionSchedulingFailed = false;
     try {
       feedbackRetention = await (
         await retentionFactory()
       ).schedule(runtimeEnvironment[environment.APP_ENV]);
+      if (feedbackRetention.orphanedScopesDetected)
+        logger.error('feedback retention orphaned scope detected', {
+          requestId,
+          errorCode: 'FEEDBACK_RETENTION_ORPHANED_SCOPE',
+        });
     } catch {
       // Maintenance failure must be visible but must not stop ordinary Mission Jobs.
       feedbackRetentionSchedulingFailed = true;
@@ -229,12 +238,14 @@ export async function jobWorkerResponse(
       expiredServiceCredits,
       scheduledFeedbackRetentionJobs: feedbackRetention.scheduled,
       feedbackRetentionSchedulingFailed,
+      feedbackRetentionOrphanedScopesDetected: feedbackRetention.orphanedScopesDetected,
     });
     return Response.json({
       ...result,
       expiredServiceCredits,
       scheduledFeedbackRetentionJobs: feedbackRetention.scheduled,
       feedbackRetentionSchedulingFailed,
+      feedbackRetentionOrphanedScopesDetected: feedbackRetention.orphanedScopesDetected,
       requestId,
     });
   } catch (error) {

@@ -28,7 +28,7 @@ const expiration = (expired = 0): ServiceCreditExpirationPort => ({
 });
 
 const retention = (): FeedbackRetentionSchedulingPort => ({
-  schedule: vi.fn(() => Promise.resolve({ scheduled: 2 })),
+  schedule: vi.fn(() => Promise.resolve({ scheduled: 2, orphanedScopesDetected: false })),
 });
 
 beforeEach(() => {
@@ -88,6 +88,7 @@ describe('job worker HTTP boundary', () => {
       drained: true,
       expiredServiceCredits: 3,
       scheduledFeedbackRetentionJobs: 2,
+      feedbackRetentionOrphanedScopesDetected: false,
     });
   });
 
@@ -125,6 +126,8 @@ describe('job worker HTTP boundary', () => {
     expect(value.execute).toHaveBeenCalledOnce();
     const body = await response.text();
     expect(body).toContain('"feedbackRetentionSchedulingFailed":true');
+    expect(body).toContain('"scheduledFeedbackRetentionJobs":null');
+    expect(body).toContain('"feedbackRetentionOrphanedScopesDetected":null');
     expect(body).not.toContain(secret);
     expect(body).not.toContain('private failure');
   });
@@ -139,5 +142,36 @@ describe('job worker HTTP boundary', () => {
     );
     expect(response.status).toBe(401);
     expect(factory).not.toHaveBeenCalled();
+  });
+
+  it('reports orphan presence only through authenticated Cron without forwarding identities or counts', async () => {
+    const value = worker();
+    const scheduler = {
+      schedule: vi.fn(() =>
+        Promise.resolve({
+          scheduled: 0,
+          orphanedScopesDetected: true,
+          workspaceId: 'private-workspace',
+          serviceId: 'private-service',
+          userId: 'private-user',
+          rawCount: 123,
+          sourceIds: ['private-source'],
+        }),
+      ),
+    };
+    const response = await jobWorkerResponse(
+      new Request('http://localhost/api/internal/jobs/run', {
+        headers: { authorization: `Bearer ${secret}` },
+      }),
+      () => Promise.resolve(value),
+      () => Promise.resolve(expiration()),
+      () => Promise.resolve(scheduler),
+    );
+    expect(response.status).toBe(200);
+    expect(value.execute).toHaveBeenCalledOnce();
+    const body = await response.text();
+    expect(body).toContain('"feedbackRetentionOrphanedScopesDetected":true');
+    expect(body).toContain('"feedbackRetentionSchedulingFailed":false');
+    expect(body).not.toMatch(/private-|sourceIds|rawCount/);
   });
 });
