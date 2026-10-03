@@ -1,12 +1,13 @@
 // Explicit opt-in local test runner. No production auth bypass or application changes.
 import assert from 'node:assert/strict';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, symlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve, join } from 'node:path';
 import http from 'node:http';
+import { attachNextDevelopmentUpgrade } from './feedback-e2e-next-upgrade.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const run = process.env.BUNSHIN_TEST_RUN_ID;
@@ -33,9 +34,12 @@ const admin = jwt('service_role');
 const db = new PrismaClient({ datasources: { db: { url: database } } });
 let next;
 let proxy;
+let closeUpgrade;
+let droppedBrowserReviewDigest;
 let childOutput = '';
 let dropNextReviewResponse = false;
 async function close() {
+  closeUpgrade?.();
   if (proxy) {
     proxy.closeAllConnections();
     proxy.close();
@@ -311,6 +315,10 @@ async function main() {
         headers: { ...req.headers, host: '127.0.0.1:19000' },
       },
       (result) => {
+        const browserDecision =
+          req.url === `/api/services/e2e-browser-${run}/improvement-feedback/review` &&
+          body.includes('"action":"MARK_REVIEWED"');
+        const digest = browserDecision ? createHash('sha256').update(body).digest('hex') : null;
         if (
           dropNextReviewResponse &&
           result.statusCode === 200 &&
@@ -318,9 +326,19 @@ async function main() {
           body.includes('"action":"MARK_REVIEWED"')
         ) {
           dropNextReviewResponse = false;
+          if (browserDecision) {
+            droppedBrowserReviewDigest = digest;
+            console.log('BROWSER post-commit response dropped');
+          }
           result.resume();
           res.destroy();
           return;
+        }
+        if (browserDecision && result.statusCode === 200) {
+          if (droppedBrowserReviewDigest) {
+            console.log(`BROWSER replay same-body=${digest === droppedBrowserReviewDigest}`);
+            droppedBrowserReviewDigest = null;
+          } else console.log('BROWSER decision response 200');
         }
         res.writeHead(result.statusCode ?? 502, {
           ...result.headers,
@@ -336,6 +354,7 @@ async function main() {
     });
     req.pipe(upstream);
   });
+  closeUpgrade = attachNextDevelopmentUpgrade(proxy);
   await new Promise((resolve) => proxy.listen(19000, '127.0.0.1', resolve));
   for (let i = 0; i < 120; i++) {
     if (next.exitCode !== null) {

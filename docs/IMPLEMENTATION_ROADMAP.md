@@ -1,6 +1,6 @@
 # BUNSHIN Platform 実装ロードマップ
 
-Feedback実Authのブラウザ再確認は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`内の2026-10-03追記。PR #1103 merge後の新しい隔離runでHTTP assertionsは再成功、アプリ内ブラウザの管理画面表示まで確認した。ただし確認ボタンから判断フォームへ進まず、browser scopeのcandidate0のまま。最小の合成JavaScript/クリックprobeは成功したので、ブラウザ全体の実行不能とは断定しない。実画面の保存/終端表示/応答喪失再送は未完、原因未確定、本番NO-GO維持。次は選択したChrome profileによる切り分けとアプリのscript配信/実行確認。今回、本番コード/schemaを修正しない。
+Feedback実Authのブラウザ通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`内の2026-10-04追記。PR #1104 merge基準の新しい隔離runで全HTTP assertionsと、指定Chrome profileの実画面PREPARE→判断確定→記録済みを確認。保存後応答喪失→同一body再送でも監査は増えず、合成原本120件は不変。従来test proxyのNext16.3.3開発用HMR upgrade未転送をテスト専用helperで補完、Postgres初期化のready raceもtest setup内で修正した。本番コード/schema変更なし。通常PKCE/実端末/cookie完全cleanup、本番停止・drain・backup復元後再削除は未完、本番NO-GO維持。次の最小タスクはFeedback maintenanceの停止→drain→preflightを非本番で再現し証跡を確認すること。
 
 Feedback人手確認の実Auth・Next・DB HTTP通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`。合成セッションでGET無保存、正常判断3種類、保存後HTTP応答喪失と同操作再送、actor/Service/Workspace/非管理者/未認証/権限取消、Auth本人削除後拒否を確認。変更はテスト専用helper/文書のみ。ブラウザ接続timeout/unavailableで実画面操作・mobile・通常PKCEは未確認、本番NO-GOを維持。次はbrowser接続/隔離条件の確認後、新runで実画面の終端表示と応答喪失再送をDB証跡へつなぐ。
 
