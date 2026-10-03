@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Feedback: 本人の選択式原本を投稿評価・支援ケースから分離する
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- 共通「困った」報告は自己申告信号であり、BUG認定・Mission評価・SNS障壁・運営者SupportCaseへ直接置換しない。専用原本には限定コード、本人Workspace/Service/Bunshin/Package、送信キー、受付時刻だけを保存する。自由文/写真/会話/Memoryを取得しない。
+- 初回入口はSOCIAL能力が有効なサービスの本人ホーム。ハッシー名やOEM名を共通Applicationへハードコードせず、研修・占いへ暗黙拡張しない。Service管理権限は他人のBunshinへの書込み権限にしない。
+- 保存Transaction内で所有・参加・能力を再検証。Workspace/actorのlockとuniqueで同時再送を直列化し、同じキー・同じ内容だけを元の受付結果へ戻す。内容/scope変更は競合、所属失効後は再送も拒否。新規24時間10件の上限と保存済み再送を分ける。
+- 原本の限定コードを将来Adapterで読める境界まで。検知/管理画面/承認/自動指示実行、本番Migration、実通知は含めない。保持期限、退会後削除、他Package入口、実機/E2Eは後続の確認事項として残す。
+
 ## Photo First観測: 開始経路と工程利用を明示参照で残す
 
 - 日付: 2026-10-03
