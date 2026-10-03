@@ -12,6 +12,22 @@
 
 ## 実行環境と隔離
 
+### 2026-10-03 ブラウザ再確認（未完）
+
+基準mainはPR #1103 merge `ccdd669a07fa82315ec207f3f709f59ca6e0c0db`。同PR head `54359a520a41f4379aa1421c891f1ac3ab645378`のverify/database SUCCESSを確認。今回のbranchは`codex/improvement-feedback-real-auth-browser`。既存の同名に近いbrowser検証branchは上書きしていない。
+
+- 新しいrun `8c09a184d401`を上記setup helperで作成。既存226 migrationのdeployがexit0になったことを確認してから、同じHTTP runnerを`BUNSHIN_E2E_KEEP_FOR_BROWSER=8c09a184d401`で実行した。全HTTP assertionのPASS出力とbrowser入口出力を確認した。browser待機のため、この時点ではrunnerは終了していない。
+- 途中、migration完了前にrunnerを開始し`public.users`不存在でexit1になった。fixture作成前の停止であり、成功扱いしない。migration完了後はUser0のpreflightを通った。同じDBのresetや既存データ削除は行わない。
+- アプリ内ブラウザでtest-only入口`http://127.0.0.1:19000/__e2e/login/browser`を開いた。初回navigationはtimeoutしたが、その後のAX/DOM/screenshotで実管理画面の表示を確認した。30報告/5人/6bucket、6個の「確認を始める」、週選択・説明文が表示された。セッションはfixture用実Auth発行cookieであり、通常ログインUI/PKCEの検証ではない。
+- 最初のbucketをAX click、DOM locator click、reload後のEnterで確認。いずれもボタンは「確認を始める」のままで、判断フォームやstatus文言は現れなかった。2026-10-03 22:54:09 +09:00の実DB読取でbrowser Serviceのcandidate0、全Serviceのoperation4（HTTP試験だけ）を確認した。**画面のPREPARE/保存/終端表示/応答喪失再送は未達**。
+- DOM内の5個のscript参照を確認し、該当するmain-app.jsをローカルHTTPで読取すると200/application-javascript、13,531,821 bytesだった。ブラウザ診断ログのerror/warn取得は空だった。これだけではscriptの実行・hydration・全chunk配信成功を証明しない。原因は未確定であり、本番不具合、CSP不具合、ブラウザ不具合のいずれとも断定しない。
+- 追加の合成HTML probeを一時的な127.0.0.1:19003だけに配信した（DB/Auth/外部通信なし、インラインscriptでparagraphの文言を変更するだけ）。同じアプリ内ブラウザで`SCRIPT_NOT_RUN`→`SCRIPT_READY`、ボタンクリック→`CLICK_CONFIRMED`をAXで確認した。ブラウザ全体のJavaScript無効・クリック不能はこの最小条件では再現しない。ただしReact/Next hydration、外部script、eval、実管理画面のAPI送信まで証明するprobeではない。アプリ固有のscript配信/実行を次に切り分ける。
+- Node24/Next dev webpack、実Auth/PostgreSQL、loopback gateway/proxy、合成fixture、通信ガードは前回と同じ。ブラウザの別profile/OS sandbox・cookie cleanup・mobile・実Safariは未確認。接続復旧とSSR画面表示を、ブラウザE2E完了と扱わない。本番NO-GOは維持。
+
+再実行コマンドは後述の手順と同じ。今回の起動は`BUNSHIN_TEST_RUN_ID=8c09a184d401`と`BUNSHIN_E2E_KEEP_FOR_BROWSER=8c09a184d401`をprocess内で設定した。次はユーザーが選んだChrome profileで同じ合成画面を確認し、実行環境依存かを切り分ける。安全対策や本番ロジックを変更して試験を通さない。
+
+ブラウザ試験は未完のため、成功したとのassertionやPR名にしない。終了時に2つの試験tabをcloseし、HTTP runner/probeへCtrl+Cを送った（shell終了コード1、待機中の中断であり全体exit0とは記録しない）。記録した完全container/network IDとtask labelを照合し、当該3container/2networkだけをstop/removeした。合成DBは使い捨てで復元対象ではない。一時mirror `C:\Users\Owner\AppData\Local\Temp\bunshin-feedback-e2e-AaIlvw`は保持し、前回の11mirrorや他checkout/依存junctionを削除していない。tab closeとブラウザcookie/profileの完全削除は区別する。今回も本番変更、課金、実生成、LINE/SNS実送信、merge/deployはない。
+
 - Windows、Node24.21.0、pnpm10.10.0、Vitest4.1.11、Docker29.8.0。Authはcached `public.ecr.aws/supabase/gotrue:v2.192.0`（healthでもv2.192.0）、PostgreSQLはcached16。gatewayに公式`node:24-alpine`を追加取得した。初期のcached別アプリimageはNode単体gatewayだけで使い、その後公式imageへ交換し、最終検証は公式Node24 gatewayで実施した。別アプリ本体は起動していない。
 - image ID: Auth `sha256:b252efb680be37d4a8bf77c210cf0439c19b63a4b51929233a65dd101d25bdab`、Postgres `sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20`、Node `sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1`。再取得時はtagの変更を前提にdigestを再照合する。
 - task専用internal networkにAuthとDBだけを配置。Authの`/proc/net/route`にdefault routeがなく、networkのInternal=trueを確認。Auth DB `auth_e2e`とアプリDBは別database。公式Auth自身のmigrationはAuth専用DBだけに適用し、bunshinのschemaへ混ぜない。
