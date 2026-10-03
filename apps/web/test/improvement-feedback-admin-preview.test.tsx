@@ -11,6 +11,7 @@ import {
   type FeedbackPreviewWindow,
 } from '../src/services/improvement-feedback-admin-preview';
 import { FeedbackAdminSummary } from '../app/s/[serviceSlug]/manage/improvement-feedback/feedback-admin-summary';
+import { safeLineAuthReturnPath, serviceAuthReturnSlug } from '../src/auth/line-return';
 const now = new Date('2026-10-03T01:30:00Z');
 const scope = {
   tenantRef: 'workspace',
@@ -83,6 +84,19 @@ beforeEach(() =>
 );
 afterEach(() => vi.unstubAllGlobals());
 describe('fixed complete-week feedback preview', () => {
+  it('preserves only the scoped bare management destination through login', () => {
+    const path = '/s/synthetic/manage/improvement-feedback';
+    expect(safeLineAuthReturnPath(path)).toBe(path);
+    expect(serviceAuthReturnSlug(path)).toBe('synthetic');
+    for (const unsafe of [
+      `${path}?week=2026-09-21`,
+      `${path}?userId=other`,
+      `${path}/other`,
+      'https://external.invalid' + path,
+      '/s/synthetic/manage/../improvement-feedback',
+    ])
+      expect(safeLineAuthReturnPath(unsafe)).toBeNull();
+  });
   it('uses a complete Monday-Sunday JST window with twelve disjoint choices', () => {
     const value = window();
     expect(value.week).toBe('2026-09-21');

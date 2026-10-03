@@ -11,6 +11,7 @@
 `/s/[serviceSlug]/manage`の「SNSの困った報告」 → `/s/[serviceSlug]/manage/improvement-feedback` → `resolveManagedServiceContext(..., ADMINISTRATION)` → scoped SOCIAL存在確認 → `PrismaImprovementFeedbackObservationAdapter.reviewEvidence` → `BuildImprovementFeedbackReviewEvidence` → サーバー側表示projection → Server Component。
 
 - ログインと同ServiceのSERVICE_OWNER/ADMINを必須にする。CONTENT_EDITOR・参加者・暗黙の本部横断権限は認めない。非公開Serviceでも管理Resolverから本人権限で解決する。リンクにはResolverが返す正規slugを使用する。
+- ログイン戻り先の既存allowlistへ新規管理ページのbare pathだけを追加する。未ログインの場合は週queryを戻り先に付けず既定週へ戻す。query/子パス/外部URL/正規化別名の拒否を維持する。戻り先許可は管理者認可ではなく、ページとAdapterが別途認可する。
 - AdapterがACTIVE管理所属、User/Workspace/Group/設定、Bunshin所有・Service一致をDBで再確認する既存契約を維持する。読取途中の認可失効は404。想定された不存在/拒否だけ404にし、未知の管理Resolver障害は握りつぶさない。
 - 自Workspace/ServiceにSOCIAL capability assignmentを持つBunshin、または既存SOCIAL Feedbackがある場合だけメニューとページを利用可能にする。ブランド名からSNSと推測しない。研修/占い専用Serviceへ暗黙に接続しない。明示的にSOCIALも持つServiceは利用可能。過去の報告確認を妨げないため、この存在確認はcapabilityの現在statusだけで除外しない。存在確認は認可の代替ではない。
 - 外部入力は許可した週の選択だけ。scope、actor、環境、subject=null、上限1,000はサーバーで固定する。tenantRefは既存契約どおりWorkspace namespace。APP_ENVを既存設定から取得し、秘密値を出力しない。
@@ -32,6 +33,7 @@
 - 管理ページ: `improvement-feedback/page.tsx`、`feedback-admin-summary.tsx`。
 - 管理home: repository/data/view-modelと`service-management-navigation.ts`に明示SOCIAL導線を追加する。
 - テスト: `improvement-feedback-admin-preview.test.tsx`、`improvement-feedback-admin-page.test.tsx`、既存navigationテスト。
+- 認証: `line-return.ts`の既存管理ページallowlistへ新ページ1パスだけを追加する。
 - 文書: 本報告、Decision Log、Roadmap、Engine V1、Adapter Contractの最新状態を追記する。過去段階の未実装記録は履歴として維持する。
 
 ## 検証
@@ -47,6 +49,8 @@ pnpm --filter web exec vitest run test/improvement-feedback-admin-preview.test.t
 確認した条件: 完了週/月曜JST境界、12週範囲、重複/未知query拒否、未ログイン・管理権限違い・非SNS拒否、DB再認可拒否、私的scope/subjectの返却拒否、5人開示・1〜4人抑制・大セル＋小セル全体抑制、不完全と空の区別、ID/hash/Revisionの非露出、障害時の非0表示とログ最小化、正規slug導線、既存管理homeモジュール境界。
 
 初回CI `37086703564`は整形と隔離DBが成功し、型チェックで異常なrule版を渡すテストfixtureのliteral型不一致が失敗した。手元の全Web型チェックも同じ不一致で失敗した。異常入力の境界castだけを明示し、拒否assertionを維持して修正する。本番ロジックの緩和ではない。修正後に上記6ファイル77件のテストを再実行して成功した。lint・architecture・整形・差分確認と最新headの通常PR CIは完了時のPR検証欄に実結果を記録する。Vite既存configLoader警告は今回の変更対象ではなく、上記テストの失敗ではない。
+
+次のCI `37087020856`は整形/型/lint/隔離DBが成功し、全体テストで既存`service-auth-route-inventory.test.ts`が新管理ページの戻り先未登録を検出した（Web 421ファイル2,715件成功、1件失敗、既存2件skip）。新ページ1パスを既存allowlistに加え、bare pathの保持とquery/外部/子パス/正規化別名拒否テストを追加する。失敗テストは削除/弱化せず、inventory・LINE戻り先・Auth Return Attemptも追加で再実行する。これらの結果と最終headの全体CIはPR検証欄で区別する。
 
 ## 未確認・運用前条件
 
