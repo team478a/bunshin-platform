@@ -24,13 +24,11 @@ function dependencies() {
   return {
     record,
     actor: vi.fn().mockResolvedValue(id),
-    scope: vi
-      .fn()
-      .mockResolvedValue({
-        workspaceId: id,
-        serviceId: id,
-        configuration: { privateSettings: 'never persist' },
-      }),
+    scope: vi.fn().mockResolvedValue({
+      workspaceId: id,
+      serviceId: id,
+      configuration: { privateSettings: 'never persist' },
+    }),
     repository: () => Promise.resolve({ record }),
   };
 }
