@@ -6156,6 +6156,7 @@ model AccountDeletionOperationAudit {
 
 model Bunshin {
   id                              String                           @id @default(uuid()) @db.Uuid
+  improvementFeedback             ImprovementFeedback[]
   workspaceId                     String                           @map("workspace_id") @db.Uuid
   groupId                         String?                          @map("group_id") @db.Uuid
   ownerUserId                     String                           @map("owner_user_id") @db.Uuid
@@ -6368,6 +6369,25 @@ model BunshinMemory {
   @@index([workspaceId, bunshinId, active, deletedAt, updatedAt])
   @@index([workspaceId, bunshinId, sourceType, sourceId])
   @@map("bunshin_memories")
+}
+
+model ImprovementFeedback {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  serviceId     String   @map("service_id") @db.Uuid
+  bunshinId     String   @map("bunshin_id") @db.Uuid
+  actorUserId   String   @map("actor_user_id") @db.Uuid
+  packageKey    String   @map("package_key") @db.VarChar(30)
+  submissionKey String   @map("submission_key") @db.Uuid
+  category      String   @db.VarChar(20)
+  surface       String   @db.VarChar(20)
+  impact        String   @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  bunshin       Bunshin  @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade, map: "improvement_feedback_scope_fkey")
+
+  @@unique([workspaceId, actorUserId, submissionKey], map: "improvement_feedback_submission_key")
+  @@index([workspaceId, serviceId, packageKey, createdAt], map: "improvement_feedback_scope_time")
+  @@map("improvement_feedback")
 }
 
 model BunshinCapabilityAssignment {

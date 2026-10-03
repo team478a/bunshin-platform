@@ -18,6 +18,7 @@ import { DailyActionSection } from './daily-action-section';
 import { SocialInsightRecorder } from './social-insight-recorder';
 import type { ServiceBunshinDetailModel } from './service-bunshin-detail-data';
 import { ActivityBarrierCard } from './activity-barrier-card';
+import { ImprovementFeedbackForm } from '../../../../ui/improvement-feedback-form';
 
 function MemberHomeDrawer({
   title,
@@ -115,6 +116,15 @@ export function ServiceBunshinDetailView({ model }: { model: ServiceBunshinDetai
             {...(isBusinessDailyService && bunshin.ownerUserId === actor.userId
               ? { photoFirstHref: '#daily-action' }
               : {})}
+          />
+        ) : null}
+        {bunshin.ownerUserId === actor.userId &&
+        capabilities.some(
+          ({ capabilityType, status }) => capabilityType === 'SOCIAL' && status === 'ACTIVE',
+        ) ? (
+          <ImprovementFeedbackForm
+            key={`${service.serviceId}:${bunshin.id}`}
+            endpoint={`/api/services/${encodeURIComponent(service.configuration.slug)}/bunshins/${encodeURIComponent(bunshin.id)}/improvement-feedback`}
           />
         ) : null}
         <SimpleFirstPostSetup

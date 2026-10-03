@@ -1,6 +1,7 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
 import {
+  PrismaImprovementFeedbackRepository,
   PrismaTrainingLifecycleRepository,
   PrismaMissionContentVariantRepository,
   PrismaAiUsageEventRepository,
@@ -189,6 +190,137 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+
+  it('persists owner trouble feedback, serializes concurrent replays and separates service, user, Bunshin and package', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Synthetic feedback owner' });
+    const other = await accounts.execute({ displayName: 'Synthetic feedback other' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic feedback service' },
+    });
+    const siblingGroup = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic feedback sibling' },
+    });
+    await client.serviceConfiguration.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        slug: `feedback-${randomUUID()}`,
+        displayName: 'Synthetic',
+        description: 'Synthetic',
+        operatorName: 'Synthetic',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const membership = await client.groupMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        userId: owner.user.id,
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const create = (ownerUserId: string) =>
+      client.bunshin.create({
+        data: {
+          workspaceId: owner.workspace.id,
+          groupId: group.id,
+          ownerUserId,
+          name: 'Synthetic feedback',
+          slug: `feedback-${randomUUID()}`,
+          type: 'COPY',
+          objectiveSummary: 'O',
+          audienceSummary: 'A',
+          personalitySummary: 'P',
+          capabilityAssignments: {
+            create: {
+              workspaceId: owner.workspace.id,
+              capabilityType: 'SOCIAL',
+              assignedByUserId: owner.user.id,
+            },
+          },
+        },
+      });
+    const bunshin = await create(owner.user.id);
+    const sibling = await create(owner.user.id);
+    const otherBunshin = await create(other.user.id);
+    const input = {
+      workspaceId: owner.workspace.id,
+      serviceId: group.id,
+      bunshinId: bunshin.id,
+      actorUserId: owner.user.id,
+      submissionKey: randomUUID(),
+      packageKey: 'SOCIAL' as const,
+      category: 'OPERATION' as const,
+      surface: 'TODAY' as const,
+      impact: 'BLOCKED' as const,
+    };
+    const repository = new PrismaImprovementFeedbackRepository(client);
+    const [first, second] = await Promise.all([
+      repository.record(input),
+      new PrismaImprovementFeedbackRepository(client).record(input),
+    ]);
+    expect(first).toEqual(second);
+    expect(await client.improvementFeedback.count({ where: { bunshinId: bunshin.id } })).toBe(1);
+    await expect(repository.record({ ...input, impact: 'DIFFICULT' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    await expect(repository.record({ ...input, bunshinId: sibling.id })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    for (const changed of [
+      { actorUserId: other.user.id },
+      { bunshinId: otherBunshin.id },
+      { serviceId: siblingGroup.id },
+      { workspaceId: other.workspace.id },
+    ]) {
+      await expect(repository.record({ ...input, ...changed })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    }
+    expect(() => repository.record({ ...input, packageKey: 'TRAINING' as never })).toThrow(
+      'invalid improvement feedback',
+    );
+    await client.bunshinCapabilityAssignment.updateMany({
+      where: { bunshinId: bunshin.id },
+      data: { status: 'SUSPENDED' },
+    });
+    await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.bunshinCapabilityAssignment.updateMany({
+      where: { bunshinId: bunshin.id },
+      data: { status: 'ACTIVE' },
+    });
+    await client.groupMembership.update({
+      where: { id: membership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.groupMembership.update({
+      where: { id: membership.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    await client.improvementFeedback.createMany({
+      data: Array.from({ length: 9 }, () => ({
+        ...input,
+        id: randomUUID(),
+        submissionKey: randomUUID(),
+      })),
+    });
+    await expect(
+      repository.record({ ...input, submissionKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(await repository.record(input)).toEqual(first);
+    await expect(
+      client.improvementFeedback.create({
+        data: { ...input, submissionKey: randomUUID(), category: 'RAW_PRIVATE_TEXT' },
+      }),
+    ).rejects.toThrow();
+    await client.bunshinCapabilityAssignment.deleteMany({ where: { bunshinId: bunshin.id } });
+    await client.bunshin.delete({ where: { id: bunshin.id } });
+    expect(await client.improvementFeedback.count({ where: { bunshinId: bunshin.id } })).toBe(0);
+  });
 
   it('persists Photo First claim and stage references, blocks cross-owner links and retains costs on provenance deletion', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
