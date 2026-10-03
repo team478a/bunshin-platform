@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
 import {
+  integrationDatabaseTarget,
+  verifyIntegrationDatabase,
+  type IntegrationDatabaseIdentity,
+} from './integration-database-preflight';
+import {
   PrismaImprovementFeedbackRepository,
   PrismaImprovementFeedbackObservationAdapter,
   PrismaTrainingLifecycleRepository,
@@ -116,15 +121,23 @@ import {
   lockTrainingEnrollmentData,
 } from '../src';
 
-const testUrl = process.env['DATABASE_URL'] ?? '';
-const safe =
-  /localhost|127\.0\.0\.1|test/i.test(testUrl) && process.env['APP_ENV'] !== 'production';
-const integration = safe ? describe : describe.skip;
+const integrationTarget = integrationDatabaseTarget(process.env);
 
-integration('database ownership boundaries', () => {
+function verifyLiveDatabase(client: PrismaClient) {
+  return verifyIntegrationDatabase(
+    integrationTarget,
+    () => client.$queryRaw<IntegrationDatabaseIdentity[]>`
+      SELECT datname AS database, shobj_description(oid, 'pg_database') AS marker
+      FROM pg_database WHERE datname = current_database()
+    `,
+  );
+}
+
+describe('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await verifyLiveDatabase(client);
     await client.socialImageSample.deleteMany();
     await client.campaignActivity.deleteMany();
     await client.campaignParticipation.deleteMany();
@@ -6663,8 +6676,9 @@ integration('database ownership boundaries', () => {
   });
 });
 
-integration('authentication return attempt isolation', () => {
+describe('authentication return attempt isolation', () => {
   const client = new PrismaClient();
+  beforeAll(async () => verifyLiveDatabase(client));
   afterAll(async () => client.$disconnect());
   it('enforces single claims, actor-bound consumption and private RLS storage', async () => {
     const ids = [randomUUID(), randomUUID()];
