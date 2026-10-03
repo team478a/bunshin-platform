@@ -117,6 +117,7 @@ export function projectFeedbackAdminPreview(evidence: Evidence, window: Feedback
       reports: bucket.reports,
       reporters: bucket.distinctReporters,
       decision: bucket.reviewDecision === 'REVIEW_REQUIRED' ? '人の確認が必要' : '判定保留',
+      reviewHandle: null as string | null,
     })),
   };
 }

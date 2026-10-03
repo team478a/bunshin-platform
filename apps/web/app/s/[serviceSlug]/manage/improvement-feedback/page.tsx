@@ -61,7 +61,7 @@ export default async function FeedbackAdminPage({
     <PublicShell showPlatformBrand={false}>
       <main className="app-page">
         <header className="app-page__heading">
-          <p className="eyebrow">サービス管理者・読み取り専用</p>
+          <p className="eyebrow">サービス管理者・人手確認</p>
           <h1>SNSの困った報告を確認</h1>
           <p>本人の自己申告を整理します。確定した不具合や、解決済みの記録ではありません。</p>
         </header>
@@ -88,7 +88,11 @@ export default async function FeedbackAdminPage({
           </nav>
         </section>
         {result.outcome === 'PREVIEW' ? (
-          <FeedbackAdminSummary preview={result.preview} />
+          <FeedbackAdminSummary
+            key={`${service.serviceId}:${window.outcome === 'WINDOW' ? window.week : ''}`}
+            preview={result.preview}
+            reviewEndpoint={`/api/services/${service.configuration.slug}/improvement-feedback/review`}
+          />
         ) : (
           <section className="settings-card">
             <h2>確認を保留しています</h2>
