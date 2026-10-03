@@ -79,4 +79,50 @@ describe('approved feedback retention internal boundary', () => {
       'erase fault',
     );
   });
+  it('detaches destructive scope and clock before a lock await', async () => {
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const model = () => ({
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    });
+    const tx = {
+      $queryRaw: vi.fn(() => barrier),
+      improvementFeedback: model(),
+      improvementTriageCandidate: model(),
+      improvementTriageOperation: model(),
+    };
+    const client = { $transaction: (work: (value: typeof tx) => Promise<unknown>) => work(tx) };
+    const input = {
+      workspaceId: '00000000-0000-4000-8000-000000000001',
+      serviceId: '00000000-0000-4000-8000-000000000002',
+      now: new Date('2026-10-03T03:00:00Z'),
+    };
+    const pending = purgeExpiredImprovementFeedback(client as never, input);
+    input.workspaceId = '00000000-0000-4000-8000-000000000003';
+    input.serviceId = '00000000-0000-4000-8000-000000000004';
+    input.now.setTime(0);
+    release();
+    await pending;
+    expect(tx.improvementFeedback.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: '00000000-0000-4000-8000-000000000001',
+          serviceId: '00000000-0000-4000-8000-000000000002',
+          createdAt: { lte: new Date('2026-07-05T03:00:00Z') },
+        },
+      }),
+    );
+    expect(tx.improvementTriageCandidate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: '00000000-0000-4000-8000-000000000001',
+          serviceId: '00000000-0000-4000-8000-000000000002',
+          expiresAt: { lte: new Date('2026-10-03T03:00:00Z') },
+        },
+      }),
+    );
+  });
 });

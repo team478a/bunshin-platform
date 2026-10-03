@@ -35,12 +35,13 @@ export async function purgeExpiredImprovementFeedback(
   client: PrismaClient,
   input: { workspaceId: string; serviceId: string; now?: Date; limit?: number },
 ) {
+  const scope = { workspaceId: input.workspaceId, serviceId: input.serviceId };
   const now = new Date(input.now ?? new Date());
   const limit = input.limit ?? 100;
   const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
   if (
-    !uuid.test(input.workspaceId) ||
-    !uuid.test(input.serviceId) ||
+    !uuid.test(scope.workspaceId) ||
+    !uuid.test(scope.serviceId) ||
     !Number.isFinite(now.getTime()) ||
     !Number.isInteger(limit) ||
     limit < 1 ||
@@ -49,8 +50,7 @@ export async function purgeExpiredImprovementFeedback(
     throw new ApplicationError('VALIDATION_ERROR', 'invalid feedback purge scope');
   return client.$transaction(
     async (tx) => {
-      await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id = ${input.workspaceId}::uuid AND id = ${input.serviceId}::uuid FOR UPDATE`;
-      const scope = { workspaceId: input.workspaceId, serviceId: input.serviceId };
+      await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id = ${scope.workspaceId}::uuid AND id = ${scope.serviceId}::uuid FOR UPDATE`;
       const sources = await tx.improvementFeedback.findMany({
         where: { ...scope, createdAt: { lte: new Date(now.getTime() - 90 * day) } },
         select: { id: true },

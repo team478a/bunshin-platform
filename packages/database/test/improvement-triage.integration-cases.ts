@@ -335,7 +335,7 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
       }
       await client.groupMembership.update({
         where: { id: f.membership.id },
-        data: { serviceRole: 'SERVICE_ADMIN', status: 'REVOKED' },
+        data: { serviceRole: 'SERVICE_ADMIN', status: 'REVOKED', revokedAt: now },
       });
       await expect(f.review()).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
@@ -369,11 +369,13 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
         },
         { timeout: 20_000 },
       );
+      const completed = Promise.allSettled([reviewing, deleting]);
       try {
         await deleteStarted.promise;
         await blocked(label);
       } finally {
         release.resolve();
+        await completed;
       }
       await reviewing;
       await deleting;
@@ -420,10 +422,12 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
         new PrismaImprovementFeedbackTriageRepository(tagged, f.scope, () => now),
       );
       const rejected = expect(reviewing).rejects.toMatchObject({ code: 'CONFLICT' });
+      const completed = Promise.allSettled([deleting, rejected]);
       try {
         await blocked(label);
       } finally {
         release.resolve();
+        await completed;
       }
       await deleting;
       await rejected;
@@ -459,16 +463,18 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
           started.resolve();
           await tx.groupMembership.update({
             where: { id: f.membership.id },
-            data: { status: 'REVOKED' },
+            data: { status: 'REVOKED', revokedAt: now },
           });
         },
         { timeout: 20_000 },
       );
+      const completed = Promise.allSettled([reviewing, revoking]);
       try {
         await started.promise;
         await blocked(label);
       } finally {
         release.resolve();
+        await completed;
       }
       await reviewing;
       await revoking;
@@ -575,6 +581,7 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
         where: { id: request.id },
         data: {
           status: 'PROCESSING',
+          blockedReason: null,
           leaseOwner: 'synthetic-worker',
           leaseExpiresAt: new Date(now.getTime() + day),
         },

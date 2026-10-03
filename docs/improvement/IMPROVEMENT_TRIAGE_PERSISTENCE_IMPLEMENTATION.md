@@ -46,7 +46,9 @@ pnpm architecture:check
 git diff --check
 ```
 
-ローカル4ファイル45件成功（新規8件含む）。型チェックでfixtureの不存在MEMBER roleとEvidence rootの不存在sourceRefsを検出し、実PARTICIPANT・bucket sourceRefsへ修正。初回lintのrequire-await/unsafe reflection returnも修正する。最終型/lint/全体CI・実DB結果は最新headのPR検証欄に記録する。
+初回ローカル4ファイル45件成功、scope/時計のawait中変更を固定するテスト追加後は46件（新規9件含む）。Application回帰3ファイル103件も成功。型チェックでfixtureの不存在MEMBER roleとEvidence rootの不存在sourceRefsを検出し、実PARTICIPANT・bucket sourceRefsへ修正。初回lintのrequire-await/unsafe reflection returnも修正後に成功。最終型/lint/全体CI・実DB結果は最新headのPR検証欄に記録する。
+
+初回CI head `c69cc28e66ca9997ab053690b6ebf1ef0ce755aa` の隔離DBは66成功/3失敗＋未処理拒否1件。fixtureがREVOKEDのrevokedAtとBLOCKED→PROCESSINGのblockedReason消去を欠き、既存DB CHECKが正しく拒否した。これに伴い失効barrierにも到達しなかった。fixtureを実状態契約へ合わせ、失敗時もbarrier解除と並行Promise回収を行う。安全assertion/DB制約は緩めず、skip/期待失敗にしない。旧headの成功ケースだけを最新headの検証完了とは扱わない。
 
 ローカルDocker daemonは未起動。実DB試験をローカル成功として報告しない。通常CIは隔離PostgreSQL16にmigrationを適用し、既存 `pnpm test:integration` が `database.integration.test.ts` から `registerImprovementTriageIntegrationCases` を実行する。既存環境guardを変更していない。テストは合成User/素材なし・fetch guard付き。テスト専用障害triggerはfinallyで復元し、本番へ入れない。
 

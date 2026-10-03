@@ -78,7 +78,14 @@ export class PrismaImprovementFeedbackTriageRepository implements ImprovementFee
       scope.adapterKey !== 'TROUBLE_FEEDBACK'
     )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid feedback repository scope');
-    this.scope = { ...scope };
+    this.scope = {
+      tenantRef: scope.tenantRef,
+      workspaceId: scope.workspaceId,
+      serviceId: scope.serviceId,
+      environment: scope.environment,
+      packageKey: scope.packageKey,
+      adapterKey: scope.adapterKey,
+    };
   }
   private async authorize(tx: Prisma.TransactionClient, actorUserId: string) {
     const s = this.scope;
