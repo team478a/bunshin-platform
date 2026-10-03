@@ -77,6 +77,16 @@ describe('common trouble feedback persistence', () => {
     expect(tx.improvementFeedback.create).not.toHaveBeenCalled();
     expect(tx.improvementFeedback.count).not.toHaveBeenCalled();
   });
+  it('rejects an expired raw-feedback replay without renewing or creating a source', async () => {
+    const { repository, tx } = fixture({
+      ...input,
+      id,
+      createdAt: new Date('2000-01-01T00:00:00Z'),
+    });
+    await expect(repository.record(input)).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(tx.improvementFeedback.create).not.toHaveBeenCalled();
+    expect(tx.improvementFeedback.count).not.toHaveBeenCalled();
+  });
   it.each(['serviceId', 'bunshinId', 'packageKey', 'category', 'surface', 'impact'] as const)(
     'rejects conflicting %s without overwriting',
     async (field) => {

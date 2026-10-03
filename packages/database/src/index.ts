@@ -280,3 +280,8 @@ export { PrismaHassySupportImprovementAdapter } from './hassy-improvement-suppor
 export { PrismaHassyPhotoQualityImprovementAdapter } from './hassy-improvement-photo-quality-adapter';
 export { PrismaImprovementFeedbackRepository } from './improvement-feedback';
 export { PrismaImprovementFeedbackObservationAdapter } from './improvement-feedback-observation-adapter';
+export { PrismaImprovementFeedbackTriageRepository } from './improvement-feedback-triage';
+export {
+  purgeExpiredImprovementFeedback,
+  IMPROVEMENT_FEEDBACK_RETENTION_POLICY,
+} from './improvement-feedback-retention';

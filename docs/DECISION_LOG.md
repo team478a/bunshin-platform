@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Candidate保存: 承認された保持方針と削除を同じ境界へ接続
+
+- 日付: 2026-10-03。基準main `4d9bfaa1d2316a62b11cee71726e2f9228903648`。ユーザーは原本受付90日、候補週終了90日、限定監査操作180日、本人削除/退会完了時の原本削除・候補失効・監査本人参照除去、組織所有の手動確認維持を提示後「進めてください」と承認した。
+- 固定版 `feedback-retention-v1` をサーバー内部で使用。原本は期限超過時に読取対象外、候補も保存/再送で期限延長しない。新表はCandidateと最小操作監査のみ。原本リンクやEvidence JSON/count/本人情報を複製しない。
+- 同Service行のTransaction lockと原本変更DB triggerにより書込・原本削除を直列化し、直接削除/cascadeでも週全体hashを消去・STALE化する。管理者/User/Workspace/Service設定の行lockで失効と操作の順序を固定する。DB失敗は全rollbackし自動再実行しない。
+- 既存退会完了Transaction内で本人原本削除と監査actor消去を実施。組織資産のmanual reviewを迂回しない。HTTP/UI書込・承認・自動修正・Provider・本番接続/デプロイは今回対象外。隔離Postgres CIの検証と本番適用を分ける。
+
 ## Improvement Candidate純粋契約: Repositoryの原子性をPortとして要求し、DB実証と分ける
 
 - 日付: 2026-10-03。PR #1090 merge後の基準main `50523d5fbcc7530a7bb9ecb6e612e0d9faa0069b`。

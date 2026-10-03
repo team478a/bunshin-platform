@@ -56,6 +56,8 @@ export class PrismaImprovementFeedbackRepository implements ImprovementFeedbackR
           existing.impact !== input.impact
         )
           throw new ApplicationError('CONFLICT', 'feedback submission key reused');
+        if (existing.createdAt.getTime() <= Date.now() - 90 * 86_400_000)
+          throw new ApplicationError('CONFLICT', 'feedback replay expired');
         return { id: existing.id, createdAt: existing.createdAt };
       }
       const recent = await tx.improvementFeedback.count({

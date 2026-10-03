@@ -45,7 +45,7 @@ export interface ImprovementTriageOperation {
   reasonCode: ReviewImprovementFeedbackInput['reasonCode'];
   receipt: ImprovementTriageReceipt;
 }
-/** All methods belong to ONE atomic snapshot/lock boundary. No production implementation yet. */
+/** All methods belong to ONE atomic snapshot/lock boundary. */
 export interface ImprovementFeedbackTriageTransaction {
   authorize(): Promise<boolean>; // ACTIVE same-Service owner/admin + active User/Workspace/Service
   policy(): Promise<ImprovementTriagePolicy | null>; // trusted reviewed configuration, not caller input
@@ -69,7 +69,7 @@ export interface ImprovementFeedbackTriageRepository {
 }
 const conflict = () => new ApplicationError('CONFLICT', 'feedback review requires revalidation');
 const day = 86_400_000;
-/** Internal contract only: no DB implementation, HTTP, candidate creation or implementation approval. */
+/** Internal review contract only: no HTTP or implementation approval. */
 export class ReviewImprovementFeedbackCandidate {
   constructor(
     private readonly repository: ImprovementFeedbackTriageRepository,
