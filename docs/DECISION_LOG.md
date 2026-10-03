@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## Feedback maintenanceの非互換移行は停止証明を本番gateにする
+
+- 2026-10-03、PR #1095 merge後main `6fd55288a47faee12f4379fc5a384d4b538265d5`。次のゴールはリリースRunbookのみ。本番停止/DB操作/deployを承認済みと扱わない。
+- `jobs/run`はworker前にretention.schedule/履歴cleanupを実行する。scheduleだけの停止、lease5分待機、health readinessだけでは安全な移行を証明できない。
+- production buildは新アプリ公開前にDBを移行する。既存機能で旧deployment/手動起動を含む停止を証明できない場合はNO-GOとし、停止guardの先行PRを別判断にする。secret変更や新Workerへ先回りしない。
+- DB移行後は旧アプリpromoteを一般rollback手順として使わない。新契約対応版を維持し、不可逆削除/backup復元後の再削除を別承認する。`docs/improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md`が対象移行の運用条件。
+
 ## Feedback purge Job限定のmaintenance主体と終端履歴保持
 
 - 2026-10-03、PR #1094 merge後main `f1bb8f9b2d5c4d606fd7cae4f2ec9fbcf635917e`。ユーザーはpurge限定の本人参照なし、既存対象の限定移行、終端後180日保持、稼働中Job非削除、通常Jobへの非横展開を「はい」で承認した。
