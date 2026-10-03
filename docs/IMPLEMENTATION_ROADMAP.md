@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+DB統合試験の隔離preflightは`docs/improvement/INTEGRATION_DATABASE_PREFLIGHT_IMPLEMENTATION.md`。曖昧なURL substring/skipを廃止し、実行環境・完全一致接続先・run限定DB/commentを削除/fixture書込前に確認する。既存GitHub専用PostgreSQL serviceは固定構成のみ維持し、CI/本番コード/schemaは変更しない。実認証E2Eと本番gateは未完。次は一時DBの既存fixture cleanupを2回連続実行で確認し、FK順序問題をテスト専用PRで修正する。
+
 Feedback人手確認の実HTTP/認証/DB E2Eの条件は`docs/improvement/IMPROVEMENT_FEEDBACK_E2E_READINESS.md`。合成データの使い捨てローカルPostgreSQLで既存migration・DB統合試験を確認し、実認証にSupabase Authが必要であることを実経路から整理する。現行CI/React fixtureだけでは実認証E2Eではない。本番NO-GOを維持。次は破壊的DBテスト前の厳密な隔離preflightをテスト専用PRで追加し、その後ローカル実Auth環境の実行条件を承認確認する。
 
 Feedback人手確認の非本番ブラウザ検証と終端表示修正は`docs/improvement/IMPROVEMENT_FEEDBACK_BROWSER_VERIFICATION.md`。実React/fake応答の9ケースと表示単体回帰を確認し、記録済み・画面更新が必要・同じ内容で再送を区別する。HTTP/DB/送信・再送契約は変更しない。実認証/DB/実端末E2Eは未確認で、本番NO-GOを維持。次は隔離した実HTTP/認証/DB E2Eの実行条件を確定する。
