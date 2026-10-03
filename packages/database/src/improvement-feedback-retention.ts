@@ -30,7 +30,7 @@ export async function eraseAccountImprovementFeedback(
   return { sourcesDeleted: sources.count, auditActorsErased: audits.count };
 }
 
-/** Internal bounded batch only. No scheduler/HTTP/prod invocation is added here. */
+/** Internal bounded batch. Scheduler callers must authorize their own execution lease. */
 export async function purgeExpiredImprovementFeedback(
   client: PrismaClient,
   input: { workspaceId: string; serviceId: string; now?: Date; limit?: number },
@@ -49,42 +49,51 @@ export async function purgeExpiredImprovementFeedback(
   )
     throw new ApplicationError('VALIDATION_ERROR', 'invalid feedback purge scope');
   return client.$transaction(
-    async (tx) => {
-      await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id = ${scope.workspaceId}::uuid AND id = ${scope.serviceId}::uuid FOR UPDATE`;
-      const sources = await tx.improvementFeedback.findMany({
-        where: { ...scope, createdAt: { lte: new Date(now.getTime() - 90 * day) } },
-        select: { id: true },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: limit,
-      });
-      const candidates = await tx.improvementTriageCandidate.findMany({
-        where: { ...scope, expiresAt: { lte: now } },
-        select: { id: true },
-        orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
-        take: limit,
-      });
-      const audits = await tx.improvementTriageOperation.findMany({
-        where: { ...scope, expiresAt: { lte: now } },
-        select: { id: true },
-        orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
-        take: limit,
-      });
-      const removedSources = await tx.improvementFeedback.deleteMany({
-        where: { ...scope, id: { in: sources.map((r) => r.id) } },
-      });
-      const removedCandidates = await tx.improvementTriageCandidate.deleteMany({
-        where: { ...scope, id: { in: candidates.map((r) => r.id) } },
-      });
-      const removedAudits = await tx.improvementTriageOperation.deleteMany({
-        where: { ...scope, id: { in: audits.map((r) => r.id) } },
-      });
-      return {
-        sourcesDeleted: removedSources.count,
-        candidatesDeleted: removedCandidates.count,
-        auditsDeleted: removedAudits.count,
-        possiblyMore: [sources, candidates, audits].some((rows) => rows.length === limit),
-      };
-    },
+    (tx) => purgeExpiredImprovementFeedbackInTransaction(tx, { ...scope, now, limit }),
     { timeout: 20_000 },
   );
+}
+
+/** Package-internal reuse; the caller owns the transaction and Job lease lock. */
+export async function purgeExpiredImprovementFeedbackInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; serviceId: string; now: Date; limit: number },
+) {
+  const scope = { workspaceId: input.workspaceId, serviceId: input.serviceId };
+  const now = new Date(input.now);
+  const limit = input.limit;
+  await tx.$queryRaw`SELECT id FROM groups WHERE workspace_id = ${scope.workspaceId}::uuid AND id = ${scope.serviceId}::uuid FOR UPDATE`;
+  const sources = await tx.improvementFeedback.findMany({
+    where: { ...scope, createdAt: { lte: new Date(now.getTime() - 90 * day) } },
+    select: { id: true },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+  const candidates = await tx.improvementTriageCandidate.findMany({
+    where: { ...scope, expiresAt: { lte: now } },
+    select: { id: true },
+    orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+  const audits = await tx.improvementTriageOperation.findMany({
+    where: { ...scope, expiresAt: { lte: now } },
+    select: { id: true },
+    orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+  const removedSources = await tx.improvementFeedback.deleteMany({
+    where: { ...scope, id: { in: sources.map((r) => r.id) } },
+  });
+  const removedCandidates = await tx.improvementTriageCandidate.deleteMany({
+    where: { ...scope, id: { in: candidates.map((r) => r.id) } },
+  });
+  const removedAudits = await tx.improvementTriageOperation.deleteMany({
+    where: { ...scope, id: { in: audits.map((r) => r.id) } },
+  });
+  return {
+    sourcesDeleted: removedSources.count,
+    candidatesDeleted: removedCandidates.count,
+    auditsDeleted: removedAudits.count,
+    possiblyMore: [sources, candidates, audits].some((rows) => rows.length === limit),
+  };
 }
