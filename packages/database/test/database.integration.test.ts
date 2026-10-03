@@ -280,9 +280,9 @@ integration('database ownership boundaries', () => {
         code: 'NOT_FOUND',
       });
     }
-    await expect(
-      repository.record({ ...input, packageKey: 'TRAINING' as never }),
-    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(() => repository.record({ ...input, packageKey: 'TRAINING' as never })).toThrow(
+      'invalid improvement feedback',
+    );
     await client.bunshinCapabilityAssignment.updateMany({
       where: { bunshinId: bunshin.id },
       data: { status: 'SUSPENDED' },

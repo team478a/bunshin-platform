@@ -31,6 +31,14 @@ function fixture(existing: object | null = null, allowed = true, count = 0) {
   return { repository, tx };
 }
 describe('common trouble feedback persistence', () => {
+  it('rejects an unsupported package synchronously before opening a transaction', () => {
+    const { repository, tx } = fixture();
+    expect(() => repository.record({ ...input, packageKey: 'TRAINING' as never })).toThrow(
+      'invalid improvement feedback',
+    );
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+    expect(tx.improvementFeedback.create).not.toHaveBeenCalled();
+  });
   it('authorizes all owner boundaries and active capability before storing', async () => {
     const { repository, tx } = fixture();
     await repository.record(input);

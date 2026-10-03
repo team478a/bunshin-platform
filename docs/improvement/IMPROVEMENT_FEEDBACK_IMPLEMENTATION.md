@@ -49,7 +49,7 @@ Service/actorのBunshin所有対応はRepository認可でありSQL複合FKによ
 Node 24.21.0 / pnpm 10.10.0 / Windows PowerShell。
 
 - Application契約: 10テスト成功。
-- Repository mock: 10テスト成功。実where句・保存指示・再送/競合・失敗伝播を検証。
+- Repository mock: 11テスト。実where句・保存指示・再送/競合・失敗伝播、未対応Packageの同期Validation拒否を検証。
 - Web HTTP: 8テスト成功。fake依存とfetch禁止ガード、追加フィールド/過大本文/Origin/未認証/保存障害を確認。
 - 実DB統合: `test/database.integration.test.ts`に同時2インスタンス、本人境界、別Bunshin/Service/Workspace/User/Package、所属/能力失効、上限/再送、CHECK、削除連動を追加。隔離PostgreSQL16の通常PR CIで検証する。本番DBは使わない。
 - `pnpm --filter @bunshin/database db:validate`: 初回DIRECT_URL未設定で停止。その後、接続しない架空localhost URLで再実行し成功。
