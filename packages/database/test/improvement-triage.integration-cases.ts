@@ -811,6 +811,50 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
         await client.improvementTriageOperation.count({ where: { serviceId: f.group.id } }),
       ).toBe(0);
     });
+    it('triage persistence: public non-owner DB role cannot select or insert candidates/audit', async () => {
+      const f = await fixture();
+      await f.review();
+      await client.$executeRawUnsafe('CREATE ROLE test_triage_public NOLOGIN');
+      await client.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO test_triage_public');
+      await client.$executeRawUnsafe(
+        'GRANT SELECT, INSERT ON improvement_triage_candidates, improvement_triage_operations TO test_triage_public',
+      );
+      try {
+        const visible = await client.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe('SET LOCAL ROLE test_triage_public');
+          return tx.$queryRaw<{ candidates: bigint; audits: bigint }[]>`SELECT
+            (SELECT count(*) FROM improvement_triage_candidates WHERE id = ${f.candidate.id}::uuid) AS candidates,
+            (SELECT count(*) FROM improvement_triage_operations WHERE candidate_id = ${f.candidate.id}::uuid) AS audits`;
+        });
+        expect(visible).toEqual([{ candidates: 0n, audits: 0n }]);
+        const row = await client.improvementTriageCandidate.findUniqueOrThrow({
+          where: { id: f.candidate.id },
+        });
+        await expect(
+          client.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe('SET LOCAL ROLE test_triage_public');
+            return tx.improvementTriageCandidate.create({ data: { ...row, id: randomUUID() } });
+          }),
+        ).rejects.toThrow('row-level security');
+        const audit = await client.improvementTriageOperation.findFirstOrThrow({
+          where: { candidateId: f.candidate.id },
+        });
+        await expect(
+          client.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe('SET LOCAL ROLE test_triage_public');
+            return tx.improvementTriageOperation.create({
+              data: { ...audit, id: randomUUID(), operationKey: randomUUID() },
+            });
+          }),
+        ).rejects.toThrow('row-level security');
+      } finally {
+        await client.$executeRawUnsafe(
+          'REVOKE ALL ON improvement_triage_candidates, improvement_triage_operations FROM test_triage_public',
+        );
+        await client.$executeRawUnsafe('REVOKE USAGE ON SCHEMA public FROM test_triage_public');
+        await client.$executeRawUnsafe('DROP ROLE test_triage_public');
+      }
+    });
     it('triage persistence: candidate and audit CHECK/scope constraints reject invalid direct writes', async () => {
       const f = await fixture();
       await f.review();

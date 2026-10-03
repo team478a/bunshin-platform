@@ -58,6 +58,8 @@ git diff --check
 
 ## 残条件・切り戻し
 
+head `2b3d88a4d05830155ac1bcf9e675206eb4040b78` は隔離DB70件成功後、全体回帰が新表RLSとschema-readiness定数の更新漏れを検出した。新表は既存と同じENABLE ROW LEVEL SECURITY/公開policyなしとし、定数を今回migrationへ更新。非ownerテスト専用DBロール（CI内だけ作成・finallyで削除）でSELECT0件とINSERT拒否を追加する。RLS/readiness回帰は削除・緩和しない。実Supabase Data API/本番ロール構成を確認したことにはしない。
+
 次の最小タスクは既存Jobによるscope限定purgeの配信/lease/完了判定を接続し、遅延・再送・期限処理を検証すること。**現時点では定期物理削除を運用保証しない**。保持を守って本番公開するにはこの接続、監視、承認済みmigration適用と既存バックアップ保持/復元時削除再適用の運用確認が必要。UI書込口の前にopaque handle/CSRF/失効/情報非露出も別PRで検証する。
 
 本番負荷（原本row triggerとService直列化）、大量削除の時間/ロック、全テナント運用、ログ/backupのコピー保持は未確認。新Worker/キューは作らない。rollbackは書込接続を止めRepository/exportを戻す。既存Feedback・退会の削除保護を安易に戻さず、DB追加表/triggerの削除は別の承認済みmigrationと検証で扱う。今回本番migration・drop・デプロイは実行しない。

@@ -67,6 +67,9 @@ CREATE UNIQUE INDEX "triage_operation_scope_key" ON "improvement_triage_operatio
  ("tenant_ref","workspace_id","service_id","environment","package_key","adapter_key","operation_key");
 CREATE INDEX "improvement_triage_operations_actor_user_id_idx" ON "improvement_triage_operations" ("actor_user_id");
 CREATE INDEX "improvement_triage_operations_expires_at_idx" ON "improvement_triage_operations" ("expires_at");
+ALTER TABLE "improvement_triage_candidates" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "improvement_triage_operations" ENABLE ROW LEVEL SECURITY;
+-- No public policies: these tables are accessed only via the authorized server Repository.
 
 CREATE FUNCTION validate_feedback_triage_operation_scope() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
