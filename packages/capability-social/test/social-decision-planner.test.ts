@@ -195,6 +195,16 @@ describe('unconnected SOCIAL Decision Context to real Brief planner preparation'
     ).toThrow('not ready');
   });
 
+  it('keeps a superseded strategy effective only for its matching confirmed weekly snapshot', () => {
+    const value = input();
+    value.plannerInput.approvedStrategy.status = 'SUPERSEDED';
+    value.plannerInput.approvedStrategy.supersededAt = new Date('2026-08-20T00:00:00Z');
+    expect(prepareSocialDecisionPlannerInput(value).context.status).toBe('READY');
+
+    value.plannerInput.weeklyPlan.strategyId = 'another-strategy';
+    expect(() => prepareSocialDecisionPlannerInput(value)).toThrow('not ready');
+  });
+
   it('bounds complete JSON and reports omissions without slicing JSON or fabricating missing values', () => {
     const value = input();
     value.observations = Array.from({ length: 30 }, (_, i) => {

@@ -333,7 +333,14 @@ export function normalizeSocialDecisionContext(
   if (strategy) {
     assertRowScope(scope, strategy);
     validateEnum(strategy.goal, SOCIAL_ACCOUNT_STRATEGY_GOALS, 'strategy goal');
-    if (strategy.status !== 'APPROVED' || strategy.approvedAt === null)
+    const effectiveSnapshotStrategy =
+      strategy.status === 'SUPERSEDED' &&
+      weekly?.strategyId === strategy.id &&
+      weekly.strategyGoal === strategy.goal;
+    if (
+      (strategy.status !== 'APPROVED' && !effectiveSnapshotStrategy) ||
+      strategy.approvedAt === null
+    )
       review.push('STRATEGY_NOT_APPROVED');
     if (strategy.goal !== goal) review.push('STRATEGY_GOAL_MISMATCH');
     if (

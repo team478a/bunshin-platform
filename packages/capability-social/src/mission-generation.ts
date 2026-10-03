@@ -232,7 +232,12 @@ export class GenerateDailyMissionBrief {
       input.approvedStrategy.bunshinId !== input.bunshinId ||
       input.approvedStrategy.socialProfileId !== input.socialProfile.id ||
       input.approvedStrategy.platform !== input.socialProfile.platform ||
-      input.approvedStrategy.status !== 'APPROVED'
+      (input.approvedStrategy.status !== 'APPROVED' &&
+        !(
+          input.approvedStrategy.status === 'SUPERSEDED' &&
+          input.weeklyPlan.strategyId === input.approvedStrategy.id &&
+          input.weeklyPlan.strategyGoal === input.approvedStrategy.goal
+        ))
     )
       throw new ApplicationError('NOT_FOUND', 'approved strategy not found');
     if (
