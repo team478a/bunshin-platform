@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement人手確認候補: 保存より先に削除とRevision失効の契約を固定する
+
+- 日付: 2026-10-03、状態: 設計提案（保持日数/削除方針は未承認）。基準main `f50f1ee5d58f02f0e9abfc309f8de31f405e963d`、PR #1089 merge後。
+- `docs/improvement/IMPROVEMENT_TRIAGE_CANDIDATE_DESIGN.md`を参照。本人Feedbackの限定bucketを人手トリアージ候補として分離し、REVIEWEDを確定BUG/APPROVEDへ自動昇格させない。既存OEM支援CandidateやPlatform Admin監査を保存/認可の代替にしない。
+- 原本cascadeはBunshin物理削除時だけで、既存退会purgeのsoft deleteはFeedback削除を保証しない。永続化前に保持・原本削除・候補失効・限定audit消去の連携をレビューする。原本ID/旧Evidence/hashを監査へ複製しない。
+- 同Service owner/admin再認可、週全体/対象bucket Evidence版、Candidate CAS版、操作再送UUIDを分離する。読取後に別txで保存するだけでは競合を解決せず、削除/所属失効も含むTransaction/lock順序を後続で検証する。少数セル/不完全は作成操作からも迂回させない。
+- 次はschema/HTTP/UIなしの純粋契約・fake否定テスト。原本/候補90日、限定audit180日の値は運用提案であって確定方針ではない。実装承認・自動修正・通知・新Worker/Providerは別判断。今回は文書だけ。
+
 ## Improvement Feedback確認画面: 少人数と原本参照をサーバー側で伏せる
 
 - 日付: 2026-10-03、状態: 実装PRで検証。
