@@ -2,6 +2,8 @@ import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
 import {
   PrismaTrainingLifecycleRepository,
+  PrismaMissionContentVariantRepository,
+  PrismaAiUsageEventRepository,
   PrismaTrainingEndDateRepository,
   listTrainingAdminEvaluationMetrics,
   PrismaTrainingRetentionAdminPreviewRepository,
@@ -187,6 +189,165 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+
+  it('persists Photo First claim and stage references, blocks cross-owner links and retains costs on provenance deletion', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Provenance owner' });
+    const other = await accounts.execute({ displayName: 'Provenance other' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Synthetic provenance',
+      slug: `provenance-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'O',
+      audienceSummary: 'A',
+      personalitySummary: 'P',
+    });
+    const mission = await client.dailyMission.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        missionDate: new Date('2026-10-03Z'),
+        format: 'TEXT',
+        estimatedMinutes: 5,
+        topic: 'Synthetic',
+        angle: 'Synthetic',
+        reason: 'Synthetic',
+      },
+    });
+    const scope = {
+      workspaceId: owner.workspace.id,
+      bunshinId: bunshin.id,
+      actorUserId: owner.user.id,
+      dailyMissionId: mission.id,
+    };
+    const variants = new PrismaMissionContentVariantRepository(client);
+    const claim = await variants.claim({
+      ...scope,
+      idempotencyKey: randomUUID(),
+      initiatingSource: 'PHOTO_FIRST',
+    });
+    if (!claim) throw new Error('synthetic generation missing');
+    expect(claim.generation.initiatingSource).toBe('PHOTO_FIRST');
+    const usage = {
+      ...scope,
+      taskType: 'PHOTO_FIRST_ANALYSIS',
+      provider: 'fake',
+      model: 'fake-model',
+      promptVersion: 'fake-v1',
+      status: 'SUCCESS' as const,
+      inputTokens: null,
+      outputTokens: null,
+      latencyMs: 1,
+      idempotencyKey: randomUUID(),
+      estimatedCostUsdMicros: 250,
+      contentVariantGenerationId: claim.generation.id,
+    };
+    const events = new PrismaAiUsageEventRepository(client);
+    await events.record(usage);
+    await events.record(usage);
+    const sibling = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Sibling provenance',
+      slug: `provenance-sibling-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'O',
+      audienceSummary: 'A',
+      personalitySummary: 'P',
+    });
+    await expect(
+      events.record({ ...usage, bunshinId: sibling.id, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(
+      await client.aiUsageEvent.count({
+        where: { contentVariantGenerationId: claim.generation.id },
+      }),
+    ).toBe(1);
+    await client.workspaceMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        userId: other.user.id,
+        role: 'MEMBER',
+        status: 'ACTIVE',
+      },
+    });
+    await expect(
+      events.record({ ...usage, actorUserId: other.user.id, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      events.record({
+        ...usage,
+        workspaceId: other.workspace.id,
+        actorUserId: other.user.id,
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await variants.fail({
+      ...scope,
+      generationId: claim.generation.id,
+      errorCategory: 'SYNTHETIC_FAILURE',
+      qualityAudit: { verdict: null, score: null, issueCodes: [], repairCount: 0 },
+    });
+    // The existing personal-workspace admin claim must remain observable, without granting Service access.
+    await client.workspaceMembership.updateMany({
+      where: { workspaceId: owner.workspace.id, userId: other.user.id },
+      data: { role: 'ADMIN' },
+    });
+    const adminClaim = await variants.claim({
+      ...scope,
+      actorUserId: other.user.id,
+      idempotencyKey: randomUUID(),
+      initiatingSource: 'STANDARD',
+    });
+    if (!adminClaim) throw new Error('synthetic admin generation missing');
+    const adminUsage = {
+      ...usage,
+      actorUserId: other.user.id,
+      contentVariantGenerationId: adminClaim.generation.id,
+      idempotencyKey: randomUUID(),
+      taskType: 'MISSION_CONTENT_VARIANT',
+    };
+    await events.record(adminUsage);
+    expect(
+      await client.aiUsageEvent.count({
+        where: { contentVariantGenerationId: adminClaim.generation.id },
+      }),
+    ).toBe(1);
+    const service = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic provenance service' },
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: service.id } });
+    await expect(
+      events.record({ ...adminUsage, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: null } });
+    await client.missionContentVariantGeneration.delete({
+      where: { id: adminClaim.generation.id },
+    });
+    const persisted = await client.missionContentVariantGeneration.findUniqueOrThrow({
+      where: { id: claim.generation.id },
+      include: { aiUsageEvents: true },
+    });
+    expect(persisted).toMatchObject({
+      status: 'FAILED',
+      initiatingSource: 'PHOTO_FIRST',
+      qualityVerdict: null,
+    });
+    expect(persisted.aiUsageEvents[0]?.estimatedCostUsdMicros).toBe(250n);
+    await client.missionContentVariantGeneration.delete({ where: { id: claim.generation.id } });
+    expect(
+      await client.aiUsageEvent.findUniqueOrThrow({
+        where: { id: persisted.aiUsageEvents[0]!.id },
+      }),
+    ).toMatchObject({ contentVariantGenerationId: null, estimatedCostUsdMicros: 250n });
+    await expect(
+      client.missionContentVariantGeneration.create({
+        data: { ...scope, idempotencyKey: randomUUID(), initiatingSource: 'INVALID' },
+      }),
+    ).rejects.toThrow();
+  });
 
   it('expires unpurchased training once with scoped evaluation stop and retention recording', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));

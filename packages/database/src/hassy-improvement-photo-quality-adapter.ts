@@ -71,6 +71,7 @@ export class PrismaHassyPhotoQualityImprovementAdapter implements ImprovementObs
             actorUserId: true,
             status: true,
             promptVersion: true,
+            initiatingSource: true,
             qualityVerdict: true,
             qualityScore: true,
             qualityIssueCodes: true,
@@ -167,6 +168,7 @@ export class PrismaHassyPhotoQualityImprovementAdapter implements ImprovementObs
               updatedAt: row.updatedAt,
               cutoff: input.toExclusive,
               promptVersion: row.promptVersion,
+              initiatingSource: row.initiatingSource,
             }),
           };
         });

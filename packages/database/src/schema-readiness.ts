@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261002070000_add_mission_variant_quality_audit';
+export const LATEST_DATABASE_MIGRATION = '20261003000000_photo_first_observation_provenance';

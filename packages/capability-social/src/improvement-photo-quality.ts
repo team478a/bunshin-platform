@@ -10,11 +10,20 @@ import {
 
 export const HASSY_PHOTO_QUALITY_DEFINITION: ImprovementAdapterDefinition = {
   key: 'HASSY_PHOTO_QUALITY',
-  version: 'hassy-photo-quality-v1',
+  version: 'hassy-photo-quality-v2',
   packageKey: 'SOCIAL',
   subtypes: ['CONTENT_VARIANT_QUALITY'],
   metadataRules: {
-    attribution: { kind: 'CODE', values: ['PHOTO_METADATA', 'PHOTO_ISSUE_SIGNAL', 'UNATTRIBUTED'] },
+    attribution: {
+      kind: 'CODE',
+      values: [
+        'PHOTO_METADATA',
+        'PHOTO_ISSUE_SIGNAL',
+        'UNATTRIBUTED',
+        'PHOTO_STARTED',
+        'STANDARD_STARTED',
+      ],
+    },
     qualityState: {
       kind: 'CODE',
       values: [
@@ -42,6 +51,7 @@ export const HASSY_PHOTO_QUALITY_DEFINITION: ImprovementAdapterDefinition = {
 /** A quality code is a signal, not proof of the initiating route or the full Photo First cohort. */
 export function projectHassyPhotoQuality(input: {
   hasPhotoMetadata: boolean;
+  initiatingSource?: string | null;
   status: string;
   verdict: string | null;
   score: number | null;
@@ -52,11 +62,16 @@ export function projectHassyPhotoQuality(input: {
   promptVersion: string | null;
 }) {
   const unconfirmedFact = input.issueCodes.includes('PHOTO_FIRST_UNCONFIRMED_FACT');
-  const attribution = input.hasPhotoMetadata
-    ? 'PHOTO_METADATA'
-    : unconfirmedFact
-      ? 'PHOTO_ISSUE_SIGNAL'
-      : 'UNATTRIBUTED';
+  const attribution =
+    input.initiatingSource === 'PHOTO_FIRST'
+      ? 'PHOTO_STARTED'
+      : input.initiatingSource === 'STANDARD'
+        ? 'STANDARD_STARTED'
+        : input.hasPhotoMetadata
+          ? 'PHOTO_METADATA'
+          : unconfirmedFact
+            ? 'PHOTO_ISSUE_SIGNAL'
+            : 'UNATTRIBUTED';
   const validIssues =
     input.issueCodes.length <= 20 && input.issueCodes.every((code) => typeof code === 'string');
   const validRepair =
@@ -112,7 +127,13 @@ export function summarizeHassyPhotoQuality(
   const attributionUnresolved = collection.observations.filter(
     (row) => row.metadata['attribution'] === 'UNATTRIBUTED',
   ).length;
-  const groups = ['PHOTO_METADATA', 'PHOTO_ISSUE_SIGNAL', 'UNATTRIBUTED'].map((attribution) => {
+  const groups = [
+    'PHOTO_METADATA',
+    'PHOTO_ISSUE_SIGNAL',
+    'UNATTRIBUTED',
+    'PHOTO_STARTED',
+    'STANDARD_STARTED',
+  ].map((attribution) => {
     const rows = collection.observations.filter(
       (row) => row.metadata['attribution'] === attribution,
     );

@@ -1,5 +1,7 @@
 # Hassy Photo First品質の独立読取Adapter
 
+後続更新: 開始経路のnullable記録と工程AI利用の明示参照を追加し、読取定義をv2へ更新した。`PHOTO_STARTED / STANDARD_STARTED`を既存3群と分けて扱う。以下のv1監査・検証履歴は保存し、現在との差分・限界・migrationは[記録補完報告](PHOTO_FIRST_OBSERVATION_PROVENANCE_IMPLEMENTATION.md)を参照する。全Photo First成功率のUNKNOWNは維持する。
+
 基準SHA: `ecf80a3ab143681e6f76d8c807897001517e3517`（PR #1083 merge）。2026-10-03 JST。読み取り実装とfake契約検証まで。本番稼働/E2Eの保証ではない。
 
 ## 実装範囲

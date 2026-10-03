@@ -93,6 +93,27 @@ function setup(rows = [row()], allowed = true) {
   };
 }
 describe('Hassy photo quality improvement read adapter', () => {
+  it('includes explicitly attributed failures before quality checking without claiming population completeness', async () => {
+    const failed = {
+      ...row(),
+      initiatingSource: 'PHOTO_FIRST',
+      status: 'FAILED',
+      variant: null,
+      qualityVerdict: null,
+      qualityScore: null,
+    };
+    const { adapter, findMany } = setup([failed]);
+    const summary = await adapter.summarize(input);
+    expect(summary.groups.find((group) => group.attribution === 'PHOTO_STARTED')).toMatchObject({
+      observed: 1,
+      checked: 0,
+      generationFailed: 1,
+      observedCheckedPassRate: null,
+    });
+    expect(summary.photoFirstPopulationPassRate).toBeNull();
+    expect(summary.photoFirstPopulationCoverage).toBe('UNKNOWN');
+    expect(findMany.mock.calls[0]?.[0].select.initiatingSource).toBe(true);
+  });
   it('reads a service cohort, not a filtered list of issues or successful photos only', async () => {
     const { adapter, findMany, manager } = setup();
     const summary = await adapter.summarize(input);
