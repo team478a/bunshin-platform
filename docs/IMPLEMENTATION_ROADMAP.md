@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback人手確認の非本番ブラウザ検証と終端表示修正は`docs/improvement/IMPROVEMENT_FEEDBACK_BROWSER_VERIFICATION.md`。実React/fake応答の9ケースと表示単体回帰を確認し、記録済み・画面更新が必要・同じ内容で再送を区別する。HTTP/DB/送信・再送契約は変更しない。実認証/DB/実端末E2Eは未確認で、本番NO-GOを維持。次は隔離した実HTTP/認証/DB E2Eの実行条件を確定する。
+
 Feedback候補の人手確認UIは`docs/improvement/IMPROVEMENT_FEEDBACK_REVIEW_UI_IMPLEMENTATION.md`。既存管理集計から暗号化短期handleと二段階POSTで候補を準備し、確認/対象外の判断だけを既存CAS・監査へ接続する。画面GETは保存せず、scope・actor・根拠・期限を固定し、応答喪失時は同operationを再送。schema/依存/本番設定は変更しない。実装承認・自動修正・STALE再開は対象外。本番公開gateは維持し、次は非本番スマートフォン通し検証。
 
 Feedback maintenanceの非互換リリース手順は`docs/improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md`。PR #1095のmainマージと本番反映を区別し、run冒頭cleanup、build前DB移行、停止/drain/preflight/再開/復元後再削除を整理。専用停止スイッチの存在は未確認で、本番操作は未実施。次は環境ownerと停止方式・旧deployment/手動起動の到達経路・実行終了の確認手段を確定する。証明できなければ先行guardを別PRで検討する。
