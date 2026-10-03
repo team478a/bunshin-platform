@@ -70,11 +70,35 @@ export type SocialDecisionPerformance = {
 export type SocialDecisionMetric =
   { status: 'MEASURED'; value: number } | { status: 'UNKNOWN'; value: null };
 
+/** Read projections: do not invent unselected persistence or audit columns. */
+export type SocialDecisionHistoryDecision = Pick<
+  MissionDecision,
+  | 'id'
+  | 'workspaceId'
+  | 'bunshinId'
+  | 'dailyMissionId'
+  | 'decision'
+  | 'rejectionReason'
+  | 'rejectionDetail'
+  | 'decidedAt'
+>;
+export type SocialDecisionHistoryActivity = Pick<
+  MissionActivity,
+  'id' | 'workspaceId' | 'bunshinId' | 'dailyMissionId' | 'actorUserId' | 'type' | 'occurredAt'
+>;
+export type SocialDecisionHistoryFeedback = Pick<
+  MissionFeedback,
+  'id' | 'workspaceId' | 'bunshinId' | 'dailyMissionId' | 'actorUserId' | 'rating' | 'updatedAt'
+>;
+export type SocialDecisionHistoryPost = Pick<
+  PostRecord,
+  'id' | 'workspaceId' | 'bunshinId' | 'dailyMissionId' | 'actorUserId' | 'platform' | 'postedAt'
+>;
 export type SocialDecisionObservation =
-  | { id: string; type: 'DECISION'; data: MissionDecision }
-  | { id: string; type: 'ACTIVITY'; data: MissionActivity }
-  | { id: string; type: 'FEEDBACK'; data: MissionFeedback }
-  | { id: string; type: 'POST'; data: PostRecord }
+  | { id: string; type: 'DECISION'; data: SocialDecisionHistoryDecision }
+  | { id: string; type: 'ACTIVITY'; data: SocialDecisionHistoryActivity }
+  | { id: string; type: 'FEEDBACK'; data: SocialDecisionHistoryFeedback }
+  | { id: string; type: 'POST'; data: SocialDecisionHistoryPost }
   | {
       id: string;
       type: 'PERFORMANCE';
