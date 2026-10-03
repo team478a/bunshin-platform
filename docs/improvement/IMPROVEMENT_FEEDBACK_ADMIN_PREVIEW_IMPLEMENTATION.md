@@ -46,7 +46,7 @@ pnpm --filter web exec vitest run test/improvement-feedback-admin-preview.test.t
 
 確認した条件: 完了週/月曜JST境界、12週範囲、重複/未知query拒否、未ログイン・管理権限違い・非SNS拒否、DB再認可拒否、私的scope/subjectの返却拒否、5人開示・1〜4人抑制・大セル＋小セル全体抑制、不完全と空の区別、ID/hash/Revisionの非露出、障害時の非0表示とログ最小化、正規slug導線、既存管理homeモジュール境界。
 
-初回CI `37086703564`は整形と隔離DBが成功し、型チェックで異常なrule版を渡すテストfixtureのliteral型不一致が失敗した。異常入力の境界castだけを明示し、拒否assertionを維持して修正する。本番ロジックの緩和ではない。手元の全Web型チェックは端末負荷で長時間となり中断し、最新headのCIで再確認する。lint・architecture・整形・差分確認と最新headの通常PR CIは完了時のPR検証欄に実結果を記録する。Vite既存configLoader警告は今回の変更対象ではなく、上記テストの失敗ではない。
+初回CI `37086703564`は整形と隔離DBが成功し、型チェックで異常なrule版を渡すテストfixtureのliteral型不一致が失敗した。手元の全Web型チェックも同じ不一致で失敗した。異常入力の境界castだけを明示し、拒否assertionを維持して修正する。本番ロジックの緩和ではない。修正後に上記6ファイル77件のテストを再実行して成功した。lint・architecture・整形・差分確認と最新headの通常PR CIは完了時のPR検証欄に実結果を記録する。Vite既存configLoader警告は今回の変更対象ではなく、上記テストの失敗ではない。
 
 ## 未確認・運用前条件
 
