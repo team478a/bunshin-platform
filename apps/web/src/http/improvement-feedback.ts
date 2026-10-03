@@ -79,7 +79,8 @@ export async function improvementFeedbackResponse(
     if (!parsed.success) throw new ApplicationError('VALIDATION_ERROR', 'invalid feedback');
     const scope = await dependencies.scope(slug, actorUserId);
     const receipt = await new RecordImprovementFeedback(await dependencies.repository()).execute({
-      ...scope,
+      workspaceId: scope.workspaceId,
+      serviceId: scope.serviceId,
       bunshinId,
       actorUserId,
       packageKey: 'SOCIAL',
