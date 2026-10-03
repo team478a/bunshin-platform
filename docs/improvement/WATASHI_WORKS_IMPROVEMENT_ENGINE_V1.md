@@ -1,5 +1,7 @@
 # ワタシワークス Improvement Engine V1
 
+読み取り専用管理画面: `IMPROVEMENT_FEEDBACK_ADMIN_PREVIEW_IMPLEMENTATION.md`。同Service/SOCIAL管理者向けの完了済みJST週集計を接続。少人数/不完全は全体件数も伏せ、原本参照・Revisionはサーバー側projectionで除く。自己申告を確定BUGにせず、永続Candidate/承認/自動修正・他Adapter画面は未実装。以下は各段階の履歴。
+
 順序5の限定Evidence: `IMPROVEMENT_FEEDBACK_REVIEW_EVIDENCE_IMPLEMENTATION.md`。本人報告を選択コード別に非永続で束ね、参照・件数/人数・完全性・規則版・決定的Revisionと保留理由を返す。人の要確認候補であり確定Issueや承認ではない。外部障害除外、永続Candidate、確認UI/HTTP/Jobは未実装。以下の監査履歴とは状態を分ける。
 
 順序4の読取補完: `IMPROVEMENT_FEEDBACK_OBSERVATIONS_IMPLEMENTATION.md`。本人の選択式報告を同Workspace/Service/SOCIALの管理者だけが既存Engine契約で収集する内部Adapter。UNKNOWN/自己申告を維持し、件数と人数を分離、発生率・解決率・原価は未測定。管理UI/HTTP/Job、BUG確定、自動Candidateは未実装。以下は各段階の履歴として残す。

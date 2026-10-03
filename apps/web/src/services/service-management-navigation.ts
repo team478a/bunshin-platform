@@ -24,9 +24,15 @@ const IMAGE_MANAGEMENT_SECTION_HREFS = new Set(['referral-rewards', 'credits', '
 
 export function selectServiceManagementSections<T extends { href: string }>(
   sections: readonly T[],
-  input: { businessDaily: boolean; fortune: boolean; promptOnlyImages?: boolean },
+  input: {
+    businessDaily: boolean;
+    fortune: boolean;
+    promptOnlyImages?: boolean;
+    socialFeedback?: boolean;
+  },
 ): T[] {
   return sections.filter((section) => {
+    if (section.href === 'improvement-feedback') return input.socialFeedback === true;
     if (input.businessDaily) return BUSINESS_DAILY_SECTION_HREFS.has(section.href);
     if (input.fortune) return FORTUNE_SECTION_HREFS.has(section.href);
     if (input.promptOnlyImages && IMAGE_MANAGEMENT_SECTION_HREFS.has(section.href)) return false;

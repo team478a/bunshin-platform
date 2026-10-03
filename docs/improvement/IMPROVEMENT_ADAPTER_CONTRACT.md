@@ -1,5 +1,7 @@
 # Improvement Adapter Contract 設計案
 
+2026-10-03追加: 本人Feedbackの限定管理画面は`IMPROVEMENT_FEEDBACK_ADMIN_PREVIEW_IMPLEMENTATION.md`。Adapterの同Service管理認可を再利用し、完了済みJST週・各bucket5人の仮の開示基準をWeb側projectionへ置く。小セル/不完全は全件数を伏せ、sourceRefs/RevisionはUIに出さない。Engineの内部Evidence契約や3報告/2人ルールは変えず、永続Candidate/承認/Jobは未実装。
+
 2026-10-03追加: 非永続の本人Feedback要確認Evidenceは`IMPROVEMENT_FEEDBACK_REVIEW_EVIDENCE_IMPLEMENTATION.md`。既存Collect/DB認可の後にcode別の件数/人数、少数/不完全保留、原本参照、rule版と決定的Revisionを組み立てる。確定Issue/承認・他Adapter統合・外部障害除外・UIは未実装。
 
 2026-10-03追加: 本人Feedbackの限定読取Adapterは`IMPROVEMENT_FEEDBACK_OBSERVATIONS_IMPLEMENTATION.md`を参照。既存Collect契約・原本参照を再利用し、同Service/SOCIAL管理権限・Bunshin所有対応をDBで照合。自己申告を診断へ昇格させず、母集団不足のrateをnullとする。cursor/管理UI/HTTP/定期Jobは追加していない。
