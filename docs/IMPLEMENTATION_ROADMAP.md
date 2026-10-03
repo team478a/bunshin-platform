@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback人手確認の実HTTP/認証/DB E2Eの条件は`docs/improvement/IMPROVEMENT_FEEDBACK_E2E_READINESS.md`。合成データの使い捨てローカルPostgreSQLで既存migration・DB統合試験を確認し、実認証にSupabase Authが必要であることを実経路から整理する。現行CI/React fixtureだけでは実認証E2Eではない。本番NO-GOを維持。次は破壊的DBテスト前の厳密な隔離preflightをテスト専用PRで追加し、その後ローカル実Auth環境の実行条件を承認確認する。
+
 Feedback人手確認の非本番ブラウザ検証と終端表示修正は`docs/improvement/IMPROVEMENT_FEEDBACK_BROWSER_VERIFICATION.md`。実React/fake応答の9ケースと表示単体回帰を確認し、記録済み・画面更新が必要・同じ内容で再送を区別する。HTTP/DB/送信・再送契約は変更しない。実認証/DB/実端末E2Eは未確認で、本番NO-GOを維持。次は隔離した実HTTP/認証/DB E2Eの実行条件を確定する。
 
 Feedback候補の人手確認UIは`docs/improvement/IMPROVEMENT_FEEDBACK_REVIEW_UI_IMPLEMENTATION.md`。既存管理集計から暗号化短期handleと二段階POSTで候補を準備し、確認/対象外の判断だけを既存CAS・監査へ接続する。画面GETは保存せず、scope・actor・根拠・期限を固定し、応答喪失時は同operationを再送。schema/依存/本番設定は変更しない。実装承認・自動修正・STALE再開は対象外。本番公開gateは維持し、次は非本番スマートフォン通し検証。
