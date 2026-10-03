@@ -6,12 +6,28 @@ import {
   type JobEnvironment,
 } from '@bunshin/application';
 import { ApplicationError } from '@bunshin/shared';
-import { prisma, type PrismaClient } from './client';
+import { Prisma, prisma, type PrismaClient } from './client';
 import { purgeExpiredImprovementFeedbackInTransaction } from './improvement-feedback-retention';
 
 const day = 86_400_000;
 const uuid = '[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}';
 const payloadPattern = new RegExp(`^feedback-purge:feedback-retention-v1:(${uuid})$`, 'i');
+
+const expiredScopesSql = (now: Date) => Prisma.sql`
+  WITH expired AS (
+    SELECT workspace_id, service_id, created_at + interval '90 days' AS due
+    FROM improvement_feedback WHERE created_at <= ${new Date(now.getTime() - 90 * day)}
+    UNION ALL
+    SELECT workspace_id, service_id, expires_at AS due
+    FROM improvement_triage_candidates WHERE expires_at <= ${now}
+    UNION ALL
+    SELECT workspace_id, service_id, expires_at AS due
+    FROM improvement_triage_operations WHERE expires_at <= ${now}
+  ), scopes AS (
+    SELECT workspace_id, service_id, min(due) AS due FROM expired
+    GROUP BY workspace_id, service_id
+  )
+`;
 
 /** Trusted internal Cron composition only; never exposed as a user enqueue operation. */
 export class PrismaImprovementFeedbackRetentionJobRepository implements ImprovementFeedbackRetentionJobRepository {
@@ -29,23 +45,24 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
     const dayKey = now.toISOString().slice(0, 10);
     // Original sources have no environment column: retention is physical ws/service scope,
     // not a license to infer or transfer environment-specific Candidate ownership.
-    const scopes = await this.client.$transaction(
+    const selection = await this.client.$transaction(
       async (tx) => {
         await tx.$executeRaw`SET LOCAL statement_timeout = '2000ms'`;
-        return tx.$queryRaw<Array<{ workspaceId: string; serviceId: string; requestedBy: string }>>`
-      WITH expired AS (
-        SELECT workspace_id, service_id, created_at + interval '90 days' AS due
-        FROM improvement_feedback WHERE created_at <= ${new Date(now.getTime() - 90 * day)}
-        UNION ALL
-        SELECT workspace_id, service_id, expires_at AS due
-        FROM improvement_triage_candidates WHERE expires_at <= ${now}
-        UNION ALL
-        SELECT workspace_id, service_id, expires_at AS due
-        FROM improvement_triage_operations WHERE expires_at <= ${now}
-      ), scopes AS (
-        SELECT workspace_id, service_id, min(due) AS due FROM expired
-        GROUP BY workspace_id, service_id
-      )
+        const orphaned = await tx.$queryRaw<{ detected: boolean }[]>`
+          ${expiredScopesSql(now)}
+          SELECT EXISTS (
+            SELECT 1 FROM scopes s JOIN groups g
+              ON g.id = s.service_id AND g.workspace_id = s.workspace_id
+            WHERE NOT EXISTS (SELECT 1 FROM workspace_memberships m
+              WHERE m.workspace_id = s.workspace_id)
+          ) AS detected
+        `;
+        if (typeof orphaned[0]?.detected !== 'boolean')
+          throw new Error('feedback retention scope inspection unavailable');
+        const scopes = await tx.$queryRaw<
+          Array<{ workspaceId: string; serviceId: string; requestedBy: string }>
+        >`
+      ${expiredScopesSql(now)}
       SELECT s.workspace_id AS "workspaceId", s.service_id AS "serviceId",
              member.user_id AS "requestedBy"
       FROM scopes s JOIN groups g ON g.id = s.service_id AND g.workspace_id = s.workspace_id
@@ -62,12 +79,13 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
       )
       ORDER BY s.due, s.workspace_id, s.service_id LIMIT 20
     `;
+        return { scopes, orphanedScopesDetected: orphaned[0].detected };
       },
-      { maxWait: 2_000, timeout: 3_000 },
+      { maxWait: 2_000, timeout: 3_000, isolationLevel: 'RepeatableRead' },
     );
     let scheduled = 0;
     const startedAt = Date.now();
-    for (const scope of scopes) {
+    for (const scope of selection.scopes) {
       if (Date.now() - startedAt >= 5_000) break;
       const payload = improvementFeedbackPurgePayload(scope.serviceId);
       // Service lock also prevents concurrent midnight schedules from creating two
@@ -111,7 +129,7 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
       );
       scheduled += result.count;
     }
-    return { scheduled };
+    return { scheduled, orphanedScopesDetected: selection.orphanedScopesDetected };
   }
 
   async execute(job: Job, workerId: string): Promise<Job> {

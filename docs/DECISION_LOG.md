@@ -1,5 +1,11 @@
 # BUNSHIN Platform Decision Log
 
+## 期限処理の孤立scope: 検出とJob履歴の現行契約を先に確定する
+
+- 2026-10-03、PR #1093 merge後main `f135b2e73ce7292d19aeeef0edde6fbe87598c32`。既存退会計画はUserをsoft DELETEDとし、Generic Jobのpseudonymous参照を保持する。Feedback/auditの90/180日承認だけで全Job履歴の削除期限が承認されたとは扱わない。
+- 今回は内部Cronに「期限超過かつWorkspaceMembershipなしのscopeがあるか」のbooleanだけを追加し、失敗時はnull（未確認）とする。個人/Service ID・件数・原本を返さず、RepeatableReadの同じsnapshotで検出と登録候補を読む。別WorkspaceのUser、勝手なSystem Account、権限変更で孤立を隠さない。
+- 実Repositoryの退会取消/完了、Job requester FK、翌日の再登録と履歴保持を隔離DBでcharacterizationする。Job nullable化・既存履歴消去・日数・停止時の取消規則は今回変更しない。後続の最小案は専用maintenance Job主体と限定保持契約の設計で、通常User Jobを巻き込まない。運用承認前に不可逆削除へ進めない。
+
 ## Feedback期限処理: 既存Jobで削除と継続を原子的に確定する
 
 - 2026-10-03、PR #1092 merge後 `38a04b86e5e468f85ab4249ede469542390fce8c`。承認済み90/90/180日を変更しない。

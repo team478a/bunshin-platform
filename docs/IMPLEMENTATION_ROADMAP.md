@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+期限処理の孤立scopeとJob本人参照は`docs/improvement/IMPROVEMENT_RETENTION_ORPHAN_AND_JOB_REVIEW.md`。内部Cronへpresence boolean/未確認nullを接続し、退会取消→完了後参照保持→翌日再登録とJob requester FKをcharacterizationする。schema/保持日数/退会規則は変更しない。次はpurge限定maintenance主体・既存参照移行・終端履歴180日（未承認案）の責任者レビュー。全Job削除やSystem Account追加へ先回りしない。
+
 Feedbackの期限処理Job接続は`docs/improvement/IMPROVEMENT_FEEDBACK_RETENTION_JOB_IMPLEMENTATION.md`。既存Cron認証/claim/workerへ内部schedulerを接続し、scope限定purgeとJob完了/継続を同txで確定する。lease切れ・二重配送・失敗回復と停止scopeを検証。新Worker/queue/schema/管理UI書込なし。本番期限内削除保証、孤立scopeの処理主体とGeneric Job履歴保持、遅延監視/backup運用は未完。次は孤立scopeとJob履歴の保持・削除条件を小さく設計/検証する。
 
 人手Candidateの内部保存・保持/削除は`docs/improvement/IMPROVEMENT_TRIAGE_PERSISTENCE_IMPLEMENTATION.md`。責任者承認の原本90日/候補週終了90日/限定監査180日を固定し、同Service lock・DB原本変更失効・CAS/audit一体保存・退会完了の原本削除/監査本人参照消去を追加する。組織manual reviewと読み取り専用UIを維持。本番適用・公開書込・定期purge配信は未完。次は既存Jobによるscope限定purgeの配信/lease/再実行と運用条件の検証。

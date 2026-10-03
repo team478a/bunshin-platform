@@ -12,6 +12,9 @@ import {
   PrismaAccountUnitOfWork,
   PrismaImprovementFeedbackRetentionJobRepository,
   PrismaJobRepository,
+  PrismaAccountDeletionRequestRepository,
+  PrismaAccountDeletionExecutionRepository,
+  PrismaAccountDeletionPurgeRepository,
 } from '../src';
 
 const now = new Date('2026-10-03T03:00:00Z');
@@ -251,7 +254,8 @@ export function registerImprovementRetentionJobIntegrationCases(client: PrismaCl
         code: 'CONFLICT',
       });
       await client.workspaceMembership.deleteMany({ where: { workspaceId: f.workspaceId } });
-      await f.repo(() => new Date(now.getTime() + day)).schedule('STAGING');
+      const inspection = await f.repo(() => new Date(now.getTime() + day)).schedule('STAGING');
+      expect(inspection.orphanedScopesDetected).toBe(true);
       expect(await client.job.count({ where: { workspaceId: f.workspaceId } })).toBe(1);
       expect(await f.remaining()).toBe(1);
     });
@@ -368,6 +372,137 @@ export function registerImprovementRetentionJobIntegrationCases(client: PrismaCl
       expect(
         await client.improvementTriageOperation.findUnique({ where: { id: fresh.id } }),
       ).toMatchObject({ candidateId: null, expiresAt: fresh.expiresAt });
+    });
+
+    it('characterization: account retirement cancels maintenance Job, keeps requester after completion, and reuses deleted member next day', async () => {
+      const f = await fixture();
+      const from = new Date('2026-05-31T15:00:00Z');
+      const to = new Date(from.getTime() + 7 * day);
+      const expiredCandidate = await client.improvementTriageCandidate.create({
+        data: {
+          tenantRef: f.workspaceId,
+          workspaceId: f.workspaceId,
+          serviceId: f.group.id,
+          environment: 'STAGING',
+          packageKey: 'SOCIAL',
+          adapterKey: 'TROUBLE_FEEDBACK',
+          fromInclusive: from,
+          toExclusive: to,
+          clusterRef: 'b'.repeat(64),
+          state: 'STALE',
+          adapterVersion: 'trouble-feedback-v1',
+          ruleVersion: 'selected-feedback-review-v1',
+          disclosurePolicyVersion: 'feedback-admin-preview-v1',
+          retentionPolicyVersion: 'feedback-retention-v1',
+          expiresAt: new Date(to.getTime() + 90 * day),
+        },
+      });
+      const job = await f.leased();
+      const sibling = await fixture();
+      const siblingJob = await sibling.leased();
+      const request = await new PrismaAccountDeletionRequestRepository(client).request(
+        f.account.user.id,
+        new Date(now.getTime() - 14 * day),
+      );
+      expect(request).not.toBeNull();
+      const claimed = await new PrismaAccountDeletionExecutionRepository(
+        client,
+      ).claimAndSuspendNext({
+        workerId: 'synthetic-retirement',
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 300_000),
+        executionVersion: 1,
+      });
+      expect(claimed).toMatchObject({ requestId: request!.id, status: 'PROCESSING' });
+      expect(await client.job.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({
+        status: 'CANCELLED',
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        requestedBy: f.account.user.id,
+        lastErrorCategory: 'ACCOUNT_DELETION_REQUESTED',
+      });
+      expect(await client.job.findUniqueOrThrow({ where: { id: siblingJob.id } })).toMatchObject({
+        status: 'LEASED',
+        requestedBy: sibling.account.user.id,
+      });
+      // No Auth API/Storage: direct repository call assumes Auth deletion already confirmed.
+      expect(
+        await new PrismaAccountDeletionPurgeRepository(client).completeAfterAuthDeletion({
+          requestId: request!.id,
+          userId: f.account.user.id,
+          workerId: 'synthetic-retirement',
+          now,
+        }),
+      ).toMatchObject({ status: 'COMPLETED' });
+      expect(
+        await client.user.findUniqueOrThrow({ where: { id: f.account.user.id } }),
+      ).toMatchObject({ status: 'DELETED', email: null, displayName: '退会済みユーザー' });
+      expect(await client.job.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({
+        requestedBy: f.account.user.id,
+        status: 'CANCELLED',
+      });
+      expect(
+        await client.improvementTriageCandidate.findUnique({ where: { id: expiredCandidate.id } }),
+      ).not.toBeNull();
+      await f.repo().schedule('STAGING');
+      expect(await client.job.count({ where: { workspaceId: f.workspaceId } })).toBe(1);
+      await f.repo(() => new Date(now.getTime() + day)).schedule('STAGING');
+      const next = await client.job.findFirstOrThrow({
+        where: {
+          workspaceId: f.workspaceId,
+          status: 'PENDING',
+        },
+      });
+      expect(next).toMatchObject({
+        requestedBy: f.account.user.id,
+        payloadReference: improvementFeedbackPurgePayload(f.group.id),
+      });
+      expect(next.id).not.toBe(job.id);
+      expect(await f.remaining()).toBe(0);
+    });
+
+    it('characterization: a terminal purge Job retains requester/FK after 180 days; only removing that fixture Job releases its User FK', async () => {
+      const account = await new CreateUserWithPersonalWorkspace(
+        new PrismaAccountUnitOfWork(client),
+      ).execute({ displayName: 'Synthetic FK only' });
+      const group = await client.group.create({
+        data: {
+          workspaceId: account.workspace.id,
+          name: 'Synthetic FK scope',
+        },
+      });
+      const old = new Date(now.getTime() - 181 * day);
+      const job = await client.job.create({
+        data: {
+          environment: 'DEVELOPMENT',
+          workspaceId: account.workspace.id,
+          requestedBy: account.user.id,
+          jobType: 'IMPROVEMENT_FEEDBACK_PURGE',
+          payloadReference: improvementFeedbackPurgePayload(group.id),
+          idempotencyKey: `synthetic-fk:${randomUUID()}`,
+          correlationId: 'synthetic',
+          status: 'SUCCEEDED',
+          completedAt: old,
+          createdAt: old,
+        },
+      });
+      await new PrismaImprovementFeedbackRetentionJobRepository(client, () => now).schedule(
+        'DEVELOPMENT',
+      );
+      expect(await client.job.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({
+        status: 'SUCCEEDED',
+        requestedBy: account.user.id,
+        completedAt: old,
+      });
+      await expect(client.user.delete({ where: { id: account.user.id } })).rejects.toMatchObject({
+        code: 'P2003',
+      });
+      expect(await client.user.findUnique({ where: { id: account.user.id } })).not.toBeNull();
+      // Synthetic fixture only: no production deletion task/retention policy is implemented.
+      await client.job.delete({ where: { id: job.id } });
+      await expect(client.user.delete({ where: { id: account.user.id } })).resolves.toMatchObject({
+        id: account.user.id,
+      });
     });
   });
 }
