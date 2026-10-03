@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback maintenanceの非互換リリース手順は`docs/improvement/IMPROVEMENT_MAINTENANCE_RELEASE_RUNBOOK.md`。PR #1095のmainマージと本番反映を区別し、run冒頭cleanup、build前DB移行、停止/drain/preflight/再開/復元後再削除を整理。専用停止スイッチの存在は未確認で、本番操作は未実施。次は環境ownerと停止方式・旧deployment/手動起動の到達経路・実行終了の確認手段を確定する。証明できなければ先行guardを別PRで検討する。
+
 Feedback purge限定の本人参照なし・終端180日保持は`docs/improvement/IMPROVEMENT_MAINTENANCE_JOB_IMPLEMENTATION.md`。2026-10-03の責任者承認に基づき、通常Job本人必須をCHECK/型/予約enqueue拒否で維持し、限定移行と固定終端時刻・bounded history cleanupを実装。所属なしのscopeも既存Jobで処理可能にする。通常Job/稼働中/逆参照/他環境は削除しない。本番適用は未実施で、旧workerとschemaの同時稼働は不可。次はリリース前の停止/drain・限定preflight・backup/復元時削除再適用の運用手順レビュー。
 
 期限処理の孤立scopeとJob本人参照は`docs/improvement/IMPROVEMENT_RETENTION_ORPHAN_AND_JOB_REVIEW.md`。内部Cronへpresence boolean/未確認nullを接続し、退会取消→完了後参照保持→翌日再登録とJob requester FKをcharacterizationする。schema/保持日数/退会規則は変更しない。次はpurge限定maintenance主体・既存参照移行・終端履歴180日（未承認案）の責任者レビュー。全Job削除やSystem Account追加へ先回りしない。
