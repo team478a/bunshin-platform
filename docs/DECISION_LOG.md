@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Candidate純粋契約: Repositoryの原子性をPortとして要求し、DB実証と分ける
+
+- 日付: 2026-10-03。PR #1090 merge後の基準main `50523d5fbcc7530a7bb9ecb6e612e0d9faa0069b`。
+- 初回は既存Candidateの人手確認/対象外操作契約のみ。作成・STALE再開・承認・保存DB・HTTP/UIは追加しない。domainの状態/CASとApplicationの限定Feedback検証を分離し、SNS/Providerを共通domainに埋め込まない。
+- 原子的Portに現行認可・最新Evidence・候補・再送記録・CAS/audit一体commitを要求する。fakeはこの契約を検証するだけで、現行Prisma Adapterの別tx読取を原子的保存へ接続した証拠にはしない。
+- trustedな承認済み方針がない場合は操作拒否。保持日数のdefaultを設けず、仮の90/180日を実設定にしない。同一操作再送も権限・期限・最新週全体/bucket根拠・表示条件を再確認し、後続更新後の古い再送は競合とする。
+- 結果はopaque候補ID・CAS版・確認状態だけ。原本ID/hash/自由文は結果に出さない。確認済みは実装承認ではない。本番/schema/削除連携は別条件。
+
 ## Improvement人手確認候補: 保存より先に削除とRevision失効の契約を固定する
 
 - 日付: 2026-10-03、状態: 設計提案（保持日数/削除方針は未承認）。基準main `f50f1ee5d58f02f0e9abfc309f8de31f405e963d`、PR #1089 merge後。

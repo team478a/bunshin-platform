@@ -310,3 +310,4 @@ export interface BunshinMemory {
   createdAt: Date;
   updatedAt: Date;
 }
+export * from './improvement-triage-candidate';
