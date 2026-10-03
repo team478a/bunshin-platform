@@ -843,7 +843,8 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
           client.$transaction(async (tx) => {
             await tx.$executeRawUnsafe('SET LOCAL ROLE test_triage_public');
             return tx.improvementTriageOperation.create({
-              data: { ...audit, id: randomUUID(), operationKey: randomUUID() },
+              // Detached audit is a valid shape after candidate purge; it reaches the RLS check.
+              data: { ...audit, id: randomUUID(), candidateId: null, operationKey: randomUUID() },
             });
           }),
         ).rejects.toThrow('row-level security');
