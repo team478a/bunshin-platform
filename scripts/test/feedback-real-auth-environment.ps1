@@ -30,7 +30,9 @@ Invoke-TestDocker run -d --rm --pull never --name $gatewayContainer --label "cod
 Invoke-TestDocker network connect $privateNetwork $gatewayContainer
 $ready = $false
 for ($attempt=0; $attempt -lt 30; $attempt++) {
-    docker exec $databaseContainer pg_isready -U postgres | Out-Null
+    # The image's initialization server accepts Unix-socket probes before it restarts.
+    # TCP readiness identifies the final runtime, not that temporary init server.
+    docker exec $databaseContainer pg_isready -h 127.0.0.1 -U postgres | Out-Null
     if ($LASTEXITCODE -eq 0) { $ready=$true; break }
     Start-Sleep -Milliseconds 500
 }

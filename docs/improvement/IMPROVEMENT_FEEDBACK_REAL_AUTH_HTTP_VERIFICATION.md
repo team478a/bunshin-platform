@@ -6,11 +6,61 @@
 
 ユーザーのローカルAuth runtime・合成アカウント・Next起動の承認を受け、**実Supabase Authのセッション→実NextのgetUser/HTTP→実PostgreSQL保存**を接続して検証した。正常判断、再送、実HTTPの保存後応答喪失、所有/管理権限拒否、Authユーザー削除後の旧cookie拒否は試験範囲で成功した。
 
-**ブラウザ操作を含む完全なE2Eは未完**。Chrome接続timeout後にbrowser unavailable、アプリ内ブラウザもwebview attach timeoutとなり、実画面のクリック/表示を確認できなかった。HTTP成功と過去のReact/fake画面成功を足してブラウザE2E成功とはしない。本番NO-GOは維持する。
+**2026-10-04の追試で、指定Chrome profileの実画面操作→実Auth/Next/PostgreSQL保存→終端表示と、保存後応答喪失→同一内容再送を同じrunで確認した**。後述の範囲限定のブラウザ通し検証は成功。通常ログインUI/PKCE、実端末、本番gateまで合格した意味ではなく、本番NO-GOは維持する。以下の2026-10-03の未完記録は当時の結果として残す。
 
 変更はテスト専用script/helperと文書のみ。本番アプリ/API/認証/Repository、schema/migration、依存/lockfile、CI/CD、本番設定は変更しない。認証bypassは本番経路へ追加しない。
 
 ## 実行環境と隔離
+
+### 2026-10-04 指定Chrome profileでの通し検証（範囲限定で成功）
+
+基準main/調査SHAはPR #1104 merge `82ca2659f6f31b7747404e7005ff844f21b8e9fd`。同PR head `bf57714851db1b4882e90d7f0ebca74f12f90ac9`のverify/database SUCCESSを確認した。今回のbranchは`codex/improvement-feedback-chrome-auth-check`。ユーザー指定のChrome profile **tomoichiro**を使用し、user-owned tabには操作せず、試験tabを作成した。
+
+#### 切り分けとテスト専用の変更
+
+- fresh run `8c09a184d402`のHTTP assertionsは全PASSだったが、従来の19000 proxy経由では確認ボタンが反応せずbrowser candidate0。Nextの19002へ直接接続すると判断操作は反応したが、意図通りOrigin不一致で「画面更新が必要」となった。直接接続を保存成功とは扱わない。
+- インストール済みNext **16.3.3**の`dist/client/dev/hot-reloader/app/web-socket.js`で開発接続先`/_next/hmr`を確認。従来のtest proxyはHTTPだけを転送し、このWebSocket upgradeを転送していなかった。GETだけを固定loopback宛へ転送する一時診断proxyで、upgrade追加後に判断操作が反応した。診断proxyのPOSTは405として保存を行わない。この診断はhydration/通信の切り分けであり、DB保存成功ではない。
+- 診断では元のCSPを強制した状態でも反応を確認した。CSP緩和を最終解決にしない。test-only `feedback-e2e-next-upgrade.mjs`を追加し、19000→19002の**正確な`/_next/hmr`のみ**を転送する。他のupgradeは拒否、handshake timeout、socket cleanupを持つ。本番アプリ/proxy設定は変更しない。単体3件は固定宛先、拒否、cleanupを検証し、実Chromeの最終runで実HMR接続と画面操作を確認した。この開発環境の因果関係から本番障害とは断定しない。
+- run `8c09a184d403`ではPostgres初期化用Unix socket serverのready判定直後、再起動中のためAuth DB作成が失敗した。成功扱いしない。setup helperの`pg_isready`を`-h 127.0.0.1`へ限定し、最終TCP serverの起動を待つ。失敗taskはID/labelを照合して除去、新しいd404でsetupからやり直した。本番DB設定は変更しない。
+- 一時診断scriptは削除し、最終成果に含めない。runnerにはbrowserの200/応答喪失と、再送bodyのSHA-256比較結果（booleanのみ）を追加した。body、handle、cookie、digestは表示しない。観測のみでrequest内容/本番処理/安全条件のassertionを変更しない。
+
+#### 最終runとDB照合
+
+fresh run **`8c09a184d404`**、空の`bunshin_disposable_8c09a184d404`に既存226 migrationを適用しexit0。2026-10-04 00:07 JST頃にrunnerを開始し、全HTTP assertionsとbrowser入口の出力を確認してから操作した。実GoTrue2.192.0/Next16.3.3 dev webpack/PostgreSQL16、Node24/pnpm10、前回同様の合成fixtureと通信ガードを使用した。runtime imageはcached公式imageで追加取得なし。
+
+| 手順           | 実画面・通信で確認した結果                                                                                                                                    | 同runのbrowser ServiceのDB読取                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 初期表示       | 30報告/5人/6bucket、実Auth発行cookieを使うtest-only入口から管理画面へ                                                                                         | HTTP試験は別Serviceで完了、browser確定操作は未実施                           |
+| 正常判断       | 最初の「確認を始める」→判断フォーム→checkbox→「判断を確定」→disabled「記録済み」。修正完了/開発承認ではないstatus                                             | MARK_REVIEWED / REVIEW_COMPLETED / REVIEWED のoperation1                     |
+| 保存後応答喪失 | 次のbucketでPREPARE後、local test-only制御で次の成功応答を破棄。実Nextの200後にproxyが切断、画面は「同じ内容で再送」。判断欄/checkboxは変更不可、成功表示なし | operation2。保存は既に完了                                                   |
+| 同一判断の再送 | 上記ボタンをクリック→「記録済み」。runner観測は`BROWSER replay same-body=true`                                                                                | operation2のまま、追加監査なし                                               |
+| 原本・scope    | 合成DBだけを読取して照合                                                                                                                                      | browser candidate2/operation2、全Feedback120/User24/Workspace4。原本件数不変 |
+
+応答喪失は実障害ではなくtest proxyによる注入。再送同一性はJSON body bytesの比較であり、画面の偶然の表示だけでは判定していない。DB件数と組み合わせて当該操作の冪等性を確認する。今回browserではREVIEW_COMPLETEDを2bucketで実行し、他の2理由はHTTP assertionsの範囲。LINE、Provider、原価、利用枠の検証へ拡張しない。原本件数の最初の確認SQLは存在しない`user_feedback_reports`を指定してexit1となり、実schemaの`improvement_feedback`で再読取120件を確認した。誤ったSQLを成功記録に含めない。
+
+#### 実行した検証と未確認
+
+```text
+# Node24のPATHをprocess限定で設定。Next/proxy停止時に実行:
+node --require ./scripts/test/feedback-e2e-network-guard.cjs --test scripts/test/feedback-e2e-next-upgrade.test.mjs
+node --test scripts/test/feedback-e2e-network-guard.test.mjs
+pnpm --filter web exec vitest run test/improvement-feedback-review-http.test.ts test/improvement-feedback-review-service.test.ts test/improvement-feedback-review-handle.test.ts test/improvement-feedback-review-control.test.tsx
+pnpm --filter web typecheck
+pnpm architecture:check
+
+# 新しいd404にsetup/migration完了後:
+BUNSHIN_TEST_RUN_ID=8c09a184d404
+BUNSHIN_E2E_KEEP_FOR_BROWSER=8c09a184d404
+node --require ./scripts/test/feedback-e2e-network-guard.cjs scripts/test/feedback-real-auth-e2e.mjs
+```
+
+upgrade3件、通信ガード8件、関連4ファイル35件、Web typecheck、architecture、Node構文/PowerShell parse、対象Prettier、diff checkを確認。HTTP runnerは全PASS後にbrowser待機をCtrl+Cで終了したためshell exit1であり、全体exit0とは記録しない。ブラウザ操作は手動確認であり、通常PR CIに組み込んだ自動browser assertionではない。
+
+未確認: 通常Magic Link/PKCE、cookie refresh/TTL失効、同時2画面barrier、別environment handle、原本変更後の実HTTP拒否、mobile viewport/実Safari、OS sandbox、browser cookie/profileの完全削除、本番停止/drain/backup復元後再削除。指定profileを使うことは専用の隔離profileを新設した意味ではない。合成session使用とAuth DB除去で完全なbrowser隔離を証明しない。
+
+終了時に試験tabをcloseし、HTTP runner/Next/proxyを停止した。d402/d403/d404の各taskについて完全ID/`codex.task` labelを照合し、当該container/networkだけを除去。d404の残存task resourceなし、18998/18999/19000/19002/19003 listenerなしを確認した。合成DBは使い捨てで復元対象ではない。ソースmirror `C:\Users\Owner\AppData\Local\Temp\bunshin-feedback-e2e-zmpd3c`と`C:\Users\Owner\AppData\Local\Temp\bunshin-feedback-e2e-abFDD7`は保持し、他checkout/依存junctionや過去mirrorを削除していない。tab closeはcookie cleanupの証明ではない。本番変更/資格情報/顧客素材、課金、実生成、LINE/SNS、merge/deployなし。
+
+今回の最小ゴールはこの範囲限定のブラウザ通し検証で完了。次の最小タスクは**Feedback maintenanceの停止→drain→preflightの非本番再現と証跡確認**。既存停止設計を読み、合成環境で実行可能な範囲を別作業で確定する。backup復元後再削除、通常ログイン/実端末など残るgateは独立に未完とし、本番GOを今回の成功から推論しない。
 
 ### 2026-10-03 ブラウザ再確認（未完）
 
@@ -99,7 +149,7 @@ node --test scripts/test/feedback-e2e-network-guard.test.mjs
 node --require ./scripts/test/feedback-e2e-network-guard.cjs scripts/test/feedback-real-auth-e2e.mjs
 ```
 
-network guard単体は19000を使うため、Next/proxyと同時に実行しない。通常runnerは終わるとNext/proxyを停止する。browser用に残す場合だけBUNSHIN_E2E_KEEP_FOR_BROWSERに同じrun IDを明示し、確認後Ctrl+Cで停止する。browser/sessionは今回未検証のため、このopt-inを完了済み手順として扱わない。
+network guard/upgrade単体は19000を使うため、Next/proxyと同時に実行しない。通常runnerは終わるとNext/proxyを停止する。browser用に残す場合だけBUNSHIN_E2E_KEEP_FOR_BROWSERに同じrun IDを明示し、全HTTP PASS出力の後に`/__e2e/login/browser`を開く。2026-10-04に指定Chromeで確認した範囲は上記追記を参照。確認後Ctrl+Cで停止する。opt-inは通常ログインや完全なbrowser隔離を保証しない。
 
 5. 検証終了後、記録ID/labelを再確認し、そのtaskのAuth/gateway/DBだけstop（--rmで匿名volumeを含む使い捨てDBを除去）、専用networkを除去する。残存task labelとloopback listenerを確認。一時mirrorのjunctionを先にunlinkし、検証した自taskの絶対pathだけを削除する。他のcheckout/依存の実体を削除しない。
 
@@ -109,6 +159,6 @@ network guard単体は19000を使うため、Next/proxyと同時に実行しな�
 
 検証終了後、f6/f7/f8の合成DBを含む旧taskのAuth/DB/gatewayと2networkを完全ID/label照合後に除去した。setup検証f9も同じ方法で除去し、各task labelのcontainer/network残存なしを確認した。Next/proxyの19000/19002 listenerは終了を確認。共有pruneや別作業のcontainer停止はない。一方、Tempの`bunshin-feedback-e2e-*`一時ソースmirror11個は削除操作が拒否されたため保持している。tracked sourceのコピー・依存junction・dev cacheであり、実ユーザーデータは持ち込んでいない。依存junctionの参照先である本来のcheckout/node_modulesを削除せず、必要なら別途安全なcleanupを行う。browser cookie/profileのcleanup確認は未実施で、Auth DB除去とその確認を混同しない。
 
-次は**ブラウザ接続の復旧を確認したうえで、同じ隔離構成の新runを使い、実画面のPREPARE→判断確定→終端表示と、commit後応答喪失→同じ内容で再送を確認すること**。今回作成したHTTP/DB assertionを再利用し、ブラウザの結果とDB監査件数を同じrunへ結びつける。OS全体のbrowser sandbox/別profile条件も先に確認する。
+2026-10-03時点の次タスクはブラウザ操作とDB証跡の接続だった。2026-10-04追試で範囲限定の成功を確認したため、現在の最小タスクは上記追記の**非本番での停止→drain→preflight再現**。OS全体のbrowser sandbox、通常ログイン、実端末などの未確認条件は残す。
 
 今回、本番DB/設定/資格情報/顧客素材、課金API、実生成、LINE/SNS、merge/deployは使用・実行していない。本番gateを解除しない。切り戻しは追加テストscript/helperと文書のみで、アプリとschemaに影響しない。完了/未確認を分けたテスト専用PRとして共有する。
