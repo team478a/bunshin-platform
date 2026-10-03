@@ -1,5 +1,12 @@
 # BUNSHIN Platform Decision Log
 
+## Feedback期限処理: 既存Jobで削除と継続を原子的に確定する
+
+- 2026-10-03、PR #1092 merge後 `38a04b86e5e468f85ab4249ede469542390fce8c`。承認済み90/90/180日を変更しない。
+- Cron認証後の既存Job workerへ内部schedulerと専用executorを接続する。新Worker/キュー/公開操作口/schemaは作らない。通常enqueueのACTIVE所属制約は緩めず、期限処理専用のtrusted DB経路で停止済みService/Workspaceも扱う。
+- Job行→Service行の順にlockし、保存済みpayload/scope/environment・leaseを照合してbounded purgeとSUCCEEDED/継続を同txで確定する。commit直前の時計でlease切れなら全rollback。正常なbatch継続は障害試行を消費せず、失敗は既存FailJobの有限backoffへ渡す。
+- 日次key、同scope未完Job除外、期限の古いscope優先で登録を限定する。requestedByは既存Workspace所属の本人参照を利用するが、本人の能動操作/権限委譲とは扱わない。所属自体がない孤立scopeは登録できず運用条件として報告する。本番適用/周期/負荷/バックアップ削除保証は別途確認する。
+
 ## Improvement Candidate保存: 承認された保持方針と削除を同じ境界へ接続
 
 - 日付: 2026-10-03。基準main `4d9bfaa1d2316a62b11cee71726e2f9228903648`。ユーザーは原本受付90日、候補週終了90日、限定監査操作180日、本人削除/退会完了時の原本削除・候補失効・監査本人参照除去、組織所有の手動確認維持を提示後「進めてください」と承認した。

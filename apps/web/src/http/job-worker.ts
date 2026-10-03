@@ -13,6 +13,7 @@ import {
   ExecuteServiceLineBroadcastJob,
   ExecuteTrainingAnswerEvaluationJob,
   ExecuteFortuneGenerationJob,
+  ExecuteImprovementFeedbackRetentionJob,
   FailJob,
   MissionAutomationHandlerRegistry,
   RunJobWorkerBatch,
@@ -42,6 +43,15 @@ export interface JobWorkerPort {
 
 export interface ServiceCreditExpirationPort {
   expire(): Promise<number>;
+}
+
+export interface FeedbackRetentionSchedulingPort {
+  schedule(environment: JobEnvironment): Promise<{ scheduled: number }>;
+}
+
+async function configuredFeedbackRetention(): Promise<FeedbackRetentionSchedulingPort> {
+  const db = await import('@bunshin/database');
+  return new db.PrismaImprovementFeedbackRetentionJobRepository();
 }
 
 async function configuredServiceCreditExpiration(): Promise<ServiceCreditExpirationPort> {
@@ -88,6 +98,10 @@ async function configuredWorker(): Promise<JobWorkerPort> {
   const jobs = new db.PrismaJobRepository();
   const complete = new CompleteJob(jobs);
   const fail = new FailJob(jobs);
+  const feedbackRetentionExecutor = new ExecuteImprovementFeedbackRetentionJob(
+    new db.PrismaImprovementFeedbackRetentionJobRepository(),
+    fail,
+  );
   // Creatomate also sends a webhook, but polling remains the recovery path when
   // a callback is delayed or lost. Keep that recovery responsive while a render
   // is pending instead of allowing the generic backoff to grow to one hour.
@@ -144,25 +158,27 @@ async function configuredWorker(): Promise<JobWorkerPort> {
   // invocation cannot claim and charge for the same extraction concurrently.
   return new RunJobWorkerBatch(new ClaimJob(jobs, 5 * 60_000), {
     execute: (job, workerId) =>
-      job.jobType === 'LINE_MISSION_DELIVER'
-        ? lineExecutor.execute(job, workerId)
-        : job.jobType === 'BADGE_LINE_DELIVER'
-          ? badgeLineExecutor.execute(job, workerId)
-          : job.jobType === 'VIDEO_RENDER_PROCESS'
-            ? videoExecutor.execute(job, workerId)
-            : job.jobType === 'VIDEO_AI_SCENE_GENERATION_PROCESS'
-              ? videoAiSceneExecutor.execute(job, workerId)
-              : job.jobType === 'SOCIAL_IMAGE_GENERATE'
-                ? socialImageExecutor.execute(job, workerId)
-                : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
-                  ? groupKnowledgeExecutor.execute(job, workerId)
-                  : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
-                    ? serviceLineBroadcastExecutor.execute(job, workerId)
-                    : job.jobType === 'TRAINING_ANSWER_EVALUATE'
-                      ? trainingEvaluationExecutor.execute(job, workerId)
-                      : job.jobType === 'FORTUNE_READING_GENERATE'
-                        ? fortuneExecutor.execute(job, workerId)
-                        : missionExecutor.execute(job, workerId),
+      job.jobType === 'IMPROVEMENT_FEEDBACK_PURGE'
+        ? feedbackRetentionExecutor.execute(job, workerId)
+        : job.jobType === 'LINE_MISSION_DELIVER'
+          ? lineExecutor.execute(job, workerId)
+          : job.jobType === 'BADGE_LINE_DELIVER'
+            ? badgeLineExecutor.execute(job, workerId)
+            : job.jobType === 'VIDEO_RENDER_PROCESS'
+              ? videoExecutor.execute(job, workerId)
+              : job.jobType === 'VIDEO_AI_SCENE_GENERATION_PROCESS'
+                ? videoAiSceneExecutor.execute(job, workerId)
+                : job.jobType === 'SOCIAL_IMAGE_GENERATE'
+                  ? socialImageExecutor.execute(job, workerId)
+                  : job.jobType === 'GROUP_KNOWLEDGE_EXTRACT'
+                    ? groupKnowledgeExecutor.execute(job, workerId)
+                    : job.jobType === 'SERVICE_LINE_BROADCAST_DELIVER'
+                      ? serviceLineBroadcastExecutor.execute(job, workerId)
+                      : job.jobType === 'TRAINING_ANSWER_EVALUATE'
+                        ? trainingEvaluationExecutor.execute(job, workerId)
+                        : job.jobType === 'FORTUNE_READING_GENERATE'
+                          ? fortuneExecutor.execute(job, workerId)
+                          : missionExecutor.execute(job, workerId),
   });
 }
 
@@ -170,12 +186,27 @@ export async function jobWorkerResponse(
   request: Request,
   workerFactory: () => Promise<JobWorkerPort> = configuredWorker,
   expirationFactory: () => Promise<ServiceCreditExpirationPort> = configuredServiceCreditExpiration,
+  retentionFactory: () => Promise<FeedbackRetentionSchedulingPort> = configuredFeedbackRetention,
 ): Promise<Response> {
   const requestId = requestIdFromHeader(request.headers.get('x-request-id'));
   const started = Date.now();
   try {
     const environment = getServerEnvironment();
     authorizeCronRequest(request, environment.CRON_SECRET);
+    let feedbackRetention = { scheduled: 0 };
+    let feedbackRetentionSchedulingFailed = false;
+    try {
+      feedbackRetention = await (
+        await retentionFactory()
+      ).schedule(runtimeEnvironment[environment.APP_ENV]);
+    } catch {
+      // Maintenance failure must be visible but must not stop ordinary Mission Jobs.
+      feedbackRetentionSchedulingFailed = true;
+      logger.error('feedback retention scheduling failed', {
+        requestId,
+        errorCode: 'FEEDBACK_RETENTION_SCHEDULING_FAILED',
+      });
+    }
     const worker = await workerFactory();
     const result = await worker.execute({
       environment: runtimeEnvironment[environment.APP_ENV],
@@ -196,8 +227,16 @@ export async function jobWorkerResponse(
       infrastructureFailures: result.infrastructureFailures,
       drained: result.drained,
       expiredServiceCredits,
+      scheduledFeedbackRetentionJobs: feedbackRetention.scheduled,
+      feedbackRetentionSchedulingFailed,
     });
-    return Response.json({ ...result, expiredServiceCredits, requestId });
+    return Response.json({
+      ...result,
+      expiredServiceCredits,
+      scheduledFeedbackRetentionJobs: feedbackRetention.scheduled,
+      feedbackRetentionSchedulingFailed,
+      requestId,
+    });
   } catch (error) {
     const mapped = toApiError(error, requestId);
     logger.error('job worker batch failed', {

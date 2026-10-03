@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedbackの期限処理Job接続は`docs/improvement/IMPROVEMENT_FEEDBACK_RETENTION_JOB_IMPLEMENTATION.md`。既存Cron認証/claim/workerへ内部schedulerを接続し、scope限定purgeとJob完了/継続を同txで確定する。lease切れ・二重配送・失敗回復と停止scopeを検証。新Worker/queue/schema/管理UI書込なし。本番期限内削除保証、孤立scopeの処理主体とGeneric Job履歴保持、遅延監視/backup運用は未完。次は孤立scopeとJob履歴の保持・削除条件を小さく設計/検証する。
+
 人手Candidateの内部保存・保持/削除は`docs/improvement/IMPROVEMENT_TRIAGE_PERSISTENCE_IMPLEMENTATION.md`。責任者承認の原本90日/候補週終了90日/限定監査180日を固定し、同Service lock・DB原本変更失効・CAS/audit一体保存・退会完了の原本削除/監査本人参照消去を追加する。組織manual reviewと読み取り専用UIを維持。本番適用・公開書込・定期purge配信は未完。次は既存Jobによるscope限定purgeの配信/lease/再実行と運用条件の検証。
 
 人手Candidateの純粋契約は`docs/improvement/IMPROVEMENT_TRIAGE_CONTRACT_IMPLEMENTATION.md`。OPENから確認/対象外だけを許可し、trusted承認方針・現在管理権限・週全体/bucket Evidence版・CAS・再送条件を検証する。原子的Portとfake回帰までで、DB保存/作成/削除/承認/HTTP/UIは未接続。次は保持・削除方針の責任者レビューと最小Repository PRの変更/受入条件の確定。未承認のまま保存実装へ進めない。
