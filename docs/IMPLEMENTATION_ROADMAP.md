@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback人手確認の実Auth・Next・DB HTTP通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`。合成セッションでGET無保存、正常判断3種類、保存後HTTP応答喪失と同操作再送、actor/Service/Workspace/非管理者/未認証/権限取消、Auth本人削除後拒否を確認。変更はテスト専用helper/文書のみ。ブラウザ接続timeout/unavailableで実画面操作・mobile・通常PKCEは未確認、本番NO-GOを維持。次はbrowser接続/隔離条件の確認後、新runで実画面の終端表示と応答喪失再送をDB証跡へつなぐ。
+
 DB統合fixtureの連続実行修正は`docs/improvement/INTEGRATION_FIXTURE_REPEAT_CLEANUP_IMPLEMENTATION.md`。最新mainで1回目86件成功・2回目FK失敗を再現し、受講/研修fixtureの子→親削除とWeekly Plan→SNS戦略の順序をテスト専用で補完。同一使い捨てDB・別プロセスで87件を2回連続成功させ、隔離preflightを維持する。本番コード/schema/CI変更なし。実認証E2Eと本番gateは未完。次はローカル実Auth runtime・合成アカウント・ネットワーク制限の実行条件の承認確認。
 
 DB統合試験の隔離preflightは`docs/improvement/INTEGRATION_DATABASE_PREFLIGHT_IMPLEMENTATION.md`。曖昧なURL substring/skipを廃止し、実行環境・完全一致接続先・run限定DB/commentを削除/fixture書込前に確認する。既存GitHub専用PostgreSQL serviceは固定構成のみ維持し、CI/本番コード/schemaは変更しない。実認証E2Eと本番gateは未完。次は一時DBの既存fixture cleanupを2回連続実行で確認し、FK順序問題をテスト専用PRで修正する。
