@@ -238,6 +238,39 @@ describe('GenerateDailyMissionBrief', () => {
     expect(recruitment.strategyFocus).not.toBe(awareness.strategyFocus);
   });
 
+  it('finishes a confirmed weekly plan with its matching superseded strategy snapshot', async () => {
+    const planner = provider();
+
+    await expect(
+      new GenerateDailyMissionBrief(planner).execute({
+        ...input,
+        approvedStrategy: {
+          ...input.approvedStrategy,
+          status: 'SUPERSEDED',
+          supersededAt: now,
+        },
+      }),
+    ).resolves.toMatchObject({ output: { weeklyPlanItemId: 'item-trusted' } });
+    expect(planner.generate).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a superseded strategy that does not match the weekly snapshot', async () => {
+    const planner = provider();
+
+    await expect(
+      new GenerateDailyMissionBrief(planner).execute({
+        ...input,
+        approvedStrategy: {
+          ...input.approvedStrategy,
+          status: 'SUPERSEDED',
+          supersededAt: now,
+        },
+        weeklyPlan: { ...input.weeklyPlan, strategyId: 'different-strategy' },
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(planner.generate).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['unconfirmed plan', { weeklyPlan: { ...input.weeklyPlan, status: 'DRAFT' as const } }],
     [

@@ -1,6 +1,8 @@
 # SOCIAL Decision Context — Brief接続準備
 
-## 状態・ADR
+> 2026-10-04 JST更新: 準備PR #1110をmainへ復旧したPR #1111はマージ済み。本書の接続条件に対する実装結果は `HASSY_DECISION_CONTEXT_BRIEF_CONNECTION.md` を参照する。本書の以下の内容は準備PR時点の調査記録として保持する。
+
+## 準備PR時点の状態・ADR
 
 2026-10-04 JST。mainは `e935172ceeba740b180ae1ee22843393668e2033`、先行PR #1109 headは `3f53dd4c28fdb901f7c2e57bfe66fb3692a41a48`。開始時に#1109は未マージ、verify/databaseはともに成功を確認した。
 

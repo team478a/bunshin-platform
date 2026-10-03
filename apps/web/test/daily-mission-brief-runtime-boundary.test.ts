@@ -18,7 +18,8 @@ describe('daily mission brief runtime boundary', () => {
     const generation = read('src/services/daily-mission-generation.ts');
 
     expect(generation).toContain('await runDailyMissionBriefGeneration({');
-    expect(generation).toContain('plannerInput: {');
+    expect(generation).toContain('const plannerInput: DailyMissionPlannerInput = {');
+    expect(generation).toContain('plannerInput: prepared.plannerInput');
     expect(generation).not.toContain('new OpenAIDailyMissionPlanner');
     expect(generation).not.toContain('new GenerateDailyMissionBrief');
   });

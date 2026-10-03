@@ -1,5 +1,9 @@
 import 'server-only';
-import { ListDailyMissions, type MissionContent } from '@bunshin/capability-social';
+import {
+  ListDailyMissions,
+  type DailyMissionPlannerInput,
+  type MissionContent,
+} from '@bunshin/capability-social';
 import { RequireActiveBunshinCapability } from '@bunshin/application';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
@@ -22,6 +26,7 @@ import {
 } from './daily-mission-ai-runtime';
 import { runDailyMissionContentGeneration } from './daily-mission-content-runtime';
 import { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
+import { prepareDailyMissionDecisionPlannerInput } from './daily-mission-decision-context';
 import { loadDailyMissionGenerationEnvironment } from './daily-mission-generation-environment';
 import { persistDailyMissionGenerationResult } from './daily-mission-result-persistence';
 
@@ -167,34 +172,41 @@ export class DailyMissionGenerationService {
         campaign,
         fallbackGroupKnowledge: serviceKnowledge?.groupKnowledge ?? [],
       });
+      const plannerInput: DailyMissionPlannerInput = {
+        ...scope,
+        missionDate: input.missionDate,
+        timezone,
+        socialProfile: profile,
+        facePolicy: bunshin.personality?.facePolicy ?? 'FULL_ANONYMOUS',
+        recentFormats,
+        recentTopics: recentMissions.map(({ missionDate, topic, angle }) => ({
+          missionDate,
+          topic,
+          angle,
+        })),
+        bunshin: bunshinContext,
+        approvedStrategy: strategy,
+        weeklyPlan,
+        contentPillars: pillars,
+        grantedKnowledge: knowledge,
+        businessProfile: serviceKnowledge?.businessProfile ?? null,
+        trendIdeas,
+        campaign,
+        personalization: plannerPersonalization,
+      };
+      stage = 'daily-decision-context';
+      const prepared = prepareDailyMissionDecisionPlannerInput({
+        scope,
+        plannerInput,
+        source: serviceKnowledge?.decisionContext ?? null,
+      });
       stage = 'daily-brief';
       const brief = await runDailyMissionBriefGeneration({
         apiKey,
         model,
         generateWithQuota,
         recordUsage,
-        plannerInput: {
-          ...scope,
-          missionDate: input.missionDate,
-          timezone,
-          socialProfile: profile,
-          facePolicy: bunshin.personality?.facePolicy ?? 'FULL_ANONYMOUS',
-          recentFormats,
-          recentTopics: recentMissions.map(({ missionDate, topic, angle }) => ({
-            missionDate,
-            topic,
-            angle,
-          })),
-          bunshin: bunshinContext,
-          approvedStrategy: strategy,
-          weeklyPlan,
-          contentPillars: pillars,
-          grantedKnowledge: knowledge,
-          businessProfile: serviceKnowledge?.businessProfile ?? null,
-          trendIdeas,
-          campaign,
-          personalization: plannerPersonalization,
-        },
+        plannerInput: prepared.plannerInput,
       });
       const pillarId = weeklyPlan.items.find(
         ({ id }) => id === brief.output.weeklyPlanItemId,
