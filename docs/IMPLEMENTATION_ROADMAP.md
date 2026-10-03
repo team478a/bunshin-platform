@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+人手Candidateの純粋契約は`docs/improvement/IMPROVEMENT_TRIAGE_CONTRACT_IMPLEMENTATION.md`。OPENから確認/対象外だけを許可し、trusted承認方針・現在管理権限・週全体/bucket Evidence版・CAS・再送条件を検証する。原子的Portとfake回帰までで、DB保存/作成/削除/承認/HTTP/UIは未接続。次は保持・削除方針の責任者レビューと最小Repository PRの変更/受入条件の確定。未承認のまま保存実装へ進めない。
+
 人手トリアージCandidateの最小保存・Revision/認可・保持/削除設計は`docs/improvement/IMPROVEMENT_TRIAGE_CANDIDATE_DESIGN.md`。退会soft deleteでFeedback原本が消えるとは保証できない現行差分を記録し、保存前に削除/失効連携を条件とする。現在は設計のみ。次の最小ゴールはschema/HTTP/UIなしの純粋契約・fake否定テスト。保持日数・audit消去・競合Transactionはレビュー後に永続化PRへ進める。
 
 Improvement Feedbackの読み取り専用管理画面は`docs/improvement/IMPROVEMENT_FEEDBACK_ADMIN_PREVIEW_IMPLEMENTATION.md`を参照。同Service/SOCIALの管理認可を維持し、完了済みJST週だけを確認する。5人未満のbucketまたは不完全読取は件数/詳細をサーバー側で伏せ、原本参照・RevisionをUIへ渡さない。永続Candidate/承認/自動修正・本番適用は含めない。次は人手トリアージCandidateの最小契約・認可/Revision・保持/削除方針の設計。

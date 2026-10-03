@@ -114,3 +114,4 @@ export * from './improvement-engine';
 export * from './improvement-feedback';
 export * from './improvement-feedback-observations';
 export * from './improvement-feedback-review-evidence';
+export * from './improvement-feedback-triage';
