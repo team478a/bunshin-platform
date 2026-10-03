@@ -97,6 +97,18 @@ BEGIN
     WHERE workspace_id = r.workspace_id AND service_id = r.service_id
       AND from_inclusive <= r.created_at AND to_exclusive > r.created_at AND state <> 'STALE';
   END LOOP;
+  IF TG_OP = 'INSERT' THEN
+    -- A record() authorization made before suspension/deletion must not recreate an erased signal.
+    PERFORM b.id FROM bunshins b JOIN users u ON u.id = b.owner_user_id
+      JOIN groups g ON g.id = b.group_id AND g.workspace_id = b.workspace_id
+      JOIN workspaces w ON w.id = b.workspace_id
+      WHERE b.id = NEW.bunshin_id AND b.workspace_id = NEW.workspace_id
+        AND b.group_id = NEW.service_id AND b.owner_user_id = NEW.actor_user_id
+        AND b.status::text IN ('DRAFT','ACTIVE','PAUSED') AND u.status::text = 'ACTIVE'
+        AND g.status::text = 'ACTIVE' AND w.status::text = 'ACTIVE'
+      FOR SHARE OF b, u, w;
+    IF NOT FOUND THEN RAISE EXCEPTION 'inactive feedback source owner'; END IF;
+  END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END $$;

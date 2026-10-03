@@ -619,7 +619,57 @@ export function registerImprovementTriageIntegrationCases(client: PrismaClient) 
           where: { id: f.candidate.id },
         }),
       ).toMatchObject({ state: 'STALE', windowEvidenceRevision: null });
+      await expect(
+        client.improvementFeedback.create({
+          data: { ...f.sources[0]!, id: randomUUID(), submissionKey: randomUUID() },
+        }),
+      ).rejects.toThrow('inactive feedback source owner');
+      expect(
+        await client.improvementFeedback.count({ where: { actorUserId: f.reporters[0]!.id } }),
+      ).toBe(0);
     });
+    it('triage persistence: source INSERT locks the active owner; later deletion erases it rather than resurrecting it', async () => {
+      const f = await fixture();
+      const inserted = gate();
+      const release = gate();
+      const started = gate();
+      const newId = randomUUID();
+      const inserting = client.$transaction(
+        async (tx) => {
+          await tx.improvementFeedback.create({
+            data: { ...f.sources[0]!, id: newId, submissionKey: randomUUID() },
+          });
+          inserted.resolve();
+          await release.promise;
+        },
+        { timeout: 20_000 },
+      );
+      await inserted.promise;
+      const label = `triage-owner-delete-${randomUUID()}`;
+      const deleting = client.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT set_config('application_name', ${label}, true)`;
+          started.resolve();
+          await tx.user.update({ where: { id: f.reporters[0]!.id }, data: { status: 'DELETED' } });
+        },
+        { timeout: 20_000 },
+      );
+      const completed = Promise.allSettled([inserting, deleting]);
+      try {
+        await started.promise;
+        await blocked(label);
+      } finally {
+        release.resolve();
+        await completed;
+      }
+      await inserting;
+      await deleting;
+      expect(
+        await client.improvementFeedback.count({ where: { actorUserId: f.reporters[0]!.id } }),
+      ).toBe(0);
+      expect(await client.improvementFeedback.count({ where: { id: newId } })).toBe(0);
+      expect(await client.improvementFeedback.count({ where: { serviceId: f.group.id } })).toBe(4);
+    }, 30_000);
     it('triage persistence: expiry rejects before purge; bounded batches restart without extending retention', async () => {
       const f = await fixture();
       await f.review();

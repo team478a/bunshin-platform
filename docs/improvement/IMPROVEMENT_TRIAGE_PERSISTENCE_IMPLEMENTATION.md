@@ -19,6 +19,8 @@
 
 ## 原本変更・削除・保持
 
+進行中の`record()`は保存前の認可だけでは退会後INSERTを防げないため、DB INSERT triggerでも現行ACTIVE本人・自Bunshin/Service/Workspaceをロック付きで再確認する。既にDELETED/ARCHIVEDの所有範囲への再INSERTは拒否。先にINSERTが成立した場合は退会側を待機させ、後の削除commitでその原本も消去する。認可前読取と保存の間の退会を「常に先の認可が有効」としない。
+
 migrationは既にDELETEDになっているUserのactor/実所有Feedbackだけを除去する。trigger導入前の削除漏れを残さないためで、組織資産自体は削除しない。原本actor/Bunshinの索引も加える。このcleanupは隔離CIで実行するが、本番の件数・時間は未確認なので本番migration承認前に負荷確認が必要。90日超の全既存原本の物理削除はmigration内で一括実行せず、bounded purgeの運用接続で扱う。
 
 | 起点                              | 実装した境界                                                                                      | 留意点                                                                           |
