@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+DB統合fixtureの連続実行修正は`docs/improvement/INTEGRATION_FIXTURE_REPEAT_CLEANUP_IMPLEMENTATION.md`。最新mainで1回目86件成功・2回目FK失敗を再現し、受講/研修fixtureの子→親削除とWeekly Plan→SNS戦略の順序をテスト専用で補完。同一使い捨てDB・別プロセスで87件を2回連続成功させ、隔離preflightを維持する。本番コード/schema/CI変更なし。実認証E2Eと本番gateは未完。次はローカル実Auth runtime・合成アカウント・ネットワーク制限の実行条件の承認確認。
+
 DB統合試験の隔離preflightは`docs/improvement/INTEGRATION_DATABASE_PREFLIGHT_IMPLEMENTATION.md`。曖昧なURL substring/skipを廃止し、実行環境・完全一致接続先・run限定DB/commentを削除/fixture書込前に確認する。既存GitHub専用PostgreSQL serviceは固定構成のみ維持し、CI/本番コード/schemaは変更しない。実認証E2Eと本番gateは未完。次は一時DBの既存fixture cleanupを2回連続実行で確認し、FK順序問題をテスト専用PRで修正する。
 
 Feedback人手確認の実HTTP/認証/DB E2Eの条件は`docs/improvement/IMPROVEMENT_FEEDBACK_E2E_READINESS.md`。合成データの使い捨てローカルPostgreSQLで既存migration・DB統合試験を確認し、実認証にSupabase Authが必要であることを実経路から整理する。現行CI/React fixtureだけでは実認証E2Eではない。本番NO-GOを維持。次は破壊的DBテスト前の厳密な隔離preflightをテスト専用PRで追加し、その後ローカル実Auth環境の実行条件を承認確認する。

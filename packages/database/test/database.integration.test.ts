@@ -2,6 +2,7 @@ import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
 import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
+import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
   integrationDatabaseTarget,
   verifyIntegrationDatabase,
@@ -156,6 +157,7 @@ describe('database ownership boundaries', () => {
     await client.groupMemberFeatureAssignment.deleteMany();
     await client.groupFeaturePolicy.deleteMany();
     await client.groupInvitation.deleteMany();
+    await cleanupProgramFixtures(client);
     await client.groupMembership.deleteMany();
     await client.generationContextSnapshot.deleteMany();
     await client.missionTrendContext.deleteMany();
@@ -181,11 +183,11 @@ describe('database ownership boundaries', () => {
     await client.postRecord.deleteMany();
     await client.missionActivity.deleteMany();
     await client.missionDecision.deleteMany();
-    await client.socialAccountStrategy.deleteMany();
     await client.missionContent.deleteMany();
     await client.dailyMission.deleteMany();
     await client.weeklyPlanItem.deleteMany();
     await client.weeklyPlan.deleteMany();
+    await client.socialAccountStrategy.deleteMany();
     await client.contentPillar.deleteMany();
     await client.socialProfile.deleteMany();
     await client.bunshinCapabilityAssignment.deleteMany();
@@ -208,6 +210,19 @@ describe('database ownership boundaries', () => {
   afterAll(async () => client.$disconnect());
   registerImprovementTriageIntegrationCases(client);
   registerImprovementRetentionJobIntegrationCases(client);
+
+  it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
+    expect(
+      await Promise.all([
+        client.programEnrollment.count(),
+        client.programMissionAssignment.count(),
+        client.programTemplate.count(),
+        client.trainingMissionAnswer.count(),
+        client.trainingToolkitItem.count(),
+        client.trainingParticipantProfile.count(),
+      ]),
+    ).toEqual([0, 0, 0, 0, 0, 0]);
+  });
 
   it('persists owner trouble feedback, serializes concurrent replays and separates service, user, Bunshin and package', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
