@@ -33,6 +33,7 @@ const payload = (): GenerationContextSnapshotPayload => ({
       'ACCOUNT_STRATEGY',
       'RECENT_ACTIVITY',
     ],
+    reason: '本人の設定とSNSプロフィールを企画へ反映した',
     onboardingResponse: { id: 'onboarding-1' },
     businessProfile: { id: 'business-1' },
     weeklyPlanItem: { id: 'item-1' },
@@ -43,6 +44,19 @@ const payload = (): GenerationContextSnapshotPayload => ({
     recentDecisions: [{ id: 'decision-1' }],
     postRecords: [{ id: 'post-1' }],
     socialInsights: [{ id: 'insight-1' }],
+  },
+  decision: {
+    schemaVersion: 1,
+    decisionEngineVersion: 'social-daily-decision-v1',
+    plannerPromptVersion: 'daily-mission-planner-v1',
+    contextVersion: 'social-decision-context-v1',
+    decisionStage: 'DAILY',
+    status: 'READY',
+    evidenceCompleteness: 'HIGH',
+    eligibleSignalTypes: ['BOUNDARY', 'CURRENT_GOAL', 'STRATEGY'],
+    ignoredSignals: [{ type: 'PERFORMANCE', reason: 'UNKNOWN_GOAL', count: 1 }],
+    missingInputs: [],
+    limitations: ['OBSERVATIONS_NOT_CAUSAL_EVIDENCE'],
   },
 });
 
@@ -156,5 +170,27 @@ describe('Generation Context Snapshot', () => {
     await expect(
       new GetGenerationContextSnapshot(repository).execute({ ...scope, bunshinId: 'bunshin-2' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('keeps old payloads compatible and rejects inconsistent decision metadata', async () => {
+    const repository = new Snapshots();
+    const oldPayload = payload();
+    delete oldPayload.decision;
+    delete oldPayload.personalization?.reason;
+    await expect(
+      new RecordGenerationContextSnapshot(repository).execute({ ...scope, payload: oldPayload }),
+    ).resolves.toMatchObject({ payload: oldPayload });
+
+    const invalid = payload();
+    invalid.decision!.ignoredSignals = [
+      { type: 'PERFORMANCE', reason: 'OTHER_GOAL', count: 1 },
+      { type: 'PERFORMANCE', reason: 'OTHER_GOAL', count: 2 },
+    ];
+    await expect(
+      new RecordGenerationContextSnapshot(new Snapshots()).execute({
+        ...scope,
+        payload: invalid,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

@@ -33,6 +33,7 @@ interface SelectedMemoryReference extends Reference {
 interface PersonalizationReferences {
   sourceTypes: string[];
   availableSourceTypes: string[];
+  reason: string | null;
   onboardingResponseId: string | null;
   businessProfileId: string | null;
   weeklyPlanItemId: string;
@@ -62,6 +63,7 @@ interface GenerationEvidence {
   model: string;
   qualityIssueCodes: string[];
   repairCount: number;
+  decision: GenerationContextSnapshotPayload['decision'] | null;
   personalization: PersonalizationReferences;
 }
 
@@ -93,10 +95,12 @@ export function buildDailyMissionGenerationContext(
       issueCodes: evidence.qualityIssueCodes,
       repairCount: evidence.repairCount,
     },
+    ...(evidence.decision ? { decision: evidence.decision } : {}),
     personalization: {
       mode: 'AI',
       sourceTypes: evidence.personalization.sourceTypes,
       availableSourceTypes: evidence.personalization.availableSourceTypes,
+      ...(evidence.personalization.reason ? { reason: evidence.personalization.reason } : {}),
       onboardingResponse: evidence.personalization.onboardingResponseId
         ? { id: evidence.personalization.onboardingResponseId }
         : null,
