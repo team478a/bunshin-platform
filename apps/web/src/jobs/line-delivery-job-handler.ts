@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   CreateSocialImageMediaReadUrl,
+  assertUserJob,
   ExecuteLineMissionDelivery,
   GetLineMissionDelivery,
   IssueMissionDeepLinkState,
@@ -21,6 +22,7 @@ import {
 export function createLineDeliveryJobHandler(): LineDeliveryJobHandler {
   return {
     async execute({ job, deliveryId, workerId }) {
+      assertUserJob(job);
       if (!job.bunshinId)
         return { status: 'FAILED', category: 'RECIPIENT_UNAVAILABLE', retryable: false };
       const bunshinId = job.bunshinId;

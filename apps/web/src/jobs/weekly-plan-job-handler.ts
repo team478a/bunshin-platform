@@ -1,11 +1,13 @@
 import 'server-only';
 import type { MissionAutomationHandler } from '@bunshin/application';
+import { assertUserJob } from '@bunshin/application';
 import { createWeeklyPlanGenerationService } from '../services/weekly-plan-generation';
 import { prepareServiceAutomaticWeek } from './service-automatic-week';
 
 export function createWeeklyPlanJobHandler(): MissionAutomationHandler {
   return {
     async execute({ job, localDate }) {
+      assertUserJob(job);
       if (!job.bunshinId) return;
       const db = await import('@bunshin/database');
       const scope = await new db.PrismaMissionAutomationScopeRepository().resolveScope({

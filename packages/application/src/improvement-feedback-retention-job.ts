@@ -1,7 +1,12 @@
 import { ApplicationError } from '@bunshin/shared';
-import type { FailJob, Job, JobEnvironment } from './job-runtime';
+import {
+  FEEDBACK_PURGE_JOB_TYPE,
+  type FailJob,
+  type Job,
+  type JobEnvironment,
+} from './job-runtime';
 
-export const IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE = 'IMPROVEMENT_FEEDBACK_PURGE';
+export const IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE = FEEDBACK_PURGE_JOB_TYPE;
 export const improvementFeedbackPurgePayload = (serviceId: string) =>
   `feedback-purge:feedback-retention-v1:${serviceId}`;
 

@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   EnqueueJob,
+  assertUserJob,
   PrepareLineMissionDelivery,
   type MissionAutomationHandler,
 } from '@bunshin/application';
@@ -21,6 +22,7 @@ import { ApplicationError } from '@bunshin/shared';
 export function createDailyMissionJobHandler(): MissionAutomationHandler {
   return {
     async execute({ job, localDate }) {
+      assertUserJob(job);
       if (!job.bunshinId) return;
       const db = await import('@bunshin/database');
       const scope = await new db.PrismaMissionAutomationScopeRepository().resolveScope({
