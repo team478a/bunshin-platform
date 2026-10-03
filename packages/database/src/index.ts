@@ -279,3 +279,4 @@ export {
 export { PrismaHassySupportImprovementAdapter } from './hassy-improvement-support-adapter';
 export { PrismaHassyPhotoQualityImprovementAdapter } from './hassy-improvement-photo-quality-adapter';
 export { PrismaImprovementFeedbackRepository } from './improvement-feedback';
+export { PrismaImprovementFeedbackObservationAdapter } from './improvement-feedback-observation-adapter';

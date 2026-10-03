@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Feedback観測: 自己申告を確定BUGや発生率へ昇格させない
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- PR #1086の専用原本を既存CollectImprovementObservationsへ接続する。共通Applicationに選択コードのprojectionを置き、databaseに固定scope＋DB管理者再認可を持つ独立読取Adapterを追加する。SOCIAL入口の報告だけを対象とし、ハッシー名やOEM名で分類しない。
+- 運営者は同Workspace/ServiceのACTIVE SERVICE_OWNER/SERVICE_ADMINだけ。参加者や編集者、本部/Workspace管理者へ暗黙の横断権限を与えない。本人書込の認可を緩めず、HTTP/UI/Jobを追加しない。
+- 原本のWorkspace/Service/Package/actor/Bunshinを正本にし、現在のBunshinの所有範囲との不一致は安全側で読取失敗とする。別Serviceへ付け替えたり、移動/譲渡を日時やkeyから推定しない。退会済み報告者や無効能力を理由に過去の報告を黙って除外しない。
+- SELF_REPORTED_TROUBLE、共通分類UNKNOWNで渡す。OPERATIONをBUG、CONTENTをAI_QUALITY、WAITINGをPERFORMANCEへ自動認定しない。報告件数とdistinct報告者を別計測し、実際の困りごとの母集団/発生率/解決率/原価はUNKNOWN/null。
+- limit+1と半開期間で最初のbounded batchを取得し、打切りはPARTIAL。保存原本の読取完全性と現実の捕捉率を分離する。自由文・素材・Memory・送信キーを取得しない。Schema/書込/Provider/設定/本番は変更しない。
+
 ## Improvement Feedback: 本人の選択式原本を投稿評価・支援ケースから分離する
 
 - 日付: 2026-10-03、状態: 実装PRで検証。
