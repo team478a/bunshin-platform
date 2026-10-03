@@ -11,6 +11,9 @@ describe('daily mission result persistence boundary', () => {
 
     expect(resultPersistence).toContain('return persistGeneratedDailyMission({');
     expect(resultPersistence).toContain('availableSourceTypes: personalizationSourceTypes(');
+    expect(resultPersistence).toContain('buildDailyMissionDecisionMetadata({');
+    expect(resultPersistence).toContain('reason: input.decisionContext');
+    expect(resultPersistence).toContain('input.brief.output.personalizationReason ?? null');
     expect(resultPersistence).toContain('recentMissionIds: input.recentMissionIds');
     expect(resultPersistence).toContain(
       'groupKnowledgeIds: input.finalizedContent.groupKnowledgeIds',
@@ -24,6 +27,7 @@ describe('daily mission result persistence boundary', () => {
 
     expect(generation).toContain('await persistDailyMissionGenerationResult({');
     expect(generation).toContain('planning: planningContext');
+    expect(generation).toContain('decisionContext: prepared.context');
     expect(generation).toContain('recentMissionIds: recentMissions.map(({ id }) => id)');
     expect(generation).not.toContain('availableSourceTypes: personalizationSourceTypes(');
     expect(generation).not.toContain('return persistGeneratedDailyMission({');

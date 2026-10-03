@@ -12,6 +12,24 @@ export interface SelectedMemoryReference extends GenerationContextReference {
   selectionReason: string;
 }
 
+export interface GenerationDecisionMetadata {
+  schemaVersion: 1;
+  decisionEngineVersion: string;
+  plannerPromptVersion: string;
+  contextVersion: string;
+  decisionStage: 'DAILY';
+  status: 'READY';
+  evidenceCompleteness: 'HIGH' | 'MEDIUM' | 'LOW';
+  eligibleSignalTypes: string[];
+  ignoredSignals: Array<{
+    type: string;
+    reason: 'OTHER_GOAL' | 'UNKNOWN_GOAL' | 'NO_OBSERVATION';
+    count: number;
+  }>;
+  missingInputs: string[];
+  limitations: string[];
+}
+
 export interface GenerationContextSnapshotPayload {
   personality: GenerationContextReference | null;
   selectedMemories: SelectedMemoryReference[];
@@ -33,10 +51,12 @@ export interface GenerationContextSnapshotPayload {
     issueCodes: string[];
     repairCount: number;
   };
+  decision?: GenerationDecisionMetadata;
   personalization?: {
     mode: 'AI' | 'FALLBACK';
     sourceTypes: string[];
     availableSourceTypes?: string[];
+    reason?: string;
     onboardingResponse: GenerationContextReference | null;
     businessProfile: GenerationContextReference | null;
     weeklyPlanItem: GenerationContextReference;
@@ -85,6 +105,22 @@ function requireText(value: string, field: string) {
   if (value.trim().length === 0) {
     throw new ApplicationError('VALIDATION_ERROR', `${field} is required`);
   }
+}
+
+function requireBoundedText(value: string, field: string, maximum: number) {
+  requireText(value, field);
+  if (value.length > maximum) throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
+}
+
+function requireUniqueText(values: string[], field: string, allowEmpty = false, maximum = 100) {
+  if (
+    (!allowEmpty && values.length === 0) ||
+    values.length > maximum ||
+    values.some((value) => value.trim().length === 0) ||
+    values.some((value) => value.length > 200) ||
+    new Set(values).size !== values.length
+  )
+    throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
 }
 
 function requireUniqueReferences(values: GenerationContextReference[], field: string) {
@@ -153,6 +189,42 @@ export function validateGenerationContextSnapshot(payload: GenerationContextSnap
         'VALIDATION_ERROR',
         'invalid personalization.availableSourceTypes',
       );
+    if (payload.personalization.reason !== undefined) {
+      requireBoundedText(payload.personalization.reason, 'personalization.reason', 500);
+    }
+  }
+  if (payload.decision) {
+    const decision = payload.decision;
+    if (decision.schemaVersion !== 1)
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid decision.schemaVersion');
+    requireBoundedText(decision.decisionEngineVersion, 'decision.decisionEngineVersion', 200);
+    requireBoundedText(decision.plannerPromptVersion, 'decision.plannerPromptVersion', 200);
+    requireBoundedText(decision.contextVersion, 'decision.contextVersion', 200);
+    if (
+      decision.decisionStage !== 'DAILY' ||
+      decision.status !== 'READY' ||
+      !['HIGH', 'MEDIUM', 'LOW'].includes(decision.evidenceCompleteness)
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid decision state');
+    requireUniqueText(decision.eligibleSignalTypes, 'decision.eligibleSignalTypes', false, 20);
+    requireUniqueText(decision.missingInputs, 'decision.missingInputs', true, 20);
+    requireUniqueText(decision.limitations, 'decision.limitations', true, 20);
+    if (decision.ignoredSignals.length > 20)
+      throw new ApplicationError('VALIDATION_ERROR', 'too many decision ignored signals');
+    const ignoredKeys = decision.ignoredSignals.map(({ type, reason, count }) => {
+      requireBoundedText(type, 'decision.ignoredSignals.type', 100);
+      if (!['OTHER_GOAL', 'UNKNOWN_GOAL', 'NO_OBSERVATION'].includes(reason))
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision ignored reason');
+      if (!Number.isInteger(count) || count < 1)
+        throw new ApplicationError('VALIDATION_ERROR', 'invalid decision ignored count');
+      return `${type}:${reason}`;
+    });
+    if (new Set(ignoredKeys).size !== ignoredKeys.length)
+      throw new ApplicationError('VALIDATION_ERROR', 'duplicate decision ignored signal');
+    if (decision.missingInputs.length > 0)
+      throw new ApplicationError('VALIDATION_ERROR', 'ready decision has missing inputs');
+    if (!payload.personalization?.reason)
+      throw new ApplicationError('VALIDATION_ERROR', 'decision personalization reason is required');
   }
   for (const memory of payload.selectedMemories) {
     requireText(memory.summary, 'selectedMemory.summary');

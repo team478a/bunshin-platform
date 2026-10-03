@@ -18,7 +18,10 @@ vi.mock('../src/services/weekly-plan-generation', () => ({
   }),
 }));
 
-import { prepareDailyMissionDecisionPlannerInput } from '../src/services/daily-mission-decision-context';
+import {
+  buildDailyMissionDecisionMetadata,
+  prepareDailyMissionDecisionPlannerInput,
+} from '../src/services/daily-mission-decision-context';
 
 const now = new Date('2026-10-04T00:00:00.000Z');
 
@@ -210,5 +213,23 @@ describe('daily mission decision context connection', () => {
         ({ type }) => type === 'POST_PERFORMANCE',
       ),
     ).toBe(false);
+
+    const metadata = buildDailyMissionDecisionMetadata({
+      context: prepared.context,
+      plannerPromptVersion: 'daily-mission-planner-v1',
+    });
+    expect(metadata).toMatchObject({
+      decisionEngineVersion: 'social-daily-decision-v1',
+      plannerPromptVersion: 'daily-mission-planner-v1',
+      contextVersion: 'social-decision-context-v1',
+      status: 'READY',
+      ignoredSignals: [
+        { type: 'PERFORMANCE', reason: 'UNKNOWN_GOAL', count: 1 },
+        { type: 'OUTCOME', reason: 'NO_OBSERVATION', count: 1 },
+      ],
+    });
+    expect(JSON.stringify(metadata)).not.toContain('workspace-1');
+    expect(JSON.stringify(metadata)).not.toContain('owner-1');
+    expect(JSON.stringify(metadata)).not.toContain('performance:post-1');
   });
 });

@@ -7,16 +7,53 @@ import {
   type SocialDecisionObservation,
   type SocialDecisionScope,
 } from '@bunshin/capability-social';
+import type { GenerationDecisionMetadata } from '@bunshin/application';
+import { ApplicationError } from '@bunshin/shared';
 
 import { buildGoalOutcomePlanningContext } from './weekly-plan-generation';
 
 type OutcomeRecord = Parameters<typeof buildGoalOutcomePlanningContext>[1][number];
+
+export const SOCIAL_DAILY_DECISION_VERSION = 'social-daily-decision-v1';
 
 export interface DailyMissionDecisionContextSource {
   enabled: boolean;
   safetyLegal: SocialDecisionBoundaryStatus;
   observations: readonly SocialDecisionObservation[];
   outcomeRecords: readonly OutcomeRecord[];
+}
+
+export function buildDailyMissionDecisionMetadata(input: {
+  context: ReturnType<typeof prepareSocialDecisionPlannerInput>['context'] | null;
+  plannerPromptVersion: string;
+}): GenerationDecisionMetadata | null {
+  if (!input.context) return null;
+  if (input.context.status !== 'READY')
+    throw new ApplicationError('CONFLICT', 'only ready decision context can be snapshotted');
+  const ignored = new Map<string, GenerationDecisionMetadata['ignoredSignals'][number]>();
+  for (const signal of input.context.signals) {
+    if (signal.ignoredReason === null) continue;
+    const key = `${signal.type}:${signal.ignoredReason}`;
+    const current = ignored.get(key);
+    ignored.set(key, {
+      type: signal.type,
+      reason: signal.ignoredReason,
+      count: (current?.count ?? 0) + 1,
+    });
+  }
+  return {
+    schemaVersion: 1,
+    decisionEngineVersion: SOCIAL_DAILY_DECISION_VERSION,
+    plannerPromptVersion: input.plannerPromptVersion,
+    contextVersion: input.context.version,
+    decisionStage: 'DAILY',
+    status: 'READY',
+    evidenceCompleteness: input.context.evidenceCompleteness,
+    eligibleSignalTypes: [...new Set(input.context.orderedSignals.map(({ type }) => type))],
+    ignoredSignals: [...ignored.values()],
+    missingInputs: [...input.context.missingInputs],
+    limitations: [...input.context.limitations],
+  };
 }
 
 function effectiveWeeklyPlan(input: DailyMissionPlannerInput) {

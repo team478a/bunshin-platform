@@ -3489,3 +3489,12 @@
 - 新しいGoalは、承認後に新しく生成するWeekly Planから有効にする。同じ週の確定済み計画を暗黙に書き換えたり、過去Mission・成果のGoalを付け替えたりしない。画面にも反映時期を明示する。
 - Daily Mission生成はWeekly Planに保存されたStrategyを読み、現在の承認済みStrategyと混在させない。保存したStrategyが欠損、別Profile、Goal不一致の場合は生成を停止する。Goalを持たない既存Weekly Planだけは互換性のため現在の承認済みStrategyを使用し、過去データを推測更新しない。
 - Workspace、Service、User、Bunshin、Social Profileの既存境界を維持し、Weekly Plan作成時にStrategyの所有範囲・Profile・Goal・承認状態をDBで再検証する。本変更は即時の週途中切替、複数Goal、期間指定、既存Planの一括補完を含めない。
+
+## 2026-10-04: SOCIAL Decision metadataは既存生成Snapshotへ最小・任意・版付きで保存する
+
+- 状態: Accepted（Brief直前接続後の監査可能性）
+- 新しいDecision、Analytics、Historyテーブルは作らず、既存 `GenerationContextSnapshot.payload` の任意 `decision` blockを再利用する。旧payloadはblockなしで引き続き有効とし、backfillや現在値からの補完を行わない。
+- 保存するのはDecision契約版、Context版、Planner Prompt版、DAILY stage、READY状態、材料充足度、利用可能signal種別、Goal不明・別Goal・観測なしで無視したsignalの種別別件数、missing inputs、既知の制約に限定する。
+- Workspace、User、Bunshin、履歴行ID、投稿本文、URL、Memory全文、観測値、自由入力はdecision blockへ複製しない。Plannerが実際に使用したpersonalization source種別と500文字以内の理由は既存personalization blockに保存し、利用可能sourceの部分集合である既存検証を維持する。
+- `decision` blockを保存するのは、既存認可・Capability・所有権・Service参加／法的同意precheckを通過し、Decision ContextがREADYとなった対象経路だけ。対象外Serviceとdeterministic fallbackのSnapshot契約は変更しない。
+- Daily MissionとGeneration Context Snapshotの既存同一transaction保存を維持する。本文品質repair後のtopic／angle／action変更とreasonの再判断は別PRで扱い、本記録だけで最終本文との意味整合を保証しない。

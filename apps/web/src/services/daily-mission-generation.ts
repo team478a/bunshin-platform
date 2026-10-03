@@ -295,6 +295,7 @@ export class DailyMissionGenerationService {
         pillar,
         selectedMemories,
         personalization,
+        decisionContext: prepared.context,
         recentMissionIds: recentMissions.map(({ id }) => id),
         contentResult: { content, quality, repairCount, qualityIssueCodes },
         finalizedContent: {

@@ -49,7 +49,7 @@
 
 ## 5. 未解決事項
 
-- Decision Context自体をGenerationContextSnapshotへ保存することと、生成理由との整合監査は後続課題。
+- Decision Contextの最小metadataとpersonalization理由のGenerationContextSnapshot保存は、後続の `HASSY_DECISION_METADATA_SNAPSHOT.md` で扱う。本文品質repair後の理由整合は引き続き未解決。
 - `safetyLegal` はService参加・法的文書同意のprecondition名であり、個別投稿内容の法令適合を保証しない。別の実安全検査が導入される場合は境界条件を拡張する。
 - Snapshotを持たない過去Post PerformanceはGoal不明のためGoal別最適化に使わない。データを推測補完しない。
 - 本番での品質改善、実Provider出力、運用時のUNKNOWN発生率は未確認。
