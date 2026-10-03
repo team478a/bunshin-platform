@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback実Authのブラウザ再確認は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`内の2026-10-03追記。PR #1103 merge後の新しい隔離runでHTTP assertionsは再成功、アプリ内ブラウザの管理画面表示まで確認した。ただし確認ボタンから判断フォームへ進まず、browser scopeのcandidate0のまま。最小の合成JavaScript/クリックprobeは成功したので、ブラウザ全体の実行不能とは断定しない。実画面の保存/終端表示/応答喪失再送は未完、原因未確定、本番NO-GO維持。次は選択したChrome profileによる切り分けとアプリのscript配信/実行確認。今回、本番コード/schemaを修正しない。
+
 Feedback人手確認の実Auth・Next・DB HTTP通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`。合成セッションでGET無保存、正常判断3種類、保存後HTTP応答喪失と同操作再送、actor/Service/Workspace/非管理者/未認証/権限取消、Auth本人削除後拒否を確認。変更はテスト専用helper/文書のみ。ブラウザ接続timeout/unavailableで実画面操作・mobile・通常PKCEは未確認、本番NO-GOを維持。次はbrowser接続/隔離条件の確認後、新runで実画面の終端表示と応答喪失再送をDB証跡へつなぐ。
 
 DB統合fixtureの連続実行修正は`docs/improvement/INTEGRATION_FIXTURE_REPEAT_CLEANUP_IMPLEMENTATION.md`。最新mainで1回目86件成功・2回目FK失敗を再現し、受講/研修fixtureの子→親削除とWeekly Plan→SNS戦略の順序をテスト専用で補完。同一使い捨てDB・別プロセスで87件を2回連続成功させ、隔離preflightを維持する。本番コード/schema/CI変更なし。実認証E2Eと本番gateは未完。次はローカル実Auth runtime・合成アカウント・ネットワーク制限の実行条件の承認確認。
