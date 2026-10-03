@@ -57,7 +57,7 @@ export function FeedbackAdminSummary({
         5人未満の集計が1つでもあれば全体を伏せます。この基準や固定の週は、匿名化や再識別防止を保証するものではありません。
       </p>
       <p>
-            受付ID、個人名、本文、写真、Memoryは表示しません。実装承認・自動修正・通知・CSV出力は行いません。
+        受付ID、個人名、本文、写真、Memoryは表示しません。実装承認・自動修正・通知・CSV出力は行いません。
       </p>
       <small>
         表示方針: {preview.policyVersion}／確認ルール: {preview.ruleVersion}
