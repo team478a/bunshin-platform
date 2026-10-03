@@ -54,6 +54,7 @@ Node 24.21.0 / pnpm 10.10.0 / Windows PowerShell。
 - 実DB統合: `test/database.integration.test.ts`に同時2インスタンス、本人境界、別Bunshin/Service/Workspace/User/Package、所属/能力失効、上限/再送、CHECK、削除連動を追加。隔離PostgreSQL16の通常PR CIで検証する。本番DBは使わない。
 - `pnpm --filter @bunshin/database db:validate`: 初回DIRECT_URL未設定で停止。その後、接続しない架空localhost URLで再実行し成功。
 - 型/lint/全回帰/buildと最新headのCI結果はPR/最終報告を正本とし、未完の実行を成功とは記載しない。
+- 実行途中の失敗記録: fixtureのPrettierチェックを整形のみ修正。CI `37081505018`の実DBは51件成功/追加1件失敗。追加fixtureのACTIVE所属にconsentedAtがなく既存state CHECKに拒否されたため、参加同意時刻・取消時刻・復帰時の取消時刻解除をfixtureへ追加した。DB制約・assertion・CIは弱めていない。最終判定は修正後の最新head CIで行う。
 - スマートフォン実機、実Session/OEM独自ドメイン、本番E2E、画面再読込をまたぐ応答喪失は未確認。静的UIだけを実操作保証として扱わない。
 
 再実行: Node24 PATHの下で `pnpm --filter @bunshin/application exec vitest run test/improvement-feedback.test.ts`、`pnpm --filter @bunshin/database exec vitest run test/improvement-feedback.test.ts`、`pnpm --filter web exec vitest run test/improvement-feedback.test.ts`。実DBは既存CIの隔離DB/Migration/`pnpm test:integration`手順に限定する。

@@ -219,6 +219,7 @@ integration('database ownership boundaries', () => {
         groupId: group.id,
         userId: owner.user.id,
         status: 'ACTIVE',
+        consentedAt: new Date(),
       },
     });
     const create = (ownerUserId: string) =>
@@ -293,12 +294,12 @@ integration('database ownership boundaries', () => {
     });
     await client.groupMembership.update({
       where: { id: membership.id },
-      data: { status: 'REVOKED' },
+      data: { status: 'REVOKED', revokedAt: new Date() },
     });
     await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await client.groupMembership.update({
       where: { id: membership.id },
-      data: { status: 'ACTIVE' },
+      data: { status: 'ACTIVE', revokedAt: null },
     });
     await client.improvementFeedback.createMany({
       data: Array.from({ length: 9 }, () => ({
