@@ -203,6 +203,9 @@ describe('server-side small-cell and reference disclosure boundary', () => {
       { ...original, reports: NaN },
       { ...original, buckets: [] },
     ])
-      expect(() => projectFeedbackAdminPreview(invalid, window())).toThrow();
+      // Deliberately malformed runtime data must bypass the pinned compile-time rule literal.
+      expect(() =>
+        projectFeedbackAdminPreview(invalid as unknown as typeof original, window()),
+      ).toThrow();
   });
 });
