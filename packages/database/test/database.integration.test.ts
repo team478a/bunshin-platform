@@ -301,6 +301,12 @@ integration('database ownership boundaries', () => {
       populationCoverage: 'UNKNOWN',
     });
     const observed = await reader.readObservations(readRequest);
+    expect((await reader.reviewEvidence(readRequest)).buckets[0]).toMatchObject({
+      reviewDecision: 'HELD',
+      reports: 1,
+      classification: 'UNKNOWN',
+      sourceRefs: [{ id: first.id }],
+    });
     expect(observed.observations[0]).toMatchObject({
       category: 'UNKNOWN',
       status: 'REPORTED',
@@ -399,6 +405,32 @@ integration('database ownership boundaries', () => {
       missingCount: null,
       truncated: true,
     });
+    await repository.record({
+      ...input,
+      actorUserId: other.user.id,
+      bunshinId: otherBunshin.id,
+      submissionKey: randomUUID(),
+    });
+    const evidence = await reader.reviewEvidence(readRequest);
+    expect(evidence).toMatchObject({
+      reports: 11,
+      distinctReporters: 2,
+      buckets: [
+        {
+          reviewDecision: 'REVIEW_REQUIRED',
+          reports: 11,
+          distinctReporters: 2,
+          classification: 'UNKNOWN',
+        },
+      ],
+    });
+    expect((await reader.reviewEvidence(readRequest)).evidenceRevision).toBe(
+      evidence.evidenceRevision,
+    );
+    expect((await reader.reviewEvidence({ ...readRequest, limit: 2 })).buckets[0]).toMatchObject({
+      reviewDecision: 'HELD',
+      holdReasons: expect.arrayContaining(['READ_INCOMPLETE']),
+    });
     await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: siblingGroup.id } });
     await expect(reader.readObservations(readRequest)).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
@@ -409,6 +441,7 @@ integration('database ownership boundaries', () => {
       data: { status: 'REVOKED', revokedAt: new Date() },
     });
     await expect(reader.readObservations(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(reader.reviewEvidence(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
       client.improvementFeedback.create({
         data: { ...input, submissionKey: randomUUID(), category: 'RAW_PRIVATE_TEXT' },
