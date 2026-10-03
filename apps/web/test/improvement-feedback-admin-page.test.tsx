@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { isValidElement, type ReactNode } from 'react';
 import { ApplicationError } from '@bunshin/shared';
 import {
   BuildImprovementFeedbackReviewEvidence,
@@ -18,7 +19,12 @@ vi.mock('../src/auth/current-user', () => ({
   currentUserProvider: () => Promise.resolve({ getCurrentUser: fake.actor }),
 }));
 vi.mock('../src/services/public-service', () => ({ resolveManagedServiceContext: fake.service }));
-vi.mock('@bunshin/config', () => ({ getServerEnvironment: () => ({ APP_ENV: 'development' }) }));
+vi.mock('@bunshin/config', () => ({
+  getServerEnvironment: () => ({
+    APP_ENV: 'development',
+    SESSION_SECRET: 'synthetic-review-session-secret-32-bytes',
+  }),
+}));
 vi.mock('@bunshin/observability', () => ({ createLogger: () => ({ error: fake.log }) }));
 vi.mock('@bunshin/database', () => ({
   prisma: { bunshin: { findFirst: fake.probe } },
@@ -46,6 +52,11 @@ import {
   type FeedbackPreviewQuery,
 } from '../src/services/improvement-feedback-admin-preview';
 const checkedAt = new Date('2026-10-03T01:30:00Z');
+function endpointInTree(node: ReactNode): string | undefined {
+  if (Array.isArray(node)) return node.map(endpointInTree).find((value) => value !== undefined);
+  if (!isValidElement<{ reviewEndpoint?: string; children?: ReactNode }>(node)) return undefined;
+  return node.props.reviewEndpoint ?? endpointInTree(node.props.children);
+}
 const scope = {
   tenantRef: 'workspace',
   workspaceId: 'workspace',
@@ -117,7 +128,8 @@ describe('service feedback admin preview page and server composition', () => {
     vi.unstubAllGlobals();
   });
   it('reads an authenticated private service with fixed scope and only renders the projected model', async () => {
-    const html = renderToStaticMarkup(await page());
+    const rendered = await page();
+    const html = renderToStaticMarkup(rendered);
     expect(fake.service).toHaveBeenCalledWith('synthetic', 'manager', 'ADMINISTRATION');
     expect(fake.construct).toHaveBeenCalledWith(expect.anything(), scope);
     expect(fake.review).toHaveBeenCalledWith({
@@ -143,7 +155,9 @@ describe('service feedback admin preview page and server composition', () => {
       },
       select: { id: true },
     });
-    expect(html).toContain('読み取り専用');
+    expect(html).toContain('人手確認');
+    expect(html).toContain('確認を始める');
+    expect(endpointInTree(rendered)).toBe('/api/services/canonical/improvement-feedback/review');
     expect(html).toContain('/s/canonical/manage/improvement-feedback?week=2026-09-21');
     expect(html).toContain('保存報告 5件');
     expect(html).not.toContain('PRIVATE_');

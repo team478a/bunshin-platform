@@ -1,6 +1,13 @@
 import type { FeedbackAdminPreview } from '../../../../../src/services/improvement-feedback-admin-preview';
+import { FeedbackReviewControl } from './feedback-review-control';
 
-export function FeedbackAdminSummary({ preview }: { preview: FeedbackAdminPreview }) {
+export function FeedbackAdminSummary({
+  preview,
+  reviewEndpoint,
+}: {
+  preview: FeedbackAdminPreview;
+  reviewEndpoint?: string;
+}) {
   return (
     <section className="settings-card">
       <h2>
@@ -28,6 +35,13 @@ export function FeedbackAdminSummary({ preview }: { preview: FeedbackAdminPrevie
                 <h3>
                   {bucket.category}・{bucket.surface}・{bucket.impact}
                 </h3>
+                {reviewEndpoint && bucket.reviewHandle && (
+                  <FeedbackReviewControl
+                    key={bucket.reviewHandle}
+                    endpoint={reviewEndpoint}
+                    selectionHandle={bucket.reviewHandle}
+                  />
+                )}
                 <p>
                   {bucket.reports}件／{bucket.reporters}人 — {bucket.decision}
                 </p>
@@ -43,7 +57,7 @@ export function FeedbackAdminSummary({ preview }: { preview: FeedbackAdminPrevie
         5人未満の集計が1つでもあれば全体を伏せます。この基準や固定の週は、匿名化や再識別防止を保証するものではありません。
       </p>
       <p>
-        受付ID、個人名、本文、写真、Memoryは表示しません。承認・修正・通知・CSV出力は行いません。
+        受付ID、個人名、本文、写真、Memoryは表示しません。実装承認・自動修正・通知・CSV出力は行いません。
       </p>
       <small>
         表示方針: {preview.policyVersion}／確認ルール: {preview.ruleVersion}

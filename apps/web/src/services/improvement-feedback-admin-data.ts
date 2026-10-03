@@ -8,6 +8,7 @@ import {
   projectFeedbackAdminPreview,
   type FeedbackPreviewWindow,
 } from './improvement-feedback-admin-preview';
+import { sealFeedbackReviewHandle } from './improvement-feedback-review-handle';
 
 /** A scoped capability/history probe, not authorization and not a public API. */
 export async function hasServiceSocialFeedbackSurface(input: {
@@ -72,9 +73,38 @@ export async function loadFeedbackAdminPreview(input: {
     });
     if (!sameImprovementScope(evidence.scope, scope) || evidence.selection.kind !== 'SERVICE')
       throw new Error('feedback preview scope mismatch');
+    const preview = projectFeedbackAdminPreview(evidence, input.window);
+    const at = Date.now();
+    if (
+      preview.state === 'VISIBLE' &&
+      !evidence.coverage.truncated &&
+      evidence.coverage.missingCount === 0
+    ) {
+      preview.buckets.forEach((bucket, index) => {
+        const source = evidence.buckets[index]!;
+        if (source.reviewDecision !== 'REVIEW_REQUIRED') return;
+        bucket.reviewHandle = sealFeedbackReviewHandle(
+          {
+            version: 'feedback-review-handle-v1',
+            actorUserId: input.actorUserId,
+            workspaceId: input.workspaceId,
+            serviceId: input.serviceId,
+            environment: scope.environment,
+            week: input.window.week,
+            clusterRef: source.clusterRef,
+            windowRevision: evidence.evidenceRevision,
+            bucketRevision: source.evidenceRevision,
+            issuedAt: at,
+            expiresAt: at + 600_000,
+            review: null,
+          },
+          getServerEnvironment().SESSION_SECRET,
+        );
+      });
+    }
     return {
       outcome: 'PREVIEW' as const,
-      preview: projectFeedbackAdminPreview(evidence, input.window),
+      preview,
     };
   } catch (error) {
     if (error instanceof ApplicationError && ['NOT_FOUND', 'FORBIDDEN'].includes(error.code))

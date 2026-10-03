@@ -3472,6 +3472,15 @@
 - 次週計画は現在のGoalと、生成時Goal・保存時Goalが一致する自己申告だけを参照する。自己申告しかない場合は`SELF_REPORTED`とし、外部KPI達成、投稿との因果関係、採用・認知等の実績として断定しない。問い合わせ・来店予約・販売の既存件数がある場合は`MEASURED`を優先する。
 - 本変更はV1の簡易入力と同一Goalへの次週反映までとする。外部SNS分析、予約・応募・売上システム連携、複数Goalの重み付け、因果推定、過去Snapshotの補完は含めない。
 
+## D-146: Feedbackの人手確認UIは暗号化短期handleで既存CASへ接続する
+
+- 日付: 2026-10-03
+- 状態: Accepted（ユーザー承認の改善候補確認・却下ゴール）
+- 画面GETでは候補を保存しない。明示的な準備POSTと確認/対象外確定POSTを分離し、既存Repositoryの管理者再認可・Evidence再検証・CAS・監査を再利用する。
+- 個人由来の根拠hashや内部IDを平文でClientへ渡さない。用途分離鍵によるAES-GCMの10分handleにactor/Service/Workspace/environment/週/根拠/Revisionを固定し、APIは同Origin・strict入力・サイズ制限・no-storeを必須とする。
+- 応答喪失後は同operation UUID・同判断で再送する。期限/根拠/権限変更は再読取を必要とし、再発注や判断の自動変更をしない。候補作成後の失敗は未判断OPENが残り得るが、確認成功とは扱わない。
+- schema/依存/Provider/本番設定は変更しない。REVIEWEDは修正済みや開発承認を意味せず、STALE再開・自動実装へ接続しない。非互換migrationの本番公開gateは別途維持する。
+
 ## D-145: SNS Goal変更は次に作るWeekly Planから有効にする
 
 - 日付: 2026-10-01
