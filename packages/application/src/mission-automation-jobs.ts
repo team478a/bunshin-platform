@@ -1,4 +1,5 @@
 import { ApplicationError } from '@bunshin/shared';
+import { assertUserJob } from './job-runtime';
 import type {
   CompleteJob,
   EnqueueJob,
@@ -269,6 +270,7 @@ export class ExecuteMissionAutomationJob {
   ) {}
 
   async execute(job: Job, workerId: string) {
+    assertUserJob(job);
     if (!job.bunshinId || job.capabilityType !== 'SOCIAL')
       return this.fail.execute(job, workerId, {
         errorCategory: 'INVALID_JOB_SCOPE',

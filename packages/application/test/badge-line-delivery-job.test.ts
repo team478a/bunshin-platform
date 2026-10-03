@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ExecuteBadgeLineDeliveryJob, ScheduleBadgeLineDeliveryJobs, type Job } from '../src';
+import { ExecuteBadgeLineDeliveryJob, ScheduleBadgeLineDeliveryJobs, type UserJob } from '../src';
 
-function job(overrides: Partial<Job> = {}): Job {
+function job(overrides: Partial<UserJob> = {}): UserJob {
   return {
     id: 'job-1',
     environment: 'PRODUCTION',

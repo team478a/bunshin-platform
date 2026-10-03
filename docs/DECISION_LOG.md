@@ -1,5 +1,13 @@
 # BUNSHIN Platform Decision Log
 
+## Feedback purge Job限定のmaintenance主体と終端履歴保持
+
+- 2026-10-03、PR #1094 merge後main `f1bb8f9b2d5c4d606fd7cae4f2ec9fbcf635917e`。ユーザーはpurge限定の本人参照なし、既存対象の限定移行、終端後180日保持、稼働中Job非削除、通常Jobへの非横展開を「はい」で承認した。
+- 通常JobはrequestedBy必須を維持。purge専用のnull主体はJob種/payload/key/CapabilityなしをDB制約とApplication境界で限定し、公開enqueueは予約種を拒否する。System Userや他Workspaceの主体を借りない。
+- 移行は既存Groupに所有scopeが一致し、正規v1 payload/日次key・逆参照なしのpurge Jobだけ。想定外のpurge行はmigrationを停止し、内容をログへ出さず別途確認する。通常Jobの本人参照/退会規則は変更しない。
+- purgeの終端日時を固定する。旧DEADや終端日時不明は移行日時から保守的に180日保持。新規終端後の復帰/時刻書換を拒否する。内部Cronだけが環境限定・最大100行・逆参照なし・期限超過終端Jobを削除し、稼働中/通常Jobや同日keyを消さない。不可逆cleanupの本番適用は実施しない。
+- schema変更と旧workerは同時稼働非互換。承認済みリリースではCron/workerを停止しmigration→新アプリ→再開する。rollbackは旧アプリだけを戻さず、新契約を維持してcleanup停止を先に行う。本人参照の復元は推測しない。
+
 ## 期限処理の孤立scope: 検出とJob履歴の現行契約を先に確定する
 
 - 2026-10-03、PR #1093 merge後main `f135b2e73ce7292d19aeeef0edde6fbe87598c32`。既存退会計画はUserをsoft DELETEDとし、Generic Jobのpseudonymous参照を保持する。Feedback/auditの90/180日承認だけで全Job履歴の削除期限が承認されたとは扱わない。

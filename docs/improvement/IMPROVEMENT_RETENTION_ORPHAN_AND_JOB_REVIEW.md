@@ -1,5 +1,7 @@
 # Feedback期限処理 — 孤立scopeとJob本人参照の監査
 
+後続: 2026-10-03にpurge限定maintenance主体・限定移行・終端履歴180日が承認された。変更内容と安全回帰は`IMPROVEMENT_MAINTENANCE_JOB_IMPLEMENTATION.md`を参照。本書はPR #1094時点の現行挙動を保存する監査記録であり、以下の「未承認/未実装」は当時の状態。本番適用済みという意味ではない。
+
 ## 結論・範囲
 
 2026-10-03 Asia/Tokyo、基準main `f135b2e73ce7292d19aeeef0edde6fbe87598c32`（PR #1093 merge確認）、ブランチ `codex/improvement-retention-orphan-audit`。Windows / Node24.21.0 / pnpm10.10.0。別checkoutの未コミット変更に触れていない。

@@ -8,6 +8,7 @@ import {
 import { ApplicationError } from '@bunshin/shared';
 import { Prisma, prisma, type PrismaClient } from './client';
 import { purgeExpiredImprovementFeedbackInTransaction } from './improvement-feedback-retention';
+import { platformJob } from './job-mapping';
 
 const day = 86_400_000;
 const uuid = '[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}';
@@ -43,6 +44,29 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
     if (!Number.isFinite(now.getTime()))
       throw new ApplicationError('VALIDATION_ERROR', 'invalid retention clock');
     const dayKey = now.toISOString().slice(0, 10);
+    // Bounded history cleanup is distinct from source retention and never selects active Jobs.
+    await this.client.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL statement_timeout = '2000ms'`;
+        await tx.$executeRaw`
+        WITH expired AS (
+          SELECT j.id FROM jobs j
+          WHERE j.environment = ${environment}::"LineConfigurationEnvironment"
+            AND j.job_type = ${IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE}
+            AND j.requested_by IS NULL AND j.bunshin_id IS NULL AND j.capability_type IS NULL
+            AND j.status IN ('SUCCEEDED', 'CANCELLED', 'DEAD')
+            AND j.maintenance_terminal_at <= ${new Date(now.getTime() - 180 * day)}
+            AND right(j.idempotency_key, 10) < ${dayKey}
+            AND NOT EXISTS (SELECT 1 FROM line_delivery_retry_requests r WHERE r.job_id = j.id)
+            AND NOT EXISTS (SELECT 1 FROM badge_line_delivery_retry_requests r WHERE r.job_id = j.id)
+            AND NOT EXISTS (SELECT 1 FROM video_render_retry_requests r WHERE r.job_id = j.id)
+            AND NOT EXISTS (SELECT 1 FROM video_scene_generation_retry_requests r WHERE r.job_id = j.id)
+          ORDER BY j.maintenance_terminal_at, j.id LIMIT 100 FOR UPDATE SKIP LOCKED
+        ) DELETE FROM jobs j USING expired e WHERE j.id = e.id
+      `;
+      },
+      { maxWait: 2_000, timeout: 3_000 },
+    );
     // Original sources have no environment column: retention is physical ws/service scope,
     // not a license to infer or transfer environment-specific Candidate ownership.
     const selection = await this.client.$transaction(
@@ -59,17 +83,10 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
         `;
         if (typeof orphaned[0]?.detected !== 'boolean')
           throw new Error('feedback retention scope inspection unavailable');
-        const scopes = await tx.$queryRaw<
-          Array<{ workspaceId: string; serviceId: string; requestedBy: string }>
-        >`
+        const scopes = await tx.$queryRaw<Array<{ workspaceId: string; serviceId: string }>>`
       ${expiredScopesSql(now)}
-      SELECT s.workspace_id AS "workspaceId", s.service_id AS "serviceId",
-             member.user_id AS "requestedBy"
+      SELECT s.workspace_id AS "workspaceId", s.service_id AS "serviceId"
       FROM scopes s JOIN groups g ON g.id = s.service_id AND g.workspace_id = s.workspace_id
-      JOIN LATERAL (
-        SELECT user_id FROM workspace_memberships WHERE workspace_id = s.workspace_id
-        ORDER BY created_at, id LIMIT 1
-      ) member ON true
       WHERE NOT EXISTS (
         SELECT 1 FROM jobs j WHERE j.environment = ${environment}::"LineConfigurationEnvironment"
           AND j.workspace_id = s.workspace_id AND j.job_type = ${IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE}
@@ -113,7 +130,7 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
             data: {
               environment,
               workspaceId: scope.workspaceId,
-              requestedBy: scope.requestedBy,
+              requestedBy: null,
               jobType: IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE,
               payloadReference: payload,
               idempotencyKey: `${payload}:${dayKey}`,
@@ -137,7 +154,12 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
     const input = { ...job };
     const inputLease = job.leaseExpiresAt?.getTime();
     const match = payloadPattern.exec(input.payloadReference);
-    if (input.jobType !== IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE || !match || !workerId)
+    if (
+      input.jobType !== IMPROVEMENT_FEEDBACK_RETENTION_JOB_TYPE ||
+      input.requestedBy !== null ||
+      !match ||
+      !workerId
+    )
       throw new ApplicationError('VALIDATION_ERROR', 'invalid retention job');
     const serviceId = match[1]!;
     return this.client.$transaction(
@@ -153,6 +175,10 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
           current.payloadReference !== input.payloadReference ||
           current.bunshinId !== null ||
           current.capabilityType !== null ||
+          current.requestedBy !== null ||
+          current.idempotencyKey !==
+            `${current.payloadReference}:${current.scheduledAt.toISOString().slice(0, 10)}` ||
+          current.scheduledAt > started ||
           current.status !== 'LEASED' ||
           current.leaseOwner !== workerId ||
           !current.leaseExpiresAt ||
@@ -187,7 +213,7 @@ export class PrismaImprovementFeedbackRetentionJobRepository implements Improvem
         const committedAt = new Date(this.now());
         if (!Number.isFinite(committedAt.getTime()) || committedAt >= current.leaseExpiresAt)
           throw new ApplicationError('CONFLICT', 'retention job lease expired before commit');
-        return updated;
+        return platformJob(updated);
       },
       { maxWait: 10_000, timeout: 20_000 },
     );

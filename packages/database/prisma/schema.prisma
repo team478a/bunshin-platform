@@ -6272,7 +6272,7 @@ model Job {
   payloadReference                 String                            @map("payload_reference") @db.VarChar(500)
   idempotencyKey                   String                            @map("idempotency_key") @db.VarChar(200)
   correlationId                    String                            @map("correlation_id") @db.VarChar(120)
-  requestedBy                      String                            @map("requested_by") @db.Uuid
+  requestedBy                      String?                           @map("requested_by") @db.Uuid
   status                           JobStatus                         @default(PENDING)
   priority                         Int                               @default(100)
   scheduledAt                      DateTime                          @default(now()) @map("scheduled_at") @db.Timestamptz(6)
@@ -6284,11 +6284,12 @@ model Job {
   lastErrorCategory                String?                           @map("last_error_category") @db.VarChar(80)
   completedAt                      DateTime?                         @map("completed_at") @db.Timestamptz(6)
   cancelledAt                      DateTime?                         @map("cancelled_at") @db.Timestamptz(6)
+  maintenanceTerminalAt            DateTime?                         @map("maintenance_terminal_at") @db.Timestamptz(6)
   createdAt                        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                        DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace                        Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin                          Bunshin?                          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  requester                        User                              @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  requester                        User?                             @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
   lineDeliveryRetryRequest         LineDeliveryRetryRequest?
   badgeLineDeliveryRetryRequest    BadgeLineDeliveryRetryRequest?
   videoRenderRetryRequest          VideoRenderRetryRequest?
