@@ -1,5 +1,7 @@
 # Improvement Adapter Contract 設計案
 
+2026-10-03追加: 本人Feedbackの限定読取Adapterは`IMPROVEMENT_FEEDBACK_OBSERVATIONS_IMPLEMENTATION.md`を参照。既存Collect契約・原本参照を再利用し、同Service/SOCIAL管理権限・Bunshin所有対応をDBで照合。自己申告を診断へ昇格させず、母集団不足のrateをnullとする。cursor/管理UI/HTTP/定期Jobは追加していない。
+
 状態: Phase 1の非永続domain/収集契約を実装。2026-10-03にHassy Goal別支援結果の実読取Adapterを追加（`HASSY_SUPPORT_OUTCOMES_IMPLEMENTATION.md`）。HTTP API/管理UI/定期Jobは未接続、DB schema追加なし。Phase 1実装基準は`19f942b622df744f3c1141810a3fdabc39a94cef`（PR #1081 merge）、2026-10-02 JST。以下の擬似契約は設計案であり、実コードの型は各package公開入口を正本とする。
 
 ## Phase 1の実装

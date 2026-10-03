@@ -2,6 +2,7 @@ import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
 import {
   PrismaImprovementFeedbackRepository,
+  PrismaImprovementFeedbackObservationAdapter,
   PrismaTrainingLifecycleRepository,
   PrismaMissionContentVariantRepository,
   PrismaAiUsageEventRepository,
@@ -264,6 +265,85 @@ integration('database ownership boundaries', () => {
     ]);
     expect(first).toEqual(second);
     expect(await client.improvementFeedback.count({ where: { bunshinId: bunshin.id } })).toBe(1);
+    // Read authorization is independent of the existing owner-only write contract.
+    const readerMembership = await client.groupMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        userId: other.user.id,
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+        serviceRole: 'SERVICE_ADMIN',
+      },
+    });
+    const observationScope = {
+      workspaceId: owner.workspace.id,
+      serviceId: group.id,
+      tenantRef: owner.workspace.id,
+      packageKey: 'SOCIAL',
+      adapterKey: 'TROUBLE_FEEDBACK',
+      environment: 'DEVELOPMENT' as const,
+    };
+    const readRequest = {
+      actorUserId: other.user.id,
+      scope: observationScope,
+      fromInclusive: new Date(first.createdAt),
+      toExclusive: new Date(first.createdAt.getTime() + 60_000),
+      subject: null,
+      limit: 100,
+    };
+    const reader = new PrismaImprovementFeedbackObservationAdapter(client, observationScope);
+    expect(await reader.summarize(readRequest)).toMatchObject({
+      reports: 1,
+      distinctReporters: 1,
+      troubleIncidenceRate: null,
+      resolutionRate: null,
+      populationCoverage: 'UNKNOWN',
+    });
+    const observed = await reader.readObservations(readRequest);
+    expect(observed.observations[0]).toMatchObject({
+      category: 'UNKNOWN',
+      status: 'REPORTED',
+      source: { kind: 'IMPROVEMENT_FEEDBACK', id: first.id },
+      userRef: owner.user.id,
+      bunshinRef: bunshin.id,
+    });
+    expect(JSON.stringify(observed)).not.toContain(input.submissionKey);
+    expect(
+      (
+        await reader.summarize({
+          ...readRequest,
+          toExclusive: new Date(first.createdAt),
+          fromInclusive: new Date(first.createdAt.getTime() - 60_000),
+        })
+      ).reports,
+    ).toBe(0);
+    expect(
+      (
+        await reader.summarize({
+          ...readRequest,
+          subject: { userRef: owner.user.id, bunshinRef: sibling.id },
+        })
+      ).reports,
+    ).toBe(0);
+    await expect(
+      reader.readObservations({ ...readRequest, actorUserId: owner.user.id }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      reader.readObservations({
+        ...readRequest,
+        scope: { ...observationScope, serviceId: siblingGroup.id },
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.groupMembership.update({
+      where: { id: readerMembership.id },
+      data: { serviceRole: 'CONTENT_EDITOR' },
+    });
+    await expect(reader.readObservations(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.groupMembership.update({
+      where: { id: readerMembership.id },
+      data: { serviceRole: 'SERVICE_ADMIN' },
+    });
     await expect(repository.record({ ...input, impact: 'DIFFICULT' })).rejects.toMatchObject({
       code: 'CONFLICT',
     });
@@ -288,6 +368,7 @@ integration('database ownership boundaries', () => {
       data: { status: 'SUSPENDED' },
     });
     await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await reader.summarize(readRequest)).reports).toBe(1);
     await client.bunshinCapabilityAssignment.updateMany({
       where: { bunshinId: bunshin.id },
       data: { status: 'ACTIVE' },
@@ -297,6 +378,7 @@ integration('database ownership boundaries', () => {
       data: { status: 'REVOKED', revokedAt: new Date() },
     });
     await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await reader.summarize(readRequest)).reports).toBe(1);
     await client.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'ACTIVE', revokedAt: null },
@@ -312,6 +394,21 @@ integration('database ownership boundaries', () => {
       repository.record({ ...input, submissionKey: randomUUID() }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(await repository.record(input)).toEqual(first);
+    expect((await reader.summarize({ ...readRequest, limit: 2 })).coverage).toEqual({
+      completeness: 'PARTIAL',
+      missingCount: null,
+      truncated: true,
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: siblingGroup.id } });
+    await expect(reader.readObservations(readRequest)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: group.id } });
+    await client.groupMembership.update({
+      where: { id: readerMembership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    await expect(reader.readObservations(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
       client.improvementFeedback.create({
         data: { ...input, submissionKey: randomUUID(), category: 'RAW_PRIVATE_TEXT' },

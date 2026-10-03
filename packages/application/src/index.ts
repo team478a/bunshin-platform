@@ -112,3 +112,4 @@ export * from './business-growth-program';
 export * from './business-sns-diagnosis';
 export * from './improvement-engine';
 export * from './improvement-feedback';
+export * from './improvement-feedback-observations';

@@ -1,5 +1,7 @@
 # ワタシワークス Improvement Engine V1
 
+順序4の読取補完: `IMPROVEMENT_FEEDBACK_OBSERVATIONS_IMPLEMENTATION.md`。本人の選択式報告を同Workspace/Service/SOCIALの管理者だけが既存Engine契約で収集する内部Adapter。UNKNOWN/自己申告を維持し、件数と人数を分離、発生率・解決率・原価は未測定。管理UI/HTTP/Job、BUG確定、自動Candidateは未実装。以下は各段階の履歴として残す。
+
 順序4の追加: 本人の選択式「困った」Feedbackを、まずSNSの投稿パートナーホームで入力・保存する最小経路として実装。`IMPROVEMENT_FEEDBACK_IMPLEMENTATION.md`を参照。既存の投稿評価/支援ケースと別原本。全Package・全画面への接続や改善検知/管理UIは未実装。下記は過去段階の監査記録として維持する。
 
 最新の進捗: 順序3の不足監査と最小記録補完をまとめ、Photo First claimの開始経路と工程AiUsageEventの明示FKを追加する。詳細は`PHOTO_FIRST_OBSERVATION_PROVENANCE_IMPLEMENTATION.md`。旧不明行の推測補完はせず、全Photo First母集団はUNKNOWN。下記のPhase 0/1時点の記述は監査履歴として残す。次の独立ゴールは順序4の共通「困った」Feedback（契約・本人入力・保存・認可/二重送信回帰）。
