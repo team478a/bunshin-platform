@@ -1,5 +1,7 @@
 # BUNSHIN Platform 実装ロードマップ
 
+Feedback maintenanceの起動経路/停止方式設計は`docs/improvement/IMPROVEMENT_MAINTENANCE_STOP_DESIGN.md`。PR #1106のverify/database成功を確認し、Cron単独停止の不足とユーザー/管理者/LINE callback等のJob writerを整理。既存Vercel Cron停止＋project入口Denyの運用候補を先に確認し、旧版/全domain/bypass/実行中処理を未確認のまま安全とはしない。指定Chromeでは対象設定404、別アカウントへ切替せず本番NO-GO維持。次の最小タスクは対象project閲覧権限での読取inventory。guardは不足経路確定・別承認後のみで、本番停止/設定変更/実装へ進まない。
+
 Feedback maintenanceの停止/drain条件再現は`docs/improvement/IMPROVEMENT_MAINTENANCE_DRAIN_REHEARSAL.md`。PR #1105 merge基準の実run HTTP＋実Application workerで、別executor/retentionが実行中でもempty batchのdrained=true、lease期限を過ぎても待機処理未終了、例外＋HTTP200/drained=trueをcharacterizationする。テスト用Portと本番停止方式の保証を分け、fakeに停止guardを実装して合格させない。使い捨てDBの既存migration/preflight回帰を確認し、本番コード/schema/設定は変更しない。本番の全到達経路停止・drain/backup復元後再削除は未完。次はownerによる停止方式と全起動元の確定。現行機能で証明できない場合だけ、最小停止guardを先行別PRとして設計・承認する。
 
 Feedback実Authのブラウザ通し検証は`docs/improvement/IMPROVEMENT_FEEDBACK_REAL_AUTH_HTTP_VERIFICATION.md`内の2026-10-04追記。PR #1104 merge基準の新しい隔離runで全HTTP assertionsと、指定Chrome profileの実画面PREPARE→判断確定→記録済みを確認。保存後応答喪失→同一body再送でも監査は増えず、合成原本120件は不変。従来test proxyのNext16.3.3開発用HMR upgrade未転送をテスト専用helperで補完、Postgres初期化のready raceもtest setup内で修正した。本番コード/schema変更なし。通常PKCE/実端末/cookie完全cleanup、本番停止・drain・backup復元後再削除は未完、本番NO-GO維持。次の最小タスクはFeedback maintenanceの停止→drain→preflightを非本番で再現し証跡を確認すること。

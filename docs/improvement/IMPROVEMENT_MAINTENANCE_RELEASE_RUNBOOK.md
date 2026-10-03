@@ -31,6 +31,8 @@
 
 ## Gate 0: リリース差分・停止方法の確定
 
+2026-10-04の[停止方式・起動経路設計](IMPROVEMENT_MAINTENANCE_STOP_DESIGN.md)は、Cron停止＋既存project入口Denyを最初の検証候補とする。実Vercel設定/旧URL/bypass/全writer停止は未確認で、候補の採用や本番変更を承認したものではない。アプリguard追加はその不足条件の確定後に別判断する。
+
 1. 公開aliasが指す実SHA、productionブランチ、新しいrelease候補SHAを再取得する。mainとの差分に含まれる全migration・通常機能変更もレビューする。#1095だけの移行と決めつけない。
 2. 対象候補のverify/database CI成功を確認。過去headの成功を流用しない。
 3. Vercelの現在の停止機能/契約と、旧deployment URL・独自ドメイン・手動POST・外部scheduler等の到達経路を環境ownerが確認する。具体的な操作画面/権限と再開方法を記録する。確認前に「Cronをpauseできる」と断定しない。
