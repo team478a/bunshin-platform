@@ -24,17 +24,33 @@ const day = 86_400_000;
 /** Registered under the existing localhost/non-production integration guard. */
 export function registerImprovementRetentionJobIntegrationCases(client: PrismaClient) {
   describe('feedback retention existing Job isolated PostgreSQL', () => {
-    beforeEach(() =>
+    let fixtureWorkspaces: string[] = [];
+    beforeEach(() => {
+      fixtureWorkspaces = [];
       vi.stubGlobal('fetch', () => {
         throw new Error('external network forbidden');
-      }),
-    );
-    afterEach(() => vi.unstubAllGlobals());
+      });
+    });
+    afterEach(async () => {
+      // Suite-local synthetic scopes only. Global claim must not pick a prior case's
+      // intentionally expired lease when the next case advances its clock by a day.
+      try {
+        const scope = { workspaceId: { in: fixtureWorkspaces } };
+        await client.lineDeliveryRetryRequest.deleteMany({ where: { job: scope } });
+        await client.job.deleteMany({ where: scope });
+        await client.improvementFeedback.deleteMany({ where: scope });
+        await client.improvementTriageOperation.deleteMany({ where: scope });
+        await client.improvementTriageCandidate.deleteMany({ where: scope });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
     async function fixture(count = 1) {
       const account = await new CreateUserWithPersonalWorkspace(
         new PrismaAccountUnitOfWork(client),
       ).execute({ displayName: 'Synthetic retention manager' });
       const workspaceId = account.workspace.id;
+      fixtureWorkspaces.push(workspaceId);
       const group = await client.group.create({
         data: { workspaceId, name: 'Synthetic retention' },
       });
@@ -513,6 +529,7 @@ export function registerImprovementRetentionJobIntegrationCases(client: PrismaCl
       const account = await new CreateUserWithPersonalWorkspace(
         new PrismaAccountUnitOfWork(client),
       ).execute({ displayName: 'Synthetic FK only' });
+      fixtureWorkspaces.push(account.workspace.id);
       const group = await client.group.create({
         data: {
           workspaceId: account.workspace.id,

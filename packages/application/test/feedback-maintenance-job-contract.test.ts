@@ -60,12 +60,8 @@ describe('Feedback maintenance actor contract', () => {
         dependency as never,
         dependency as never,
       ),
-      new ExecuteFortuneGenerationJob(
-        dependency as never,
-        dependency as never,
-        dependency as never,
-      ),
-      new ExecuteLineDeliveryJob(dependency as never, dependency as never, dependency as never),
+      new ExecuteFortuneGenerationJob(dependency, dependency as never, dependency as never),
+      new ExecuteLineDeliveryJob(dependency, dependency as never, dependency as never),
     ];
     for (const executor of executors)
       await expect(executor.execute(job, 'synthetic-worker')).rejects.toMatchObject({
