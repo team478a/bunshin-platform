@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as Application from '@bunshin/application';
+import type * as CapabilitySocial from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import type * as ServiceDailyIdeaFallback from '../src/services/service-daily-idea-fallback';
 
@@ -30,12 +32,14 @@ vi.mock('@bunshin/database', () => ({
   PrismaLineMessageDeliveryRepository: class {},
   PrismaJobRepository: class {},
 }));
-vi.mock('@bunshin/capability-social', () => ({
+vi.mock('@bunshin/capability-social', async (importOriginal) => ({
+  ...(await importOriginal<typeof CapabilitySocial>()),
   ConfirmWeeklyPlan: class {
     execute = m.confirm;
   },
 }));
-vi.mock('@bunshin/application', () => ({
+vi.mock('@bunshin/application', async (importOriginal) => ({
+  ...(await importOriginal<typeof Application>()),
   EnqueueJob: class {
     enqueue = m.enqueue;
   },
@@ -85,7 +89,11 @@ const scope = {
   groupId: 'service',
 };
 describe('service automatic preparation and delivery', () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
+    vi.stubGlobal('fetch', () => {
+      throw new Error('external network forbidden');
+    });
     vi.resetAllMocks();
     m.scope.mockResolvedValue(scope);
     m.knowledge.mockResolvedValue({
@@ -105,6 +113,22 @@ describe('service automatic preparation and delivery', () => {
     m.policy.mockResolvedValue(null);
     m.image.mockResolvedValue({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
   });
+  it.each([createDailyMissionJobHandler, createWeeklyPlanJobHandler])(
+    'rejects maintenance before user handler invokes planning or delivery',
+    async (createHandler) => {
+      await expect(
+        createHandler().execute({
+          job: { requestedBy: null, jobType: 'IMPROVEMENT_FEEDBACK_PURGE' } as never,
+          localDate: '2026-09-07',
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(m.scope).not.toHaveBeenCalled();
+      expect(m.week).not.toHaveBeenCalled();
+      expect(m.daily).not.toHaveBeenCalled();
+      expect(m.prepare).not.toHaveBeenCalled();
+      expect(m.enqueue).not.toHaveBeenCalled();
+    },
+  );
   it('queues an opted-in commercial image before preparing the LINE delivery', async () => {
     m.policy.mockResolvedValue({
       onboardingConfig: {

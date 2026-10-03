@@ -70,6 +70,8 @@ git diff --check
 
 head `67876bf990ac3456c1d8aca88fb43ebcfc483ca7` / CI `37098329503` は隔離DB86件成功、format/typecheck/lint成功。全体testでは最新migrationとApplication readiness定数の不一致を既存テストが検出。`schema-readiness.ts` の定数を新migrationへ更新する（期待値やassertionは変更しない）。新アプリを旧DBで起動させない必須gateであり、同じ検証条件のまま最新headで再実行する。
 
+head `129a02dfa5a429e094f6c96970afdef6284dec6b` / CI `37098735799` は隔離DB86件成功、format/typecheck/lint成功。全体testの既存Service automaticテストのmodule mockが新しいassertUserJob exportを持たず15件失敗。Application/Capabilityのpartial mockで本番のguardを使い、既存のProvider/配信fakeを維持して外部通信を禁止する。Daily/Weekly handlerへのmaintenance直接呼出し拒否2件を追加する。mockへ架空の認可成功を入れず、通常Jobの期待値も弱めない。既存の全体Web試験のskip 2件は新設・変更しない（未実行として区別する）。
+
 ## リリース・切り戻し・残条件
 
 旧アプリはNULL主体を扱えない。schema readinessだけで並行稼働が安全とはしない。責任者承認の運用でCron/worker停止・稼働中lease drain→既存purge行の限定preflight→migration→新アプリ→再開が必要。migration失敗時は旧schemaのままrollbackし、scope別の確認後に再計画する。今回本番操作はしない。
