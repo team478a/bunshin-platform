@@ -68,6 +68,8 @@ git diff --check
 
 初回head `466306c604c684dd8b0fdd73423982e917985667` のCI `37098230643` ではmigration/readiness成功、隔離DB85件成功・1件失敗。翌日に進めたownerless試験のglobal claimが、先行ケースで意図的に残した期限切れleaseを取得した。suite-localの合成Workspaceを終了時に清掃し、同じJob ID/完了/削除のassertionを維持して再実行する。通常Jobや他試験scopeを一括削除しない。対象lintの不要な型cast2箇所も除去した。古いheadの成功や途中成功を最終証拠へ流用しない。
 
+head `67876bf990ac3456c1d8aca88fb43ebcfc483ca7` / CI `37098329503` は隔離DB86件成功、format/typecheck/lint成功。全体testでは最新migrationとApplication readiness定数の不一致を既存テストが検出。`schema-readiness.ts` の定数を新migrationへ更新する（期待値やassertionは変更しない）。新アプリを旧DBで起動させない必須gateであり、同じ検証条件のまま最新headで再実行する。
+
 ## リリース・切り戻し・残条件
 
 旧アプリはNULL主体を扱えない。schema readinessだけで並行稼働が安全とはしない。責任者承認の運用でCron/worker停止・稼働中lease drain→既存purge行の限定preflight→migration→新アプリ→再開が必要。migration失敗時は旧schemaのままrollbackし、scope別の確認後に再計画する。今回本番操作はしない。
