@@ -1,5 +1,6 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
+import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
 import {
   PrismaImprovementFeedbackRepository,
   PrismaImprovementFeedbackObservationAdapter,
@@ -191,6 +192,7 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+  registerImprovementTriageIntegrationCases(client);
 
   it('persists owner trouble feedback, serializes concurrent replays and separates service, user, Bunshin and package', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));

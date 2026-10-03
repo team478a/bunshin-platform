@@ -1,1 +1,1 @@
-export const LATEST_DATABASE_MIGRATION = '20261003010000_improvement_feedback';
+export const LATEST_DATABASE_MIGRATION = '20261003030000_improvement_triage_persistence';
