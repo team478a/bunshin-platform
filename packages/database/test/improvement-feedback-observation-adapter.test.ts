@@ -213,6 +213,21 @@ describe('trouble feedback observation read adapter', () => {
     findMany.mockRejectedValue(new Error('database unavailable'));
     await expect(adapter.summarize(input)).rejects.toThrow('database unavailable');
   });
+  it('builds held evidence only after the same DB manager authorization and refuses revoked readers', async () => {
+    const allowed = setup();
+    const result = await allowed.adapter.reviewEvidence(input);
+    expect(result.buckets[0]).toMatchObject({
+      classification: 'UNKNOWN',
+      reviewDecision: 'HELD',
+      reports: 1,
+      sourceRefs: [{ kind: 'IMPROVEMENT_FEEDBACK', id: 'report-a' }],
+    });
+    expect(allowed.manager).toHaveBeenCalledTimes(1);
+    expect(allowed.findMany).toHaveBeenCalledTimes(1);
+    const denied = setup([], false);
+    await expect(denied.adapter.reviewEvidence(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(denied.findMany).not.toHaveBeenCalled();
+  });
   it('snapshots scope, subject and period before awaiting authorization', async () => {
     const { adapter, manager, findMany } = setup();
     let release!: () => void;

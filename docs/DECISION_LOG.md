@@ -1,5 +1,14 @@
 # BUNSHIN Platform Decision Log
 
+## Improvement Feedback Evidence: 決定的な要確認候補を確定Issueから分離する
+
+- 日付: 2026-10-03、状態: 実装PRで検証。
+- PR #1087の管理者読取とCollect契約を再利用し、非永続の選択コード別EvidenceをApplicationへ追加する。DBの原本・認可・入力保存は変更しない。HTTP/管理UI/Job/Candidate永続化・承認・指示案生成は含めない。
+- 同じ種類/場面/困り具合で束ねるが、受付IDの重複と別報告の意味的重複を混同しない。distinct報告者はUser単位とし、複数Bunshinを複数人にしない。V1の仮の確認対象基準は3報告以上かつ2人以上、完全な読取。満たさなければ原本参照・観測件数を保持したまま保留する。この値は統計的有意性/表示匿名化の保証ではなく、モニター運用前にレビューする。
+- UNKNOWN/自己申告を維持し、機械障害・原因・再現率・外部Provider帰属は未確認。保留解除は人の確認対象にするだけでBUGやAPPROVEDへ遷移しない。外部障害除外・技術的相関・他Adapter統合は別の証拠が必要。
+- scope/期間/subject選択/Adapter版/rule版/コードから決定的なクラスタ参照を作り、根拠の内容・人数・完全性が変わればEvidence revisionを変更する。入力順や同じ受付IDの再読取でrevisionを変えない。原文/写真/Memoryや直接User IDを返却Evidenceへ複製しない。内部参照とhashは匿名化保証ではない。
+- 母集団・率・原価は未取得のまま。保存/削除/保持期限の設計レビュー前に永続Issueを追加しない。最初のbounded batchのみ、本番実行口は追加しない。
+
 ## Improvement Feedback観測: 自己申告を確定BUGや発生率へ昇格させない
 
 - 日付: 2026-10-03、状態: 実装PRで検証。

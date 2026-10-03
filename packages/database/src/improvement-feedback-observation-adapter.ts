@@ -1,5 +1,6 @@
 import {
   CollectImprovementObservations,
+  BuildImprovementFeedbackReviewEvidence,
   validateImprovementReadRequest,
   IMPROVEMENT_FEEDBACK_OBSERVATION_DEFINITION,
   projectImprovementFeedbackObservation,
@@ -132,5 +133,14 @@ export class PrismaImprovementFeedbackObservationAdapter implements ImprovementO
       this,
     ).execute(request);
     return summarizeImprovementFeedback(request, collection);
+  }
+  async reviewEvidence(input: ImprovementReadRequest) {
+    return new BuildImprovementFeedbackReviewEvidence(
+      {
+        authorize: (request) =>
+          Promise.resolve(sameImprovementScope(request.scope, this.configuredScope)),
+      },
+      this,
+    ).execute(input);
   }
 }

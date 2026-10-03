@@ -1,5 +1,7 @@
 # ワタシワークス Improvement Engine V1
 
+順序5の限定Evidence: `IMPROVEMENT_FEEDBACK_REVIEW_EVIDENCE_IMPLEMENTATION.md`。本人報告を選択コード別に非永続で束ね、参照・件数/人数・完全性・規則版・決定的Revisionと保留理由を返す。人の要確認候補であり確定Issueや承認ではない。外部障害除外、永続Candidate、確認UI/HTTP/Jobは未実装。以下の監査履歴とは状態を分ける。
+
 順序4の読取補完: `IMPROVEMENT_FEEDBACK_OBSERVATIONS_IMPLEMENTATION.md`。本人の選択式報告を同Workspace/Service/SOCIALの管理者だけが既存Engine契約で収集する内部Adapter。UNKNOWN/自己申告を維持し、件数と人数を分離、発生率・解決率・原価は未測定。管理UI/HTTP/Job、BUG確定、自動Candidateは未実装。以下は各段階の履歴として残す。
 
 順序4の追加: 本人の選択式「困った」Feedbackを、まずSNSの投稿パートナーホームで入力・保存する最小経路として実装。`IMPROVEMENT_FEEDBACK_IMPLEMENTATION.md`を参照。既存の投稿評価/支援ケースと別原本。全Package・全画面への接続や改善検知/管理UIは未実装。下記は過去段階の監査記録として維持する。
