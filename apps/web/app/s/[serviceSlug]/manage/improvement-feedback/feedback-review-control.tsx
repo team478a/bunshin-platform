@@ -2,6 +2,26 @@
 import { useRef, useState } from 'react';
 import type { FeedbackReviewCommand } from '../../../../../src/services/improvement-feedback-review';
 
+type TerminalState = 'RECORDED' | 'RELOAD_REQUIRED' | null;
+
+export function feedbackReviewButtonLabel({
+  done,
+  busy,
+  uncertain,
+  prepared,
+}: {
+  done: TerminalState;
+  busy: boolean;
+  uncertain: boolean;
+  prepared: boolean;
+}) {
+  if (done === 'RECORDED') return '記録済み';
+  if (done === 'RELOAD_REQUIRED') return '画面更新が必要';
+  if (busy) return '確認中…';
+  if (uncertain) return '同じ内容で再送';
+  return prepared ? '判断を確定' : '確認を始める';
+}
+
 export function FeedbackReviewControl({
   endpoint,
   selectionHandle,
@@ -13,7 +33,7 @@ export function FeedbackReviewControl({
   const [reason, setReason] = useState('REVIEW_COMPLETED');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<TerminalState>(null);
   const [message, setMessage] = useState('');
   const pending = useRef<FeedbackReviewCommand | null>(null);
   const sending = useRef(false);
@@ -50,7 +70,7 @@ export function FeedbackReviewControl({
       });
       if (!response.ok) {
         if ([400, 401, 403, 404, 409].includes(response.status)) {
-          setDone(true);
+          setDone('RELOAD_REQUIRED');
           setMessage(
             '確認条件が変わったか期限切れです。保存成功とは判定していません。画面を更新してください。',
           );
@@ -69,7 +89,7 @@ export function FeedbackReviewControl({
         setUncertain(false);
         setMessage('確認内容を選び、チェックを入れて確定してください。');
       } else if (['REVIEWED', 'DISMISSED'].includes(json.data?.state ?? '')) {
-        setDone(true);
+        setDone('RECORDED');
         setMessage(
           json.data?.state === 'REVIEWED'
             ? '確認済みとして記録されています。修正完了・開発承認ではありません。'
@@ -108,12 +128,12 @@ export function FeedbackReviewControl({
       )}
       <button
         type="button"
-        disabled={busy || done || (!!handle && !confirmed)}
+        disabled={busy || done !== null || (!!handle && !confirmed)}
         onClick={() => {
           void send();
         }}
       >
-        {busy ? '確認中…' : uncertain ? '同じ内容で再送' : handle ? '判断を確定' : '確認を始める'}
+        {feedbackReviewButtonLabel({ done, busy, uncertain, prepared: handle !== null })}
       </button>
       <p role="status" aria-live="polite">
         {message}

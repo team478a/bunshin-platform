@@ -73,3 +73,24 @@ git diff --check
 ```
 
 本番変更・課金・実生成・Storage/LINE送信・merge/deployなし。Feedback maintenanceの旧worker停止/drain/復元gateを維持する。この検証で本番NO-GOを解除しない。切り戻しは追加テスト専用フォルダ/報告書を除くのみで、本番データへの操作は不要。
+
+## 追記: 終端ボタン表示の限定修正
+
+2026-10-03 Asia/Tokyo、PR #1098 merge後main `24ba81648a62857a4b6a14ef58f48f2f710c8d3e` を基準とする。上記は修正前の調査証跡として維持する。
+
+`FeedbackReviewControl` の従来boolean終端フラグを `RECORDED / RELOAD_REQUIRED / null` へ区別し、文言だけを純粋関数 `feedbackReviewButtonLabel` で選択する。成功・既に確認済み/対象外の応答は「記録済み」、400/401/403/404/409の操作停止は「画面更新が必要」。終端表示をbusy/uncertainより優先し、両者ともdisabledのまま。未終端の通信待ちは「確認中…」、応答不明は「同じ内容で再送」、準備済みは「判断を確定」、初期は「確認を始める」を維持する。
+
+送信command/handle/operation保持、fetch、HTTP/API、CAS、Repository、DB、認可、期限、利用枠、原本/履歴を変更しない。成功メッセージの「修正完了・開発承認ではない」説明も維持する。開発承認・自動修正・本番公開へ拡張しない。
+
+既存ブラウザシナリオの終端label観測を期待assertionへ移行した。正常/既に確認済み/却下2理由/応答喪失再送後の5観測は「記録済み」、409/403の2観測は「画面更新が必要」をassertする。確認チェック、disabled、同一body再送、二重クリック等の既存assertionは削除しない。今回Chrome 390×844で9件すべて成功。これは実React/fake応答の回帰であり実認証・実DB E2Eではない。
+
+CI向けの純粋表示テストを9件追加し、既存SSR/関連回帰と合わせてWeb6ファイル87件成功。純粋テストだけでReact stateの接続を保証せず、今回のブラウザ実操作と区別する。型/lint/format/architecture/diffと最新head全体CIの結果はPRへ記録する。
+
+修正後のローカル証跡:
+
+- `C:/Users/Owner/.codex/visualizations/2026/10/03/feedback-review/terminal-label-results.json`
+- `C:/Users/Owner/.codex/visualizations/2026/10/03/feedback-review/terminal-recorded.png`
+
+スクリーンショット初回は終端描画前の古いframeを取得したため、証跡として採用せず「記録済み」の可視状態をwaitForした後に取得・保存し直した。固定sleep、skip、assertionの弱体化はしない。テスト用サーバー停止、viewport復元、作成タブclose済み。
+
+残る最小検証は、隔離された非本番の実HTTP/認証/DBをつなぐE2Eの実行条件を確定すること。実セッション失効、他Service/同時更新、実端末/Safariは引き続き未確認。本番停止・drain・復元gateは未解除。切り戻しはUI文言変更のみを戻せるが、再送を示す旧表示が再発する。DB・履歴は操作しない。

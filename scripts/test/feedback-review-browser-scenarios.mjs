@@ -31,14 +31,16 @@ export async function verifyFeedbackReviewBrowser(tab) {
     await a.getByRole('button', { name: '判断を確定', exact: true }).click();
     await observe();
   }
-  async function terminal(region, phrase) {
+  async function terminal(region, phrase, expectedLabel = '記録済み') {
     await region.getByRole('status').filter({ hasText: phrase }).waitFor({ state: 'visible' });
     assert(
       (await region.getByRole('status').innerText()).includes(phrase),
       'Wrong terminal message',
     );
     assert(!(await region.getByRole('button').isEnabled()), 'Terminal permits another send');
-    terminalLabels.push(await region.getByRole('button').innerText());
+    const label = await region.getByRole('button').innerText();
+    assert(label === expectedLabel, `Wrong terminal label: ${label}`);
+    terminalLabels.push(label);
   }
   await reset('normal');
   await prepare();
@@ -110,13 +112,13 @@ export async function verifyFeedbackReviewBrowser(tab) {
   await reset('conflict');
   await prepare();
   await confirm();
-  await terminal(a, '保存成功とは判定していません');
+  await terminal(a, '保存成功とは判定していません', '画面更新が必要');
   assert((await ledger()).calls === 2 && (await ledger()).writes === 0, 'Conflict retried');
   results.push('conflict409: PASS');
   await reset('denied');
   await a.getByRole('button', { name: '確認を始める', exact: true }).click();
   await observe();
-  await terminal(a, '保存成功とは判定していません');
+  await terminal(a, '保存成功とは判定していません', '画面更新が必要');
   assert((await ledger()).calls === 1 && (await ledger()).writes === 0, 'Denied retried');
   results.push('denied403: PASS (not real auth)');
   await reset('busy');
@@ -137,8 +139,7 @@ export async function verifyFeedbackReviewBrowser(tab) {
   return {
     results,
     terminalLabels,
-    knownIssue: terminalLabels.every((label) => label === '同じ内容で再送')
-      ? 'REPRODUCED: terminal button label suggests retry despite being disabled'
-      : 'Terminal label behavior changed; inspect before updating characterization',
+    terminalLabelRegression:
+      'PASS: recorded and reload-required labels are distinct; retry remains non-terminal',
   };
 }
