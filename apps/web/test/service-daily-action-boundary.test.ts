@@ -52,6 +52,15 @@ describe('service Daily Action boundary', () => {
     expect(ui).toContain('迷ったら、これを教えてください');
     expect(ui).toContain('iPhoneキーボード右下のマイク');
     expect(page).toContain('<DailyActionSection');
+    expect(page).toContain('photoFirstMissionSeed={photoFirstMissionSeed}');
+    expect(page).toContain("status === 'CONFIRMED'");
+    expect(page).toContain('scheduledDate === today');
+    expect(page).toContain('photoFirstWeeklyPlan.socialProfileId');
+    expect(ui).toContain('resolvedTodayMissionId || photoFirstMissionSeed');
+    expect(ui).toContain('setResolvedTodayMissionId(payload.data.variant.dailyMissionId)');
+    expect(http).toContain("existingPolicy: 'RETURN'");
+    expect(http).toContain('PrismaLineNotificationPreferenceRepository().getScoped');
+    expect(http).toContain("notification.preference?.timezone ?? 'Asia/Tokyo'");
   });
 
   it('lets iPhone users choose an existing photo instead of forcing the camera', () => {
@@ -74,5 +83,24 @@ describe('service Daily Action boundary', () => {
     expect(automaticImage).toContain('ownerUserId: input.actorUserId');
     expect(automaticImage).toContain('referenceImage: reference?.referenceImage ?? null');
     expect(automaticImage).toContain('storeReference');
+  });
+
+  it('restores the latest persisted Photo First plan after a page reload', () => {
+    expect(page).toContain('variant.photoFirst');
+    expect(page).toContain('dailyMissionId: variant.dailyMissionId');
+    expect(page).toContain('latestPhotoFirstResult');
+    expect(page).toContain('initialPhotoFirstResult={latestPhotoFirstResult}');
+    expect(ui).toContain('initialPhotoFirstResult ?? null');
+    expect(ui).toContain('元の写真を確認する');
+  });
+
+  it('answers only the current scoped Photo First question and keeps a new variant', () => {
+    expect(http).toContain('sourceVariantId: uuid');
+    expect(http).toContain('confirmationAnswer: z.string().trim().min(1).max(500)');
+    expect(http).toContain('actorUserId: scope.actorUserId');
+    expect(http).toContain("'回答する確認質問が見つかりません'");
+    expect(ui).toContain('回答を反映して投稿案を見直す');
+    expect(ui).toContain('sourceVariantId: photoFirstResult.variant.id');
+    expect(ui).toContain('前の案も履歴に残っています');
   });
 });

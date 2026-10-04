@@ -62,7 +62,11 @@ export function buildParticipantBusinessProgress(input: {
       (left, right) => right.total - left.total || left.topic.localeCompare(right.topic, 'ja'),
     )[0];
   const customerActions =
-    input.outcomes.reservations + input.outcomes.visits + input.outcomes.orders;
+    input.outcomes.reservations +
+    input.outcomes.visits +
+    input.outcomes.repeatReservations +
+    input.outcomes.repeatVisits +
+    input.outcomes.orders;
   const nextWeekFocus = bestPost
     ? customerActions > 0
       ? `「${bestPost.topic}」を、写真や最初の一言を変えてもう一度伝える`

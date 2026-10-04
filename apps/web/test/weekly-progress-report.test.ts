@@ -57,18 +57,34 @@ describe('weekly progress report', () => {
       startedAt: new Date('2026-07-17T00:00:00.000Z'),
       asOf: new Date('2026-09-15T03:00:00.000Z'),
       lastPostedAt: new Date('2026-09-14T02:00:00.000Z'),
-      outcomes: { inquiries: 2, reservations: 1, visits: 0, orders: 1, other: 0 },
+      outcomes: {
+        inquiries: 2,
+        reservations: 1,
+        visits: 0,
+        repeatReservations: 1,
+        repeatVisits: 1,
+        orders: 1,
+        other: 0,
+      },
       weeklyPosts: [
         {
           topic: '初回相談の流れ',
-          outcomes: { inquiries: 2, reservations: 1, visits: 0, orders: 1, other: 0 },
+          outcomes: {
+            inquiries: 2,
+            reservations: 1,
+            visits: 0,
+            repeatReservations: 1,
+            repeatVisits: 1,
+            orders: 1,
+            other: 0,
+          },
         },
       ],
     });
 
     expect(progress.program?.day).toBe(61);
     expect(progress.program?.phase.key).toBe('ESTABLISH_PATTERN');
-    expect(progress.outcomeTotal).toBe(4);
+    expect(progress.outcomeTotal).toBe(6);
     expect(progress.bestTopic).toBe('初回相談の流れ');
     expect(progress.nextWeekFocus).toContain('もう一度伝える');
     expect(progress.lastPostedAt?.toISOString()).toBe('2026-09-14T02:00:00.000Z');
@@ -79,7 +95,15 @@ describe('weekly progress report', () => {
       startedAt: new Date('2026-09-01T00:00:00.000Z'),
       asOf: new Date('2026-09-07T03:00:00.000Z'),
       lastPostedAt: null,
-      outcomes: { inquiries: 0, reservations: 0, visits: 0, orders: 0, other: 0 },
+      outcomes: {
+        inquiries: 0,
+        reservations: 0,
+        visits: 0,
+        repeatReservations: 0,
+        repeatVisits: 0,
+        orders: 0,
+        other: 0,
+      },
       weeklyPosts: [],
     });
 

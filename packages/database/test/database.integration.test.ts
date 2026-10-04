@@ -1,7 +1,19 @@
 import { reserveVideoMedia, finishVideoMedia } from '../src/video-media-quota';
 import { randomUUID } from 'node:crypto';
+import { registerImprovementTriageIntegrationCases } from './improvement-triage.integration-cases';
+import { registerImprovementRetentionJobIntegrationCases } from './improvement-retention-jobs.integration-cases';
+import { cleanupProgramFixtures } from './program-fixture-cleanup';
 import {
+  integrationDatabaseTarget,
+  verifyIntegrationDatabase,
+  type IntegrationDatabaseIdentity,
+} from './integration-database-preflight';
+import {
+  PrismaImprovementFeedbackRepository,
+  PrismaImprovementFeedbackObservationAdapter,
   PrismaTrainingLifecycleRepository,
+  PrismaMissionContentVariantRepository,
+  PrismaAiUsageEventRepository,
   PrismaTrainingEndDateRepository,
   listTrainingAdminEvaluationMetrics,
   PrismaTrainingRetentionAdminPreviewRepository,
@@ -110,15 +122,23 @@ import {
   lockTrainingEnrollmentData,
 } from '../src';
 
-const testUrl = process.env['DATABASE_URL'] ?? '';
-const safe =
-  /localhost|127\.0\.0\.1|test/i.test(testUrl) && process.env['APP_ENV'] !== 'production';
-const integration = safe ? describe : describe.skip;
+const integrationTarget = integrationDatabaseTarget(process.env);
 
-integration('database ownership boundaries', () => {
+function verifyLiveDatabase(client: PrismaClient) {
+  return verifyIntegrationDatabase(
+    integrationTarget,
+    () => client.$queryRaw<IntegrationDatabaseIdentity[]>`
+      SELECT datname AS database, shobj_description(oid, 'pg_database') AS marker
+      FROM pg_database WHERE datname = current_database()
+    `,
+  );
+}
+
+describe('database ownership boundaries', () => {
   const client = new PrismaClient();
 
   beforeAll(async () => {
+    await verifyLiveDatabase(client);
     await client.socialImageSample.deleteMany();
     await client.campaignActivity.deleteMany();
     await client.campaignParticipation.deleteMany();
@@ -137,6 +157,7 @@ integration('database ownership boundaries', () => {
     await client.groupMemberFeatureAssignment.deleteMany();
     await client.groupFeaturePolicy.deleteMany();
     await client.groupInvitation.deleteMany();
+    await cleanupProgramFixtures(client);
     await client.groupMembership.deleteMany();
     await client.generationContextSnapshot.deleteMany();
     await client.missionTrendContext.deleteMany();
@@ -162,11 +183,11 @@ integration('database ownership boundaries', () => {
     await client.postRecord.deleteMany();
     await client.missionActivity.deleteMany();
     await client.missionDecision.deleteMany();
-    await client.socialAccountStrategy.deleteMany();
     await client.missionContent.deleteMany();
     await client.dailyMission.deleteMany();
     await client.weeklyPlanItem.deleteMany();
     await client.weeklyPlan.deleteMany();
+    await client.socialAccountStrategy.deleteMany();
     await client.contentPillar.deleteMany();
     await client.socialProfile.deleteMany();
     await client.bunshinCapabilityAssignment.deleteMany();
@@ -187,6 +208,440 @@ integration('database ownership boundaries', () => {
   });
 
   afterAll(async () => client.$disconnect());
+  registerImprovementTriageIntegrationCases(client);
+  registerImprovementRetentionJobIntegrationCases(client);
+
+  it('fixture cleanup regression: program and training residue is absent before new fixtures', async () => {
+    expect(
+      await Promise.all([
+        client.programEnrollment.count(),
+        client.programMissionAssignment.count(),
+        client.programTemplate.count(),
+        client.trainingMissionAnswer.count(),
+        client.trainingToolkitItem.count(),
+        client.trainingParticipantProfile.count(),
+      ]),
+    ).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  it('persists owner trouble feedback, serializes concurrent replays and separates service, user, Bunshin and package', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Synthetic feedback owner' });
+    const other = await accounts.execute({ displayName: 'Synthetic feedback other' });
+    const group = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic feedback service' },
+    });
+    const siblingGroup = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic feedback sibling' },
+    });
+    await client.serviceConfiguration.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        slug: `feedback-${randomUUID()}`,
+        displayName: 'Synthetic',
+        description: 'Synthetic',
+        operatorName: 'Synthetic',
+        createdByUserId: owner.user.id,
+        updatedByUserId: owner.user.id,
+      },
+    });
+    const membership = await client.groupMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        userId: owner.user.id,
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+      },
+    });
+    const create = (ownerUserId: string) =>
+      client.bunshin.create({
+        data: {
+          workspaceId: owner.workspace.id,
+          groupId: group.id,
+          ownerUserId,
+          name: 'Synthetic feedback',
+          slug: `feedback-${randomUUID()}`,
+          type: 'COPY',
+          objectiveSummary: 'O',
+          audienceSummary: 'A',
+          personalitySummary: 'P',
+          capabilityAssignments: {
+            create: {
+              workspaceId: owner.workspace.id,
+              capabilityType: 'SOCIAL',
+              assignedByUserId: owner.user.id,
+            },
+          },
+        },
+      });
+    const bunshin = await create(owner.user.id);
+    const sibling = await create(owner.user.id);
+    const otherBunshin = await create(other.user.id);
+    const input = {
+      workspaceId: owner.workspace.id,
+      serviceId: group.id,
+      bunshinId: bunshin.id,
+      actorUserId: owner.user.id,
+      submissionKey: randomUUID(),
+      packageKey: 'SOCIAL' as const,
+      category: 'OPERATION' as const,
+      surface: 'TODAY' as const,
+      impact: 'BLOCKED' as const,
+    };
+    const repository = new PrismaImprovementFeedbackRepository(client);
+    const [first, second] = await Promise.all([
+      repository.record(input),
+      new PrismaImprovementFeedbackRepository(client).record(input),
+    ]);
+    expect(first).toEqual(second);
+    expect(await client.improvementFeedback.count({ where: { bunshinId: bunshin.id } })).toBe(1);
+    // Read authorization is independent of the existing owner-only write contract.
+    const readerMembership = await client.groupMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        groupId: group.id,
+        userId: other.user.id,
+        status: 'ACTIVE',
+        consentedAt: new Date(),
+        serviceRole: 'SERVICE_ADMIN',
+      },
+    });
+    const observationScope = {
+      workspaceId: owner.workspace.id,
+      serviceId: group.id,
+      tenantRef: owner.workspace.id,
+      packageKey: 'SOCIAL',
+      adapterKey: 'TROUBLE_FEEDBACK',
+      environment: 'DEVELOPMENT' as const,
+    };
+    const readRequest = {
+      actorUserId: other.user.id,
+      scope: observationScope,
+      fromInclusive: new Date(first.createdAt),
+      toExclusive: new Date(first.createdAt.getTime() + 60_000),
+      subject: null,
+      limit: 100,
+    };
+    const reader = new PrismaImprovementFeedbackObservationAdapter(client, observationScope);
+    expect(await reader.summarize(readRequest)).toMatchObject({
+      reports: 1,
+      distinctReporters: 1,
+      troubleIncidenceRate: null,
+      resolutionRate: null,
+      populationCoverage: 'UNKNOWN',
+    });
+    const observed = await reader.readObservations(readRequest);
+    expect((await reader.reviewEvidence(readRequest)).buckets[0]).toMatchObject({
+      reviewDecision: 'HELD',
+      reports: 1,
+      classification: 'UNKNOWN',
+      sourceRefs: [{ id: first.id }],
+    });
+    expect(observed.observations[0]).toMatchObject({
+      category: 'UNKNOWN',
+      status: 'REPORTED',
+      source: { kind: 'IMPROVEMENT_FEEDBACK', id: first.id },
+      userRef: owner.user.id,
+      bunshinRef: bunshin.id,
+    });
+    expect(JSON.stringify(observed)).not.toContain(input.submissionKey);
+    expect(
+      (
+        await reader.summarize({
+          ...readRequest,
+          toExclusive: new Date(first.createdAt),
+          fromInclusive: new Date(first.createdAt.getTime() - 60_000),
+        })
+      ).reports,
+    ).toBe(0);
+    expect(
+      (
+        await reader.summarize({
+          ...readRequest,
+          subject: { userRef: owner.user.id, bunshinRef: sibling.id },
+        })
+      ).reports,
+    ).toBe(0);
+    await expect(
+      reader.readObservations({ ...readRequest, actorUserId: owner.user.id }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      reader.readObservations({
+        ...readRequest,
+        scope: { ...observationScope, serviceId: siblingGroup.id },
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.groupMembership.update({
+      where: { id: readerMembership.id },
+      data: { serviceRole: 'CONTENT_EDITOR' },
+    });
+    await expect(reader.readObservations(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.groupMembership.update({
+      where: { id: readerMembership.id },
+      data: { serviceRole: 'SERVICE_ADMIN' },
+    });
+    await expect(repository.record({ ...input, impact: 'DIFFICULT' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    await expect(repository.record({ ...input, bunshinId: sibling.id })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    for (const changed of [
+      { actorUserId: other.user.id },
+      { bunshinId: otherBunshin.id },
+      { serviceId: siblingGroup.id },
+      { workspaceId: other.workspace.id },
+    ]) {
+      await expect(repository.record({ ...input, ...changed })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    }
+    expect(() => repository.record({ ...input, packageKey: 'TRAINING' as never })).toThrow(
+      'invalid improvement feedback',
+    );
+    await client.bunshinCapabilityAssignment.updateMany({
+      where: { bunshinId: bunshin.id },
+      data: { status: 'SUSPENDED' },
+    });
+    await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await reader.summarize(readRequest)).reports).toBe(1);
+    await client.bunshinCapabilityAssignment.updateMany({
+      where: { bunshinId: bunshin.id },
+      data: { status: 'ACTIVE' },
+    });
+    await client.groupMembership.update({
+      where: { id: membership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    await expect(repository.record(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await reader.summarize(readRequest)).reports).toBe(1);
+    await client.groupMembership.update({
+      where: { id: membership.id },
+      data: { status: 'ACTIVE', revokedAt: null },
+    });
+    await client.improvementFeedback.createMany({
+      data: Array.from({ length: 9 }, () => ({
+        ...input,
+        id: randomUUID(),
+        submissionKey: randomUUID(),
+      })),
+    });
+    await expect(
+      repository.record({ ...input, submissionKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(await repository.record(input)).toEqual(first);
+    expect((await reader.summarize({ ...readRequest, limit: 2 })).coverage).toEqual({
+      completeness: 'PARTIAL',
+      missingCount: null,
+      truncated: true,
+    });
+    await repository.record({
+      ...input,
+      actorUserId: other.user.id,
+      bunshinId: otherBunshin.id,
+      submissionKey: randomUUID(),
+    });
+    const evidence = await reader.reviewEvidence(readRequest);
+    expect(evidence).toMatchObject({
+      reports: 11,
+      distinctReporters: 2,
+      buckets: [
+        {
+          reviewDecision: 'REVIEW_REQUIRED',
+          reports: 11,
+          distinctReporters: 2,
+          classification: 'UNKNOWN',
+        },
+      ],
+    });
+    expect((await reader.reviewEvidence(readRequest)).evidenceRevision).toBe(
+      evidence.evidenceRevision,
+    );
+    expect((await reader.reviewEvidence({ ...readRequest, limit: 2 })).buckets[0]).toMatchObject({
+      reviewDecision: 'HELD',
+      holdReasons: expect.arrayContaining(['READ_INCOMPLETE']),
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: siblingGroup.id } });
+    await expect(reader.readObservations(readRequest)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: group.id } });
+    await client.groupMembership.update({
+      where: { id: readerMembership.id },
+      data: { status: 'REVOKED', revokedAt: new Date() },
+    });
+    await expect(reader.readObservations(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(reader.reviewEvidence(readRequest)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      client.improvementFeedback.create({
+        data: { ...input, submissionKey: randomUUID(), category: 'RAW_PRIVATE_TEXT' },
+      }),
+    ).rejects.toThrow();
+    await client.bunshinCapabilityAssignment.deleteMany({ where: { bunshinId: bunshin.id } });
+    await client.bunshin.delete({ where: { id: bunshin.id } });
+    expect(await client.improvementFeedback.count({ where: { bunshinId: bunshin.id } })).toBe(0);
+  });
+
+  it('persists Photo First claim and stage references, blocks cross-owner links and retains costs on provenance deletion', async () => {
+    const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
+    const owner = await accounts.execute({ displayName: 'Provenance owner' });
+    const other = await accounts.execute({ displayName: 'Provenance other' });
+    const bunshin = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Synthetic provenance',
+      slug: `provenance-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'O',
+      audienceSummary: 'A',
+      personalitySummary: 'P',
+    });
+    const mission = await client.dailyMission.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        bunshinId: bunshin.id,
+        missionDate: new Date('2026-10-03Z'),
+        format: 'TEXT',
+        estimatedMinutes: 5,
+        topic: 'Synthetic',
+        angle: 'Synthetic',
+        reason: 'Synthetic',
+      },
+    });
+    const scope = {
+      workspaceId: owner.workspace.id,
+      bunshinId: bunshin.id,
+      actorUserId: owner.user.id,
+      dailyMissionId: mission.id,
+    };
+    const variants = new PrismaMissionContentVariantRepository(client);
+    const claim = await variants.claim({
+      ...scope,
+      idempotencyKey: randomUUID(),
+      initiatingSource: 'PHOTO_FIRST',
+    });
+    if (!claim) throw new Error('synthetic generation missing');
+    expect(claim.generation.initiatingSource).toBe('PHOTO_FIRST');
+    const usage = {
+      ...scope,
+      taskType: 'PHOTO_FIRST_ANALYSIS',
+      provider: 'fake',
+      model: 'fake-model',
+      promptVersion: 'fake-v1',
+      status: 'SUCCESS' as const,
+      inputTokens: null,
+      outputTokens: null,
+      latencyMs: 1,
+      idempotencyKey: randomUUID(),
+      estimatedCostUsdMicros: 250,
+      contentVariantGenerationId: claim.generation.id,
+    };
+    const events = new PrismaAiUsageEventRepository(client);
+    await events.record(usage);
+    await events.record(usage);
+    const sibling = await new PrismaBunshinRepository(client).create({
+      workspaceId: owner.workspace.id,
+      actorUserId: owner.user.id,
+      name: 'Sibling provenance',
+      slug: `provenance-sibling-${randomUUID()}`,
+      type: 'COPY',
+      objectiveSummary: 'O',
+      audienceSummary: 'A',
+      personalitySummary: 'P',
+    });
+    await expect(
+      events.record({ ...usage, bunshinId: sibling.id, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(
+      await client.aiUsageEvent.count({
+        where: { contentVariantGenerationId: claim.generation.id },
+      }),
+    ).toBe(1);
+    await client.workspaceMembership.create({
+      data: {
+        workspaceId: owner.workspace.id,
+        userId: other.user.id,
+        role: 'MEMBER',
+        status: 'ACTIVE',
+      },
+    });
+    await expect(
+      events.record({ ...usage, actorUserId: other.user.id, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      events.record({
+        ...usage,
+        workspaceId: other.workspace.id,
+        actorUserId: other.user.id,
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await variants.fail({
+      ...scope,
+      generationId: claim.generation.id,
+      errorCategory: 'SYNTHETIC_FAILURE',
+      qualityAudit: { verdict: null, score: null, issueCodes: [], repairCount: 0 },
+    });
+    // The existing personal-workspace admin claim must remain observable, without granting Service access.
+    await client.workspaceMembership.updateMany({
+      where: { workspaceId: owner.workspace.id, userId: other.user.id },
+      data: { role: 'ADMIN' },
+    });
+    const adminClaim = await variants.claim({
+      ...scope,
+      actorUserId: other.user.id,
+      idempotencyKey: randomUUID(),
+      initiatingSource: 'STANDARD',
+    });
+    if (!adminClaim) throw new Error('synthetic admin generation missing');
+    const adminUsage = {
+      ...usage,
+      actorUserId: other.user.id,
+      contentVariantGenerationId: adminClaim.generation.id,
+      idempotencyKey: randomUUID(),
+      taskType: 'MISSION_CONTENT_VARIANT',
+    };
+    await events.record(adminUsage);
+    expect(
+      await client.aiUsageEvent.count({
+        where: { contentVariantGenerationId: adminClaim.generation.id },
+      }),
+    ).toBe(1);
+    const service = await client.group.create({
+      data: { workspaceId: owner.workspace.id, name: 'Synthetic provenance service' },
+    });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: service.id } });
+    await expect(
+      events.record({ ...adminUsage, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await client.bunshin.update({ where: { id: bunshin.id }, data: { groupId: null } });
+    await client.missionContentVariantGeneration.delete({
+      where: { id: adminClaim.generation.id },
+    });
+    const persisted = await client.missionContentVariantGeneration.findUniqueOrThrow({
+      where: { id: claim.generation.id },
+      include: { aiUsageEvents: true },
+    });
+    expect(persisted).toMatchObject({
+      status: 'FAILED',
+      initiatingSource: 'PHOTO_FIRST',
+      qualityVerdict: null,
+    });
+    expect(persisted.aiUsageEvents[0]?.estimatedCostUsdMicros).toBe(250n);
+    await client.missionContentVariantGeneration.delete({ where: { id: claim.generation.id } });
+    expect(
+      await client.aiUsageEvent.findUniqueOrThrow({
+        where: { id: persisted.aiUsageEvents[0]!.id },
+      }),
+    ).toMatchObject({ contentVariantGenerationId: null, estimatedCostUsdMicros: 250n });
+    await expect(
+      client.missionContentVariantGeneration.create({
+        data: { ...scope, idempotencyKey: randomUUID(), initiatingSource: 'INVALID' },
+      }),
+    ).rejects.toThrow();
+  });
 
   it('expires unpurchased training once with scoped evaluation stop and retention recording', async () => {
     const accounts = new CreateUserWithPersonalWorkspace(new PrismaAccountUnitOfWork(client));
@@ -4443,6 +4898,9 @@ integration('database ownership boundaries', () => {
     const memberPlans = new PrismaWeeklyPlanRepository(client);
     const memberPlan = await new CreateGeneratedWeeklyPlan(memberPlans, assignments).execute({
       ...memberScope,
+      socialProfileId: memberProfile.id,
+      strategyId: memberStrategy.id,
+      strategyGoal: memberStrategy.goal,
       weekStartDate: '2026-08-31',
       timezone: 'Asia/Tokyo',
       strategySummary: '本人の予定',
@@ -4894,9 +5352,43 @@ integration('database ownership boundaries', () => {
       title: '教育',
       weight: 50,
     });
+    const profile = await new CreateSocialProfile(
+      new PrismaSocialProfileRepository(client),
+      assignments,
+    ).execute({
+      ...ownerScope(owner, bunshin.id),
+      platform: 'X',
+      purpose: '週間計画',
+      postingFrequency: 'WEEKLY',
+      preferredFormats: ['TEXT'],
+    });
+    const strategyRepository = new PrismaSocialAccountStrategyRepository(client);
+    const strategy = await new CreateSocialAccountStrategy(strategyRepository, assignments).execute(
+      {
+        ...ownerScope(owner, bunshin.id),
+        socialProfileId: profile.id,
+        platform: 'X',
+        goal: 'BRAND_AWARENESS',
+        availableMinutes: 5,
+        destinationType: 'PROFILE',
+        concept: '認知を広げる',
+        positioning: '専門家',
+        targetSummary: '初めて知る人',
+        profileDraft: 'プロフィール',
+        ctaStrategy: '詳細を見る',
+        postingPolicy: '週次',
+      },
+    );
+    const approvedStrategy = await new ApproveSocialAccountStrategy(
+      strategyRepository,
+      assignments,
+    ).execute({ ...ownerScope(owner, bunshin.id), strategyId: strategy.id });
     const repository = new PrismaWeeklyPlanRepository(client);
     const generated = await new CreateGeneratedWeeklyPlan(repository, assignments).execute({
       ...ownerScope(owner, bunshin.id),
+      socialProfileId: profile.id,
+      strategyId: approvedStrategy.id,
+      strategyGoal: approvedStrategy.goal,
       weekStartDate: '2026-08-10',
       timezone: 'Asia/Tokyo',
       strategySummary: 'AI生成戦略',
@@ -4915,6 +5407,9 @@ integration('database ownership boundaries', () => {
     });
     expect(generated).toMatchObject({
       status: 'DRAFT',
+      socialProfileId: profile.id,
+      strategyId: approvedStrategy.id,
+      strategyGoal: approvedStrategy.goal,
       strategySummary: 'AI生成戦略',
       items: [{ scheduledDate: '2026-08-11', contentPillarId: pillar.id }],
     });
@@ -4924,6 +5419,9 @@ integration('database ownership boundaries', () => {
         workspaceId: owner.workspace.id,
         actorUserId: outsider.user.id,
         bunshinId: bunshin.id,
+        socialProfileId: profile.id,
+        strategyId: approvedStrategy.id,
+        strategyGoal: approvedStrategy.goal,
         weekStartDate: '2026-08-03',
         timezone: 'Asia/Tokyo',
         strategySummary: 'scope外',
@@ -6193,8 +6691,9 @@ integration('database ownership boundaries', () => {
   });
 });
 
-integration('authentication return attempt isolation', () => {
+describe('authentication return attempt isolation', () => {
   const client = new PrismaClient();
+  beforeAll(async () => verifyLiveDatabase(client));
   afterAll(async () => client.$disconnect());
   it('enforces single claims, actor-bound consumption and private RLS storage', async () => {
     const ids = [randomUUID(), randomUUID()];

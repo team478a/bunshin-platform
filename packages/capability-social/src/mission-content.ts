@@ -75,6 +75,13 @@ function strings(value: unknown, maximumItems: number, maximumLength: number, fi
     throw new ApplicationError('VALIDATION_ERROR', `invalid ${field}`);
   return value.map((item) => missionString(item, maximumLength, field));
 }
+function hashtags(value: unknown) {
+  return strings(value, 30, 100, 'hashtags').map((tag) => {
+    const text = tag.replace(/^#+/, '').trim();
+    if (!text) throw new ApplicationError('VALIDATION_ERROR', 'invalid hashtags');
+    return `#${text}`;
+  });
+}
 function missionNullableString(value: unknown, maximum: number, field: string) {
   return value === null || value === undefined ? null : missionString(value, maximum, field);
 }
@@ -93,7 +100,7 @@ export function normalizeMissionContent(
       threadParts: strings(v['threadParts'], 25, 2000, 'thread parts'),
       cta: missionNullableString(v['cta'], 1000, 'cta'),
       caption: missionNullableString(v['caption'], 2200, 'caption'),
-      hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+      hashtags: hashtags(v['hashtags']),
       photoInstruction: missionNullableString(v['photoInstruction'], 2000, 'photo instruction'),
     };
   }
@@ -130,7 +137,7 @@ export function normalizeMissionContent(
       estimatedMinutes: missionInteger(v['estimatedMinutes'], 1, 120, 'estimated minutes'),
       slides,
       caption: missionString(v['caption'], 2200, 'caption'),
-      hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+      hashtags: hashtags(v['hashtags']),
     };
   }
   if (format === 'LIVE_ACTION') {
@@ -251,6 +258,6 @@ export function normalizeMissionContent(
       v['overlayText'] === null ? null : missionString(v['overlayText'], 500, 'overlay text'),
     ...(imageSlides ? { slides: imageSlides } : {}),
     caption: missionString(v['caption'], 2200, 'caption'),
-    hashtags: strings(v['hashtags'], 30, 100, 'hashtags'),
+    hashtags: hashtags(v['hashtags']),
   };
 }

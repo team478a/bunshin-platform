@@ -3,9 +3,10 @@
 import type {
   SocialActivityBarrierQuestion,
   SocialActivitySupportAction,
+  SocialActivitySupportKey,
   SocialActivitySupportProgress,
 } from '@bunshin/capability-social';
-import { useRef, useState } from 'react';
+import { useRef, useState, type MouseEvent } from 'react';
 
 type AnswerResponse = {
   data?: { supportProgress: SocialActivitySupportProgress | null };
@@ -16,14 +17,22 @@ type SupportResponse = {
   error?: { message?: string };
 };
 
+const photoFirstActionLabels: Partial<Record<SocialActivitySupportKey, string>> = {
+  CONTENT_REVIEW: '写真から投稿内容を考え直す',
+  MEDIA_PREPARATION: '写真を1枚残す',
+  LOW_RISK_PUBLISHING: '写真の使い方と投稿案を確認する',
+};
+
 export function ActivityBarrierCard({
   endpoint,
   initialQuestion,
   initialSupport,
+  photoFirstHref,
 }: {
   endpoint: string;
   initialQuestion: SocialActivityBarrierQuestion | null;
   initialSupport: SocialActivitySupportProgress | null;
+  photoFirstHref?: string;
 }) {
   const [question, setQuestion] = useState(initialQuestion);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null | undefined>(undefined);
@@ -31,6 +40,14 @@ export function ActivityBarrierCard({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
+  const photoFirstActionLabel =
+    support && photoFirstHref ? photoFirstActionLabels[support.support.key] : undefined;
+
+  function openPhotoFirstSection(event: MouseEvent<HTMLAnchorElement>) {
+    const target = document.querySelector(event.currentTarget.hash);
+    const drawer = target?.closest('details');
+    if (drawer instanceof HTMLDetailsElement) drawer.open = true;
+  }
 
   async function submit() {
     if (!question || selectedCaseId === undefined || pending) return;
@@ -113,13 +130,24 @@ export function ActivityBarrierCard({
                   {pending ? '保存しています…' : 'このサポートを始める'}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void transitionSupport('COMPLETE')}
-                >
-                  {pending ? '保存しています…' : 'できました'}
-                </button>
+                <>
+                  {photoFirstActionLabel && photoFirstHref ? (
+                    <a
+                      className="button button--primary button--full"
+                      href={photoFirstHref}
+                      onClick={openPhotoFirstSection}
+                    >
+                      {photoFirstActionLabel}
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void transitionSupport('COMPLETE')}
+                  >
+                    {pending ? '保存しています…' : 'できました'}
+                  </button>
+                </>
               )}
               <button
                 className="button button--secondary"

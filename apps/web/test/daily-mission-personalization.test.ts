@@ -117,6 +117,13 @@ describe('daily mission personalization context', () => {
 
     expect(result.bunshinContext.name).toBe('歴史案内人');
     expect(result.strategyContext.targetSummary).toBe('歴史好きの初心者');
+    expect(result.strategyContext).toMatchObject({
+      goal: 'BRAND_AWARENESS',
+      goalPlanning: {
+        goalKind: 'BUSINESS_OUTCOME',
+        canonicalGoal: 'AWARENESS',
+      },
+    });
     expect(result.knowledge).toEqual([
       { type: 'SERVICE_FACT', title: '正式情報', content: 'ORIが正式名称' },
       { type: 'PERSONAL_MATERIAL', title: '本人素材', content: '昨日撮影した城跡' },

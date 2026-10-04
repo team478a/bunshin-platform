@@ -17,6 +17,8 @@ export interface RecordAiUsageInput {
   errorCode?: string | null;
   idempotencyKey: string;
   occurredAt?: Date;
+  /** Optional explicit reference; persistence must validate the same owner and scope. */
+  contentVariantGenerationId?: string;
 }
 
 export interface AiUsageEventRepository {
@@ -27,6 +29,14 @@ export class RecordAiUsage {
   constructor(private readonly repository: AiUsageEventRepository) {}
 
   async execute(input: RecordAiUsageInput) {
+    if (
+      input.contentVariantGenerationId !== undefined &&
+      (!input.bunshinId ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          input.contentVariantGenerationId,
+        ))
+    )
+      throw new ApplicationError('VALIDATION_ERROR', 'invalid AI usage generation reference');
     const required = [
       input.taskType,
       input.provider,

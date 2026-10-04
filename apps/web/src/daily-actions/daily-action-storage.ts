@@ -121,6 +121,20 @@ export class DailyActionStorage {
     return bytes;
   }
 
+  async readForVision(storageKey: string) {
+    const source = await this.read(storageKey);
+    try {
+      const output = await sharp(source, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer();
+      return { bytes: new Uint8Array(output), mimeType: 'image/jpeg' as const };
+    } catch (error) {
+      throw new ApplicationError('VALIDATION_ERROR', '写真を解析用に準備できませんでした', error);
+    }
+  }
+
   async remove(storageKey: string) {
     const removed = await this.storage.storage.from(BUCKET).remove([storageKey]);
     if (removed.error) throw new ApplicationError('INTERNAL_ERROR', '写真を削除できませんでした');

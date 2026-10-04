@@ -8,10 +8,12 @@ import {
   GetDailyMission,
   ListDailyMissions,
   ListMissionContentVariants,
+  missionContentVariantQualityAudit,
 } from '@bunshin/capability-social';
 import { createLogger } from '@bunshin/observability';
 import { ApplicationError } from '@bunshin/shared';
 import { recordAiUsageSafely } from '../observability/ai-usage';
+import { DailyActionStorage } from '../daily-actions/daily-action-storage';
 import {
   createMissionContentVariantUsageState,
   generateMissionContentVariantWithAi,
@@ -35,6 +37,12 @@ interface Input {
   variantInstructions?: string[];
 }
 
+interface PhotoFirstInput extends Input {
+  photoActionId: string;
+  sourceVariantId?: string;
+  photoConfirmation?: { question: string; answer: string };
+}
+
 const daysBefore = (date: string, days: number) => {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() - days);
@@ -55,6 +63,14 @@ function errorCategory(error: unknown) {
 
 export class MissionContentVariantGenerationService {
   async execute(input: Input) {
+    return (await this.executeInternal(input)).variant;
+  }
+
+  async executePhotoFirst(input: PhotoFirstInput) {
+    return this.executeInternal(input);
+  }
+
+  private async executeInternal(input: Input | PhotoFirstInput) {
     const started = Date.now();
     const scope = {
       workspaceId: input.workspaceId,
@@ -108,6 +124,10 @@ export class MissionContentVariantGenerationService {
         ...scope,
         dailyMissionId: mission.id,
         idempotencyKey: input.generationIdempotencyKey,
+        initiatingSource: 'photoActionId' in input ? 'PHOTO_FIRST' : 'STANDARD',
+        ...('sourceVariantId' in input && input.sourceVariantId
+          ? { sourceVariantId: input.sourceVariantId }
+          : {}),
       });
       if (!claim.acquired) {
         if (claim.generation.status === 'SUCCEEDED' && claim.generation.variantId) {
@@ -118,7 +138,7 @@ export class MissionContentVariantGenerationService {
           const completed = existing.find(({ id }) => id === claim.generation.variantId);
           if (!completed)
             throw new ApplicationError('CONFLICT', 'completed mission variant is unavailable');
-          return completed;
+          return { variant: completed, photoFirst: completed.photoFirst };
         }
         throw new ApplicationError('CONFLICT', 'mission content variant generation already used');
       }
@@ -133,7 +153,38 @@ export class MissionContentVariantGenerationService {
           ? {}
           : { allowServiceOwnerMemories: input.allowServiceOwnerMemories }),
       });
-      const { content, quality } = await generateMissionContentVariantWithAi({
+      let photoFirstSource:
+        | {
+            bytes: Uint8Array;
+            mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+            sourceNote: string;
+          }
+        | undefined;
+      if ('photoActionId' in input) {
+        const photo = await db.prisma.bunshinMemory.findFirst({
+          where: {
+            id: input.photoActionId,
+            workspaceId: input.workspaceId,
+            bunshinId: input.bunshinId,
+            sourceType: 'USER_INPUT',
+            sourceId: { startsWith: 'daily-action:PHOTO:' },
+            attachmentStatus: 'READY',
+            active: true,
+            deletedAt: null,
+            bunshin: {
+              ownerUserId: input.actorUserId,
+              ...(input.groupId === undefined ? {} : { groupId: input.groupId }),
+            },
+          },
+          select: { content: true, attachmentStorageKey: true },
+        });
+        if (!photo?.attachmentStorageKey)
+          throw new ApplicationError('NOT_FOUND', '写真が見つかりません');
+        const prepared = await new DailyActionStorage().readForVision(photo.attachmentStorageKey);
+        photoFirstSource = { ...prepared, sourceNote: photo.content };
+      }
+      const { content, quality, photoFirst } = await generateMissionContentVariantWithAi({
+        generationId,
         scope,
         mission,
         recentMissions,
@@ -142,6 +193,10 @@ export class MissionContentVariantGenerationService {
         ...(input.variantInstructions === undefined
           ? {}
           : { variantInstructions: input.variantInstructions }),
+        ...(photoFirstSource ? { photoFirst: photoFirstSource } : {}),
+        ...('photoConfirmation' in input && input.photoConfirmation
+          ? { photoFirstConfirmation: input.photoConfirmation }
+          : {}),
         usageState,
       });
 
@@ -182,11 +237,38 @@ export class MissionContentVariantGenerationService {
             ? BigInt(usageState.estimatedCostMicros)
             : null,
         latencyMs: Date.now() - started,
+        qualityAudit: missionContentVariantQualityAudit(
+          usageState.qualityAttempts,
+          usageState.qualityRepairCount,
+        ),
+        ...('sourceVariantId' in input && input.sourceVariantId
+          ? { sourceVariantId: input.sourceVariantId }
+          : {}),
+        ...('photoActionId' in input && photoFirst
+          ? {
+              photoFirst: {
+                photoMemoryId: input.photoActionId,
+                analysis: photoFirst.analysis,
+                planning: {
+                  ...photoFirst.planning,
+                  ...(input.photoConfirmation && input.sourceVariantId
+                    ? {
+                        confirmationAnswer: input.photoConfirmation.answer,
+                        confirmationSourceVariantId: input.sourceVariantId,
+                      }
+                    : {}),
+                },
+                analyzerModel: photoFirst.model,
+                analyzerPromptVersion: photoFirst.promptVersion,
+              },
+            }
+          : {}),
       });
-      return variant;
+      return { variant, photoFirst: variant.photoFirst };
     } catch (error) {
       if (generationId) {
         await recordAiUsageSafely({
+          contentVariantGenerationId: generationId,
           ...scope,
           taskType: 'MISSION_CONTENT_VARIANT_PIPELINE',
           provider: 'openai',
@@ -215,6 +297,10 @@ export class MissionContentVariantGenerationService {
               ? BigInt(usageState.estimatedCostMicros)
               : null,
             latencyMs: Date.now() - started,
+            qualityAudit: missionContentVariantQualityAudit(
+              usageState.qualityAttempts,
+              usageState.qualityRepairCount,
+            ),
           });
         } catch (observationError) {
           logger.error('mission variant failure state update failed', {

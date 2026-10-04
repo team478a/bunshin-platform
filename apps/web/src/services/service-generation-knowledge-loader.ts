@@ -1,7 +1,9 @@
 import 'server-only';
 import { GroupKnowledgeService } from '@bunshin/application';
+import type { SocialDecisionObservation } from '@bunshin/capability-social';
 import { businessContentMixKnowledge } from './business-content-mix';
 import { summarizeMissionLearningHistory } from './daily-mission-learning-history';
+import { readPostPerformance } from './post-performance';
 import { resolveServiceContentAssistanceLevel } from './service-content-assistance-level';
 import {
   businessProfileKnowledgeForPrompt,
@@ -18,6 +20,7 @@ import {
   readServiceOnboardingAnswers,
   serviceOnboardingProposalContext,
 } from './service-onboarding-response';
+import { readSnapshotStrategyGoal } from './social-goal-outcomes';
 import {
   serviceContentTerminologyKnowledge,
   serviceContentTerminologyPolicy,
@@ -115,6 +118,9 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
           },
           select: {
             id: true,
+            workspaceId: true,
+            bunshinId: true,
+            actorUserId: true,
             type: true,
             dailyMissionId: true,
             occurredAt: true,
@@ -154,7 +160,11 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
           },
           select: {
             id: true,
+            workspaceId: true,
+            bunshinId: true,
+            actorUserId: true,
             rating: true,
+            dailyMissionId: true,
             updatedAt: true,
             dailyMission: { select: { missionDate: true, topic: true, angle: true } },
           },
@@ -174,6 +184,9 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
           },
           select: {
             id: true,
+            workspaceId: true,
+            bunshinId: true,
+            dailyMissionId: true,
             decision: true,
             rejectionReason: true,
             rejectionDetail: true,
@@ -194,10 +207,21 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
           },
           select: {
             id: true,
+            workspaceId: true,
+            bunshinId: true,
+            actorUserId: true,
             dailyMissionId: true,
+            platform: true,
             postedAt: true,
             manualMetrics: true,
-            dailyMission: { select: { missionDate: true, topic: true, angle: true } },
+            dailyMission: {
+              select: {
+                missionDate: true,
+                topic: true,
+                angle: true,
+                generationContext: { select: { payload: true } },
+              },
+            },
           },
           orderBy: [{ postedAt: 'desc' }, { id: 'desc' }],
           take: 5,
@@ -225,10 +249,11 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
         })
       : Promise.resolve([]),
   ]);
-  const dailyIdeaDelivery = readServiceOnboardingSettings(
+  const serviceSettings = readServiceOnboardingSettings(
     registrationPolicy?.onboardingConfig,
     registrationPolicy?.surveyConfig,
-  ).dailyIdeaDelivery;
+  );
+  const dailyIdeaDelivery = serviceSettings.dailyIdeaDelivery;
   const businessContentMixEnabled = Boolean(businessProfile && dailyIdeaDelivery.enabled);
   const contentTerminologyPolicy = serviceConfiguration
     ? serviceContentTerminologyPolicy(serviceConfiguration.slug)
@@ -263,6 +288,103 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
       }
     : null;
   const onboardingAnswers = readServiceOnboardingAnswers(onboardingResponse?.answers);
+  const decisionContextEnabled =
+    serviceSettings.businessProfileEnabled && serviceSettings.dailyIdeaDelivery.enabled;
+  const legalConsent =
+    decisionContextEnabled && serviceConfiguration
+      ? await new db.PrismaServiceParticipationRepository().findLegalConsentView({
+          slug: serviceConfiguration.slug,
+          actorUserId: scope.actorUserId,
+          now: new Date(),
+        })
+      : null;
+  const acceptedLegalDocumentIds = new Set(legalConsent?.acceptedDocumentIds ?? []);
+  const safetyLegal =
+    legalConsent && legalConsent.legalDocuments.every(({ id }) => acceptedLegalDocumentIds.has(id))
+      ? ('PASSED' as const)
+      : ('UNKNOWN' as const);
+  const decisionObservations: SocialDecisionObservation[] = [
+    ...recentDecisions.map((decision) => ({
+      id: `decision:${decision.id}`,
+      type: 'DECISION' as const,
+      data: {
+        id: decision.id,
+        workspaceId: decision.workspaceId,
+        bunshinId: decision.bunshinId,
+        dailyMissionId: decision.dailyMissionId,
+        decision: decision.decision,
+        rejectionReason: decision.rejectionReason,
+        rejectionDetail: decision.rejectionDetail,
+        decidedAt: decision.decidedAt,
+      },
+    })),
+    ...recentActivities.map((activity) => ({
+      id: `activity:${activity.id}`,
+      type: 'ACTIVITY' as const,
+      data: {
+        id: activity.id,
+        workspaceId: activity.workspaceId,
+        bunshinId: activity.bunshinId,
+        dailyMissionId: activity.dailyMissionId,
+        actorUserId: activity.actorUserId,
+        type: activity.type,
+        occurredAt: activity.occurredAt,
+      },
+    })),
+    ...recentFeedback.map((feedback) => ({
+      id: `feedback:${feedback.id}`,
+      type: 'FEEDBACK' as const,
+      data: {
+        id: feedback.id,
+        workspaceId: feedback.workspaceId,
+        bunshinId: feedback.bunshinId,
+        dailyMissionId: feedback.dailyMissionId,
+        actorUserId: feedback.actorUserId,
+        rating: feedback.rating,
+        updatedAt: feedback.updatedAt,
+      },
+    })),
+    ...recentPostRecords.flatMap((post): SocialDecisionObservation[] => {
+      const performance = readPostPerformance(post.manualMetrics);
+      const goalAtObservation = readSnapshotStrategyGoal(
+        post.dailyMission.generationContext?.payload,
+      );
+      return [
+        {
+          id: `post:${post.id}`,
+          type: 'POST',
+          data: {
+            id: post.id,
+            workspaceId: post.workspaceId,
+            bunshinId: post.bunshinId,
+            dailyMissionId: post.dailyMissionId,
+            actorUserId: post.actorUserId,
+            platform: post.platform,
+            postedAt: post.postedAt,
+          },
+        },
+        ...(performance
+          ? [
+              {
+                id: `performance:${post.id}`,
+                type: 'PERFORMANCE' as const,
+                goalAtObservation,
+                data: {
+                  topic: post.dailyMission.topic,
+                  metrics: {
+                    engagementScore: null,
+                    saves: performance.saves,
+                    shares: performance.shares,
+                    comments: performance.comments,
+                    follows: performance.follows,
+                  },
+                },
+              },
+            ]
+          : []),
+      ];
+    }),
+  ];
   const learningHistory = summarizeMissionLearningHistory({
     activities: recentActivities,
     variants: recentVariants,
@@ -287,6 +409,16 @@ export async function loadServiceGenerationKnowledge(scope: ServiceGenerationKno
     businessContentMixEnabled,
     contentTerminologyPolicy,
     businessProfile: normalizedBusinessProfile,
+    decisionContext: {
+      enabled: decisionContextEnabled,
+      safetyLegal,
+      observations: decisionObservations,
+      outcomeRecords: recentPostRecords.map((post) => ({
+        topic: post.dailyMission.topic,
+        manualMetrics: post.manualMetrics,
+        strategyGoal: readSnapshotStrategyGoal(post.dailyMission.generationContext?.payload),
+      })),
+    },
     personalization: {
       onboardingContext: serviceOnboardingProposalContext(onboardingAnswers),
       behaviorSummary: learningHistory.behaviorSummary,

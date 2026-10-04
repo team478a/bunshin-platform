@@ -2,6 +2,9 @@ import {
   SOCIAL_ACTIVITY_BARRIER_DISMISSAL_DAYS,
   SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
   buildSocialActivityBarrierQuestion,
+  readSocialActivityBarrierGoalAttribution,
+  readSocialActivityBarrierGoalMetrics,
+  selectSocialActivitySupport,
   socialActivitySupportFor,
   type SocialActivityBarrierCase,
   type SocialActivityBarrierConfirmationRepository,
@@ -22,6 +25,15 @@ function evidence(row: {
   thresholds: Prisma.JsonValue;
   ruleVersion: string;
 }): SocialActivityBarrierEvidence {
+  const storedMetrics =
+    row.metrics !== null && typeof row.metrics === 'object' && !Array.isArray(row.metrics)
+      ? (row.metrics as Record<string, Prisma.JsonValue>)
+      : {};
+  const {
+    goalAttribution: storedGoalAttribution,
+    goalMetrics: storedGoalMetrics,
+    ...metrics
+  } = storedMetrics;
   return {
     evidenceCode: row.evidenceCode as SocialActivityBarrierEvidence['evidenceCode'],
     observationWindow: {
@@ -30,7 +42,9 @@ function evidence(row: {
       eligibleDays: row.eligibleDays,
       excludedSystemIncidentDays: row.excludedSystemIncidentDays,
     },
-    metrics: row.metrics as SocialActivityBarrierEvidence['metrics'],
+    metrics,
+    goalAttribution: readSocialActivityBarrierGoalAttribution(storedGoalAttribution),
+    goalMetrics: readSocialActivityBarrierGoalMetrics(storedGoalMetrics),
     thresholds: row.thresholds as SocialActivityBarrierEvidence['thresholds'],
     ruleVersion: row.ruleVersion as SocialActivityBarrierEvidence['ruleVersion'],
   };
@@ -248,13 +262,24 @@ export class PrismaSocialActivityBarrierConfirmationRepository implements Social
         },
       });
 
-      const support = selected ? socialActivitySupportFor(selected.category) : null;
-      if (selected && support) {
+      const selection = selected
+        ? selectSocialActivitySupport({ category: selected.category, evidence: selected.evidence })
+        : null;
+      const support = selection?.support ?? null;
+      if (selected && selection) {
         await tx.socialActivitySupportIntervention.create({
           data: {
             caseId: selected.id,
-            supportKey: support.key,
-            definitionSnapshot: { ...support, steps: [...support.steps] },
+            supportKey: selection.support.key,
+            definitionSnapshot: {
+              ...selection.support,
+              steps: [...selection.support.steps],
+              selection: {
+                mode: selection.mode,
+                eligibleGoal: selection.eligibleGoal,
+                fallbackReason: selection.fallbackReason,
+              },
+            },
             ruleVersion: SOCIAL_ACTIVITY_SUPPORT_RULE_VERSION,
             idempotencyKey: `${input.idempotencyKey}:support`,
             offeredAt: input.answeredAt,

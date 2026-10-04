@@ -29,7 +29,42 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
           select: { id: true },
         });
     if (accessible === null) throw new ApplicationError('NOT_FOUND', 'AI usage scope not found');
-    await this.client.aiUsageEvent.upsert({
+    if (input.contentVariantGenerationId !== undefined) {
+      if (!input.bunshinId)
+        throw new ApplicationError('NOT_FOUND', 'AI usage generation is unavailable');
+      const generation = await this.client.missionContentVariantGeneration.findFirst({
+        where: {
+          id: input.contentVariantGenerationId,
+          workspaceId: input.workspaceId,
+          bunshinId: input.bunshinId,
+          actorUserId: input.actorUserId,
+          dailyMission: {
+            bunshin: {
+              OR: [
+                { ownerUserId: input.actorUserId },
+                // Preserve the existing personal-workspace claim policy; this is not a Service-admin grant.
+                {
+                  groupId: null,
+                  workspace: {
+                    memberships: {
+                      some: {
+                        userId: input.actorUserId,
+                        status: 'ACTIVE',
+                        role: { in: ['OWNER', 'ADMIN'] },
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (!generation)
+        throw new ApplicationError('NOT_FOUND', 'AI usage generation is unavailable');
+    }
+    const recorded = await this.client.aiUsageEvent.upsert({
       where: {
         workspaceId_actorUserId_idempotencyKey: {
           workspaceId: input.workspaceId,
@@ -57,9 +92,17 @@ export class PrismaAiUsageEventRepository implements AiUsageEventRepository {
         pricingVersion: input.pricingVersion ?? null,
         errorCode: input.errorCode ?? null,
         occurredAt: input.occurredAt ?? new Date(),
+        contentVariantGenerationId: input.contentVariantGenerationId ?? null,
       },
       update: {},
     });
+    if (
+      input.contentVariantGenerationId !== undefined &&
+      (recorded.contentVariantGenerationId !== input.contentVariantGenerationId ||
+        recorded.bunshinId !== input.bunshinId ||
+        recorded.taskType !== input.taskType)
+    )
+      throw new ApplicationError('CONFLICT', 'AI usage key belongs to another generation or stage');
   }
 }
 

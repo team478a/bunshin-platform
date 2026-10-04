@@ -170,6 +170,14 @@ export function ServiceManagementHomeView({ model }: { model: ServiceManagementH
                 <dd>{businessOutcomes.visits}件</dd>
               </div>
               <div className="settings-status-item">
+                <dt>再予約</dt>
+                <dd>{businessOutcomes.repeatReservations}件</dd>
+              </div>
+              <div className="settings-status-item">
+                <dt>再来店</dt>
+                <dd>{businessOutcomes.repeatVisits}件</dd>
+              </div>
+              <div className="settings-status-item">
                 <dt>購入・申込</dt>
                 <dd>{businessOutcomes.orders}件</dd>
               </div>

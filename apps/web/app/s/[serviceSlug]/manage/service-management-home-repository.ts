@@ -1,5 +1,6 @@
 import { currentAiProviderEnvironment } from '../../../../src/ai/secure-provider-configuration';
 import { currentLineEnvironment } from '../../../../src/line/secure-configuration';
+import { hasServiceSocialFeedbackSurface } from '../../../../src/services/improvement-feedback-admin-data';
 
 export async function readServiceManagementHomeRecords({
   workspaceId,
@@ -46,6 +47,7 @@ export async function readServiceManagementHomeRecords({
     },
   });
   if (!group) return null;
+  const socialFeedback = await hasServiceSocialFeedbackSurface({ workspaceId, serviceId });
   const line = group.lineChannelConfigurations[0];
   const linePolicy = group.lineRoutingPolicies[0];
   const now = new Date();
@@ -325,6 +327,7 @@ export async function readServiceManagementHomeRecords({
   ]);
   return {
     group,
+    socialFeedback,
     line,
     linePolicy,
     now,

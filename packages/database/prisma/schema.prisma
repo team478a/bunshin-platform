@@ -1788,9 +1788,12 @@ enum SocialAccountStrategyGoal {
   FOLLOWERS
   LINE_REGISTRATION
   INQUIRY
+  VISIT_RESERVATION
   SALES
   RECRUIT
+  REPEAT
   BRAND_AWARENESS
+  TRUST_EXPERTISE
   BLOG_TRAFFIC
   OTHER
 }
@@ -2095,6 +2098,7 @@ model User {
   organizationEntitlementsUpdated   OrganizationEntitlement[]           @relation("OrganizationEntitlementUpdater")
   organizationEntitlementAudits     OrganizationEntitlementAudit[]      @relation("OrganizationEntitlementAuditActor")
   groupMemberships                  GroupMembership[]
+  improvementTriageOperations        ImprovementTriageOperation[]
   groupInvitationsCreated           GroupInvitation[]                   @relation("GroupInvitationCreator")
   platformAdmin                     PlatformAdmin?
   platformAdminAuditsAsTarget       PlatformAdminAudit[]                @relation("PlatformAdminAuditTarget")
@@ -2609,6 +2613,8 @@ model Group {
   updatedAt                       DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace                       Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   memberships                     GroupMembership[]
+  improvementTriageCandidates      ImprovementTriageCandidate[]
+  improvementTriageOperations      ImprovementTriageOperation[]
   invitations                     GroupInvitation[]
   productPacks                    ProductPack[]
   knowledgeSources                GroupKnowledgeSource[]
@@ -6153,6 +6159,7 @@ model AccountDeletionOperationAudit {
 
 model Bunshin {
   id                              String                           @id @default(uuid()) @db.Uuid
+  improvementFeedback             ImprovementFeedback[]
   workspaceId                     String                           @map("workspace_id") @db.Uuid
   groupId                         String?                          @map("group_id") @db.Uuid
   ownerUserId                     String                           @map("owner_user_id") @db.Uuid
@@ -6224,30 +6231,33 @@ model Bunshin {
 }
 
 model AiUsageEvent {
-  id                     String        @id @default(uuid()) @db.Uuid
-  workspaceId            String        @map("workspace_id") @db.Uuid
-  bunshinId              String?       @map("bunshin_id") @db.Uuid
-  actorUserId            String        @map("actor_user_id") @db.Uuid
-  taskType               String        @map("task_type") @db.VarChar(80)
-  provider               String        @db.VarChar(40)
-  model                  String        @db.VarChar(120)
-  promptVersion          String        @map("prompt_version") @db.VarChar(120)
-  status                 AiUsageStatus
-  inputTokens            Int?          @map("input_tokens")
-  outputTokens           Int?          @map("output_tokens")
-  latencyMs              Int           @map("latency_ms")
-  estimatedCostUsdMicros BigInt?       @map("estimated_cost_usd_micros")
-  pricingVersion         String?       @map("pricing_version") @db.VarChar(120)
-  errorCode              String?       @map("error_code") @db.VarChar(80)
-  idempotencyKey         String        @map("idempotency_key") @db.VarChar(200)
-  occurredAt             DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  workspace              Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin                Bunshin?      @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  actor                  User          @relation("AiUsageActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  id                         String                           @id @default(uuid()) @db.Uuid
+  workspaceId                String                           @map("workspace_id") @db.Uuid
+  bunshinId                  String?                          @map("bunshin_id") @db.Uuid
+  actorUserId                String                           @map("actor_user_id") @db.Uuid
+  taskType                   String                           @map("task_type") @db.VarChar(80)
+  provider                   String                           @db.VarChar(40)
+  model                      String                           @db.VarChar(120)
+  promptVersion              String                           @map("prompt_version") @db.VarChar(120)
+  status                     AiUsageStatus
+  inputTokens                Int?                             @map("input_tokens")
+  outputTokens               Int?                             @map("output_tokens")
+  latencyMs                  Int                              @map("latency_ms")
+  estimatedCostUsdMicros     BigInt?                          @map("estimated_cost_usd_micros")
+  pricingVersion             String?                          @map("pricing_version") @db.VarChar(120)
+  errorCode                  String?                          @map("error_code") @db.VarChar(80)
+  idempotencyKey             String                           @map("idempotency_key") @db.VarChar(200)
+  occurredAt                 DateTime                         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt                  DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  contentVariantGenerationId String?                          @map("content_variant_generation_id") @db.Uuid
+  contentVariantGeneration   MissionContentVariantGeneration? @relation(fields: [contentVariantGenerationId], references: [id], onDelete: SetNull)
+  workspace                  Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin                    Bunshin?                         @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  actor                      User                             @relation("AiUsageActor", fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, actorUserId, idempotencyKey])
   @@index([workspaceId, occurredAt])
+  @@index([contentVariantGenerationId])
   @@index([workspaceId, bunshinId, taskType, occurredAt])
   @@map("ai_usage_events")
 }
@@ -6262,7 +6272,7 @@ model Job {
   payloadReference                 String                            @map("payload_reference") @db.VarChar(500)
   idempotencyKey                   String                            @map("idempotency_key") @db.VarChar(200)
   correlationId                    String                            @map("correlation_id") @db.VarChar(120)
-  requestedBy                      String                            @map("requested_by") @db.Uuid
+  requestedBy                      String?                           @map("requested_by") @db.Uuid
   status                           JobStatus                         @default(PENDING)
   priority                         Int                               @default(100)
   scheduledAt                      DateTime                          @default(now()) @map("scheduled_at") @db.Timestamptz(6)
@@ -6274,11 +6284,12 @@ model Job {
   lastErrorCategory                String?                           @map("last_error_category") @db.VarChar(80)
   completedAt                      DateTime?                         @map("completed_at") @db.Timestamptz(6)
   cancelledAt                      DateTime?                         @map("cancelled_at") @db.Timestamptz(6)
+  maintenanceTerminalAt            DateTime?                         @map("maintenance_terminal_at") @db.Timestamptz(6)
   createdAt                        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                        DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace                        Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin                          Bunshin?                          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
-  requester                        User                              @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
+  requester                        User?                             @relation(fields: [requestedBy], references: [id], onDelete: Restrict)
   lineDeliveryRetryRequest         LineDeliveryRetryRequest?
   badgeLineDeliveryRetryRequest    BadgeLineDeliveryRetryRequest?
   videoRenderRetryRequest          VideoRenderRetryRequest?
@@ -6356,10 +6367,92 @@ model BunshinMemory {
   updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
   workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin     Bunshin                 @relation(fields: [bunshinId], references: [id], onDelete: Restrict)
+  photoFirstVariantMetadata MissionContentVariantPhotoFirstMetadata[]
 
+  @@unique([workspaceId, bunshinId, id], map: "bunshin_memories_scope_id_key")
   @@index([workspaceId, bunshinId, active, deletedAt, updatedAt])
   @@index([workspaceId, bunshinId, sourceType, sourceId])
   @@map("bunshin_memories")
+}
+
+model ImprovementFeedback {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  serviceId     String   @map("service_id") @db.Uuid
+  bunshinId     String   @map("bunshin_id") @db.Uuid
+  actorUserId   String   @map("actor_user_id") @db.Uuid
+  packageKey    String   @map("package_key") @db.VarChar(30)
+  submissionKey String   @map("submission_key") @db.Uuid
+  category      String   @db.VarChar(20)
+  surface       String   @db.VarChar(20)
+  impact        String   @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  bunshin       Bunshin  @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Cascade, map: "improvement_feedback_scope_fkey")
+
+  @@unique([workspaceId, actorUserId, submissionKey], map: "improvement_feedback_submission_key")
+  @@index([workspaceId, serviceId, packageKey, createdAt], map: "improvement_feedback_scope_time")
+  @@index([actorUserId], map: "improvement_feedback_actor_user_id_idx")
+  @@index([bunshinId], map: "improvement_feedback_bunshin_id_idx")
+  @@map("improvement_feedback")
+}
+
+model ImprovementTriageCandidate {
+  id                      String                       @id @default(uuid()) @db.Uuid
+  tenantRef               String                       @map("tenant_ref") @db.VarChar(240)
+  workspaceId             String                       @map("workspace_id") @db.Uuid
+  serviceId               String                       @map("service_id") @db.Uuid
+  environment             String                       @db.VarChar(20)
+  packageKey              String                       @map("package_key") @db.VarChar(30)
+  adapterKey              String                       @map("adapter_key") @db.VarChar(30)
+  fromInclusive           DateTime                     @map("from_inclusive") @db.Timestamptz(6)
+  toExclusive             DateTime                     @map("to_exclusive") @db.Timestamptz(6)
+  clusterRef              String                       @map("cluster_ref") @db.Char(64)
+  windowEvidenceRevision  String?                      @map("window_evidence_revision") @db.Char(64)
+  bucketEvidenceRevision  String?                      @map("bucket_evidence_revision") @db.Char(64)
+  adapterVersion          String                       @map("adapter_version") @db.VarChar(120)
+  ruleVersion             String                       @map("rule_version") @db.VarChar(120)
+  disclosurePolicyVersion String                       @map("disclosure_policy_version") @db.VarChar(120)
+  retentionPolicyVersion  String                       @map("retention_policy_version") @db.VarChar(120)
+  candidateRevision       Int                          @default(1) @map("candidate_revision")
+  state                   String                       @default("OPEN") @db.VarChar(20)
+  expiresAt               DateTime                     @map("expires_at") @db.Timestamptz(6)
+  createdAt               DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  service                 Group                        @relation(fields: [workspaceId, serviceId], references: [workspaceId, id], onDelete: Cascade)
+  operations              ImprovementTriageOperation[]
+
+  @@unique([tenantRef, workspaceId, serviceId, environment, packageKey, adapterKey, clusterRef], map: "triage_candidate_scope_cluster")
+  @@index([workspaceId, serviceId, fromInclusive, toExclusive], map: "triage_candidate_scope_period")
+  @@index([expiresAt])
+  @@map("improvement_triage_candidates")
+}
+
+model ImprovementTriageOperation {
+  id                        String                      @id @default(uuid()) @db.Uuid
+  tenantRef                 String                      @map("tenant_ref") @db.VarChar(240)
+  workspaceId               String                      @map("workspace_id") @db.Uuid
+  serviceId                 String                      @map("service_id") @db.Uuid
+  environment               String                      @db.VarChar(20)
+  packageKey                String                      @map("package_key") @db.VarChar(30)
+  adapterKey                String                      @map("adapter_key") @db.VarChar(30)
+  operationKey              String                      @map("operation_key") @db.Uuid
+  candidateId               String?                     @map("candidate_id") @db.Uuid
+  actorUserId               String?                     @map("actor_user_id") @db.Uuid
+  expectedCandidateRevision Int                         @map("expected_candidate_revision")
+  action                    String                      @db.VarChar(20)
+  reasonCode                String                      @map("reason_code") @db.VarChar(30)
+  resultRevision            Int                         @map("result_revision")
+  resultState               String                      @map("result_state") @db.VarChar(20)
+  occurredAt                DateTime                    @map("occurred_at") @db.Timestamptz(6)
+  expiresAt                 DateTime                    @map("expires_at") @db.Timestamptz(6)
+  service                   Group                       @relation(fields: [workspaceId, serviceId], references: [workspaceId, id], onDelete: Cascade)
+  candidate                 ImprovementTriageCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  actor                     User?                       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantRef, workspaceId, serviceId, environment, packageKey, adapterKey, operationKey], map: "triage_operation_scope_key")
+  @@index([actorUserId])
+  @@index([expiresAt])
+  @@map("improvement_triage_operations")
 }
 
 model BunshinCapabilityAssignment {
@@ -6471,8 +6564,10 @@ model SocialAccountStrategy {
   workspace         Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   bunshin           Bunshin                          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
   socialProfile     SocialProfile                    @relation(fields: [workspaceId, bunshinId, socialProfileId, platform], references: [workspaceId, bunshinId, id, platform], onDelete: Restrict)
+  weeklyPlans       WeeklyPlan[]
 
   @@unique([socialProfileId, version])
+  @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, socialProfileId, status, version])
   @@map("social_account_strategies")
 }
@@ -6596,24 +6691,29 @@ model ContentPillar {
 }
 
 model WeeklyPlan {
-  id              String           @id @default(uuid()) @db.Uuid
-  workspaceId     String           @map("workspace_id") @db.Uuid
-  bunshinId       String           @map("bunshin_id") @db.Uuid
-  weekStartDate   DateTime         @map("week_start_date") @db.Date
-  timezone        String           @db.VarChar(64)
-  strategySummary String?          @map("strategy_summary") @db.VarChar(1000)
-  status          WeeklyPlanStatus @default(DRAFT)
-  confirmedAt     DateTime?        @map("confirmed_at") @db.Timestamptz(6)
-  expiredAt       DateTime?        @map("expired_at") @db.Timestamptz(6)
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  bunshin         Bunshin          @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  id              String                     @id @default(uuid()) @db.Uuid
+  workspaceId     String                     @map("workspace_id") @db.Uuid
+  bunshinId       String                     @map("bunshin_id") @db.Uuid
+  socialProfileId String?                    @map("social_profile_id") @db.Uuid
+  strategyId      String?                    @map("strategy_id") @db.Uuid
+  strategyGoal    SocialAccountStrategyGoal? @map("strategy_goal")
+  weekStartDate   DateTime                   @map("week_start_date") @db.Date
+  timezone        String                     @db.VarChar(64)
+  strategySummary String?                    @map("strategy_summary") @db.VarChar(1000)
+  status          WeeklyPlanStatus           @default(DRAFT)
+  confirmedAt     DateTime?                  @map("confirmed_at") @db.Timestamptz(6)
+  expiredAt       DateTime?                  @map("expired_at") @db.Timestamptz(6)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace       Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  bunshin         Bunshin                    @relation(fields: [workspaceId, bunshinId], references: [workspaceId, id], onDelete: Restrict)
+  strategy        SocialAccountStrategy?     @relation(fields: [workspaceId, bunshinId, strategyId], references: [workspaceId, bunshinId, id], onDelete: Restrict)
   items           WeeklyPlanItem[]
 
   @@unique([workspaceId, bunshinId, weekStartDate])
   @@unique([workspaceId, bunshinId, id])
   @@index([workspaceId, bunshinId, status, weekStartDate])
+  @@index([workspaceId, bunshinId, strategyId])
   @@map("weekly_plans")
 }
 
@@ -6828,11 +6928,35 @@ model MissionContentVariant {
   dailyMission        DailyMission                     @relation(fields: [workspaceId, bunshinId, dailyMissionId, format], references: [workspaceId, bunshinId, id, format], onDelete: Cascade, map: "mission_content_variants_mission_fkey")
   generation          MissionContentVariantGeneration?
   selections          MissionContentVariantSelection[]
+  photoFirstMetadata  MissionContentVariantPhotoFirstMetadata?
 
   @@unique([workspaceId, bunshinId, dailyMissionId, sequence], map: "mission_content_variants_sequence_key")
   @@unique([workspaceId, bunshinId, dailyMissionId, id], map: "mission_content_variants_scope_id_key")
   @@index([workspaceId, bunshinId, dailyMissionId, createdAt], map: "mission_content_variants_mission_created_idx")
   @@map("mission_content_variants")
+}
+
+/// Photo Firstで使用した本人写真と構造化解析・企画を投稿案へ追記可能な形で保持する。
+model MissionContentVariantPhotoFirstMetadata {
+  id                    String                @id @default(uuid()) @db.Uuid
+  workspaceId           String                @map("workspace_id") @db.Uuid
+  bunshinId             String                @map("bunshin_id") @db.Uuid
+  dailyMissionId        String                @map("daily_mission_id") @db.Uuid
+  variantId             String                @unique @map("variant_id") @db.Uuid
+  photoMemoryId         String                @map("photo_memory_id") @db.Uuid
+  actorUserId           String                @map("actor_user_id") @db.Uuid
+  analysisJson          Json                  @map("analysis_json")
+  planningJson          Json                  @map("planning_json")
+  analyzerModel         String                @map("analyzer_model") @db.VarChar(120)
+  analyzerPromptVersion String                @map("analyzer_prompt_version") @db.VarChar(120)
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  variant               MissionContentVariant @relation(fields: [workspaceId, bunshinId, dailyMissionId, variantId], references: [workspaceId, bunshinId, dailyMissionId, id], onDelete: Cascade, map: "mission_variant_photo_first_variant_fkey")
+  photoMemory           BunshinMemory         @relation(fields: [workspaceId, bunshinId, photoMemoryId], references: [workspaceId, bunshinId, id], onDelete: Restrict, map: "mission_variant_photo_first_memory_fkey")
+
+  @@unique([workspaceId, bunshinId, dailyMissionId, variantId], map: "mission_variant_photo_first_scope_key")
+  @@index([workspaceId, bunshinId, photoMemoryId], map: "mission_variant_photo_first_memory_idx")
+  @@index([workspaceId, bunshinId, dailyMissionId, createdAt], map: "mission_variant_photo_first_mission_idx")
+  @@map("mission_content_variant_photo_first_metadata")
 }
 
 /// 別案生成のclaim/成功/失敗を冪等に記録する。失敗時にもAI観測値を残す。
@@ -6843,6 +6967,8 @@ model MissionContentVariantGeneration {
   dailyMissionId      String                                @map("daily_mission_id") @db.Uuid
   actorUserId         String                                @map("actor_user_id") @db.Uuid
   idempotencyKey      String                                @map("idempotency_key") @db.VarChar(200)
+  initiatingSource    String?                               @map("initiating_source") @db.VarChar(20)
+  aiUsageEvents       AiUsageEvent[]
   status              MissionContentVariantGenerationStatus @default(PROCESSING)
   variantId           String?                               @unique @map("variant_id") @db.Uuid
   model               String?                               @db.VarChar(120)
@@ -6852,6 +6978,10 @@ model MissionContentVariantGeneration {
   estimatedCostMicros BigInt?                               @map("estimated_cost_micros")
   latencyMs           Int?                                  @map("latency_ms")
   errorCategory       String?                               @map("error_category") @db.VarChar(80)
+  qualityVerdict      String?                               @map("quality_verdict") @db.VarChar(20)
+  qualityScore        Int?                                  @map("quality_score")
+  qualityIssueCodes   String[]                              @default([]) @map("quality_issue_codes")
+  qualityRepairCount  Int                                   @default(0) @map("quality_repair_count")
   createdAt           DateTime                              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime                              @updatedAt @map("updated_at") @db.Timestamptz(6)
   dailyMission        DailyMission                          @relation(fields: [workspaceId, bunshinId, dailyMissionId], references: [workspaceId, bunshinId, id], onDelete: Cascade, map: "mission_content_variant_generations_mission_fkey")
