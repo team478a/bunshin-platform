@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { DailyMissionBrief } from '../src/mission-generation';
 import { decideSocialDecisionRepair } from '../src/social-decision-repair';
-import { prepareSocialDecisionRebrief } from '../src/social-decision-rebrief';
+import {
+  finalizeSocialDecisionRebrief,
+  prepareSocialDecisionRebrief,
+  type SocialDecisionRebriefOutput,
+} from '../src/social-decision-rebrief';
 
 const constraints = {
   missionDate: '2026-10-04',
@@ -42,6 +46,24 @@ const disposition = decideSocialDecisionRepair({
   qualityIssueCodes: ['GOAL_MISMATCH'],
   contentInspectionIssue: null,
 });
+const output: SocialDecisionRebriefOutput = {
+  topic: '初回相談で最初に確認すること',
+  angle: '当日の流れを時系列で説明する',
+  reason: '問い合わせ前の不安を具体的に減らすため',
+  estimatedMinutes: 10,
+  personalizationSourceTypes: ['ACCOUNT_STRATEGY'],
+  personalizationReason: '現在の問い合わせ目的を判断軸にしたため',
+};
+
+function prepare(brief: DailyMissionBrief = previousBrief) {
+  return prepareSocialDecisionRebrief({
+    attempt: 1,
+    boundary,
+    disposition,
+    constraints,
+    previousBrief: brief,
+  });
+}
 
 describe('social decision rebrief input contract', () => {
   it('prepares one provider-safe revised brief attempt with locked decision constraints', () => {
@@ -150,5 +172,94 @@ describe('social decision rebrief input contract', () => {
         previousBrief,
       }),
     ).toThrow('previous decision does not match rebrief constraints');
+  });
+});
+
+describe('social decision rebrief finalize contract', () => {
+  it('changes only the six mutable fields and preserves internal and locked references', () => {
+    const briefWithTrend = { ...previousBrief, trendCandidateId: 'trend-internal' };
+    const preparation = prepare(briefWithTrend);
+
+    const finalized = finalizeSocialDecisionRebrief({
+      preparation,
+      previousBrief: briefWithTrend,
+      output,
+    });
+
+    expect(finalized).toEqual({
+      ...briefWithTrend,
+      ...output,
+    });
+    expect(finalized.socialProfileId).toBe('profile-internal');
+    expect(finalized.weeklyPlanItemId).toBe('weekly-item-internal');
+    expect(finalized.campaignId).toBe('campaign-approved');
+    expect(finalized.trendCandidateId).toBe('trend-internal');
+    expect(finalized.format).toBe('SLIDE');
+    expect(finalized.classification).toBe('ADVERTISEMENT');
+  });
+
+  it.each([
+    ['mission date', { missionDate: '2026-10-05' }],
+    ['format', { format: 'IMAGE' as const }],
+    ['campaign attachment', { campaignAttached: false }],
+    ['trend usage', { trendUsed: true }],
+    ['classification', { classification: 'ORGANIC' as const }],
+  ])('rejects preparation drift in locked %s', (_name, lockedOverride) => {
+    const preparation = prepare();
+    expect(() =>
+      finalizeSocialDecisionRebrief({
+        preparation: {
+          ...preparation,
+          lockedConstraints: { ...preparation.lockedConstraints, ...lockedOverride },
+        },
+        previousBrief,
+        output,
+      }),
+    ).toThrow('decision rebrief preparation does not match brief');
+  });
+
+  it('rejects a preparation created for another previous decision', () => {
+    const preparation = prepare();
+    expect(() =>
+      finalizeSocialDecisionRebrief({
+        preparation,
+        previousBrief: { ...previousBrief, topic: '別の元判断' },
+        output,
+      }),
+    ).toThrow('decision rebrief preparation does not match brief');
+  });
+
+  it('rejects extra provider fields instead of spreading them over the brief', () => {
+    const polluted = { ...output, format: 'IMAGE' } as SocialDecisionRebriefOutput;
+    expect(() =>
+      finalizeSocialDecisionRebrief({
+        preparation: prepare(),
+        previousBrief,
+        output: polluted,
+      }),
+    ).toThrow('invalid decision rebrief output fields');
+  });
+
+  it('rejects an output that exceeds the locked time budget', () => {
+    expect(() =>
+      finalizeSocialDecisionRebrief({
+        preparation: prepare(),
+        previousBrief,
+        output: { ...output, estimatedMinutes: 20 },
+      }),
+    ).toThrow('invalid decision rebrief estimated minutes');
+  });
+
+  it('rejects an unknown personalization source at the domain boundary', () => {
+    expect(() =>
+      finalizeSocialDecisionRebrief({
+        preparation: prepare(),
+        previousBrief,
+        output: {
+          ...output,
+          personalizationSourceTypes: ['UNKNOWN_SOURCE'] as never[],
+        },
+      }),
+    ).toThrow('invalid decision rebrief personalization sources');
   });
 });
