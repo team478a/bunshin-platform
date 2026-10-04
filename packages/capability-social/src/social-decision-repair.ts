@@ -3,6 +3,8 @@ import { ApplicationError } from '@bunshin/shared';
 import { MISSION_QUALITY_VERDICTS, type MissionQualityVerdict } from './mission-quality';
 
 export const SOCIAL_DECISION_REPAIR_POLICY_VERSION = 'social-decision-repair-v1';
+export const SOCIAL_DECISION_STAGES = ['DAILY', 'REVISED_BRIEF'] as const;
+export type SocialDecisionStage = (typeof SOCIAL_DECISION_STAGES)[number];
 export const SOCIAL_DECISION_CONTENT_INSPECTION_ISSUES = [
   'INSTRUCTION_AS_POST',
   'EXACT_RECENT_CONTENT',
@@ -13,7 +15,7 @@ export type SocialDecisionContentInspectionIssue =
 
 interface SocialDecisionRepairDispositionBase {
   policyVersion: typeof SOCIAL_DECISION_REPAIR_POLICY_VERSION;
-  currentDecisionStage: 'DAILY';
+  currentDecisionStage: SocialDecisionStage;
   qualityIssueCodes: string[];
   contentInspectionIssue: SocialDecisionContentInspectionIssue | null;
 }
@@ -46,10 +48,14 @@ const qualityIssueCodes = (values: readonly string[]) => {
 };
 
 export function decideSocialDecisionRepair(input: {
+  currentDecisionStage?: SocialDecisionStage;
   qualityVerdict: MissionQualityVerdict;
   qualityIssueCodes: readonly string[];
   contentInspectionIssue: SocialDecisionContentInspectionIssue | null;
 }): SocialDecisionRepairDisposition {
+  const currentDecisionStage = input.currentDecisionStage ?? 'DAILY';
+  if (!SOCIAL_DECISION_STAGES.includes(currentDecisionStage))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid decision repair stage');
   if (!MISSION_QUALITY_VERDICTS.includes(input.qualityVerdict))
     throw new ApplicationError('VALIDATION_ERROR', 'invalid decision repair quality verdict');
   if (
@@ -59,7 +65,7 @@ export function decideSocialDecisionRepair(input: {
     throw new ApplicationError('VALIDATION_ERROR', 'invalid decision repair inspection issue');
   const base: SocialDecisionRepairDispositionBase = {
     policyVersion: SOCIAL_DECISION_REPAIR_POLICY_VERSION,
-    currentDecisionStage: 'DAILY',
+    currentDecisionStage,
     qualityIssueCodes: qualityIssueCodes(input.qualityIssueCodes),
     contentInspectionIssue: input.contentInspectionIssue,
   };
