@@ -1,4 +1,7 @@
-import { decideSocialDecisionRepair } from '@bunshin/capability-social';
+import {
+  decideSocialDecisionRebriefNextStep,
+  decideSocialDecisionRepair,
+} from '@bunshin/capability-social';
 import type {
   CheckMissionQuality,
   GenerateMissionContent,
@@ -69,16 +72,22 @@ export async function generateQualityCheckedMissionContent(input: {
       contentInspectionIssue: noveltyIssue?.code ?? null,
     });
     if (decisionRepair.action === 'KEEP_DECISION') break;
-    if (
-      input.decisionRepairPolicy === 'REQUIRE_REBRIEF' &&
-      decisionRepair.action === 'REBRIEF_REQUIRED'
-    )
+    const rebriefNextStep =
+      input.decisionRepairPolicy === 'REQUIRE_REBRIEF'
+        ? decideSocialDecisionRebriefNextStep({
+            decisionStage: 'DAILY',
+            rebriefAttemptsUsed: 0,
+            disposition: decisionRepair,
+          })
+        : null;
+    if (rebriefNextStep?.action === 'RUN_REBRIEF')
       throw new ApplicationError(
         'CONTENT_REJECTED',
         'decision-aligned mission requires a new brief before semantic repair',
         {
           reason: 'DECISION_REBRIEF_REQUIRED',
           decisionRepair,
+          rebriefNextStep,
           issueCodes: [...qualityIssueCodes],
           noveltyIssue,
           attempts: attempt + 1,

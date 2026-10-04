@@ -115,6 +115,12 @@ describe('daily mission quality pipeline', () => {
           reason: 'QUALITY_REVISE',
           nextDecisionStage: 'REVISED_BRIEF',
         },
+        rebriefNextStep: {
+          policyVersion: 'social-decision-rebrief-orchestration-v1',
+          action: 'RUN_REBRIEF',
+          nextDecisionStage: 'REVISED_BRIEF',
+          rebriefAttempt: 1,
+        },
         issueCodes: ['NEEDS_DETAIL'],
         attempts: 1,
       },
@@ -149,6 +155,10 @@ describe('daily mission quality pipeline', () => {
           action: 'REBRIEF_REQUIRED',
           reason: 'CONTENT_INSPECTION_FAILED',
           nextDecisionStage: 'REVISED_BRIEF',
+        },
+        rebriefNextStep: {
+          action: 'RUN_REBRIEF',
+          rebriefAttempt: 1,
         },
         noveltyIssue: { code: 'EXACT_RECENT_CONTENT' },
         attempts: 1,

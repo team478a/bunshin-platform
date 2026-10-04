@@ -3538,3 +3538,11 @@
 - socialProfile、Weekly item、Campaign、trendの内部参照とmission date、format、classificationは元Briefから復元し、Provider出力では変更できない。
 - finalize前に準備結果と元Briefを再照合し、別Briefとの取り違え、固定条件の変化、余分なfield、時間超過、不正または重複したpersonalization sourceを拒否する。
 - 本変更はpure関数とfixtureだけであり、Provider呼出し、Daily Mission生成経路、quota／Usage、永続化、revision snapshotには接続しない。
+
+## 2026-10-04: reBrief lifecycleは最大1回のversioned state machineで制御する
+
+- 状態: Accepted（Provider接続前のorchestration契約）
+- 初回DecisionはPASSなら受理、REJECTならfail-closed、REVISEまたは本文検査issueなら1回だけ `REVISED_BRIEF` へ進める。
+- `REVISED_BRIEF` は終端stageとし、再品質検査がPASSかつ本文検査issueなしの場合だけ受理する。REVISE、REJECT、重複等は二度目のreBriefを行わずfail-closedとする。
+- stageと試行回数、repair dispositionのstageが一致しない入力を拒否し、最大回数をcallerの慣習に依存させない。
+- 既存品質pipelineの未接続guardはこのstate machineが返す `RUN_REBRIEF` を記録して停止する。本変更ではProvider呼出し、quota／Usage、保存、通知を開始しない。
