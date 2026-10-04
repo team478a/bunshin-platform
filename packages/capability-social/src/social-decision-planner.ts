@@ -105,6 +105,9 @@ export function prepareSocialDecisionPlannerInput(input: SocialDecisionPlannerPr
   });
   if (context.status !== 'READY')
     throw new ApplicationError('CONFLICT', 'decision context is not ready', {
+      category: Object.values(input.boundary).includes('BLOCKED')
+        ? 'DECISION_CONTEXT_BLOCKED'
+        : 'DECISION_CONTEXT_REVIEW_REQUIRED',
       status: context.status,
       missingInputs: context.missingInputs,
       reviewReasons: context.reviewReasons,

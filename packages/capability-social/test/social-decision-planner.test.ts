@@ -81,13 +81,50 @@ describe('unconnected SOCIAL Decision Context to real Brief planner preparation'
       const value = input();
       value.boundary[key] = 'UNKNOWN';
       const planner = provider();
-      await expect(async () => {
-        const prepared = prepareSocialDecisionPlannerInput(value);
-        await new GenerateDailyMissionBrief(planner).execute(prepared.plannerInput);
-      }).rejects.toThrow('not ready');
+      await expect(
+        Promise.resolve().then(() => prepareSocialDecisionPlannerInput(value)),
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        cause: {
+          category: 'DECISION_CONTEXT_REVIEW_REQUIRED',
+          status: 'BLOCKED',
+        },
+      });
       expect(planner.generate).not.toHaveBeenCalled();
     },
   );
+
+  it('classifies an explicitly blocked boundary separately and does not invoke a provider', async () => {
+    const value = input();
+    value.boundary.safetyLegal = 'BLOCKED';
+    const planner = provider();
+
+    await expect(
+      Promise.resolve().then(() => prepareSocialDecisionPlannerInput(value)),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      cause: {
+        category: 'DECISION_CONTEXT_BLOCKED',
+        status: 'BLOCKED',
+      },
+    });
+    expect(planner.generate).not.toHaveBeenCalled();
+  });
+
+  it('classifies a non-boundary review requirement without treating it as an explicit block', async () => {
+    const value = input();
+    value.plannerInput.businessProfile = null;
+
+    await expect(
+      Promise.resolve().then(() => prepareSocialDecisionPlannerInput(value)),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      cause: {
+        category: 'DECISION_CONTEXT_REVIEW_REQUIRED',
+        status: 'REVIEW_REQUIRED',
+      },
+    });
+  });
 
   it('replaces unscoped legacy history instead of carrying other-Goal performance into the prompt', () => {
     const value = input();
