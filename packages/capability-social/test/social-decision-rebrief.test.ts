@@ -70,6 +70,7 @@ describe('social decision rebrief input contract', () => {
         format: constraints.format,
         availableMinutes: constraints.availableMinutes,
         campaignAttached: true,
+        trendUsed: false,
         classification: constraints.classification,
       },
       previousDecision: {

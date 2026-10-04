@@ -3522,3 +3522,11 @@
 - authorization、Capability、ownership、safety/legalはreBrief時点で全てPASSEDを要求する。UNKNOWNをPASSEDで補完しない。
 - Goal、Strategy version、Weekly goal/angle、日付、timezone、platform、format、利用可能時間、Campaign、classificationを固定する。変更可能なのはtopic、angle、reason、estimatedMinutes、personalization source/reasonだけとする。
 - Providerへ渡せる準備結果からWorkspace／User／Bunshin／Profile／Weekly item等の内部識別子と生成本文を除外する。本変更ではProvider呼出し、quota消費、revision保存を行わない。
+
+## 2026-10-04: reBriefは通常Briefと別の未接続Provider adapterを使う
+
+- 状態: Accepted（本番composition接続前のadapter境界）
+- reBriefは通常BriefのPromptへrepair指示を追加せず、`daily-mission-rebrief-v1` の別adapterとstrict schemaを使用する。通常Briefの挙動とPrompt Versionは変更しない。
+- adapterはreBrief準備時の固定条件とPlanner Contextを照合し、差分があればProvider呼出し前に拒否する。
+- Campaign、Product Pack、Group、Personality等の内部参照とasset URLを明示投影で除外する。前Briefの判断要素は渡すが、生成済み投稿本文は入力型に持たない。
+- Provider出力は変更許可済みの6項目だけ受け付け、利用可能時間と提供済みpersonalization sourceを再検証する。本変更ではDaily Mission生成経路への接続、quota消費、Usage記録、revision保存を行わない。

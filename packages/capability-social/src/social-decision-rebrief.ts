@@ -46,6 +46,7 @@ export type SocialDecisionRebriefLockedConstraints = Omit<
   'campaignId'
 > & {
   campaignAttached: boolean;
+  trendUsed: boolean;
 };
 
 export interface SocialDecisionRebriefPreparation {
@@ -84,9 +85,14 @@ function previousDecision(brief: DailyMissionBrief): SocialDecisionRebriefPrevio
 
 function lockedConstraints(
   constraints: SocialDecisionRebriefConstraints,
+  previousBrief: DailyMissionBrief,
 ): SocialDecisionRebriefLockedConstraints {
   const { campaignId, ...providerSafe } = constraints;
-  return { ...structuredClone(providerSafe), campaignAttached: campaignId !== null };
+  return {
+    ...structuredClone(providerSafe),
+    campaignAttached: campaignId !== null,
+    trendUsed: previousBrief.trendCandidateId !== undefined,
+  };
 }
 
 /**
@@ -131,7 +137,7 @@ export function prepareSocialDecisionRebrief(input: {
       qualityIssueCodes: [...input.disposition.qualityIssueCodes],
       contentInspectionIssue: input.disposition.contentInspectionIssue,
     },
-    lockedConstraints: lockedConstraints(input.constraints),
+    lockedConstraints: lockedConstraints(input.constraints, input.previousBrief),
     previousDecision: previousDecision(input.previousBrief),
     mutableFields: SOCIAL_DECISION_REBRIEF_MUTABLE_FIELDS,
   };
