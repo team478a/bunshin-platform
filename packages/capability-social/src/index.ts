@@ -3,6 +3,7 @@ export * from './social-account-strategy';
 export * from './social-goal';
 export * from './social-decision-context';
 export * from './social-decision-planner';
+export * from './social-decision-repair';
 export * from './content-pillars';
 export * from './weekly-plan';
 export * from './mission-generation';

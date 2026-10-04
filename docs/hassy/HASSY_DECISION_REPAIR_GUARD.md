@@ -42,7 +42,7 @@
 
 ## 5. 未解決事項
 
-- 自動reBriefと明示的decision revisionのどちらを正本にするか。
+- repair後の次動作と `REVISED_BRIEF` stageは、後続の `HASSY_DECISION_REBRIEF_CONTRACT.md` でpure contractとして固定する。自動reBriefと永続化するdecision revisionのどちらを正本にするかは引き続き未解決。
 - reBrief時のProvider利用回数、quota、Usage、idempotency、最大試行数。
 - 表記だけの安全な修正を同decisionで許可する場合の、Provider出力に依存しない分類契約。
 
