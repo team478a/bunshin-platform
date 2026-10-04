@@ -1,7 +1,11 @@
 import { ApplicationError } from '@bunshin/shared';
 
 import type { CampaignContentClassification } from '@bunshin/application';
-import type { DailyMissionBrief, MissionPersonalizationSourceType } from './mission-generation';
+import {
+  MISSION_PERSONALIZATION_SOURCE_TYPES,
+  type DailyMissionBrief,
+  type MissionPersonalizationSourceType,
+} from './mission-generation';
 import type { SocialDecisionBoundary } from './social-decision-context';
 import type { SocialDecisionRepairDisposition } from './social-decision-repair';
 import type { SocialAccountStrategyGoal } from './social-account-strategy';
@@ -39,6 +43,15 @@ export interface SocialDecisionRebriefPreviousDecision {
   estimatedMinutes: number;
   personalizationSourceTypes: MissionPersonalizationSourceType[];
   personalizationReason: string | null;
+}
+
+export interface SocialDecisionRebriefOutput {
+  topic: string;
+  angle: string;
+  reason: string;
+  estimatedMinutes: number;
+  personalizationSourceTypes: MissionPersonalizationSourceType[];
+  personalizationReason: string;
 }
 
 export type SocialDecisionRebriefLockedConstraints = Omit<
@@ -140,5 +153,115 @@ export function prepareSocialDecisionRebrief(input: {
     lockedConstraints: lockedConstraints(input.constraints, input.previousBrief),
     previousDecision: previousDecision(input.previousBrief),
     mutableFields: SOCIAL_DECISION_REBRIEF_MUTABLE_FIELDS,
+  };
+}
+
+function assertExactOutputFields(output: SocialDecisionRebriefOutput) {
+  const fields = Object.keys(output).sort();
+  const expected = [...SOCIAL_DECISION_REBRIEF_MUTABLE_FIELDS].sort();
+  if (fields.length !== expected.length || fields.some((field, index) => field !== expected[index]))
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid decision rebrief output fields');
+}
+
+function assertRebriefOutput(
+  output: SocialDecisionRebriefOutput,
+  locked: SocialDecisionRebriefLockedConstraints,
+) {
+  assertExactOutputFields(output);
+  for (const [field, value, maximum] of [
+    ['topic', output.topic, 200],
+    ['angle', output.angle, 500],
+    ['reason', output.reason, 1000],
+    ['personalizationReason', output.personalizationReason, 500],
+  ] as const) {
+    if (typeof value !== 'string' || value.trim().length === 0 || value.trim().length > maximum)
+      throw new ApplicationError('VALIDATION_ERROR', `invalid decision rebrief ${field}`);
+  }
+  if (
+    !Number.isInteger(output.estimatedMinutes) ||
+    output.estimatedMinutes < 1 ||
+    output.estimatedMinutes > locked.availableMinutes
+  )
+    throw new ApplicationError('VALIDATION_ERROR', 'invalid decision rebrief estimated minutes');
+  if (
+    !Array.isArray(output.personalizationSourceTypes) ||
+    output.personalizationSourceTypes.length === 0 ||
+    output.personalizationSourceTypes.some(
+      (source) => !(MISSION_PERSONALIZATION_SOURCE_TYPES as readonly unknown[]).includes(source),
+    ) ||
+    new Set(output.personalizationSourceTypes).size !== output.personalizationSourceTypes.length
+  )
+    throw new ApplicationError(
+      'VALIDATION_ERROR',
+      'invalid decision rebrief personalization sources',
+    );
+}
+
+function assertPreparationMatchesBrief(
+  preparation: SocialDecisionRebriefPreparation,
+  previousBrief: DailyMissionBrief,
+) {
+  const locked = preparation.lockedConstraints;
+  const expectedPrevious = previousDecision(previousBrief);
+  const actualPrevious = preparation.previousDecision;
+  const mutableFieldsMatch =
+    preparation.mutableFields.length === SOCIAL_DECISION_REBRIEF_MUTABLE_FIELDS.length &&
+    preparation.mutableFields.every(
+      (field, index) => field === SOCIAL_DECISION_REBRIEF_MUTABLE_FIELDS[index],
+    );
+  const previousDecisionMatches =
+    actualPrevious.topic === expectedPrevious.topic &&
+    actualPrevious.angle === expectedPrevious.angle &&
+    actualPrevious.reason === expectedPrevious.reason &&
+    actualPrevious.estimatedMinutes === expectedPrevious.estimatedMinutes &&
+    actualPrevious.personalizationReason === expectedPrevious.personalizationReason &&
+    actualPrevious.personalizationSourceTypes.length ===
+      expectedPrevious.personalizationSourceTypes.length &&
+    actualPrevious.personalizationSourceTypes.every(
+      (source, index) => source === expectedPrevious.personalizationSourceTypes[index],
+    );
+  if (
+    preparation.policyVersion !== SOCIAL_DECISION_REBRIEF_POLICY_VERSION ||
+    preparation.decisionStage !== 'REVISED_BRIEF' ||
+    preparation.attempt !== SOCIAL_DECISION_REBRIEF_MAX_ATTEMPTS ||
+    preparation.maximumAttempts !== SOCIAL_DECISION_REBRIEF_MAX_ATTEMPTS ||
+    locked.missionDate !== previousBrief.missionDate ||
+    locked.format !== previousBrief.format ||
+    locked.campaignAttached !== (previousBrief.campaignId !== null) ||
+    locked.trendUsed !== (previousBrief.trendCandidateId !== undefined) ||
+    locked.classification !== previousBrief.classification ||
+    !mutableFieldsMatch ||
+    !previousDecisionMatches
+  )
+    throw new ApplicationError('CONFLICT', 'decision rebrief preparation does not match brief');
+}
+
+/**
+ * Restores provider-safe reBrief output into the original Brief without allowing provider data to
+ * replace internal references or locked decision fields. It does not persist or call a provider.
+ */
+export function finalizeSocialDecisionRebrief(input: {
+  preparation: SocialDecisionRebriefPreparation;
+  previousBrief: DailyMissionBrief;
+  output: SocialDecisionRebriefOutput;
+}): DailyMissionBrief {
+  assertPreparationMatchesBrief(input.preparation, input.previousBrief);
+  assertRebriefOutput(input.output, input.preparation.lockedConstraints);
+  return {
+    missionDate: input.previousBrief.missionDate,
+    socialProfileId: input.previousBrief.socialProfileId,
+    weeklyPlanItemId: input.previousBrief.weeklyPlanItemId,
+    format: input.previousBrief.format,
+    topic: input.output.topic.trim(),
+    angle: input.output.angle.trim(),
+    reason: input.output.reason.trim(),
+    estimatedMinutes: input.output.estimatedMinutes,
+    ...(input.previousBrief.trendCandidateId === undefined
+      ? {}
+      : { trendCandidateId: input.previousBrief.trendCandidateId }),
+    campaignId: input.previousBrief.campaignId,
+    classification: input.previousBrief.classification,
+    personalizationSourceTypes: [...input.output.personalizationSourceTypes],
+    personalizationReason: input.output.personalizationReason.trim(),
   };
 }

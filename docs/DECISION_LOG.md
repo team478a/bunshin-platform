@@ -3530,3 +3530,11 @@
 - adapterはreBrief準備時の固定条件とPlanner Contextを照合し、差分があればProvider呼出し前に拒否する。
 - Campaign、Product Pack、Group、Personality等の内部参照とasset URLを明示投影で除外する。前Briefの判断要素は渡すが、生成済み投稿本文は入力型に持たない。
 - Provider出力は変更許可済みの6項目だけ受け付け、利用可能時間と提供済みpersonalization sourceを再検証する。本変更ではDaily Mission生成経路への接続、quota消費、Usage記録、revision保存を行わない。
+
+## 2026-10-04: reBrief結果は元Briefへ明示投影して固定参照を復元する
+
+- 状態: Accepted（本番composition接続前のpure finalize境界）
+- Provider結果を元Briefへspreadせず、topic、angle、reason、estimatedMinutes、personalization source/reasonの6項目だけを明示コピーする。
+- socialProfile、Weekly item、Campaign、trendの内部参照とmission date、format、classificationは元Briefから復元し、Provider出力では変更できない。
+- finalize前に準備結果と元Briefを再照合し、別Briefとの取り違え、固定条件の変化、余分なfield、時間超過、不正または重複したpersonalization sourceを拒否する。
+- 本変更はpure関数とfixtureだけであり、Provider呼出し、Daily Mission生成経路、quota／Usage、永続化、revision snapshotには接続しない。

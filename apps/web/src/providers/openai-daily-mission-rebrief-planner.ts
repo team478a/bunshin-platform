@@ -3,6 +3,7 @@ import 'server-only';
 import type {
   DailyMissionPlannerProviderInput,
   MissionPersonalizationSourceType,
+  SocialDecisionRebriefOutput,
   SocialDecisionRebriefPreparation,
 } from '@bunshin/capability-social';
 import { MISSION_PERSONALIZATION_SOURCE_TYPES } from '@bunshin/capability-social';
@@ -10,14 +11,7 @@ import { ApplicationError } from '@bunshin/shared';
 
 export const DAILY_MISSION_REBRIEF_PROMPT_VERSION = 'daily-mission-rebrief-v1';
 
-export interface DailyMissionRebriefPlannerOutput {
-  topic: string;
-  angle: string;
-  reason: string;
-  estimatedMinutes: number;
-  personalizationSourceTypes: MissionPersonalizationSourceType[];
-  personalizationReason: string;
-}
+export type DailyMissionRebriefPlannerOutput = SocialDecisionRebriefOutput;
 
 export interface DailyMissionRebriefPlannerResult {
   output: DailyMissionRebriefPlannerOutput;
