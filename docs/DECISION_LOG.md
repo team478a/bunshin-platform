@@ -3506,3 +3506,11 @@
 - 現行repairはBriefのtopic、angle、personalization reasonを再判断せず本文だけを変更するため、意味変更を確実に検出できない段階で旧reasonを最終本文へ流用しない。MissionとSnapshotの保存前に停止し、不完全な生成物を公開しない。
 - Decision Context対象外のServiceは既存repairを維持する。初回品質PASSかつ意味重複なしの対象生成も変更しない。
 - 自動reBriefまたは版付きdecision revisionは本変更へ含めない。Provider呼出し回数、quota、失敗復旧、revision参照の契約を別途レビューしてから追加する。
+
+## 2026-10-04: Decision repairの次動作を版付きpure contractで固定する
+
+- 状態: Accepted（自動reBrief接続前の契約）
+- 品質判定と既存本文検査の結果を、`KEEP_DECISION`、`REBRIEF_REQUIRED`、`REJECT_CONTENT` のいずれかへ正規化する。policy versionは `social-decision-repair-v1` とする。
+- PASSかつ本文検査issueなしだけ同じ `DAILY` decisionを維持する。REVISEまたは本文検査issueは `REVISED_BRIEF` stageを要求し、REJECTはrevisionを提案せず生成物を拒否する。
+- 入力は品質verdict、重複排除したissue code、本文検査issueだけとする。本文、Memory、Workspace／User／Bunshin識別子、Provider Promptは契約へ渡さない。
+- 本契約は次動作を決めるだけで、自動reBrief、追加Provider呼出し、quota消費、Snapshot保存、UI表示を行わない。既存fail-closed guardは契約結果を使用する。

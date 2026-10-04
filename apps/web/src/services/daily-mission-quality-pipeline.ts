@@ -1,3 +1,4 @@
+import { decideSocialDecisionRepair } from '@bunshin/capability-social';
 import type {
   CheckMissionQuality,
   GenerateMissionContent,
@@ -62,22 +63,28 @@ export async function generateQualityCheckedMissionContent(input: {
             recentMissions: input.recentMissions,
           })
         : null;
-    if (currentQuality.output.verdict === 'PASS' && !noveltyIssue) break;
+    const decisionRepair = decideSocialDecisionRepair({
+      qualityVerdict: currentQuality.output.verdict,
+      qualityIssueCodes: currentQuality.output.issues.map(({ code }) => code),
+      contentInspectionIssue: noveltyIssue?.code ?? null,
+    });
+    if (decisionRepair.action === 'KEEP_DECISION') break;
     if (
       input.decisionRepairPolicy === 'REQUIRE_REBRIEF' &&
-      (currentQuality.output.verdict === 'REVISE' || noveltyIssue !== null)
+      decisionRepair.action === 'REBRIEF_REQUIRED'
     )
       throw new ApplicationError(
         'CONTENT_REJECTED',
         'decision-aligned mission requires a new brief before semantic repair',
         {
           reason: 'DECISION_REBRIEF_REQUIRED',
+          decisionRepair,
           issueCodes: [...qualityIssueCodes],
           noveltyIssue,
           attempts: attempt + 1,
         },
       );
-    if (currentQuality.output.verdict === 'REJECT' || attempt === 2)
+    if (decisionRepair.action === 'REJECT_CONTENT' || attempt === 2)
       throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check', {
         issueCodes: [...qualityIssueCodes],
         noveltyIssue,

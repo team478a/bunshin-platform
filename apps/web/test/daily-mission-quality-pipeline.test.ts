@@ -109,6 +109,12 @@ describe('daily mission quality pipeline', () => {
       code: 'CONTENT_REJECTED',
       cause: {
         reason: 'DECISION_REBRIEF_REQUIRED',
+        decisionRepair: {
+          policyVersion: 'social-decision-repair-v1',
+          action: 'REBRIEF_REQUIRED',
+          reason: 'QUALITY_REVISE',
+          nextDecisionStage: 'REVISED_BRIEF',
+        },
         issueCodes: ['NEEDS_DETAIL'],
         attempts: 1,
       },
@@ -138,6 +144,12 @@ describe('daily mission quality pipeline', () => {
       code: 'CONTENT_REJECTED',
       cause: {
         reason: 'DECISION_REBRIEF_REQUIRED',
+        decisionRepair: {
+          policyVersion: 'social-decision-repair-v1',
+          action: 'REBRIEF_REQUIRED',
+          reason: 'CONTENT_INSPECTION_FAILED',
+          nextDecisionStage: 'REVISED_BRIEF',
+        },
         noveltyIssue: { code: 'EXACT_RECENT_CONTENT' },
         attempts: 1,
       },
