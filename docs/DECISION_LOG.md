@@ -3514,3 +3514,11 @@
 - PASSかつ本文検査issueなしだけ同じ `DAILY` decisionを維持する。REVISEまたは本文検査issueは `REVISED_BRIEF` stageを要求し、REJECTはrevisionを提案せず生成物を拒否する。
 - 入力は品質verdict、重複排除したissue code、本文検査issueだけとする。本文、Memory、Workspace／User／Bunshin識別子、Provider Promptは契約へ渡さない。
 - 本契約は次動作を決めるだけで、自動reBrief、追加Provider呼出し、quota消費、Snapshot保存、UI表示を行わない。既存fail-closed guardは契約結果を使用する。
+
+## 2026-10-04: reBrief入力は安全境界を再確認し1回だけ許可する
+
+- 状態: Accepted（実Provider接続前の入力契約）
+- `REBRIEF_REQUIRED` だけを `REVISED_BRIEF` 入力へ変換し、試行上限は1回とする。REJECTをreBrief可能と読み替えず、2回目以降も拒否する。
+- authorization、Capability、ownership、safety/legalはreBrief時点で全てPASSEDを要求する。UNKNOWNをPASSEDで補完しない。
+- Goal、Strategy version、Weekly goal/angle、日付、timezone、platform、format、利用可能時間、Campaign、classificationを固定する。変更可能なのはtopic、angle、reason、estimatedMinutes、personalization source/reasonだけとする。
+- Providerへ渡せる準備結果からWorkspace／User／Bunshin／Profile／Weekly item等の内部識別子と生成本文を除外する。本変更ではProvider呼出し、quota消費、revision保存を行わない。
