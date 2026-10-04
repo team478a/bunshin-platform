@@ -3498,3 +3498,11 @@
 - Workspace、User、Bunshin、履歴行ID、投稿本文、URL、Memory全文、観測値、自由入力はdecision blockへ複製しない。Plannerが実際に使用したpersonalization source種別と500文字以内の理由は既存personalization blockに保存し、利用可能sourceの部分集合である既存検証を維持する。
 - `decision` blockを保存するのは、既存認可・Capability・所有権・Service参加／法的同意precheckを通過し、Decision ContextがREADYとなった対象経路だけ。対象外Serviceとdeterministic fallbackのSnapshot契約は変更しない。
 - Daily MissionとGeneration Context Snapshotの既存同一transaction保存を維持する。本文品質repair後のtopic／angle／action変更とreasonの再判断は別PRで扱い、本記録だけで最終本文との意味整合を保証しない。
+
+## 2026-10-04: Decision Context対象はreBriefなしの本文repairを保存前に停止する
+
+- 状態: Accepted（自動reBrief／decision revision導入前の安全guard）
+- Decision ContextがREADYとなったDaily Missionでは、初回の本文品質判定がREVISE、または初回本文の検査で直近本文との重複・作成指示の露出を検出した場合、既存の本文だけのrepair／variant retryを行わず `CONTENT_REJECTED` で停止する。
+- 現行repairはBriefのtopic、angle、personalization reasonを再判断せず本文だけを変更するため、意味変更を確実に検出できない段階で旧reasonを最終本文へ流用しない。MissionとSnapshotの保存前に停止し、不完全な生成物を公開しない。
+- Decision Context対象外のServiceは既存repairを維持する。初回品質PASSかつ意味重複なしの対象生成も変更しない。
+- 自動reBriefまたは版付きdecision revisionは本変更へ含めない。Provider呼出し回数、quota、失敗復旧、revision参照の契約を別途レビューしてから追加する。

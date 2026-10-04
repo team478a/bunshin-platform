@@ -269,6 +269,7 @@ export class DailyMissionGenerationService {
           generateWithQuota,
           recordUsage,
           terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null,
+          decisionRepairPolicy: prepared.context ? 'REQUIRE_REBRIEF' : 'ALLOW_CONTENT_REPAIR',
           setStage: (value) => {
             stage = value;
           },

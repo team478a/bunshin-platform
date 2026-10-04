@@ -24,6 +24,8 @@ describe('daily mission content runtime boundary', () => {
     expect(generation).toContain(
       'terminologyPolicy: serviceKnowledge?.contentTerminologyPolicy ?? null',
     );
+    expect(generation).toContain("? 'REQUIRE_REBRIEF'");
+    expect(generation).toContain(": 'ALLOW_CONTENT_REPAIR'");
     expect(generation).not.toContain('new OpenAIMissionContentGenerator');
     expect(generation).not.toContain('new OpenAIMissionQualityChecker');
     expect(generation).not.toContain('applyServiceContentTerminology(');
