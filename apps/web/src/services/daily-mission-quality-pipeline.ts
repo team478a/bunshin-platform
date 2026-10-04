@@ -8,6 +8,7 @@ import type {
   MissionContentGeneratorInput,
   MissionContentGeneratorResult,
   MissionQualityCheckerInput,
+  SocialDecisionStage,
 } from '@bunshin/capability-social';
 import { ApplicationError } from '@bunshin/shared';
 import {
@@ -39,12 +40,21 @@ export async function generateQualityCheckedMissionContent(input: {
   applyTerminology: (result: MissionContentGeneratorResult) => MissionContentGeneratorResult;
   setStage: (stage: string) => void;
   decisionRepairPolicy: 'ALLOW_CONTENT_REPAIR' | 'REQUIRE_REBRIEF';
+  decisionStage?: SocialDecisionStage;
+  rebriefAttemptsUsed?: 0 | 1;
+  operationPrefix?: string;
 }) {
-  input.setStage('content:0');
+  const operation = (suffix: string) =>
+    input.operationPrefix ? `${input.operationPrefix}:${suffix}` : suffix;
+  const decisionStage = input.decisionStage ?? 'DAILY';
+  const rebriefAttemptsUsed = input.rebriefAttemptsUsed ?? 0;
+  input.setStage(operation('content:0'));
   let content = input.applyTerminology(
-    await input.generateWithQuota('content:0', () => input.generator.execute(input.contentInput)),
+    await input.generateWithQuota(operation('content:0'), () =>
+      input.generator.execute(input.contentInput),
+    ),
   );
-  await input.recordUsage('content:0', 'CONTENT_GENERATOR', content);
+  await input.recordUsage(operation('content:0'), 'CONTENT_GENERATOR', content);
 
   let repairCount = 0;
   const qualityIssueCodes = new Set<string>();
@@ -52,13 +62,13 @@ export async function generateQualityCheckedMissionContent(input: {
   let noveltyIssue: ReturnType<typeof inspectDailyMissionContent> = null;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    input.setStage(`quality:${attempt}`);
-    const currentQuality = await input.generateWithQuota(`quality:${attempt}`, () =>
+    input.setStage(operation(`quality:${attempt}`));
+    const currentQuality = await input.generateWithQuota(operation(`quality:${attempt}`), () =>
       input.checker.execute(input.qualityInput(content.output)),
     );
     quality = currentQuality;
     for (const issue of currentQuality.output.issues) qualityIssueCodes.add(issue.code);
-    await input.recordUsage(`quality:${attempt}`, 'QUALITY_CHECKER', currentQuality);
+    await input.recordUsage(operation(`quality:${attempt}`), 'QUALITY_CHECKER', currentQuality);
     noveltyIssue =
       currentQuality.output.verdict === 'PASS'
         ? inspectDailyMissionContent({
@@ -67,6 +77,7 @@ export async function generateQualityCheckedMissionContent(input: {
           })
         : null;
     const decisionRepair = decideSocialDecisionRepair({
+      currentDecisionStage: decisionStage,
       qualityVerdict: currentQuality.output.verdict,
       qualityIssueCodes: currentQuality.output.issues.map(({ code }) => code),
       contentInspectionIssue: noveltyIssue?.code ?? null,
@@ -75,8 +86,8 @@ export async function generateQualityCheckedMissionContent(input: {
     const rebriefNextStep =
       input.decisionRepairPolicy === 'REQUIRE_REBRIEF'
         ? decideSocialDecisionRebriefNextStep({
-            decisionStage: 'DAILY',
-            rebriefAttemptsUsed: 0,
+            decisionStage,
+            rebriefAttemptsUsed,
             disposition: decisionRepair,
           })
         : null;
@@ -86,6 +97,26 @@ export async function generateQualityCheckedMissionContent(input: {
         'decision-aligned mission requires a new brief before semantic repair',
         {
           reason: 'DECISION_REBRIEF_REQUIRED',
+          decisionRepair,
+          rebriefNextStep,
+          issueCodes: [...qualityIssueCodes],
+          noveltyIssue,
+          attempts: attempt + 1,
+        },
+      );
+    if (rebriefNextStep?.action === 'FAIL_CLOSED')
+      throw new ApplicationError(
+        'CONTENT_REJECTED',
+        'decision-aligned mission failed final quality validation',
+        {
+          reason:
+            rebriefNextStep.reason === 'REBRIEF_ATTEMPT_FAILED'
+              ? 'DECISION_REBRIEF_FAILED'
+              : 'DECISION_CONTENT_REJECTED',
+          category:
+            rebriefNextStep.reason === 'REBRIEF_ATTEMPT_FAILED'
+              ? 'DECISION_REBRIEF_FAILED'
+              : 'DECISION_CONTENT_REJECTED',
           decisionRepair,
           rebriefNextStep,
           issueCodes: [...qualityIssueCodes],
@@ -104,9 +135,9 @@ export async function generateQualityCheckedMissionContent(input: {
     const semanticDuplicate =
       noveltyIssue !== null ||
       currentQuality.output.issues.some(({ code }) => code === 'RECENT_CONTENT_DUPLICATE');
-    input.setStage(`content:${attempt + 1}`);
+    input.setStage(operation(`content:${attempt + 1}`));
     content = input.applyTerminology(
-      await input.generateWithQuota(`content:${attempt + 1}`, () =>
+      await input.generateWithQuota(operation(`content:${attempt + 1}`), () =>
         input.generator.execute(
           semanticDuplicate
             ? {
@@ -127,7 +158,7 @@ export async function generateQualityCheckedMissionContent(input: {
       ),
     );
     await input.recordUsage(
-      `content:${attempt + 1}`,
+      operation(`content:${attempt + 1}`),
       semanticDuplicate ? 'CONTENT_NOVELTY_RETRY' : 'CONTENT_REPAIR',
       content,
     );
@@ -136,5 +167,12 @@ export async function generateQualityCheckedMissionContent(input: {
   if (!quality || quality.output.verdict !== 'PASS' || noveltyIssue)
     throw new ApplicationError('CONTENT_REJECTED', 'generated mission failed quality check');
 
-  return { content, quality, repairCount, qualityIssueCodes: [...qualityIssueCodes] };
+  return {
+    content,
+    quality,
+    repairCount,
+    qualityIssueCodes: [...qualityIssueCodes],
+    decisionStage,
+    rebriefAttemptsUsed,
+  };
 }

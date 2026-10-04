@@ -193,4 +193,61 @@ describe('Generation Context Snapshot', () => {
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
+
+  it('accepts a bounded revised-brief snapshot and rejects missing or malformed revision links', async () => {
+    const revised = payload();
+    revised.decision = {
+      ...revised.decision!,
+      plannerPromptVersion: 'daily-mission-rebrief-v1',
+      decisionStage: 'REVISED_BRIEF',
+      revision: {
+        schemaVersion: 1,
+        policyVersion: 'social-decision-rebrief-v1',
+        orchestrationPolicyVersion: 'social-decision-rebrief-orchestration-v1',
+        attempt: 1,
+        maximumAttempts: 1,
+        revisionOfDecisionRef: `sha256:${'a'.repeat(64)}`,
+        decisionRef: `sha256:${'b'.repeat(64)}`,
+        trigger: {
+          reason: 'QUALITY_REVISE',
+          qualityIssueCodes: ['GOAL_MISMATCH'],
+          contentInspectionIssue: null,
+        },
+        initialPlannerModel: 'planner-model',
+        initialPlannerPromptVersion: 'daily-mission-planner-v1',
+        rebriefModel: 'rebrief-model',
+        rebriefPlannerPromptVersion: 'daily-mission-rebrief-v1',
+        finalQuality: { verdict: 'PASS', issueCodes: [] },
+      },
+    };
+    await expect(
+      new RecordGenerationContextSnapshot(new Snapshots()).execute({
+        ...scope,
+        payload: revised,
+      }),
+    ).resolves.toMatchObject({
+      payload: { decision: { decisionStage: 'REVISED_BRIEF', revision: { attempt: 1 } } },
+    });
+
+    const missingRevision = payload();
+    missingRevision.decision = {
+      ...missingRevision.decision!,
+      decisionStage: 'REVISED_BRIEF',
+    };
+    await expect(
+      new RecordGenerationContextSnapshot(new Snapshots()).execute({
+        ...scope,
+        payload: missingRevision,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    const malformedReference = structuredClone(revised);
+    malformedReference.decision!.revision!.decisionRef = 'not-a-reference';
+    await expect(
+      new RecordGenerationContextSnapshot(new Snapshots()).execute({
+        ...scope,
+        payload: malformedReference,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
 });

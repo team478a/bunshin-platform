@@ -3546,3 +3546,13 @@
 - `REVISED_BRIEF` は終端stageとし、再品質検査がPASSかつ本文検査issueなしの場合だけ受理する。REVISE、REJECT、重複等は二度目のreBriefを行わずfail-closedとする。
 - stageと試行回数、repair dispositionのstageが一致しない入力を拒否し、最大回数をcallerの慣習に依存させない。
 - 既存品質pipelineの未接続guardはこのstate machineが返す `RUN_REBRIEF` を記録して停止する。本変更ではProvider呼出し、quota／Usage、保存、通知を開始しない。
+
+## 2026-10-04: reBriefは既存Daily Mission生成内で1回だけ実行し既存Snapshotへrevisionを保存する
+
+- 状態: Accepted（PR #1119をbaseとする本番生成境界接続）
+- READYなDecision Context対象だけ、初回品質結果が `RUN_REBRIEF` の場合に専用reBrief adapterを1回呼ぶ。初回REJECTと、改訂後のREVISE／REJECT／本文検査issueはProviderを再度呼ばずfail-closedとする。
+- 初回本文・品質は既存suffix、reBriefは `decision-rebrief:1`、改訂本文・品質は `rebrief:1:*` を使う。同じusage prefix内でquota operation keyとAI Usage idempotency keyを一致させ、段階間の衝突を防ぐ。
+- reBrief直前に、最初のtrusted precheckから得たauthorization、Capability、ownership、safety/legalをpure契約で再照合する。UNKNOWNやBLOCKEDをPASSEDへ変換しない。
+- 改訂後はMemory選択、personalization、本文入力、品質入力を最終Briefから再構築する。初回Brief向けの選択結果を黙って流用しない。
+- 新テーブルは追加せず、既存 `GenerationContextSnapshot.payload.decision.revision` に最大回数、policy版、trigger、初回／改訂Prompt・model、元／改訂decisionのSHA-256参照、最終品質をDaily Missionと同一transactionで保存する。digestは匿名化保証ではなく、原Brief本文や内部IDをSnapshotへ複製しないための同一性参照である。
+- 改訂後の最終失敗は `DECISION_REBRIEF_FAILED` として既存Daily Mission Generation失敗状態へ残し、Mission／Snapshotを保存しない。本変更は実AI、実課金API、deploy、自動投稿を実行しない。

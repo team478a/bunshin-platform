@@ -1,5 +1,8 @@
 import 'server-only';
-import type { BunshinCapabilityAssignmentRepository } from '@bunshin/application';
+import type {
+  BunshinCapabilityAssignmentRepository,
+  GenerationDecisionRevisionMetadata,
+} from '@bunshin/application';
 import type { DailyMissionRepository, SocialDecisionContext } from '@bunshin/capability-social';
 import type { DailyMissionAiScope } from './daily-mission-ai-runtime';
 import type { runDailyMissionBriefGeneration } from './daily-mission-brief-runtime';
@@ -31,6 +34,7 @@ export function persistDailyMissionGenerationResult(input: {
   selectedMemories: SelectedMemories;
   personalization: Personalization;
   decisionContext: SocialDecisionContext | null;
+  decisionRevision: GenerationDecisionRevisionMetadata | null;
   recentMissionIds: string[];
   contentResult: ContentResult;
   finalizedContent: FinalizedContent & { groupKnowledgeIds: string[] };
@@ -98,6 +102,7 @@ export function persistDailyMissionGenerationResult(input: {
       decision: buildDailyMissionDecisionMetadata({
         context: input.decisionContext,
         plannerPromptVersion: input.brief.promptVersion,
+        revision: input.decisionRevision,
       }),
       personalization: {
         sourceTypes: input.brief.output.personalizationSourceTypes ?? [],
