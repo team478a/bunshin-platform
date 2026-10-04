@@ -3581,3 +3581,15 @@
 - 最初にArchitecture PrinciplesとGenspark Testを人間レビューし、その後AI研修の一つの具体的ProblemでProblem、Feasibility、Skill、Artifact、Validationの最小契約を設計する。
 - 自動Skill生成、顧客データ送信、コード自動変更、PRの自動merge、本番Deployは延期する。UNKNOWNなFeasibilityをPASSEDへ補完しない。
 - AI研修で価値・品質・原価・人間確認工数を確認する前に、共通Coreやハッシーへ横展開しない。
+
+## 2026-10-05: 外部AIは交換可能Capabilityとして利用しOutcomeとPlatform資産を中心にする
+
+- 状態: Accepted（Architecture Principlesへの正式反映）
+- AIの単機能や特定Providerを商品価値・Domain Modelの中心に置かず、ユーザーのProblemから実際のOutcomeへ到達することを価値とする。
+- Reasoning、Coding、Skill Development、Image Generation、Video Generation、Voice、Search / Research等をPlatformが要求するCapabilityとして表し、ChatGPT、Codex等はそれを実現する交換可能なProvider候補として扱う。
+- Context、Memory、Problem / Intent、Judgment、Skill、Workflow、Execution History、Outcome、ImprovementをPlatform側の重要資産とする。ただしPackage、Tenant、Workspace、User、Bunshin、Service間で暗黙共有せず、既存の所有・認可・Grant・同意境界を維持する。
+- 長期ループを `Problem -> Context -> Feasibility -> Judgment -> Skill / Workflow -> Capability -> Artifact -> Validation -> Delivery -> Outcome -> Memory -> Improvement` とするが、MVP Firstを維持し、具体的なPackageで必要性が確認された契約だけを段階的に共通化する。
+- Draft、Validation、Human Approval、外部実行、PR作成、Merge、Deployを別段階・別権限とする。ログやFeedbackからの自動コード変更、自動Merge、自動Deployは採用しない。
+- Genspark Testを、新機能の独自価値、Provider依存、コモディティ化リスクを人間がレビューするGateとする。自動スコアや実装・本番提供の承認として扱わない。
+- 外部Providerの性能向上をPlatformのCapability向上として吸収し、Provider変更でPlatform資産や既存Isolation原則が変わらない構造を優先する。
+- 本DecisionはCodex採用、Codex API接続、Problem / Feasibility / Skill / Artifact契約の実装、新Provider追加を承認するものではない。
